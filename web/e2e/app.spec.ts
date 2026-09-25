@@ -219,3 +219,40 @@ test('busca, gravação no segundo, pessoas e coleções contra o mock', async (
   await expect(page.getByRole('heading', { name: 'Metalúrgica Serra Azul' })).toBeVisible()
   await screenshot(page, '11-colecoes')
 })
+
+test('identificação por voz contra o mock', async ({ page }) => {
+  await login(page)
+  const nav = page.getByRole('navigation', { name: 'Principal' })
+
+  // Gravação: a sugestão por voz do exemplo, com aceitar e recusar; recusar tira a sugestão.
+  await page.getByRole('list', { name: 'Gravações' }).getByRole('link', { name: 'Alinhamento do programa de lideranças' }).click()
+  const speakers = page.getByRole('region', { name: 'Locutores' })
+  const suggestions = speakers.getByRole('list', { name: 'Sugestões por voz para Locutor 2' })
+  await expect(suggestions).toContainText('Parece ser Rafael Lima — 82%')
+  await expect(speakers.getByRole('button', { name: 'Aceitar Rafael Lima para Locutor 2' })).toBeVisible()
+  await screenshot(page, '15-sugestao-por-voz')
+  const rejected = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().includes('/speakers/S2/suggestions/'))
+  await speakers.getByRole('button', { name: 'Recusar Rafael Lima para Locutor 2' }).click()
+  await rejected
+  await expect(suggestions).toHaveCount(0)
+
+  // Pessoa: consentimento registrado, amostras da impressão.
+  await nav.getByRole('link', { name: 'Pessoas' }).click()
+  await page.getByRole('link', { name: 'Rafael Lima' }).click()
+  const voice = page.getByRole('region', { name: 'Voz' })
+  await expect(voice.getByText('Consentimento registrado', { exact: true })).toBeVisible()
+  await expect(voice.getByText(/2 amostras na impressão de voz/)).toBeVisible()
+  await voice.getByRole('button', { name: 'Revogar consentimento' }).click()
+  await expect(voice.getByRole('button', { name: 'Confirmar revogação' })).toBeVisible()
+  await screenshot(page, '16-pessoa-voz')
+  await voice.getByRole('button', { name: 'Manter' }).click()
+
+  // Admin: opt-in, termo e trilha.
+  await nav.getByRole('link', { name: 'Painel admin' }).click()
+  await page.getByRole('navigation', { name: 'Seções da administração' }).getByRole('link', { name: 'Identificação por voz' }).click()
+  await expect(page.getByRole('checkbox', { name: /Ligar a identificação por voz/ })).toBeChecked()
+  await expect(page.getByRole('table', { name: 'Eventos de voz mais recentes' }).getByRole('row')).toHaveCount(4)
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  await expect(page.getByText('Configuração de voz salva.')).toBeVisible()
+  await screenshot(page, '17-admin-voz')
+})
