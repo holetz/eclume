@@ -1,0 +1,614 @@
+{
+  "schema_version": "1.0",
+  "id": "01928f3a-1c00-7a00-8000-000000000501",
+  "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
+  "title": "Alinhamento do programa de lideranças",
+  "language": "pt-BR",
+  "recorded_at": "2026-09-18T14:00:05Z",
+  "duration_ms": 166000,
+  "source": "desktop",
+  "content_hash": "sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5",
+  "revision": 3,
+  "created_at": "2026-09-18T14:09:41Z",
+  "updated_at": "2026-09-18T15:02:17Z",
+  "owner": {
+    "id": "01928f3a-1c00-7a00-8000-000000000101",
+    "name": "Mariana Couto"
+  },
+  "engine": {
+    "name": "whisperx-local",
+    "model": "large-v3-turbo",
+    "diarization_model": "pyannote/speaker-diarization-community-1"
+  },
+  "speakers": [
+    {
+      "id": "S1",
+      "label": "Mariana Couto",
+      "person": {
+        "id": "01928f3a-1c00-7a00-8000-000000000301",
+        "name": "Mariana Couto"
+      },
+      "suggestions": [],
+      "talk_ms": 87150
+    },
+    {
+      "id": "S2",
+      "label": "Locutor 2",
+      "person": null,
+      "suggestions": [
+        {
+          "person": {
+            "id": "01928f3a-1c00-7a00-8000-000000000302",
+            "name": "Rafael Lima"
+          },
+          "score": 0.82
+        }
+      ],
+      "talk_ms": 37050
+    },
+    {
+      "id": "S3",
+      "label": "Locutor 3",
+      "person": null,
+      "suggestions": [],
+      "talk_ms": 29750
+    }
+  ],
+  "segments": [
+    {
+      "id": "seg-0001",
+      "speaker_id": "S1",
+      "start_ms": 3200,
+      "end_ms": 11850,
+      "text": "Bom dia, pessoal. Obrigada por reservarem esse horário. A ideia hoje é fechar o desenho do programa de lideranças para o primeiro semestre.",
+      "confidence": 0.93,
+      "words": [
+        {
+          "text": "Bom",
+          "start_ms": 3200,
+          "end_ms": 3536,
+          "confidence": 0.8
+        },
+        {
+          "text": "dia,",
+          "start_ms": 3576,
+          "end_ms": 3912,
+          "confidence": 0.87
+        },
+        {
+          "text": "pessoal.",
+          "start_ms": 3952,
+          "end_ms": 4288,
+          "confidence": 0.94
+        },
+        {
+          "text": "Obrigada",
+          "start_ms": 4328,
+          "end_ms": 4664,
+          "confidence": 0.82
+        },
+        {
+          "text": "por",
+          "start_ms": 4704,
+          "end_ms": 5040,
+          "confidence": 0.89
+        },
+        {
+          "text": "reservarem",
+          "start_ms": 5080,
+          "end_ms": 5416,
+          "confidence": 0.96
+        },
+        {
+          "text": "esse",
+          "start_ms": 5456,
+          "end_ms": 5792,
+          "confidence": 0.84
+        },
+        {
+          "text": "horário.",
+          "start_ms": 5832,
+          "end_ms": 6168,
+          "confidence": 0.91
+        },
+        {
+          "text": "A",
+          "start_ms": 6208,
+          "end_ms": 6544,
+          "confidence": 0.98
+        },
+        {
+          "text": "ideia",
+          "start_ms": 6584,
+          "end_ms": 6920,
+          "confidence": 0.86
+        },
+        {
+          "text": "hoje",
+          "start_ms": 6960,
+          "end_ms": 7296,
+          "confidence": 0.93
+        },
+        {
+          "text": "é",
+          "start_ms": 7336,
+          "end_ms": 7673,
+          "confidence": 0.81
+        },
+        {
+          "text": "fechar",
+          "start_ms": 7713,
+          "end_ms": 8049,
+          "confidence": 0.88
+        },
+        {
+          "text": "o",
+          "start_ms": 8089,
+          "end_ms": 8425,
+          "confidence": 0.95
+        },
+        {
+          "text": "desenho",
+          "start_ms": 8465,
+          "end_ms": 8801,
+          "confidence": 0.83
+        },
+        {
+          "text": "do",
+          "start_ms": 8841,
+          "end_ms": 9177,
+          "confidence": 0.9
+        },
+        {
+          "text": "programa",
+          "start_ms": 9217,
+          "end_ms": 9553,
+          "confidence": 0.97
+        },
+        {
+          "text": "de",
+          "start_ms": 9593,
+          "end_ms": 9929,
+          "confidence": 0.85
+        },
+        {
+          "text": "lideranças",
+          "start_ms": 9969,
+          "end_ms": 10305,
+          "confidence": 0.92
+        },
+        {
+          "text": "para",
+          "start_ms": 10345,
+          "end_ms": 10681,
+          "confidence": 0.8
+        },
+        {
+          "text": "o",
+          "start_ms": 10721,
+          "end_ms": 11057,
+          "confidence": 0.87
+        },
+        {
+          "text": "primeiro",
+          "start_ms": 11097,
+          "end_ms": 11433,
+          "confidence": 0.94
+        },
+        {
+          "text": "semestre.",
+          "start_ms": 11473,
+          "end_ms": 11810,
+          "confidence": 0.82
+        }
+      ]
+    },
+    {
+      "id": "seg-0002",
+      "speaker_id": "S2",
+      "start_ms": 12400,
+      "end_ms": 24100,
+      "text": "Bom dia, Mariana. Do nosso lado, o ponto principal é o tempo dos gestores. A gente não consegue tirar ninguém da operação por mais de meio dia por mês.",
+      "confidence": 0.91,
+      "words": [
+        {
+          "text": "Bom",
+          "start_ms": 12400,
+          "end_ms": 12763,
+          "confidence": 0.8
+        },
+        {
+          "text": "dia,",
+          "start_ms": 12803,
+          "end_ms": 13166,
+          "confidence": 0.87
+        },
+        {
+          "text": "Mariana.",
+          "start_ms": 13206,
+          "end_ms": 13570,
+          "confidence": 0.94
+        },
+        {
+          "text": "Do",
+          "start_ms": 13610,
+          "end_ms": 13973,
+          "confidence": 0.82
+        },
+        {
+          "text": "nosso",
+          "start_ms": 14013,
+          "end_ms": 14377,
+          "confidence": 0.89
+        },
+        {
+          "text": "lado,",
+          "start_ms": 14417,
+          "end_ms": 14780,
+          "confidence": 0.96
+        },
+        {
+          "text": "o",
+          "start_ms": 14820,
+          "end_ms": 15184,
+          "confidence": 0.84
+        },
+        {
+          "text": "ponto",
+          "start_ms": 15224,
+          "end_ms": 15587,
+          "confidence": 0.91
+        },
+        {
+          "text": "principal",
+          "start_ms": 15627,
+          "end_ms": 15991,
+          "confidence": 0.98
+        },
+        {
+          "text": "é",
+          "start_ms": 16031,
+          "end_ms": 16394,
+          "confidence": 0.86
+        },
+        {
+          "text": "o",
+          "start_ms": 16434,
+          "end_ms": 16797,
+          "confidence": 0.93
+        },
+        {
+          "text": "tempo",
+          "start_ms": 16837,
+          "end_ms": 17201,
+          "confidence": 0.81
+        },
+        {
+          "text": "dos",
+          "start_ms": 17241,
+          "end_ms": 17604,
+          "confidence": 0.88
+        },
+        {
+          "text": "gestores.",
+          "start_ms": 17644,
+          "end_ms": 18008,
+          "confidence": 0.95
+        },
+        {
+          "text": "A",
+          "start_ms": 18048,
+          "end_ms": 18411,
+          "confidence": 0.83
+        },
+        {
+          "text": "gente",
+          "start_ms": 18451,
+          "end_ms": 18815,
+          "confidence": 0.9
+        },
+        {
+          "text": "não",
+          "start_ms": 18855,
+          "end_ms": 19218,
+          "confidence": 0.97
+        },
+        {
+          "text": "consegue",
+          "start_ms": 19258,
+          "end_ms": 19622,
+          "confidence": 0.85
+        },
+        {
+          "text": "tirar",
+          "start_ms": 19662,
+          "end_ms": 20025,
+          "confidence": 0.92
+        },
+        {
+          "text": "ninguém",
+          "start_ms": 20065,
+          "end_ms": 20428,
+          "confidence": 0.8
+        },
+        {
+          "text": "da",
+          "start_ms": 20468,
+          "end_ms": 20832,
+          "confidence": 0.87
+        },
+        {
+          "text": "operação",
+          "start_ms": 20872,
+          "end_ms": 21235,
+          "confidence": 0.94
+        },
+        {
+          "text": "por",
+          "start_ms": 21275,
+          "end_ms": 21639,
+          "confidence": 0.82
+        },
+        {
+          "text": "mais",
+          "start_ms": 21679,
+          "end_ms": 22042,
+          "confidence": 0.89
+        },
+        {
+          "text": "de",
+          "start_ms": 22082,
+          "end_ms": 22446,
+          "confidence": 0.96
+        },
+        {
+          "text": "meio",
+          "start_ms": 22486,
+          "end_ms": 22849,
+          "confidence": 0.84
+        },
+        {
+          "text": "dia",
+          "start_ms": 22889,
+          "end_ms": 23253,
+          "confidence": 0.91
+        },
+        {
+          "text": "por",
+          "start_ms": 23293,
+          "end_ms": 23656,
+          "confidence": 0.98
+        },
+        {
+          "text": "mês.",
+          "start_ms": 23696,
+          "end_ms": 24060,
+          "confidence": 0.86
+        }
+      ]
+    },
+    {
+      "id": "seg-0003",
+      "speaker_id": "S1",
+      "start_ms": 24600,
+      "end_ms": 38900,
+      "text": "Faz sentido. Por isso a proposta é trabalhar em encontros de quatro horas, com uma tarefa prática entre um encontro e outro, aplicada no dia a dia da equipe.",
+      "confidence": 0.94
+    },
+    {
+      "id": "seg-0004",
+      "speaker_id": "S3",
+      "start_ms": 39500,
+      "end_ms": 52300,
+      "text": "Eu só queria entender como a gente mede se funcionou. No ano passado fizemos um treinamento e ninguém soube dizer o que mudou.",
+      "confidence": 0.89
+    },
+    {
+      "id": "seg-0005",
+      "speaker_id": "S1",
+      "start_ms": 52900,
+      "end_ms": 71400,
+      "text": "Essa é a pergunta certa. Antes do primeiro encontro, a gente aplica o assessment com cada gestor e com uma amostra da equipe dele. No fim do semestre, repetimos e comparamos.",
+      "confidence": 0.9
+    },
+    {
+      "id": "seg-0006",
+      "speaker_id": "S3",
+      "start_ms": 72000,
+      "end_ms": 80350,
+      "text": "E esse resultado chega para a diretoria de que forma?",
+      "confidence": 0.95
+    },
+    {
+      "id": "seg-0007",
+      "speaker_id": "S1",
+      "start_ms": 80900,
+      "end_ms": 97600,
+      "text": "Num relatório consolidado, sem expor ninguém individualmente. Cada gestor recebe a própria devolutiva numa conversa um a um.",
+      "confidence": 0.92
+    },
+    {
+      "id": "seg-0008",
+      "speaker_id": "S2",
+      "start_ms": 98200,
+      "end_ms": 112750,
+      "text": "Isso resolve a preocupação que o pessoal da fábrica levantou. Eles tinham receio de que a avaliação virasse instrumento de cobrança.",
+      "confidence": 0.88
+    },
+    {
+      "id": "seg-0009",
+      "speaker_id": "S3",
+      "start_ms": 113300,
+      "end_ms": 121900,
+      "text": "Certo. Quantas turmas vocês estão pensando?",
+      "confidence": 0.96
+    },
+    {
+      "id": "seg-0010",
+      "speaker_id": "S1",
+      "start_ms": 122500,
+      "end_ms": 139800,
+      "text": "Três turmas de 12 gestores. A primeira começa em outubro, com as lideranças da produção, que é onde o turnover está mais alto.",
+      "confidence": 0.87,
+      "words": [
+        {
+          "text": "Três",
+          "start_ms": 122500,
+          "end_ms": 123212,
+          "confidence": 0.8
+        },
+        {
+          "text": "turmas",
+          "start_ms": 123252,
+          "end_ms": 123964,
+          "confidence": 0.87
+        },
+        {
+          "text": "de",
+          "start_ms": 124004,
+          "end_ms": 124716,
+          "confidence": 0.94
+        },
+        {
+          "text": "12",
+          "start_ms": null,
+          "end_ms": null
+        },
+        {
+          "text": "gestores.",
+          "start_ms": 125508,
+          "end_ms": 126220,
+          "confidence": 0.89
+        },
+        {
+          "text": "A",
+          "start_ms": 126260,
+          "end_ms": 126973,
+          "confidence": 0.96
+        },
+        {
+          "text": "primeira",
+          "start_ms": 127013,
+          "end_ms": 127725,
+          "confidence": 0.84
+        },
+        {
+          "text": "começa",
+          "start_ms": 127765,
+          "end_ms": 128477,
+          "confidence": 0.91
+        },
+        {
+          "text": "em",
+          "start_ms": 128517,
+          "end_ms": 129229,
+          "confidence": 0.98
+        },
+        {
+          "text": "outubro,",
+          "start_ms": 129269,
+          "end_ms": 129981,
+          "confidence": 0.86
+        },
+        {
+          "text": "com",
+          "start_ms": 130021,
+          "end_ms": 130733,
+          "confidence": 0.93
+        },
+        {
+          "text": "as",
+          "start_ms": 130773,
+          "end_ms": 131486,
+          "confidence": 0.81
+        },
+        {
+          "text": "lideranças",
+          "start_ms": 131526,
+          "end_ms": 132238,
+          "confidence": 0.88
+        },
+        {
+          "text": "da",
+          "start_ms": 132278,
+          "end_ms": 132990,
+          "confidence": 0.95
+        },
+        {
+          "text": "produção,",
+          "start_ms": 133030,
+          "end_ms": 133742,
+          "confidence": 0.83
+        },
+        {
+          "text": "que",
+          "start_ms": 133782,
+          "end_ms": 134494,
+          "confidence": 0.9
+        },
+        {
+          "text": "é",
+          "start_ms": 134534,
+          "end_ms": 135246,
+          "confidence": 0.97
+        },
+        {
+          "text": "onde",
+          "start_ms": 135286,
+          "end_ms": 135999,
+          "confidence": 0.85
+        },
+        {
+          "text": "o",
+          "start_ms": 136039,
+          "end_ms": 136751,
+          "confidence": 0.92
+        },
+        {
+          "text": "turnover",
+          "start_ms": 136791,
+          "end_ms": 137503,
+          "confidence": 0.8
+        },
+        {
+          "text": "está",
+          "start_ms": 137543,
+          "end_ms": 138255,
+          "confidence": 0.87
+        },
+        {
+          "text": "mais",
+          "start_ms": 138295,
+          "end_ms": 139007,
+          "confidence": 0.94
+        },
+        {
+          "text": "alto.",
+          "start_ms": 139047,
+          "end_ms": 139760,
+          "confidence": 0.82
+        }
+      ]
+    },
+    {
+      "id": "seg-0011",
+      "speaker_id": "S2",
+      "start_ms": 140400,
+      "end_ms": 151200,
+      "text": "Eu consigo fechar a lista da primeira turma até sexta e mando para você por e-mail.",
+      "confidence": 0.92
+    },
+    {
+      "id": "seg-0012",
+      "speaker_id": "S1",
+      "start_ms": 151800,
+      "end_ms": 163500,
+      "text": "Perfeito. Com a lista em mãos, agendo as entrevistas iniciais e mando o cronograma na semana que vem.",
+      "confidence": 0.94
+    }
+  ],
+  "tags": [
+    "programa-liderancas",
+    "cliente-metalurgica"
+  ]
+}
