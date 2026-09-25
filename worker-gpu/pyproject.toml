@@ -7,7 +7,14 @@ requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
   "eclume-engines",
+  "arq>=0.26",
+  "boto3>=1.34",
 ]
+
+# A imagem GPU instala `gpu` (WhisperX, torch); o dev sem GPU pode usar `cpu` (faster-whisper).
+[project.optional-dependencies]
+gpu = ["eclume-engines[whisperx]"]
+cpu = ["eclume-engines[cpu]"]
 
 [build-system]
 requires = ["hatchling"]
