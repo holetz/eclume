@@ -64,21 +64,26 @@ uv run arq eclume_server.worker.WorkerSettings
 ## Web — npm em `web/`
 
 Vite + React + TS, eslint (flat config com typescript-eslint, react-hooks e react-refresh) e
-vitest com jsdom e Testing Library. `package-lock.json` é versionado.
+vitest com jsdom e Testing Library. `package-lock.json` é versionado. Os tipos da API saem do
+contrato por `gen:api` (`src/api/schema.gen.ts`, versionado); a estrutura do app está em
+[frontend-web.md](frontend-web.md).
 
 ```bash
 npm --prefix web ci
+npm --prefix web run gen:api
 npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
 ```
 
-Os testes de navegador da conversão de mídia (vitest browser mode, Chrome) ficam fora do
-`npm test` e da CI e rodam só no host de build; o porquê e as fixtures estão em
-[formato-audio-upload.md](formato-audio-upload.md).
+Os testes de navegador ficam fora do `npm test`: os da conversão de mídia (vitest browser mode,
+Chrome; o porquê e as fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o
+E2E Playwright do app contra o mock. Localmente, rodam no host de build; o E2E precisa do mock
+no ar, e `ECLUME_MOCK_URL` indica a porta quando a 4010 está ocupada.
 
 ```bash
 remote-run web 'npx playwright install --with-deps chrome && npm run fixtures && npm run test:browser'
+remote-run . 'ECLUME_MOCK_PORT=4110 docker compose -p eclume-mock-web -f deploy/docker-compose.mock.yml up -d --wait && cd web && npx playwright install chromium && ECLUME_MOCK_URL=http://127.0.0.1:4110 npm run test:e2e'
 ```
 
 ## Desktop — workspace cargo em `desktop/`
@@ -120,8 +125,10 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 
 ## CI — `.github/workflows/ci.yml`
 
-Três jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
-`web` e `desktop`, cada um rodando exatamente os comandos acima (com `--locked` no uv e no cargo).
+Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
+`contracts`, `web` e `desktop`, cada um rodando os comandos acima (com `--locked` no uv e no
+cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
+e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
 O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual

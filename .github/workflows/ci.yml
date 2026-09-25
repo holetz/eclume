@@ -66,9 +66,43 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - run: npm run gen:api -- --check
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # Testes que precisam de navegador: a conversão de mídia (vitest browser mode) e o E2E do app
+  # contra o mock do contrato. Os dois usam o Google Chrome que já vem no runner (canal `chrome`,
+  # com os decoders proprietários), sem baixar navegador.
+  web-browser:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      E2E_CHANNEL: chrome
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: ffmpeg para as fixtures de mídia
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: Testes de navegador da conversão
+        run: npm run fixtures && npm run test:browser
+      - name: Mock server (Prism)
+        working-directory: .
+        run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
+      - name: E2E contra o mock
+        run: npm run test:e2e
+      - if: failure()
+        working-directory: .
+        run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   desktop:
     runs-on: ubuntu-latest
