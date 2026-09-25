@@ -177,6 +177,8 @@ class ClaudeCliProvider:
         detail = ""
         if result is not None:
             detail = str(result.get("result") or result.get("subtype") or "").strip()
+            if result.get("api_error_status"):
+                detail = f"{detail} (HTTP {result['api_error_status']})"
         if not detail:
             lines = stderr.decode(errors="replace").strip().splitlines()
             detail = lines[-1] if lines else f"código de saída {proc.returncode}"
