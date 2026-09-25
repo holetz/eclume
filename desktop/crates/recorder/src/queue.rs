@@ -7,7 +7,8 @@
 //!
 //! Esquema v2: `upload_id` e `sha256` guardam o upload em curso para a retomada,
 //! `next_attempt_at` agenda a próxima tentativa depois de uma falha, `synced_at` marca a
-//! confirmação do servidor e `purged_at` a remoção do arquivo local pela retenção. Uma fila v1
+//! confirmação do servidor, `purged_at` a remoção do arquivo local pela retenção e
+//! `meeting_app` o app da reunião que a detecção viu (`teams`, `meet`, `zoom`, `other`). Uma fila v1
 //! ganha as colunas na abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
@@ -35,18 +36,20 @@ CREATE TABLE IF NOT EXISTS recordings (
     sha256          TEXT,
     next_attempt_at INTEGER,
     synced_at       INTEGER,
-    purged_at       INTEGER
+    purged_at       INTEGER,
+    meeting_app     TEXT
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
 ";
 
 /// Colunas que a v2 acrescentou, com o tipo, para migrar uma fila v1.
-const V2_COLUMNS: [(&str, &str); 5] = [
+const V2_COLUMNS: [(&str, &str); 6] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
     ("next_attempt_at", "INTEGER"),
     ("synced_at", "INTEGER"),
     ("purged_at", "INTEGER"),
+    ("meeting_app", "TEXT"),
 ];
 
 /// Espera antes da próxima tentativa, depois de `attempts` tentativas: 30 s dobrando a cada
@@ -119,6 +122,8 @@ pub struct QueuedRecording {
     pub synced_at: Option<i64>,
     /// Quando a retenção apagou o arquivo local.
     pub purged_at: Option<i64>,
+    /// App da reunião detectada, no vocabulário do contrato (`capture.meeting_app`).
+    pub meeting_app: Option<String>,
 }
 
 impl QueuedRecording {
@@ -143,6 +148,7 @@ impl QueuedRecording {
                 next_attempt_at: row.get("next_attempt_at")?,
                 synced_at: row.get("synced_at")?,
                 purged_at: row.get("purged_at")?,
+                meeting_app: row.get("meeting_app")?,
             },
             status,
         ))
@@ -341,6 +347,18 @@ impl Queue {
         let changed = self.conn.execute(
             "UPDATE recordings SET upload_id = ?2, sha256 = ?3 WHERE id = ?1",
             params![id, upload_id, sha256],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está na fila");
+        }
+        Ok(())
+    }
+
+    /// Registra o app da reunião que originou a gravação.
+    pub fn set_meeting_app(&self, id: &str, meeting_app: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET meeting_app = ?2 WHERE id = ?1",
+            params![id, meeting_app],
         )?;
         if changed == 0 {
             bail!("gravação {id} não está na fila");
@@ -617,6 +635,12 @@ mod tests {
         assert!(synced.synced_at.is_some());
         assert!(synced.next_attempt_at.is_none());
         queue.set_upload_state("u", None, Some("ab12")).unwrap();
+        queue.set_meeting_app("u", "teams").unwrap();
+        assert_eq!(
+            queue.get("u").unwrap().unwrap().meeting_app.as_deref(),
+            Some("teams")
+        );
+        assert!(queue.set_meeting_app("nao-existe", "zoom").is_err());
         assert!(queue.get("u").unwrap().unwrap().upload_id.is_none());
         assert!(queue.set_upload_state("nao-existe", None, None).is_err());
     }
