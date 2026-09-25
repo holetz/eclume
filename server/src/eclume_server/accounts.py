@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, text
 
 from eclume_server.db import tables as t
 from eclume_server.security import hash_password
@@ -46,7 +46,7 @@ class AccountError(ValueError):
 
 
 async def create_org(conn: AsyncConnection, name: str) -> UUID:
-    """Cria a organização com a configuração padrão."""
+    """Cria a organização com a configuração padrão e os templates de resumo padrão."""
     if not name.strip():
         msg = "o nome da organização não pode ser vazio"
         raise AccountError(msg)
@@ -54,6 +54,8 @@ async def create_org(conn: AsyncConnection, name: str) -> UUID:
         await conn.execute(insert(t.organizations).values(name=name.strip()).returning(t.organizations.c.id))
     ).scalar_one()
     await conn.execute(insert(t.org_settings).values(org_id=org_id, **DEFAULT_ORG_SETTINGS))
+    # Os textos dos padrões vivem na migration 002_agentes, uma fonte só para orgs novas e antigas.
+    await conn.execute(text("SELECT eclume_seed_summary_templates(:org)"), {"org": org_id})
     return org_id
 
 

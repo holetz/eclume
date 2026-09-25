@@ -1,0 +1,833 @@
+//! O upload resumível do contrato v1: `POST /uploads` com o `sha256` (200 `deduplicated` encerra
+//! sem transferir nada) → `PUT` de cada parte na URL recebida → `POST /uploads/{id}/complete`.
+//! Retomar é `GET /uploads/{id}`, pular `parts_received` e pedir `part-urls` do que falta.
+//!
+//! Cada requisição tem retentativa com backoff para falha de rede, 408, 429 e 5xx; o resto dos
+//! erros (401, 403, 422...) falha na hora com a mensagem do problem.
+
+use std::collections::{BTreeMap, HashMap};
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{anyhow, bail, Context, Result};
+use serde::de::DeserializeOwned;
+use url::Url;
+
+use crate::api::{
+    self, CompletedPart, PartUrl, PartUrls, PartUrlsRequest, Problem, Upload, UploadComplete,
+    UploadCreate,
+};
+use crate::transport::{HttpRequest, HttpResponse, Transport};
+
+/// Prefixo de todo PAT do eclume.
+pub const PAT_PREFIX: &str = "eclp_";
+/// O contrato limita a 1000 partes por pedido de URLs.
+const MAX_PART_URLS: usize = 1000;
+/// Teto para um `Retry-After` que o servidor mandar.
+const MAX_RETRY_AFTER: Duration = Duration::from_secs(60);
+
+/// Retentativas por requisição.
+#[derive(Clone)]
+pub struct RetryPolicy {
+    /// Tentativas além da primeira.
+    pub retries: u32,
+    /// Espera antes da primeira retentativa; dobra a cada uma.
+    pub base_delay: Duration,
+    pub sleep: Arc<dyn Fn(Duration) + Send + Sync>,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            retries: 3,
+            base_delay: Duration::from_secs(1),
+            sleep: Arc::new(std::thread::sleep),
+        }
+    }
+}
+
+/// O resultado de um upload confirmado pelo servidor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Uploaded {
+    pub recording_id: String,
+    /// O servidor já tinha uma gravação com este hash.
+    pub deduplicated: bool,
+}
+
+/// Status em que vale tentar de novo a mesma requisição.
+pub fn is_transient(status: u16) -> bool {
+    status == 408 || status == 429 || status >= 500
+}
+
+/// O erro legível de uma resposta sem sucesso, com o `code` e o texto do problem.
+pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
+    let problem: Problem = serde_json::from_slice(&response.body).unwrap_or_default();
+    let code = problem
+        .code
+        .map(|code| format!(" ({code})"))
+        .unwrap_or_default();
+    let text = problem
+        .detail
+        .or(problem.title)
+        .map(|text| format!(": {text}"))
+        .unwrap_or_default();
+    anyhow!(
+        "{what}: o servidor respondeu {}{code}{text}",
+        response.status
+    )
+}
+
+/// Cliente da API do eclume por PAT.
+pub struct Client {
+    transport: Arc<dyn Transport>,
+    base: Url,
+    token: String,
+    retry: RetryPolicy,
+}
+
+impl Client {
+    pub fn new(
+        transport: Arc<dyn Transport>,
+        api_url: &str,
+        token: &str,
+        retry: RetryPolicy,
+    ) -> Result<Self> {
+        let base = Url::parse(api_url).with_context(|| format!("endereço inválido: {api_url}"))?;
+        if !matches!(base.scheme(), "http" | "https") || base.host().is_none() {
+            bail!("endereço inválido: use http:// ou https:// seguido do host");
+        }
+        let token = token.trim();
+        if !token.starts_with(PAT_PREFIX) || token.len() <= PAT_PREFIX.len() {
+            bail!("PAT inválido: um PAT do eclume começa com {PAT_PREFIX}");
+        }
+        Ok(Self {
+            transport,
+            base,
+            token: token.to_string(),
+            retry,
+        })
+    }
+
+    fn endpoint(&self, path: &str) -> String {
+        format!("{}/api/v1{path}", self.base.as_str().trim_end_matches('/'))
+    }
+
+    fn authorize(&self, request: HttpRequest) -> HttpRequest {
+        request.header("Authorization", format!("Bearer {}", self.token))
+    }
+
+    /// URL na mesma origem da API: leva o PAT. Uma URL pré-assinada do armazenamento (outra
+    /// origem) não pode levar, porque o S3 recusa dois mecanismos de autenticação.
+    fn same_origin(&self, url: &str) -> bool {
+        Url::parse(url).is_ok_and(|url| url.origin() == self.base.origin())
+    }
+
+    /// Envia com retentativa e backoff; devolve a última resposta, de sucesso ou não.
+    fn send(&self, request: &HttpRequest) -> Result<HttpResponse> {
+        let mut attempt = 0;
+        loop {
+            let result = self.transport.send(request.clone());
+            let retry_after = match &result {
+                Ok(response) if !is_transient(response.status) => return result,
+                Ok(response) => response
+                    .header("retry-after")
+                    .and_then(|value| value.trim().parse::<u64>().ok())
+                    .map(|secs| Duration::from_secs(secs).min(MAX_RETRY_AFTER)),
+                Err(_) => None,
+            };
+            if attempt >= self.retry.retries {
+                return result;
+            }
+            let delay = retry_after.unwrap_or(self.retry.base_delay * 2_u32.pow(attempt));
+            match &result {
+                Ok(response) => log::warn!(
+                    "{} {} respondeu {}; nova tentativa em {delay:?}",
+                    request.method,
+                    request.url,
+                    response.status
+                ),
+                Err(err) => log::warn!("{err:#}; nova tentativa em {delay:?}"),
+            }
+            (self.retry.sleep)(delay);
+            attempt += 1;
+        }
+    }
+
+    fn call_json<T: DeserializeOwned>(&self, what: &str, request: HttpRequest) -> Result<T> {
+        let response = self.send(&self.authorize(request))?;
+        if !response.is_success() {
+            return Err(api_error(what, &response));
+        }
+        parse(what, &response)
+    }
+
+    /// Confere o PAT e o endereço: `GET /api/v1/me`.
+    pub fn check(&self) -> Result<()> {
+        let request = self.authorize(HttpRequest::new("GET", self.endpoint("/me")));
+        let response = self.send(&request)?;
+        if response.is_success() {
+            Ok(())
+        } else {
+            Err(api_error("falha ao conferir o PAT", &response))
+        }
+    }
+
+    fn get_upload(&self, upload_id: &str) -> Result<Option<Upload>> {
+        let url = self.endpoint(&format!("/uploads/{upload_id}"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            404 | 410 => Ok(None),
+            _ if response.is_success() => parse("falha ao ler o upload", &response).map(Some),
+            _ => Err(api_error("falha ao ler o upload", &response)),
+        }
+    }
+
+    fn part_urls(&self, upload_id: &str, numbers: &[u32]) -> Result<Vec<PartUrl>> {
+        let mut urls = Vec::with_capacity(numbers.len());
+        for chunk in numbers.chunks(MAX_PART_URLS) {
+            let request = HttpRequest::new(
+                "POST",
+                self.endpoint(&format!("/uploads/{upload_id}/part-urls")),
+            )
+            .json(&PartUrlsRequest {
+                part_numbers: chunk.to_vec(),
+            })?;
+            let page: PartUrls = self.call_json("falha ao pedir as URLs das partes", request)?;
+            urls.extend(page.parts);
+        }
+        Ok(urls)
+    }
+
+    /// Envia uma parte e devolve o ETag. `Ok(None)`: a URL pré-assinada foi recusada (expirou) e
+    /// vale pedir outra.
+    fn put_part(&self, part: &PartUrl, body: &[u8]) -> Result<Option<String>> {
+        let mut request = HttpRequest::new("PUT", part.url.clone()).body(body.to_vec());
+        for (name, value) in &part.headers {
+            request = request.header(name.clone(), value.clone());
+        }
+        let same_origin = self.same_origin(&part.url);
+        if same_origin {
+            request = self.authorize(request);
+        }
+        let response = self.send(&request)?;
+        let what = format!("falha ao enviar a parte {}", part.part_number);
+        if response.is_success() {
+            let etag = response
+                .header("etag")
+                .ok_or_else(|| anyhow!("{what}: resposta sem ETag"))?;
+            return Ok(Some(etag.to_string()));
+        }
+        if !same_origin && response.status == 403 {
+            return Ok(None);
+        }
+        Err(api_error(&what, &response))
+    }
+
+    /// Sobe o arquivo e devolve a gravação confirmada. `resume` é o upload guardado de uma
+    /// tentativa anterior; `save_upload_id` persiste o upload em curso (ou o limpa, com `None`)
+    /// antes de qualquer parte subir, para a próxima tentativa retomar.
+    pub fn upload(
+        &self,
+        path: &Path,
+        create: &UploadCreate,
+        resume: Option<&str>,
+        save_upload_id: &mut dyn FnMut(Option<&str>) -> Result<()>,
+    ) -> Result<Uploaded> {
+        let actual = std::fs::metadata(path)
+            .with_context(|| format!("falha ao ler {}", path.display()))?
+            .len();
+        if actual != create.size_bytes {
+            bail!(
+                "o arquivo {} mudou de tamanho ({actual} bytes, esperado {})",
+                path.display(),
+                create.size_bytes
+            );
+        }
+        let previous = match resume {
+            Some(upload_id) => self.get_upload(upload_id)?,
+            None => None,
+        };
+        let upload = match previous {
+            Some(upload) if upload.status == api::status::IN_PROGRESS => upload,
+            Some(upload) if upload.recording_id.is_some() => return finished(upload),
+            _ => {
+                if resume.is_some() {
+                    save_upload_id(None)?;
+                }
+                let request = HttpRequest::new("POST", self.endpoint("/uploads")).json(create)?;
+                let upload: Upload = self.call_json("falha ao iniciar o upload", request)?;
+                if upload.status != api::status::IN_PROGRESS {
+                    return finished(upload);
+                }
+                save_upload_id(Some(&upload.id))?;
+                upload
+            }
+        };
+        self.send_parts(path, create.size_bytes, &upload)
+    }
+
+    fn send_parts(&self, path: &Path, size: u64, upload: &Upload) -> Result<Uploaded> {
+        let mut etags: BTreeMap<u32, String> = upload
+            .parts_received
+            .iter()
+            .map(|part| (part.part_number, part.etag.clone()))
+            .collect();
+        let missing: Vec<u32> = (1..=upload.part_count)
+            .filter(|n| !etags.contains_key(n))
+            .collect();
+        let mut urls: HashMap<u32, PartUrl> = upload
+            .parts
+            .iter()
+            .filter(|part| missing.contains(&part.part_number))
+            .map(|part| (part.part_number, part.clone()))
+            .collect();
+        let lacking: Vec<u32> = missing
+            .iter()
+            .copied()
+            .filter(|n| !urls.contains_key(n))
+            .collect();
+        if !lacking.is_empty() {
+            for part in self.part_urls(&upload.id, &lacking)? {
+                urls.insert(part.part_number, part);
+            }
+        }
+
+        let mut file =
+            File::open(path).with_context(|| format!("falha ao abrir {}", path.display()))?;
+        for number in missing {
+            let body = read_part(&mut file, number, upload.part_size, size)?;
+            let part = urls
+                .remove(&number)
+                .ok_or_else(|| anyhow!("o servidor não deu URL para a parte {number}"))?;
+            let etag = match self.put_part(&part, &body)? {
+                Some(etag) => etag,
+                None => {
+                    let fresh = self
+                        .part_urls(&upload.id, &[number])?
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| anyhow!("o servidor não renovou a URL da parte {number}"))?;
+                    self.put_part(&fresh, &body)?.ok_or_else(|| {
+                        anyhow!("a parte {number} foi recusada mesmo com a URL renovada")
+                    })?
+                }
+            };
+            etags.insert(number, etag);
+        }
+
+        let complete = UploadComplete {
+            parts: etags
+                .into_iter()
+                .map(|(part_number, etag)| CompletedPart { part_number, etag })
+                .collect(),
+        };
+        let request = HttpRequest::new(
+            "POST",
+            self.endpoint(&format!("/uploads/{}/complete", upload.id)),
+        )
+        .json(&complete)?;
+        let recording: api::Recording = self.call_json("falha ao concluir o upload", request)?;
+        Ok(Uploaded {
+            recording_id: recording.id,
+            deduplicated: false,
+        })
+    }
+}
+
+/// Um upload que o servidor já resolveu (deduplicado ou concluído antes).
+fn finished(upload: Upload) -> Result<Uploaded> {
+    let recording_id = upload.recording_id.ok_or_else(|| {
+        anyhow!(
+            "o upload {} terminou em {} sem gravação",
+            upload.id,
+            upload.status
+        )
+    })?;
+    Ok(Uploaded {
+        recording_id,
+        deduplicated: upload.status == api::status::DEDUPLICATED,
+    })
+}
+
+fn parse<T: DeserializeOwned>(what: &str, response: &HttpResponse) -> Result<T> {
+    serde_json::from_slice(&response.body)
+        .with_context(|| format!("{what}: resposta fora do contrato"))
+}
+
+/// Os bytes da parte `number` (a partir de 1): `part_size` bytes, menos a última.
+fn read_part(file: &mut File, number: u32, part_size: u64, size: u64) -> Result<Vec<u8>> {
+    let offset = u64::from(number - 1) * part_size;
+    if offset >= size {
+        bail!("a parte {number} passa do fim do arquivo");
+    }
+    let len = usize::try_from(part_size.min(size - offset))?;
+    let mut body = vec![0; len];
+    file.seek(SeekFrom::Start(offset))?;
+    file.read_exact(&mut body)?;
+    Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    use super::*;
+    use crate::api::Capture;
+
+    const BASE: &str = "https://eclume.test:8443";
+    const PAT: &str = "eclp_teste";
+
+    /// Transporte roteirizado: confere método e caminho de cada requisição, em ordem, e responde.
+    #[derive(Default)]
+    struct Script {
+        steps: Mutex<VecDeque<(String, Result<HttpResponse>)>>,
+        seen: Mutex<Vec<HttpRequest>>,
+    }
+
+    impl Script {
+        fn expect(self, call: &str, response: Result<HttpResponse>) -> Self {
+            self.steps
+                .lock()
+                .unwrap()
+                .push_back((call.to_string(), response));
+            self
+        }
+
+        fn seen(&self) -> Vec<HttpRequest> {
+            self.seen.lock().unwrap().clone()
+        }
+    }
+
+    impl Transport for Script {
+        fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
+            let (call, response) =
+                self.steps.lock().unwrap().pop_front().unwrap_or_else(|| {
+                    panic!("requisição a mais: {} {}", request.method, request.url)
+                });
+            let path = request
+                .url
+                .split_once("://")
+                .map_or("", |(_, rest)| rest.find('/').map_or("", |i| &rest[i..]));
+            assert_eq!(
+                format!("{} {}", request.method, path),
+                call,
+                "requisição fora do roteiro"
+            );
+            self.seen.lock().unwrap().push(request);
+            response
+        }
+    }
+
+    fn json(status: u16, body: serde_json::Value) -> Result<HttpResponse> {
+        Ok(HttpResponse {
+            status,
+            headers: vec![("content-type".into(), "application/json".into())],
+            body: serde_json::to_vec(&body).unwrap(),
+        })
+    }
+
+    fn etag(value: &str) -> Result<HttpResponse> {
+        Ok(HttpResponse {
+            status: 200,
+            headers: vec![("etag".into(), value.into())],
+            body: Vec::new(),
+        })
+    }
+
+    fn status(code: u16) -> Result<HttpResponse> {
+        json(code, serde_json::json!({}))
+    }
+
+    fn part(n: u32, base: &str) -> serde_json::Value {
+        serde_json::json!({
+            "part_number": n, "method": "PUT",
+            "url": format!("{base}/api/v1/uploads/up-1/parts/{n}"),
+            "headers": {"Content-Type": "application/octet-stream"},
+            "expires_at": "2026-09-24T15:00:00Z"
+        })
+    }
+
+    fn upload(
+        status: &str,
+        parts: Vec<serde_json::Value>,
+        received: &[(u32, &str)],
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "id": "up-1", "status": status, "filename": "g.ogg", "content_type": "audio/ogg",
+            "size_bytes": 12, "sha256": "ab", "part_size": 5, "part_count": 3,
+            "parts_received": received.iter().map(|(n, e)| serde_json::json!({
+                "part_number": n, "etag": e, "size_bytes": 5
+            })).collect::<Vec<_>>(),
+            "parts": parts, "recording_id": null,
+            "expires_at": "2026-09-25T00:00:00Z", "created_at": "2026-09-24T00:00:00Z",
+            "campo_novo": "o cliente ignora"
+        })
+    }
+
+    fn file() -> (std::path::PathBuf, UploadCreate) {
+        let dir = std::env::temp_dir().join(format!("eclume-proto-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{:?}.ogg", std::thread::current().id()));
+        std::fs::write(&path, b"aaaaabbbbbcc").unwrap();
+        let create = UploadCreate {
+            filename: "g.ogg".into(),
+            content_type: "audio/ogg; codecs=opus".into(),
+            size_bytes: 12,
+            sha256: "ab".into(),
+            recorded_at: None,
+            duration_ms: Some(1_000),
+            source: "desktop".into(),
+            capture: Capture {
+                meeting_app: Some("teams".into()),
+                device_name: None,
+                client_version: "eclume-desktop/0.1.0".into(),
+            },
+        };
+        (path, create)
+    }
+
+    fn make_client(script: Script) -> (Client, Arc<Script>, Arc<Mutex<Vec<Duration>>>) {
+        let script = Arc::new(script);
+        let slept = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&slept);
+        let retry = RetryPolicy {
+            sleep: Arc::new(move |d| log.lock().unwrap().push(d)),
+            ..RetryPolicy::default()
+        };
+        let client =
+            Client::new(Arc::clone(&script) as Arc<dyn Transport>, BASE, PAT, retry).unwrap();
+        (client, script, slept)
+    }
+
+    fn body_json(request: &HttpRequest) -> serde_json::Value {
+        serde_json::from_slice(&request.body).unwrap()
+    }
+
+    #[test]
+    fn upload_novo_sobe_as_partes_e_conclui() {
+        let script = Script::default()
+            .expect(
+                "POST /api/v1/uploads",
+                json(
+                    201,
+                    upload(
+                        "in_progress",
+                        vec![part(1, BASE), part(2, BASE), part(3, BASE)],
+                        &[],
+                    ),
+                ),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/1", etag("\"e1\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/2", etag("\"e2\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/3", etag("\"e3\""))
+            .expect(
+                "POST /api/v1/uploads/up-1/complete",
+                json(201, serde_json::json!({"id": "rec-1", "status": "queued"})),
+            );
+        let (client, script, _) = make_client(script);
+        let (path, create) = file();
+        let mut saved = Vec::new();
+        let uploaded = client
+            .upload(&path, &create, None, &mut |id| {
+                saved.push(id.map(str::to_string));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            uploaded,
+            Uploaded {
+                recording_id: "rec-1".into(),
+                deduplicated: false
+            }
+        );
+        assert_eq!(saved, vec![Some("up-1".to_string())]);
+
+        let seen = script.seen();
+        let create_body = body_json(&seen[0]);
+        assert_eq!(create_body["sha256"], "ab");
+        assert_eq!(create_body["capture"]["meeting_app"], "teams");
+        assert_eq!(create_body["source"], "desktop");
+        assert_eq!(seen[1].body, b"aaaaa");
+        assert_eq!(seen[2].body, b"bbbbb");
+        assert_eq!(seen[3].body, b"cc");
+        for request in &seen {
+            assert!(request
+                .headers
+                .contains(&("Authorization".into(), format!("Bearer {PAT}"))));
+        }
+        assert!(seen[1]
+            .headers
+            .contains(&("Content-Type".into(), "application/octet-stream".into())));
+        assert_eq!(
+            body_json(&seen[4]),
+            serde_json::json!({"parts": [
+                {"part_number": 1, "etag": "\"e1\""},
+                {"part_number": 2, "etag": "\"e2\""},
+                {"part_number": 3, "etag": "\"e3\""}
+            ]})
+        );
+    }
+
+    #[test]
+    fn deduplicado_confirma_sem_transferir() {
+        let mut dedup = upload("deduplicated", vec![], &[]);
+        dedup["recording_id"] = "rec-9".into();
+        dedup["part_count"] = 0.into();
+        let script = Script::default().expect("POST /api/v1/uploads", json(200, dedup));
+        let (client, script, _) = make_client(script);
+        let (path, create) = file();
+        let uploaded = client
+            .upload(&path, &create, None, &mut |_| panic!("nada a guardar"))
+            .unwrap();
+        assert_eq!(
+            uploaded,
+            Uploaded {
+                recording_id: "rec-9".into(),
+                deduplicated: true
+            }
+        );
+        assert_eq!(script.seen().len(), 1);
+    }
+
+    #[test]
+    fn retomada_pula_as_partes_recebidas_e_pede_urls_das_que_faltam() {
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/uploads/up-1",
+                json(
+                    200,
+                    upload("in_progress", vec![], &[(1, "\"e1\""), (3, "\"e3\"")]),
+                ),
+            )
+            .expect(
+                "POST /api/v1/uploads/up-1/part-urls",
+                json(200, serde_json::json!({"parts": [part(2, BASE)]})),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/2", etag("\"e2\""))
+            .expect(
+                "POST /api/v1/uploads/up-1/complete",
+                json(201, serde_json::json!({"id": "rec-1"})),
+            );
+        let (client, script, _) = make_client(script);
+        let (path, create) = file();
+        let uploaded = client
+            .upload(&path, &create, Some("up-1"), &mut |_| panic!("não recria"))
+            .unwrap();
+        assert_eq!(uploaded.recording_id, "rec-1");
+        let seen = script.seen();
+        assert_eq!(
+            body_json(&seen[1]),
+            serde_json::json!({"part_numbers": [2]})
+        );
+        assert_eq!(seen[2].body, b"bbbbb");
+        assert_eq!(body_json(&seen[3])["parts"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn retomada_de_upload_sumido_ou_concluido() {
+        // Sumiu (expirou e foi limpo): recria do zero.
+        let mut dedup = upload("deduplicated", vec![], &[]);
+        dedup["recording_id"] = "rec-2".into();
+        let script = Script::default()
+            .expect("GET /api/v1/uploads/up-1", status(404))
+            .expect("POST /api/v1/uploads", json(200, dedup));
+        let (client, _, _) = make_client(script);
+        let (path, create) = file();
+        let mut saved = Vec::new();
+        let uploaded = client
+            .upload(&path, &create, Some("up-1"), &mut |id| {
+                saved.push(id.map(str::to_string));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(uploaded.recording_id, "rec-2");
+        assert_eq!(saved, vec![None]);
+
+        // Já concluído (o app caiu depois do complete): confirma sem subir nada.
+        let mut done = upload("completed", vec![], &[]);
+        done["recording_id"] = "rec-3".into();
+        let script = Script::default().expect("GET /api/v1/uploads/up-1", json(200, done));
+        let (client, _, _) = make_client(script);
+        let uploaded = client
+            .upload(&path, &create, Some("up-1"), &mut |_| Ok(()))
+            .unwrap();
+        assert_eq!(
+            uploaded,
+            Uploaded {
+                recording_id: "rec-3".into(),
+                deduplicated: false
+            }
+        );
+    }
+
+    #[test]
+    fn retenta_rede_e_5xx_com_backoff_e_retry_after() {
+        let mut dedup = upload("deduplicated", vec![], &[]);
+        dedup["recording_id"] = "rec-4".into();
+        let script = Script::default()
+            .expect("POST /api/v1/uploads", Err(anyhow!("conexão recusada")))
+            .expect("POST /api/v1/uploads", status(503))
+            .expect(
+                "POST /api/v1/uploads",
+                Ok(HttpResponse {
+                    status: 429,
+                    headers: vec![("retry-after".into(), "7".into())],
+                    body: Vec::new(),
+                }),
+            )
+            .expect("POST /api/v1/uploads", json(200, dedup));
+        let (client, _, slept) = make_client(script);
+        let (path, create) = file();
+        let uploaded = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap();
+        assert_eq!(uploaded.recording_id, "rec-4");
+        assert_eq!(
+            *slept.lock().unwrap(),
+            vec![
+                Duration::from_secs(1),
+                Duration::from_secs(2),
+                Duration::from_secs(7)
+            ]
+        );
+    }
+
+    #[test]
+    fn desiste_depois_das_retentativas() {
+        let script = Script::default()
+            .expect("POST /api/v1/uploads", status(502))
+            .expect("POST /api/v1/uploads", status(502))
+            .expect("POST /api/v1/uploads", status(502))
+            .expect("POST /api/v1/uploads", status(502));
+        let (client, _, slept) = make_client(script);
+        let (path, create) = file();
+        let err = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("502"), "{err:#}");
+        assert_eq!(slept.lock().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn nao_retenta_401_e_mostra_o_problem() {
+        let script = Script::default().expect(
+            "POST /api/v1/uploads",
+            json(401, serde_json::json!({"title": "Não autenticado", "detail": "PAT revogado.", "code": "unauthorized"})),
+        );
+        let (client, _, slept) = make_client(script);
+        let (path, create) = file();
+        let err = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap_err();
+        assert_eq!(
+            format!("{err:#}"),
+            "falha ao iniciar o upload: o servidor respondeu 401 (unauthorized): PAT revogado."
+        );
+        assert!(slept.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn url_pre_assinada_vai_sem_pat_e_e_renovada_quando_expira() {
+        let storage = "https://minio.test:9000";
+        let script = Script::default()
+            .expect(
+                "POST /api/v1/uploads",
+                json(
+                    201,
+                    upload(
+                        "in_progress",
+                        vec![part(1, storage), part(2, storage), part(3, storage)],
+                        &[],
+                    ),
+                ),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/1", etag("\"e1\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/2", status(403))
+            .expect(
+                "POST /api/v1/uploads/up-1/part-urls",
+                json(200, serde_json::json!({"parts": [part(2, storage)]})),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/2", etag("\"e2\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/3", etag("\"e3\""))
+            .expect(
+                "POST /api/v1/uploads/up-1/complete",
+                json(201, serde_json::json!({"id": "rec-5"})),
+            );
+        let (client, script, _) = make_client(script);
+        let (path, create) = file();
+        let uploaded = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap();
+        assert_eq!(uploaded.recording_id, "rec-5");
+        for put in script.seen().iter().filter(|r| r.method == "PUT") {
+            assert!(put.headers.iter().all(|(name, _)| name != "Authorization"));
+        }
+    }
+
+    #[test]
+    fn arquivo_que_mudou_de_tamanho_nao_sobe() {
+        // Nada vai à rede: o tamanho é conferido antes.
+        let script = Script::default();
+        let (client, _, _) = make_client(script);
+        let (path, mut create) = file();
+        create.size_bytes = 99;
+        let err = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("mudou de tamanho"), "{err:#}");
+    }
+
+    #[test]
+    fn valida_endereco_e_pat() {
+        let transport: Arc<dyn Transport> = Arc::new(Script::default());
+        assert!(Client::new(
+            Arc::clone(&transport),
+            "ftp://x",
+            PAT,
+            RetryPolicy::default()
+        )
+        .is_err());
+        assert!(Client::new(
+            Arc::clone(&transport),
+            "https://x",
+            "ghp_abc",
+            RetryPolicy::default()
+        )
+        .is_err());
+        assert!(Client::new(
+            Arc::clone(&transport),
+            "https://x",
+            "eclp_",
+            RetryPolicy::default()
+        )
+        .is_err());
+        let client = Client::new(
+            transport,
+            "https://x:8443/",
+            " eclp_abc \n",
+            RetryPolicy::default(),
+        )
+        .unwrap();
+        assert_eq!(client.endpoint("/me"), "https://x:8443/api/v1/me");
+        assert!(client.same_origin("https://x:8443/api/v1/uploads/1/parts/1"));
+        assert!(!client.same_origin("https://x:9000/bucket/obj"));
+    }
+
+    #[test]
+    fn check_confere_o_pat_em_me() {
+        let script = Script::default()
+            .expect("GET /api/v1/me", json(200, serde_json::json!({"id": "u"})))
+            .expect(
+                "GET /api/v1/me",
+                json(403, serde_json::json!({"code": "insufficient_scope"})),
+            );
+        let (client, _, _) = make_client(script);
+        client.check().unwrap();
+        let err = client.check().unwrap_err();
+        assert!(format!("{err:#}").contains("insufficient_scope"), "{err:#}");
+    }
+}

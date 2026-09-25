@@ -1,7 +1,7 @@
 [project]
 name = "eclume-server"
 version = "0.1.0"
-description = "API do eclume: organizações, usuários, PATs, gravações, pessoas e busca."
+description = "API do eclume: organizações, usuários, PATs, gravações, resumos, pessoas e busca."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -17,6 +17,10 @@ dependencies = [
   "pydantic>=2.7",
   "pydantic-settings>=2.3",
   "pyyaml>=6.0",
+  # agentes de sumarização (holetz/eclume#9)
+  "anthropic>=1.8",
+  "httpx>=0.27",
+  "cryptography>=44",
 ]
 
 [project.scripts]

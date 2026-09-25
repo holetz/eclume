@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 def test_health_sem_credencial(client: TestClient):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["contract_version"] == "1.0.0"
+    assert response.json()["contract_version"] == "1.1.0"
 
 
 def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):
