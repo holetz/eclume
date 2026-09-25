@@ -55,7 +55,12 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     asyncio.run(roda())
     key = progress_key("rec-1")
     assert key == "eclume:progress:rec-1"
-    assert redis.hashes[key] == {"stage": "upload", "pct": 100, "updated_at": "2026-09-24T12:00:00Z"}
+    assert redis.hashes[key] == {
+        "stage": "upload",
+        "pct": 100,
+        "started_at": "2026-09-24T12:00:00Z",
+        "updated_at": "2026-09-24T12:00:00Z",
+    }
     assert redis.ttl[key] == PROGRESS_TTL_SECONDS
     assert redis.writes == 3
 

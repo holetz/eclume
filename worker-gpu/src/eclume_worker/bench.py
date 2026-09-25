@@ -42,6 +42,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--compute-type")
     parser.add_argument("--language", default="pt")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--batch-size", type=int, help="lote inicial fixo do ASR (padrão: pela VRAM livre)")
     parser.add_argument("--no-diarize", action="store_true")
     parser.add_argument("--no-embeddings", action="store_true")
     parser.add_argument("--transcript", type=Path, help="grava o transcript.raw.json neste caminho")
@@ -52,7 +53,7 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
     """Roda a engine uma vez e devolve as medidas."""
     kwargs: dict[str, Any] = {}
     if args.engine == "whisperx-local":
-        kwargs = {"device": args.device, "hf_token": resolve_hf_token()}
+        kwargs = {"device": args.device, "hf_token": resolve_hf_token(), "batch_size": args.batch_size}
     engine = factory(args.engine, **kwargs)
     options = EngineOptions(
         language=args.language,

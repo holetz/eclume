@@ -71,10 +71,15 @@ class WhisperXLocalEngine:
         hf_token: str | None = None,
         device: str = "cuda",
         vram: VramMonitor | None = None,
+        batch_size: int | None = None,
     ) -> None:
-        """`hf_token` libera a diarização; sem ele o job transcreve com um locutor só."""
+        """`hf_token` libera a diarização; sem ele o job transcreve com um locutor só.
+
+        `batch_size` fixa o lote inicial do ASR; `None` o escolhe pela VRAM livre.
+        """
         self.hf_token = hf_token
         self.device = device
+        self.batch_size = batch_size
         self.vram = vram if vram is not None else VramMonitor()
         self._slot_key: tuple[Any, ...] | None = None
         self._slot: Any = None
@@ -178,7 +183,7 @@ class WhisperXLocalEngine:
         requested = options.model or DEFAULT_MODEL
         models = [requested] if requested == FALLBACK_MODEL else [requested, FALLBACK_MODEL]
         compute_types = self._compute_types(options, warnings)
-        first_batch = initial_batch_size(self.vram.free_mb())
+        first_batch = self.batch_size or initial_batch_size(self.vram.free_mb())
 
         for model in models:
             if model == FALLBACK_MODEL and model != requested:

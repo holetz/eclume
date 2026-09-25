@@ -83,7 +83,7 @@ class EngineRegistry:
 
     def _kwargs(self, name: str) -> dict[str, Any]:
         if name == "whisperx-local":
-            return {"device": self.config.device}
+            return {"device": self.config.device, "batch_size": self.config.batch_size}
         if name == "openai-compatible":
             if not self.config.remote_base_url:
                 msg = "engine openai-compatible sem ECLUME_REMOTE_BASE_URL"
@@ -141,8 +141,9 @@ class EngineRegistry:
                 self._engine.unload()
 
 
-def _engine_info(result: EngineResult, processing_s: float, job_s: float) -> dict[str, Any]:
+def _engine_info(result: EngineResult, processing_s: float, job_s: float, started_at: str) -> dict[str, Any]:
     return {
+        "started_at": started_at,
         "engine": result.engine,
         "model": result.model,
         "compute_type": result.compute_type,
@@ -244,9 +245,10 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     except Exception as exc:
         raise JobFailedError(UPLOAD_FAILED, f"falha ao gravar os artefatos: {exc}") from exc
 
-    info = _engine_info(result, processing_s, time.monotonic() - started)
-    await redis.enqueue_job("ingest_transcript", recording_id, t_key, e_key, info, _queue_name=DEFAULT_QUEUE)
+    info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at)
+    # 100 antes do retorno: o server apaga o hash ao ingerir, e uma gravação depois o recriaria.
     await reporter.report("upload", 100)
+    await redis.enqueue_job("ingest_transcript", recording_id, t_key, e_key, info, _queue_name=DEFAULT_QUEUE)
     logger.info("gravação %s transcrita: %s", recording_id, info)
     return {"status": "done", "transcript_key": t_key, "embeddings_key": e_key, "engine_info": info}
 

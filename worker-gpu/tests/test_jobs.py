@@ -140,7 +140,7 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     assert options.min_speakers == 2
     assert token == "hf_x"
     assert engine.name == "whisperx-local"
-    assert engine.kwargs == {"device": "cuda"}
+    assert engine.kwargs == {"device": "cuda", "batch_size": None}
 
     [(name, args, kwargs)] = ctx["redis"].jobs
     assert name == "ingest_transcript"
@@ -154,6 +154,8 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     assert info["peak_vram_mb"] == 2500
     assert info["warnings"] == ["exemplo"]
     assert info["realtime_factor"] is not None
+    assert info["started_at"] == ctx["redis"].hashes[f"eclume:progress:{RECORDING}"]["started_at"]
+    assert info["started_at"].endswith("Z")
 
     history = ctx["redis"].history
     assert history[-1] == ("upload", 100)

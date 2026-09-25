@@ -259,6 +259,11 @@ def test_oom_reduz_o_lote_pela_metade(monkeypatch: pytest.MonkeyPatch):
     assert result.warnings == [WARN_BATCH_REDUCED]
 
 
+def test_lote_fixo_no_construtor(fake: FakeWhisperX):
+    eng = WhisperXLocalEngine(hf_token=None, vram=FakeVram(6000), batch_size=4)
+    assert eng.transcribe(AUDIO, EngineOptions(diarize=False)).batch_size == 4
+
+
 def test_oom_persistente_cai_para_medium(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_models={"large-v3-turbo"})
     install(monkeypatch, fake)

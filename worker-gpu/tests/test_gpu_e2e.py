@@ -107,6 +107,7 @@ def test_transcreve_o_dialogo_de_duas_vozes():
 
     assert extra["progress"]["stage"] == "upload"
     assert extra["progress"]["pct"] == "100"
+    assert extra["progress"]["started_at"] == info["started_at"]
     assert 0 < extra["ttl"] <= 86_400
 
 

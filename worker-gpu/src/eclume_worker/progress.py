@@ -1,6 +1,7 @@
 """Progresso do job em Redis: `HSET eclume:progress:{recording_id}` com TTL de 1 dia.
 
-O `pct` é o geral do job, monotônico, com uma faixa por etapa.
+O `pct` é o geral do job, monotônico, com uma faixa por etapa. `started_at` é o início do job,
+igual em toda gravação do hash.
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _rfc3339(moment: datetime) -> str:
+    return moment.isoformat().replace("+00:00", "Z")
+
+
 class ProgressReporter:
     """Grava o progresso só quando o `pct` geral ou a etapa mudam."""
 
@@ -46,6 +51,7 @@ class ProgressReporter:
         self.redis = redis
         self.key = progress_key(recording_id)
         self.clock = clock
+        self.started_at = _rfc3339(clock())
         self._last: tuple[str, int] | None = None
         self._pct = 0
 
@@ -55,6 +61,11 @@ class ProgressReporter:
         if self._last == (stage, self._pct):
             return
         self._last = (stage, self._pct)
-        updated_at = self.clock().isoformat().replace("+00:00", "Z")
-        await self.redis.hset(self.key, mapping={"stage": stage, "pct": self._pct, "updated_at": updated_at})
+        mapping = {
+            "stage": stage,
+            "pct": self._pct,
+            "started_at": self.started_at,
+            "updated_at": _rfc3339(self.clock()),
+        }
+        await self.redis.hset(self.key, mapping=mapping)
         await self.redis.expire(self.key, PROGRESS_TTL_SECONDS)

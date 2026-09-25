@@ -27,6 +27,8 @@ class WorkerConfig:
     # Engine forçada no processo (dev sem GPU: `cpu`); vazia, vale `options.engine` do job.
     engine: str | None = None
     device: str = "cuda"
+    # Lote inicial fixo do ASR; vazio, a engine o escolhe pela VRAM livre.
+    batch_size: int | None = None
     model_idle_seconds: float = 300.0
     job_timeout_seconds: int = 6 * 3600
     work_dir: Path = Path("/tmp/eclume-work")  # noqa: S108 — diretório de trabalho do container
@@ -53,6 +55,7 @@ class WorkerConfig:
             s3_region=get("ECLUME_S3_REGION", defaults.s3_region),
             engine=get("ECLUME_ENGINE"),
             device=get("ECLUME_DEVICE", defaults.device),
+            batch_size=int(get("ECLUME_BATCH_SIZE")) if get("ECLUME_BATCH_SIZE") else None,
             model_idle_seconds=float(get("ECLUME_MODEL_IDLE_SECONDS", defaults.model_idle_seconds)),
             job_timeout_seconds=int(get("ECLUME_JOB_TIMEOUT_SECONDS", defaults.job_timeout_seconds)),
             work_dir=Path(get("ECLUME_WORK_DIR", defaults.work_dir)),
