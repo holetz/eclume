@@ -156,7 +156,10 @@ echo "Subindo a infraestrutura…" >&2
 "${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm migrate
 echo "Subindo os serviços…" >&2
-"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 server worker-cpu worker-gpu web caddy
+"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 server worker-cpu worker-gpu web
+# O compose não recria um container quando só o `configs.content` muda: o Caddy é sempre recriado,
+# para o Caddyfile do checkout valer. A CA está no volume e sobrevive.
+"${COMPOSE[@]}" up -d --no-build --force-recreate --wait --wait-timeout 60 caddy
 
 # A CA nasce na primeira subida do Caddy; espera o arquivo e publica em /downloads/.
 for _ in $(seq 1 15); do

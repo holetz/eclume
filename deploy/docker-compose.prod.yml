@@ -225,6 +225,8 @@ configs:
           root * /srv/downloads
           @manifestos path *.json *.md *.crt
           header @manifestos Cache-Control "no-cache"
+          @ca path *.crt
+          header @ca Content-Type application/x-x509-ca-cert
           file_server {
             hide .*
           }
