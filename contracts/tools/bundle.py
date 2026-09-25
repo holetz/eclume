@@ -107,7 +107,6 @@ def main() -> int:
             return 1
         sys.stdout.write("bundle atualizado\n")
         return 0
-    BUNDLE.parent.mkdir(parents=True, exist_ok=True)
     BUNDLE.write_text(text, encoding="utf-8")
     sys.stdout.write(f"gravado {BUNDLE.relative_to(CONTRACTS.parent)}\n")
     return 0
