@@ -354,12 +354,51 @@ def test_sem_acesso_ao_modelo_gated_degrada(monkeypatch: pytest.MonkeyPatch, fak
     assert all(s.speaker is None for s in result.segments)
 
 
-def test_um_modelo_residente_por_vez(fake: FakeWhisperX):
+def test_asr_fica_residente_entre_jobs_e_a_etapa_sai(fake: FakeWhisperX):
     eng = engine()
     eng.transcribe(AUDIO, EngineOptions())
-    assert eng._slot_key == ("diarize", DIARIZATION_MODEL)
+    assert [m["kind"] for m in eng.loaded_models()] == ["asr"]
+    eng.transcribe(AUDIO, EngineOptions())
+    # O segundo job não recarrega o ASR; alinhador e pyannote voltam a cada job.
+    assert fake.names().count("load_model") == 1
+    assert fake.names().count("load_align_model") == 2
+    assert fake.names().count("DiarizationPipeline") == 2
     eng.unload()
-    assert eng._slot is None
+    assert eng.loaded_models() == []
+
+
+def test_vram_apertada_descarrega_o_asr_antes_da_etapa(fake: FakeWhisperX):
+    eng = engine(free=1500)
+    eng.transcribe(AUDIO, EngineOptions())
+    eng.transcribe(AUDIO, EngineOptions())
+    assert fake.names().count("load_model") == 2
+    assert eng.loaded_models() == []
+
+
+def test_lugar_unico_como_antes(fake: FakeWhisperX):
+    eng = WhisperXLocalEngine(hf_token="hf_x", device="cuda", vram=FakeVram(), keep_asr_resident=False)
+    eng.transcribe(AUDIO, EngineOptions())
+    assert [m["kind"] for m in eng.loaded_models()] == ["diarization"]
+    eng.transcribe(AUDIO, EngineOptions())
+    assert fake.names().count("load_model") == 2
+
+
+def test_oom_na_etapa_com_asr_residente_descarrega_e_repete(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
+    eng = engine()
+    tries = []
+    original = fake.align
+
+    def align_oom_once(*args: Any, **kw: Any) -> dict:
+        tries.append([m["kind"] for m in eng.loaded_models()])
+        if len(tries) == 1:
+            msg = "CUDA out of memory"
+            raise RuntimeError(msg)
+        return original(*args, **kw)
+
+    monkeypatch.setattr(sys.modules["whisperx"], "align", align_oom_once)
+    result = eng.transcribe(AUDIO, EngineOptions(diarize=False))
+    assert tries == [["asr", "alignment"], ["alignment"]]
+    assert result.segments
 
 
 @pytest.mark.parametrize(("free", "batch"), [(None, 4), (6000, 4), (3500, 4), (3499, 2), (1000, 2)])
@@ -382,7 +421,7 @@ def test_sem_token_devolve_none(tmp_path: Path):
 
 
 def test_modelo_residente_para_o_heartbeat(fake: FakeWhisperX):
-    eng = engine()
+    eng = WhisperXLocalEngine(hf_token="hf_x", device="cuda", vram=FakeVram(), keep_asr_resident=False)
     assert eng.loaded_models() == []
     eng.transcribe(AUDIO, EngineOptions(diarize=False))
     (aligner,) = eng.loaded_models()
@@ -394,6 +433,13 @@ def test_modelo_residente_para_o_heartbeat(fake: FakeWhisperX):
     assert [m["kind"] for m in eng.loaded_models()] == ["diarization"]
     eng.unload()
     assert eng.loaded_models() == []
+
+
+def test_heartbeat_declara_o_asr_residente(fake: FakeWhisperX):
+    eng = engine()
+    eng.transcribe(AUDIO, EngineOptions(diarize=False))
+    (asr,) = eng.loaded_models()
+    assert (asr["kind"], asr["name"], asr["vram_mb"]) == ("asr", "large-v3-turbo", 2210)  # 2610 - 400
 
 
 def test_opcoes_do_admin_lote_recuo_e_modelo_de_diarizacao(monkeypatch: pytest.MonkeyPatch):

@@ -6,7 +6,9 @@ python -m eclume_worker.bench /data/bench.ogg --engine whisperx-local --no-diari
 
 Imprime um JSON com o fator de tempo real (processamento ÷ duração), os minutos de
 processamento por hora de áudio e a VRAM de pico acima da linha de base. Com `--transcript`,
-grava também o `transcript.raw.json` para inspeção.
+grava também o `transcript.raw.json` para inspeção. `--repeat N` roda N jobs seguidos na mesma
+engine (como o worker faz) e lista o tempo de cada um em `runs_s`: com o ASR residente, do segundo
+em diante não há carga do modelo; `--single-slot` mede o comportamento antigo, um modelo por vez.
 """
 
 from __future__ import annotations
@@ -46,6 +48,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-diarize", action="store_true")
     parser.add_argument("--no-embeddings", action="store_true")
     parser.add_argument("--transcript", type=Path, help="grava o transcript.raw.json neste caminho")
+    parser.add_argument("--repeat", type=int, default=1, help="jobs seguidos na mesma engine (padrão: 1)")
+    parser.add_argument("--single-slot", action="store_true", help="um modelo por vez, sem o ASR residente")
     return parser.parse_args(argv)
 
 
@@ -53,7 +57,12 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
     """Roda a engine uma vez e devolve as medidas."""
     kwargs: dict[str, Any] = {}
     if args.engine == "whisperx-local":
-        kwargs = {"device": args.device, "hf_token": resolve_hf_token(), "batch_size": args.batch_size}
+        kwargs = {
+            "device": args.device,
+            "hf_token": resolve_hf_token(),
+            "batch_size": args.batch_size,
+            "keep_asr_resident": not args.single_slot,
+        }
     engine = factory(args.engine, **kwargs)
     options = EngineOptions(
         language=args.language,
@@ -63,9 +72,12 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
         embeddings=not args.no_embeddings,
     )
     free_before = VramMonitor().free_mb()
-    started = time.monotonic()
-    result = engine.transcribe(args.audio, options)
-    processing_s = time.monotonic() - started
+    runs_s = []
+    for _ in range(max(1, args.repeat)):
+        started = time.monotonic()
+        result = engine.transcribe(args.audio, options)
+        runs_s.append(round(time.monotonic() - started, 2))
+    processing_s = runs_s[0]
     engine.unload()
 
     if args.transcript is not None:
@@ -89,6 +101,7 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
         "diarization": result.diarization_model is not None,
         "duration_s": round(result.duration_s, 2),
         "processing_s": round(processing_s, 2),
+        "runs_s": runs_s,
         "realtime_factor": None if rtf is None else round(rtf, 4),
         "minutes_per_audio_hour": None if rtf is None else round(rtf * 60, 2),
         "peak_vram_mb": result.peak_vram_mb,

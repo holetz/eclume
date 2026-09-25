@@ -140,7 +140,12 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     assert options.min_speakers == 2
     assert token == "hf_x"
     assert engine.name == "whisperx-local"
-    assert engine.kwargs == {"device": "cuda", "batch_size": None}
+    assert engine.kwargs == {
+        "device": "cuda",
+        "batch_size": None,
+        "keep_asr_resident": True,
+        "resident_min_free_mb": 2500,
+    }
 
     [(name, args, kwargs)] = ctx["redis"].jobs
     assert name == "ingest_transcript"

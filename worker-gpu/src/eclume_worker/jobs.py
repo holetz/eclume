@@ -101,7 +101,12 @@ class EngineRegistry:
 
     def _kwargs(self, name: str, base_url: str | None) -> dict[str, Any]:
         if name == "whisperx-local":
-            return {"device": self.config.device, "batch_size": self.config.batch_size}
+            return {
+                "device": self.config.device,
+                "batch_size": self.config.batch_size,
+                "keep_asr_resident": self.config.keep_asr_resident,
+                "resident_min_free_mb": self.config.resident_min_free_mb,
+            }
         if name == "openai-compatible":
             if not base_url:
                 msg = "engine openai-compatible sem endpoint_url nas options nem ECLUME_REMOTE_BASE_URL"
