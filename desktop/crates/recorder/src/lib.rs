@@ -4,6 +4,7 @@
 
 pub mod encode;
 pub mod mix;
+pub mod queue;
 pub mod source;
 
 pub use eclume_audio_capture::AudioSource;
