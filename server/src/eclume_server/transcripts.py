@@ -12,6 +12,7 @@ from sqlalchemy import delete, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
+from eclume_server.problems import not_found
 from eclume_server.serialize import Row, user_ref
 
 if TYPE_CHECKING:
@@ -264,15 +265,58 @@ def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
     )
 
 
+def speakers_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+    """Locutores com o nome da pessoa ligada (sob a RLS)."""
+    return select(t.speakers, t.people.c.name.label("person_name")).select_from(
+        t.speakers.outerjoin(t.people, t.people.c.id == t.speakers.c.person_id)
+    )
+
+
 def speaker_json(row: Row) -> dict[str, Any]:
-    """Schema `Speaker`; pessoas e sugestões chegam com as specs de pessoas e de voz."""
+    """Schema `Speaker`, de uma linha de `speakers_select`; sugestões por voz chegam com a #15."""
+    person = None
+    if row["person_id"] is not None:
+        person = {"id": str(row["person_id"]), "name": row["person_name"]}
     return {
         "id": row["speaker_id"],
         "label": row["label"],
-        "person": None,
+        "person": person,
         "suggestions": [],
         "talk_ms": row["talk_ms"],
     }
+
+
+async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[UUID, list[Row]]:
+    """Locutores de cada transcrição, na ordem da transcrição."""
+    rows = (
+        await conn.execute(
+            speakers_select()
+            .where(t.speakers.c.transcript_id.in_(transcript_ids))
+            .order_by(t.speakers.c.transcript_id, t.speakers.c.position)
+        )
+    ).mappings()
+    grouped: dict[UUID, list[Row]] = {transcript_id: [] for transcript_id in transcript_ids}
+    for row in rows:
+        grouped[row["transcript_id"]].append(row)
+    return grouped
+
+
+async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: bool) -> dict[str, Any]:
+    """Transcrição visível completa (schema v1), ou 404."""
+    row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
+    if row is None:
+        raise not_found("Transcrição inexistente ou sem acesso.")
+    speakers = (await load_speakers(conn, [transcript_id]))[transcript_id]
+    segments = (
+        (
+            await conn.execute(
+                select(t.segments).where(t.segments.c.transcript_id == transcript_id).order_by(t.segments.c.position)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return transcript_json(row, speakers, list(segments), words=words)
 
 
 def segment_json(row: Row, *, words: bool) -> dict[str, Any]:
