@@ -24,6 +24,27 @@ Portas:
 | lumea | `https://192.168.15.199` (443) |
 | eclume | `https://192.168.15.199:8443` |
 
+## Estado real do host (provisionado em 2026-09-24, spec holetz/eclume#4)
+
+| Item | Estado |
+|---|---|
+| Máquina | `holetz-pc`, usuário `holetz` (sudo sem senha), 4 CPUs, 15 GB RAM, ~56 GB livres em `/` |
+| GPU | GTX 1660 SUPER 6 GB, driver 595.91.07, runtime `nvidia` já configurado no Docker |
+| Docker | 29.1.3 do repositório do Ubuntu, mantido no lugar do Docker CE (passo 3 dispensado) |
+| Coexistência | O host é o servidor doméstico do usuário, com Jellyfin, *arr, qBittorrent, homepage, Sunshine e Samba. Esses serviços **não são tocados**. O Jellyfin pode disputar a GPU. |
+| Firewall | ufw já ativo, com regras 443 (lumea) e 8443 (eclume) só para `192.168.15.0/24` |
+| SSH | chave `ed25519` da máquina de dev autorizada. **O login por senha foi mantido** (passo 1.4 não aplicado), para não trancar o usuário fora de outros dispositivos. |
+| Claude | `~/.local/bin/claude` (2.1.282) já logado |
+| Builds | uv e Rust stable em `~/.local/bin` e `~/.cargo/bin`, com as deps de build do Tauri instaladas |
+
+**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões):
+
+- Imagens: `docker --context gpu-host compose ... build`, direto no daemon do host, sem registry.
+- Cargo, npm e uv: `remote-run <dir> '<comando>'` (`~/.local/bin/remote-run` na máquina de dev).
+  O helper sincroniza o diretório por rsync (sem `.git`, preservando `target/`, `node_modules/`,
+  `.venv/` e `dist/` no host) e executa em `~/build/<caminho>` com `nice`.
+- Disco: pode com `docker builder prune -f --filter until=720h` quando apertar.
+
 ## 1. IP fixo e SSH
 
 1. No roteador, reserve o IP `192.168.15.199` (reserva DHCP) para a placa de rede do servidor.
