@@ -332,3 +332,29 @@ collections = Table(
     _ts("created_at", server_default=FetchedValue()),
     _ts("updated_at", server_default=FetchedValue()),
 )
+
+invitations = Table(
+    "invitations",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    Column("email", Text),
+    Column("role", Text),
+    Column("group_ids", ARRAY(UUID(as_uuid=True))),
+    Column("token_hash", Text),
+    _ts("expires_at"),
+    _ts("accepted_at"),
+    _uuid("accepted_user_id"),
+    _uuid("created_by"),
+    _ts("created_at"),
+)
+
+org_secrets = Table(
+    "org_secrets",
+    metadata,
+    _uuid("org_id", primary_key=True),
+    Column("name", Text, primary_key=True),
+    Column("value_encrypted", Text),
+    _ts("updated_at"),
+    _uuid("updated_by"),
+)

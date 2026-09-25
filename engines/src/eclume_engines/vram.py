@@ -47,6 +47,19 @@ class VramMonitor:
         info = self._info()
         return None if info is None else int(info.used // _MB)
 
+    def snapshot(self) -> dict[str, Any] | None:
+        """Nome, VRAM total e usada (MiB) e utilização (%) da GPU agora; `None` sem NVML."""
+        info = self._info()
+        if info is None:
+            return None
+        name = self._nvml.nvmlDeviceGetName(self._handle)
+        return {
+            "gpu_name": name.decode() if isinstance(name, bytes) else str(name),
+            "vram_total_mb": int(info.total // _MB),
+            "vram_used_mb": int(info.used // _MB),
+            "utilization_pct": float(self._nvml.nvmlDeviceGetUtilizationRates(self._handle).gpu),
+        }
+
     @contextlib.contextmanager
     def track(self) -> Iterator[PeakVram]:
         """Amostra o uso durante o bloco; `PeakVram.mb` é o pico acima da linha de base."""

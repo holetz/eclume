@@ -31,5 +31,49 @@
     }
   ],
   "recent_failures": [],
-  "checked_at": "2026-09-19T13:43:00Z"
+  "checked_at": "2026-09-19T13:43:00Z",
+  "worker": {
+    "online": true,
+    "last_seen_at": "2026-09-19T13:42:55Z",
+    "version": "0.1.0",
+    "engine": "whisperx-local",
+    "device": "cuda",
+    "busy": true
+  },
+  "queues": [
+    {
+      "name": "eclume:gpu",
+      "queued": 1,
+      "running": 1
+    },
+    {
+      "name": "eclume:default",
+      "queued": 0,
+      "running": 0
+    }
+  ],
+  "running_jobs": [
+    {
+      "job_id": "01928f3a-1c00-7a00-8000-000000000e01",
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000301",
+      "recording_title": "Reunião de alinhamento — cliente Aurora",
+      "state": "running",
+      "stage": "diarization",
+      "progress": 0.78,
+      "queued_at": "2026-09-19T13:40:02Z",
+      "started_at": "2026-09-19T13:40:05Z",
+      "updated_at": "2026-09-19T13:42:51Z"
+    },
+    {
+      "job_id": "01928f3a-1c00-7a00-8000-000000000e02",
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000302",
+      "recording_title": "Entrevista de desligamento",
+      "state": "queued",
+      "stage": null,
+      "progress": null,
+      "queued_at": "2026-09-19T13:41:30Z",
+      "started_at": null,
+      "updated_at": null
+    }
+  ]
 }

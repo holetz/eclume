@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#10
+source: holetz/eclume#10, holetz/eclume#12
 maintainer: holetz
 ---
 
@@ -52,15 +52,25 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/gravacoes/:id`, `/importar`, `/pessoas`, `/pessoas/:id`, `/busca`,
-  `/colecoes`, `/tokens`, `/app-desktop`), e os filtros na query string também em pt-BR (`?de=`,
-  `?colecao=`, `?tag=` na biblioteca; `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
-- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`. Uma área de
-  outra spec (hoje: Administração) já está lá, desligada: ligar é mudar `enabled` e registrar a
-  rota.
+- **Rotas em pt-BR** (`/entrar`, `/convite/:token`, `/gravacoes/:id`, `/importar`, `/pessoas`,
+  `/pessoas/:id`, `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/*`), e os filtros na
+  query string também em pt-BR (`?de=`, `?colecao=`, `?tag=` na biblioteca;
+  `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
+- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`; uma área nova de
+  outra spec entra desligada, e ligá-la é mudar `enabled` e registrar a rota.
 - **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
-  `['tags']`, `['recordings', ...]`): uma mutação que muda contagens ou nomes vistos em outras
-  telas invalida o prefixo inteiro, além de gravar no cache o que a resposta devolveu.
+  `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
+  vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
+  devolveu.
+- **Administração** (`/admin/*`, `src/features/admin/`): `AdminRoutes` monta as seções
+  (Transcrição, Agentes, Templates padrão, Usuários e convites, Segredos, Saúde) dentro de
+  `AdminLayout`, que **exige `role: admin`** — esconder o item do menu não é controle de acesso; o
+  membro vê "Sem permissão". A lista de seções mora em `sections.ts`. Segredos só têm campo de
+  escrita e nunca mostram o valor; o link de convite, como o segredo do PAT, aparece uma vez; a
+  Saúde relê a cada 10 s (`refetchInterval`). As regras do server estão em
+  [server-admin.md](server-admin.md).
+- **Rotas públicas:** `/entrar` e `/convite/:token` (aceite do convite: nome, senha de 12+ e
+  confirmação; 404 vira "convite inválido, expirado ou já usado").
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
@@ -126,8 +136,8 @@ Depois de recarregar, o import recomeça pela conversão.
   `fetch` do Node).
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
   para o mock, e um cenário percorre login, biblioteca, transcrição, import com conversão real e
-  PAT, e outro percorre busca, gravação aberta no segundo do trecho, vínculo de locutor, pessoas
-  e coleções. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
+  PAT, outro percorre busca, gravação aberta no segundo do trecho, vínculo de locutor, pessoas
+  e coleções, e um terceiro o painel admin. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
   resposta do login, pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em

@@ -9,6 +9,8 @@ dependencies = [
   "eclume-engines",
   "arq>=0.26",
   "boto3>=1.34",
+  # Abre o token do HF que o server manda cifrado nas options do job.
+  "cryptography>=44",
 ]
 
 # A imagem GPU instala `gpu` (WhisperX, torch); o dev sem GPU pode usar `cpu` (faster-whisper).

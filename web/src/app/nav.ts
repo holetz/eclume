@@ -18,7 +18,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', enabled: true },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Conta', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Conta', enabled: true },
-  { to: '/admin', label: 'Painel admin', group: 'Administração', enabled: false, adminOnly: true }, // holetz/eclume#12
+  { to: '/admin', label: 'Painel admin', group: 'Administração', enabled: true, adminOnly: true },
 ]
 
 export type Role = 'admin' | 'member'

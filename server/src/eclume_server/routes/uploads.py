@@ -25,7 +25,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized, validation_failed
-from eclume_server.recordings import get_visible, insert_job, render
+from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
 from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
@@ -357,7 +357,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
             recording_id, enqueue = await _finish(ctx, conn, row, principal)
         recording = await get_visible(conn, recording_id)
     if enqueue is not None:
-        await ctx.queue.enqueue_transcribe(recording_id, 1, *enqueue)
+        await enqueue_transcription(ctx, recording_id, 1, *enqueue)
     return (await render(ctx, [recording]))[0]
 
 

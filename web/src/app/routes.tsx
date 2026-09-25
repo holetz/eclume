@@ -1,4 +1,6 @@
 import { Link, Route, Routes } from 'react-router'
+import { AdminRoutes } from '../features/admin/AdminRoutes'
+import { InvitationPage } from '../features/auth/InvitationPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { CollectionsPage } from '../features/collections/CollectionsPage'
 import { DesktopPage } from '../features/desktop/DesktopPage'
@@ -28,6 +30,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
+      <Route path="/convite/:token" element={<InvitationPage />} />
       <Route element={<RequireSession />}>
         <Route index element={<LibraryPage />} />
         <Route path="/gravacoes/:id" element={<RecordingPage />} />
@@ -38,6 +41,7 @@ export function AppRoutes() {
         <Route path="/colecoes" element={<CollectionsPage />} />
         <Route path="/tokens" element={<TokensPage />} />
         <Route path="/app-desktop" element={<DesktopPage />} />
+        <Route path="/admin/*" element={<AdminRoutes />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
