@@ -26,12 +26,15 @@ async def migrate(engine: AsyncEngine) -> list[str]:
     async with engine.connect() as conn:
         await conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _LOCK_KEY})
         try:
-            await conn.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS schema_migrations ("
-                    " version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+            # Só cria quando falta: o papel de conexão da aplicação (`eclume_server`) não tem
+            # CREATE no schema e roda `migrate` no `admin bootstrap` com o schema já em dia.
+            if (await conn.execute(text("SELECT to_regclass('schema_migrations')"))).scalar() is None:
+                await conn.execute(
+                    text(
+                        "CREATE TABLE schema_migrations ("
+                        " version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+                    )
                 )
-            )
             await conn.commit()
             done = set((await conn.execute(text("SELECT version FROM schema_migrations"))).scalars())
             await conn.commit()
@@ -49,3 +52,19 @@ async def migrate(engine: AsyncEngine) -> list[str]:
             await conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _LOCK_KEY})
             await conn.commit()
     return applied_now
+
+
+RUNTIME_ROLE = "eclume_server"
+
+
+async def enable_runtime_login(engine: AsyncEngine, password: str) -> None:
+    """Liga o LOGIN do papel de conexão da aplicação (criado pela migration 006) com esta senha."""
+    async with engine.begin() as conn:
+        # `ALTER ROLE` não aceita parâmetro: o literal sai do `format(%L)` do próprio Postgres.
+        statement = (
+            await conn.execute(
+                text("SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', CAST(:role AS text), CAST(:password AS text))"),
+                {"role": RUNTIME_ROLE, "password": password},
+            )
+        ).scalar_one()
+        await conn.execute(text(statement))

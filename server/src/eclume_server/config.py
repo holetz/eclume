@@ -12,9 +12,12 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="ECLUME_", env_file=None)
 
-    # O papel desta URL é o dono do schema (superusuário no dev): roda migrations e operações de
-    # sistema. As requisições baixam para `eclume_app` por transação (docs/standards/code/server-nucleo.md).
+    # Em produção, o papel desta URL é `eclume_server` (sem superusuário, só DML); só o one-shot
+    # `migrate` usa o dono do schema. No dev, o superusuário serve aos dois. As requisições baixam
+    # para `eclume_app` por transação (docs/standards/code/server-nucleo.md §Papéis do banco).
     database_url: str = "postgresql+asyncpg://eclume:eclume@127.0.0.1:5432/eclume"
+    # Com valor, `eclume-server migrate` liga o LOGIN de `eclume_server` com esta senha.
+    runtime_db_password: str | None = None
     redis_url: str = "redis://127.0.0.1:6379/0"
 
     s3_endpoint: str = "http://127.0.0.1:9000"

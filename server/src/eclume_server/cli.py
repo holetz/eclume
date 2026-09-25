@@ -10,7 +10,7 @@ from uuid import UUID
 
 from eclume_server.accounts import AccountError, create_org, create_user
 from eclume_server.config import get_settings
-from eclume_server.db.migrate import migrate
+from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate
 from eclume_server.db.session import make_engine, system_tx
 
 
@@ -21,12 +21,17 @@ def _password(from_stdin: bool) -> str:  # noqa: FBT001 — espelha a flag do CL
 
 
 async def _migrate() -> None:
-    engine = make_engine(get_settings().database_url)
+    settings = get_settings()
+    engine = make_engine(settings.database_url)
     try:
         applied = await migrate(engine)
+        if settings.runtime_db_password:
+            await enable_runtime_login(engine, settings.runtime_db_password)
     finally:
         await engine.dispose()
     print("aplicadas: " + (", ".join(applied) if applied else "nenhuma (schema em dia)"))  # noqa: T201
+    if settings.runtime_db_password:
+        print(f"papel {RUNTIME_ROLE} com LOGIN")  # noqa: T201
 
 
 async def _bootstrap(args: argparse.Namespace, password: str) -> None:
@@ -57,7 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     """Parser do CLI."""
     parser = argparse.ArgumentParser(prog="eclume-server", description="Administração do server do eclume.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("migrate", help="aplica as migrations pendentes")
+    commands.add_parser(
+        "migrate", help="aplica as migrations pendentes (e liga o papel eclume_server com ECLUME_RUNTIME_DB_PASSWORD)"
+    )
 
     admin = commands.add_parser("admin", help="organizações e usuários").add_subparsers(dest="admin", required=True)
     bootstrap = admin.add_parser("bootstrap", help="cria a primeira organização e o seu admin (aplica as migrations)")
