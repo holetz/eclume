@@ -14,6 +14,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import forbidden, not_found
 from eclume_server.serialize import Row, user_ref
+from eclume_server.voice import load_suggestions, suggest
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -96,7 +97,7 @@ def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, 
     return model, result
 
 
-async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`
+async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transcript`; uma transação em sequência
     conn: AsyncConnection,
     storage: Storage,
     recording_id: UUID,
@@ -182,6 +183,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`
             insert(t.segments),
             [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(segments)],
         )
+    vectors: dict[str, list[float]] = {}
     if embeddings_key and options.get("embeddings"):
         model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
         for sid, vector in vectors.items():
@@ -192,6 +194,10 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`
                 ),
                 {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
             )
+    if vectors:
+        dims = {len(vector) for vector in vectors.values()}
+        if len(dims) == 1:
+            await suggest(conn, org, transcript_id, model, dims.pop())
 
     await conn.execute(
         update(t.transcription_jobs)
@@ -274,7 +280,7 @@ def speakers_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
 
 
 def speaker_json(row: Row) -> dict[str, Any]:
-    """Schema `Speaker`, de uma linha de `speakers_select`; sugestões por voz chegam com a #15."""
+    """Schema `Speaker`, de uma linha de `speakers_select` com as `suggestions` de `load_suggestions`."""
     person = None
     if row["person_id"] is not None:
         person = {"id": str(row["person_id"]), "name": row["person_name"]}
@@ -282,13 +288,13 @@ def speaker_json(row: Row) -> dict[str, Any]:
         "id": row["speaker_id"],
         "label": row["label"],
         "person": person,
-        "suggestions": [],
+        "suggestions": [] if person else list(row.get("suggestions") or []),
         "talk_ms": row["talk_ms"],
     }
 
 
 async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[UUID, list[Row]]:
-    """Locutores de cada transcrição, na ordem da transcrição."""
+    """Locutores de cada transcrição, na ordem da transcrição, com as sugestões por voz pendentes."""
     rows = (
         await conn.execute(
             speakers_select()
@@ -296,9 +302,11 @@ async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> di
             .order_by(t.speakers.c.transcript_id, t.speakers.c.position)
         )
     ).mappings()
+    suggestions = await load_suggestions(conn, transcript_ids)
     grouped: dict[UUID, list[Row]] = {transcript_id: [] for transcript_id in transcript_ids}
     for row in rows:
-        grouped[row["transcript_id"]].append(row)
+        key = (row["transcript_id"], row["speaker_id"])
+        grouped[row["transcript_id"]].append({**row, "suggestions": suggestions.get(key, [])})
     return grouped
 
 

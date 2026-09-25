@@ -9,6 +9,7 @@ from sqlalchemy import func, insert, select, text
 
 from eclume_server.db import tables as t
 from eclume_server.security import hash_password
+from eclume_server.voice import DEFAULT_THRESHOLD
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -37,7 +38,7 @@ DEFAULT_ORG_SETTINGS: dict[str, dict[str, Any]] = {
         "max_speakers": None,
     },
     "summarization": {"default_provider_id": None, "auto_summarize": False, "default_template_id": None},
-    "voice_identification": {"enabled": False, "suggestion_threshold": 0.75},
+    "voice_identification": {"enabled": False, "suggestion_threshold": DEFAULT_THRESHOLD},
 }
 
 
