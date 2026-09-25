@@ -63,3 +63,11 @@ export function usePersonSegments(id: string) {
 export function recordingAt(recordingId: string, ms: number): string {
   return `/gravacoes/${recordingId}?t=${Math.max(0, Math.floor(ms))}`
 }
+
+/** Até 200 pessoas em ordem alfabética, para escolher numa lista (filtro da busca). */
+export function usePeopleOptions() {
+  return useQuery({
+    queryKey: [...PEOPLE_KEY, 'options'],
+    queryFn: () => unwrap(api.GET('/api/v1/people', { params: { query: { limit: 200 } } })),
+  })
+}
