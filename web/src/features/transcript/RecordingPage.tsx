@@ -6,6 +6,7 @@ import { JobProgress, StatusBadge } from '../library/RecordingStatus'
 import { useRecording, useTranscript } from './queries'
 import styles from './RecordingPage.module.css'
 import { SpeakersPanel } from './SpeakersPanel'
+import { SummariesPanel } from './SummariesPanel'
 import { TranscriptView } from './TranscriptView'
 
 export function RecordingPage() {
@@ -68,6 +69,7 @@ export function RecordingPage() {
           </div>
           <aside className={styles.side} aria-label="Locutores e resumos">
             <SpeakersPanel transcript={transcript.data} />
+            <SummariesPanel transcriptId={transcript.data.id} />
           </aside>
         </div>
       )}
