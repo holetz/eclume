@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+
+# Node / Tauri
+node_modules/
+target/
+
+# Configuração local e segredos — os exemplos (.env.example) são versionados
+.env
+*.env.local
+
+# SO / editor
+.DS_Store
+*.swp
