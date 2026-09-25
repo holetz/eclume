@@ -1,7 +1,7 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local com estados recording → pending → syncing → synced ou failed, e expõe os traits Uploader e MeetingDetector para o sync e a detecção — este é o formato, o ciclo de vida e os pontos de extensão.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local (v2) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida e os pontos de extensão.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
 timestamp: 2026-09-24
@@ -51,29 +51,40 @@ suspenso não trava a gravação nem desalinha as faixas.
 - A gravação nasce como `gravacoes/<id>.ogg.part` e vira `<id>.ogg` ao parar.
 - A fila é a tabela `recordings` (`id`, `path`, `started_at`, `ended_at`, `duration_ms`, `bytes`,
   `status`, `interrupted`, `attempts`, `last_error`, `remote_id`), com instantes em milissegundos
-  Unix.
+  Unix. O esquema v2 (`user_version = 2`) acrescenta `upload_id` e `sha256` (retomada do upload),
+  `next_attempt_at` (backoff), `synced_at` (confirmação do servidor), `purged_at` (arquivo local
+  apagado pela retenção) e `meeting_app` (app da reunião detectada, no vocabulário do contrato).
+  Uma fila v1 ganha as colunas na abertura, sem perder linhas.
 
 ```
-recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced
+recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)
     │                   ▲                        │
-    └─crash: recover────┘ (interrupted = 1)      └──▶ failed ──retry_failed──▶ pending
+    └─crash: recover────┘ (interrupted = 1)      └──▶ failed ──retry_due / retry_failed──▶ pending
 ```
 
 - **Recuperação:** ao abrir, o app chama `session::recover`: cada linha ainda em `recording` tem o
   `.part` renomeado (o Ogg é legível até a última página escrita) e vira `pending` com
   `interrupted = 1`; o que ficou em `syncing` volta a `pending`.
-- `claim_next` reserva só `pending`; uma falha volta à fila apenas por
-  `retry_failed(max_attempts)`, no ritmo da política de espera de quem agenda o sync.
+- `claim_next` reserva só `pending`. `mark_failed` agenda `next_attempt_at` por
+  `retry_backoff_ms` (30 s dobrando a cada tentativa, até 1 h); `retry_due(agora, max)` devolve à
+  fila as falhas cujo prazo venceu, e `retry_failed(max)` as devolve já.
+- `purge_candidates(até)` lista as `synced` com `remote_id` cujo arquivo ainda existe;
+  `mark_purged` registra a remoção. Nada que o servidor não confirmou sai do disco.
 
-## Pontos de extensão (spec `desktop-deteccao-e-sync`)
+## Pontos de extensão
+
+Implementados pela spec `desktop-deteccao-e-sync`; o detalhe está em
+[desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md).
 
 - `Uploader::upload(&QueuedRecording) -> Result<String>` envia o arquivo e devolve o id remoto;
   `sync_pending(&Mutex<Queue>, &dyn Uploader)` passa por todas as `pending`, isola cada falha na
-  própria linha e não segura a fila durante o upload. A fila do app vem de `AppState::queue()`.
-- `MeetingDetector::poll() -> Option<MeetingEvent>` (`Started { app }` / `Ended`), consultado
-  periodicamente; iniciar e parar a gravação a partir dele usa `AppState::start_recording` e
-  `stop_recording`, os mesmos caminhos da bandeja.
-- `AppState::set_syncing(bool)` liga o estado "Sincronizando" que a bandeja já mostra.
+  própria linha e não segura a fila durante o upload. A implementação é o `HttpUploader` do
+  `eclume-sync`, que guarda o upload em curso na fila compartilhada (`AppState::shared_queue()`).
+- `MeetingDetector::poll() -> Option<MeetingEvent>` (`Started { app }` / `Ended`), consultado a
+  cada segundo; a implementação é o `DebouncedDetector` do `eclume-detect`. A gravação que ele
+  inicia usa `AppState::start_recording_as` com a origem (manual ou detecção, e o app), e a
+  manual continua por `start_recording`.
+- `AppState::set_syncing(bool)` liga o estado "Sincronizando" que a bandeja mostra.
 
 ## App e bandeja
 

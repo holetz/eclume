@@ -8,3 +8,4 @@ pilar e os comandos de build, lint e teste que as specs citam no `verify:`.
 * [desktop-gravacao.md](desktop-gravacao.md) — como o app desktop grava (mic + sistema em Ogg/Opus mono 16 kHz), a fila SQLite de gravações e os traits de sync e detecção
 * [server-nucleo.md](server-nucleo.md) — como o server persiste e isola (migrations SQL, RLS sob `eclume_app`), autentica (sessão com CSRF, PAT), recebe uploads (URL de parte assinada pela API) e é testado (serviços reais, conformidade com o OpenAPI)
 * [frontend-web.md](frontend-web.md) — o app web: cliente gerado do contrato, origem única com sessão e CSRF, estrutura de pastas, motor de upload multipart e testes (vitest sobre as fixtures e E2E contra o mock)
+* [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) — como o app desktop detecta reuniões (mic, processo e janela, com debounce e políticas por app) e sobe as gravações por PAT pelo upload resumível, com CA extra e retenção

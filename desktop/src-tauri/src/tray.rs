@@ -1,7 +1,11 @@
 //! Bandeja do sistema: ícone por estado e o menu de ações rápidas.
 //!
-//! No Linux (AppIndicator) o clique no ícone só abre o menu, então toda ação mora no menu.
+//! No Linux (AppIndicator) o clique no ícone só abre o menu, então toda ação mora no menu —
+//! inclusive a pergunta de reunião detectada, que ganha dois itens enquanto espera resposta.
 
+use std::sync::Mutex;
+
+use eclume_detect::AppKey;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -12,19 +16,32 @@ use crate::state::{AppState, AppStatus, StatusView};
 const TRAY_ID: &str = "eclume";
 const MENU_STATUS: &str = "status";
 const MENU_TOGGLE: &str = "toggle";
+const MENU_ASK_RECORD: &str = "ask-record";
+const MENU_ASK_IGNORE: &str = "ask-ignore";
+const MENU_SYNC: &str = "sync-now";
 const MENU_OPEN_WEB: &str = "open-web";
 const MENU_SHOW: &str = "show";
 const MENU_QUIT: &str = "quit";
 
-/// Os itens que mudam com o estado.
-struct TrayHandles {
-    tray: TrayIcon<Wry>,
+/// O menu em uso e os itens que mudam com o estado.
+struct MenuHandles {
     status: MenuItem<Wry>,
     toggle: MenuItem<Wry>,
+    /// A pergunta que o menu mostra agora.
+    ask: Option<AppKey>,
 }
 
-/// Cria o ícone e o menu da bandeja.
-pub fn build(app: &AppHandle) -> tauri::Result<()> {
+struct TrayHandles {
+    tray: TrayIcon<Wry>,
+    menu: Mutex<MenuHandles>,
+}
+
+/// A bandeja está de pé: é a indicação visível que a gravação automática exige.
+pub fn is_visible(app: &AppHandle) -> bool {
+    app.try_state::<TrayHandles>().is_some()
+}
+
+fn build_menu(app: &AppHandle, ask: Option<AppKey>) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
     let status = MenuItem::with_id(
         app,
         MENU_STATUS,
@@ -39,22 +56,68 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let open_web = MenuItem::with_id(app, MENU_OPEN_WEB, "Abrir o eclume web", true, None::<&str>)?;
-    let show = MenuItem::with_id(app, MENU_SHOW, "Mostrar gravações", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, MENU_QUIT, "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(
+    let menu = Menu::with_items(app, &[&status])?;
+    if let Some(key) = ask {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(
+            app,
+            MENU_ASK_RECORD,
+            format!("Gravar a reunião do {}", key.label()),
+            true,
+            None::<&str>,
+        )?)?;
+        menu.append(&MenuItem::with_id(
+            app,
+            MENU_ASK_IGNORE,
+            "Ignorar esta reunião",
+            true,
+            None::<&str>,
+        )?)?;
+    }
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&toggle)?;
+    menu.append(&MenuItem::with_id(
         app,
-        &[
-            &status,
-            &PredefinedMenuItem::separator(app)?,
-            &toggle,
-            &open_web,
-            &show,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
+        MENU_SYNC,
+        "Sincronizar agora",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        MENU_OPEN_WEB,
+        "Abrir o eclume web",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        MENU_SHOW,
+        "Gravações e configurações",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        MENU_QUIT,
+        "Sair",
+        true,
+        None::<&str>,
+    )?)?;
+    Ok((
+        menu,
+        MenuHandles {
+            status,
+            toggle,
+            ask,
+        },
+    ))
+}
 
+/// Cria o ícone e o menu da bandeja.
+pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let (menu, handles) = build_menu(app, None)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(AppStatus::Idle)?)
         .tooltip(crate::APP_NAME)
@@ -65,8 +128,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
     app.manage(TrayHandles {
         tray,
-        status,
-        toggle,
+        menu: Mutex::new(handles),
     });
     refresh(app);
     Ok(())
@@ -84,8 +146,16 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
                 {
                     log::error!("falha ao alternar a gravação: {err:#}");
                 }
+                crate::sync::nudge(&app);
                 crate::refresh_ui(&app);
             });
+        }
+        MENU_ASK_RECORD => crate::auto::answer(app, true),
+        MENU_ASK_IGNORE => crate::auto::answer(app, false),
+        MENU_SYNC => {
+            if let Err(err) = crate::sync::sync_now(app) {
+                log::error!("{err:#}");
+            }
         }
         MENU_OPEN_WEB => {
             if let Err(err) = crate::open_web(app, &app.state::<AppState>()) {
@@ -106,7 +176,8 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// Atualiza ícone, dica e textos do menu a partir do estado.
+/// Atualiza ícone, dica e textos do menu a partir do estado; troca o menu quando a pergunta de
+/// reunião aparece ou some.
 pub fn refresh(app: &AppHandle) {
     let Some(handles) = app.try_state::<TrayHandles>() else {
         return;
@@ -118,10 +189,19 @@ pub fn refresh(app: &AppHandle) {
             return;
         }
     };
+    let Ok(mut menu) = handles.menu.lock() else {
+        return;
+    };
     let line = status_line(&view);
+    let ask = view.pending_ask.map(|a| a.app);
     let result = (|| -> tauri::Result<()> {
-        handles.status.set_text(&line)?;
-        handles.toggle.set_text(toggle_label(view.status))?;
+        if menu.ask != ask {
+            let (next, next_handles) = build_menu(app, ask)?;
+            handles.tray.set_menu(Some(next))?;
+            *menu = next_handles;
+        }
+        menu.status.set_text(&line)?;
+        menu.toggle.set_text(toggle_label(view.status))?;
         handles.tray.set_icon(Some(icon(view.status)?))?;
         handles
             .tray
@@ -141,13 +221,26 @@ fn toggle_label(status: AppStatus) -> &'static str {
     }
 }
 
-/// A linha de status do menu: o estado e, se houver, quantas gravações faltam sincronizar.
+/// A linha de status do menu: o estado, o app e o modo da gravação, a reunião esperando
+/// resposta e quantas gravações faltam sincronizar.
 pub fn status_line(view: &StatusView) -> String {
-    match view.counts.unsynced() {
-        0 => view.status.label().to_string(),
-        1 => format!("{} · 1 gravação a sincronizar", view.status.label()),
-        n => format!("{} · {n} gravações a sincronizar", view.status.label()),
+    let mut parts = vec![view.status.label().to_string()];
+    if view.status == AppStatus::Recording {
+        match (view.recording_app, view.recording_auto) {
+            (Some(app), true) => parts.push(format!("{} (automático)", app.label)),
+            (Some(app), false) => parts.push(app.label.to_string()),
+            (None, true) => parts.push("automático".into()),
+            (None, false) => {}
+        }
+    } else if let Some(ask) = view.pending_ask {
+        parts.push(format!("reunião no {} detectada", ask.label));
     }
+    match view.counts.unsynced() {
+        0 => {}
+        1 => parts.push("1 gravação a sincronizar".into()),
+        n => parts.push(format!("{n} gravações a sincronizar")),
+    }
+    parts.join(" · ")
 }
 
 fn icon(status: AppStatus) -> tauri::Result<Image<'static>> {
@@ -163,18 +256,24 @@ mod tests {
     use eclume_recorder::QueueCounts;
 
     use super::*;
+    use crate::state::MeetingView;
 
     fn view(status: AppStatus, pending: u32) -> StatusView {
         StatusView {
             status,
             recording_id: None,
             recording_started_at: None,
+            recording_auto: false,
+            recording_app: None,
+            meeting: None,
+            pending_ask: None,
             counts: QueueCounts {
                 pending,
                 ..QueueCounts::default()
             },
             web_url: String::new(),
             notice: None,
+            sync_notice: None,
         }
     }
 
@@ -191,6 +290,23 @@ mod tests {
         );
         assert_eq!(toggle_label(AppStatus::Recording), "Parar gravação");
         assert_eq!(toggle_label(AppStatus::Idle), "Iniciar gravação");
+    }
+
+    #[test]
+    fn bandeja_mostra_gravacao_automatica_e_pergunta() {
+        let mut auto = view(AppStatus::Recording, 0);
+        auto.recording_auto = true;
+        auto.recording_app = Some(MeetingView::from(AppKey::Teams));
+        assert_eq!(
+            status_line(&auto),
+            "Gravando · Microsoft Teams (automático)"
+        );
+        let mut asking = view(AppStatus::Idle, 2);
+        asking.pending_ask = Some(MeetingView::from(AppKey::Zoom));
+        assert_eq!(
+            status_line(&asking),
+            "Ocioso · reunião no Zoom detectada · 2 gravações a sincronizar"
+        );
     }
 
     #[test]
