@@ -9,6 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "fixtures": "bash scripts/media-fixtures.sh",
     "preview": "vite preview"
   },
   "dependencies": {
