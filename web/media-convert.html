@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>eclume — conversão no navegador (demo)</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+      progress { width: 100%; }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      .erro { color: #b00020; }
+    </style>
+  </head>
+  <body>
+    <h1>Conversão no navegador</h1>
+    <p>
+      Página de demonstração de dev de <code>src/lib/media-convert</code>: converte áudio ou vídeo
+      para Opus mono 16 kHz em Ogg, sem enviar nada.
+    </p>
+    <p id="ambiente"></p>
+    <p><input id="arquivo" type="file" accept="audio/*,video/*" /></p>
+    <p id="sondagem"></p>
+    <p>
+      <button id="converter" disabled>Converter</button>
+      <button id="cancelar" disabled>Cancelar</button>
+    </p>
+    <progress id="progresso" max="1" value="0"></progress>
+    <p id="estado"></p>
+    <dl id="resultado" hidden></dl>
+    <audio id="ouvir" controls hidden></audio>
+    <script type="module" src="/src/demo/media-convert.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "type": "https://eclume.dev/problems/validation-failed",
+  "title": "Requisição inválida",
+  "status": 422,
+  "code": "validation_failed",
+  "errors": [
+    {
+      "field": "sha256",
+      "message": "deve ter 64 caracteres hexadecimais minúsculos"
+    }
+  ]
+}

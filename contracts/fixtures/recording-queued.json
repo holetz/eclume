@@ -1,0 +1,39 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000401",
+  "title": "Alinhamento do programa de lideranças",
+  "source": "desktop",
+  "recorded_at": "2026-09-18T14:00:05Z",
+  "duration_ms": 166000,
+  "language": "pt-BR",
+  "size_bytes": 19287595,
+  "content_type": "audio/ogg",
+  "content_hash": "sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5",
+  "owner": {
+    "id": "01928f3a-1c00-7a00-8000-000000000101",
+    "name": "Mariana Couto"
+  },
+  "capture": {
+    "meeting_app": "teams",
+    "device_name": "NB-MARIANA",
+    "client_version": "eclume-desktop/0.3.0"
+  },
+  "status": "queued",
+  "visibility": "private",
+  "tags": [],
+  "collection_ids": [],
+  "metadata": {},
+  "job": {
+    "id": "01928f3a-1c00-7a00-8000-000000000e01",
+    "state": "queued",
+    "stage": null,
+    "progress": 0,
+    "attempts": 0,
+    "error": null,
+    "queued_at": "2026-09-18T14:09:31Z",
+    "started_at": null,
+    "finished_at": null
+  },
+  "transcript_id": null,
+  "created_at": "2026-09-18T14:09:31Z",
+  "updated_at": "2026-09-18T14:09:31Z"
+}

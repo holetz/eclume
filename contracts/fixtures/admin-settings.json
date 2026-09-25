@@ -1,0 +1,31 @@
+{
+  "asr": {
+    "engine": "whisperx-local",
+    "model": "large-v3-turbo",
+    "compute_type": "int8_float16",
+    "batch_size": null,
+    "default_language": "pt",
+    "fallback_model": "medium",
+    "endpoint_url": null
+  },
+  "diarization": {
+    "enabled": true,
+    "model": "pyannote/speaker-diarization-community-1",
+    "min_speakers": null,
+    "max_speakers": null
+  },
+  "summarization": {
+    "default_provider_id": "01928f3a-1c00-7a00-8000-000000000b01",
+    "auto_summarize": false,
+    "default_template_id": "01928f3a-1c00-7a00-8000-000000000901"
+  },
+  "voice_identification": {
+    "enabled": true,
+    "suggestion_threshold": 0.75
+  },
+  "updated_at": "2026-09-14T18:25:00Z",
+  "updated_by": {
+    "id": "01928f3a-1c00-7a00-8000-000000000101",
+    "name": "Mariana Couto"
+  }
+}

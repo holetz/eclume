@@ -1,0 +1,35 @@
+{
+  "queue": {
+    "queued": 1,
+    "running": 1,
+    "failed_last_24h": 0
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce GTX 1660 SUPER",
+    "vram_total_mb": 6144,
+    "vram_used_mb": 3890,
+    "utilization_pct": 87.0
+  },
+  "models_loaded": [
+    {
+      "name": "large-v3-turbo",
+      "kind": "asr",
+      "loaded_at": "2026-09-19T13:41:10Z",
+      "vram_mb": 2210
+    },
+    {
+      "name": "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese",
+      "kind": "alignment",
+      "loaded_at": "2026-09-19T13:42:01Z",
+      "vram_mb": 640
+    },
+    {
+      "name": "pyannote/speaker-diarization-community-1",
+      "kind": "diarization",
+      "loaded_at": "2026-09-19T13:42:30Z",
+      "vram_mb": 980
+    }
+  ],
+  "recent_failures": [],
+  "checked_at": "2026-09-19T13:43:00Z"
+}

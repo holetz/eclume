@@ -1,0 +1,21 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000601",
+  "filename": "2026-09-18 11-00 Teams.opus",
+  "content_type": "audio/ogg",
+  "size_bytes": 19287595,
+  "sha256": "e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5",
+  "part_size": 8388608,
+  "part_count": 3,
+  "expires_at": "2026-09-25T14:09:10Z",
+  "created_at": "2026-09-18T14:09:10Z",
+  "status": "in_progress",
+  "parts_received": [
+    {
+      "part_number": 1,
+      "etag": "\"a3f1c9e07b2d4e5f8a6b1c0d9e8f7a6b\"",
+      "size_bytes": 8388608
+    }
+  ],
+  "parts": [],
+  "recording_id": null
+}
