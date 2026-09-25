@@ -59,9 +59,6 @@ impl HttpUploader {
         }
     }
 
-    pub fn client(&self) -> &Client {
-        &self.client
-    }
 
     fn lock(&self) -> Result<MutexGuard<'_, Queue>> {
         self.queue
