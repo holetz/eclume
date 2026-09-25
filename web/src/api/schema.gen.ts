@@ -1136,6 +1136,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retentar um job de transcrição que falhou
+         * @description Cria o job da revisão seguinte da gravação, com a configuração atual da organização, e o enfileira. Vale para qualquer gravação da organização, inclusive privada, mas só para o job mais recente da gravação e em estado `failed`.
+         */
+        post: operations["retryTranscriptionJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/health": {
         parameters: {
             query?: never;
@@ -1168,7 +1188,8 @@ export interface components {
             /**
              * @description Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
              *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-             *     `rate_limited`. Códigos novos entram de forma aditiva.
+             *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão).
+             *     Códigos novos entram de forma aditiva.
              */
             code: string;
             /** @description Com `insufficient_scope`, os escopos que faltaram. */
@@ -1409,9 +1430,11 @@ export interface components {
             progress: number;
             attempts: number;
             error: {
-                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... */
+                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. */
                 code: string;
                 message: string;
+                /** @description A falha é passageira (worker perdido, job sumido ou parado, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
+                retryable?: boolean;
             } | null;
             /** Format: date-time */
             queued_at: string;
@@ -1624,7 +1647,7 @@ export interface components {
              * @description Tipo do evento; o cliente mostra cru um valor que não conhece.
              * @enum {string}
              */
-            event: "comparison" | "suggested" | "accepted" | "rejected" | "sample_added" | "sample_removed" | "link_restored" | "link_dropped" | "consent_granted" | "consent_revoked" | "voiceprint_deleted" | "exported" | "org_opt_in_changed" | "org_purged";
+            event: "comparison" | "suggested" | "accepted" | "rejected" | "sample_added" | "sample_removed" | "link_restored" | "link_dropped" | "consent_granted" | "consent_revoked" | "voiceprint_deleted" | "exported" | "org_opt_in_changed" | "org_purged" | "embeddings_purged";
             person: components["schemas"]["PersonRef"] | null;
             /** @description Quem agiu; `null` numa ação do sistema (a comparação da ingestão). */
             actor: components["schemas"]["UserRef"] | null;
@@ -2047,6 +2070,18 @@ export interface components {
             items: components["schemas"]["Invitation"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
+        /** @description O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`. */
+        AdminJobRetried: {
+            /** Format: uuid */
+            job_id: string;
+            /** Format: uuid */
+            recording_id: string;
+            revision: number;
+            /** @enum {string} */
+            state: "queued";
+            /** Format: date-time */
+            queued_at: string;
+        };
         AdminHealth: {
             queue: {
                 queued: number;
@@ -2078,6 +2113,8 @@ export interface components {
                 message: string;
                 /** Format: date-time */
                 failed_at: string;
+                /** @description Falha passageira que `POST /api/v1/admin/jobs/{job_id}/retry` pode resolver (1.4.0). */
+                retryable?: boolean;
             }[];
             /** Format: date-time */
             checked_at: string;
@@ -2248,7 +2285,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo, papel ou dono). */
+        /** @description Credencial válida sem permissão (escopo, papel ou dono), ou PAT numa operação que aceita só sessão (`code: session_required`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -2385,6 +2422,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     acceptInvitation: {
@@ -2461,6 +2499,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createToken: {
@@ -2489,6 +2528,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -2514,6 +2554,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3650,6 +3691,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
         };
@@ -3675,6 +3717,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3700,6 +3743,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3932,6 +3976,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createGroup: {
@@ -3986,6 +4031,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -4543,6 +4589,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    retryTranscriptionJob: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Novo job na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJobRetried"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getAdminHealth: {
