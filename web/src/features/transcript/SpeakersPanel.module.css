@@ -134,3 +134,23 @@
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+.suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 calc(0.625rem + var(--space-2));
+  display: grid;
+  gap: var(--space-1);
+}
+
+.suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-sm);
+}

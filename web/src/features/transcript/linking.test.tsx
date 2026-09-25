@@ -82,7 +82,7 @@ describe('vínculo de locutor com pessoa', () => {
     expect(within(panel).queryByRole('combobox')).not.toBeInTheDocument()
   })
 
-  it('confirma a sugestão por voz com um clique', async () => {
+  it('aceita a sugestão por voz com um clique', async () => {
     const transcript = fixtures.transcript()
     transcript.speakers[1].suggestions = [{ person: RAFAEL, score: 0.82 }]
     const http = mockTranscriptApi({
@@ -90,11 +90,40 @@ describe('vínculo de locutor com pessoa', () => {
       'PATCH /api/v1/transcripts/:id/speakers/:speaker': () => fixtures.speakerLinked(),
     })
     const panel = await openPanel()
-    expect(within(panel).getByText('Sugestão por voz: Rafael Lima (82%)')).toBeInTheDocument()
-    await userEvent.click(within(panel).getByRole('button', { name: 'Confirmar Rafael Lima' }))
+    const list = within(panel).getByRole('list', { name: 'Sugestões por voz para Locutor 2' })
+    expect(list).toHaveTextContent('Parece ser Rafael Lima — 82%')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Aceitar Rafael Lima para Locutor 2' }))
     expect(await within(panel).findByRole('link', { name: 'Rafael Lima' })).toBeInTheDocument()
     expect(await http.requests('PATCH /api/v1/transcripts/:id/speakers/:speaker')[0].json()).toEqual({
       person_id: RAFAEL.id,
     })
+  })
+
+  it('recusa uma sugestão e mostra as outras em ordem', async () => {
+    const transcript = fixtures.transcript()
+    const JULIANA = { id: '01928f3a-1c00-7a00-8000-000000000303', name: 'Juliana Prado' }
+    transcript.speakers[1].suggestions = [
+      { person: RAFAEL, score: 0.82 },
+      { person: JULIANA, score: 0.71 },
+    ]
+    const http = mockTranscriptApi({
+      'GET /api/v1/transcripts/:id': () => transcript,
+      'DELETE /api/v1/transcripts/:id/speakers/:speaker/suggestions/:person': () => ({
+        ...transcript.speakers[1],
+        suggestions: [{ person: JULIANA, score: 0.71 }],
+      }),
+    })
+    const panel = await openPanel()
+    const list = within(panel).getByRole('list', { name: 'Sugestões por voz para Locutor 2' })
+    expect(within(list).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Rafael Lima — 82%'),
+      expect.stringContaining('Juliana Prado — 71%'),
+    ])
+    await userEvent.click(within(panel).getByRole('button', { name: 'Recusar Rafael Lima para Locutor 2' }))
+    expect(await within(panel).findByRole('button', { name: 'Aceitar Juliana Prado para Locutor 2' })).toBeInTheDocument()
+    expect(within(panel).queryByText(/Rafael Lima — 82%/)).not.toBeInTheDocument()
+    expect(http.requests('DELETE /api/v1/transcripts/:id/speakers/:speaker/suggestions/:person')[0].url).toContain(
+      `/speakers/S2/suggestions/${RAFAEL.id}`,
+    )
   })
 })
