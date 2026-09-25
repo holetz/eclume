@@ -21,10 +21,6 @@ ADMIN = "holetz/eclume#12 (painel-admin)"
 
 NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/admin/health", ADMIN),
-    ("GET", "/api/v1/admin/invitations", ADMIN),
-    ("POST", "/api/v1/admin/invitations", ADMIN),
-    ("DELETE", "/api/v1/admin/invitations/{invitation_id}", ADMIN),
-    ("POST", "/api/v1/auth/invitations/{invitation_token}/accept", ADMIN),
     ("GET", "/api/v1/collections", PEOPLE_SEARCH),
     ("POST", "/api/v1/collections", PEOPLE_SEARCH),
     ("PATCH", "/api/v1/collections/{collection_id}", PEOPLE_SEARCH),

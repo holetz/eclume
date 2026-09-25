@@ -4812,7 +4812,7 @@ components:
       value:
         status: ok
         version: 0.1.0
-        contract_version: 1.1.0
+        contract_version: 1.2.0
     LoginRequest:
       summary: E-mail e senha
       value:
