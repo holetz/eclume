@@ -347,7 +347,7 @@ async def put_part(
 @router.post("/uploads/{upload_id}/complete", status_code=201)
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição."""
-    enqueue: tuple[UUID, str, dict[str, Any]] | None = None
+    enqueue: tuple[str, dict[str, Any]] | None = None
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] in {"completed", "deduplicated"}:
@@ -358,7 +358,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
             recording_id, enqueue = await _finish(ctx, conn, row, principal)
         recording = await get_visible(conn, recording_id)
     if enqueue is not None:
-        await ctx.queue.enqueue_transcribe(recording_id, 1, enqueue[1], enqueue[2])
+        await ctx.queue.enqueue_transcribe(recording_id, 1, *enqueue)
     return (await render(ctx, [recording]))[0]
 
 
@@ -383,7 +383,7 @@ async def _finish(
     conn: AsyncConnection,
     row: Row,
     principal: Principal,
-) -> tuple[UUID, tuple[UUID, str, dict[str, Any]] | None]:
+) -> tuple[UUID, tuple[str, dict[str, Any]] | None]:
     """Fecha o multipart, confere o hash e grava gravação e job. Devolve o que enfileirar."""
     key = row["audio_key"]
     parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
@@ -439,4 +439,4 @@ async def _finish(
         .where(t.uploads.c.id == row["id"])
         .values(status="completed", recording_id=recording_id, completed_at=now)
     )
-    return recording_id, ((recording_id, key, options) if matches else None)
+    return recording_id, ((key, options) if matches else None)
