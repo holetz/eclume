@@ -1,8 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { AdminLayout } from './AdminLayout'
 import { AgentsPage } from './AgentsPage'
+import { HealthPage } from './HealthPage'
+import { SecretsPage } from './SecretsPage'
 import { SettingsPage } from './SettingsPage'
 import { TemplatesPage } from './TemplatesPage'
+import { UsersPage } from './UsersPage'
 
 /** Rotas de /admin/*, dentro da moldura com a guarda de papel. */
 export function AdminRoutes() {
@@ -13,6 +16,9 @@ export function AdminRoutes() {
         <Route path="transcricao" element={<SettingsPage />} />
         <Route path="agentes" element={<AgentsPage />} />
         <Route path="templates" element={<TemplatesPage />} />
+        <Route path="usuarios" element={<UsersPage />} />
+        <Route path="segredos" element={<SecretsPage />} />
+        <Route path="saude" element={<HealthPage />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
     </Routes>
