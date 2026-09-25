@@ -110,6 +110,8 @@ def provision() -> Services:
         s3_bucket=f"eclume-test-{suffix}",
         secret_key=secrets.token_hex(16),
         public_url="https://testserver",
+        # Partes no mínimo do contrato (5 MiB) deixam os testes de upload mais leves.
+        upload_part_size=5 * 1024 * 1024,
     )
     services = Services(settings=settings, database=database)
     services.s3().create_bucket(Bucket=settings.s3_bucket)

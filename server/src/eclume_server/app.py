@@ -12,7 +12,9 @@ from eclume_server.config import Settings, get_settings
 from eclume_server.context import AppContext
 from eclume_server.db.session import make_engine
 from eclume_server.problems import install_handlers
+from eclume_server.queue import Queue
 from eclume_server.routes import include_routes
+from eclume_server.storage import Storage
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -25,10 +27,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = make_engine(settings.database_url)
-        app.state.ctx = AppContext(settings=settings, engine=engine)
+        queue = await Queue.connect(settings.redis_url)
+        app.state.ctx = AppContext(settings=settings, engine=engine, storage=Storage(settings), queue=queue)
         try:
             yield
         finally:
+            await queue.close()
             await engine.dispose()
 
     app = FastAPI(title="eclume API", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)

@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from eclume_server.config import Settings
+    from eclume_server.queue import Queue
+    from eclume_server.storage import Storage
 
 
 @dataclass
@@ -20,6 +22,8 @@ class AppContext:
 
     settings: Settings
     engine: AsyncEngine
+    storage: Storage
+    queue: Queue
 
 
 def get_ctx(request: Request) -> AppContext:
