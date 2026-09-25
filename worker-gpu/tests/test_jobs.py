@@ -205,9 +205,12 @@ def test_falha_no_upload(tmp_path: Path):
 def test_engine_forcada_pelo_ambiente_vence_options(tmp_path: Path):
     factory = Factory()
     ctx = contexto(tmp_path, factory=factory, engine="cpu")
-    rodar(ctx, {"engine": "whisperx-local"})
+    rodar(ctx, {"engine": "whisperx-local", "model": "large-v3-turbo", "compute_type": "int8_float16", "batch_size": 4})
     assert factory.created[0].name == "cpu"
     assert factory.created[0].kwargs == {}
+    # A configuração de modelo do admin é da whisperx-local: a engine forçada usa os padrões dela.
+    [(_, options, _token)] = factory.created[0].calls
+    assert (options.model, options.compute_type, options.batch_size) == (None, None, None)
 
 
 def test_options_escolhe_a_engine_sem_ambiente(tmp_path: Path):

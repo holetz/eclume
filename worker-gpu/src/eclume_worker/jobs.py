@@ -231,6 +231,13 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     engine_options = dataclasses.replace(
         EngineOptions.from_mapping(options), language=language.split("-", 1)[0].lower()
     )
+    engine_name = registry.resolve_name(options)
+    if options.get("engine") and engine_name != options["engine"]:
+        # Modelo, compute type e lote do admin são da engine que ele escolheu; a engine forçada pelo
+        # operador (`ECLUME_ENGINE`, ex. `cpu` no dev e no E2E) usa os padrões dela.
+        engine_options = dataclasses.replace(
+            engine_options, model=None, compute_type=None, batch_size=None, fallback_model=None
+        )
     reporter = ProgressReporter(redis, recording_id)
 
     await reporter.report("download")
@@ -249,7 +256,7 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         result = await asyncio.to_thread(
             functools.partial(
                 registry.run,
-                registry.resolve_name(options),
+                engine_name,
                 audio_path,
                 engine_options,
                 progress,
