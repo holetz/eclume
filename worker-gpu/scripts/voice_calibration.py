@@ -315,18 +315,6 @@ def embed(work: Path, output: Path, extra: list[dict[str, Any]]) -> None:
     print(f"{len(items)} locutores casados, {len(discarded)} descartados")
 
 
-def whole_recordings(paths: list[Path], labels: list[str]) -> list[dict[str, Any]]:
-    """Gravações inteiras de um leitor só (`leitor=arquivo`), como reuniões de um turno."""
-    return [
-        {
-            "id": path.stem,
-            "audio": str(path),
-            "turns": [{"reader": label, "section": path.stem, "start": 0, "end": 1e9}],
-        }
-        for path, label in zip(paths, labels, strict=True)
-    ]
-
-
 # --- analyze: FPR/FNR por limiar, duração e modo de comparação -------------------------------
 
 
@@ -487,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("embed")
     p.add_argument("--work", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--whole", nargs="*", default=[], help="gravações inteiras extras, `leitor=arquivo`")
+    p.add_argument("--extra", type=Path, help="JSON com reuniões extras (`id`, `audio`, `turns`), como o bench de 1 h")
     p = sub.add_parser("analyze")
     p.add_argument("embeddings", type=Path)
     p.add_argument("--seed", type=int, default=15)
@@ -507,8 +495,7 @@ def main(argv: list[str] | None = None) -> int:
             meetings_per_round=args.rounds,
         )
     elif args.command == "embed":
-        pairs = [spec.split("=", 1) for spec in args.whole]
-        extra = whole_recordings([Path(path) for _, path in pairs], [label for label, _ in pairs])
+        extra = json.loads(args.extra.read_text(encoding="utf-8")) if args.extra else []
         embed(args.work, args.out, extra)
     else:
         report = analyze(json.loads(args.embeddings.read_text(encoding="utf-8")), seed=args.seed)
