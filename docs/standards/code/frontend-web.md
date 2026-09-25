@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#10
+source: holetz/eclume#10, holetz/eclume#12
 maintainer: holetz
 ---
 
@@ -52,10 +52,19 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/gravacoes/:id`, `/importar`, `/tokens`, `/app-desktop`).
+- **Rotas em pt-BR** (`/entrar`, `/convite/:token`, `/gravacoes/:id`, `/importar`, `/tokens`,
+  `/app-desktop`, `/admin/*`).
 - **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`. As áreas de
-  outras specs (Pessoas, Busca, Coleções, Administração) já estão lá, desligadas: ligar uma é
-  mudar `enabled` e registrar a rota.
+  outras specs já estão lá, desligadas: ligar uma é mudar `enabled` e registrar a rota.
+- **Administração** (`/admin/*`, `src/features/admin/`): `AdminRoutes` monta as seções
+  (Transcrição, Agentes, Templates padrão, Usuários e convites, Segredos, Saúde) dentro de
+  `AdminLayout`, que **exige `role: admin`** — esconder o item do menu não é controle de acesso; o
+  membro vê "Sem permissão". A lista de seções mora em `sections.ts`. Segredos só têm campo de
+  escrita e nunca mostram o valor; o link de convite, como o segredo do PAT, aparece uma vez; a
+  Saúde relê a cada 10 s (`refetchInterval`). As regras do server estão em
+  [server-admin.md](server-admin.md).
+- **Rotas públicas:** `/entrar` e `/convite/:token` (aceite do convite: nome, senha de 12+ e
+  confirmação; 404 vira "convite inválido, expirado ou já usado").
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
@@ -103,7 +112,7 @@ Depois de recarregar, o import recomeça pela conversão.
   `fetch` do Node).
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
   para o mock, e um cenário percorre login, biblioteca, transcrição, import com conversão real e
-  PAT. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
+  PAT; um segundo cenário percorre o painel admin. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
   resposta do login, pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em

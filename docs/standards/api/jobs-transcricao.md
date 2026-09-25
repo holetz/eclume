@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso no Redis e a idempotência por `(recording_id, revision)`.
+description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis e a idempotência por `(recording_id, revision)`.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12
 maintainer: holetz
 ---
 
@@ -35,6 +35,17 @@ argumentos:
 - `options: dict`, com `language` (padrão `"pt"`), `min_speakers`, `max_speakers`, `engine`,
   `model`, `compute_type`, `diarize: bool` e `embeddings: bool`. A configuração do admin chega por
   aqui; **o worker não lê o banco**.
+- Acrescentados pela holetz/eclume#12 (aditivos: um worker antigo os ignora), todos opcionais:
+  - `batch_size` — lote inicial do ASR; `ECLUME_BATCH_SIZE` do worker vence;
+  - `fallback_model` — modelo depois de um OOM persistente (padrão `medium`);
+  - `diarization_model` — pipeline de diarização (padrão `pyannote/speaker-diarization-community-1`);
+  - `endpoint_url` — base da engine `openai-compatible`; vence `ECLUME_REMOTE_BASE_URL`;
+  - `hf_token_encrypted` — o token do Hugging Face da organização, cifrado. Vai só no payload
+    enfileirado, nunca em `transcription_jobs.options`. Formato: `v1:` + base64(nonce de 12 bytes +
+    cifra AES-256-GCM + tag), com a chave de `ECLUME_ENCRYPTION_KEY` (base64 de 32 bytes) ou, sem
+    ela, HKDF-SHA256 de `ECLUME_SECRET_KEY` com `info=eclume-secrets-v1` — **as mesmas no server
+    e no worker**. Vence `HF_TOKEN` e o arquivo; se não abrir, o job segue com o token do ambiente e
+    o aviso `hf_token_undecryptable`.
 
 ## O worker GPU devolve
 
@@ -57,6 +68,23 @@ O worker grava `HSET eclume:progress:{recording_id}` com `stage` (`download`, `a
 `diarize`, `embed` ou `upload`), `pct` (0–100) e `updated_at`, com TTL de 1 dia. O server lê
 para o estado do job. O hash traz também `started_at` (RFC 3339 UTC), o início do job, gravado
 desde a primeira escrita.
+
+## Heartbeat do worker GPU
+
+Acrescentado pela holetz/eclume#12. A cada 15 s o worker **substitui** o hash
+`eclume:gpu:health` (`DEL` + `HSET` + `EXPIRE 45`, numa transação) e o apaga no desligamento.
+Hash ausente = worker parado há mais de 45 s. Campos, todos texto:
+
+| Campo | O que é |
+|---|---|
+| `updated_at` | instante do heartbeat (RFC 3339 UTC) |
+| `worker_version`, `engine`, `device` | versão do `eclume_worker`, engine do processo (a forçada por `ECLUME_ENGINE`, a última usada ou `whisperx-local`) e dispositivo |
+| `busy` | `1` com um job rodando, `0` ocioso |
+| `models` | JSON `[{name, kind, loaded_at, vram_mb}]` do modelo residente (`kind` em `asr`, `alignment`, `diarization`); `[]` sem modelo |
+| `gpu_name`, `vram_total_mb`, `vram_used_mb`, `utilization_pct` | leitura da NVML do dispositivo inteiro; ausentes sem NVML (engine `cpu`) |
+
+O `vram_mb` do modelo é o uso do dispositivo depois de carregá-lo menos o de antes. O server lê o
+hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)).
 
 ## O server ingere
 
@@ -134,7 +162,7 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
 | `realtime_factor` | `processing_ms / duration_ms` |
 | `peak_vram_mb` | pico de VRAM acima da linha de base anterior ao job (NVML), ou `null` |
 | `align_model`, `diarization_model`, `embedding_model` | modelos usados; `null` quando a etapa não rodou |
-| `warnings` | avisos (`diarization_skipped_no_token`, `diarization_skipped_no_access`, `fallback_medium`, `batch_size_reduced`, `compute_type_float16_rejected`, `alignment_unavailable`) |
+| `warnings` | avisos (`diarization_skipped_no_token`, `diarization_skipped_no_access`, `fallback_medium` — também com outro `fallback_model` —, `batch_size_reduced`, `compute_type_float16_rejected`, `alignment_unavailable`, `hf_token_undecryptable`) |
 | `worker_version` | versão do `eclume_worker` |
 
 `error_code` de `transcription_failed`:

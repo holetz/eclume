@@ -27,7 +27,7 @@ derivado (o escopo do repositório que ele governa).
 | Doc | Covers |
 | --- | --- |
 | [contrato-v1.md](api/contrato-v1.md) | As convenções da API v1 do eclume — autenticação por sessão e PAT com escopos, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva. |
-| [jobs-transcricao.md](api/jobs-transcricao.md) | As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso no Redis e a idempotência por `(recording_id, revision)`. |
+| [jobs-transcricao.md](api/jobs-transcricao.md) | As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis e a idempotência por `(recording_id, revision)`. |
 
 ### code/
 | Doc | Covers |
