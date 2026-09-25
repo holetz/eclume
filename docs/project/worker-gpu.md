@@ -86,6 +86,23 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
   de integração separou os 2 locutores e alternou as falas certo, exceto a primeira frase ("Bom
   dia, pessoal."), atribuída ao outro locutor.
 
+### ASR residente entre jobs (holetz/eclume#26)
+
+Medido em 2026-09-25 com a imagem de produção, o worker do stack ocioso (sem modelo carregado) e
+5.396 MiB livres: a fixture `duas-vozes.ogg` (30,4 s), três jobs seguidos na mesma engine
+(`python -m eclume_worker.bench a.ogg --repeat 3`, com e sem `--single-slot`). Sem token do
+Hugging Face no host, a diarização não roda; o pyannote seria recarregado a cada job nos dois modos,
+então a diferença abaixo é a carga do ASR.
+
+| Modo | Job 1 (frio) | Job 2 | Job 3 |
+|---|---|---|---|
+| um modelo por vez (`--single-slot`, o de antes) | 23,2 s | 10,4 s | 10,5 s |
+| ASR residente (padrão) | 20,6 s | 6,1 s | 5,8 s |
+
+Do segundo job em diante, o job curto cai ~43% (≈4,5 s a menos por job): o alinhador ainda é
+recarregado, o ASR não. O pico acima da linha de base com o ASR residente foi 1.746 MiB, longe do
+limiar de 2.500 MiB livres que faria o ASR sair.
+
 ## Imagem
 
 `worker-gpu/Dockerfile` é construído no host, a partir da raiz do repositório:
