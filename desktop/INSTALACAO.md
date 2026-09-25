@@ -9,7 +9,7 @@ Os instaladores ficam na página de download do eclume, em
 | Plataforma | Arquivo recomendado | Alternativa |
 |---|---|---|
 | Windows 10/11 (64 bits) | `eclume_<versão>_x64-setup.exe` | `eclume_<versão>_x64_pt-BR.msi` (instalação para todos os usuários, exige administrador) |
-| Linux (x86_64) | `eclume_<versão>_amd64.AppImage` | `eclume_<versão>_amd64.deb` (Debian, Ubuntu e derivados) |
+| Linux (x86_64; Ubuntu 24.04, Debian 13 ou mais novos) | `eclume_<versão>_amd64.AppImage` | `eclume_<versão>_amd64.deb` (Debian, Ubuntu e derivados) |
 | macOS 15 ou mais novo (Intel e Apple Silicon) | `eclume_<versão>_universal.dmg` | — |
 
 O `SHA256SUMS` da pasta da versão traz o hash de cada arquivo, para quem quiser conferir o

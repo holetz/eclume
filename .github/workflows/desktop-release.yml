@@ -60,7 +60,7 @@ jobs:
           matriz=$(MACOS="$MACOS" python3 - <<'EOF'
           import json, os
           alvos = [
-              {"plataforma": "linux", "os": "ubuntu-22.04", "bundles": "appimage,deb", "alvo": ""},
+              {"plataforma": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb", "alvo": ""},
               {"plataforma": "windows", "os": "windows-latest", "bundles": "nsis,msi", "alvo": ""},
           ]
           if os.environ["MACOS"] == "true":
