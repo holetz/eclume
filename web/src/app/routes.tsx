@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
+import { LibraryPage } from '../features/library/LibraryPage'
 import { RequireSession } from './RequireSession'
 import { usePageTitle } from './usePageTitle'
 
@@ -15,17 +16,12 @@ function NotFoundPage() {
   )
 }
 
-function LibraryPlaceholder() {
-  usePageTitle('Biblioteca')
-  return <h1>Biblioteca</h1>
-}
-
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
       <Route element={<RequireSession />}>
-        <Route index element={<LibraryPlaceholder />} />
+        <Route index element={<LibraryPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
