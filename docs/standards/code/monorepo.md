@@ -34,8 +34,10 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
   compartilhada de ruff e pytest. Python 3.12 (`.python-version`).
 - Cada membro é um pacote hatchling com `src/` layout e testes em `<pilar>/tests/`. `server` e
   `worker-gpu` dependem de `eclume-engines` por `[tool.uv.sources] eclume-engines = { workspace = true }`.
-- Uma dependência entra no pacote que a usa, na spec que a usa: o `uv.lock` não carrega torch nem
-  WhisperX antes da spec `engine-asr-whisperx`.
+- Uma dependência entra no pacote que a usa, na spec que a usa. Dependência pesada (torch,
+  WhisperX, faster-whisper) entra como **extra** (`eclume-engines[whisperx]`/`[cpu]`,
+  `eclume-worker[gpu]`/`[cpu]`): o `uv.lock` a resolve, mas `uv sync --all-packages` não a
+  instala, e a CI e a máquina de dev seguem sem torch. Só a imagem do worker GPU instala `gpu`.
 - O ruff roda com `select = ["ALL"]`; um ignore novo entra com o motivo comentado ao lado.
 
 ```bash

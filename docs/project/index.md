@@ -5,3 +5,4 @@ host e outros fatos sobre o eclume como código mantido. Cada página tem `type:
 
 * [host-setup.md](host-setup.md) — como preparar o servidor `192.168.15.199` para receber os containers do eclume e do lumea
 * [referencias.md](referencias.md) — soluções de mercado avaliadas e como o eclume usa cada uma
+* [worker-gpu.md](worker-gpu.md) — o worker GPU na GTX 1660 SUPER: compute type, benchmark medido, imagem, cache de modelos, token do Hugging Face e operação

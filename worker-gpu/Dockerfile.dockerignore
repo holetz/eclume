@@ -1,0 +1,13 @@
+# Contexto do build do worker GPU (lido pelo BuildKit por ficar ao lado do Dockerfile):
+# só os manifestos do workspace uv e o código dos pacotes da imagem.
+*
+!pyproject.toml
+!uv.lock
+!engines/pyproject.toml
+!engines/README.md
+!engines/src/
+!worker-gpu/pyproject.toml
+!worker-gpu/README.md
+!worker-gpu/src/
+!server/pyproject.toml
+**/__pycache__
