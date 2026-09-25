@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
 import { ImportPage } from '../features/import/ImportPage'
 import { LibraryPage } from '../features/library/LibraryPage'
+import { TokensPage } from '../features/tokens/TokensPage'
 import { RecordingPage } from '../features/transcript/RecordingPage'
 import { RequireSession } from './RequireSession'
 import { usePageTitle } from './usePageTitle'
@@ -26,6 +27,7 @@ export function AppRoutes() {
         <Route index element={<LibraryPage />} />
         <Route path="/gravacoes/:id" element={<RecordingPage />} />
         <Route path="/importar" element={<ImportPage />} />
+        <Route path="/tokens" element={<TokensPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
