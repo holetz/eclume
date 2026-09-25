@@ -30,6 +30,10 @@ class WorkerConfig:
     # Lote inicial fixo do ASR; vazio, a engine o escolhe pela VRAM livre.
     batch_size: int | None = None
     model_idle_seconds: float = 300.0
+    # ASR residente entre jobs (engine whisperx-local) enquanto houver essa VRAM livre com ele
+    # carregado; `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez.
+    keep_asr_resident: bool = True
+    resident_min_free_mb: int = 2500
     job_timeout_seconds: int = 6 * 3600
     work_dir: Path = Path("/tmp/eclume-work")  # noqa: S108 — diretório de trabalho do container
     remote_base_url: str | None = None
@@ -60,6 +64,8 @@ class WorkerConfig:
             device=get("ECLUME_DEVICE", defaults.device),
             batch_size=int(get("ECLUME_BATCH_SIZE")) if get("ECLUME_BATCH_SIZE") else None,
             model_idle_seconds=float(get("ECLUME_MODEL_IDLE_SECONDS", defaults.model_idle_seconds)),
+            keep_asr_resident=str(get("ECLUME_KEEP_ASR_RESIDENT", "1")).lower() not in {"0", "false", "no", "nao"},
+            resident_min_free_mb=int(get("ECLUME_RESIDENT_MIN_FREE_MB", defaults.resident_min_free_mb)),
             job_timeout_seconds=int(get("ECLUME_JOB_TIMEOUT_SECONDS", defaults.job_timeout_seconds)),
             work_dir=Path(get("ECLUME_WORK_DIR", defaults.work_dir)),
             remote_base_url=get("ECLUME_REMOTE_BASE_URL"),

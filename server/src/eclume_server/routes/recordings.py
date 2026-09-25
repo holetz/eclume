@@ -22,10 +22,10 @@ from eclume_server.problems import conflict, forbidden, invalid_field, not_found
 from eclume_server.recordings import (
     enqueue_transcription,
     get_visible,
-    insert_job,
     recording_select,
     render,
     require_owner,
+    start_next_revision,
 )
 from eclume_server.routes.collections import check_collections
 from eclume_server.routes.uploads import LANGUAGE
@@ -212,15 +212,8 @@ async def retranscribe(
             await conn.execute(
                 update(t.recordings).where(t.recordings.c.id == recording_id).values(language=body.language)
             )
-        transcript_revision = (
-            await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording_id))
-        ).scalar()
-        revision = max(transcript_revision or 0, row["job_revision"] or 0) + 1
         language = body.language if body is not None and body.language else row["language"]
-        options = await insert_job(conn, {"id": recording_id, "org_id": row["org_id"], "language": language}, revision)
-        await conn.execute(
-            update(t.recordings).where(t.recordings.c.id == recording_id).values(status="queued", updated_at=func.now())
-        )
+        revision, options = await start_next_revision(conn, row, language)
         refreshed = await get_visible(conn, recording_id)
     await enqueue_transcription(ctx, recording_id, revision, row["audio_key"], options)
     return (await render(ctx, [refreshed]))[0]

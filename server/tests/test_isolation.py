@@ -230,3 +230,35 @@ def test_rls_de_usuarios_convites_e_segredos(
             "INSERT INTO org_secrets (org_id, name, value_encrypted) VALUES (:org, 'anthropic_api_key', 'v1:y')",
             org=str(member.org_id),
         )
+
+
+def test_papel_de_conexao_nao_e_superusuario_nem_dono(services: Services):
+    """A suíte conecta como `eclume_server`: sem superusuário, sem DDL, dono de nada, membro de `eclume_app`."""
+
+    async def attributes(conn: Any) -> Any:  # noqa: ANN401
+        role = (
+            await conn.execute(
+                text(
+                    "SELECT current_user, rolsuper, rolbypassrls, rolcreatedb, rolcreaterole,"
+                    " pg_has_role(current_user, 'eclume_app', 'MEMBER'),"
+                    " (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                    "   WHERE n.nspname = 'public' AND c.relowner = r.oid)"
+                    " FROM pg_roles r WHERE rolname = current_user"
+                )
+            )
+        ).one()
+        return tuple(role)
+
+    assert run(services.sql(attributes)) == ("eclume_server", False, True, False, False, True, 0)
+
+    async def create_table(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(text("CREATE TABLE intrusa (id int)"))
+
+    with pytest.raises(DBAPIError, match="permission denied"):
+        run(services.sql(create_table))
+
+    async def write_migrations(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(text("DELETE FROM schema_migrations"))
+
+    with pytest.raises(DBAPIError, match="permission denied"):
+        run(services.sql(write_migrations))

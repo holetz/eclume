@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "1.3.0"
+CONTRACT_VERSION = "1.4.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()

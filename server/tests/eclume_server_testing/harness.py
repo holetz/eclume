@@ -1,7 +1,8 @@
 """Harness de serviços da suíte do server: Postgres, Redis e MinIO reais.
 
 Os serviços vêm de `deploy/docker-compose.test.yml`. Cada sessão de teste cria um banco, um
-bucket e escolhe um banco do Redis próprios, e desfaz tudo no fim.
+bucket e escolhe um banco do Redis próprios, e desfaz tudo no fim. As migrations rodam com o
+superusuário (o migrador); a suíte conecta como `eclume_server`, o papel de conexão de produção.
 """
 
 from __future__ import annotations
@@ -16,11 +17,11 @@ from urllib.parse import urlsplit
 
 import boto3
 import redis
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from eclume_server.config import Settings
-from eclume_server.db.migrate import migrate
+from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
@@ -31,6 +32,7 @@ S3_ENDPOINT = os.environ.get("ECLUME_TEST_S3_ENDPOINT", "http://127.0.0.1:59100"
 S3_ACCESS_KEY = os.environ.get("ECLUME_TEST_S3_ACCESS_KEY", "eclume")
 S3_SECRET_KEY = os.environ.get("ECLUME_TEST_S3_SECRET_KEY", "eclume-test-secret")
 REQUIRE_SERVICES = os.environ.get("ECLUME_TEST_REQUIRE_SERVICES") == "1"
+RUNTIME_PASSWORD = "eclume-test-runtime"  # senha de teste do papel de conexão
 
 
 def run[T](coro: Coroutine[Any, Any, T]) -> T:
@@ -57,6 +59,8 @@ class Services:
 
     settings: Settings
     database: str
+    # URL do migrador (superusuário) do banco da sessão; `settings.database_url` é a de `eclume_server`.
+    owner_url: str
 
     def s3(self) -> Any:  # noqa: ANN401 — cliente boto3 sem stubs
         """Cliente S3 do MinIO de teste."""
@@ -91,19 +95,23 @@ def provision() -> Services:
     """Cria banco (com as migrations), bucket e escolhe o banco do Redis desta sessão."""
     suffix = secrets.token_hex(4)
     database = f"eclume_test_{suffix}"
-    database_url = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
+    owner_url = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
+    runtime_url = (
+        make_url(owner_url).set(username=RUNTIME_ROLE, password=RUNTIME_PASSWORD).render_as_string(hide_password=False)
+    )
 
     async def create_database() -> None:
         await _admin(f'CREATE DATABASE "{database}"')
-        engine = create_async_engine(database_url)
+        engine = create_async_engine(owner_url)
         try:
             await migrate(engine)
+            await enable_runtime_login(engine, RUNTIME_PASSWORD)
         finally:
             await engine.dispose()
 
     run(create_database())
     settings = Settings(
-        database_url=database_url,
+        database_url=runtime_url,
         redis_url=f"{REDIS_URL.rstrip('/')}/{secrets.randbelow(15) + 1}",
         s3_endpoint=S3_ENDPOINT,
         s3_access_key=S3_ACCESS_KEY,
@@ -114,7 +122,7 @@ def provision() -> Services:
         # Partes no mínimo do contrato (5 MiB) deixam os testes de upload mais leves.
         upload_part_size=5 * 1024 * 1024,
     )
-    services = Services(settings=settings, database=database)
+    services = Services(settings=settings, database=database, owner_url=owner_url)
     services.s3().create_bucket(Bucket=settings.s3_bucket)
     # Filas de uma sessão anterior no mesmo banco do Redis travariam os workers em modo burst.
     redis.Redis.from_url(settings.redis_url).flushdb()

@@ -36,6 +36,7 @@ const MESSAGES: Record<string, string> = {
   unauthorized: 'Sua sessão expirou. Entre de novo.',
   insufficient_scope: 'Seu acesso não inclui esta ação.',
   forbidden: 'Você não tem permissão para esta ação.',
+  session_required: 'Esta ação só pode ser feita pelo navegador, com a sua sessão.',
   not_found: 'Não encontrado. Pode ter sido excluído.',
   conflict: 'Conflito com o estado atual. Recarregue a página e tente de novo.',
   hash_mismatch: 'O arquivo chegou diferente do enviado. Tente importar de novo.',

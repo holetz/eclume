@@ -4,7 +4,7 @@ import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDateTime, stageLabel } from '../library/format'
 import styles from './Admin.module.css'
-import { HEALTH_REFRESH_MS, useAdminHealth } from './queries'
+import { HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
 import { sectionTitle } from './sections'
 
 type Health = Schemas['AdminHealth']
@@ -203,6 +203,7 @@ function HealthView({ health }: { health: Health }) {
                     <td className={styles.mono}>{failure.code}</td>
                     <td>{failure.message}</td>
                     <td className={styles.actionsCell}>
+                      <RetryJobButton jobId={failure.job_id} retryable={failure.retryable === true} />{' '}
                       <Link to={`/gravacoes/${failure.recording_id}`}>Abrir gravação</Link>
                     </td>
                   </tr>
@@ -212,6 +213,30 @@ function HealthView({ health }: { health: Health }) {
           </div>
         )}
       </section>
+    </>
+  )
+}
+
+/** Retentar um job da lista de falhas; a falha passageira vem destacada. */
+function RetryJobButton({ jobId, retryable }: { jobId: string; retryable: boolean }) {
+  const retry = useRetryJob()
+  if (retry.isSuccess) return <span className="muted">Na fila de novo.</span>
+  return (
+    <>
+      <button
+        type="button"
+        className={retryable ? 'btn btn-primary' : 'btn'}
+        disabled={retry.isPending}
+        title={retryable ? 'Falha passageira: tentar de novo costuma resolver.' : undefined}
+        onClick={() => retry.mutate(jobId)}
+      >
+        {retry.isPending ? 'Enfileirando…' : 'Tentar de novo'}
+      </button>
+      {retry.isError && (
+        <span className="alert alert-error" role="alert">
+          {errorMessage(retry.error)}
+        </span>
+      )}
     </>
   )
 }

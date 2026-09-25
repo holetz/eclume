@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, insufficient_scope, unauthorized
+from eclume_server.problems import forbidden, insufficient_scope, session_required, unauthorized
 from eclume_server.security import PAT_PREFIX, sha256_hex
 
 if TYPE_CHECKING:
@@ -120,8 +120,8 @@ def requires(
         principal = await authenticate(request, ctx)
         if principal.method == "pat":
             if session_only:
-                # PAT não é credencial aceita aqui (o contrato declara só `sessionCookie`): 401.
-                raise unauthorized("Esta operação aceita só sessão do navegador, não PAT.")
+                # Credencial válida, mas não a aceita aqui (o contrato declara só `sessionCookie`).
+                raise session_required()
             missing = [scope for scope in scopes if scope not in principal.scopes]
             if missing:
                 raise insufficient_scope(missing)

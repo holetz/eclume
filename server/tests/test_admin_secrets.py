@@ -88,7 +88,7 @@ def test_segredo_so_entra_e_nunca_volta(
     member = as_user(make_user())
     assert member.get(URL).status_code == 403
     assert member.put(f"{URL}/hf_token", json={"value": "x"}).status_code == 403
-    assert admin.pat("recordings:write").put(f"{URL}/hf_token", json={"value": "x"}).status_code == 401
+    assert admin.pat("recordings:write").put(f"{URL}/hf_token", json={"value": "x"}).status_code == 403
 
     assert admin.delete(f"{URL}/hf_token").status_code == 204
     assert admin.delete(f"{URL}/hf_token").status_code == 404

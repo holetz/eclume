@@ -12,7 +12,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.settings_admin import BLOCKS, AdminSettingsPatch, changes_of, settings_json, validate_merged
-from eclume_server.voice import audit, voice_settings
+from eclume_server.voice import audit, purge_embeddings, voice_settings
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -65,10 +65,19 @@ async def update_admin_settings(body: AdminSettingsPatch, principal: Admin, ctx:
         merged["voice_identification"] = voice_settings(merged["voice_identification"])
         await validate_merged(conn, merged)
         await _audit_voice(conn, principal, voice_before, merged["voice_identification"])
+        turned_off = voice_before["enabled"] and not merged["voice_identification"]["enabled"]
+        if turned_off:
+            # LGPD: sem opt-in, nenhuma impressão de voz por gravação fica guardada.
+            embeddings, suggestions = await purge_embeddings(conn)
+            details = {"deleted_embeddings": embeddings, "deleted_suggestions": suggestions}
+            await audit(conn, principal.org_id, "embeddings_purged", actor_id=principal.user_id, details=details)
         await conn.execute(
             update(t.org_settings)
             .where(t.org_settings.c.org_id == principal.org_id)
             .values(**merged, updated_at=func.now(), updated_by=principal.user_id)
         )
         row = await _read(conn, principal)
+    if turned_off:
+        # Os `speaker_embeddings.json` do bucket saem no worker CPU, depois do commit.
+        await ctx.queue.enqueue_purge_embedding_objects(principal.org_id)
     return settings_json(row, row["updated_by_name"])

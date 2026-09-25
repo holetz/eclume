@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import exists, func, insert, select, true
+from sqlalchemy import exists, func, insert, select, true, update
 
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
@@ -13,6 +13,7 @@ from eclume_server.problems import forbidden, not_found
 from eclume_server.queue import transcribe_options
 from eclume_server.serialize import Row, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
+from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -59,7 +60,11 @@ def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, 
         stage, value = progress
     error = None
     if row["job_error_code"]:
-        error = {"code": row["job_error_code"], "message": row["job_error_message"] or ""}
+        error = {
+            "code": row["job_error_code"],
+            "message": row["job_error_message"] or "",
+            "retryable": is_retryable(row["job_error_code"]),
+        }
     return {
         "id": str(row["job_id"]),
         "state": state,
@@ -149,6 +154,27 @@ async def insert_job(
         values |= {"state": "failed", "error_code": error[0], "error_message": error[1], "finished_at": func.now()}
     await conn.execute(insert(t.transcription_jobs).values(**values))
     return options
+
+
+async def start_next_revision(
+    conn: AsyncConnection, recording: Row, language: str | None
+) -> tuple[int, dict[str, Any]]:
+    """Cria o job da revisão seguinte e põe a gravação na fila; devolve `(revisão, options)`.
+
+    A revisão é uma acima da maior entre a transcrição e o último job (retranscrever e retentar).
+    `recording` traz `id`, `org_id` e `job_revision` (a linha de `recording_select`).
+    """
+    transcript_revision = (
+        await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording["id"]))
+    ).scalar()
+    revision = max(transcript_revision or 0, recording["job_revision"] or 0) + 1
+    options = await insert_job(
+        conn, {"id": recording["id"], "org_id": recording["org_id"], "language": language}, revision
+    )
+    await conn.execute(
+        update(t.recordings).where(t.recordings.c.id == recording["id"]).values(status="queued", updated_at=func.now())
+    )
+    return revision, options
 
 
 async def enqueue_transcription(

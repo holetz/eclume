@@ -1,0 +1,177 @@
+# Stack efêmero para o E2E do web contra o backend real (projeto `eclume-e2e`), no host GPU:
+#
+#   bash deploy/e2e-real.sh
+#
+# As mesmas peças da produção (Caddy com `tls internal`, server, worker CPU com a CLI do Claude,
+# worker de transcrição, Postgres, Redis, MinIO), sem nada em comum com ela: dados em tmpfs ou em
+# volumes que o `down -v` apaga, Caddy só em 127.0.0.1:18443 e o worker de transcrição com
+# `ECLUME_ENGINE=cpu`, sem GPU — não disputa VRAM com a produção nem com o Jellyfin. Server e web
+# saem do checkout (`:e2e`); o worker reaproveita a imagem `eclume-worker-gpu:prod`, que tem a
+# engine CPU (faster-whisper) e não vale reconstruir (~8 GB), com o código de `engines/` e
+# `worker-gpu/` do checkout montado na frente (PYTHONPATH). O compose roda no host (bind mounts
+# relativos). Senhas fixas: nada aqui sai do host.
+name: eclume-e2e
+
+x-server-env: &server-env
+  ECLUME_DATABASE_URL: postgresql+asyncpg://eclume_server:e2e-runtime@postgres:5432/eclume
+  ECLUME_REDIS_URL: redis://redis:6379/0
+  ECLUME_S3_ENDPOINT: http://minio:9000
+  ECLUME_S3_ACCESS_KEY: eclume
+  ECLUME_S3_SECRET_KEY: eclume-e2e-secret
+  ECLUME_S3_BUCKET: eclume
+  ECLUME_SECRET_KEY: eclume-e2e-secret-key
+  ECLUME_PUBLIC_URL: https://127.0.0.1:18443
+  ECLUME_COOKIE_SECURE: "true"
+
+x-server-image: &server-image
+  image: eclume-server:e2e
+  build:
+    context: ..
+    dockerfile: deploy/server.Dockerfile
+    labels: {org.eclume.image: "server-e2e"}
+
+services:
+  caddy:
+    image: caddy:2.11
+    depends_on:
+      server: {condition: service_healthy}
+      web: {condition: service_started}
+    ports:
+      - "127.0.0.1:18443:8443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+
+  web:
+    image: eclume-web:e2e
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      labels: {org.eclume.image: "web-e2e"}
+
+  server:
+    <<: *server-image
+    environment: *server-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker-cpu:
+    <<: *server-image
+    command: ["arq", "eclume_server.worker.WorkerSettings"]
+    environment: *server-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    volumes:
+      # O resumo real do E2E sai do `claude -p` do host, com o mesmo login da produção.
+      - ${ECLUME_CLAUDE_CREDENTIALS:-/dev/null}:/home/app/.claude/.credentials.json
+
+  worker:
+    image: eclume-worker-gpu:prod
+    environment:
+      ECLUME_ENGINE: cpu
+      ECLUME_DEVICE: cpu
+      ECLUME_REDIS_URL: redis://redis:6379/0
+      ECLUME_S3_ENDPOINT_URL: http://minio:9000
+      ECLUME_S3_ACCESS_KEY: eclume
+      ECLUME_S3_SECRET_KEY: eclume-e2e-secret
+      ECLUME_S3_BUCKET: eclume
+      ECLUME_SECRET_KEY: eclume-e2e-secret-key
+      PYTHONPATH: /src/engines:/src/worker
+    depends_on:
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    volumes:
+      - models:/models
+      - ../engines/src:/src/engines:ro
+      - ../worker-gpu/src:/src/worker:ro
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: eclume
+      POSTGRES_PASSWORD: eclume-e2e
+      POSTGRES_DB: eclume
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eclume -d eclume"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: eclume
+      MINIO_ROOT_PASSWORD: eclume-e2e-secret
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # --- one-shots (perfil tools) ---
+
+  minio-init:
+    profiles: [tools]
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 eclume eclume-e2e-secret >/dev/null && mc mb --ignore-existing local/eclume"]
+
+  # O migrador (superusuário) aplica o schema e liga o LOGIN de eclume_server, como na produção.
+  migrate:
+    <<: *server-image
+    profiles: [tools]
+    command: ["eclume-server", "migrate"]
+    environment:
+      <<: *server-env
+      ECLUME_DATABASE_URL: postgresql+asyncpg://eclume:eclume-e2e@postgres:5432/eclume
+      ECLUME_RUNTIME_DB_PASSWORD: e2e-runtime
+    depends_on:
+      postgres: {condition: service_healthy}
+
+configs:
+  caddyfile:
+    content: |
+      {
+        default_sni 127.0.0.1
+        auto_https disable_redirects
+        skip_install_trust
+      }
+      https://127.0.0.1:8443 {
+        tls internal
+        handle /api/* {
+          reverse_proxy server:8000
+        }
+        handle /media/* {
+          reverse_proxy server:8000
+        }
+        handle {
+          reverse_proxy web:80
+        }
+      }
+
+volumes:
+  # O modelo da engine CPU (faster-whisper `small`, ~0,5 GB): baixado a cada rodada, apagado no `down -v`.
+  models:

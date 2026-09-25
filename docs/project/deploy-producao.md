@@ -7,7 +7,7 @@ tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#14
+source: holetz/eclume#14, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -36,12 +36,12 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 | `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`), com healthcheck em `/api/v1/health` |
 | `worker-cpu` | `eclume-server:prod` | `arq eclume_server.worker.WorkerSettings`: ingestão, resumos, expiração de uploads |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1` ([worker-gpu.md](worker-gpu.md)) |
-| `postgres` | `pgvector/pgvector:pg16` | banco; o papel `eclume` é superusuário e as requisições baixam para `eclume_app` |
+| `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens) |
 
 One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket), `migrate`
-(`eclume-server migrate`) e `publish-ca` (copia a CA para `/downloads/`).
+(`eclume-server migrate`, como o superusuário, que também liga o `LOGIN` de `eclume_server` com `ECLUME_RUNTIME_PG_PASSWORD`) e `publish-ca` (copia a CA para `/downloads/`).
 
 - **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO,
   server e web não têm `ports:`. Para depurar, use `compose exec`.
@@ -110,7 +110,10 @@ host.
 
 | Variável | Observação |
 |---|---|
-| `ECLUME_PG_PASSWORD` | só vale na criação do volume; para trocar depois, `ALTER USER eclume PASSWORD '…'` antes de mudar o env |
+| `ECLUME_PG_PASSWORD` | do superusuário `eclume` (migrador); só vale na criação do volume; para trocar depois, `ALTER USER eclume PASSWORD '…'` antes de mudar o env |
+| `ECLUME_RUNTIME_PG_PASSWORD` | do papel `eclume_server`, a conexão do server e do worker CPU. O `migrate` a aplica a cada deploy, então trocá-la é mudar o env e fazer deploy. Um env anterior a ela ganha uma gerada pelo próprio `deploy.sh` (append, sem tocar no resto) |
+| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
+| `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
@@ -118,7 +121,7 @@ host.
 
 ### Admin e provider
 
-O `bootstrap-admin.sh` cria a organização **EK** e o admin `admin@example.com`. A
+O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a organização **EK** e o admin `admin@example.com`. A
 senha é gerada no host e fica **só** em `/srv/eclume/secrets/admin-password` (600). Ela chega
 ao `eclume-server admin bootstrap --password-stdin` por um pipe e nunca é gravada na estação.
 Com alguma organização no banco, o script não faz nada.
@@ -213,12 +216,21 @@ P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml
 "${P[@]}" ps --all
 "${P[@]}" logs -f --tail 100 worker-gpu
 "${P[@]}" exec postgres psql -U eclume eclume
-"${P[@]}" run --rm server eclume-server admin create-user --org-id <org> --email <e-mail> --name "<nome>" --password-stdin
+"${P[@]}" run --rm migrate eclume-server admin create-user --org-id <org> --email <e-mail> --name "<nome>" --password-stdin
 bash deploy/deploy.sh --context gpu-host --services "server web"   # só código do server e do web
 ```
 
 - **Login do Claude expirado:** o resumo falha com `provider_auth`. Rode `claude` no host, faça o
   login e reenvie o resumo; o arquivo montado é o mesmo, sem reiniciar nada.
+- **Renovação do token do Claude sobre o mount de arquivo** (verificada na holetz/eclume#26): o
+  `rename` sobre um arquivo montado dá `EBUSY`, e a CLI (2.1.282) cai para a escrita no próprio
+  arquivo — o escritor atômico dela trata `EXDEV`/`EPERM`/`EEXIST`/`EBUSY` assim —, que o host
+  enxerga. Por isso o mount é do arquivo, não da pasta `~/.claude`.
+- **Job de transcrição parado:** o worker CPU marca sozinho como falha recuperável (`worker_lost`,
+  `job_lost`, `job_stalled`) o job que o worker GPU abandonou; o dono retranscreve ou o admin usa
+  "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
+- **E2E do web contra o backend real** num stack efêmero, sem tocar a produção:
+  `remote-run . 'bash deploy/e2e-real.sh'` ([frontend-web.md](../standards/code/frontend-web.md)).
 - **Token do Hugging Face:** grave em Administração → Segredos (vence o arquivo) ou troque
   `/srv/eclume/secrets/hf_token` (600). O worker relê a cada job, sem reiniciar
   ([worker-gpu.md](worker-gpu.md)).

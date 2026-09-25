@@ -60,6 +60,16 @@ export function useGroups() {
   return useQuery({ queryKey: GROUPS_KEY, queryFn: () => unwrap(api.GET('/api/v1/groups', PAGE)) })
 }
 
+/** Retenta o job que falhou (a revisão seguinte da gravação); a Saúde se atualiza em seguida. */
+export function useRetryJob() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (jobId: string) =>
+      unwrap(api.POST('/api/v1/admin/jobs/{job_id}/retry', { params: { path: { job_id: jobId } } })),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: HEALTH_KEY }),
+  })
+}
+
 export function useAdminHealth() {
   return useQuery({
     queryKey: HEALTH_KEY,

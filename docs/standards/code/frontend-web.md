@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -56,6 +56,13 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `/pessoas/:id`, `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/*`), e os filtros na
   query string também em pt-BR (`?de=`, `?colecao=`, `?tag=` na biblioteca;
   `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
+- **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
+  biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
+  (89 KB gzip). O chunk do WebCodecs (Mediabunny, ~560 KB) só carrega na conversão do import, e
+  o aviso de chunk grande do Vite que ainda aparece é dele.
+- **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
+  (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
+  como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
 - **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`; uma área nova de
   outra spec entra desligada, e ligá-la é mudar `enabled` e registrar a rota.
 - **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
@@ -147,3 +154,12 @@ Depois de recarregar, o import recomeça pela conversão.
   `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado.
 - A CI roda os unitários no job `web` e o E2E, junto dos testes de navegador da conversão, no
   job `web-browser`.
+- **E2E contra o backend real** (`npm run test:e2e:real`, `playwright.real.config.ts`,
+  `e2e-real/`): nada simulado — login com os cookies do servidor, import com conversão no
+  navegador e upload pelas URLs de parte assinadas, transcrição pelo worker e o resumo automático
+  do `claude -p`. Roda no host GPU por `bash deploy/e2e-real.sh` (da estação:
+  `remote-run . 'bash deploy/e2e-real.sh'`), que sobe um stack efêmero próprio
+  (`deploy/docker-compose.e2e.yml`, projeto `eclume-e2e`, Caddy em `127.0.0.1:18443`, dados em
+  tmpfs, worker na engine CPU sem GPU), cria organização e admin descartáveis, roda o cenário e
+  sai sempre com `down -v` e as imagens `:e2e` apagadas. Nunca toca a produção. Leva ~1 min além
+  do build; fica fora da CI (exige o daemon, o Chrome e o login do Claude do host).

@@ -7,7 +7,7 @@ tags: [code, server, admin, configuracao, segredos, convites, saude, rls]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#12
+source: holetz/eclume#12, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -83,20 +83,32 @@ o acordo com o worker GPU, em [jobs-transcricao.md](../api/jobs-transcricao.md).
 ## Saúde (`/admin/health`)
 
 - **Heartbeat do worker GPU:** o worker substitui `eclume:gpu:health` a cada 15 s (TTL 45 s) com
-  versão, engine, dispositivo, `busy`, o modelo residente e, com NVML, nome da GPU, VRAM usada e
+  versão, engine, dispositivo, `busy`, os modelos residentes (o ASR e o da etapa) e, com NVML, nome da GPU, VRAM usada e
   total e utilização; no SIGTERM, apaga o hash. Hash ausente = worker parado há mais de 45 s →
   `worker: null` e `gpu: null`. Os campos estão no [contrato de jobs](../api/jobs-transcricao.md).
 - **Filas:** por fila arq (`eclume:gpu`, `eclume:default`), `running` = ids do zset com
   `arq:in-progress:<id>`, `queued` = o resto. São números da instância, sem ids nem conteúdo.
 - **Jobs e falhas da organização**, lidos com o papel de sistema e filtrados por `org_id`:
   `running_jobs` são os `transcription_jobs` `queued`/`running` com etapa, progresso e o
-  `updated_at` do hash de progresso (parado há muito = worker morto); `recent_failures` são os
-  últimos 20 `failed` em 24 h. O título de gravação que o admin não enxerga pela RLS sai como
-  "Gravação privada".
+  `updated_at` do hash de progresso; `recent_failures` são os últimos 20 `failed` em 24 h, com
+  `retryable` (a falha passageira do [job morto](../api/jobs-transcricao.md#job-morto), falta de
+  VRAM, S3). O título de gravação que o admin não enxerga pela RLS sai como "Gravação privada".
+
+## Retentativa (`POST /admin/jobs/{job_id}/retry`)
+
+- Só admin, só sessão. Vale para qualquer gravação da organização, **inclusive privada** de outro
+  membro — por isso roda com o papel de sistema, filtrando por `org_id` —, mas só para o job
+  **mais recente** da gravação e em estado `failed`: job de outra organização ou inexistente é
+  404; job antigo ou ainda em aberto é 409.
+- Cria o job da revisão seguinte com a configuração atual da organização
+  (`recordings.start_next_revision`, o mesmo caminho da retranscrição do dono), põe a gravação em
+  `queued`, enfileira o `transcribe` com o token do HF cifrado e responde 202 com
+  `AdminJobRetried` (`job_id`, `recording_id`, `revision`, `state: queued`, `queued_at`).
+- A Saúde do web mostra "Tentar de novo" em cada falha recente, destacado quando `retryable`.
 
 ## Testes
 
 `server/tests/test_admin_settings.py`, `test_admin_secrets.py`, `test_invitations.py`,
-`test_admin_health.py` e o bloco de RLS de `test_isolation.py` rodam com Postgres, Redis e MinIO
+`test_admin_health.py` (com a retentativa) e o bloco de RLS de `test_isolation.py` rodam com Postgres, Redis e MinIO
 reais e a conformidade estrita ligada; o heartbeat é semeado no Redis do teste. O lado do worker é
 `worker-gpu/tests/test_health.py` e os testes de token em `test_jobs.py`.

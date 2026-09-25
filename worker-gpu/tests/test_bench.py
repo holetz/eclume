@@ -56,7 +56,7 @@ def test_benchmark_mede_e_grava_transcript(tmp_path: Path, monkeypatch: Any):
     report = run(parse_args([str(audio), "--no-diarize", "--transcript", str(saida)]), factory=factory)
 
     [engine] = engines
-    assert engine.kwargs == {"device": "cuda", "hf_token": None, "batch_size": None}
+    assert engine.kwargs == {"device": "cuda", "hf_token": None, "batch_size": None, "keep_asr_resident": True}
     assert engine.options is not None
     assert engine.options.diarize is False
     assert engine.unloaded

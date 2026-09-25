@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from eclume_server.voice import DEFAULT_TERM_VERSION, DEFAULT_THRESHOLD
+from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import DEFAULT_VOICES, EMBEDDING_DIMS, run_cpu, run_gpu, transcribed, voice
 from eclume_server_testing.harness import run
 
@@ -168,7 +169,7 @@ def test_opt_in_desligado_esconde_sugestoes(ek: Org):
     assert ek.speakers(second)["S2"]["suggestions"]
     ek.opt_in(enabled=False)
     assert ek.speakers(second)["S2"]["suggestions"] == []
-    assert ek.events()[0] == "org_opt_in_changed"
+    assert ek.events()[:2] == ["embeddings_purged", "org_opt_in_changed"]
 
 
 def test_recusar_sugestao(ek: Org):
@@ -180,7 +181,7 @@ def test_recusar_sugestao(ek: Org):
     revision = ek.owner.get(base).json()["revision"]
     url = f"{base}/speakers/S2/suggestions/{rafael['id']}"
 
-    assert ek.owner.pat("transcripts:write").delete(url).status_code == 401
+    assert ek.owner.pat("transcripts:write").delete(url).status_code == 403
     assert ek.admin.delete(url).status_code in {403, 404}
     rejected = ek.owner.delete(url)
     assert rejected.status_code == 200, rejected.text
@@ -234,7 +235,7 @@ def test_revogar_apaga_a_impressao_e_as_sugestoes(ek: Org):
         ek.owner.pat("people:write")
         .put(f"/api/v1/people/{rafael['id']}/voice-consent", json={"status": "granted"})
         .status_code
-        == 401
+        == 403
     )
 
 
@@ -371,3 +372,104 @@ def test_retranscricao_restaura_os_vinculos(ek: Org, services: Services):
         "SELECT count(*) FROM voice_samples s LEFT JOIN speakers sp USING (transcript_id, speaker_id) WHERE sp.person_id IS NULL",
     ) == [(0,)]
     assert ek.events(rafael["id"]).count("link_restored") == 1
+
+
+# --- LGPD: purga dos embeddings por gravação e exclusão completa ----------------------------------
+
+
+def _recording_of(services: Services, tid: str) -> str:
+    return str(_sql(services, "SELECT recording_id FROM transcripts WHERE id = :t", t=tid)[0][0])
+
+
+def _objects(services: Services, prefix: str) -> list[str]:
+    listed = services.s3().list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=prefix)
+    return [obj["Key"] for obj in listed.get("Contents", [])]
+
+
+def _embeddings(services: Services, tid: str) -> int:
+    return _sql(services, "SELECT count(*) FROM speaker_embeddings WHERE transcript_id = :t", t=tid)[0][0]
+
+
+def test_desligar_o_opt_in_purga_os_embeddings_so_da_organizacao(
+    ek: Org, new_org: Callable[[], Org], services: Services
+):
+    other = new_org()
+    for org in (ek, other):
+        org.opt_in()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    tid = ek.transcript()
+    assert ek.speakers(tid)["S2"]["suggestions"]
+    other_tid = other.transcript()
+    rid, other_rid = _recording_of(services, tid), _recording_of(services, other_tid)
+    embeddings_key = f"recordings/{rid}/speaker_embeddings.json"
+    assert _embeddings(services, tid) == 3
+    assert _objects(services, embeddings_key) == [embeddings_key]
+
+    ek.opt_in(enabled=False)
+    assert _sql(
+        services,
+        "SELECT count(*) FROM speaker_embeddings WHERE org_id = (SELECT org_id FROM transcripts WHERE id = :t)",
+        t=tid,
+    ) == [(0,)]
+    assert _sql(
+        services, "SELECT count(*) FROM speaker_suggestions WHERE transcript_id = :t AND status = 'pending'", t=tid
+    ) == [(0,)]
+    purged = ek.admin.get("/api/v1/admin/voice-audit").json()["items"][0]
+    assert purged["event"] == "embeddings_purged"
+    assert purged["details"]["deleted_embeddings"] >= 3
+    assert purged["details"]["deleted_suggestions"] >= 1
+    # A amostra de quem consentiu fica; revogá-la é o fluxo de consentimento.
+    assert ek.samples(rafael["id"]) == 1
+
+    run_cpu(services.settings)
+    assert _objects(services, embeddings_key) == []
+    assert _objects(services, f"recordings/{rid}/transcript.raw.json")  # só os embeddings saem
+    assert _embeddings(services, other_tid) == 3
+    assert _objects(services, f"recordings/{other_rid}/speaker_embeddings.json")
+
+
+def test_ingestao_com_opt_in_desligado_no_meio_nao_guarda_embeddings(ek: Org, services: Services):
+    ek.opt_in()
+    recording = upload_file(ek.owner, audio_bytes(2100))
+    job = _sql(
+        services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
+    )
+    assert job == [("true",)]
+    ek.opt_in(enabled=False)
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    assert _embeddings(services, tid) == 0
+    assert _objects(services, f"recordings/{recording['id']}/speaker_embeddings.json") == []
+
+
+def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumos(ek: Org, services: Services):
+    ek.opt_in()
+    rafael = ek.person("Rafael Lima")
+    tid = ek.transcript()
+    ek.link(tid, "S2", rafael["id"])
+    ek.admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
+    templates = ek.owner.get("/api/v1/summary-templates").json()["items"]
+    summary = ek.owner.post(f"/api/v1/transcripts/{tid}/summaries", json={"template_id": templates[0]["id"]})
+    assert summary.status_code == 202, summary.text
+    run_cpu(services.settings)
+    rid = _recording_of(services, tid)
+    audio_key = _sql(services, "SELECT audio_key FROM recordings WHERE id = :r", r=rid)[0][0]
+    counts = """
+        SELECT (SELECT count(*) FROM transcripts WHERE id = :t),
+               (SELECT count(*) FROM segments WHERE transcript_id = :t),
+               (SELECT count(*) FROM speakers WHERE transcript_id = :t),
+               (SELECT count(*) FROM speaker_embeddings WHERE transcript_id = :t),
+               (SELECT count(*) FROM voice_samples WHERE transcript_id = :t),
+               (SELECT count(*) FROM summaries WHERE transcript_id = :t),
+               (SELECT count(*) FROM transcription_jobs WHERE recording_id = :r)
+    """
+    assert all(n > 0 for n in _sql(services, counts, t=tid, r=rid)[0])
+    assert _objects(services, audio_key)
+    assert len(_objects(services, f"recordings/{rid}/")) == 2  # transcrição bruta e embeddings
+
+    assert ek.owner.delete(f"/api/v1/recordings/{rid}").status_code == 204
+    assert _sql(services, counts, t=tid, r=rid) == [(0, 0, 0, 0, 0, 0, 0)]
+    assert _objects(services, audio_key) == []
+    assert _objects(services, f"recordings/{rid}/") == []

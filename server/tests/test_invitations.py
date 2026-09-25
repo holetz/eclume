@@ -126,7 +126,7 @@ def test_validacao_e_permissoes(
     assert member.get(URL).status_code == 403
     assert member.post(URL, json={"email": "y@exemplo.com.br"}).status_code == 403
     assert member.delete(f"{URL}/{invitation['id']}").status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 401
+    assert admin.pat("recordings:read").get(URL).status_code == 403
 
     # Admin de outra organização não vê nem revoga.
     stranger = as_user(make_user(role="admin", org_id=make_org()))

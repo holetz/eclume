@@ -17,6 +17,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import iso
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress
+from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
     from eclume_server.auth import Principal
@@ -158,6 +159,7 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
                 "code": row["error_code"] or "internal_error",
                 "message": row["error_message"] or "",
                 "failed_at": iso(row["finished_at"]),
+                "retryable": is_retryable(row["error_code"]),
             }
             for row in failures
         ],

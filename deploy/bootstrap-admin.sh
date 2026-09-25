@@ -44,6 +44,6 @@ fi
 password_file="$DATA_DIR/secrets/admin-password"
 host "umask 077; [ -s '$password_file' ] || openssl rand -base64 24 | tr '+/' '-_' | tr -d '=\n' > '$password_file'"
 host "cat '$password_file'" \
-  | "${COMPOSE[@]}" run --rm -T --no-deps server \
+  | "${COMPOSE[@]}" run --rm -T --no-deps migrate \
       eclume-server admin bootstrap --org "$ORG" --email "$EMAIL" --name "$NAME" --password-stdin
 echo "Admin $EMAIL criado; a senha está em $SSH:$password_file (600)." >&2

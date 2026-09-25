@@ -4,10 +4,10 @@ title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume e publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh.
 resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/scripts/**, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#16
+source: holetz/eclume#16, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -107,7 +107,20 @@ recentes. O Caddy do eclume serve a pasta em `/downloads/`.
   continuar ocioso. No Windows, o instalador roda em modo `passive` e reabre o app. Build de
   depuração não se atualiza.
 - O TLS é o do sistema (rustls com `rustls-platform-verifier`): a CA raiz do Caddy instalada no
-  cliente vale para o updater. Nada de `dangerousAcceptInvalidCerts`.
+  cliente vale para o updater. Desde a 0.1.1, a **CA extra** da config do sync (`ca_path`) também
+  vale: é somada às do sistema no cliente do updater por `UpdaterBuilder::configure_client` +
+  `tls_certs_merge`. Uma CA ilegível só gera aviso no log; a checagem segue com as do sistema.
+  Nada de `dangerousAcceptInvalidCerts`.
+- `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor: o plugin fica fixado
+  em `2.12` e o `reqwest` do app é o mesmo `0.13`, sem features próprias.
+- **Prova da atualização ponta a ponta** (Linux, no host): a 0.1.0 publicada roda sob Xvfb
+  (`xvfb-run -a dbus-run-session -- ./eclume.AppImage`, com `HOME`/`XDG_*` temporários e
+  `SSL_CERT_FILE` = CAs do sistema + `eclume-root.crt`, porque a 0.1.0 só conhece as do sistema e
+  o `rustls-native-certs` honra a variável), consulta o `latest.json` de produção aos 30 s, baixa
+  o AppImage da versão nova, confere a assinatura minisign, troca o arquivo e reinicia. Feita em
+  2026-09-25 com `desktop-v0.1.1` publicada: `versão 0.1.1 disponível` → `rewriting AppImage` →
+  `versão 0.1.1 instalada` em ~1 s, o arquivo passou a ter o SHA-256 do AppImage 0.1.1 e o app
+  reabriu na versão nova.
 
 ## Chave do updater
 

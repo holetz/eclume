@@ -52,7 +52,7 @@ count_sql="select string_agg(t || '=' || n, ' ' order by t) from (
   select 'transcripts', count(*) from transcripts union all
   select 'summaries', count(*) from summaries) c"
 
-# Os papéis (eclume_app) são do cluster, não do banco; num cluster novo eles vêm antes do dump.
+# Os papéis (eclume_app, eclume_server) são do cluster, não do banco; num cluster novo eles vêm antes do dump.
 # "já existe" é esperado num cluster que já os tem.
 docker exec -i "$pg" psql -U eclume -q -d postgres < "$roles" >/dev/null 2>&1 || true
 

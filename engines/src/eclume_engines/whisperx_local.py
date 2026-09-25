@@ -4,8 +4,13 @@ O WhisperX (e com ele torch e pyannote) é importado só dentro de `transcribe`,
 e os testes importem este módulo sem as dependências pesadas. As chamadas seguem a API do
 WhisperX 3.8.6, fixado no extra `whisperx`.
 
-Na GTX 1660 (6 GB, Turing, sem tensor cores) há um único modelo residente por vez: carregar o
-modelo de uma etapa descarrega o da anterior. O `fp16` puro é recusado (NaN na série 16xx).
+Na GTX 1660 (6 GB, Turing, sem tensor cores) há dois lugares para modelos: o do ASR e o da etapa
+(alinhamento ou diarização). O ASR fica residente entre jobs — o que tira ~20 s de carga de cada
+job curto — enquanto a VRAM livre permitir: antes de carregar o modelo de uma etapa, com menos de
+`resident_min_free_mb` livres, o ASR é descarregado; um OOM numa etapa com o ASR residente o
+descarrega e repete a etapa uma vez. No fim do job o modelo da etapa sai e o ASR fica, até a
+descarga por ociosidade do worker. `keep_asr_resident=False` volta ao lugar único (carregar o
+modelo de uma etapa descarrega o da anterior). O `fp16` puro é recusado (NaN na série 16xx).
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from eclume_engines.base import (
 from eclume_engines.vram import VramMonitor, initial_batch_size
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -49,6 +55,9 @@ FORBIDDEN_COMPUTE_TYPES = frozenset({"float16"})
 DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
 # Tipo de cada modelo residente, no vocabulário de `models_loaded` do contrato v1.
 _KINDS = {"asr": "asr", "align": "alignment", "diarize": "diarization"}
+# VRAM livre mínima, com o ASR carregado, para ele continuar residente ao carregar uma etapa: o
+# alinhador (~0,6 GB) ou o pyannote (~1 GB) mais a inferência deles, com folga para o Jellyfin.
+RESIDENT_MIN_FREE_MB = 2500
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
 WARN_NO_TOKEN = "diarization_skipped_no_token"  # noqa: S105 — código de aviso, não segredo
@@ -68,60 +77,91 @@ class WhisperXLocalEngine:
 
     name = "whisperx-local"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — opções da engine, todas nomeadas
         self,
         *,
         hf_token: str | None = None,
         device: str = "cuda",
         vram: VramMonitor | None = None,
         batch_size: int | None = None,
+        keep_asr_resident: bool = True,
+        resident_min_free_mb: int = RESIDENT_MIN_FREE_MB,
     ) -> None:
         """`hf_token` libera a diarização; sem ele o job transcreve com um locutor só.
 
         `batch_size` fixa o lote inicial do ASR; `None` o escolhe pela VRAM livre.
+        `keep_asr_resident` mantém o ASR carregado entre as etapas e entre jobs, enquanto houver
+        `resident_min_free_mb` livres; `False` é o lugar único de antes.
         """
         self.hf_token = hf_token
         self.device = device
         self.batch_size = batch_size
+        self.keep_asr_resident = keep_asr_resident
+        self.resident_min_free_mb = resident_min_free_mb
         self.vram = vram if vram is not None else VramMonitor()
-        self._slot_key: tuple[Any, ...] | None = None
-        self._slot: Any = None
-        # (tipo, nome, carregado em, VRAM do modelo) do residente; trocado inteiro, lido pelo heartbeat.
-        self._resident: tuple[str, str, str, int | None] | None = None
+        # Um lugar por papel ("asr" e "stage"): {papel: (chave, objeto, (tipo, nome, carregado em, VRAM))}.
+        # Trocado por atribuição inteira: o heartbeat lê de outra thread.
+        self._slots: dict[str, tuple[tuple[Any, ...], Any, tuple[str, str, str, int | None]]] = {}
 
     # -- modelo residente -------------------------------------------------------------------
 
     def _load(self, key: tuple[Any, ...], loader: Any, name: str) -> Any:  # noqa: ANN401 — objetos do WhisperX
-        if self._slot_key != key:
-            self.unload()
-            before = self.vram.used_mb()
-            self._slot = loader()
-            self._slot_key = key
-            after = self.vram.used_mb()
-            vram_mb = max(0, after - before) if before is not None and after is not None else None
-            loaded_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-            self._resident = (_KINDS[key[0]], name, loaded_at, vram_mb)
-        return self._slot
+        role = "asr" if key[0] == "asr" else "stage"
+        current = self._slots.get(role)
+        if current is not None and current[0] == key:
+            return current[1]
+        self._unload_role(role)
+        if role == "asr" or not self.keep_asr_resident:
+            # Lugar único: o modelo novo tira o outro. O ASR também tira a etapa, que não é mais usada.
+            self._unload_role("stage" if role == "asr" else "asr")
+        elif not self._room_for_stage():
+            logger.info("VRAM livre abaixo de %d MB: descarregando o ASR residente", self.resident_min_free_mb)
+            self._unload_role("asr")
+        before = self.vram.used_mb()
+        model = loader()
+        after = self.vram.used_mb()
+        vram_mb = max(0, after - before) if before is not None and after is not None else None
+        loaded_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        self._slots = {**self._slots, role: (key, model, (_KINDS[key[0]], name, loaded_at, vram_mb))}
+        return model
 
-    def loaded_models(self) -> list[dict[str, Any]]:
-        """O modelo residente na GPU (há no máximo um), para o heartbeat do worker."""
-        resident = self._resident
-        if resident is None:
-            return []
-        kind, name, loaded_at, vram_mb = resident
-        return [{"name": name, "kind": kind, "loaded_at": loaded_at, "vram_mb": vram_mb}]
+    def _room_for_stage(self) -> bool:
+        """Cabe o modelo de uma etapa com o ASR residente? Sem NVML (sem medida), cabe."""
+        free = self.vram.free_mb()
+        return free is None or free >= self.resident_min_free_mb
 
-    def unload(self) -> None:
-        """Descarrega o modelo residente e devolve a VRAM ao driver."""
-        if self._slot is None:
-            return
-        self._slot = None
-        self._slot_key = None
-        self._resident = None
+    def _unload_role(self, role: str) -> bool:
+        if role not in self._slots:
+            return False
+        self._slots = {r: slot for r, slot in self._slots.items() if r != role}
         gc.collect()
         torch = sys.modules.get("torch")
         if torch is not None and torch.cuda.is_available():
             torch.cuda.empty_cache()
+        return True
+
+    def loaded_models(self) -> list[dict[str, Any]]:
+        """Os modelos residentes na GPU (o ASR e o da etapa, no máximo), para o heartbeat do worker."""
+        return [
+            {"name": name, "kind": kind, "loaded_at": loaded_at, "vram_mb": vram_mb}
+            for _key, _model, (kind, name, loaded_at, vram_mb) in self._slots.values()
+        ]
+
+    def unload(self) -> None:
+        """Descarrega todos os modelos residentes e devolve a VRAM ao driver."""
+        self._unload_role("stage")
+        self._unload_role("asr")
+
+    def _stage(self, run: Callable[[], Any]) -> Any:  # noqa: ANN401 — o resultado da etapa
+        """Roda uma etapa; num OOM com o ASR residente, descarrega o ASR e repete uma vez."""
+        try:
+            return run()
+        except EngineError as exc:
+            if exc.code != OUT_OF_MEMORY or not self._unload_role("asr"):
+                raise
+            logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
+            self._unload_role("stage")
+            return run()
 
     # -- pipeline ---------------------------------------------------------------------------
 
@@ -145,10 +185,15 @@ class WhisperXLocalEngine:
         with self.vram.track() as peak:
             result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
             progress("asr", 100.0)
-            result, align_model = self._align(whisperx, audio, result, options, warnings)
+            aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
             progress("align", 100.0)
-            result, embeddings, diarization_model = self._diarize(whisperx, audio, result, options, progress, warnings)
+            result, embeddings, diarization_model = self._stage(
+                lambda: self._diarize(whisperx, audio, aligned, options, progress, warnings)
+            )
             progress("diarize", 100.0)
+        if self.keep_asr_resident:
+            # O ASR fica para o próximo job; a VRAM da etapa volta ao host.
+            self._unload_role("stage")
 
         segments = _to_segments(result.get("segments", []))
         progress("embed", 100.0)

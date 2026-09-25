@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -69,7 +70,7 @@ def test_sem_worker_e_sem_jobs(
         {"name": "eclume:default", "queued": 0, "running": 0},
     ]
     assert as_user(make_user()).get(URL).status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 401
+    assert admin.pat("recordings:read").get(URL).status_code == 403
 
 
 def test_heartbeat_fila_e_progresso(
@@ -153,3 +154,41 @@ def test_falhas_recentes_so_da_organizacao(
     assert failure["code"] == "gpu_oom"
     assert failure["message"] == "CUDA out of memory"
     assert stranger.get(URL).json()["recent_failures"] == []
+    assert failure["retryable"] is True
+
+
+def test_admin_retenta_o_job_que_falhou_inclusive_de_gravacao_privada(
+    admin: Api,
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    make_org: Callable[[], UUID],
+    services: Services,
+):
+    member = as_user(make_user())
+    recording = upload_file(member, audio_bytes(1200), title="Privada que falhou")
+    run_gpu(services.settings, fail=True)
+    run_cpu(services.settings)
+    failed_job = member.get(f"/api/v1/recordings/{recording['id']}").json()["job"]
+    retry = f"/api/v1/admin/jobs/{failed_job['id']}/retry"
+
+    assert member.post(retry).status_code == 403
+    assert admin.pat("recordings:write").post(retry).status_code == 403
+    assert as_user(make_user(role="admin", org_id=make_org())).post(retry).status_code == 404
+    assert admin.post(f"/api/v1/admin/jobs/{uuid.uuid4()}/retry").status_code == 404
+
+    response = admin.post(retry)
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["recording_id"] == recording["id"]
+    assert body["revision"] == 2
+    assert body["state"] == "queued"
+    after = member.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert after["status"] == "queued"
+    assert after["job"]["id"] == body["job_id"]
+    # O job antigo não é mais o mais recente, e o novo ainda não falhou.
+    assert admin.post(retry).status_code == 409
+    assert admin.post(f"/api/v1/admin/jobs/{body['job_id']}/retry").status_code == 409
+
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert member.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"

@@ -101,7 +101,12 @@ class EngineRegistry:
 
     def _kwargs(self, name: str, base_url: str | None) -> dict[str, Any]:
         if name == "whisperx-local":
-            return {"device": self.config.device, "batch_size": self.config.batch_size}
+            return {
+                "device": self.config.device,
+                "batch_size": self.config.batch_size,
+                "keep_asr_resident": self.config.keep_asr_resident,
+                "resident_min_free_mb": self.config.resident_min_free_mb,
+            }
         if name == "openai-compatible":
             if not base_url:
                 msg = "engine openai-compatible sem endpoint_url nas options nem ECLUME_REMOTE_BASE_URL"
@@ -226,6 +231,13 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     engine_options = dataclasses.replace(
         EngineOptions.from_mapping(options), language=language.split("-", 1)[0].lower()
     )
+    engine_name = registry.resolve_name(options)
+    if options.get("engine") and engine_name != options["engine"]:
+        # Modelo, compute type e lote do admin são da engine que ele escolheu; a engine forçada pelo
+        # operador (`ECLUME_ENGINE`, ex. `cpu` no dev e no E2E) usa os padrões dela.
+        engine_options = dataclasses.replace(
+            engine_options, model=None, compute_type=None, batch_size=None, fallback_model=None
+        )
     reporter = ProgressReporter(redis, recording_id)
 
     await reporter.report("download")
@@ -244,7 +256,7 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         result = await asyncio.to_thread(
             functools.partial(
                 registry.run,
-                registry.resolve_name(options),
+                engine_name,
                 audio_path,
                 engine_options,
                 progress,

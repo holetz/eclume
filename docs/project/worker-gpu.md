@@ -7,7 +7,7 @@ tags: [worker-gpu, whisperx, gpu, benchmark, runbook]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#8, holetz/eclume#12
+source: holetz/eclume#8, holetz/eclume#12, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -86,6 +86,23 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
   de integração separou os 2 locutores e alternou as falas certo, exceto a primeira frase ("Bom
   dia, pessoal."), atribuída ao outro locutor.
 
+### ASR residente entre jobs (holetz/eclume#26)
+
+Medido em 2026-09-25 com a imagem de produção, o worker do stack ocioso (sem modelo carregado) e
+5.396 MiB livres: a fixture `duas-vozes.ogg` (30,4 s), três jobs seguidos na mesma engine
+(`python -m eclume_worker.bench a.ogg --repeat 3`, com e sem `--single-slot`). Sem token do
+Hugging Face no host, a diarização não roda; o pyannote seria recarregado a cada job nos dois modos,
+então a diferença abaixo é a carga do ASR.
+
+| Modo | Job 1 (frio) | Job 2 | Job 3 |
+|---|---|---|---|
+| um modelo por vez (`--single-slot`, o de antes) | 23,2 s | 10,4 s | 10,5 s |
+| ASR residente (padrão) | 20,6 s | 6,1 s | 5,8 s |
+
+Do segundo job em diante, o job curto cai ~43% (≈4,5 s a menos por job): o alinhador ainda é
+recarregado, o ASR não. O pico acima da linha de base com o ASR residente foi 1.746 MiB, longe do
+limiar de 2.500 MiB livres que faria o ASR sair.
+
 ## Imagem
 
 `worker-gpu/Dockerfile` é construído no host, a partir da raiz do repositório:
@@ -145,10 +162,12 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
 |---|---|---|
 | `ECLUME_REDIS_URL` | `redis://localhost:6379/0` | Redis das filas e do progresso |
 | `ECLUME_S3_BUCKET`, `ECLUME_S3_ENDPOINT_URL`, `ECLUME_S3_ACCESS_KEY`, `ECLUME_S3_SECRET_KEY`, `ECLUME_S3_REGION` | `eclume`, —, —, —, `us-east-1` | bucket do áudio e dos artefatos (MinIO) |
-| `ECLUME_ENGINE` | vazio | força a engine do processo (`cpu` em dev); vazio, vale `options.engine` |
+| `ECLUME_ENGINE` | vazio | força a engine do processo (`cpu` em dev e no E2E); vazio, vale `options.engine`. Forçada, ignora modelo, compute type e lote do admin |
 | `ECLUME_DEVICE` | `cuda` | dispositivo do torch e do CTranslate2 |
 | `ECLUME_BATCH_SIZE` | vazio | lote inicial fixo do ASR; vazio, vem da VRAM livre |
 | `ECLUME_MODEL_IDLE_SECONDS` | `300` | descarrega os modelos após esse tempo sem job |
+| `ECLUME_KEEP_ASR_RESIDENT` | `1` | mantém o ASR carregado entre as etapas e entre jobs; `0` volta a um modelo por vez |
+| `ECLUME_RESIDENT_MIN_FREE_MB` | `2500` | VRAM livre mínima, com o ASR carregado, para ele ficar ao carregar o alinhador ou o pyannote |
 | `ECLUME_JOB_TIMEOUT_SECONDS` | `21600` | limite de um job (6 h) |
 | `ECLUME_WORK_DIR` | `/tmp/eclume-work` | onde o áudio é baixado; limpo ao fim do job |
 | `HF_TOKEN`, `ECLUME_HF_TOKEN_FILE` | —, `/run/secrets/hf_token` | token do Hugging Face (o da organização, vindo no job, vence) |
@@ -160,9 +179,13 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
   host: `redis-cli HGETALL eclume:gpu:health` no Redis do stack. Medido na GTX 1660 SUPER em
   2026-09-25: nome, 6.144 MiB de total e a VRAM do stack de produção (3.659 MiB) lidos certo; o
   hash some em até 45 s depois de um `kill` e na hora num `docker stop`.
-- **VRAM compartilhada com o Jellyfin.** Não há mais de um modelo na GPU por vez: cada etapa
-  descarrega o modelo da anterior. Depois de `ECLUME_MODEL_IDLE_SECONDS` sem job, o worker
-  descarrega o último e fica só com o contexto CUDA (~120 MiB).
+- **VRAM compartilhada com o Jellyfin.** Há no máximo dois modelos na GPU: o ASR, residente entre
+  jobs, e o da etapa em curso (alinhador ou pyannote), que sai no fim do job. Antes de carregar o
+  da etapa com menos de `ECLUME_RESIDENT_MIN_FREE_MB` livres — o Jellyfin transcodificando, por
+  exemplo —, o ASR sai; um OOM numa etapa com ele residente o descarrega e repete a etapa. Depois
+  de `ECLUME_MODEL_IDLE_SECONDS` sem job, o worker descarrega tudo e fica só com o contexto CUDA
+  (~120 MiB). `python -m eclume_worker.bench <áudio> --repeat 3` mede jobs seguidos na mesma
+  engine (`runs_s`), e `--single-slot` o comportamento de um modelo por vez.
 - **Falta de memória.** Um OOM no ASR corta o lote pela metade até 1. Se ainda faltar, o modelo
   cai para `medium` (aviso `fallback_medium`). Esgotado isso, o job falha com `out_of_memory`.
 - **Disco.** O host tem pouco espaço livre. Confira `df -h /` antes de um build, e, depois de

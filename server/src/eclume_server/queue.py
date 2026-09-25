@@ -115,6 +115,10 @@ class Queue:
             "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
         )
 
+    async def enqueue_purge_embedding_objects(self, org_id: UUID) -> None:
+        """Enfileira a remoção dos `speaker_embeddings.json` da organização no worker CPU."""
+        await self.pool.enqueue_job("purge_embedding_objects", str(org_id), _queue_name=DEFAULT_QUEUE)
+
     async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
         """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""
         if not recording_ids:
