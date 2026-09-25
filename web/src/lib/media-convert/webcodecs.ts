@@ -43,6 +43,7 @@ export async function probeWithWebCodecs(file: Blob): Promise<ProbeResult> {
     return {
       durationSec: await input.getDurationFromMetadata(track ? [track] : undefined),
       hasAudio: track !== null,
+      decodable: track !== null && typeof AudioDecoder === 'function' && (await track.canDecode()),
     }
   } finally {
     input.dispose()

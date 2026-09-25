@@ -1,4 +1,12 @@
 // API pública da biblioteca de conversão. O app importa só daqui.
+export {
+  convertAudio,
+  probeMedia,
+  type ConvertOptions,
+  type ConvertResult,
+  type MediaProbe,
+} from './convert'
+export type { EngineName } from './engine'
 export { checkEnvironment, type EnvironmentReport } from './environment'
 export { MediaConvertError, type MediaConvertErrorCode } from './errors'
 export {

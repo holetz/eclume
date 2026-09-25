@@ -13,4 +13,6 @@ export type EngineName = 'webcodecs' | 'ffmpeg'
 export interface ProbeResult {
   durationSec: number | null
   hasAudio: boolean
+  /** O navegador decodifica a faixa de áudio (senão a conversão cairá para o ffmpeg.wasm). */
+  decodable: boolean
 }
