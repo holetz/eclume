@@ -11,6 +11,8 @@ build/
 # Node / Tauri
 node_modules/
 target/
+# Schemas gerados pelo tauri-build a cada compilação
+desktop/src-tauri/gen/
 
 # Configuração local e segredos — os exemplos (.env.example) são versionados
 .env

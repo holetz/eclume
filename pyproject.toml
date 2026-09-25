@@ -1,0 +1,49 @@
+# Raiz do workspace uv do eclume. Os pacotes Python vivem nos pilares da raiz:
+# `engines` (interface de engine), `server` (API) e `worker-gpu` (worker de ASR).
+# Esta raiz não é um pacote — só declara o workspace, a config compartilhada de
+# ferramentas (ruff/pytest) e o grupo de dev.
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["engines", "server", "worker-gpu"]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.6",
+  "pytest>=8.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = [
+  "engines/src",
+  "engines/tests",
+  "server/src",
+  "server/tests",
+  "worker-gpu/src",
+  "worker-gpu/tests",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "E501",     # line too long — o formatter cuida
+  "COM812",   # trailing comma — conflita com `ruff format`
+  "D203",     # conflita com D211 (sem linha em branco antes da docstring de classe)
+  "D213",     # conflita com D212 (resumo na primeira linha da docstring)
+  "D401",     # imperative mood — o projeto escreve em português
+  "CPY001",   # aviso de copyright por arquivo — a licença MIT vive em LICENSE
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "D100", "D103", "ANN201"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["engines/tests", "server/tests", "worker-gpu/tests"]
+addopts = "--import-mode=importlib"

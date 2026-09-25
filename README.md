@@ -14,8 +14,17 @@ agente que a organização escolher.
   antes do upload.
 - **desktop/**: app Tauri para Windows, Linux e macOS. Detecta reuniões, grava, sincroniza e fica
   na bandeja do sistema.
+- **engines/**: a interface de engine de ASR, compartilhada pelo server e pelo worker.
 - **contracts/**: OpenAPI v1 e o schema da transcrição, que são o contrato com integrações como o
   lumea.
+- **deploy/**: compose de desenvolvimento (Postgres com pgvector, Redis e MinIO) e, depois, o de
+  produção.
+- **docs/**: o conhecimento do projeto, num bundle OKF.
+
+## Desenvolvimento
+
+Os comandos de build, lint e teste de cada peça estão em
+[docs/standards/code/monorepo.md](docs/standards/code/monorepo.md).
 
 ## Licença
 

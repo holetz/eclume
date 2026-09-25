@@ -1,0 +1,47 @@
+# Serviços de apoio do eclume para desenvolvimento local.
+# Toda porta é publicada só em 127.0.0.1: o Docker publica por fora do ufw, então
+# um bind em 0.0.0.0 exporia o banco na rede. Credenciais são de dev (deploy/.env.example).
+name: eclume-dev
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${ECLUME_PG_USER:-eclume}
+      POSTGRES_PASSWORD: ${ECLUME_PG_PASSWORD:-eclume}
+      POSTGRES_DB: ${ECLUME_PG_DB:-eclume}
+    ports:
+      - "127.0.0.1:${ECLUME_PG_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${ECLUME_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${ECLUME_MINIO_USER:-eclume}
+      MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD:-eclume-dev-secret}
+    ports:
+      - "127.0.0.1:${ECLUME_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${ECLUME_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+volumes:
+  postgres-data:
+  minio-data:
