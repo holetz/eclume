@@ -30,6 +30,9 @@ import uploadCreated from '../../../contracts/fixtures/upload-created.json'
 import uploadDeduplicated from '../../../contracts/fixtures/upload-deduplicated.json'
 import uploadInProgress from '../../../contracts/fixtures/upload-in-progress.json'
 import userPage from '../../../contracts/fixtures/user-page.json'
+import voiceAuditPage from '../../../contracts/fixtures/voice-audit-page.json'
+import voiceprint from '../../../contracts/fixtures/voiceprint.json'
+import voiceprintExport from '../../../contracts/fixtures/voiceprint-export.json'
 
 type Transcript = import('../api/schema.gen').operations['getTranscript']['responses'][200]['content']['application/json']
 
@@ -71,4 +74,7 @@ export const fixtures = {
   searchPage: fresh<Schemas['SearchPage']>(searchPage),
   collectionPage: fresh<Schemas['CollectionPage']>(collectionPage),
   tagList: fresh<Schemas['TagList']>(tagList),
+  voiceprint: fresh<Schemas['Voiceprint']>(voiceprint),
+  voiceprintExport: fresh<Schemas['VoiceprintExport']>(voiceprintExport),
+  voiceAuditPage: fresh<Schemas['VoiceAuditPage']>(voiceAuditPage),
 }
