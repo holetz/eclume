@@ -30,6 +30,9 @@ DEFAULT_THRESHOLD = 0.55
 MIN_COMPARE_TALK_MS = 10_000
 MIN_SAMPLE_TALK_MS = 10_000
 MAX_SUGGESTIONS = 3
+# Retranscrição: o locutor novo herda o vínculo do antigo quando a fala dos dois se sobrepõe ao
+# menos nesta fração, nos dois sentidos.
+RESTORE_OVERLAP = 0.5
 
 DEFAULT_TERM_VERSION = "1"
 DEFAULT_TERM_TEXT = (
@@ -117,7 +120,122 @@ async def add_sample(conn: AsyncConnection, transcript_id: UUID, speaker_id: str
     return (await conn.execute(_ADD_SAMPLE, params)).first() is not None
 
 
-# --- ingestão: comparação ---------------------------------------------------------------------------
+# --- ingestão: vínculos preservados e comparação -------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OldLink:
+    """Vínculo de um locutor antes da retranscrição, com a fala dele."""
+
+    speaker_id: str
+    person_id: UUID
+    label: str
+    spans: list[tuple[int, int]]
+
+
+async def capture_links(conn: AsyncConnection, transcript_id: UUID) -> list[OldLink]:
+    """Os locutores ligados da transcrição e os intervalos de fala de cada um (antes de apagar)."""
+    sp, sg = t.speakers.c, t.segments.c
+    linked = (
+        await conn.execute(
+            select(sp.speaker_id, sp.person_id, sp.label).where(
+                sp.transcript_id == transcript_id, sp.person_id.is_not(None)
+            )
+        )
+    ).all()
+    if not linked:
+        return []
+    spans: dict[str, list[tuple[int, int]]] = {}
+    rows = await conn.execute(
+        select(sg.speaker_id, sg.start_ms, sg.end_ms).where(
+            sg.transcript_id == transcript_id, sg.speaker_id.in_([row.speaker_id for row in linked])
+        )
+    )
+    for row in rows:
+        spans.setdefault(row.speaker_id, []).append((row.start_ms, row.end_ms))
+    return [OldLink(row.speaker_id, row.person_id, row.label, spans.get(row.speaker_id, [])) for row in linked]
+
+
+def _merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    result: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if result and start <= result[-1][1]:
+            result[-1] = (result[-1][0], max(result[-1][1], end))
+        elif end > start:
+            result.append((start, end))
+    return result
+
+
+def _overlap(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> int:
+    """Interseção total de duas listas de intervalos já mescladas e ordenadas."""
+    total, i, j = 0, 0, 0
+    while i < len(a) and j < len(b):
+        total += max(0, min(a[i][1], b[j][1]) - max(a[i][0], b[j][0]))
+        if a[i][1] < b[j][1]:
+            i += 1
+        else:
+            j += 1
+    return total
+
+
+def match_links(old: list[OldLink], new_segments: list[dict[str, Any]]) -> tuple[dict[str, OldLink], list[OldLink]]:
+    """Casa cada vínculo antigo com o locutor novo de maior sobreposição de fala, um para um.
+
+    Só casa com sobreposição ≥ `RESTORE_OVERLAP` da fala dos dois. Devolve `({novo: antigo}, perdidos)`.
+    """
+    new_spans: dict[str, list[tuple[int, int]]] = {}
+    for segment in new_segments:
+        new_spans.setdefault(segment["speaker_id"], []).append((segment["start_ms"], segment["end_ms"]))
+    merged_new = {sid: _merged(spans) for sid, spans in new_spans.items()}
+    talk_new = {sid: sum(end - start for start, end in spans) for sid, spans in merged_new.items()}
+    candidates = []
+    for link in old:
+        spans = _merged(link.spans)
+        talk_old = sum(end - start for start, end in spans)
+        for sid, other in merged_new.items():
+            shared = _overlap(spans, other)
+            if talk_old and talk_new[sid] and shared >= RESTORE_OVERLAP * max(talk_old, talk_new[sid]):
+                candidates.append((shared, link.speaker_id, sid, link))
+    matched: dict[str, OldLink] = {}
+    used_old: set[str] = set()
+    for _, old_id, new_id, link in sorted(candidates, key=lambda c: -c[0]):
+        if old_id not in used_old and new_id not in matched:
+            matched[new_id] = link
+            used_old.add(old_id)
+    return matched, [link for link in old if link.speaker_id not in used_old]
+
+
+async def restore_links(
+    conn: AsyncConnection, org_id: UUID, transcript_id: UUID, old: list[OldLink], new_segments: list[dict[str, Any]]
+) -> None:
+    """Reaplica aos locutores novos os vínculos confirmados antes da retranscrição (papel de sistema)."""
+    matched, dropped = match_links(old, new_segments)
+    for new_id, link in matched.items():
+        await conn.execute(
+            update(t.speakers)
+            .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == new_id)
+            .values(person_id=link.person_id, label=link.label)
+        )
+        sampled = await add_sample(conn, transcript_id, new_id, None)
+        await audit(
+            conn,
+            org_id,
+            "link_restored",
+            person_id=link.person_id,
+            transcript_id=transcript_id,
+            speaker_id=new_id,
+            details={"previous_speaker_id": link.speaker_id, "sample": sampled},
+        )
+    for link in dropped:
+        await audit(
+            conn,
+            org_id,
+            "link_dropped",
+            person_id=link.person_id,
+            transcript_id=transcript_id,
+            speaker_id=link.speaker_id,
+            details={"reason": "sem locutor novo com a mesma fala"},
+        )
 
 
 # Centroide normalizado das amostras de cada pessoa com consentimento, do mesmo modelo e dimensão;

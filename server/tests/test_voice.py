@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from eclume_server.voice import DEFAULT_TERM_VERSION, DEFAULT_THRESHOLD
-from eclume_server_testing.fakes import DEFAULT_VOICES, EMBEDDING_DIMS, transcribed, voice
+from eclume_server_testing.fakes import DEFAULT_VOICES, EMBEDDING_DIMS, run_cpu, run_gpu, transcribed, voice
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -346,3 +346,28 @@ def test_outra_organizacao_nunca_e_comparada(new_org: Callable[[], Org], service
     assert run(services.sql(as_app)) == [0, 0, 0, 0]
     assert _sql(services, "SELECT count(*) FROM voice_samples WHERE person_id = :p", p=stranger["id"]) == [(1,)]
 
+
+def test_retranscricao_restaura_os_vinculos(ek: Org, services: Services):
+    ek.opt_in()
+    rafael, mariana = ek.person("Rafael Lima"), ek.person("Mariana Couto", consent=False)
+    recording = transcribed(ek.owner, services.settings)
+    tid = recording["transcript_id"]
+    ek.link(tid, "S2", rafael["id"])
+    ek.link(tid, "S1", mariana["id"])
+    assert ek.samples(rafael["id"]) == 1
+
+    response = ek.owner.post(f"/api/v1/recordings/{recording['id']}/retranscribe", json={})
+    assert response.status_code in {200, 202}, response.text
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    speakers = ek.speakers(tid)
+    assert (speakers["S2"]["person"]["id"], speakers["S2"]["label"]) == (rafael["id"], "Rafael Lima")
+    assert speakers["S1"]["person"]["id"] == mariana["id"]
+    assert speakers["S3"]["person"] is None
+    assert ek.samples(rafael["id"]) == 1
+    assert ek.samples(mariana["id"]) == 0
+    assert _sql(
+        services,
+        "SELECT count(*) FROM voice_samples s LEFT JOIN speakers sp USING (transcript_id, speaker_id) WHERE sp.person_id IS NULL",
+    ) == [(0,)]
+    assert ek.events(rafael["id"]).count("link_restored") == 1

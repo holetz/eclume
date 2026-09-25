@@ -14,7 +14,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import forbidden, not_found
 from eclume_server.serialize import Row, user_ref
-from eclume_server.voice import load_suggestions, suggest
+from eclume_server.voice import capture_links, load_suggestions, restore_links, suggest
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -154,6 +154,7 @@ async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transc
         .first()
     )
     values = {"language": language, "duration_ms": duration_ms, "engine": engine, "updated_at": now}
+    old_links = []
     if existing is None:
         transcript_id = (
             await conn.execute(
@@ -164,6 +165,7 @@ async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transc
         ).scalar_one()
     else:
         transcript_id = existing["id"]
+        old_links = await capture_links(conn, transcript_id)
         revision = max(job["revision"], existing["revision"] + 1)
         await conn.execute(
             update(t.transcripts).where(t.transcripts.c.id == transcript_id).values(revision=revision, **values)
@@ -194,6 +196,9 @@ async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transc
                 ),
                 {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
             )
+    # Retranscrever não desfaz o que alguém confirmou: os vínculos voltam pela sobreposição de fala.
+    if old_links:
+        await restore_links(conn, org, transcript_id, old_links, segments)
     if vectors:
         dims = {len(vector) for vector in vectors.values()}
         if len(dims) == 1:
