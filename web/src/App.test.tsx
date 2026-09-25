@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import App from './App.tsx'
 
 describe('App', () => {
-  it('mostra o nome do produto', () => {
+  it('abre o shell com a navegação principal', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'eclume' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Principal' })).toBeInTheDocument()
   })
 })

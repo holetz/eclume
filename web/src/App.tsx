@@ -1,9 +1,17 @@
+import { BrowserRouter, Route, Routes } from 'react-router'
+import { AppShell } from './app/AppShell'
+
 function App() {
   return (
-    <main>
-      <h1>eclume</h1>
-      <p>Transcrição institucional: grave, transcreva, encontre pessoas.</p>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          element={<AppShell user={{ name: 'Visitante', email: '', role: 'member' }} onLogout={() => {}} />}
+        >
+          <Route index element={<h1>Biblioteca</h1>} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
 
