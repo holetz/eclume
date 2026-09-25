@@ -14,7 +14,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.pagination import Cursor, Limit, decode_position, encode_position, iso
+from eclume_server.pagination import Cursor, Limit, decode_named_position, encode_position, iso
 from eclume_server.problems import invalid_field, not_found
 
 if TYPE_CHECKING:
@@ -92,11 +92,7 @@ async def list_collections(principal: Reader, ctx: Ctx, cursor: Cursor = None, l
     c = t.collections.c
     query = _select().order_by(func.lower(c.name), c.id).limit(limit + 1)
     if cursor:
-        sort_name, collection_id = decode_position(cursor, 2)
-        try:
-            position = (sort_name, UUID(collection_id))
-        except ValueError as exc:
-            raise invalid_field("cursor", "cursor inválido") from exc
+        position = decode_named_position(cursor)
         query = query.where(tuple_(func.lower(c.name), c.id) > position)
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         rows = (await conn.execute(query)).mappings().all()

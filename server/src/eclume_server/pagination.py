@@ -57,6 +57,15 @@ def decode_position(cursor: str, size: int) -> list[str]:
     return values
 
 
+def decode_named_position(cursor: str) -> tuple[str, UUID]:
+    """Posição `(nome ordenável, id)` das listas em ordem alfabética."""
+    name, row_id = decode_position(cursor, 2)
+    try:
+        return name, UUID(row_id)
+    except ValueError as exc:
+        raise invalid_field("cursor", "cursor inválido") from exc
+
+
 def page(items: list[dict[str, Any]], rows: list[Any], limit: int, sort_key: str) -> dict[str, Any]:
     """Monta a página a partir de `limit + 1` linhas lidas: a sobra só diz que há próxima."""
     next_cursor = None

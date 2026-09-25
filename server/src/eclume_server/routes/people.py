@@ -15,7 +15,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.pagination import Cursor, Limit, decode_cursor, decode_position, encode_position, page
+from eclume_server.pagination import Cursor, Limit, decode_cursor, decode_named_position, encode_position, page
 from eclume_server.people import get_person, person_json, person_select, prefix_filter
 from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.routes.auth import check_email
@@ -63,11 +63,7 @@ async def list_people(
     if q and q.strip():
         query = query.where(prefix_filter(q))
     if cursor:
-        sort_name, person_id = decode_position(cursor, 2)
-        try:
-            position = (sort_name, UUID(person_id))
-        except ValueError as exc:
-            raise invalid_field("cursor", "cursor inválido") from exc
+        position = decode_named_position(cursor)
         query = query.where(tuple_(c.sort_name, c.id) > position)
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         rows = (await conn.execute(query)).mappings().all()
