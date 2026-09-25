@@ -130,10 +130,11 @@ def test_pat_nao_gere_pats_nem_grupos(as_user: Callable[[Account], Api], make_us
     pat = as_user(make_user(role="admin")).pat("recordings:read", "recordings:write")
     for method, url in (("GET", "/api/v1/tokens"), ("GET", "/api/v1/groups"), ("GET", "/api/v1/admin/users")):
         response = pat.request(method, url)
-        assert response.status_code == 401, url
+        assert response.status_code == 403, url
+        assert response.json()["code"] == "session_required"
         assert "só sessão" in response.json()["detail"]
     created = pat.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]})
-    assert created.status_code == 401
+    assert created.status_code == 403
 
 
 def test_pat_expirado_e_401(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):

@@ -180,7 +180,7 @@ def test_recusar_sugestao(ek: Org):
     revision = ek.owner.get(base).json()["revision"]
     url = f"{base}/speakers/S2/suggestions/{rafael['id']}"
 
-    assert ek.owner.pat("transcripts:write").delete(url).status_code == 401
+    assert ek.owner.pat("transcripts:write").delete(url).status_code == 403
     assert ek.admin.delete(url).status_code in {403, 404}
     rejected = ek.owner.delete(url)
     assert rejected.status_code == 200, rejected.text
@@ -234,7 +234,7 @@ def test_revogar_apaga_a_impressao_e_as_sugestoes(ek: Org):
         ek.owner.pat("people:write")
         .put(f"/api/v1/people/{rafael['id']}/voice-consent", json={"status": "granted"})
         .status_code
-        == 401
+        == 403
     )
 
 

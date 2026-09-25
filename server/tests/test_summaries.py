@@ -143,7 +143,7 @@ def test_providers_sao_so_do_admin_com_sessao(team: dict[str, Any]):
     assert team["member"].get("/api/v1/admin/agent-providers").status_code == 403
     assert team["member"].post("/api/v1/admin/agent-providers", json=CLAUDE).status_code == 403
     pat = team["admin"].pat("summaries:read", "summaries:write")
-    assert pat.get("/api/v1/admin/agent-providers").status_code == 401
+    assert pat.get("/api/v1/admin/agent-providers").status_code == 403
 
 
 def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Services, org: UUID):

@@ -27,7 +27,7 @@ def test_so_admin_com_sessao(admin: Api, as_user: Callable[[Account], Api], make
     member = as_user(make_user())
     assert member.get(URL).status_code == 403
     assert member.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 401
+    assert admin.pat("recordings:read").get(URL).status_code == 403
 
 
 def test_leitura_e_merge_por_bloco(admin: Api):

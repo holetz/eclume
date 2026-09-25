@@ -78,6 +78,11 @@ def forbidden(detail: str) -> ApiProblemError:
     return ApiProblemError(403, "forbidden", detail)
 
 
+def session_required() -> ApiProblemError:
+    """403 — PAT numa operação que aceita só sessão do navegador."""
+    return ApiProblemError(403, "session_required", "Esta operação aceita só sessão do navegador, não PAT.")
+
+
 def insufficient_scope(missing: list[str]) -> ApiProblemError:
     """403 — o PAT não tem os escopos exigidos pela operação."""
     return ApiProblemError(
