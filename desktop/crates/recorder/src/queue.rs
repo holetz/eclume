@@ -1,8 +1,14 @@
 //! Fila local e persistente das gravações, em SQLite.
 //!
 //! Uma linha por gravação, com o ciclo `recording → pending → syncing → synced | failed`.
-//! `failed` volta a `pending` por `retry_failed`. Uma linha que ficou em `recording` quando o
-//! processo morreu é recuperada na abertura seguinte como `pending` com `interrupted = 1`.
+//! `failed` volta a `pending` por `retry_due` (no prazo do backoff) ou `retry_failed` (já). Uma
+//! linha que ficou em `recording` quando o processo morreu é recuperada na abertura seguinte como
+//! `pending` com `interrupted = 1`.
+//!
+//! Esquema v2: `upload_id` e `sha256` guardam o upload em curso para a retomada,
+//! `next_attempt_at` agenda a próxima tentativa depois de uma falha, `synced_at` marca a
+//! confirmação do servidor e `purged_at` a remoção do arquivo local pela retenção. Uma fila v1
+//! ganha as colunas na abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -10,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS recordings (
@@ -24,10 +30,33 @@ CREATE TABLE IF NOT EXISTS recordings (
     interrupted INTEGER NOT NULL DEFAULT 0,
     attempts    INTEGER NOT NULL DEFAULT 0,
     last_error  TEXT,
-    remote_id   TEXT
+    remote_id   TEXT,
+    upload_id       TEXT,
+    sha256          TEXT,
+    next_attempt_at INTEGER,
+    synced_at       INTEGER,
+    purged_at       INTEGER
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
 ";
+
+/// Colunas que a v2 acrescentou, com o tipo, para migrar uma fila v1.
+const V2_COLUMNS: [(&str, &str); 5] = [
+    ("upload_id", "TEXT"),
+    ("sha256", "TEXT"),
+    ("next_attempt_at", "INTEGER"),
+    ("synced_at", "INTEGER"),
+    ("purged_at", "INTEGER"),
+];
+
+/// Espera antes da próxima tentativa, depois de `attempts` tentativas: 30 s dobrando a cada
+/// falha, até 1 h.
+pub fn retry_backoff_ms(attempts: i64) -> i64 {
+    const BASE_MS: i64 = 30_000;
+    const MAX_MS: i64 = 3_600_000;
+    let exponent = u32::try_from(attempts.saturating_sub(1).clamp(0, 16)).unwrap_or(16);
+    BASE_MS.saturating_mul(1_i64 << exponent).min(MAX_MS)
+}
 
 /// Estado de uma gravação na fila.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -80,6 +109,16 @@ pub struct QueuedRecording {
     pub last_error: Option<String>,
     /// Identificador da gravação no servidor, depois do sync.
     pub remote_id: Option<String>,
+    /// Upload em curso no servidor, para retomar.
+    pub upload_id: Option<String>,
+    /// SHA-256 do arquivo (hex), calculado uma vez para o upload.
+    pub sha256: Option<String>,
+    /// Quando a próxima tentativa fica liberada, depois de uma falha.
+    pub next_attempt_at: Option<i64>,
+    /// Quando o servidor confirmou a gravação.
+    pub synced_at: Option<i64>,
+    /// Quando a retenção apagou o arquivo local.
+    pub purged_at: Option<i64>,
 }
 
 impl QueuedRecording {
@@ -99,6 +138,11 @@ impl QueuedRecording {
                 attempts: row.get("attempts")?,
                 last_error: row.get("last_error")?,
                 remote_id: row.get("remote_id")?,
+                upload_id: row.get("upload_id")?,
+                sha256: row.get("sha256")?,
+                next_attempt_at: row.get("next_attempt_at")?,
+                synced_at: row.get("synced_at")?,
+                purged_at: row.get("purged_at")?,
             },
             status,
         ))
@@ -155,6 +199,7 @@ impl Queue {
     fn init(conn: Connection) -> Result<Self> {
         conn.execute_batch(SCHEMA)
             .context("falha ao criar o esquema da fila")?;
+        migrate(&conn).context("falha ao migrar a fila")?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
     }
@@ -232,8 +277,8 @@ impl Queue {
         self.get(&id)
     }
 
-    /// Devolve a `pending` as falhas com menos de `max_attempts` tentativas. Quem agenda o sync
-    /// chama isto no ritmo da própria política de espera entre tentativas.
+    /// Devolve a `pending` as falhas com menos de `max_attempts` tentativas, sem esperar o
+    /// backoff (o usuário trocou o PAT ou pediu para tentar de novo).
     pub fn retry_failed(&self, max_attempts: i64) -> Result<usize> {
         Ok(self.conn.execute(
             "UPDATE recordings SET status = 'pending' WHERE status = 'failed' AND attempts < ?1",
@@ -241,24 +286,90 @@ impl Queue {
         )?)
     }
 
-    /// Marca a gravação como sincronizada.
+    /// Devolve a `pending` as falhas cujo backoff venceu até `now` (ms Unix), com menos de
+    /// `max_attempts` tentativas.
+    pub fn retry_due(&self, now: i64, max_attempts: i64) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE recordings SET status = 'pending'
+             WHERE status = 'failed' AND attempts < ?1
+               AND (next_attempt_at IS NULL OR next_attempt_at <= ?2)",
+            params![max_attempts, now],
+        )?)
+    }
+
+    /// Marca a gravação como sincronizada: o servidor confirmou `remote_id`.
     pub fn mark_synced(&self, id: &str, remote_id: &str) -> Result<()> {
-        self.transition(
-            id,
-            "UPDATE recordings SET status = 'synced', remote_id = ?2, last_error = NULL
+        let changed = self.conn.execute(
+            "UPDATE recordings SET status = 'synced', remote_id = ?2, last_error = NULL,
+             next_attempt_at = NULL, synced_at = ?3
              WHERE id = ?1 AND status = 'syncing'",
-            remote_id,
+            params![id, remote_id, now_ms()],
+        )?;
+        ensure_changed(id, changed)
+    }
+
+    /// Marca a tentativa de sync como falha e agenda a próxima por [`retry_backoff_ms`];
+    /// `retry_due` a devolve à fila quando o prazo vence.
+    pub fn mark_failed(&self, id: &str, error: &str) -> Result<()> {
+        let attempts: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT attempts FROM recordings WHERE id = ?1 AND status = 'syncing'",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(attempts) = attempts else {
+            bail!("gravação {id} não está em sync");
+        };
+        let next = now_ms().saturating_add(retry_backoff_ms(attempts));
+        let changed = self.conn.execute(
+            "UPDATE recordings SET status = 'failed', last_error = ?2, next_attempt_at = ?3
+             WHERE id = ?1 AND status = 'syncing'",
+            params![id, error, next],
+        )?;
+        ensure_changed(id, changed)
+    }
+
+    /// Guarda (ou limpa, com `None`) o upload em curso e o hash do arquivo, para retomar.
+    pub fn set_upload_state(
+        &self,
+        id: &str,
+        upload_id: Option<&str>,
+        sha256: Option<&str>,
+    ) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET upload_id = ?2, sha256 = ?3 WHERE id = ?1",
+            params![id, upload_id, sha256],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está na fila");
+        }
+        Ok(())
+    }
+
+    /// Gravações confirmadas até `synced_before` (ms Unix) cujo arquivo local ainda existe.
+    pub fn purge_candidates(&self, synced_before: i64) -> Result<Vec<QueuedRecording>> {
+        self.query(
+            "SELECT * FROM recordings
+             WHERE status = 'synced' AND remote_id IS NOT NULL AND purged_at IS NULL
+               AND synced_at IS NOT NULL AND synced_at <= ?1
+             ORDER BY started_at",
+            params![synced_before],
         )
     }
 
-    /// Marca a tentativa de sync como falha; `retry_failed` a devolve à fila.
-    pub fn mark_failed(&self, id: &str, error: &str) -> Result<()> {
-        self.transition(
-            id,
-            "UPDATE recordings SET status = 'failed', last_error = ?2
-             WHERE id = ?1 AND status = 'syncing'",
-            error,
-        )
+    /// Registra que o arquivo local de uma gravação confirmada foi apagado.
+    pub fn mark_purged(&self, id: &str, at: i64) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET purged_at = ?2
+             WHERE id = ?1 AND status = 'synced' AND purged_at IS NULL",
+            params![id, at],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está sincronizada ou já foi apagada");
+        }
+        Ok(())
     }
 
     /// Devolve a `pending` o que ficou em `syncing` quando o processo morreu no meio do upload.
@@ -267,13 +378,6 @@ impl Queue {
             "UPDATE recordings SET status = 'pending' WHERE status = 'syncing'",
             [],
         )?)
-    }
-
-    fn transition(&self, id: &str, sql: &str, value: &str) -> Result<()> {
-        if self.conn.execute(sql, params![id, value])? == 0 {
-            bail!("gravação {id} não está em sync");
-        }
-        Ok(())
     }
 
     pub fn get(&self, id: &str) -> Result<Option<QueuedRecording>> {
@@ -329,6 +433,30 @@ impl Queue {
         let rows = stmt.query_map(params, QueuedRecording::from_row)?;
         rows.map(|row| with_status(row?)).collect()
     }
+}
+
+fn ensure_changed(id: &str, changed: usize) -> Result<()> {
+    if changed == 0 {
+        bail!("gravação {id} não está em sync");
+    }
+    Ok(())
+}
+
+/// Acrescenta as colunas da v2 a uma fila v1 (o `CREATE TABLE IF NOT EXISTS` não mexe numa
+/// tabela que já existe).
+fn migrate(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
+    let existing = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (column, kind) in V2_COLUMNS {
+        if !existing.iter().any(|name| name == column) {
+            conn.execute_batch(&format!(
+                "ALTER TABLE recordings ADD COLUMN {column} {kind}"
+            ))?;
+        }
+    }
+    Ok(())
 }
 
 fn with_status((mut recording, status): (QueuedRecording, String)) -> Result<QueuedRecording> {
@@ -439,5 +567,120 @@ mod tests {
         assert_eq!(queue.release_stale_syncing().unwrap(), 1);
         assert_eq!(queue.get("x").unwrap().unwrap().status, Status::Pending);
         assert_eq!(queue.list(10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn queue_backoff_dobra_ate_uma_hora() {
+        assert_eq!(retry_backoff_ms(0), 30_000);
+        assert_eq!(retry_backoff_ms(1), 30_000);
+        assert_eq!(retry_backoff_ms(2), 60_000);
+        assert_eq!(retry_backoff_ms(4), 240_000);
+        assert_eq!(retry_backoff_ms(8), 3_600_000);
+        assert_eq!(retry_backoff_ms(i64::MAX), 3_600_000);
+    }
+
+    #[test]
+    fn queue_falha_so_volta_quando_o_backoff_vence() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        begin_and_finish(&queue, "r", 1);
+        queue.claim_next().unwrap().unwrap();
+        let before = now_ms();
+        queue.mark_failed("r", "rede fora").unwrap();
+        let failed = queue.get("r").unwrap().unwrap();
+        let next = failed.next_attempt_at.unwrap();
+        assert!(next >= before + 30_000 && next <= now_ms() + 30_000);
+
+        assert_eq!(queue.retry_due(next - 1, i64::MAX).unwrap(), 0);
+        assert_eq!(queue.retry_due(next, 2).unwrap(), 1);
+        queue.claim_next().unwrap().unwrap();
+        queue.mark_failed("r", "de novo").unwrap();
+        // Segunda falha: o prazo dobra, e o limite de tentativas vale.
+        let again = queue.get("r").unwrap().unwrap();
+        assert!(again.next_attempt_at.unwrap() - now_ms() > 30_000);
+        assert_eq!(queue.retry_due(i64::MAX, 2).unwrap(), 0);
+        assert_eq!(queue.retry_due(i64::MAX, 3).unwrap(), 1);
+        assert!(queue.mark_failed("r", "fora de sync").is_err());
+    }
+
+    #[test]
+    fn queue_guarda_estado_de_retomada_e_confirmacao() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        begin_and_finish(&queue, "u", 1);
+        queue
+            .set_upload_state("u", Some("up-1"), Some("ab12"))
+            .unwrap();
+        let rec = queue.claim_next().unwrap().unwrap();
+        assert_eq!(rec.upload_id.as_deref(), Some("up-1"));
+        assert_eq!(rec.sha256.as_deref(), Some("ab12"));
+        queue.mark_synced("u", "srv-u").unwrap();
+        let synced = queue.get("u").unwrap().unwrap();
+        assert!(synced.synced_at.is_some());
+        assert!(synced.next_attempt_at.is_none());
+        queue.set_upload_state("u", None, Some("ab12")).unwrap();
+        assert!(queue.get("u").unwrap().unwrap().upload_id.is_none());
+        assert!(queue.set_upload_state("nao-existe", None, None).is_err());
+    }
+
+    #[test]
+    fn queue_retencao_so_apaga_o_que_o_servidor_confirmou() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        begin_and_finish(&queue, "ok", 1);
+        begin_and_finish(&queue, "falhou", 2);
+        begin_and_finish(&queue, "pendente", 3);
+        queue.claim_next().unwrap().unwrap();
+        queue.mark_synced("ok", "srv-ok").unwrap();
+        queue.claim_next().unwrap().unwrap();
+        queue.mark_failed("falhou", "x").unwrap();
+
+        assert!(queue.purge_candidates(0).unwrap().is_empty());
+        let due = queue.purge_candidates(i64::MAX).unwrap();
+        assert_eq!(
+            due.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["ok"]
+        );
+        queue.mark_purged("ok", 42).unwrap();
+        assert_eq!(queue.get("ok").unwrap().unwrap().purged_at, Some(42));
+        assert!(queue.purge_candidates(i64::MAX).unwrap().is_empty());
+        assert!(queue.mark_purged("ok", 43).is_err());
+        assert!(queue.mark_purged("pendente", 43).is_err());
+    }
+
+    #[test]
+    fn queue_migra_fila_v1_sem_perder_linhas() {
+        let dir = std::env::temp_dir().join(format!("eclume-queue-v1-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("queue.sqlite");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE recordings (
+                    id TEXT PRIMARY KEY, path TEXT NOT NULL, started_at INTEGER NOT NULL,
+                    ended_at INTEGER, duration_ms INTEGER, bytes INTEGER,
+                    status TEXT NOT NULL CHECK (status IN ('recording','pending','syncing','synced','failed')),
+                    interrupted INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT, remote_id TEXT);
+                 INSERT INTO recordings (id, path, started_at, status) VALUES ('velha', '/tmp/v.ogg', 7, 'pending');
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let mut queue = Queue::open(&db).unwrap();
+        let version: i32 = queue
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let rec = queue.claim_next().unwrap().unwrap();
+        assert_eq!(rec.id, "velha");
+        assert!(rec.upload_id.is_none());
+        queue.set_upload_state("velha", Some("up"), None).unwrap();
+        drop(queue);
+        // Reabrir uma fila já migrada não mexe em nada.
+        let queue = Queue::open(&db).unwrap();
+        assert_eq!(
+            queue.get("velha").unwrap().unwrap().upload_id.as_deref(),
+            Some("up")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
