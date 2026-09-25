@@ -20,6 +20,7 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, encode_cursor, iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import get_visible, insert_job, recording_select, render, require_owner
+from eclume_server.routes.collections import check_collections
 from eclume_server.routes.uploads import LANGUAGE
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row, user_ref
@@ -117,10 +118,11 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
     for field, value in values.items():
         if value is None:
             raise invalid_field(field, "não pode ser nulo")
-    if values.get("collection_ids"):
-        raise invalid_field("collection_ids", "coleção inexistente")
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         require_owner(await get_visible(conn, recording_id), principal)
+        if "collection_ids" in values:
+            await check_collections(conn, values["collection_ids"])
+            values["collection_ids"] = list(dict.fromkeys(values["collection_ids"]))
         now = datetime.now(UTC)
         await conn.execute(
             update(t.recordings).where(t.recordings.c.id == recording_id).values(**values, updated_at=now)
