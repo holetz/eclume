@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "eclume-engines",
+    "eclume-server",
 ]
 
 [manifest.dependency-groups]
@@ -26,6 +27,17 @@ wheels = [
 name = "eclume-engines"
 version = "0.1.0"
 source = { editable = "engines" }
+
+[[package]]
+name = "eclume-server"
+version = "0.1.0"
+source = { editable = "server" }
+dependencies = [
+    { name = "eclume-engines" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "eclume-engines", editable = "engines" }]
 
 [[package]]
 name = "iniconfig"

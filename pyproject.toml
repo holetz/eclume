@@ -7,7 +7,7 @@
 package = false
 
 [tool.uv.workspace]
-members = ["engines"]
+members = ["engines", "server"]
 
 [dependency-groups]
 dev = [
@@ -18,7 +18,7 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["engines/src", "engines/tests"]
+src = ["engines/src", "engines/tests", "server/src", "server/tests"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -38,5 +38,5 @@ ignore = [
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["engines/tests"]
+testpaths = ["engines/tests", "server/tests"]
 addopts = "--import-mode=importlib"
