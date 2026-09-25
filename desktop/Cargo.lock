@@ -1184,6 +1184,8 @@ name = "eclume-detect"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "eclume-recorder",
+ "log",
  "serde",
  "serde_json",
 ]
