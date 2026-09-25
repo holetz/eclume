@@ -35,6 +35,9 @@ x-server-env: &server-env
   ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
   ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
   ECLUME_COOKIE_SECURE: "true"
+  # Job de transcrição morto: graça antes de confirmar e teto de progresso parado (segundos).
+  ECLUME_JOB_GRACE_SECONDS: ${ECLUME_JOB_GRACE_SECONDS:-120}
+  ECLUME_JOB_STALL_SECONDS: ${ECLUME_JOB_STALL_SECONDS:-1800}
 
 x-server-image: &server-image
   image: eclume-server:prod
@@ -112,6 +115,11 @@ services:
       ECLUME_S3_BUCKET: eclume
       # A mesma do server: abre o token do HF que Administração → Segredos manda cifrado no job.
       ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
+      # ASR residente entre jobs enquanto sobrar essa VRAM livre (o Jellyfin divide a GPU);
+      # 0 volta a um modelo por vez. A descarga por ociosidade devolve tudo depois de 300 s.
+      ECLUME_KEEP_ASR_RESIDENT: ${ECLUME_KEEP_ASR_RESIDENT:-1}
+      ECLUME_RESIDENT_MIN_FREE_MB: ${ECLUME_RESIDENT_MIN_FREE_MB:-2500}
+      ECLUME_MODEL_IDLE_SECONDS: ${ECLUME_MODEL_IDLE_SECONDS:-300}
     depends_on:
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
