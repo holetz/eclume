@@ -1,0 +1,31 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+}
+
+.card {
+  width: 100%;
+  max-width: 24rem;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+}
+
+.brand {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-accent);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.note {
+  font-size: var(--text-xs);
+}

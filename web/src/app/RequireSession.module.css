@@ -1,0 +1,9 @@
+.status {
+  min-height: 60vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  text-align: center;
+}

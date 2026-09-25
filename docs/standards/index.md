@@ -27,12 +27,15 @@ derivado (o escopo do repositório que ele governa).
 | Doc | Covers |
 | --- | --- |
 | [contrato-v1.md](api/contrato-v1.md) | As convenções da API v1 do eclume — autenticação por sessão e PAT com escopos, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva. |
+| [jobs-transcricao.md](api/jobs-transcricao.md) | As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso no Redis e a idempotência por `(recording_id, revision)`. |
 
 ### code/
 | Doc | Covers |
 | --- | --- |
 | [desktop-deteccao-e-sync.md](code/desktop-deteccao-e-sync.md) | O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, e sobe cada gravação por PAT pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, o protocolo, o PAT, a CA extra e a retenção. |
 | [desktop-gravacao.md](code/desktop-gravacao.md) | O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local (v2) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida e os pontos de extensão. |
+| [frontend-web.md](code/frontend-web.md) | O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism. |
 | [formato-audio-upload.md](code/formato-audio-upload.md) | Antes do upload, o navegador converte áudio e vídeo para Opus mono 16 kHz em Ogg (32 kbps) pela biblioteca isolada web/src/lib/media-convert — WebCodecs com Mediabunny, ffmpeg.wasm de fallback — e este é o formato, o porquê e a API que o app consome. |
 | [monorepo.md](code/monorepo.md) | Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam. |
+| [server-nucleo.md](code/server-nucleo.md) | Como o pacote eclume_server guarda e isola os dados (migrations SQL, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash) e é testado (serviços reais, conformidade com o OpenAPI bundled). |
 <!-- END GENERATED -->

@@ -17,18 +17,25 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 npm --prefix web ci
+npm --prefix web run gen:api
 npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
+npm --prefix web run test:e2e
 cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace
 docker compose -f deploy/docker-compose.dev.yml up -d
+docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
+uv run eclume-server migrate
+uv run uvicorn eclume_server.app:create_app --factory
+uv run arq eclume_server.worker.WorkerSettings
 cq knowledge validate
 ```
 
-- A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `web` e `desktop` em Linux a cada PR e
-  push em `main`.
+- A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `contracts`, `web`, `web-browser` e
+  `desktop` em Linux a cada PR e push em `main`.
 - Mudanças de dependência exigem atualizar `pyproject.toml`/`uv.lock`, `web/package.json`/
   `web/package-lock.json` ou `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, conforme o pilar.
 - Destino de hospedagem: `192.168.15.199` (Ubuntu, GTX 1660 Super com 6 GB), acessado por

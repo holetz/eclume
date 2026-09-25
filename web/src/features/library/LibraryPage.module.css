@@ -1,0 +1,115 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.header p {
+  margin-top: var(--space-1);
+}
+
+.filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-self: start;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
+}
+
+.filterOption {
+  position: relative;
+}
+
+.filterOption input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.filterOption span {
+  display: block;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.filterOption input:checked + span {
+  color: var(--color-text);
+  font-weight: 600;
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+}
+
+.filterOption input:focus-visible + span {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.main {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-md);
+  font-weight: 620;
+}
+
+.title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.title a:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+}
+
+.more {
+  justify-self: center;
+}

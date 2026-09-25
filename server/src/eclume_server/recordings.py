@@ -1,0 +1,149 @@
+"""Gravações: consulta com o job mais recente, forma JSON e início de job de transcrição."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import exists, func, insert, select, true
+
+from eclume_server.db import tables as t
+from eclume_server.pagination import iso
+from eclume_server.problems import forbidden, not_found
+from eclume_server.queue import transcribe_options
+from eclume_server.serialize import Row, user_ref
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy import Select
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
+    from eclume_server.auth import Principal
+    from eclume_server.context import AppContext
+
+_job = (
+    select(t.transcription_jobs)
+    .where(t.transcription_jobs.c.recording_id == t.recordings.c.id)
+    .order_by(t.transcription_jobs.c.revision.desc())
+    .limit(1)
+    .lateral("job")
+)
+_shared = exists().where(t.recording_shares.c.recording_id == t.recordings.c.id).label("shared")
+
+
+def recording_select() -> Select:
+    """Gravações com dono, job mais recente, transcrição e se há compartilhamento (sob a RLS)."""
+    return select(
+        t.recordings,
+        t.users.c.name.label("owner_name"),
+        _shared,
+        t.transcripts.c.id.label("transcript_id"),
+        *(column.label(f"job_{column.name}") for column in _job.c),
+    ).select_from(
+        t.recordings.join(t.users, t.users.c.id == t.recordings.c.owner_id)
+        .outerjoin(_job, true())
+        .outerjoin(t.transcripts, t.transcripts.c.recording_id == t.recordings.c.id)
+    )
+
+
+def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, Any] | None:
+    if row["job_id"] is None:
+        return None
+    state = row["job_state"]
+    stage = None
+    value = 1.0 if state == "succeeded" else 0.0
+    if state in {"queued", "running"} and progress is not None:
+        state = "running"
+        stage, value = progress
+    error = None
+    if row["job_error_code"]:
+        error = {"code": row["job_error_code"], "message": row["job_error_message"] or ""}
+    return {
+        "id": str(row["job_id"]),
+        "state": state,
+        "stage": stage,
+        "progress": value,
+        "attempts": row["job_attempts"],
+        "error": error,
+        "queued_at": iso(row["job_queued_at"]),
+        "started_at": iso(row["job_started_at"]),
+        "finished_at": iso(row["job_finished_at"]),
+    }
+
+
+def recording_json(row: Row, progress: tuple[str | None, float] | None = None) -> dict[str, Any]:
+    """Schema `Recording`, com o progresso em curso publicado pelo worker GPU."""
+    job = _job_json(row, progress)
+    status = row["status"]
+    if status == "queued" and job is not None and job["state"] == "running":
+        status = "processing"
+    return {
+        "id": str(row["id"]),
+        "title": row["title"],
+        "status": status,
+        "source": row["source"],
+        "recorded_at": iso(row["recorded_at"]),
+        "duration_ms": row["duration_ms"],
+        "language": row["language"],
+        "size_bytes": row["size_bytes"],
+        "content_type": row["content_type"],
+        "content_hash": row["content_hash"],
+        "owner": user_ref(row["owner_id"], row["owner_name"]),
+        "visibility": "shared" if row["shared"] else "private",
+        "tags": list(row["tags"]),
+        "collection_ids": [str(c) for c in row["collection_ids"]],
+        "metadata": row["metadata"],
+        "capture": row["capture"],
+        "job": job,
+        "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
+        "created_at": iso(row["created_at"]),
+        "updated_at": iso(row["updated_at"]),
+    }
+
+
+async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa: ANN401
+    """Gravação visível ao usuário da transação, ou 404."""
+    row = (await conn.execute(recording_select().where(t.recordings.c.id == recording_id))).mappings().first()
+    if row is None:
+        raise not_found("Gravação inexistente ou sem acesso.")
+    return row
+
+
+def require_owner(row: Row, principal: Principal) -> None:
+    """Só o dono escreve na gravação; quem só a vê por compartilhamento recebe 403."""
+    if row["owner_id"] != principal.user_id:
+        raise forbidden("Só o dono da gravação pode alterá-la.")
+
+
+async def render(ctx: AppContext, rows: list[Row]) -> list[dict[str, Any]]:
+    """Formas JSON, com o progresso do Redis para os jobs em aberto."""
+    open_jobs = [row["id"] for row in rows if row["job_state"] in {"queued", "running"}]
+    progress = await ctx.queue.progress(open_jobs)
+    return [recording_json(row, progress.get(row["id"])) for row in rows]
+
+
+async def insert_job(
+    conn: AsyncConnection,
+    recording: Row,
+    revision: int,
+    *,
+    error: tuple[str, str] | None = None,
+) -> dict[str, Any]:
+    """Cria o job da revisão; devolve as `options` do `transcribe`. Com `error`, nasce falho."""
+    org_settings = (
+        (await conn.execute(select(t.org_settings).where(t.org_settings.c.org_id == recording["org_id"])))
+        .mappings()
+        .one()
+    )
+    options = transcribe_options(org_settings, recording["language"])
+    values: dict[str, Any] = {
+        "org_id": recording["org_id"],
+        "recording_id": recording["id"],
+        "revision": revision,
+        "state": "queued",
+        "options": options,
+    }
+    if error is not None:
+        values |= {"state": "failed", "error_code": error[0], "error_message": error[1], "finished_at": func.now()}
+    await conn.execute(insert(t.transcription_jobs).values(**values))
+    return options

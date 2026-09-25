@@ -97,8 +97,8 @@ OUTPUT_FORMAT, DEFAULT_BITRATE, MIN_BITRATE, MAX_BITRATE, sha256Hex
 
 - **Unitários** (`npm --prefix web test`, ambiente node): ambiente, estimativa, hash, progresso,
   erros e a escolha de motor com os motores substituídos por dublês.
-- **Navegador** (`npm run fixtures && npm run test:browser`, **só no host de build** por
-  `remote-run`): vitest browser mode com `@vitest/browser-playwright` no canal `chrome` — o
+- **Navegador** (`npm run fixtures && npm run test:browser`, no host de build por `remote-run`
+  e na CI): vitest browser mode com `@vitest/browser-playwright` no canal `chrome` — o
   Google Chrome tem os decoders proprietários (AAC), que o Chromium do Playwright não tem.
   `scripts/media-fixtures.sh` gera, com ffmpeg, 10 s de áudio estéreo 48 kHz em MP4, MOV, M4A,
   WebM, MKV, MP3, WAV e OGG (todos pelo WebCodecs), AVI (pelo fallback), um MP4 sem áudio e
@@ -107,6 +107,7 @@ OUTPUT_FORMAT, DEFAULT_BITRATE, MIN_BITRATE, MAX_BITRATE, sha256Hex
   próprio blob.
 - Provado em Chrome 154 headless no host (2026-09-24): o `AudioEncoder` aceita Opus a 16 kHz mono,
   e as oito fixtures convertem pelo WebCodecs.
-- Os testes de navegador ainda não rodam na CI do GitHub.
+- Na CI, o job `web-browser` roda `npm run fixtures && npm run test:browser` no Google Chrome que
+  já vem no runner `ubuntu-latest`, com o ffmpeg instalado por apt.
 - Para validar à mão: `npm --prefix web run dev` e abrir `/media-convert.html` (só no dev, fora do
   build de produção).
