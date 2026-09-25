@@ -29,8 +29,8 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 cq knowledge validate
 ```
 
-- A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `contracts`, `web`, `web-browser` e `desktop` em Linux a cada PR e
-  push em `main`.
+- A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `contracts`, `web`, `web-browser` e
+  `desktop` em Linux a cada PR e push em `main`.
 - Mudanças de dependência exigem atualizar `pyproject.toml`/`uv.lock`, `web/package.json`/
   `web/package-lock.json` ou `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, conforme o pilar.
 - Destino de hospedagem: `192.168.15.199` (Ubuntu, GTX 1660 Super com 6 GB), acessado por
