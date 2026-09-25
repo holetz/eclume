@@ -55,6 +55,8 @@ ignore = [
 "contracts/**" = ["INP001"]  # script e testes soltos: contracts/ não é pacote Python
 # FastAPI e pydantic resolvem as anotações em runtime: os tipos precisam existir fora do TYPE_CHECKING.
 "server/src/eclume_server/{auth,context,routes/*}.py" = ["TC001", "TC002", "TC003"]
+# Handlers FastAPI recebem um parâmetro por campo da requisição (filtros, path, query).
+"server/src/eclume_server/routes/*.py" = ["PLR0913", "PLR0917"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from eclume_server.pagination import iso
 
+Row = Mapping[str, Any]
+"""Linha de consulta (`RowMapping` do SQLAlchemy) ou dict equivalente."""
 
-def user_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAlchemy
+
+def user_json(row: Row) -> dict[str, Any]:
     """Schema `User`."""
     return {
         "id": str(row["id"]),

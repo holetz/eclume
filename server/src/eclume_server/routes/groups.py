@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, insert, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
@@ -17,7 +18,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, iso, page
 from eclume_server.problems import conflict, invalid_field, not_found
-from eclume_server.serialize import user_ref
+from eclume_server.serialize import Row, user_ref
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -47,7 +48,7 @@ class GroupPatch(BaseModel):
     description: str | None = None
 
 
-def group_json(row: Any, members: list[Any] | None = None) -> dict[str, Any]:  # noqa: ANN401
+def group_json(row: Row, members: list[Row] | None = None) -> dict[str, Any]:
     """Schema `Group`; `members` só no detalhe."""
     body: dict[str, Any] = {
         "id": str(row["id"]),
@@ -61,7 +62,7 @@ def group_json(row: Any, members: list[Any] | None = None) -> dict[str, Any]:  #
     return body
 
 
-async def _get(conn: Any, group_id: UUID) -> Any:  # noqa: ANN401
+async def _get(conn: AsyncConnection, group_id: UUID) -> Any:  # noqa: ANN401
     row = (await conn.execute(select(t.groups, _MEMBER_COUNT).where(t.groups.c.id == group_id))).mappings().first()
     if row is None:
         raise not_found("Grupo inexistente.")
@@ -147,7 +148,7 @@ async def delete_group(group_id: UUID, principal: Admin, ctx: Ctx) -> Response:
     return Response(status_code=204)
 
 
-async def _check_member_target(conn: Any, group_id: UUID, user_id: UUID) -> None:  # noqa: ANN401
+async def _check_member_target(conn: AsyncConnection, group_id: UUID, user_id: UUID) -> None:
     await _get(conn, group_id)
     if (await conn.execute(select(t.users.c.id).where(t.users.c.id == user_id))).first() is None:
         raise not_found("Usuário inexistente.")

@@ -17,6 +17,7 @@ from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, iso, page
 from eclume_server.problems import invalid_field, not_found
 from eclume_server.security import new_pat, sha256_hex
+from eclume_server.serialize import Row
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -41,7 +42,7 @@ class TokenCreate(BaseModel):
     expires_at: datetime | None = None
 
 
-def token_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAlchemy
+def token_json(row: Row) -> dict[str, Any]:
     """Schema `Token`."""
     return {
         "id": str(row["id"]),
