@@ -2,7 +2,13 @@
 # vendorizados do Anarlog carregam `VENDOR.md` com o commit fixado e a licença MIT.
 [workspace]
 resolver = "2"
-members = ["src-tauri", "crates/resampler", "crates/audio-capture", "crates/recorder"]
+members = [
+    "src-tauri",
+    "crates/resampler",
+    "crates/audio-capture",
+    "crates/recorder",
+    "crates/detect",
+]
 
 [workspace.package]
 version = "0.1.0"

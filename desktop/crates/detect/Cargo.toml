@@ -1,0 +1,15 @@
+[package]
+name = "eclume-detect"
+description = "Detecção de reuniões do app desktop do eclume: sinais de mic e processo, debounce e gravação automática."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

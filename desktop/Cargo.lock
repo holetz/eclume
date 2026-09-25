@@ -1180,6 +1180,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eclume-detect"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "eclume-recorder"
 version = "0.1.0"
 dependencies = [
