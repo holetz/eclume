@@ -904,7 +904,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description Nome do segredo (`hf_token`). */
+                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
                 secret_name: string;
             };
             cookie?: never;
@@ -1767,6 +1767,13 @@ export interface components {
              * @description Link de aceite, só na resposta da criação.
              */
             accept_url?: string;
+            /**
+             * @description `pending` enquanto válido e não aceito; `expired` depois de `expires_at`.
+             * @enum {string}
+             */
+            status?: "pending" | "accepted" | "expired";
+            /** Format: date-time */
+            created_at?: string;
         };
         InvitationCreate: {
             /** Format: email */
@@ -1777,6 +1784,11 @@ export interface components {
              */
             role: "admin" | "member";
             group_ids?: string[];
+            /**
+             * @description Validade do link em dias; padrão 7.
+             * @default 7
+             */
+            expires_in_days: number;
         };
         InvitationPage: {
             items: components["schemas"]["Invitation"][];
@@ -1816,6 +1828,44 @@ export interface components {
             }[];
             /** Format: date-time */
             checked_at: string;
+            /** @description Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando nenhum worker publicou nos últimos 45 s. */
+            worker?: {
+                online: boolean;
+                /** Format: date-time */
+                last_seen_at: string;
+                version: string | null;
+                engine: string | null;
+                device?: string | null;
+                /** @description Há um job de transcrição rodando no worker. */
+                busy: boolean;
+            } | null;
+            /** @description Profundidade de cada fila arq da instância (só números, sem ids). */
+            queues?: {
+                name: string;
+                queued: number;
+                running: number;
+            }[];
+            /** @description Jobs de transcrição da organização ainda não concluídos, com o progresso. */
+            running_jobs?: {
+                /** Format: uuid */
+                job_id: string;
+                /** Format: uuid */
+                recording_id: string;
+                recording_title: string;
+                /** @enum {string} */
+                state: "queued" | "running";
+                stage: string | null;
+                progress: number | null;
+                /** Format: date-time */
+                queued_at: string;
+                /** Format: date-time */
+                started_at: string | null;
+                /**
+                 * Format: date-time
+                 * @description Última escrita do worker no progresso; parado há muito tempo indica worker morto.
+                 */
+                updated_at: string | null;
+            }[];
         };
         /**
          * Transcript
@@ -3855,7 +3905,7 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo (`hf_token`). */
+                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
                 secret_name: string;
             };
             cookie?: never;
@@ -3886,7 +3936,7 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo (`hf_token`). */
+                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
                 secret_name: string;
             };
             cookie?: never;

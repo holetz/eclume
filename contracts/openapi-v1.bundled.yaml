@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.1.0
+  version: 1.2.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -2013,7 +2013,8 @@ paths:
     - name: secret_name
       in: path
       required: true
-      description: Nome do segredo (`hf_token`).
+      description: 'Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider
+        `anthropic` sem chave própria). Outro nome → 422.'
       schema:
         type: string
         pattern: ^[a-z][a-z0-9_]{1,63}$
@@ -4295,6 +4296,16 @@ components:
           description: Link de aceite, só na resposta da criação.
           type: string
           format: uri
+        status:
+          description: '`pending` enquanto válido e não aceito; `expired` depois de `expires_at`.'
+          type: string
+          enum:
+          - pending
+          - accepted
+          - expired
+        created_at:
+          type: string
+          format: date-time
     InvitationCreate:
       type: object
       required:
@@ -4314,6 +4325,12 @@ components:
           items:
             type: string
             format: uuid
+        expires_in_days:
+          description: Validade do link em dias; padrão 7.
+          type: integer
+          minimum: 1
+          maximum: 30
+          default: 7
     InvitationPage:
       type: object
       required:
@@ -4434,6 +4451,111 @@ components:
         checked_at:
           type: string
           format: date-time
+        worker:
+          description: Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
+            nenhum worker publicou nos últimos 45 s.
+          oneOf:
+          - type: object
+            required:
+            - online
+            - last_seen_at
+            - version
+            - engine
+            - busy
+            properties:
+              online:
+                type: boolean
+              last_seen_at:
+                type: string
+                format: date-time
+              version:
+                type:
+                - string
+                - 'null'
+              engine:
+                type:
+                - string
+                - 'null'
+              device:
+                type:
+                - string
+                - 'null'
+              busy:
+                description: Há um job de transcrição rodando no worker.
+                type: boolean
+          - type: 'null'
+        queues:
+          description: Profundidade de cada fila arq da instância (só números, sem ids).
+          type: array
+          items:
+            type: object
+            required:
+            - name
+            - queued
+            - running
+            properties:
+              name:
+                type: string
+              queued:
+                type: integer
+                minimum: 0
+              running:
+                type: integer
+                minimum: 0
+        running_jobs:
+          description: Jobs de transcrição da organização ainda não concluídos, com o progresso.
+          type: array
+          items:
+            type: object
+            required:
+            - job_id
+            - recording_id
+            - recording_title
+            - state
+            - stage
+            - progress
+            - queued_at
+            - started_at
+            - updated_at
+            properties:
+              job_id:
+                type: string
+                format: uuid
+              recording_id:
+                type: string
+                format: uuid
+              recording_title:
+                type: string
+              state:
+                type: string
+                enum:
+                - queued
+                - running
+              stage:
+                type:
+                - string
+                - 'null'
+              progress:
+                type:
+                - number
+                - 'null'
+                minimum: 0
+                maximum: 1
+              queued_at:
+                type: string
+                format: date-time
+              started_at:
+                type:
+                - string
+                - 'null'
+                format: date-time
+              updated_at:
+                description: Última escrita do worker no progresso; parado há muito tempo indica worker
+                  morto.
+                type:
+                - string
+                - 'null'
+                format: date-time
     Transcript:
       title: Transcript
       description: 'Transcrição do eclume, contrato v1. É o corpo de `GET /api/v1/transcripts/{transcript_id}`
@@ -4690,7 +4812,7 @@ components:
       value:
         status: ok
         version: 0.1.0
-        contract_version: 1.1.0
+        contract_version: 1.2.0
     LoginRequest:
       summary: E-mail e senha
       value:
@@ -6047,6 +6169,8 @@ components:
           id: 01928f3a-1c00-7a00-8000-000000000101
           name: Mariana Couto
         accept_url: https://192.168.15.199:8443/convite/Zk3qW8rT5yU1iO7pA2sD
+        status: pending
+        created_at: '2026-09-18T16:00:00Z'
     AdminHealth:
       summary: Um job rodando na GPU
       value:
@@ -6074,6 +6198,39 @@ components:
           vram_mb: 980
         recent_failures: []
         checked_at: '2026-09-19T13:43:00Z'
+        worker:
+          online: true
+          last_seen_at: '2026-09-19T13:42:55Z'
+          version: 0.1.0
+          engine: whisperx-local
+          device: cuda
+          busy: true
+        queues:
+        - name: eclume:gpu
+          queued: 1
+          running: 1
+        - name: eclume:default
+          queued: 0
+          running: 0
+        running_jobs:
+        - job_id: 01928f3a-1c00-7a00-8000-000000000e01
+          recording_id: 01928f3a-1c00-7a00-8000-000000000301
+          recording_title: Reunião de alinhamento — cliente Aurora
+          state: running
+          stage: diarization
+          progress: 0.78
+          queued_at: '2026-09-19T13:40:02Z'
+          started_at: '2026-09-19T13:40:05Z'
+          updated_at: '2026-09-19T13:42:51Z'
+        - job_id: 01928f3a-1c00-7a00-8000-000000000e02
+          recording_id: 01928f3a-1c00-7a00-8000-000000000302
+          recording_title: Entrevista de desligamento
+          state: queued
+          stage: null
+          progress: null
+          queued_at: '2026-09-19T13:41:30Z'
+          started_at: null
+          updated_at: null
     ProblemUnauthorized:
       summary: Sem credencial
       value:

@@ -941,6 +941,7 @@ source = { editable = "worker-gpu" }
 dependencies = [
     { name = "arq" },
     { name = "boto3" },
+    { name = "cryptography" },
     { name = "eclume-engines" },
 ]
 
@@ -956,6 +957,7 @@ gpu = [
 requires-dist = [
     { name = "arq", specifier = ">=0.26" },
     { name = "boto3", specifier = ">=1.34" },
+    { name = "cryptography", specifier = ">=44" },
     { name = "eclume-engines", editable = "engines" },
     { name = "eclume-engines", extras = ["cpu"], marker = "extra == 'cpu'", editable = "engines" },
     { name = "eclume-engines", extras = ["whisperx"], marker = "extra == 'gpu'", editable = "engines" },

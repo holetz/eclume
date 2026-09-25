@@ -15,6 +15,7 @@ import importlib
 import logging
 import statistics
 import sys
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from eclume_engines.base import (
@@ -46,6 +47,8 @@ DEFAULT_COMPUTE_TYPE = "int8_float16"
 COMPUTE_TYPE_FALLBACKS = ("int8", "float32")
 FORBIDDEN_COMPUTE_TYPES = frozenset({"float16"})
 DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
+# Tipo de cada modelo residente, no vocabulário de `models_loaded` do contrato v1.
+_KINDS = {"asr": "asr", "align": "alignment", "diarize": "diarization"}
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
 WARN_NO_TOKEN = "diarization_skipped_no_token"  # noqa: S105 — código de aviso, não segredo
@@ -83,15 +86,30 @@ class WhisperXLocalEngine:
         self.vram = vram if vram is not None else VramMonitor()
         self._slot_key: tuple[Any, ...] | None = None
         self._slot: Any = None
+        # (tipo, nome, carregado em, VRAM do modelo) do residente; trocado inteiro, lido pelo heartbeat.
+        self._resident: tuple[str, str, str, int | None] | None = None
 
     # -- modelo residente -------------------------------------------------------------------
 
-    def _load(self, key: tuple[Any, ...], loader: Any) -> Any:  # noqa: ANN401 — objetos do WhisperX
+    def _load(self, key: tuple[Any, ...], loader: Any, name: str) -> Any:  # noqa: ANN401 — objetos do WhisperX
         if self._slot_key != key:
             self.unload()
+            before = self.vram.used_mb()
             self._slot = loader()
             self._slot_key = key
+            after = self.vram.used_mb()
+            vram_mb = max(0, after - before) if before is not None and after is not None else None
+            loaded_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+            self._resident = (_KINDS[key[0]], name, loaded_at, vram_mb)
         return self._slot
+
+    def loaded_models(self) -> list[dict[str, Any]]:
+        """O modelo residente na GPU (há no máximo um), para o heartbeat do worker."""
+        resident = self._resident
+        if resident is None:
+            return []
+        kind, name, loaded_at, vram_mb = resident
+        return [{"name": name, "kind": kind, "loaded_at": loaded_at, "vram_mb": vram_mb}]
 
     def unload(self) -> None:
         """Descarrega o modelo residente e devolve a VRAM ao driver."""
@@ -99,6 +117,7 @@ class WhisperXLocalEngine:
             return
         self._slot = None
         self._slot_key = None
+        self._resident = None
         gc.collect()
         torch = sys.modules.get("torch")
         if torch is not None and torch.cuda.is_available():
@@ -164,6 +183,7 @@ class WhisperXLocalEngine:
                 pipeline = self._load(
                     ("asr", model, compute_type, language),
                     lambda ct=compute_type: whisperx.load_model(model, self.device, compute_type=ct, language=language),
+                    model,
                 )
             except ValueError as exc:  # o CTranslate2 recusa o compute type com ValueError
                 logger.warning("compute_type %s indisponível: %s", compute_type, exc)
@@ -181,13 +201,15 @@ class WhisperXLocalEngine:
         warnings: list[str],
     ) -> tuple[dict[str, Any], str, str, int]:
         requested = options.model or DEFAULT_MODEL
-        models = [requested] if requested == FALLBACK_MODEL else [requested, FALLBACK_MODEL]
+        fallback = options.fallback_model or FALLBACK_MODEL
+        models = [requested] if requested == fallback else [requested, fallback]
         compute_types = self._compute_types(options, warnings)
-        first_batch = self.batch_size or initial_batch_size(self.vram.free_mb())
+        # `ECLUME_BATCH_SIZE` (operador do host) vence o lote da configuração do admin.
+        first_batch = self.batch_size or options.batch_size or initial_batch_size(self.vram.free_mb())
 
         for model in models:
-            if model == FALLBACK_MODEL and model != requested:
-                logger.warning("OOM persistente com %s; caindo para %s", requested, FALLBACK_MODEL)
+            if model == fallback and model != requested:
+                logger.warning("OOM persistente com %s; caindo para %s", requested, fallback)
                 warnings.append(WARN_FALLBACK_MEDIUM)
             batch = first_batch
             while True:
@@ -213,7 +235,7 @@ class WhisperXLocalEngine:
                         warnings.append(WARN_BATCH_REDUCED)
                     continue
                 return result, model, compute_type, batch
-        raise EngineError(OUT_OF_MEMORY, "VRAM insuficiente mesmo com batch_size=1 e o modelo medium")
+        raise EngineError(OUT_OF_MEMORY, f"VRAM insuficiente mesmo com batch_size=1 e o modelo {fallback}")
 
     def _align(
         self,
@@ -227,6 +249,7 @@ class WhisperXLocalEngine:
             align_model, metadata = self._load(
                 ("align", options.language),
                 lambda: whisperx.load_align_model(language_code=options.language, device=self.device),
+                _align_model_name(options.language) or f"alinhamento ({options.language})",
             )
         except ValueError as exc:  # idioma sem modelo de alinhamento padrão
             logger.warning("sem alinhamento para %s: %s", options.language, exc)
@@ -253,21 +276,23 @@ class WhisperXLocalEngine:
     ) -> tuple[dict[str, Any], dict[str, list[float]] | None, str | None]:
         if not options.diarize:
             return result, None, None
+        model_name = options.diarization_model or DIARIZATION_MODEL
         if not self.hf_token:
             logger.warning(
                 "sem token do Hugging Face: transcrevendo sem diarização (um locutor). "
                 "Defina HF_TOKEN ou ECLUME_HF_TOKEN_FILE e aceite os termos de %s.",
-                DIARIZATION_MODEL,
+                model_name,
             )
             warnings.append(WARN_NO_TOKEN)
             return result, None, None
         try:
             diarize_module = importlib.import_module("whisperx.diarize")
             pipeline = self._load(
-                ("diarize", DIARIZATION_MODEL),
+                ("diarize", model_name),
                 lambda: diarize_module.DiarizationPipeline(
-                    model_name=DIARIZATION_MODEL, token=self.hf_token, device=self.device
+                    model_name=model_name, token=self.hf_token, device=self.device
                 ),
+                model_name,
             )
         except Exception as exc:
             if not _is_access_denied(exc):
@@ -275,7 +300,7 @@ class WhisperXLocalEngine:
             logger.warning(
                 "sem acesso a %s com o token atual (termos do modelo não aceitos?): transcrevendo "
                 "sem diarização (um locutor). Erro: %s",
-                DIARIZATION_MODEL,
+                model_name,
                 exc,
             )
             warnings.append(WARN_NO_ACCESS)
@@ -292,7 +317,7 @@ class WhisperXLocalEngine:
             result = whisperx.assign_word_speakers(diarize_df, result, fill_nearest=True)
         except Exception as exc:
             raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
-        return result, embeddings, DIARIZATION_MODEL
+        return result, embeddings, model_name
 
 
 def _align_model_name(language: str) -> str | None:

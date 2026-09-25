@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING
 
 from eclume_server.routes import (
     admin,
+    admin_health,
+    admin_invitations,
+    admin_secrets,
+    admin_settings,
     agent_providers,
     auth,
     collections,
@@ -36,6 +40,10 @@ def include_routes(app: FastAPI) -> None:
         transcripts,
         groups,
         admin,
+        admin_health,
+        admin_invitations,
+        admin_secrets,
+        admin_settings,
         agent_providers,
         summaries,
         people,

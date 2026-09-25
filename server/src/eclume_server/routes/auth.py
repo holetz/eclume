@@ -4,22 +4,28 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
-from eclume_server import __version__
+from eclume_server import __version__, invitations
+from eclume_server.accounts import MIN_PASSWORD
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, unauthorized
+from eclume_server.problems import forbidden, invalid_field, unauthorized
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 from eclume_server.serialize import user_json
 
-CONTRACT_VERSION = "1.1.0"
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
+CONTRACT_VERSION = "1.2.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -66,19 +72,41 @@ async def login(body: LoginRequest, ctx: Ctx) -> Response:
         if needs_rehash(user["password_hash"]):
             values["password_hash"] = hash_password(body.password)
         await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
-        token, csrf = new_session_token(), new_session_token()
-        ttl = timedelta(days=ctx.settings.session_ttl_days)
-        await conn.execute(
-            insert(t.sessions).values(
-                token_hash=sha256_hex(token), csrf_token=csrf, user_id=user["id"], expires_at=now + ttl
-            )
-        )
+        return await _open_session(conn, ctx, user["id"], now)
+
+
+async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, now: datetime) -> Response:
+    """Cria a sessão no banco e devolve o 204 com os cookies `eclume_session` e `eclume_csrf`."""
+    token, csrf = new_session_token(), new_session_token()
+    ttl = timedelta(days=ctx.settings.session_ttl_days)
+    await conn.execute(
+        insert(t.sessions).values(token_hash=sha256_hex(token), csrf_token=csrf, user_id=user_id, expires_at=now + ttl)
+    )
     response = Response(status_code=204)
     max_age = int(ttl.total_seconds())
     secure = ctx.settings.cookie_secure
     response.set_cookie(SESSION_COOKIE, token, max_age=max_age, httponly=True, secure=secure, samesite="lax")
     response.set_cookie(CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure, samesite="lax")
     return response
+
+
+class InvitationAccept(BaseModel):
+    """Schema `InvitationAccept`."""
+
+    name: str = Field(min_length=1)
+    password: str = Field(min_length=MIN_PASSWORD)
+
+
+@router.post("/auth/invitations/{invitation_token}/accept", status_code=204)
+async def accept_invitation(invitation_token: str, body: InvitationAccept, ctx: Ctx) -> Response:
+    """Cria a conta do convite e abre a sessão, como o login."""
+    if not body.name.strip():
+        raise invalid_field("name", "não pode ser vazio")
+    now = datetime.now(UTC)
+    async with system_tx(ctx.engine) as conn:
+        user_id = await invitations.accept(conn, invitation_token, name=body.name, password=body.password)
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
+        return await _open_session(conn, ctx, user_id, now)
 
 
 @router.post("/auth/logout", status_code=204)

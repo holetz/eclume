@@ -157,7 +157,6 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
 
     invalid = [
         {"name": "x", "kind": "openai-compatible", "model": "m"},
-        {"name": "x", "kind": "anthropic", "model": "claude-opus-5"},
         {"name": "x", "kind": "claude-cli", "model": "sonnet", "base_url": "https://api.anthropic.com"},
         {"name": "x", "kind": "ollama", "model": "m", "base_url": "ftp://x"},
         {"name": "x", "kind": "gemini", "model": "m"},

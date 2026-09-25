@@ -45,6 +45,10 @@ class EngineOptions:
     embeddings: bool = True
     min_speakers: int | None = None
     max_speakers: int | None = None
+    # Da configuração do admin; vazios, valem os padrões da engine (e `ECLUME_BATCH_SIZE` no worker).
+    batch_size: int | None = None
+    fallback_model: str | None = None
+    diarization_model: str | None = None
 
     @classmethod
     def from_mapping(cls, options: Mapping[str, Any] | None) -> EngineOptions:
@@ -63,6 +67,9 @@ class EngineOptions:
             embeddings=bool(options.get("embeddings", True)),
             min_speakers=_int("min_speakers"),
             max_speakers=_int("max_speakers"),
+            batch_size=_int("batch_size"),
+            fallback_model=options.get("fallback_model") or None,
+            diarization_model=options.get("diarization_model") or None,
         )
 
 

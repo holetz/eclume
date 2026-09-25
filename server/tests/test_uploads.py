@@ -100,7 +100,11 @@ def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
         "engine": "whisperx-local",
         "model": "large-v3-turbo",
         "compute_type": "int8_float16",
+        "batch_size": None,
+        "fallback_model": "medium",
+        "endpoint_url": None,
         "diarize": True,
+        "diarization_model": "pyannote/speaker-diarization-community-1",
         "embeddings": False,
     }
     stored = services.s3().get_object(Bucket=services.settings.s3_bucket, Key=key)["Body"].read()

@@ -258,3 +258,60 @@ def test_troca_de_engine_descarrega_a_anterior(tmp_path: Path):
 )
 def test_revisao_do_job_id(job_id: str | None, revision: int):
     assert parse_revision(job_id) == revision
+
+
+def _cifrado(texto: str, secret_key: str) -> str:
+    """O token como o server o grava (mesmo formato de eclume_server.crypto)."""
+    import base64  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    from cryptography.hazmat.primitives import hashes  # noqa: PLC0415
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: PLC0415
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF  # noqa: PLC0415
+
+    key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"eclume-secrets-v1").derive(secret_key.encode())
+    nonce = os.urandom(12)
+    return "v1:" + base64.b64encode(nonce + AESGCM(key).encrypt(nonce, texto.encode(), None)).decode()
+
+
+def test_token_da_organizacao_vence_o_do_ambiente(tmp_path: Path):
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory, secret_key="segredo-do-server")
+    rodar(ctx, {"hf_token_encrypted": _cifrado("hf_da_organizacao", "segredo-do-server")})
+    [(_, _, token)] = factory.created[0].calls
+    assert token == "hf_da_organizacao"
+    info = ctx["redis"].jobs[0][1][3]
+    assert "hf_token_undecryptable" not in info["warnings"]
+
+    # O job seguinte, sem o segredo, volta ao token do ambiente.
+    rodar(ctx, {})
+    assert factory.created[0].calls[-1][2] == "hf_x"
+
+
+@pytest.mark.parametrize("cfg", [{"secret_key": "outra-chave"}, {}])
+def test_token_que_nao_abre_cai_no_do_ambiente_com_aviso(tmp_path: Path, cfg: dict[str, str]):
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory, **cfg)
+    out = rodar(ctx, {"hf_token_encrypted": _cifrado("hf_da_organizacao", "segredo-do-server")})
+    assert out["status"] == "done"
+    [(_, _, token)] = factory.created[0].calls
+    assert token == "hf_x"
+    assert ctx["redis"].jobs[0][1][3]["warnings"] == ["hf_token_undecryptable", "exemplo"]
+
+
+def test_endpoint_das_options_vence_o_do_ambiente(tmp_path: Path):
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory, remote_base_url="http://speaches:8000")
+    rodar(ctx, {"engine": "openai-compatible", "endpoint_url": "http://outro:9000/v1"})
+    rodar(ctx, {"engine": "openai-compatible", "endpoint_url": "http://outro:9000/v1"})
+    assert [e.kwargs["base_url"] for e in factory.created] == ["http://outro:9000/v1"]
+    rodar(ctx, {"engine": "openai-compatible"})
+    assert [e.kwargs["base_url"] for e in factory.created] == ["http://outro:9000/v1", "http://speaches:8000"]
+
+
+def test_opcoes_do_admin_chegam_a_engine(tmp_path: Path):
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory)
+    rodar(ctx, {"batch_size": 2, "fallback_model": "small", "diarization_model": "pyannote/x"})
+    [(_, options, _)] = factory.created[0].calls
+    assert (options.batch_size, options.fallback_model, options.diarization_model) == (2, "small", "pyannote/x")

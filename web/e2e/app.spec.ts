@@ -73,13 +73,17 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
-test('login, biblioteca, transcrição, import e token contra o mock', async ({ page }) => {
+async function login(page: Page, shot?: string) {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
-  await screenshot(page, '1-login')
+  if (shot) await screenshot(page, shot)
   await page.getByLabel('E-mail').fill('mariana.couto@example.com')
   await page.getByLabel('Senha').fill('senha-de-teste')
   await page.getByRole('button', { name: 'Entrar' }).click()
+}
+
+test('login, biblioteca, transcrição, import e token contra o mock', async ({ page }) => {
+  await login(page, '1-login')
 
   // Biblioteca: as duas gravações da fixture, uma em processamento.
   const library = page.getByRole('list', { name: 'Gravações' })
@@ -131,6 +135,43 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'App desktop' }).click()
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
+})
+
+test('painel admin contra o mock', async ({ page }) => {
+  await login(page)
+  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Painel admin' }).click()
+  const tabs = page.getByRole('navigation', { name: 'Seções da administração' })
+
+  // Transcrição: a configuração do exemplo, salva de volta.
+  await expect(page.getByRole('heading', { name: 'Transcrição' })).toBeVisible()
+  await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('large-v3-turbo')
+  await page.getByRole('button', { name: 'Salvar configuração' }).click()
+  await expect(page.getByText('Configuração salva.')).toBeVisible()
+  await screenshot(page, '12-admin-transcricao')
+
+  // Saúde: GPU e jobs do exemplo.
+  await tabs.getByRole('link', { name: 'Saúde' }).click()
+  await expect(page.getByText('NVIDIA GeForce GTX 1660 SUPER')).toBeVisible()
+  await expect(page.getByRole('row', { name: /Reunião de alinhamento — cliente Aurora/ })).toBeVisible()
+  await screenshot(page, '13-admin-saude')
+
+  // Segredos: só escrita.
+  await tabs.getByRole('link', { name: 'Segredos' }).click()
+  const hf = page.getByRole('form', { name: 'Token do Hugging Face' })
+  await expect(hf.getByText('Definido')).toBeVisible()
+  await hf.getByLabel('Novo valor').fill('hf_e2e_token')
+  await hf.getByRole('button', { name: 'Salvar' }).click()
+  await expect(hf.getByText('Token do Hugging Face salvo.')).toBeVisible()
+  await expect(hf.getByLabel('Novo valor')).toHaveValue('')
+
+  // Usuários: a lista do exemplo e o convite com link mostrado uma vez.
+  await tabs.getByRole('link', { name: 'Usuários e convites' }).click()
+  await expect(page.getByRole('row', { name: /Paulo Andrade/ })).toBeVisible()
+  const invite = page.getByRole('form', { name: 'Novo convite' })
+  await invite.getByLabel('E-mail').fill('beatriz.nunes@example.com')
+  await invite.getByRole('button', { name: 'Criar convite' }).click()
+  await expect(page.getByLabel('Link do convite')).toHaveValue(/\/convite\//)
+  await screenshot(page, '14-admin-usuarios')
 })
 
 test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {

@@ -21,6 +21,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.queue import GPU_QUEUE
+from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -259,9 +260,10 @@ JOB_TIMEOUT_S = 25 * 60
 INTERNAL_ERROR = "internal_error"
 
 
-def provider_config(settings: Settings, row: Row) -> ProviderConfig:
-    """Configuração do provider com a chave decifrada."""
-    api_key = decrypt(settings, row["api_key_encrypted"]) if row["api_key_encrypted"] else None
+def provider_config(settings: Settings, row: Row, org_key_encrypted: str | None = None) -> ProviderConfig:
+    """Configuração do provider com a chave decifrada; sem chave própria, vale a da organização."""
+    encrypted = row["api_key_encrypted"] or org_key_encrypted
+    api_key = decrypt(settings, encrypted) if encrypted else None
     return ProviderConfig(
         kind=row["kind"],
         model=row["model"],
@@ -360,6 +362,10 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             .mappings()
             .first()
         )
+        # O provider `anthropic` sem chave própria usa o segredo `anthropic_api_key` da organização.
+        org_key = None
+        if provider_row is not None and provider_row["kind"] == "anthropic" and not provider_row["api_key_encrypted"]:
+            org_key = await secret_encrypted(conn, summary["org_id"], ANTHROPIC_API_KEY)
         transcript = await _transcript_text(conn, summary["transcript_id"])
         await conn.execute(
             update(t.summaries)
@@ -372,7 +378,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             engine, summary_id, PROVIDER_NOT_CONFIGURED, "O provider foi removido ou desabilitado.", attempts
         )
     try:
-        config = provider_config(ctx["settings"], provider_row)
+        config = provider_config(ctx["settings"], provider_row, org_key)
     except SecretDecryptError:
         message = "A chave de API do provider não abre com a chave de cifra atual; cadastre-a de novo."
         return await _fail(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)

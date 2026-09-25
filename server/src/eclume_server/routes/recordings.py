@@ -19,7 +19,14 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, encode_cursor, iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
-from eclume_server.recordings import get_visible, insert_job, recording_select, render, require_owner
+from eclume_server.recordings import (
+    enqueue_transcription,
+    get_visible,
+    insert_job,
+    recording_select,
+    render,
+    require_owner,
+)
 from eclume_server.routes.collections import check_collections
 from eclume_server.routes.uploads import LANGUAGE
 from eclume_server.security import sign, signature_matches
@@ -215,7 +222,7 @@ async def retranscribe(
             update(t.recordings).where(t.recordings.c.id == recording_id).values(status="queued", updated_at=func.now())
         )
         refreshed = await get_visible(conn, recording_id)
-    await ctx.queue.enqueue_transcribe(recording_id, revision, row["audio_key"], options)
+    await enqueue_transcription(ctx, recording_id, revision, row["audio_key"], options)
     return (await render(ctx, [refreshed]))[0]
 
 

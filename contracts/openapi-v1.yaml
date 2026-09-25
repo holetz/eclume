@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.1.0
+  version: 1.2.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -1905,7 +1905,7 @@ paths:
       - name: secret_name
         in: path
         required: true
-        description: Nome do segredo (`hf_token`).
+        description: "Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422."
         schema:
           type: string
           pattern: "^[a-z][a-z0-9_]{1,63}$"
@@ -3786,6 +3786,13 @@ components:
           description: Link de aceite, só na resposta da criação.
           type: string
           format: uri
+        status:
+          description: "`pending` enquanto válido e não aceito; `expired` depois de `expires_at`."
+          type: string
+          enum: [pending, accepted, expired]
+        created_at:
+          type: string
+          format: date-time
 
     InvitationCreate:
       type: object
@@ -3803,6 +3810,12 @@ components:
           items:
             type: string
             format: uuid
+        expires_in_days:
+          description: Validade do link em dias; padrão 7.
+          type: integer
+          minimum: 1
+          maximum: 30
+          default: 7
 
     InvitationPage:
       type: object
@@ -3892,6 +3905,78 @@ components:
         checked_at:
           type: string
           format: date-time
+        worker:
+          description: >-
+            Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
+            nenhum worker publicou nos últimos 45 s.
+          oneOf:
+            - type: object
+              required: [online, last_seen_at, version, engine, busy]
+              properties:
+                online:
+                  type: boolean
+                last_seen_at:
+                  type: string
+                  format: date-time
+                version:
+                  type: [string, "null"]
+                engine:
+                  type: [string, "null"]
+                device:
+                  type: [string, "null"]
+                busy:
+                  description: Há um job de transcrição rodando no worker.
+                  type: boolean
+            - type: "null"
+        queues:
+          description: Profundidade de cada fila arq da instância (só números, sem ids).
+          type: array
+          items:
+            type: object
+            required: [name, queued, running]
+            properties:
+              name:
+                type: string
+              queued:
+                type: integer
+                minimum: 0
+              running:
+                type: integer
+                minimum: 0
+        running_jobs:
+          description: Jobs de transcrição da organização ainda não concluídos, com o progresso.
+          type: array
+          items:
+            type: object
+            required: [job_id, recording_id, recording_title, state, stage, progress, queued_at, started_at, updated_at]
+            properties:
+              job_id:
+                type: string
+                format: uuid
+              recording_id:
+                type: string
+                format: uuid
+              recording_title:
+                type: string
+              state:
+                type: string
+                enum: [queued, running]
+              stage:
+                type: [string, "null"]
+              progress:
+                type: [number, "null"]
+                minimum: 0
+                maximum: 1
+              queued_at:
+                type: string
+                format: date-time
+              started_at:
+                type: [string, "null"]
+                format: date-time
+              updated_at:
+                description: Última escrita do worker no progresso; parado há muito tempo indica worker morto.
+                type: [string, "null"]
+                format: date-time
 
   examples:
     Health:

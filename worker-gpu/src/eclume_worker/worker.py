@@ -17,7 +17,9 @@ from typing import Any
 from arq.connections import RedisSettings
 from arq.worker import func
 
+from eclume_engines.vram import VramMonitor
 from eclume_worker.config import GPU_QUEUE, WorkerConfig
+from eclume_worker.health import heartbeat_loop, withdraw
 from eclume_worker.jobs import EngineRegistry, transcribe
 from eclume_worker.storage import ArtifactStore
 
@@ -48,21 +50,25 @@ def configure_logging(level: int = logging.INFO) -> None:
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    """Prepara o log, o S3, a engine e a descarga por ociosidade."""
+    """Prepara o log, o S3, a engine, a descarga por ociosidade e o heartbeat."""
     configure_logging()
     ctx["config"] = CONFIG
     ctx["store"] = ArtifactStore.from_config(CONFIG)
     ctx["engines"] = registry = EngineRegistry(CONFIG)
     ctx["idle_task"] = asyncio.create_task(idle_unloader(registry, CONFIG.model_idle_seconds))
+    ctx["heartbeat_task"] = asyncio.create_task(heartbeat_loop(ctx["redis"], CONFIG, registry, VramMonitor()))
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    """Para a descarga ociosa e libera a GPU."""
-    task = ctx.get("idle_task")
-    if task is not None:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+    """Para a descarga ociosa e o heartbeat, retira o heartbeat e libera a GPU."""
+    for name in ("idle_task", "heartbeat_task"):
+        task = ctx.get(name)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+    if "redis" in ctx:
+        await withdraw(ctx["redis"])
     registry = ctx.get("engines")
     if registry is not None:
         await asyncio.to_thread(registry.unload)

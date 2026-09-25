@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 
 from eclume_server_testing.api import PASSWORD, Api
+from eclume_server_testing.conformance import bundle
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -22,7 +23,8 @@ if TYPE_CHECKING:
 def test_health_sem_credencial(client: TestClient):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["contract_version"] == "1.1.0"
+    # O server anuncia a versão do contrato a que conforma.
+    assert response.json()["contract_version"] == bundle()["info"]["version"]
 
 
 def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):

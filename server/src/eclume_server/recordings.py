@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import exists, func, insert, select, true
 
 from eclume_server.db import tables as t
+from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import forbidden, not_found
 from eclume_server.queue import transcribe_options
 from eclume_server.serialize import Row, user_ref
+from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -147,3 +149,20 @@ async def insert_job(
         values |= {"state": "failed", "error_code": error[0], "error_message": error[1], "finished_at": func.now()}
     await conn.execute(insert(t.transcription_jobs).values(**values))
     return options
+
+
+async def enqueue_transcription(
+    ctx: AppContext, recording_id: UUID, revision: int, audio_key: str, options: dict[str, Any]
+) -> None:
+    """Enfileira o `transcribe`; o token do HF da organização vai cifrado só no payload do job.
+
+    O texto cifrado não entra em `transcription_jobs.options`: o worker o abre com a mesma chave de
+    cifra do server (docs/standards/api/jobs-transcricao.md).
+    """
+    async with system_tx(ctx.engine) as conn:
+        org_id = (
+            await conn.execute(select(t.recordings.c.org_id).where(t.recordings.c.id == recording_id))
+        ).scalar_one()
+        hf_token = await secret_encrypted(conn, org_id, HF_TOKEN)
+    payload = {**options, "hf_token_encrypted": hf_token} if hf_token else options
+    await ctx.queue.enqueue_transcribe(recording_id, revision, audio_key, payload)

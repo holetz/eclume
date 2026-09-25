@@ -16,20 +16,8 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-ADMIN = "holetz/eclume#12 (painel-admin)"
-
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
-    ("GET", "/api/v1/admin/health", ADMIN),
-    ("GET", "/api/v1/admin/invitations", ADMIN),
-    ("POST", "/api/v1/admin/invitations", ADMIN),
-    ("DELETE", "/api/v1/admin/invitations/{invitation_id}", ADMIN),
-    ("GET", "/api/v1/admin/secrets", ADMIN),
-    ("PUT", "/api/v1/admin/secrets/{secret_name}", ADMIN),
-    ("DELETE", "/api/v1/admin/secrets/{secret_name}", ADMIN),
-    ("GET", "/api/v1/admin/settings", ADMIN),
-    ("PATCH", "/api/v1/admin/settings", ADMIN),
-    ("POST", "/api/v1/auth/invitations/{invitation_token}/accept", ADMIN),
-)
+# Vazia desde a holetz/eclume#12: todas as operações do contrato v1 estão implementadas.
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:
