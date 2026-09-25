@@ -97,11 +97,12 @@ class PeakVram:
 
 
 def initial_batch_size(free_mb: int | None) -> int:
-    """Lote inicial do ASR pela VRAM livre: 16 com ≥ 5 GB, 8 com ≥ 3,5 GB, senão 4."""
-    if free_mb is None:
-        return 8
-    if free_mb >= 5000:  # noqa: PLR2004 — faixas da spec holetz/eclume#8
-        return 16
-    if free_mb >= 3500:  # noqa: PLR2004
-        return 8
-    return 4
+    """Lote inicial do ASR pela VRAM livre: 4 com ≥ 3,5 GB, senão 2.
+
+    Medido na GTX 1660 SUPER (1 h de áudio, `large-v3-turbo` `int8_float16`): lotes 4, 8 e 16
+    levam o mesmo tempo (357, 381 e 370 s), porque a GPU já satura com 4, mas o 16 sobe o pico de
+    VRAM de ~3,0 para ~3,9 GB. O lote pequeno deixa folga para o Jellyfin do host.
+    """
+    if free_mb is None or free_mb >= 3500:  # noqa: PLR2004 — medida em docs/project/worker-gpu.md
+        return 4
+    return 2

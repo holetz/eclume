@@ -206,7 +206,7 @@ def test_pipeline_completo_com_diarizacao_e_embeddings(fake: FakeWhisperX):
 
     assert result.model == "large-v3-turbo"
     assert result.compute_type == "int8_float16"
-    assert result.batch_size == 16
+    assert result.batch_size == 4
     assert result.duration_s == 90.0
     assert result.align_model == "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
     assert result.diarization_model == DIARIZATION_MODEL
@@ -250,12 +250,12 @@ def test_diarizacao_sem_embeddings(fake: FakeWhisperX):
 
 
 def test_oom_reduz_o_lote_pela_metade(monkeypatch: pytest.MonkeyPatch):
-    fake = FakeWhisperX(oom_batches={16, 8})
+    fake = FakeWhisperX(oom_batches={4, 2})
     install(monkeypatch, fake)
     result = engine().transcribe(AUDIO, EngineOptions(diarize=False))
     batches = [args[1] for name, args in fake.calls if name == "transcribe"]
-    assert batches == [16, 8, 4]
-    assert result.batch_size == 4
+    assert batches == [4, 2, 1]
+    assert result.batch_size == 1
     assert result.warnings == [WARN_BATCH_REDUCED]
 
 
@@ -269,7 +269,7 @@ def test_oom_persistente_cai_para_medium(monkeypatch: pytest.MonkeyPatch):
     install(monkeypatch, fake)
     result = engine(free=3000).transcribe(AUDIO, EngineOptions(diarize=False))
     transcribes = [args[:2] for name, args in fake.calls if name == "transcribe"]
-    assert transcribes == [("large-v3-turbo", 4), ("large-v3-turbo", 2), ("large-v3-turbo", 1), ("medium", 4)]
+    assert transcribes == [("large-v3-turbo", 2), ("large-v3-turbo", 1), ("medium", 2)]
     assert result.model == "medium"
     assert result.warnings == [WARN_BATCH_REDUCED, WARN_FALLBACK_MEDIUM]
 
@@ -358,7 +358,7 @@ def test_um_modelo_residente_por_vez(fake: FakeWhisperX):
     assert eng._slot is None
 
 
-@pytest.mark.parametrize(("free", "batch"), [(None, 8), (6000, 16), (5000, 16), (4000, 8), (3500, 8), (2000, 4)])
+@pytest.mark.parametrize(("free", "batch"), [(None, 4), (6000, 4), (3500, 4), (3499, 2), (1000, 2)])
 def test_lote_inicial_pela_vram_livre(free: int | None, batch: int):
     assert initial_batch_size(free) == batch
 
