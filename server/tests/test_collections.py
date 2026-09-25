@@ -1,0 +1,110 @@
+"""Coleções do usuário (gravação em N coleções) e tags das gravações visíveis."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from eclume_server_testing.api import audio_bytes, upload_file
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from eclume_server_testing.api import Account, Api
+
+
+def test_cadastro_ordem_e_paginacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    created = api.post("/api/v1/collections", json={"name": "Metalúrgica Serra Azul", "description": "Lideranças"})
+    assert created.status_code == 201
+    serra = created.json()
+    assert (serra["recording_count"], serra["description"]) == (0, "Lideranças")
+    api.post("/api/v1/collections", json={"name": "acme"})
+    api.post("/api/v1/collections", json={"name": "Zeta"})
+    assert api.post("/api/v1/collections", json={"name": ""}).status_code == 422
+
+    first = api.get("/api/v1/collections", params={"limit": 2}).json()
+    assert [c["name"] for c in first["items"]] == ["acme", "Metalúrgica Serra Azul"]
+    rest = api.get("/api/v1/collections", params={"limit": 2, "cursor": first["next_cursor"]}).json()
+    assert ([c["name"] for c in rest["items"]], rest["next_cursor"]) == (["Zeta"], None)
+
+    patched = api.patch(f"/api/v1/collections/{serra['id']}", json={"description": None})
+    assert (patched.status_code, patched.json()["description"]) == (200, None)
+    assert patched.json()["updated_at"] > serra["updated_at"]
+    assert api.patch(f"/api/v1/collections/{serra['id']}", json={}).status_code == 422
+    assert api.patch(f"/api/v1/collections/{serra['id']}", json={"name": None}).status_code == 422
+    assert api.delete(f"/api/v1/collections/{serra['id']}").status_code == 204
+    assert api.patch(f"/api/v1/collections/{serra['id']}", json={"name": "x"}).status_code == 404
+    assert api.delete(f"/api/v1/collections/{serra['id']}").status_code == 404
+
+
+def test_gravacao_em_varias_colecoes(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    other = as_user(make_user())
+    a = api.post("/api/v1/collections", json={"name": "Cliente A"}).json()
+    b = api.post("/api/v1/collections", json={"name": "Programa B"}).json()
+    alheia = other.post("/api/v1/collections", json={"name": "De outro"}).json()
+    recording = upload_file(api, audio_bytes(100), collection_ids=[a["id"]])
+    assert recording["collection_ids"] == [a["id"]]
+
+    url = f"/api/v1/recordings/{recording['id']}"
+    patched = api.patch(url, json={"collection_ids": [a["id"], b["id"], a["id"]]})
+    assert patched.status_code == 200
+    assert patched.json()["collection_ids"] == [a["id"], b["id"]]
+    assert api.patch(url, json={"collection_ids": [alheia["id"]]}).status_code == 422
+    missing = api.patch(url, json={"collection_ids": ["01928f3a-1c00-7a00-8000-000000000801"]})
+    assert (missing.status_code, missing.json()["errors"][0]["field"]) == (422, "collection_ids")
+    counts = {c["name"]: c["recording_count"] for c in api.get("/api/v1/collections").json()["items"]}
+    assert counts == {"Cliente A": 1, "Programa B": 1}
+    in_b = api.get("/api/v1/recordings", params={"collection": b["id"]}).json()["items"]
+    assert [r["id"] for r in in_b] == [recording["id"]]
+
+    # Excluir a coleção só a tira da gravação.
+    before = api.get(url).json()
+    assert api.delete(f"/api/v1/collections/{a['id']}").status_code == 204
+    after = api.get(url).json()
+    assert after["collection_ids"] == [b["id"]]
+    assert after["updated_at"] > before["updated_at"]
+
+    # Upload pedindo coleção alheia é recusado já na criação.
+    refused = api.post(
+        "/api/v1/uploads",
+        json={
+            "filename": "x.opus",
+            "content_type": "audio/ogg; codecs=opus",
+            "size_bytes": 10,
+            "sha256": "0" * 64,
+            "collection_ids": [alheia["id"]],
+        },
+    )
+    assert (refused.status_code, refused.json()["errors"][0]["field"]) == (422, "collection_ids")
+
+
+def test_colecoes_sao_do_usuario(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    alice = as_user(make_user())
+    bob = as_user(make_user())
+    mine = alice.post("/api/v1/collections", json={"name": "Minha"}).json()
+    assert bob.get("/api/v1/collections").json()["items"] == []
+    assert bob.patch(f"/api/v1/collections/{mine['id']}", json={"name": "x"}).status_code == 404
+    assert bob.delete(f"/api/v1/collections/{mine['id']}").status_code == 404
+    reader = alice.pat("recordings:read")
+    assert [c["id"] for c in reader.get("/api/v1/collections").json()["items"]] == [mine["id"]]
+    denied = reader.post("/api/v1/collections", json={"name": "x"})
+    assert (denied.status_code, denied.json()["required_scopes"]) == (403, ["recordings:write"])
+
+
+def test_tags_das_gravacoes_visiveis(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    alice = as_user(make_user())
+    bob = as_user(make_user())
+    first = upload_file(alice, audio_bytes(100), tags=["cliente-a", "entrevista"])
+    upload_file(alice, audio_bytes(100), tags=["cliente-a"])
+    upload_file(bob, audio_bytes(100), tags=["interno"])
+    assert alice.get("/api/v1/tags").json() == {
+        "items": [{"name": "cliente-a", "count": 2}, {"name": "entrevista", "count": 1}]
+    }
+    assert bob.get("/api/v1/tags").json() == {"items": [{"name": "interno", "count": 1}]}
+    alice.post(f"/api/v1/recordings/{first['id']}/shares", json={"target_type": "organization"})
+    assert bob.get("/api/v1/tags").json()["items"] == [
+        {"name": "cliente-a", "count": 1},
+        {"name": "entrevista", "count": 1},
+        {"name": "interno", "count": 1},
+    ]
