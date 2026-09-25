@@ -66,3 +66,22 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
 - **Um job curto paga o carregamento dos modelos.** Os 30 s do diálogo de teste levam ~26 s com
   diarização, quase tudo carregando ASR, alinhador e pyannote, porque há um modelo residente
   por vez. Numa hora de áudio, isso é ~5% do tempo.
+
+### Com diarização e embeddings (pyannote `community-1`, `return_embeddings=True`)
+
+| Lote do ASR | Processamento de 1 h | Fator de tempo real | Min por hora de áudio | VRAM de pico |
+|---|---|---|---|---|
+| 4 | 517 s | 0,144 | 8,61 | 3.003 MiB |
+| 16 | 542 s | 0,151 | 9,03 | 3.873 MiB |
+
+- **A diarização custa ~3 min por hora de áudio.** Com lote 4, ASR e alinhamento levaram
+  ~330 s e a diarização com embeddings ~180 s. Ela não sobe o pico, porque roda depois de o
+  alinhador sair da GPU.
+- **Os locutores batem com os leitores.** A 1 h junta cinco contos, e o pyannote achou 3
+  locutores. As trocas caíram nas fronteiras dos contos (24:10, 36:50, 46:39, 56:09), com dois
+  trechos de menos de 1 s atribuídos ao locutor vizinho.
+- **Os embeddings são do `pyannote/wespeaker-voxceleb-resnet34-LM`,** com 256 dimensões, um
+  vetor por locutor em `speaker_embeddings.json`.
+- **No diálogo sintético de 30 s** (duas vozes do Piper, `min_speakers=max_speakers=2`), o teste
+  de integração separou os 2 locutores e alternou as falas certo, exceto a primeira frase ("Bom
+  dia, pessoal."), atribuída ao outro locutor.
