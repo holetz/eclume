@@ -1,0 +1,17 @@
+[package]
+name = "eclume-sync"
+description = "Sync do app desktop do eclume: upload resumível das gravações por PAT, pelo contrato v1."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+rustls-native-certs = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "json"] }
+url = "2"

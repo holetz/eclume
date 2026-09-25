@@ -8,6 +8,7 @@ members = [
     "crates/audio-capture",
     "crates/recorder",
     "crates/detect",
+    "crates/sync",
 ]
 
 [workspace.package]
