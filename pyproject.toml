@@ -47,6 +47,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "D100", "D103", "ANN201"]
 "contracts/**" = ["INP001"]  # script e testes soltos: contracts/ não é pacote Python
+# fakes do WhisperX, do Redis e do S3 nos testes das engines e do worker: assinaturas espelham
+# as reais (argumentos não usados, `Any`), sem docstring por método, com valores de teste literais
+"{engines,worker-gpu}/tests/**" = ["ANN401", "ARG001", "ARG002", "D101", "D102", "D105", "D107", "PLR0913", "PLR0917", "PLR2004", "S105", "S106", "S107", "SLF001"]
 
 [tool.ruff.format]
 quote-style = "double"
