@@ -1,10 +1,14 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
+import { problem, mockFetch } from './test/http'
 
 describe('App', () => {
-  it('abre o shell com a navegação principal', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sem sessão, abre o login', async () => {
+    mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     render(<App />)
-    expect(screen.getByRole('navigation', { name: 'Principal' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
   })
 })
