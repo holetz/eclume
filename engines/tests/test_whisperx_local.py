@@ -20,6 +20,7 @@ from eclume_engines.whisperx_local import (
     WARN_BATCH_REDUCED,
     WARN_FALLBACK_MEDIUM,
     WARN_FLOAT16_REJECTED,
+    WARN_NO_ACCESS,
     WARN_NO_TOKEN,
     WhisperXLocalEngine,
 )
@@ -310,15 +311,38 @@ def test_erro_de_decodificacao(monkeypatch: pytest.MonkeyPatch, fake: FakeWhispe
 
 
 def test_falha_da_diarizacao_com_token_falha_o_job(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
-    class Boom:
-        def __init__(self, **_kw: Any) -> None:
-            msg = "401 Unauthorized: gated repo"
+    original = sys.modules["whisperx.diarize"].DiarizationPipeline
+
+    class Boom(original):
+        def __call__(self, audio: Any, **kw: Any) -> Any:
+            msg = "shape mismatch in segmentation"
             raise RuntimeError(msg)
 
     monkeypatch.setattr(sys.modules["whisperx.diarize"], "DiarizationPipeline", Boom)
     with pytest.raises(EngineError) as info:
         engine().transcribe(AUDIO, EngineOptions())
     assert info.value.code == "diarization_failed"
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        AttributeError("'NoneType' object has no attribute 'to'"),  # pyannote 4 devolve None num 403
+        RuntimeError("403 Client Error: Cannot access gated repo. Not in the authorized list."),
+        type("GatedRepoError", (Exception,), {})("acesso negado"),
+    ],
+)
+def test_sem_acesso_ao_modelo_gated_degrada(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX, erro: Exception):
+    class SemAcesso:
+        def __init__(self, **_kw: Any) -> None:
+            raise erro
+
+    monkeypatch.setattr(sys.modules["whisperx.diarize"], "DiarizationPipeline", SemAcesso)
+    result = engine().transcribe(AUDIO, EngineOptions())
+    assert result.warnings == [WARN_NO_ACCESS]
+    assert result.diarization_model is None
+    assert result.speaker_embeddings == {}
+    assert all(s.speaker is None for s in result.segments)
 
 
 def test_um_modelo_residente_por_vez(fake: FakeWhisperX):

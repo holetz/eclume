@@ -49,6 +49,7 @@ DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
 WARN_NO_TOKEN = "diarization_skipped_no_token"  # noqa: S105 — código de aviso, não segredo
+WARN_NO_ACCESS = "diarization_skipped_no_access"
 WARN_FALLBACK_MEDIUM = "fallback_medium"
 WARN_BATCH_REDUCED = "batch_size_reduced"
 WARN_FLOAT16_REJECTED = "compute_type_float16_rejected"
@@ -263,6 +264,18 @@ class WhisperXLocalEngine:
                     model_name=DIARIZATION_MODEL, token=self.hf_token, device=self.device
                 ),
             )
+        except Exception as exc:
+            if not _is_access_denied(exc):
+                raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
+            logger.warning(
+                "sem acesso a %s com o token atual (termos do modelo não aceitos?): transcrevendo "
+                "sem diarização (um locutor). Erro: %s",
+                DIARIZATION_MODEL,
+                exc,
+            )
+            warnings.append(WARN_NO_ACCESS)
+            return result, None, None
+        try:
             output = pipeline(
                 audio,
                 min_speakers=options.min_speakers,
@@ -284,6 +297,30 @@ def _align_model_name(language: str) -> str | None:
         if name:
             return name
     return None
+
+
+_ACCESS_ERROR_NAMES = frozenset({"GatedRepoError", "RepositoryNotFoundError", "HfHubHTTPError"})
+_ACCESS_MARKERS = ("401", "403", "gated", "authorized list", "restricted")
+
+
+def _is_access_denied(exc: BaseException) -> bool:
+    """Sem acesso ao modelo gated: token recusado ou termos do modelo não aceitos.
+
+    Num 401/403 o pyannote 4 só imprime o erro e devolve `None` em `Pipeline.from_pretrained`, e
+    o WhisperX então falha em `None.to(device)`; os demais casos chegam como erro do
+    huggingface_hub.
+    """
+    seen: BaseException | None = exc
+    while seen is not None:
+        if type(seen).__name__ in _ACCESS_ERROR_NAMES:
+            return True
+        message = str(seen).lower()
+        if isinstance(seen, AttributeError) and "'nonetype' object has no attribute 'to'" in message:
+            return True
+        if any(marker in message for marker in _ACCESS_MARKERS):
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
 
 
 def _stage_error(code: str, stage: str, exc: Exception) -> EngineError:
