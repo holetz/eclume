@@ -26,7 +26,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
-tauri-plugin-updater = "2"
+# Fixado no minor: `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor.
+tauri-plugin-updater = "2.12"
+# O mesmo `reqwest` do updater (sem features próprias): a CA extra entra no cliente dele.
+reqwest = { version = "0.13", default-features = false }
 tokio = { version = "1", features = ["time"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

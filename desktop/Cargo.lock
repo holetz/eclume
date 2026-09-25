@@ -1350,6 +1350,7 @@ dependencies = [
  "log",
  "mac-notification-sys",
  "notify-rust",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",
