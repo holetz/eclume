@@ -2589,9 +2589,9 @@ components:
           minLength: 1
           maxLength: 255
         content_type:
-          description: Tipo do arquivo (`audio/ogg`, `audio/webm`, `video/mp4`).
+          description: "Tipo do arquivo, com parâmetros opcionais (`audio/ogg; codecs=opus`, a saída do navegador; `audio/webm`; `video/mp4`)."
           type: string
-          pattern: "^(audio|video)/[A-Za-z0-9.+-]+$"
+          pattern: "^(audio|video)/[A-Za-z0-9.+-]+(\\s*;.*)?$"
         size_bytes:
           type: integer
           minimum: 1

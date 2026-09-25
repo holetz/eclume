@@ -2773,9 +2773,10 @@ components:
           minLength: 1
           maxLength: 255
         content_type:
-          description: Tipo do arquivo (`audio/ogg`, `audio/webm`, `video/mp4`).
+          description: Tipo do arquivo, com parâmetros opcionais (`audio/ogg; codecs=opus`, a saída do
+            navegador; `audio/webm`; `video/mp4`).
           type: string
-          pattern: ^(audio|video)/[A-Za-z0-9.+-]+$
+          pattern: ^(audio|video)/[A-Za-z0-9.+-]+(\s*;.*)?$
         size_bytes:
           type: integer
           minimum: 1
@@ -4746,7 +4747,7 @@ components:
       summary: Gravação do desktop, 18 MB em Opus
       value:
         filename: 2026-09-18 11-00 Teams.opus
-        content_type: audio/ogg
+        content_type: audio/ogg; codecs=opus
         size_bytes: 19287595
         sha256: e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
         title: Alinhamento do programa de lideranças

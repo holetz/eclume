@@ -41,7 +41,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Upload** resumível em partes (multipart S3 orquestrado pela API): `POST /uploads` com o
   `sha256` do arquivo → partes por `PUT` em URLs opacas que expiram → `POST /uploads/{id}/complete`.
   Mesmo hash de uma gravação do usuário responde 200 `deduplicated` sem transferir nada. Retomar é
-  `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`.
+  `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`. O navegador sobe o áudio já convertido
+  ([formato-audio-upload.md](../code/formato-audio-upload.md)): `audio/ogg; codecs=opus` e o
+  `sha256` em hex minúsculo que a biblioteca de conversão devolve.
 - **Transcrição** no schema de `contracts/transcript.schema.json`: segmentos
   `{id, speaker_id, start_ms, end_ms, text}` (palavras só com `?include=words`), locutores
   `{id, label, person, suggestions}`, `content_hash` do áudio e `revision`, que sobe a cada edição.
