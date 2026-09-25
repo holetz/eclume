@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from eclume_server.routes import (
     admin,
+    admin_settings,
     agent_providers,
     auth,
     groups,
@@ -25,7 +26,18 @@ PREFIX = "/api/v1"
 
 def include_routes(app: FastAPI) -> None:
     """Registra as rotas implementadas."""
-    for module in (auth, tokens, uploads, recordings, transcripts, groups, admin, agent_providers, summaries):
+    for module in (
+        auth,
+        tokens,
+        uploads,
+        recordings,
+        transcripts,
+        groups,
+        admin,
+        admin_settings,
+        agent_providers,
+        summaries,
+    ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.
     app.include_router(recordings.media_router)

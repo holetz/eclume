@@ -27,8 +27,6 @@ NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/admin/secrets", ADMIN),
     ("PUT", "/api/v1/admin/secrets/{secret_name}", ADMIN),
     ("DELETE", "/api/v1/admin/secrets/{secret_name}", ADMIN),
-    ("GET", "/api/v1/admin/settings", ADMIN),
-    ("PATCH", "/api/v1/admin/settings", ADMIN),
     ("POST", "/api/v1/auth/invitations/{invitation_token}/accept", ADMIN),
     ("GET", "/api/v1/collections", PEOPLE_SEARCH),
     ("POST", "/api/v1/collections", PEOPLE_SEARCH),
