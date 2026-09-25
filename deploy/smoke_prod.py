@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from email.message import Message
 
 FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fixtures" / "duas-vozes.ogg"
 
@@ -51,8 +52,8 @@ class Api:
 
     def raw(
         self, method: str, url: str, body: bytes | None = None, headers: dict[str, str] | None = None
-    ) -> tuple[int, dict[str, str], bytes]:
-        """Requisição crua: status, headers e corpo, sem lançar em status de erro."""
+    ) -> tuple[int, Message, bytes]:
+        """Requisição crua: status, headers (sem caixa: o Caddy manda `Etag`) e corpo, sem lançar em erro."""
         full = url if url.startswith("http") else self.base + url
         request = urllib.request.Request(full, data=body, method=method, headers=headers or {})  # noqa: S310 — URL do próprio stack
         csrf = self._csrf()
@@ -60,9 +61,9 @@ class Api:
             request.add_header("X-CSRF-Token", csrf)
         try:
             with self.opener.open(request, timeout=60) as response:
-                return response.status, dict(response.headers), response.read()
+                return response.status, response.headers, response.read()
         except urllib.error.HTTPError as exc:
-            return exc.code, dict(exc.headers), exc.read()
+            return exc.code, exc.headers, exc.read()
 
     def json(
         self, method: str, url: str, payload: dict[str, Any] | None = None, expect: tuple[int, ...] = (200,)
@@ -145,14 +146,16 @@ def _upload(api: Api, audio: Path) -> str:
         _step(f"áudio já enviado antes: gravação {created['recording_id']}")
         return created["recording_id"]
     size = created["part_size"]
-    parts = []
+    # Um upload retomado (mesmo sha256, ainda in_progress) só traz URL das partes que faltam.
+    parts = [{"part_number": p["part_number"], "etag": p["etag"]} for p in created["parts_received"]]
     for part in created["parts"]:
         number = part["part_number"]
         chunk = data[(number - 1) * size : number * size]
         status, headers, body = api.raw(part["method"], part["url"], chunk, part.get("headers") or {})
         if status != 200:  # noqa: PLR2004
             _fail(f"PUT parte {number} → {status}: {body[:200]!r}")
-        parts.append({"part_number": number, "etag": headers.get("ETag") or headers.get("etag")})
+        parts.append({"part_number": number, "etag": headers["ETag"]})
+    parts.sort(key=lambda p: p["part_number"])
     recording = api.json("POST", f"/api/v1/uploads/{created['id']}/complete", {"parts": parts}, expect=(200, 201))
     recording_id = recording.get("id") or recording.get("recording_id")
     _step(f"upload concluído: {len(parts)} parte(s), gravação {recording_id}")
