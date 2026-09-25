@@ -39,6 +39,33 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         raise invalid_field("cursor", "cursor inválido") from exc
 
 
+def encode_position(*values: object) -> str:
+    """Cursor opaco de uma posição qualquer (texto, número, id), para ordenações sem data."""
+    raw = json.dumps([str(value) for value in values]).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_position(cursor: str, size: int) -> list[str]:
+    """Os `size` valores de um cursor de `encode_position`; inválido vira 422 no campo `cursor`."""
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        values = json.loads(base64.urlsafe_b64decode(padded))
+    except (ValueError, TypeError) as exc:
+        raise invalid_field("cursor", "cursor inválido") from exc
+    if not isinstance(values, list) or len(values) != size or not all(isinstance(v, str) for v in values):
+        raise invalid_field("cursor", "cursor inválido")
+    return values
+
+
+def decode_named_position(cursor: str) -> tuple[str, UUID]:
+    """Posição `(nome ordenável, id)` das listas em ordem alfabética."""
+    name, row_id = decode_position(cursor, 2)
+    try:
+        return name, UUID(row_id)
+    except ValueError as exc:
+        raise invalid_field("cursor", "cursor inválido") from exc
+
+
 def page(items: list[dict[str, Any]], rows: list[Any], limit: int, sort_key: str) -> dict[str, Any]:
     """Monta a página a partir de `limit + 1` linhas lidas: a sobra só diz que há próxima."""
     next_cursor = None

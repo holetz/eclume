@@ -26,6 +26,7 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized, validation_failed
 from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
+from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
 from eclume_server.storage import audio_key
@@ -172,9 +173,6 @@ async def create_upload(
     body: UploadCreate, request: Request, response: Response, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
     """Inicia um upload; mesmo hash de uma gravação do usuário deduplica (200), de um upload aberto retoma."""
-    if body.collection_ids:
-        # Coleções nascem na spec pessoas-organizacao-e-busca: hoje nenhum id existe.
-        raise invalid_field("collection_ids", "coleção inexistente")
     part_size = ctx.settings.upload_part_size
     part_count = math.ceil(body.size_bytes / part_size)
     if part_count > MAX_PARTS:
@@ -195,6 +193,7 @@ async def create_upload(
     }
     try:
         async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+            await check_collections(conn, body.collection_ids)
             duplicate = (
                 await conn.execute(
                     select(t.recordings.c.id).where(
@@ -392,6 +391,9 @@ async def _finish(
     matches = actual == row["sha256"]
     requested = row["request"]
     recording_id = row["new_recording_id"]
+    # Coleções pedidas na criação que o usuário excluiu enquanto o upload andava ficam de fora.
+    wanted = [UUID(c) for c in dict.fromkeys(requested.get("collection_ids") or [])]
+    existing = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
     now = _now()
     capture = requested.get("capture")
     values = {
@@ -410,7 +412,7 @@ async def _finish(
         "content_hash": f"sha256:{actual}",
         "audio_key": key,
         "tags": requested.get("tags") or [],
-        "collection_ids": [],
+        "collection_ids": [c for c in wanted if c in existing],
         "metadata": requested.get("metadata") or {},
         "capture": capture,
     }

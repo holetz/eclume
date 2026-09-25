@@ -1,9 +1,11 @@
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
 import { JobProgress, StatusBadge } from '../library/RecordingStatus'
+import { OrganizePanel } from './OrganizePanel'
 import { useRecording, useTranscript } from './queries'
+import { parseStart } from './segments'
 import styles from './RecordingPage.module.css'
 import { SpeakersPanel } from './SpeakersPanel'
 import { SummariesPanel } from './SummariesPanel'
@@ -11,6 +13,8 @@ import { TranscriptView } from './TranscriptView'
 
 export function RecordingPage() {
   const { id = '' } = useParams()
+  const [params] = useSearchParams()
+  const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
   usePageTitle(recording.data?.title ?? 'Gravação')
@@ -65,10 +69,16 @@ export function RecordingPage() {
       ) : (
         <div className={styles.layout}>
           <div className={styles.main}>
-            <TranscriptView recordingId={data.id} transcript={transcript.data} />
+            <TranscriptView
+              key={startMs ?? 'inicio'}
+              recordingId={data.id}
+              transcript={transcript.data}
+              startMs={startMs}
+            />
           </div>
-          <aside className={styles.side} aria-label="Locutores e resumos">
+          <aside className={styles.side} aria-label="Locutores, organização e resumos">
             <SpeakersPanel transcript={transcript.data} />
+            <OrganizePanel recording={data} />
             <SummariesPanel transcriptId={transcript.data.id} />
           </aside>
         </div>

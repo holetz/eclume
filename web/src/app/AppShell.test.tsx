@@ -25,7 +25,7 @@ describe('navegação', () => {
     const items = NAV_ITEMS.map((i) => (i.adminOnly ? { ...i, enabled: true } : i))
     const labels = (role: 'admin' | 'member') =>
       navGroups(role, items).flatMap((g) => g.items.map((i) => i.label))
-    expect(labels('member')).not.toContain('Pessoas')
+    expect(labels('member')).toContain('Pessoas')
     expect(labels('member')).not.toContain('Painel admin')
     expect(labels('admin')).toContain('Painel admin')
   })

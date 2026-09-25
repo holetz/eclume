@@ -12,8 +12,11 @@ from eclume_server.routes import (
     admin_settings,
     agent_providers,
     auth,
+    collections,
     groups,
+    people,
     recordings,
+    search,
     summaries,
     tokens,
     transcripts,
@@ -43,6 +46,9 @@ def include_routes(app: FastAPI) -> None:
         admin_settings,
         agent_providers,
         summaries,
+        people,
+        collections,
+        search,
     ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.

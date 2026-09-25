@@ -1,9 +1,9 @@
 ---
 type: standard
-title: Núcleo do server — persistência, isolamento, autenticação e upload
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash), organiza (pessoas da organização, coleções do usuário, edição da transcrição pelo dono), busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
-tags: [code, server, postgres, rls, auth, upload, testes]
+tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
@@ -11,7 +11,7 @@ source: holetz/eclume#5, holetz/eclume#12
 maintainer: holetz
 ---
 
-# Núcleo do server — persistência, isolamento, autenticação e upload
+# Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
 
 O pacote `eclume_server` (`server/`) implementa o [contrato v1](../api/contrato-v1.md) com
 FastAPI, SQLAlchemy 2 async (asyncpg), arq/Redis e boto3 contra o MinIO. As consultas são SQL
@@ -43,8 +43,9 @@ Tudo por ambiente (`eclume_server/config.py`):
   RLS, papéis e `GRANT` são DDL que o autogenerate não expressa.
 - `eclume_server/db/tables.py` descreve as tabelas em SQLAlchemy Core **só para tipar** as
   consultas (jsonb, arrays, uuid); nunca cria nada.
-- Pessoas (`speakers.person_id`) e coleções (`recordings.collection_ids`) já têm coluna, mas as
-  tabelas e FKs chegam com a spec `pessoas-organizacao-e-busca`.
+- Uma migration nova ganha o próximo número livre **na `main`**, não na branch: duas specs em
+  paralelo não disputam o mesmo `NNN`. O runner aplica toda migration ainda não aplicada, então a
+  ordem de chegada entre branches não importa.
 
 ## Isolamento por RLS
 
@@ -68,6 +69,14 @@ Tudo por ambiente (`eclume_server/config.py`):
   comandos. As regras do painel estão em [server-admin.md](server-admin.md).
 - A API responde **404** para o que a política esconde; quem vê por compartilhamento e tenta
   escrever recebe **403**.
+- **Operador não `LEAKPROOF` não chega ao índice sob a RLS.** O planner aplica antes as quals da
+  política e só leva a um índice a qual do usuário que for `LEAKPROOF`: igualdade de `uuid` e
+  `text` serve, `@@` (tsvector) e `@>`/`ANY` de array não. Quando o índice importa, uma função
+  `SECURITY DEFINER` (com `SET search_path = public, pg_temp`) usa o índice restrita a
+  `eclume_org()` e devolve **só chaves**; a consulta de `eclume_app` junta essas chaves à tabela, e
+  a política continua decidindo o que o usuário vê. É o caso de `eclume_segment_matches`.
+- **Efeito que atravessa a visibilidade** (renomear uma pessoa muda o nome em transcrições que
+  quem editou não vê) mora num gatilho `SECURITY DEFINER`, nunca num `system_tx` dentro da rota.
 
 ## Autenticação
 
@@ -113,6 +122,50 @@ Tudo por ambiente (`eclume_server/config.py`):
 - `GET /recordings/{id}/audio` redireciona (302) para `/media/recordings/{id}/audio?expires=&sig=`,
   servido pela API com `Range` a partir do MinIO — fora de `/api/v1`, opaco para o cliente.
 
+## Pessoas, coleções e edição da transcrição
+
+- **Pessoas são da organização** (`people`, política `org_id = eclume_org()`): todo membro lê e
+  escreve, com `people:read`/`people:write` no PAT. E-mail único por organização
+  (`lower(email)`): 409 na criação, 422 em `email` no `PATCH` (que não declara 409).
+  `sort_name = lower(eclume_unaccent(name))` ordena o diretório e atende `q` por prefixo do nome,
+  de qualquer palavra do nome ou do e-mail; cursor `(sort_name, id)`. `eclume_unaccent` é o
+  `unaccent` com dicionário fixo, `IMMUTABLE`, para caber em coluna gerada.
+- **Locutor ↔ pessoa** por FK composta `speakers (person_id, org_id) → people (id, org_id)` com
+  `ON DELETE SET NULL (person_id)`: vínculo entre organizações é impossível no banco, e excluir a
+  pessoa só desliga os locutores (o `label` fica). `transcript_count` e `last_seen_at` contam só
+  transcrições visíveis a quem pergunta. Renomear ou excluir a pessoa sobe o `updated_at` (não a
+  `revision`) de toda transcrição em que ela fala, pelo gatilho `eclume_touch_person_transcripts`.
+- **`voice_consent`** é só armazenado (`status` `none` ao nascer); o contrato v1 não tem campo de
+  escrita, e a comparação de voz é da spec de identificação por voz.
+- **Edição da transcrição** — `PATCH` de locutor (`label`, `person_id`), `POST .../speakers/merge`
+  e `PATCH` de segmento — é só do dono da gravação, com `transcripts:write`; quem vê por
+  compartilhamento recebe 403. Toda edição sobe `revision` e `updated_at`. Ligar sem `label` usa o
+  nome da pessoa; pessoa inexistente ou de outra organização → 422 em `person_id`. A mesclagem
+  apaga os locutores de origem e as impressões de voz deles e recalcula `talk_ms`; corrigir o
+  texto descarta `words` e reindexa o `tsv` (coluna gerada).
+- **Coleções são do usuário** (`collections`, política de dono). `recordings.collection_ids`
+  segue array: a API só aceita ids de coleções do próprio usuário (422 em `collection_ids`, no
+  `PATCH /recordings` e no `POST /uploads`, que as aplica no `complete`), deduplica, e excluir a
+  coleção a tira das gravações (`array_remove`) subindo o `updated_at` delas. `recording_count`
+  conta gravações visíveis. `GET /tags` agrega `unnest(tags)` das gravações visíveis.
+
+## Busca full-text
+
+- Config `eclume_pt`: cópia de `portuguese` com `unaccent` antes do `portuguese_stem`, então
+  "liderancas" acha "lideranças". `segments.tsv` é coluna gerada `to_tsvector('eclume_pt', text)`
+  com índice GIN.
+- `GET /search` roda sob a RLS. Com `q`: `websearch_to_tsquery('eclume_pt', q)` (frase entre aspas,
+  `-exclusão`), junção com `eclume_segment_matches(tsquery)` para usar o GIN, ordem `ts_rank_cd`
+  desc, depois `recorded_at` desc e a posição da fala. Só com `person`: as falas da pessoa em ordem
+  cronológica, `rank` 0. Sem `q` nem `person` → 422. Filtros `person`, `from`/`to` (`recorded_at`),
+  `tag` e `collection` combinam com qualquer um dos modos.
+- `highlight` = `ts_headline` com `HighlightAll` e marcadores sentinela (`\x02`/`\x03`, tirados
+  antes do texto); o Python escapa o texto e só então troca os marcadores por `<mark>`/`</mark>`.
+  Nenhum outro HTML chega ao cliente.
+- Cursor = deslocamento opaco (`encode_position`): o ranking em `real` não dá keyset estável.
+- Medida (240 mil segmentos, pg16 do host): termo raro 14 ms pela função contra 956 ms do `@@`
+  direto sob a RLS; termo comum (24 mil trechos) 217 ms contra 457 ms.
+
 ## Testes
 
 - Postgres, Redis e MinIO reais, de `deploy/docker-compose.test.yml` (projeto `eclume-test`,
@@ -122,7 +175,14 @@ Tudo por ambiente (`eclume_server/config.py`):
 - **Conformidade:** um hook de resposta no `TestClient` valida toda resposta de `/api/v1` contra
   `contracts/openapi-v1.bundled.yaml` com os objetos fechados (`strictify`): status declarado,
   headers obrigatórios e corpo. Um teste confere que implementadas + pendentes = o contrato.
-- **Isolamento** é provado pela API e por SQL direto sob `eclume_app` (`test_isolation.py`).
+- **Isolamento** é provado pela API e por SQL direto sob `eclume_app` (`test_isolation.py`); a
+  busca tem o próprio: nunca devolve segmento de gravação inacessível, antes e depois de
+  compartilhar e de desfazer o compartilhamento (`test_search.py`).
+- `eclume_server_testing.fakes.transcribed(api, settings, **campos)` sobe um áudio e roda os dois
+  workers: devolve a gravação já com a transcrição de 3 locutores da fixture do contrato.
+- Rodando em paralelo com outra suíte no mesmo host, suba o compose com projeto e portas próprios
+  (`ECLUME_TEST_PG_PORT`, `ECLUME_TEST_REDIS_PORT`, `ECLUME_TEST_MINIO_PORT`) e aponte
+  `ECLUME_TEST_DATABASE_URL`, `ECLUME_TEST_REDIS_URL` e `ECLUME_TEST_S3_ENDPOINT` para elas.
 - O ciclo de transcrição roda com o worker GPU fake (`eclume_server_testing/fakes.py`) e o worker
   CPU real. Um `arq.Worker` guarda o loop corrente ao nascer: crie-o dentro do loop que o roda.
 

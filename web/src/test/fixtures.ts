@@ -6,20 +6,26 @@ import adminSettings from '../../../contracts/fixtures/admin-settings.json'
 import agentProviderPage from '../../../contracts/fixtures/agent-provider-page.json'
 import groupPage from '../../../contracts/fixtures/group-page.json'
 import invitation from '../../../contracts/fixtures/invitation.json'
+import collectionPage from '../../../contracts/fixtures/collection-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
+import person from '../../../contracts/fixtures/person.json'
+import personPage from '../../../contracts/fixtures/person-page.json'
 import recordingPage from '../../../contracts/fixtures/recording-page.json'
 import recordingQueued from '../../../contracts/fixtures/recording-queued.json'
 import recordingTranscribed from '../../../contracts/fixtures/recording-transcribed.json'
 import secretList from '../../../contracts/fixtures/secret-list.json'
+import searchPage from '../../../contracts/fixtures/search-page.json'
 import speakerLinked from '../../../contracts/fixtures/speaker-linked.json'
 import summaryDone from '../../../contracts/fixtures/summary-done.json'
 import summaryPage from '../../../contracts/fixtures/summary-page.json'
 import summaryQueued from '../../../contracts/fixtures/summary-queued.json'
 import summaryTemplatePage from '../../../contracts/fixtures/summary-template-page.json'
+import tagList from '../../../contracts/fixtures/tag-list.json'
 import tokenCreated from '../../../contracts/fixtures/token-created.json'
 import tokenPage from '../../../contracts/fixtures/token-page.json'
 import transcript from '../../../contracts/fixtures/transcript-3-locutores.json'
+import transcriptPage from '../../../contracts/fixtures/transcript-page.json'
 import uploadCreated from '../../../contracts/fixtures/upload-created.json'
 import uploadDeduplicated from '../../../contracts/fixtures/upload-deduplicated.json'
 import uploadInProgress from '../../../contracts/fixtures/upload-in-progress.json'
@@ -41,6 +47,7 @@ export const fixtures = {
   recordingQueued: fresh<Schemas['Recording']>(recordingQueued),
   recordingTranscribed: fresh<Schemas['Recording']>(recordingTranscribed),
   transcript: fresh<Transcript>(transcript),
+  transcriptPage: fresh<Schemas['TranscriptPage']>(transcriptPage),
   speakerLinked: fresh<Transcript['speakers'][number]>(speakerLinked),
   summaryPage: fresh<Schemas['SummaryPage']>(summaryPage),
   summaryQueued: fresh<Schemas['Summary']>(summaryQueued),
@@ -59,4 +66,9 @@ export const fixtures = {
   userPage: fresh<Schemas['UserPage']>(userPage),
   invitation: fresh<Schemas['Invitation']>(invitation),
   groupPage: fresh<Schemas['GroupPage']>(groupPage),
+  person: fresh<Schemas['Person']>(person),
+  personPage: fresh<Schemas['PersonPage']>(personPage),
+  searchPage: fresh<Schemas['SearchPage']>(searchPage),
+  collectionPage: fresh<Schemas['CollectionPage']>(collectionPage),
+  tagList: fresh<Schemas['TagList']>(tagList),
 }

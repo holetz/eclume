@@ -1,0 +1,14 @@
+# Contexto do build da imagem do server (lido pelo BuildKit por ficar ao lado do Dockerfile):
+# só os manifestos do workspace uv e o código dos pacotes da imagem.
+*
+!pyproject.toml
+!uv.lock
+!engines/pyproject.toml
+!engines/README.md
+!engines/src/
+!server/pyproject.toml
+!server/README.md
+!server/src/
+!worker-gpu/pyproject.toml
+!worker-gpu/README.md
+**/__pycache__

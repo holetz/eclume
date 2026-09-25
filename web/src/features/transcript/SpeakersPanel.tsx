@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { formatDuration } from '../library/format'
+import { PEOPLE_KEY } from '../people/queries'
+import { PersonCombobox } from './PersonCombobox'
 import { transcriptKey, updateTranscriptCache } from './queries'
 import { speakerColorIndex, speakerName, type Speaker, type Transcript } from './segments'
 import styles from './SpeakersPanel.module.css'
@@ -50,22 +53,35 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
 function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; speaker: Speaker; color: number }) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
+  const [linking, setLinking] = useState(false)
   const [label, setLabel] = useState(speaker.label)
   const inputId = useId()
+  const patch = (body: { label?: string; person_id?: string | null }) =>
+    unwrap(
+      api.PATCH('/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}', {
+        params: { path: { transcript_id: transcriptId, speaker_id: speaker.id } },
+        body,
+      }),
+    )
+  const apply = (updated: Speaker) =>
+    updateTranscriptCache(queryClient, transcriptId, (t) => ({
+      ...t,
+      speakers: t.speakers.map((s) => (s.id === updated.id ? updated : s)),
+    }))
   const rename = useMutation({
-    mutationFn: (newLabel: string) =>
-      unwrap(
-        api.PATCH('/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}', {
-          params: { path: { transcript_id: transcriptId, speaker_id: speaker.id } },
-          body: { label: newLabel },
-        }),
-      ),
+    mutationFn: (newLabel: string) => patch({ label: newLabel }),
     onSuccess: (updated) => {
-      updateTranscriptCache(queryClient, transcriptId, (t) => ({
-        ...t,
-        speakers: t.speakers.map((s) => (s.id === updated.id ? updated : s)),
-      }))
+      apply(updated)
       setEditing(false)
+    },
+  })
+  // Ligar ou desligar muda contagens e falas no diretório de pessoas.
+  const link = useMutation({
+    mutationFn: (personId: string | null) => patch({ person_id: personId }),
+    onSuccess: (updated) => {
+      apply(updated)
+      queryClient.invalidateQueries({ queryKey: PEOPLE_KEY })
+      setLinking(false)
     },
   })
 
@@ -75,15 +91,25 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
     if (value) rename.mutate(value)
   }
 
+  const name = speakerName(speaker)
   const suggestion = speaker.person ? undefined : speaker.suggestions?.[0]
+  const idle = !editing && !linking
 
   return (
     <li className={styles.item} data-speaker={color}>
       <div className={styles.row}>
         <span className={styles.dot} aria-hidden="true" />
         <div className={styles.info}>
-          <span className={styles.name}>{speakerName(speaker)}</span>
-          <span className={styles.detail}>{speaker.person ? 'Pessoa confirmada' : 'Sem pessoa ligada'}</span>
+          <span className={styles.name}>{name}</span>
+          <span className={styles.detail}>
+            {speaker.person ? (
+              <>
+                Pessoa: <Link to={`/pessoas/${speaker.person.id}`}>{speaker.person.name}</Link>
+              </>
+            ) : (
+              'Sem pessoa ligada'
+            )}
+          </span>
           {speaker.talk_ms != null && (
             <span className={styles.detail}>{formatDuration(speaker.talk_ms)} de fala</span>
           )}
@@ -93,7 +119,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
             </span>
           )}
         </div>
-        {!editing && (
+      </div>
+      {idle && (
+        <div className={styles.buttons}>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -102,16 +130,61 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
               rename.reset()
               setEditing(true)
             }}
-            aria-label={`Renomear ${speakerName(speaker)}`}
+            aria-label={`Renomear ${name}`}
           >
             Renomear
           </button>
-        )}
-      </div>
+          {speaker.person ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => link.mutate(null)}
+              disabled={link.isPending}
+              aria-label={`Desligar ${name} de ${speaker.person.name}`}
+            >
+              Desligar pessoa
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                link.reset()
+                setLinking(true)
+              }}
+              aria-label={`Ligar ${name} a uma pessoa`}
+            >
+              Ligar a pessoa
+            </button>
+          )}
+          {suggestion && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => link.mutate(suggestion.person.id)}
+              disabled={link.isPending}
+            >
+              Confirmar {suggestion.person.name}
+            </button>
+          )}
+        </div>
+      )}
+      {linking && (
+        <PersonCombobox
+          label={`Pessoa para ${name}`}
+          onSelect={(person) => link.mutate(person.id)}
+          onCancel={() => setLinking(false)}
+        />
+      )}
+      {link.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(link.error)}
+        </p>
+      )}
       {editing && (
         <form className={styles.form} onSubmit={submit}>
           <label htmlFor={inputId} className="visually-hidden">
-            Novo nome de {speakerName(speaker)}
+            Novo nome de {name}
           </label>
           <input
             id={inputId}

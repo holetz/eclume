@@ -59,7 +59,6 @@ impl HttpUploader {
         }
     }
 
-
     fn lock(&self) -> Result<MutexGuard<'_, Queue>> {
         self.queue
             .lock()
