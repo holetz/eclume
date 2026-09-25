@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-SUMMARIES = "holetz/eclume#9 (agentes-e-templates)"
 PEOPLE_SEARCH = "holetz/eclume#11 (pessoas-organizacao-e-busca)"
 ADMIN = "holetz/eclume#12 (painel-admin)"
 
@@ -46,15 +45,6 @@ NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("PATCH", "/api/v1/transcripts/{transcript_id}/segments/{segment_id}", PEOPLE_SEARCH),
     ("POST", "/api/v1/transcripts/{transcript_id}/speakers/merge", PEOPLE_SEARCH),
     ("PATCH", "/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}", PEOPLE_SEARCH),
-    ("GET", "/api/v1/transcripts/{transcript_id}/summaries", SUMMARIES),
-    ("POST", "/api/v1/transcripts/{transcript_id}/summaries", SUMMARIES),
-    ("GET", "/api/v1/summaries/{summary_id}", SUMMARIES),
-    ("DELETE", "/api/v1/summaries/{summary_id}", SUMMARIES),
-    ("GET", "/api/v1/summary-templates", SUMMARIES),
-    ("POST", "/api/v1/summary-templates", SUMMARIES),
-    ("GET", "/api/v1/summary-templates/{template_id}", SUMMARIES),
-    ("PATCH", "/api/v1/summary-templates/{template_id}", SUMMARIES),
-    ("DELETE", "/api/v1/summary-templates/{template_id}", SUMMARIES),
 )
 
 
