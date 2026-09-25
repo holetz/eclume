@@ -1,0 +1,9 @@
+//! Núcleo de gravação do app desktop do eclume, sem dispositivo de áudio: mixagem das fontes,
+//! codificação em Ogg/Opus mono 16 kHz, fila local de gravações e as interfaces que a spec
+//! `desktop-deteccao-e-sync` implementa.
+
+pub mod mix;
+pub mod source;
+
+pub use eclume_audio_capture::AudioSource;
+pub use mix::{Mixer, FRAME, TARGET_RATE};
