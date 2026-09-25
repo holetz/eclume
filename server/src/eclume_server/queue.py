@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING, Any
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
+from arq.constants import in_progress_key_prefix
 
 if TYPE_CHECKING:
     from uuid import UUID
 
 GPU_QUEUE = "eclume:gpu"
 DEFAULT_QUEUE = "eclume:default"
+# Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
+GPU_HEALTH_KEY = "eclume:gpu:health"
 DEFAULT_LANGUAGE = "pt"
 
 # Etapas do worker GPU → `Job.stage` do contrato v1.
@@ -112,18 +115,39 @@ class Queue:
             "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
         )
 
-    async def progress(self, recording_ids: list[UUID]) -> dict[UUID, tuple[str | None, float]]:
-        """Progresso publicado pelo worker GPU, por gravação."""
+    async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
+        """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""
         if not recording_ids:
             return {}
         pipe = self.pool.pipeline(transaction=False)
         for recording_id in recording_ids:
             pipe.hgetall(progress_key(recording_id))
         raw = await pipe.execute()
-        result = {}
-        for recording_id, values in zip(recording_ids, raw, strict=True):
-            decoded = {k.decode(): v.decode() for k, v in values.items()} if values else None
-            parsed = job_progress(decoded)
-            if parsed is not None:
-                result[recording_id] = parsed
-        return result
+        return {
+            recording_id: _decode(values) for recording_id, values in zip(recording_ids, raw, strict=True) if values
+        }
+
+    async def progress(self, recording_ids: list[UUID]) -> dict[UUID, tuple[str | None, float]]:
+        """Progresso publicado pelo worker GPU, por gravação."""
+        raw = await self.raw_progress(recording_ids)
+        return {recording_id: parsed for recording_id, values in raw.items() if (parsed := job_progress(values))}
+
+    async def depth(self, queue_name: str) -> tuple[int, int]:
+        """`(na fila, rodando)` de uma fila arq: o zset guarda os dois até o job terminar."""
+        job_ids = await self.pool.zrange(queue_name, 0, -1)
+        if not job_ids:
+            return 0, 0
+        pipe = self.pool.pipeline(transaction=False)
+        for job_id in job_ids:
+            pipe.exists(in_progress_key_prefix + job_id.decode())
+        running = sum(await pipe.execute())
+        return len(job_ids) - running, running
+
+    async def gpu_health(self) -> dict[str, str] | None:
+        """Último heartbeat do worker GPU, ou `None` se expirou (worker parado há mais de 45 s)."""
+        values = await self.pool.hgetall(GPU_HEALTH_KEY)
+        return _decode(values) if values else None
+
+
+def _decode(values: dict[bytes, bytes]) -> dict[str, str]:
+    return {k.decode(): v.decode() for k, v in values.items()}
