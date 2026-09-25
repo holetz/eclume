@@ -113,10 +113,9 @@ async def set_voice_consent(person_id: UUID, body: VoiceConsentPut, principal: M
         return person_json(await get_person(conn, person_id))
 
 
-_SAMPLES = text(
-    """
+_SAMPLES = """
     SELECT s.transcript_id, r.title AS recording_title, s.speaker_id, s.model, s.talk_ms,
-           s.created_by, u.name AS created_by_name, s.created_at, s.embedding::text AS embedding
+           s.created_by, u.name AS created_by_name, s.created_at{vector}
     FROM voice_samples s
     LEFT JOIN transcripts tr ON tr.id = s.transcript_id
     LEFT JOIN recordings r ON r.id = tr.recording_id
@@ -124,7 +123,9 @@ _SAMPLES = text(
     WHERE s.person_id = :person
     ORDER BY s.created_at DESC, s.transcript_id, s.speaker_id
     """
-)
+# O vetor só é lido na exportação (admin); a página da pessoa nunca o carrega.
+_SAMPLES_PLAIN = text(_SAMPLES.format(vector=""))
+_SAMPLES_WITH_VECTORS = text(_SAMPLES.format(vector=", s.embedding::text AS embedding"))
 
 
 def _sample_json(row: Any, *, embedding: bool) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAlchemy
@@ -148,7 +149,7 @@ async def get_voiceprint(person_id: UUID, principal: Member, ctx: Ctx) -> dict[s
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         person = person_json(await get_person(conn, person_id))
         settings = await org_voice(conn, principal.org_id)
-        rows = (await conn.execute(_SAMPLES, {"person": person_id})).all()
+        rows = (await conn.execute(_SAMPLES_PLAIN, {"person": person_id})).all()
     samples = [_sample_json(row, embedding=False) for row in rows]
     return {
         "person_id": str(person_id),
@@ -228,7 +229,10 @@ async def export_voiceprint(person_id: UUID, principal: Admin, ctx: Ctx) -> Resp
             }
             for row in consents
         ]
-        samples = [_sample_json(row, embedding=True) for row in await conn.execute(_SAMPLES, {"person": person_id})]
+        samples = [
+            _sample_json(row, embedding=True)
+            for row in await conn.execute(_SAMPLES_WITH_VECTORS, {"person": person_id})
+        ]
         await audit(conn, principal.org_id, "exported", person_id=person_id, actor_id=principal.user_id)
         a = t.voice_audit.c
         events = (
