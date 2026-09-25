@@ -98,7 +98,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM summary_templates WHERE org_id = target AND owner_id IS NULL) THEN
         RETURN;
     END IF;
-    INSERT INTO summary_templates (org_id, name, description, instructions)
+    -- Instantes distintos: a listagem ordena por `created_at` e os três nascem na mesma transação.
+    INSERT INTO summary_templates (org_id, name, description, instructions, created_at, updated_at)
     VALUES (
         target,
         'Ata de reunião',
@@ -106,10 +107,12 @@ BEGIN
         'Escreva a ata da reunião em Markdown, com as seções Contexto (uma ou duas frases), '
         'Participantes, Pontos discutidos, Decisões e Encaminhamentos. Cada encaminhamento é uma '
         'caixa de seleção (`- [ ]`) com responsável e prazo, quando ditos. Use os nomes dos '
-        'locutores como aparecem na transcrição. Não invente o que não foi dito.'
+        'locutores como aparecem na transcrição. Não invente o que não foi dito.',
+        now(),
+        now()
     )
     RETURNING id INTO ata;
-    INSERT INTO summary_templates (org_id, name, description, instructions)
+    INSERT INTO summary_templates (org_id, name, description, instructions, created_at, updated_at)
     VALUES
         (
             target,
@@ -117,7 +120,9 @@ BEGIN
             'Até cinco tópicos para a diretoria.',
             'Resuma a reunião para a diretoria em até cinco tópicos: objetivo, principais '
             'conclusões, riscos, decisões e próximos passos. Frases curtas, sem detalhes '
-            'operacionais. Não invente o que não foi dito.'
+            'operacionais. Não invente o que não foi dito.',
+            now() + interval '1 millisecond',
+            now() + interval '1 millisecond'
         ),
         (
             target,
@@ -126,7 +131,9 @@ BEGIN
             'Liste só as decisões tomadas e as ações combinadas, em duas seções Markdown: '
             'Decisões (uma por item) e Ações (`- [ ] ação — responsável — prazo`, com "a definir" '
             'quando não dito). Indique o momento aproximado (HH:MM:SS) de cada item. Não invente '
-            'o que não foi dito.'
+            'o que não foi dito.',
+            now() + interval '2 milliseconds',
+            now() + interval '2 milliseconds'
         );
     UPDATE org_settings
     SET summarization = jsonb_set(summarization, '{default_template_id}', to_jsonb(ata::text))
