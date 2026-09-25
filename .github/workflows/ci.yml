@@ -67,12 +67,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Dependências de sistema do Tauri 2
+      - name: Dependências de sistema do Tauri 2 e da captura de áudio
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            libxdo-dev libssl-dev build-essential
+            libxdo-dev libssl-dev build-essential \
+            libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy

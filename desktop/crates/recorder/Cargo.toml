@@ -1,0 +1,18 @@
+[package]
+name = "eclume-recorder"
+description = "Núcleo de gravação do app desktop do eclume: mixagem, Ogg/Opus e fila local."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+eclume-audio-capture = { path = "../audio-capture", default-features = false }
+resampler = { path = "../resampler" }
+anyhow = "1"
+log = "0.4"
+ogg = "0.9"
+opus = "0.4"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }

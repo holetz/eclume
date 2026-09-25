@@ -1,0 +1,30 @@
+# Verificação sob demanda do app desktop em Windows e macOS: só `cargo check`, disparado à mão
+# (`gh workflow run desktop-plataformas.yml`). Não roda em PR nem em push: com o repositório
+# privado, o minuto de macOS custa 10× e o de Windows 2×. O job Linux do `ci.yml` segue sendo a
+# prova de cada PR; a validação funcional nessas plataformas é da spec `distribuicao-desktop`.
+name: desktop-plataformas
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-plataformas-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - run: cargo check --manifest-path desktop/Cargo.toml --workspace --all-targets --locked
