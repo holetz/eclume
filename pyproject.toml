@@ -7,7 +7,7 @@
 package = false
 
 [tool.uv.workspace]
-members = ["engines", "server"]
+members = ["engines", "server", "worker-gpu"]
 
 [dependency-groups]
 dev = [
@@ -18,7 +18,14 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["engines/src", "engines/tests", "server/src", "server/tests"]
+src = [
+  "engines/src",
+  "engines/tests",
+  "server/src",
+  "server/tests",
+  "worker-gpu/src",
+  "worker-gpu/tests",
+]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -38,5 +45,5 @@ ignore = [
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["engines/tests", "server/tests"]
+testpaths = ["engines/tests", "server/tests", "worker-gpu/tests"]
 addopts = "--import-mode=importlib"
