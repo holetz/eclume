@@ -29,7 +29,7 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ['../*', '/*'],
+              regex: '^(\\.\\./|/)',
               message: 'src/lib/media-convert/ não importa de fora da própria pasta.',
             },
           ],
