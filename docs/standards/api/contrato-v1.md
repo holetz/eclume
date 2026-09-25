@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -34,7 +34,11 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Só sessão:** gestão de PATs, escrita de grupos, `/api/v1/admin/*` (que exige ainda o papel
   `admin`) e as rotas de voz (tag `voice`: consentimento, impressão, exportação e recusa de
   sugestão). Um PAT vazado não cria outro PAT, não mexe na organização e não lê nem apaga dado
-  biométrico.
+  biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
+  credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
+- **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha
+  passageira (worker perdido, job sumido ou parado, falta de VRAM), que retranscrever ou
+  `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
 - **Erros** em `application/problem+json` (RFC 9457) com o campo estável `code`; o cliente decide
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,

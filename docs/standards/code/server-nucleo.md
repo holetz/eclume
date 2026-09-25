@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash), organiza (pessoas da organização, coleções do usuário, edição da transcrição pelo dono), busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash), organiza (pessoas da organização, coleções do usuário, edição da transcrição pelo dono), busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -26,7 +26,9 @@ Tudo por ambiente (`eclume_server/config.py`):
 
 | Variável | Padrão (dev) | Para quê |
 |---|---|---|
-| `ECLUME_DATABASE_URL` | `postgresql+asyncpg://eclume:eclume@127.0.0.1:5432/eclume` | papel dono do schema, superusuário ou com `BYPASSRLS` |
+| `ECLUME_DATABASE_URL` | `postgresql+asyncpg://eclume:eclume@127.0.0.1:5432/eclume` | papel de conexão: `eclume_server` em produção, o migrador (superusuário) só no `migrate`; no dev, o superusuário serve aos dois |
+| `ECLUME_RUNTIME_DB_PASSWORD` | — | com valor, `eclume-server migrate` liga o `LOGIN` de `eclume_server` com essa senha |
+| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | `120`, `1800` | detecção de job morto ([jobs-transcricao.md](../api/jobs-transcricao.md#job-morto)) |
 | `ECLUME_REDIS_URL` | `redis://127.0.0.1:6379/0` | filas arq e progresso |
 | `ECLUME_S3_ENDPOINT`, `_ACCESS_KEY`, `_SECRET_KEY`, `_BUCKET`, `_REGION` | MinIO do compose de dev | áudio e artefatos |
 | `ECLUME_SECRET_KEY` | inseguro, de dev | assina as URLs de parte e de áudio |
@@ -47,6 +49,31 @@ Tudo por ambiente (`eclume_server/config.py`):
   paralelo não disputam o mesmo `NNN`. O runner aplica toda migration ainda não aplicada, então a
   ordem de chegada entre branches não importa.
 
+## Papéis do banco
+
+Três papéis, cada um com um motivo:
+
+| Papel | Atributos | Quem usa | Para quê |
+|---|---|---|---|
+| migrador (o superusuário `eclume` da imagem) | superusuário, dono de todo objeto | só o one-shot `migrate` (e `admin bootstrap`, o backup) | DDL, extensões, papéis, `GRANT` |
+| `eclume_server` | `LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE`, dono de nada, membro de `eclume_app` | server e worker CPU | `SELECT/INSERT/UPDATE/DELETE` em toda tabela, `USAGE` nas sequências, `EXECUTE` nas funções; só leitura em `schema_migrations` |
+| `eclume_app` | `NOLOGIN NOBYPASSRLS` | toda transação de requisição, por `SET LOCAL ROLE` | as políticas de RLS |
+
+- A migration `006_papel_de_conexao.sql` cria `eclume_server` (`NOLOGIN`, idempotente) com os
+  `GRANT`s e `ALTER DEFAULT PRIVILEGES` do migrador, de modo que as migrations seguintes já nascem
+  acessíveis. A senha não mora em SQL: `eclume-server migrate` com `ECLUME_RUNTIME_DB_PASSWORD`
+  liga o `LOGIN` e fixa a senha (`ALTER ROLE ... PASSWORD` montado por `format(%L)`).
+- O `BYPASSRLS` de `eclume_server` é deliberado: as operações de sistema (resolver credencial,
+  ingestão, resumos, saúde, expiração de upload, mídia assinada) atravessam organizações por
+  desenho. O que o papel perde é o poder de dono — DDL, `ALTER`, `DROP`, papéis — e o de
+  superusuário. Tirar também o `BYPASSRLS` exigiria cada `system_tx` como função `SECURITY
+  DEFINER`.
+- `migrate` só cria `schema_migrations` quando falta (`to_regclass`): com o schema em dia, o
+  `admin bootstrap` roda também sob `eclume_server`, que não tem `CREATE` no schema.
+- A suíte do server aplica as migrations como superusuário e roda inteira como `eclume_server`
+  (`harness.provision`); um teste confere os atributos do papel, que ele não é dono de nada e que
+  `CREATE TABLE` e escrita em `schema_migrations` são negados.
+
 ## Isolamento por RLS
 
 - Toda tabela de domínio tem `org_id`; as de conteúdo são do dono (`owner_id`) ou herdam a
@@ -55,9 +82,9 @@ Tudo por ambiente (`eclume_server/config.py`):
 - **Toda transação de requisição** roda `SET LOCAL ROLE eclume_app` (papel `NOLOGIN`, sem
   `BYPASSRLS`) e fixa os dois settings com `set_config(..., true)` — `db.session.user_tx`. Sem
   contexto, `eclume_app` não enxerga nada.
-- **Operações de sistema** — lookup de credencial, bootstrap, worker CPU, migrations — rodam com o
-  papel de conexão (`system_tx`), que precisa ser superusuário ou ter `BYPASSRLS`, porque o
-  `FORCE` submete até o dono às políticas. `sessions` não tem `GRANT` para `eclume_app`.
+- **Operações de sistema** — lookup de credencial, bootstrap, worker CPU — rodam com o papel de
+  conexão (`system_tx`), que precisa de `BYPASSRLS` (`eclume_server`), porque o `FORCE` submete até
+  o dono às políticas. `sessions` não tem `GRANT` para `eclume_app`.
 - **Visibilidade de gravação:** dono, ou compartilhamento com a organização, ou com um grupo de
   que o usuário é membro. Escrita é só do dono. Transcrição, locutores, segmentos, embeddings e
   jobs herdam a visibilidade por `EXISTS` em `recordings`.
@@ -87,9 +114,11 @@ Tudo por ambiente (`eclume_server/config.py`):
   dispensa hash lento); `prefix` = os 9 primeiros caracteres. Um `Authorization: Bearer` presente
   nunca cai para o cookie.
 - **Status de erro, alinhados ao que cada operação declara:**
-  - sem credencial, credencial inválida, CSRF ausente ou errado, e PAT numa rota só de sessão
-    (PATs, grupos, admin, logout) → **401** `unauthorized`: nessas rotas o PAT não é credencial
-    aceita, e a sessão sem double-submit está incompleta;
+  - sem credencial, credencial inválida, CSRF ausente ou errado → **401** `unauthorized`: a
+    sessão sem double-submit está incompleta, e o web responde a 401 com um login novo, que
+    recupera o cookie;
+  - PAT numa rota só de sessão (PATs, grupos, admin, voz, logout) → **403** `session_required`
+    (contrato 1.4.0): a credencial é válida, só não é a aceita ali;
   - escopo faltando → **403** `insufficient_scope` com `required_scopes`;
   - papel `admin` faltando ou escrita de não dono → **403** `forbidden`;
   - requisição fora do contrato (parâmetro, corpo ou regra de negócio) → **422**

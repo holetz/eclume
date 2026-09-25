@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis e a idempotência por `(recording_id, revision)`.
+description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -100,6 +100,37 @@ da gravação para `transcribed`.
 Reprocessar a mesma `revision` sobrescreve os artefatos; `ingest_transcript` é idempotente por
 `(recording_id, revision)`.
 
+## Job morto
+
+Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, restart, deploy)
+não enfileira `transcription_failed`. O server percebe sozinho: o cron `reap_stalled_jobs` do
+worker CPU (`eclume_server/stalled.py`, a cada minuto, `unique`) examina os jobs `queued`/`running`
+enfileirados há mais de `ECLUME_JOB_GRACE_SECONDS` (120 s) e cruza o estado do job no arq, o hash
+de progresso e o heartbeat:
+
+| Situação | Veredito |
+|---|---|
+| no arq `queued`/`deferred` (fila atrasada) | nada — fila não é falha |
+| arq `complete` com sucesso (a ingestão pode estar na fila `eclume:default`) | nada |
+| arq `complete` com falha (o retry do arq encerrou o job de um worker morto) | `worker_lost` |
+| sumido do arq (`not_found`) e sem hash de progresso | `job_lost` |
+| progresso sem escrita há mais de `ECLUME_JOB_STALL_SECONDS` (1800 s), mesmo com worker vivo | `job_stalled` |
+| heartbeat ausente ou `busy=0` e progresso ausente ou sem escrita há mais que a graça | `worker_lost` |
+
+- **Duas observações.** Nada é marcado na primeira vez: a suspeita fica em
+  `eclume:reaper:suspect:<_job_id>` (código e instante) e só vira falha se o mesmo diagnóstico
+  durar a graça inteira. Isso cobre o worker que acabou de pegar o job e ainda não publicou
+  progresso nem heartbeat.
+- **Falha recuperável.** O veredito vai pelo mesmo `fail()` do `transcription_failed` (job e
+  gravação `failed`, hash apagado), com mensagem em pt-BR. `worker_lost`, `job_lost`,
+  `job_stalled`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e `upload_failed` saem com
+  `Job.error.retryable = true` (contrato 1.4.0).
+- **Retentar é explícito.** O dono retranscreve (`POST /recordings/{id}/retranscribe`); o admin
+  retenta qualquer gravação da organização por `POST /admin/jobs/{job_id}/retry`
+  ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
+  configuração atual. Não há retentativa automática: repetiria um OOM ou um áudio ruim em laço.
+- **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela.
+
 ## Dev sem GPU
 
 `ECLUME_ENGINE=cpu` (faster-whisper `small` int8, sem alinhamento, diarização opcional). Os testes
@@ -129,8 +160,16 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
   `transcription_failed` e encerra o job, e o retry é decisão do server. A `revision` é lida do
   `_job_id`; sem ela, vale 1.
 - **Engine.** `ECLUME_ENGINE`, quando definido no processo do worker, força a engine (dev sem
-  GPU: `cpu`). Vazio, vale `options.engine`, e na falta dele, `whisperx-local`. A engine `cpu`
-  não diariza, e o raw sai com um locutor.
+  GPU e o E2E: `cpu`). Vazio, vale `options.engine`, e na falta dele, `whisperx-local`. Uma engine
+  forçada diferente de `options.engine` ignora `model`, `compute_type`, `batch_size` e
+  `fallback_model` do job — são da engine que o admin escolheu — e usa os padrões dela. A engine
+  `cpu` não diariza, e o raw sai com um locutor.
+- **ASR residente.** Na `whisperx-local`, o ASR fica carregado entre jobs, ao lado de um lugar
+  para o modelo da etapa (alinhamento ou diarização). Antes de carregar o modelo de uma etapa com
+  menos de `ECLUME_RESIDENT_MIN_FREE_MB` (2500) livres, o ASR sai; um OOM numa etapa com o ASR
+  residente o descarrega e repete a etapa uma vez. No fim do job, o modelo da etapa sai e o ASR
+  fica até a descarga por ociosidade (`ECLUME_MODEL_IDLE_SECONDS`, 300 s).
+  `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez. O heartbeat declara os residentes.
 - **Idioma.** A engine recebe só o idioma de `language` (`pt-BR` → `pt`), e o raw guarda o valor
   recebido.
 - **Raw.** Locutores `S1..Sn` na ordem da primeira fala, `label` `Locutor N`, `talk_ms` e

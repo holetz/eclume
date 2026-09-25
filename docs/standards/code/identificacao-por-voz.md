@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Identificação de pessoas pela voz
-description: Como o eclume sugere quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, sugestão que nunca liga sozinha, retranscrição que preserva vínculos, e o regime LGPD (opt-in da organização, consentimento versionado por pessoa, exclusão, exportação e trilha de auditoria).
+description: Como o eclume sugere quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, sugestão que nunca liga sozinha, retranscrição que preserva vínculos, e o regime LGPD (opt-in da organização com purga dos embeddings ao desligar, consentimento versionado por pessoa, exclusão, exportação e trilha de auditoria).
 resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/VoicePage.tsx, web/src/features/transcript/SpeakersPanel.tsx
 tags: [code, server, web, voz, lgpd, pgvector, auditoria]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#15
+source: holetz/eclume#15, holetz/eclume#26
 maintainer: holetz
 ---
 
@@ -100,11 +100,27 @@ organização e o consentimento da pessoa.
 - **Exportação** (direito de acesso): `GET /people/{id}/voiceprint/export`, só admin, devolve
   consentimentos, amostras **com os vetores** e a trilha da pessoa, com `Content-Disposition`, e
   audita `exported`.
-- **Só sessão:** todas as rotas de voz recusam PAT (401). Um PAT vazado não lê, exporta nem apaga
-  biometria.
+- **Só sessão:** todas as rotas de voz recusam PAT (403 `session_required`). Um PAT vazado não
+  lê, exporta nem apaga biometria.
 - **Os embeddings por gravação** (`speaker_embeddings`) existem para todo locutor enquanto o
   opt-in estiver ligado, mas nunca são comparados com a impressão de quem não consentiu nem saem
-  pela API. Desligar o opt-in não os apaga.
+  pela API.
+- **Purga ao desligar.** A transição `enabled: true → false` apaga, na mesma transação do
+  `PATCH /admin/settings`, os `speaker_embeddings` e as sugestões pendentes de toda a organização
+  (função `SECURITY DEFINER` `eclume_purge_speaker_embeddings`, restrita a `eclume_org()` e a
+  `eclume_admin()`, migration `007`), audita `embeddings_purged` com as contagens e, depois do
+  commit, enfileira `purge_embedding_objects(org_id)` no worker CPU, que apaga o
+  `recordings/{id}/speaker_embeddings.json` de cada gravação da organização (lotes de 1000; nada,
+  se o opt-in tiver sido religado nesse meio-tempo). As amostras de quem consentiu ficam: tirá-las
+  é o fluxo de consentimento. Religar não traz os vetores antigos: só uma retranscrição os recria.
+- **Opt-in vale na ingestão.** Um job enfileirado com `embeddings: true` antes do desligamento
+  chega ao `ingest_transcript` depois dele: a ingestão relê o opt-in, não grava o vetor e apaga o
+  `speaker_embeddings.json` que o worker produziu.
+- **Excluir a gravação** apaga áudio, `recordings/{id}/` inteiro (transcrição bruta e
+  embeddings), transcrição, locutores, segmentos, embeddings, amostras, sugestões, jobs e resumos
+  (cascata no banco e `Storage.delete_recording` no bucket). Uma gravação excluída durante a
+  transcrição tem os artefatos que o worker gravou depois apagados pelo `ingest_transcript`.
+  Prova em `test_voice.py`.
 
 ## Auditoria
 
@@ -113,7 +129,7 @@ organização e o consentimento da pessoa.
   exclusão dela.
 - Eventos: `comparison`, `suggested`, `accepted`, `rejected`, `sample_added`, `sample_removed`,
   `link_restored`, `link_dropped`, `consent_granted`, `consent_revoked`, `voiceprint_deleted`,
-  `exported`, `org_opt_in_changed` e `org_purged`. O `actor` é `null` nos eventos do sistema.
+  `exported`, `org_opt_in_changed`, `org_purged` e `embeddings_purged` (1.4.0). O `actor` é `null` nos eventos do sistema.
 - O id do evento é gerado no Python: um `INSERT ... RETURNING` exigiria a política de leitura, que
   é só de admin.
 
