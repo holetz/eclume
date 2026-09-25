@@ -12,3 +12,5 @@ eclume-audio-capture = { path = "../audio-capture", default-features = false }
 resampler = { path = "../resampler" }
 anyhow = "1"
 log = "0.4"
+ogg = "0.9"
+opus = "0.4"
