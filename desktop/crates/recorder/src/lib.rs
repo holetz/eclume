@@ -3,10 +3,13 @@
 //! `desktop-deteccao-e-sync` implementa.
 
 pub mod encode;
+pub mod ext;
 pub mod mix;
 pub mod queue;
+pub mod session;
 pub mod source;
 
 pub use eclume_audio_capture::AudioSource;
 pub use encode::OggOpusWriter;
+pub use ext::{sync_pending, MeetingDetector, MeetingEvent, SyncReport, Uploader};
 pub use mix::{Mixer, FRAME, TARGET_RATE};

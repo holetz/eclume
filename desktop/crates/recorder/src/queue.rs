@@ -1,7 +1,7 @@
 //! Fila local e persistente das gravações, em SQLite.
 //!
 //! Uma linha por gravação, com o ciclo `recording → pending → syncing → synced | failed`.
-//! `failed` volta a `syncing` numa nova tentativa. Uma linha que ficou em `recording` quando o
+//! `failed` volta a `pending` por `retry_failed`. Uma linha que ficou em `recording` quando o
 //! processo morreu é recuperada na abertura seguinte como `pending` com `interrupted = 1`.
 
 use std::path::{Path, PathBuf};
@@ -211,16 +211,13 @@ impl Queue {
         Ok(recovered)
     }
 
-    /// Reserva a próxima gravação a sincronizar (a mais antiga `pending`, ou `failed` com menos
-    /// de `max_attempts` tentativas) e a marca `syncing`.
-    pub fn claim_next(&mut self, max_attempts: i64) -> Result<Option<QueuedRecording>> {
+    /// Reserva a próxima gravação a sincronizar (a `pending` mais antiga) e a marca `syncing`.
+    pub fn claim_next(&mut self) -> Result<Option<QueuedRecording>> {
         let tx = self.conn.transaction()?;
         let id: Option<String> = tx
             .query_row(
-                "SELECT id FROM recordings
-                 WHERE status = 'pending' OR (status = 'failed' AND attempts < ?1)
-                 ORDER BY started_at LIMIT 1",
-                params![max_attempts],
+                "SELECT id FROM recordings WHERE status = 'pending' ORDER BY started_at LIMIT 1",
+                [],
                 |row| row.get(0),
             )
             .optional()?;
@@ -235,6 +232,15 @@ impl Queue {
         self.get(&id)
     }
 
+    /// Devolve a `pending` as falhas com menos de `max_attempts` tentativas. Quem agenda o sync
+    /// chama isto no ritmo da própria política de espera entre tentativas.
+    pub fn retry_failed(&self, max_attempts: i64) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE recordings SET status = 'pending' WHERE status = 'failed' AND attempts < ?1",
+            params![max_attempts],
+        )?)
+    }
+
     /// Marca a gravação como sincronizada.
     pub fn mark_synced(&self, id: &str, remote_id: &str) -> Result<()> {
         self.transition(
@@ -245,7 +251,7 @@ impl Queue {
         )
     }
 
-    /// Marca a tentativa de sync como falha; ela volta a ser elegível em `claim_next`.
+    /// Marca a tentativa de sync como falha; `retry_failed` a devolve à fila.
     pub fn mark_failed(&self, id: &str, error: &str) -> Result<()> {
         self.transition(
             id,
@@ -371,23 +377,26 @@ mod tests {
         begin_and_finish(&queue, "velha", 1);
         begin_and_finish(&queue, "nova", 2);
 
-        let first = queue.claim_next(3).unwrap().unwrap();
+        let first = queue.claim_next().unwrap().unwrap();
         assert_eq!(first.id, "velha");
         assert_eq!(first.status, Status::Syncing);
         assert_eq!(first.attempts, 1);
         queue.mark_synced("velha", "srv-1").unwrap();
 
-        let second = queue.claim_next(3).unwrap().unwrap();
+        let second = queue.claim_next().unwrap().unwrap();
         assert_eq!(second.id, "nova");
         queue.mark_failed("nova", "rede fora").unwrap();
         let failed = queue.get("nova").unwrap().unwrap();
         assert_eq!(failed.status, Status::Failed);
         assert_eq!(failed.last_error.as_deref(), Some("rede fora"));
 
-        // Falha volta a ser elegível até o limite de tentativas.
-        assert_eq!(queue.claim_next(3).unwrap().unwrap().id, "nova");
+        // Falha só volta à fila por `retry_failed`, e até o limite de tentativas.
+        assert!(queue.claim_next().unwrap().is_none());
+        assert_eq!(queue.retry_failed(3).unwrap(), 1);
+        assert_eq!(queue.claim_next().unwrap().unwrap().id, "nova");
         queue.mark_failed("nova", "de novo").unwrap();
-        assert!(queue.claim_next(2).unwrap().is_none());
+        assert_eq!(queue.retry_failed(2).unwrap(), 0);
+        assert!(queue.claim_next().unwrap().is_none());
 
         let counts = queue.counts().unwrap();
         assert_eq!(counts.synced, 1);
@@ -426,7 +435,7 @@ mod tests {
         begin_and_finish(&queue, "x", 1);
         assert!(queue.mark_synced("x", "srv").is_err());
         assert!(queue.finish("x", Path::new("/tmp/x.ogg"), 2, 1, 1).is_err());
-        queue.claim_next(3).unwrap().unwrap();
+        queue.claim_next().unwrap().unwrap();
         assert_eq!(queue.release_stale_syncing().unwrap(), 1);
         assert_eq!(queue.get("x").unwrap().unwrap().status, Status::Pending);
         assert_eq!(queue.list(10).unwrap().len(), 1);
