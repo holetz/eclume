@@ -36,6 +36,7 @@ Portas:
 | SSH | chave `ed25519` da máquina de dev autorizada. **O login por senha foi mantido** (passo 1.4 não aplicado), para não trancar o usuário fora de outros dispositivos. |
 | Claude | `~/.local/bin/claude` (2.1.282) já logado |
 | Builds | uv e Rust stable em `~/.local/bin` e `~/.cargo/bin`, com as deps de build do Tauri instaladas |
+| eclume em produção | projeto `eclume` na 8443 desde 2026-09-25 (holetz/eclume#14), dados em `/srv/eclume`, backup no cron do `holetz` às 03:30; runbook em [deploy-producao.md](deploy-producao.md) |
 
 **Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões):
 
@@ -156,12 +157,12 @@ Os builds e deploys usam `--context gpu-host`. O loop de desenvolvimento continu
 
 ## 10. Certificado do Caddy (depois do primeiro deploy)
 
-Cada stack usa Caddy com `tls internal`. HTTPS é obrigatório para a conversão de mídia no navegador
-(WebCodecs) e para o microfone. Instale a CA raiz em cada máquina cliente:
+Cada stack usa Caddy com `tls internal`, e cada uma tem a sua CA. HTTPS é obrigatório para a
+conversão de mídia no navegador (WebCodecs) e para o microfone. O deploy do eclume publica a raiz
+em `https://192.168.15.199:8443/downloads/eclume-root.crt` (`/srv/eclume/downloads/`):
 
 ```bash
-# extrair a CA raiz do Caddy do eclume
-docker --context gpu-host compose -p eclume cp caddy:/data/caddy/pki/authorities/local/root.crt ./eclume-root.crt
+scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
 ```
 
 - **Linux:** copie para `/usr/local/share/ca-certificates/eclume-root.crt` e rode
@@ -171,6 +172,9 @@ docker --context gpu-host compose -p eclume cp caddy:/data/caddy/pki/authorities
   `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain eclume-root.crt`.
 - **Firefox:** importe em Configurações → Certificados, porque ele usa repositório próprio.
 
+A conferência da impressão digital e o uso pelo lumea (`LUMEA_ECLUME_CA_BUNDLE`) estão em
+[deploy-producao.md](deploy-producao.md#ca-raiz-nos-clientes).
+
 ## Instaladores do desktop (sem assinatura de código)
 
 Os instaladores saem do workflow `desktop-release` (tag `desktop-v<versão>`) como um GitHub
@@ -179,7 +183,8 @@ Release privado; o contrato está em
 clientes baixam do próprio servidor eclume:
 
 - **Pasta servida:** `/srv/eclume/downloads/`, publicada em `https://192.168.15.199:8443/downloads/`
-  pelo Caddy do eclume (spec holetz/eclume#14). Na raiz ficam `latest.json` (manifesto do
+  pelo Caddy do eclume ([deploy-producao.md](deploy-producao.md)). Na raiz ficam `latest.json`
+  (manifesto do
   updater), `instaladores.json` (lista para a página de download) e `INSTALACAO.md`; cada versão
   fica em `/srv/eclume/downloads/<versão>/`, com as três mais recentes mantidas.
 - **Publicar um release** (no host, onde o `gh` está autenticado):

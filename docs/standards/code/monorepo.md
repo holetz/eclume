@@ -24,7 +24,7 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
 | `web/` | frontend React + Vite + TS | npm, Node 22 |
 | `desktop/` | app Tauri 2 (`desktop/src-tauri`) | cargo (workspace em `desktop/Cargo.toml`) |
 | `contracts/` | OpenAPI v1 e JSON Schema da transcrição | — |
-| `deploy/` | compose de dev e, depois, de produção | Docker compose |
+| `deploy/` | compose de dev, de teste e de produção, imagens do server e do web, scripts de deploy e backup ([deploy-producao.md](../../project/deploy-producao.md)) | Docker compose |
 | `docs/` | bundle OKF | `cq knowledge` |
 
 ## Python — workspace uv
