@@ -1,0 +1,126 @@
+{
+  "exported_at": "2026-09-20T10:00:00Z",
+  "exported_by": {
+    "id": "01928f3a-1c00-7a00-8000-000000000101",
+    "name": "Mariana Couto"
+  },
+  "person": {
+    "id": "01928f3a-1c00-7a00-8000-000000000302",
+    "name": "Rafael Lima",
+    "email": "rafael.lima@example.com"
+  },
+  "consents": [
+    {
+      "status": "granted",
+      "term_version": "1",
+      "term_text": "Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11), que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento, pedir a exclusão ou a cópia dos meus dados a qualquer momento.",
+      "notes": "Termo assinado na reunião de abertura do programa (ata de 12/09/2026).",
+      "recorded_by": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "recorded_at": "2026-09-12T11:05:00Z"
+    }
+  ],
+  "samples": [
+    {
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "recording_title": "Alinhamento do programa de lideranças",
+      "speaker_id": "S2",
+      "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
+      "talk_ms": 37050,
+      "created_by": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "created_at": "2026-09-18T15:02:17Z",
+      "embedding": [
+        0.009,
+        -0.002,
+        -0.0031,
+        -0.0351,
+        0.011,
+        -0.0009,
+        0.066,
+        -0.0623
+      ]
+    },
+    {
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000502",
+      "recording_title": null,
+      "speaker_id": "S1",
+      "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
+      "talk_ms": 412300,
+      "created_by": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "created_at": "2026-09-12T16:40:00Z",
+      "embedding": [
+        0.1554,
+        -0.1944,
+        0.0035,
+        0.0544,
+        -0.0126,
+        -0.047,
+        -0.0036,
+        0.0431
+      ]
+    }
+  ],
+  "audit": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d03",
+      "event": "accepted",
+      "person": {
+        "id": "01928f3a-1c00-7a00-8000-000000000302",
+        "name": "Rafael Lima"
+      },
+      "actor": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "speaker_id": "S2",
+      "score": 0.82,
+      "details": {},
+      "created_at": "2026-09-18T15:02:17Z"
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d02",
+      "event": "suggested",
+      "person": {
+        "id": "01928f3a-1c00-7a00-8000-000000000302",
+        "name": "Rafael Lima"
+      },
+      "actor": null,
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "speaker_id": "S2",
+      "score": 0.82,
+      "details": {
+        "threshold": 0.6,
+        "model": "pyannote/wespeaker-voxceleb-resnet34-LM"
+      },
+      "created_at": "2026-09-18T14:40:02Z"
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d01",
+      "event": "consent_granted",
+      "person": {
+        "id": "01928f3a-1c00-7a00-8000-000000000302",
+        "name": "Rafael Lima"
+      },
+      "actor": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "transcript_id": null,
+      "speaker_id": null,
+      "score": null,
+      "details": {
+        "term_version": "1"
+      },
+      "created_at": "2026-09-12T11:05:00Z"
+    }
+  ]
+}

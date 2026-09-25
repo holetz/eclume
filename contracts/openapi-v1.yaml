@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.2.0
+  version: 1.3.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -40,6 +40,10 @@ tags:
     description: Transcrições, export e edição de locutores e segmentos.
   - name: people
     description: Diretório de pessoas da organização.
+  - name: voice
+    description: >-
+      Identificação por voz (LGPD): consentimento, impressão de voz, recusa de sugestão e
+      auditoria. Só sessão: um PAT nunca lê nem apaga dado biométrico.
   - name: search
     description: Busca full-text sobre segmentos.
   - name: organize
@@ -905,6 +909,40 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
+  /api/v1/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+      - name: speaker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^S[0-9]+$"
+      - $ref: "#/components/parameters/PersonId"
+    delete:
+      tags: [voice]
+      operationId: rejectSpeakerSuggestion
+      summary: Recusar uma sugestão por voz
+      description: |
+        A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
+        comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
+        Aceitar é o `PATCH` do locutor com `person_id`.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Locutor sem a sugestão recusada.
+          content:
+            application/json:
+              schema:
+                $ref: "./transcript.schema.json#/$defs/Speaker"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/transcripts/{transcript_id}/speakers/merge:
     parameters:
       - $ref: "#/components/parameters/TranscriptId"
@@ -1407,6 +1445,112 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/people/{person_id}/voice-consent:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    put:
+      tags: [voice]
+      operationId: setVoiceConsent
+      summary: Registrar ou revogar o consentimento de voz
+      description: |
+        Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
+        quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
+        histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
+        as sugestões pendentes da pessoa.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceConsentPut"
+            examples:
+              registrar:
+                $ref: "#/components/examples/VoiceConsentPutRequest"
+      responses:
+        "200":
+          description: Pessoa com o consentimento novo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/people/{person_id}/voiceprint:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      tags: [voice]
+      operationId: getVoiceprint
+      summary: Impressão de voz da pessoa
+      description: As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+      responses:
+        "200":
+          description: Impressão.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voiceprint"
+              examples:
+                impressao:
+                  $ref: "#/components/examples/Voiceprint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [voice]
+      operationId: deleteVoiceprint
+      summary: Excluir a impressão de voz
+      description: Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/people/{person_id}/voiceprint/export:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      tags: [voice]
+      operationId: exportVoiceprint
+      summary: Exportar os dados de voz da pessoa
+      description: |
+        Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha de
+        auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
+      responses:
+        "200":
+          description: Exportação.
+          headers:
+            Content-Disposition:
+              description: "`attachment; filename=\"voz-<pessoa>.json\"`."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceprintExport"
+              examples:
+                exportacao:
+                  $ref: "#/components/examples/VoiceprintExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/search:
     get:
       tags: [search]
@@ -1782,6 +1926,53 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/voice-audit:
+    get:
+      tags: [admin, voice]
+      operationId: listVoiceAudit
+      summary: Trilha de auditoria da identificação por voz
+      description: Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações, do mais novo ao mais antigo.
+      parameters:
+        - $ref: "#/components/parameters/PersonFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Eventos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceAuditPage"
+              examples:
+                trilha:
+                  $ref: "#/components/examples/VoiceAuditPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/voiceprints:
+    delete:
+      tags: [admin, voice]
+      operationId: purgeVoiceprints
+      summary: Apagar todas as impressões de voz da organização
+      description: Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria ficam.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: O que foi apagado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoicePurgeResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/v1/admin/agent-providers:
     get:
@@ -3090,6 +3281,231 @@ components:
         updated_at:
           type: [string, "null"]
           format: date-time
+        term_version:
+          description: Versão do termo de consentimento vigente quando o estado foi registrado.
+          type: [string, "null"]
+        recorded_by:
+          description: Quem registrou o estado atual.
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+        sample_count:
+          description: Amostras (locutores confirmados) na impressão de voz da pessoa.
+          type: integer
+          minimum: 0
+
+    VoiceConsentPut:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [granted, revoked]
+        notes:
+          description: Como o consentimento foi colhido (documento assinado, e-mail, ata).
+          type: [string, "null"]
+          maxLength: 2000
+
+    VoiceConsentRecord:
+      description: Um registro do histórico de consentimento, com o termo exato em vigor.
+      type: object
+      required: [status, term_version, term_text, notes, recorded_by, recorded_at]
+      properties:
+        status:
+          type: string
+          enum: [granted, revoked]
+        term_version:
+          type: string
+        term_text:
+          type: string
+        notes:
+          type: [string, "null"]
+        recorded_by:
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+        recorded_at:
+          type: string
+          format: date-time
+
+    VoiceSample:
+      description: Uma amostra da impressão de voz — um locutor confirmado como a pessoa.
+      type: object
+      required: [transcript_id, recording_title, speaker_id, model, talk_ms, created_by, created_at]
+      properties:
+        transcript_id:
+          type: string
+          format: uuid
+        recording_title:
+          description: Título da gravação, ou `null` se quem pergunta não a vê.
+          type: [string, "null"]
+        speaker_id:
+          type: string
+          pattern: "^S[0-9]+$"
+        model:
+          description: Modelo de embedding da amostra.
+          type: string
+        talk_ms:
+          type: integer
+          minimum: 0
+        created_by:
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+
+    VoiceSampleExport:
+      description: Amostra com o vetor, só na exportação.
+      type: object
+      required: [transcript_id, recording_title, speaker_id, model, talk_ms, created_by, created_at, embedding]
+      properties:
+        transcript_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: [string, "null"]
+        speaker_id:
+          type: string
+        model:
+          type: string
+        talk_ms:
+          type: integer
+          minimum: 0
+        created_by:
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        embedding:
+          type: array
+          items:
+            type: number
+
+    Voiceprint:
+      type: object
+      required: [person_id, consent, sample_count, samples]
+      properties:
+        person_id:
+          type: string
+          format: uuid
+        consent:
+          $ref: "#/components/schemas/VoiceConsent"
+        sample_count:
+          type: integer
+          minimum: 0
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceSample"
+
+    VoiceAuditEvent:
+      type: object
+      required: [id, event, person, actor, transcript_id, speaker_id, score, details, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event:
+          description: Tipo do evento; o cliente mostra cru um valor que não conhece.
+          type: string
+          enum:
+            - comparison
+            - suggested
+            - accepted
+            - rejected
+            - sample_added
+            - sample_removed
+            - link_restored
+            - link_dropped
+            - consent_granted
+            - consent_revoked
+            - voiceprint_deleted
+            - exported
+            - org_opt_in_changed
+            - org_purged
+        person:
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/PersonRef"
+            - type: "null"
+        actor:
+          description: Quem agiu; `null` numa ação do sistema (a comparação da ingestão).
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+        transcript_id:
+          type: [string, "null"]
+          format: uuid
+        speaker_id:
+          type: [string, "null"]
+        score:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        details:
+          description: Dados do evento (contagens, limiar, modelo); nunca vetores.
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    VoiceAuditPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceAuditEvent"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    VoiceprintExport:
+      type: object
+      required: [exported_at, exported_by, person, consents, samples, audit]
+      properties:
+        exported_at:
+          type: string
+          format: date-time
+        exported_by:
+          $ref: "./transcript.schema.json#/$defs/UserRef"
+        person:
+          type: object
+          required: [id, name, email]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            email:
+              type: [string, "null"]
+        consents:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceConsentRecord"
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceSampleExport"
+        audit:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceAuditEvent"
+
+    VoicePurgeResult:
+      type: object
+      required: [deleted_samples, deleted_suggestions]
+      properties:
+        deleted_samples:
+          type: integer
+          minimum: 0
+        deleted_suggestions:
+          type: integer
+          minimum: 0
 
     Person:
       type: object
@@ -3550,12 +3966,19 @@ components:
       required: [enabled, suggestion_threshold]
       properties:
         enabled:
-          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada.
+          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada.
           type: boolean
         suggestion_threshold:
+          description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
           type: number
           minimum: 0
           maximum: 1
+        consent_term_version:
+          description: Versão do termo de consentimento; sobe sozinha a cada texto novo.
+          type: string
+        consent_term_text:
+          description: Texto do termo que a pessoa aceita ao consentir.
+          type: string
 
     AdminSettings:
       type: object
@@ -3635,6 +4058,11 @@ components:
               type: number
               minimum: 0
               maximum: 1
+            consent_term_text:
+              description: Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo que aceitaram.
+              type: string
+              minLength: 1
+              maxLength: 20000
 
     AgentProvider:
       type: object
@@ -4126,6 +4554,18 @@ components:
     AdminHealth:
       summary: Um job rodando na GPU
       externalValue: ./fixtures/admin-health.json
+    VoiceConsentPutRequest:
+      summary: Consentimento colhido por escrito
+      externalValue: ./fixtures/voice-consent-put-request.json
+    Voiceprint:
+      summary: Impressão com duas amostras
+      externalValue: ./fixtures/voiceprint.json
+    VoiceprintExport:
+      summary: Exportação LGPD de uma pessoa
+      externalValue: ./fixtures/voiceprint-export.json
+    VoiceAuditPage:
+      summary: Sugestão, aceite e consentimento
+      externalValue: ./fixtures/voice-audit-page.json
     ProblemUnauthorized:
       summary: Sem credencial
       externalValue: ./fixtures/problem-unauthorized.json
