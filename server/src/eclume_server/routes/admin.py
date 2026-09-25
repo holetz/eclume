@@ -15,7 +15,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
-from eclume_server.problems import conflict, invalid_field, not_found
+from eclume_server.problems import invalid_field, not_found
 from eclume_server.serialize import user_json
 
 router = APIRouter(prefix="/admin")
@@ -67,7 +67,8 @@ async def update_user(user_id: UUID, body: UserPatch, principal: Admin, ctx: Ctx
             )
         ).scalar_one()
         if admins == 0:
-            raise conflict("A organização precisa manter ao menos um admin ativo.")
+            field = "active" if "active" in values else "role"
+            raise invalid_field(field, "a organização precisa manter ao menos um admin ativo")
         # Sessões e PATs alheios estão fora do alcance de `eclume_app`: volta ao papel de sistema.
         await conn.execute(text("SET LOCAL ROLE NONE"))
         if values.get("active") is False:

@@ -87,8 +87,10 @@ def test_ultimo_admin_nao_se_rebaixa(as_user: Callable[[Account], Api], make_use
     admin_account = make_user(role="admin")
     admin = as_user(admin_account)
     response = admin.patch(f"/api/v1/admin/users/{admin_account.user_id}", json={"role": "member"})
-    assert response.status_code == 409
-    assert response.json()["code"] == "conflict"
+    assert response.status_code == 422
+    assert response.json()["errors"] == [
+        {"field": "role", "message": "a organização precisa manter ao menos um admin ativo"}
+    ]
     assert admin.get("/api/v1/me").json()["user"]["role"] == "admin"
 
 

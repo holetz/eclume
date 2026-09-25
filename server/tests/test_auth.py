@@ -73,12 +73,12 @@ def test_csrf_obrigatorio_em_metodo_mutavel_com_sessao(
     api = as_user(make_user())
     api.send_csrf = False
     response = api.post("/api/v1/tokens", json={"name": "x", "scopes": ["transcripts:read"]})
-    assert response.status_code == 403
-    assert response.json()["code"] == "forbidden"
+    assert response.status_code == 401
+    assert "X-CSRF-Token" in response.json()["detail"]
     wrong = api.post(
         "/api/v1/tokens", json={"name": "x", "scopes": ["transcripts:read"]}, headers={"X-CSRF-Token": "errado"}
     )
-    assert wrong.status_code == 403
+    assert wrong.status_code == 401
     assert api.get("/api/v1/me").status_code == 200  # GET não exige CSRF
 
 
@@ -128,10 +128,10 @@ def test_pat_nao_gere_pats_nem_grupos(as_user: Callable[[Account], Api], make_us
     pat = as_user(make_user(role="admin")).pat("recordings:read", "recordings:write")
     for method, url in (("GET", "/api/v1/tokens"), ("GET", "/api/v1/groups"), ("GET", "/api/v1/admin/users")):
         response = pat.request(method, url)
-        assert response.status_code == 403, url
-        assert response.json()["code"] == "forbidden"
+        assert response.status_code == 401, url
+        assert "só sessão" in response.json()["detail"]
     created = pat.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]})
-    assert created.status_code == 403
+    assert created.status_code == 401
 
 
 def test_pat_expirado_e_401(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):

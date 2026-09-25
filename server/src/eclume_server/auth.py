@@ -91,7 +91,8 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
     if row is None:
         raise unauthorized("Sessão inválida ou expirada.")
     if request.method in _MUTATING and request.headers.get(CSRF_HEADER) != row["csrf_token"]:
-        raise forbidden(f"O header {CSRF_HEADER} deve repetir o cookie {CSRF_COOKIE}.")
+        # Sem o double-submit a sessão não é uma credencial completa: 401, que toda operação declara.
+        raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {CSRF_COOKIE}.")
     return Principal(row["user_id"], row["org_id"], row["role"], "session", ALL_SCOPES, session_id=row["id"])
 
 
@@ -119,7 +120,8 @@ def requires(
         principal = await authenticate(request, ctx)
         if principal.method == "pat":
             if session_only:
-                raise forbidden("Esta operação aceita só sessão do navegador, não PAT.")
+                # PAT não é credencial aceita aqui (o contrato declara só `sessionCookie`): 401.
+                raise unauthorized("Esta operação aceita só sessão do navegador, não PAT.")
             missing = [scope for scope in scopes if scope not in principal.scopes]
             if missing:
                 raise insufficient_scope(missing)

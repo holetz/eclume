@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from eclume_server.app import create_app
 from eclume_server_testing.api import Account, Api, login, new_org, new_user
+from eclume_server_testing.conformance import CONFORMANCE
 from eclume_server_testing.harness import REQUIRE_SERVICES, Services, provision, teardown, unreachable_services
 
 if TYPE_CHECKING:
@@ -40,7 +41,19 @@ def services() -> Iterator[Services]:
 @pytest.fixture(scope="session")
 def client(services: Services) -> Iterator[TestClient]:
     with TestClient(create_app(services.settings), base_url="https://testserver") as test_client:
+        # Toda resposta de /api/v1 da suíte é conferida contra o contrato bundled.
+        test_client.event_hooks["response"] = [CONFORMANCE.check]
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _conformance() -> Iterator[None]:
+    """Falha o teste cujas respostas saíram do contrato."""
+    CONFORMANCE.failures.clear()
+    yield
+    failures = list(CONFORMANCE.failures)
+    CONFORMANCE.failures.clear()
+    assert failures == [], "respostas fora do contrato:\n" + "\n".join(failures)
 
 
 @pytest.fixture
