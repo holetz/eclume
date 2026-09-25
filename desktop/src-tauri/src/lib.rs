@@ -1,10 +1,14 @@
-//! App desktop do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus, mantém a fila
-//! local de gravações e fica na bandeja do sistema.
+//! App desktop do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus, percebe sozinho
+//! quando uma reunião começa, mantém a fila local de gravações, sobe-as ao servidor por PAT e
+//! fica na bandeja do sistema.
 
+mod auto;
 pub mod capture;
 mod commands;
 pub mod config;
+mod notify;
 pub mod state;
+mod sync;
 mod tray;
 
 use std::time::Duration;
@@ -49,7 +53,10 @@ fn spawn_reaper(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
         match app.state::<AppState>().reap_finished() {
-            Ok(true) => refresh_ui(&app),
+            Ok(true) => {
+                sync::nudge(&app);
+                refresh_ui(&app);
+            }
             Ok(false) => {}
             Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
         }
@@ -73,6 +80,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
+            sync::spawn(app.handle());
+            auto::spawn(app.handle().clone());
+            sync::nudge(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -87,7 +97,10 @@ pub fn run() {
             commands::recordings,
             commands::toggle_recording,
             commands::open_web,
-            commands::set_web_url,
+            commands::settings,
+            commands::save_settings,
+            commands::answer_meeting,
+            commands::sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");
