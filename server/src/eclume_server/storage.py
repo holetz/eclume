@@ -22,11 +22,18 @@ if TYPE_CHECKING:
     from eclume_server.config import Settings
 
 _CHUNK = 1024 * 1024
+# Limite de chaves por `DeleteObjects` do S3.
+_DELETE_BATCH = 1000
 
 
 def audio_key(org_id: UUID, owner_id: UUID, recording_id: UUID) -> str:
     """Chave do áudio: a gravação vive sob o dono (`orgs/{org}/users/{id}/...`)."""
     return f"orgs/{org_id}/users/{owner_id}/recordings/{recording_id}/audio"
+
+
+def embeddings_object_key(recording_id: UUID | str) -> str:
+    """`speaker_embeddings.json` do worker GPU (contrato de jobs)."""
+    return f"{artifacts_prefix(recording_id)}speaker_embeddings.json"
 
 
 def artifacts_prefix(recording_id: UUID | str) -> str:
@@ -152,14 +159,31 @@ class Storage:
             content_type=response.get("ContentType") or "application/octet-stream",
         )
 
-    async def delete_recording(self, key: str, recording_id: UUID) -> None:
-        """Apaga o áudio e os artefatos do worker de uma gravação."""
+    async def delete_keys(self, keys: list[str]) -> None:
+        """Apaga as chaves (as ausentes são ignoradas), em lotes do limite do S3."""
 
         def delete() -> None:
-            keys = [key]
+            for start in range(0, len(keys), _DELETE_BATCH):
+                batch = keys[start : start + _DELETE_BATCH]
+                self._s3.delete_objects(
+                    Bucket=self.bucket, Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True}
+                )
+
+        if keys:
+            await run_in_threadpool(delete)
+
+    async def delete_artifacts(self, recording_id: UUID | str) -> None:
+        """Apaga os artefatos do worker GPU de uma gravação (a transcrição bruta e os embeddings)."""
+        await self.delete_recording(None, recording_id)
+
+    async def delete_recording(self, key: str | None, recording_id: UUID | str) -> None:
+        """Apaga o áudio e os artefatos do worker de uma gravação."""
+
+        def listed() -> list[str]:
+            keys = [key] if key else []
             prefix = artifacts_prefix(recording_id)
             for page in self._s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
                 keys.extend(obj["Key"] for obj in page.get("Contents", []))
-            self._s3.delete_objects(Bucket=self.bucket, Delete={"Objects": [{"Key": k} for k in keys], "Quiet": True})
+            return keys
 
-        await run_in_threadpool(delete)
+        await self.delete_keys(await run_in_threadpool(listed))

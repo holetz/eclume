@@ -14,7 +14,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import forbidden, not_found
 from eclume_server.serialize import Row, user_ref
-from eclume_server.voice import capture_links, load_suggestions, restore_links, suggest
+from eclume_server.voice import capture_links, load_suggestions, org_voice, restore_links, suggest
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -97,7 +97,42 @@ def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, 
     return model, result
 
 
-async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transcript`; uma transação em sequência
+async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão passa explícito
+    conn: AsyncConnection,
+    storage: Storage,
+    transcript_id: UUID,
+    org: UUID,
+    embeddings_key: str | None,
+    mapping: dict[str, str],
+    *,
+    keep: bool,
+) -> tuple[str | None, dict[str, list[float]]]:
+    """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
+
+    O opt-in vale no momento da ingestão: um job enfileirado antes do desligamento não guarda o
+    vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
+    """
+    if not embeddings_key:
+        return None, {}
+    if not keep or not (await org_voice(conn, org))["enabled"]:
+        await storage.delete_keys([embeddings_key])
+        return None, {}
+    model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
+    for sid, vector in vectors.items():
+        await conn.execute(
+            text(
+                "INSERT INTO speaker_embeddings (transcript_id, org_id, speaker_id, model, embedding)"
+                " VALUES (:transcript, :org, :speaker, :model, CAST(:vector AS vector))"
+            ),
+            {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
+        )
+    return model, vectors
+
+
+RECORDING_GONE = "gravação inexistente"
+
+
+async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
     conn: AsyncConnection,
     storage: Storage,
     recording_id: UUID,
@@ -116,7 +151,7 @@ async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transc
         .first()
     )
     if recording is None:
-        return "gravação inexistente"
+        return RECORDING_GONE
     job = (
         (
             await conn.execute(
@@ -185,17 +220,9 @@ async def ingest(  # noqa: PLR0913, C901 — os argumentos do job `ingest_transc
             insert(t.segments),
             [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(segments)],
         )
-    vectors: dict[str, list[float]] = {}
-    if embeddings_key and options.get("embeddings"):
-        model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
-        for sid, vector in vectors.items():
-            await conn.execute(
-                text(
-                    "INSERT INTO speaker_embeddings (transcript_id, org_id, speaker_id, model, embedding)"
-                    " VALUES (:transcript, :org, :speaker, :model, CAST(:vector AS vector))"
-                ),
-                {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
-            )
+    model, vectors = await _store_embeddings(
+        conn, storage, transcript_id, org, embeddings_key, mapping, keep=bool(options.get("embeddings"))
+    )
     # Retranscrever não desfaz o que alguém confirmou: os vínculos voltam pela sobreposição de fala.
     if old_links:
         await restore_links(conn, org, transcript_id, old_links, segments)

@@ -455,6 +455,12 @@ async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, p
     return True
 
 
+async def purge_embeddings(conn: AsyncConnection) -> tuple[int, int]:
+    """Apaga os `speaker_embeddings` e as sugestões pendentes da organização (só admin, sob a RLS)."""
+    row = (await conn.execute(text("SELECT * FROM eclume_purge_speaker_embeddings()"))).one()
+    return int(row.embeddings), int(row.suggestions)
+
+
 async def forget(conn: AsyncConnection, person_id: UUID | None) -> tuple[int, int]:
     """Apaga as amostras e as sugestões pendentes da pessoa (ou da organização, com `None`)."""
     row = (await conn.execute(text("SELECT * FROM eclume_voice_forget(:person)"), {"person": person_id})).one()
