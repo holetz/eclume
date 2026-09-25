@@ -24,7 +24,8 @@ pub fn recordings(
     to_js(state.recordings(limit.unwrap_or(50)))
 }
 
-#[tauri::command]
+// `async`: abrir dispositivos pode levar segundos e não deve travar a thread da UI.
+#[tauri::command(async)]
 pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandResult<StatusView> {
     let result = state.toggle_recording(crate::capture::open_sources);
     crate::refresh_ui(&app);

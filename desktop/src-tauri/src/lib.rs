@@ -5,6 +5,7 @@ pub mod capture;
 mod commands;
 pub mod config;
 pub mod state;
+mod tray;
 
 use std::time::Duration;
 
@@ -20,9 +21,19 @@ pub const APP_NAME: &str = "eclume";
 /// Evento que a janela escuta para se atualizar.
 const STATUS_EVENT: &str = "status-changed";
 
-/// Atualiza tudo que mostra o estado (janela; a bandeja entra na tarefa seguinte).
+/// Atualiza tudo que mostra o estado: a bandeja e a janela.
 pub(crate) fn refresh_ui(app: &AppHandle) {
+    tray::refresh(app);
     let _ = app.emit(STATUS_EVENT, ());
+}
+
+/// Mostra e foca a janela principal (criada oculta).
+pub(crate) fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Abre o eclume web no navegador padrão.
@@ -57,6 +68,10 @@ pub fn run() {
             let state = AppState::open(&data_dir, &config_dir)?;
             log::info!("dados em {}", data_dir.display());
             app.manage(state);
+            tray::build(app.handle())?;
+            // No macOS, o app vive na barra de menus, sem ícone no Dock.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
             Ok(())
         })

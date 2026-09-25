@@ -4,11 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eclume</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
   </head>
   <body>
     <main>
-      <h1>eclume</h1>
-      <p>App desktop em construção: captura, bandeja e sync entram nas próximas specs.</p>
+      <header class="topo">
+        <div>
+          <h1>eclume</h1>
+          <p class="estado" id="estado" data-status="idle">Ocioso</p>
+        </div>
+        <button type="button" id="alternar" class="primario">Iniciar gravação</button>
+      </header>
+
+      <p class="aviso" id="aviso" hidden></p>
+
+      <section aria-labelledby="titulo-fila">
+        <div class="secao-topo">
+          <h2 id="titulo-fila">Gravações</h2>
+          <span class="resumo" id="resumo"></span>
+        </div>
+        <ul class="fila" id="fila"></ul>
+        <p class="vazio" id="vazio">Nenhuma gravação ainda.</p>
+      </section>
+
+      <section aria-labelledby="titulo-web">
+        <h2 id="titulo-web">eclume web</h2>
+        <form id="form-web" class="linha">
+          <label class="rotulo" for="web-url">Endereço</label>
+          <input id="web-url" type="url" required spellcheck="false" autocomplete="off" />
+          <button type="submit">Salvar</button>
+          <button type="button" id="abrir-web">Abrir</button>
+        </form>
+      </section>
     </main>
   </body>
 </html>
