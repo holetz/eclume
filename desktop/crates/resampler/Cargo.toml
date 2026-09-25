@@ -1,0 +1,13 @@
+# Vendorizado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/resampler
+# (MIT; ver VENDOR.md). Sem a feature `async-source` nem os benchmarks.
+[package]
+name = "resampler"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+audioadapter-buffers = "2.0"
+rubato = "1.0.1"
+thiserror = "2"

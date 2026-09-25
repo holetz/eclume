@@ -43,6 +43,11 @@ Portas:
 - Cargo, npm e uv: `remote-run <dir> '<comando>'` (`~/.local/bin/remote-run` na máquina de dev).
   O helper sincroniza o diretório por rsync (sem `.git`, preservando `target/`, `node_modules/`,
   `.venv/` e `dist/` no host) e executa em `~/build/<caminho>` com `nice`.
+- Arquivos gerados no host (um `Cargo.lock` atualizado, por exemplo) não voltam sozinhos: traga-os
+  com `rsync holetz@192.168.15.199:build/<nome>/<arquivo> <local>` **logo depois** do comando que
+  os gerou, porque o próximo `remote-run` sobrescreve a cópia do host com a local.
+- O `cmake` (exigido pela libopus embutida do desktop) está em `~/.local/bin`, instalado por
+  `uv tool install cmake`, sem apt.
 - Disco: pode com `docker builder prune -f --filter until=720h` quando apertar.
 
 ## 1. IP fixo e SSH

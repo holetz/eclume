@@ -1,0 +1,33 @@
+# Captura de áudio do eclume: mic por cpal e áudio do sistema por plataforma. Os backends de
+# sistema são adaptados de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
+# (crates/audio-actual/src/speaker, MIT; ver VENDOR.md).
+[package]
+name = "eclume-audio-capture"
+description = "Captura de mic e áudio do sistema do app desktop do eclume."
+version.workspace = true
+edition = "2024"
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+# Sem `backends`, o crate só expõe o trait `AudioSource` e o anel de amostras, sem nenhuma
+# dependência de sistema — é assim que o `eclume-recorder` o usa nos testes.
+default = ["backends"]
+backends = ["dep:cpal", "dep:pipewire", "dep:libpulse-binding", "dep:wasapi", "dep:cidre"]
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+ringbuf = "0.4.8"
+cpal = { version = "0.17", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libpulse-binding = { version = "2.30.1", optional = true }
+pipewire = { version = "0.9.2", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wasapi = { version = "0.23.0", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cidre = { version = "0.15", optional = true, default-features = false, features = ["app", "async", "av", "ax", "blocks", "cm", "core_audio", "dispatch", "io_kit", "io_pm", "macos_15_0"] }
