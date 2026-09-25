@@ -48,6 +48,13 @@
   --color-highlight: #fff4c7;
   --color-focus: #0b5c6b;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 1px rgb(0 0 0 / 0.04);
+  /* Locutores: tons distinguíveis entre si, com contraste AA como texto sobre a superfície. */
+  --speaker-1: #0b5c6b;
+  --speaker-2: #8a3b12;
+  --speaker-3: #4b3f9e;
+  --speaker-4: #2d6a1f;
+  --speaker-5: #9b2458;
+  --speaker-6: #6b5a00;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -74,6 +81,12 @@
     --color-highlight: #3a3415;
     --color-focus: #6ac4d2;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --speaker-1: #6ac4d2;
+  --speaker-2: #f0a37a;
+  --speaker-3: #b3a9f5;
+  --speaker-4: #9bd68a;
+  --speaker-5: #f59cc4;
+  --speaker-6: #e0cd6a;
   }
 }
 
@@ -100,4 +113,10 @@
   --color-highlight: #3a3415;
   --color-focus: #6ac4d2;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --speaker-1: #6ac4d2;
+  --speaker-2: #f0a37a;
+  --speaker-3: #b3a9f5;
+  --speaker-4: #9bd68a;
+  --speaker-5: #f59cc4;
+  --speaker-6: #e0cd6a;
 }
