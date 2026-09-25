@@ -37,6 +37,10 @@ o acordo com o worker GPU, em [jobs-transcricao.md](../api/jobs-transcricao.md).
 - **Vale para os próximos jobs.** O worker não lê o banco: `transcribe_options` monta as
   `options` do `transcribe` a partir de `org_settings` num lugar só (`recordings.insert_job`), usado
   pelo upload completo e pela retranscrição. Transcrições prontas não mudam.
+- **Bloco `voice_identification`** (opt-in LGPD, limiar e termo de consentimento): um
+  `consent_term_text` novo sobe `consent_term_version` sozinho, e toda mudança no bloco vai para a
+  trilha de voz (`org_opt_in_changed`). A tela é a seção Identificação por voz (`/admin/voz`);
+  as regras estão em [identificacao-por-voz.md](identificacao-por-voz.md).
 
 ## Segredos (`/admin/secrets`)
 
