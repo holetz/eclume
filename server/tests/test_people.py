@@ -38,7 +38,13 @@ def test_cadastro_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user
     )
     assert created.status_code == 201, created.text
     person = created.json()
-    assert person["voice_consent"] == {"status": "none", "updated_at": None}
+    assert person["voice_consent"] == {
+        "status": "none",
+        "updated_at": None,
+        "term_version": None,
+        "recorded_by": None,
+        "sample_count": 0,
+    }
     assert (person["transcript_count"], person["last_seen_at"]) == (0, None)
     assert api.get(f"/api/v1/people/{person['id']}").json() == person
 

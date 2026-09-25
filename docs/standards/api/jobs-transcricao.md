@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15
 maintainer: holetz
 ---
 
@@ -89,9 +89,11 @@ hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)
 ## O server ingere
 
 `ingest_transcript` persiste a transcrição no Postgres, indexa para FTS e guarda os embeddings
-(coluna pgvector, dimensão pelo modelo). A comparação com as pessoas é da spec
-`identificacao-por-voz` (holetz/eclume#15) e não entra aqui. Depois muda o estado da gravação
-para `transcribed`.
+(coluna pgvector, dimensão pelo modelo). Na mesma transação, restaura os vínculos
+locutor↔pessoa de uma retranscrição e compara os locutores com as impressões de voz das pessoas
+com consentimento, gravando as sugestões acima do limiar
+([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
+da gravação para `transcribed`.
 
 ## Idempotência
 

@@ -75,7 +75,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
       setEditing(false)
     },
   })
-  // Ligar ou desligar muda contagens e falas no diretório de pessoas.
+  // Ligar ou desligar muda contagens, falas e impressões de voz no diretório de pessoas.
   const link = useMutation({
     mutationFn: (personId: string | null) => patch({ person_id: personId }),
     onSuccess: (updated) => {
@@ -83,6 +83,15 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
       queryClient.invalidateQueries({ queryKey: PEOPLE_KEY })
       setLinking(false)
     },
+  })
+  const reject = useMutation({
+    mutationFn: (personId: string) =>
+      unwrap(
+        api.DELETE('/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}', {
+          params: { path: { transcript_id: transcriptId, speaker_id: speaker.id, person_id: personId } },
+        }),
+      ),
+    onSuccess: apply,
   })
 
   function submit(event: FormEvent) {
@@ -92,8 +101,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
   }
 
   const name = speakerName(speaker)
-  const suggestion = speaker.person ? undefined : speaker.suggestions?.[0]
+  const suggestions = speaker.person ? [] : (speaker.suggestions ?? [])
   const idle = !editing && !linking
+  const deciding = link.isPending || reject.isPending
 
   return (
     <li className={styles.item} data-speaker={color}>
@@ -113,13 +123,39 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
           {speaker.talk_ms != null && (
             <span className={styles.detail}>{formatDuration(speaker.talk_ms)} de fala</span>
           )}
-          {suggestion && (
-            <span className={styles.detail}>
-              Sugestão por voz: {suggestion.person.name} ({Math.round(suggestion.score * 100)}%)
-            </span>
-          )}
         </div>
       </div>
+      {idle && suggestions.length > 0 && (
+        <ul className={styles.suggestions} aria-label={`Sugestões por voz para ${name}`}>
+          {suggestions.map((suggestion) => (
+            <li key={suggestion.person.id} className={styles.suggestion}>
+              <span>
+                Parece ser <strong>{suggestion.person.name}</strong> — {Math.round(suggestion.score * 100)}%
+              </span>
+              <span className={styles.buttons}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => link.mutate(suggestion.person.id)}
+                  disabled={deciding}
+                  aria-label={`Aceitar ${suggestion.person.name} para ${name}`}
+                >
+                  Aceitar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => reject.mutate(suggestion.person.id)}
+                  disabled={deciding}
+                  aria-label={`Recusar ${suggestion.person.name} para ${name}`}
+                >
+                  Recusar
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {idle && (
         <div className={styles.buttons}>
           <button
@@ -157,16 +193,6 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
               Ligar a pessoa
             </button>
           )}
-          {suggestion && (
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => link.mutate(suggestion.person.id)}
-              disabled={link.isPending}
-            >
-              Confirmar {suggestion.person.name}
-            </button>
-          )}
         </div>
       )}
       {linking && (
@@ -176,9 +202,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
           onCancel={() => setLinking(false)}
         />
       )}
-      {link.isError && (
+      {(link.isError || reject.isError) && (
         <p className="alert alert-error" role="alert">
-          {errorMessage(link.error)}
+          {errorMessage(link.error ?? reject.error)}
         </p>
       )}
       {editing && (

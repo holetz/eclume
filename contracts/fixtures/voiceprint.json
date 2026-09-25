@@ -1,0 +1,45 @@
+{
+  "person_id": "01928f3a-1c00-7a00-8000-000000000302",
+  "consent": {
+    "status": "granted",
+    "updated_at": "2026-09-12T11:05:00Z",
+    "term_version": "1",
+    "recorded_by": {
+      "id": "01928f3a-1c00-7a00-8000-000000000101",
+      "name": "Mariana Couto"
+    },
+    "sample_count": 2
+  },
+  "opt_in": true,
+  "term": {
+    "version": "1",
+    "text": "Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11), que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento, pedir a exclusão ou a cópia dos meus dados a qualquer momento."
+  },
+  "sample_count": 2,
+  "samples": [
+    {
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "recording_title": "Alinhamento do programa de lideranças",
+      "speaker_id": "S2",
+      "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
+      "talk_ms": 37050,
+      "created_by": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "created_at": "2026-09-18T15:02:17Z"
+    },
+    {
+      "transcript_id": "01928f3a-1c00-7a00-8000-000000000502",
+      "recording_title": null,
+      "speaker_id": "S1",
+      "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
+      "talk_ms": 412300,
+      "created_by": {
+        "id": "01928f3a-1c00-7a00-8000-000000000101",
+        "name": "Mariana Couto"
+      },
+      "created_at": "2026-09-12T16:40:00Z"
+    }
+  ]
+}

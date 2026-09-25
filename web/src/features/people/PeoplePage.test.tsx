@@ -42,6 +42,7 @@ describe('diretório de pessoas', () => {
       'POST /api/v1/people': () => fixtures.person(),
       'GET /api/v1/people/:id': () => fixtures.person(),
       'GET /api/v1/people/:id/transcripts': () => ({ items: [], next_cursor: null }),
+      'GET /api/v1/people/:id/voiceprint': () => fixtures.voiceprint(),
       'GET /api/v1/search': () => ({ items: [], next_cursor: null }),
     })
     renderApp('/pessoas')
@@ -78,6 +79,7 @@ describe('página da pessoa', () => {
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people/:id': () => fixtures.person(),
       'GET /api/v1/people/:id/transcripts': () => fixtures.transcriptPage(),
+      'GET /api/v1/people/:id/voiceprint': () => fixtures.voiceprint(),
       'GET /api/v1/search': () => fixtures.searchPage(),
       ...extra,
     })

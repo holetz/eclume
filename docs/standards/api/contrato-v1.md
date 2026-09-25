@@ -4,10 +4,10 @@ title: Contrato de API v1
 description: As convenções da API v1 do eclume — autenticação por sessão e PAT com escopos, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#3
+source: holetz/eclume#3, holetz/eclume#15
 maintainer: holetz
 ---
 
@@ -31,8 +31,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
   implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Sessão tem todas as
   permissões do usuário.
-- **Só sessão:** gestão de PATs, escrita de grupos e `/api/v1/admin/*` (que exige ainda o papel
-  `admin`). Um PAT vazado não cria outro PAT nem mexe na organização.
+- **Só sessão:** gestão de PATs, escrita de grupos, `/api/v1/admin/*` (que exige ainda o papel
+  `admin`) e as rotas de voz (tag `voice`: consentimento, impressão, exportação e recusa de
+  sugestão). Um PAT vazado não cria outro PAT, não mexe na organização e não lê nem apaga dado
+  biométrico.
 - **Erros** em `application/problem+json` (RFC 9457) com o campo estável `code`; o cliente decide
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
@@ -47,7 +49,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Transcrição** no schema de `contracts/transcript.schema.json`: segmentos
   `{id, speaker_id, start_ms, end_ms, text}` (palavras só com `?include=words`), locutores
   `{id, label, person, suggestions}`, `content_hash` do áudio e `revision`, que sobe a cada edição.
-  Sugestão por voz nunca é identidade até alguém confirmar.
+  Sugestão por voz nunca é identidade até alguém confirmar: aceitar é o `PATCH` do locutor com
+  `person_id`, recusar é o `DELETE` da sugestão
+  ([identificacao-por-voz.md](../code/identificacao-por-voz.md)).
 
 ## Evolução: a v1 só cresce
 

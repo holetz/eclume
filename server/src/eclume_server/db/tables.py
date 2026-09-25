@@ -315,6 +315,8 @@ people = Table(
     Column("notes", Text),
     Column("voice_consent_status", Text, server_default=FetchedValue()),
     _ts("voice_consent_updated_at"),
+    Column("voice_consent_term_version", Text),
+    _uuid("voice_consent_by"),
     Column("sort_name", Text, server_default=FetchedValue()),
     _uuid("created_by"),
     _ts("created_at", server_default=FetchedValue()),
@@ -357,4 +359,64 @@ org_secrets = Table(
     Column("value_encrypted", Text),
     _ts("updated_at"),
     _uuid("updated_by"),
+)
+
+# --- identificação por voz (005_identificacao_por_voz) -------------------------------------------
+
+voice_consents = Table(
+    "voice_consents",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    _uuid("person_id"),
+    Column("status", Text),
+    Column("term_version", Text),
+    Column("term_text", Text),
+    Column("notes", Text),
+    _uuid("recorded_by"),
+    _ts("recorded_at", server_default=FetchedValue()),
+)
+
+# `embedding` (pgvector) fica de fora, como em `speaker_embeddings`: lido e gravado por SQL explícito.
+voice_samples = Table(
+    "voice_samples",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    Column("speaker_id", Text, primary_key=True),
+    _uuid("org_id"),
+    _uuid("person_id"),
+    Column("model", Text),
+    Column("talk_ms", BigInteger),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
+speaker_suggestions = Table(
+    "speaker_suggestions",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    Column("speaker_id", Text, primary_key=True),
+    _uuid("person_id", primary_key=True),
+    _uuid("org_id"),
+    Column("score", Float),
+    Column("status", Text, server_default=FetchedValue()),
+    _uuid("decided_by"),
+    _ts("decided_at"),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
+voice_audit = Table(
+    "voice_audit",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    _uuid("person_id"),
+    Column("person_name", Text),
+    _uuid("actor_id"),
+    Column("event", Text),
+    _uuid("transcript_id"),
+    Column("speaker_id", Text),
+    Column("score", Float),
+    Column("details", JSONB, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
 )

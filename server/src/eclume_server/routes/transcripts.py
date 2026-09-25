@@ -33,6 +33,7 @@ from eclume_server.transcripts import (
     summary_json,
     transcript_select,
 )
+from eclume_server.voice import SpeakerKey, load_suggestions, on_link
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -152,7 +153,9 @@ async def update_speaker(
     values = _patch_values(body)
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         await editable_transcript(conn, transcript_id, principal)
-        if speaker_id not in await _speaker_ids(conn, transcript_id):
+        where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
+        current = (await conn.execute(select(t.speakers.c.person_id).where(*where))).first()
+        if current is None:
             raise not_found("Locutor inexistente nesta transcrição.")
         if values.get("person_id") is not None:
             try:
@@ -160,11 +163,20 @@ async def update_speaker(
             except ApiProblemError as exc:
                 raise invalid_field("person_id", "pessoa inexistente") from exc
             values.setdefault("label", person["name"])
-        where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
         await conn.execute(update(t.speakers).where(*where).values(**values))
+        if "person_id" in values:
+            key = SpeakerKey(transcript_id, speaker_id)
+            await on_link(conn, principal, key, current.person_id, values["person_id"])
         await bump_revision(conn, transcript_id)
-        row = (await conn.execute(speakers_select().where(*where))).mappings().one()
-    return speaker_json(row)
+        return await speaker_response(conn, transcript_id, speaker_id)
+
+
+async def speaker_response(conn: AsyncConnection, transcript_id: UUID, speaker_id: str) -> dict[str, Any]:
+    """Schema `Speaker` do locutor, com as sugestões pendentes."""
+    where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
+    row = (await conn.execute(speakers_select().where(*where))).mappings().one()
+    suggestions = await load_suggestions(conn, [transcript_id])
+    return speaker_json({**row, "suggestions": suggestions.get((transcript_id, speaker_id), [])})
 
 
 @router.post("/transcripts/{transcript_id}/speakers/merge")

@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15
 maintainer: holetz
 ---
 
@@ -135,8 +135,9 @@ Tudo por ambiente (`eclume_server/config.py`):
   pessoa só desliga os locutores (o `label` fica). `transcript_count` e `last_seen_at` contam só
   transcrições visíveis a quem pergunta. Renomear ou excluir a pessoa sobe o `updated_at` (não a
   `revision`) de toda transcrição em que ela fala, pelo gatilho `eclume_touch_person_transcripts`.
-- **`voice_consent`** é só armazenado (`status` `none` ao nascer); o contrato v1 não tem campo de
-  escrita, e a comparação de voz é da spec de identificação por voz.
+- **`voice_consent`** nasce `none` e muda só por `PUT /people/{id}/voice-consent`, com o termo
+  versionado da organização. Amostras, comparação, sugestões, exclusão, exportação e auditoria da
+  voz estão em [identificacao-por-voz.md](identificacao-por-voz.md).
 - **Edição da transcrição** — `PATCH` de locutor (`label`, `person_id`), `POST .../speakers/merge`
   e `PATCH` de segmento — é só do dono da gravação, com `transcripts:write`; quem vê por
   compartilhamento recebe 403. Toda edição sobe `revision` e `updated_at`. Ligar sem `label` usa o

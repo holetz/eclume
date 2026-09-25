@@ -39,7 +39,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [ffmpeg.wasm](standards/code/formato-audio-upload.md) — O ffmpeg compilado para WebAssembly, fallback da conversão no navegador para contêineres e codecs que o WebCodecs não atende.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
-- **impressão de voz** — Embedding de locutor, do mesmo modelo da diarização, usado para sugerir a pessoa que falou; dado biométrico sensível pela LGPD.
+- [impressão de voz](standards/code/identificacao-por-voz.md) — Conjunto de amostras de uma pessoa (embeddings de locutores confirmados como ela, do mesmo modelo da diarização), comparado por centroide para sugeri-la em transcrições novas; dado biométrico sensível pela LGPD, só com opt-in da organização e consentimento da pessoa.
 - **lumea** — Plataforma de desenvolvimento humano e organizacional da EK, que importa transcrições do eclume por PAT.
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
 - [mock server](../contracts/README.md) — Prism servindo o bundle do contrato v1 com as fixtures (`deploy/docker-compose.mock.yml`, `127.0.0.1:4010`), contra o qual o lumea, o desktop e o web desenvolvem sem o backend.
@@ -50,6 +50,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [RLS](standards/code/server-nucleo.md) — Row-Level Security do Postgres: as políticas por organização e dono que isolam os dados do eclume sob o papel `eclume_app`.
 - [segredo da organização](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) gravado cifrado pelo painel admin, só de escrita: a API nunca o devolve.
 - **spec** — Unidade de trabalho do ciclo Quenching, guardada como issue do GitHub e conduzida por `develop` → `execute` → `conclude`.
+- [sugestão por voz](standards/code/identificacao-por-voz.md) — Pessoa proposta para um locutor sem pessoa quando a voz passa do limiar da organização; nunca liga sozinha, só vira vínculo quando alguém aceita.
 - [WhisperX](project/referencias.md) — Biblioteca de ASR (faster-whisper em lote, alinhamento por palavra, diarização pyannote) usada como motor no worker GPU.
 - [updater](standards/code/desktop-distribuicao.md) — Atualização automática do app desktop pelo plugin do Tauri: lê `latest.json` em `/downloads/` do servidor eclume e só instala o pacote assinado com a chave minisign do eclume.
 - **worker CPU** — O processo arq do pacote `server` (`eclume_server.worker`, fila `eclume:default`) que ingere as transcrições do worker GPU e descarta uploads vencidos.

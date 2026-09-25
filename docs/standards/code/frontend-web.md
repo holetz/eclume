@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15
 maintainer: holetz
 ---
 
@@ -100,8 +100,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   (`to` é exclusivo no contrato), convertidos a RFC 3339.
 - **Ligar locutor a pessoa** usa `PersonCombobox`: combobox ARIA 1.2 com lista em popup (setas,
   Enter, Esc, `aria-activedescendant`), busca no diretório por prefixo e a opção "Cadastrar
-  “nome”" quando ninguém tem aquele nome. Sugestão por voz aparece como botão "Confirmar
-  <pessoa>", que liga com um clique; nunca é aplicada sozinha.
+  “nome”" quando ninguém tem aquele nome. Cada sugestão por voz pendente aparece como "Parece ser
+  <pessoa> — NN%", com Aceitar (liga com um clique) e Recusar; nunca é aplicada sozinha.
+- **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a página da pessoa tem a seção
+  Voz (consentimento com o termo, amostras, excluir e exportar), e o admin tem a seção
+  Identificação por voz (`/admin/voz`), com opt-in, limiar, termo, trilha e purga.
 - **Organização da gravação** (tags, coleções, tipo de reunião, cliente, projeto) é um painel da
   página da gravação: o dono edita, quem vê por compartilhamento só lê. Os metadados de
   organização são as chaves `tipo_reuniao`, `cliente` e `projeto` do `RecordingMetadata`; as

@@ -9,6 +9,7 @@ from sqlalchemy import Text, distinct, func, select, true
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import not_found
+from eclume_server.serialize import user_ref
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -34,9 +35,40 @@ _stats = (
 )
 
 
+_samples = (
+    select(func.count().label("sample_count"))
+    .select_from(t.voice_samples)
+    .where(t.voice_samples.c.person_id == t.people.c.id)
+    .lateral("samples")
+)
+_consent_by = t.users.alias("consent_by")
+
+
 def person_select() -> Select:
-    """Pessoas visíveis (da organização) com `transcript_count` e `last_seen_at`."""
-    return select(t.people, _stats.c.transcript_count, _stats.c.last_seen_at).select_from(t.people.join(_stats, true()))
+    """Pessoas visíveis (da organização) com estatísticas, amostras de voz e quem registrou o consentimento."""
+    return select(
+        t.people,
+        _stats.c.transcript_count,
+        _stats.c.last_seen_at,
+        _samples.c.sample_count,
+        _consent_by.c.name.label("voice_consent_by_name"),
+    ).select_from(
+        t.people.join(_stats, true())
+        .join(_samples, true())
+        .outerjoin(_consent_by, _consent_by.c.id == t.people.c.voice_consent_by)
+    )
+
+
+def consent_json(row: Row) -> dict[str, Any]:
+    """Schema `VoiceConsent`, de uma linha de `person_select`."""
+    by = row["voice_consent_by"]
+    return {
+        "status": row["voice_consent_status"],
+        "updated_at": iso(row["voice_consent_updated_at"]),
+        "term_version": row["voice_consent_term_version"],
+        "recorded_by": user_ref(by, row["voice_consent_by_name"]) if by and row["voice_consent_by_name"] else None,
+        "sample_count": row["sample_count"],
+    }
 
 
 def person_json(row: Row) -> dict[str, Any]:
@@ -46,10 +78,7 @@ def person_json(row: Row) -> dict[str, Any]:
         "name": row["name"],
         "email": row["email"],
         "notes": row["notes"],
-        "voice_consent": {
-            "status": row["voice_consent_status"],
-            "updated_at": iso(row["voice_consent_updated_at"]),
-        },
+        "voice_consent": consent_json(row),
         "transcript_count": row["transcript_count"],
         "last_seen_at": iso(row["last_seen_at"]),
         "created_at": iso(row["created_at"]),

@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.2.0
+  version: 1.3.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -37,6 +37,9 @@ tags:
   description: Transcrições, export e edição de locutores e segmentos.
 - name: people
   description: Diretório de pessoas da organização.
+- name: voice
+  description: 'Identificação por voz (LGPD): consentimento, impressão de voz, recusa de sugestão e auditoria.
+    Só sessão: um PAT nunca lê nem apaga dado biométrico.'
 - name: search
   description: Busca full-text sobre segmentos.
 - name: organize
@@ -965,6 +968,46 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+  /api/v1/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}:
+    parameters:
+    - $ref: '#/components/parameters/TranscriptId'
+    - name: speaker_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^S[0-9]+$
+    - $ref: '#/components/parameters/PersonId'
+    delete:
+      tags:
+      - voice
+      operationId: rejectSpeakerSuggestion
+      summary: Recusar uma sugestão por voz
+      description: 'A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
+
+        comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
+
+        Aceitar é o `PATCH` do locutor com `person_id`.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Locutor sem a sugestão recusada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Speaker'
+              examples:
+                recusada:
+                  $ref: '#/components/examples/SpeakerSuggestionRejected'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/transcripts/{transcript_id}/speakers/merge:
     parameters:
     - $ref: '#/components/parameters/TranscriptId'
@@ -1498,6 +1541,120 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/people/{person_id}/voice-consent:
+    parameters:
+    - $ref: '#/components/parameters/PersonId'
+    put:
+      tags:
+      - voice
+      operationId: setVoiceConsent
+      summary: Registrar ou revogar o consentimento de voz
+      description: 'Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
+
+        quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
+
+        histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
+
+        as sugestões pendentes da pessoa.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceConsentPut'
+            examples:
+              registrar:
+                $ref: '#/components/examples/VoiceConsentPutRequest'
+      responses:
+        '200':
+          description: Pessoa com o consentimento novo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/people/{person_id}/voiceprint:
+    parameters:
+    - $ref: '#/components/parameters/PersonId'
+    get:
+      tags:
+      - voice
+      operationId: getVoiceprint
+      summary: Impressão de voz da pessoa
+      description: As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+      responses:
+        '200':
+          description: Impressão.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Voiceprint'
+              examples:
+                impressao:
+                  $ref: '#/components/examples/Voiceprint'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - voice
+      operationId: deleteVoiceprint
+      summary: Excluir a impressão de voz
+      description: Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluída.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/people/{person_id}/voiceprint/export:
+    parameters:
+    - $ref: '#/components/parameters/PersonId'
+    get:
+      tags:
+      - voice
+      operationId: exportVoiceprint
+      summary: Exportar os dados de voz da pessoa
+      description: 'Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha
+        de
+
+        auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
+
+        '
+      responses:
+        '200':
+          description: Exportação.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="voz-<pessoa>.json"`.'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceprintExport'
+              examples:
+                exportacao:
+                  $ref: '#/components/examples/VoiceprintExport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/search:
     get:
       tags:
@@ -1889,6 +2046,57 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+  /api/v1/admin/voice-audit:
+    get:
+      tags:
+      - admin
+      - voice
+      operationId: listVoiceAudit
+      summary: Trilha de auditoria da identificação por voz
+      description: Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações,
+        do mais novo ao mais antigo.
+      parameters:
+      - $ref: '#/components/parameters/PersonFilter'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Eventos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceAuditPage'
+              examples:
+                trilha:
+                  $ref: '#/components/examples/VoiceAuditPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/admin/voiceprints:
+    delete:
+      tags:
+      - admin
+      - voice
+      operationId: purgeVoiceprints
+      summary: Apagar todas as impressões de voz da organização
+      description: Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria
+        ficam.
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: O que foi apagado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoicePurgeResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/v1/admin/agent-providers:
     get:
       tags:
@@ -3397,6 +3605,309 @@ components:
           - string
           - 'null'
           format: date-time
+        term_version:
+          description: Versão do termo de consentimento vigente quando o estado foi registrado.
+          type:
+          - string
+          - 'null'
+        recorded_by:
+          description: Quem registrou o estado atual.
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        sample_count:
+          description: Amostras (locutores confirmados) na impressão de voz da pessoa.
+          type: integer
+          minimum: 0
+    VoiceConsentPut:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - granted
+          - revoked
+        notes:
+          description: Como o consentimento foi colhido (documento assinado, e-mail, ata).
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+    VoiceConsentRecord:
+      description: Um registro do histórico de consentimento, com o termo exato em vigor.
+      type: object
+      required:
+      - status
+      - term_version
+      - term_text
+      - notes
+      - recorded_by
+      - recorded_at
+      properties:
+        status:
+          type: string
+          enum:
+          - granted
+          - revoked
+        term_version:
+          type: string
+        term_text:
+          type: string
+        notes:
+          type:
+          - string
+          - 'null'
+        recorded_by:
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        recorded_at:
+          type: string
+          format: date-time
+    VoiceSample:
+      description: Uma amostra da impressão de voz — um locutor confirmado como a pessoa.
+      type: object
+      required:
+      - transcript_id
+      - recording_title
+      - speaker_id
+      - model
+      - talk_ms
+      - created_by
+      - created_at
+      properties:
+        transcript_id:
+          type: string
+          format: uuid
+        recording_title:
+          description: Título da gravação, ou `null` se quem pergunta não a vê.
+          type:
+          - string
+          - 'null'
+        speaker_id:
+          type: string
+          pattern: ^S[0-9]+$
+        model:
+          description: Modelo de embedding da amostra.
+          type: string
+        talk_ms:
+          type: integer
+          minimum: 0
+        created_by:
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+    VoiceSampleExport:
+      description: Amostra com o vetor, só na exportação.
+      type: object
+      required:
+      - transcript_id
+      - recording_title
+      - speaker_id
+      - model
+      - talk_ms
+      - created_by
+      - created_at
+      - embedding
+      properties:
+        transcript_id:
+          type: string
+          format: uuid
+        recording_title:
+          type:
+          - string
+          - 'null'
+        speaker_id:
+          type: string
+        model:
+          type: string
+        talk_ms:
+          type: integer
+          minimum: 0
+        created_by:
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        embedding:
+          type: array
+          items:
+            type: number
+    Voiceprint:
+      type: object
+      required:
+      - person_id
+      - consent
+      - opt_in
+      - term
+      - sample_count
+      - samples
+      properties:
+        person_id:
+          type: string
+          format: uuid
+        opt_in:
+          description: Opt-in de identificação por voz da organização. Desligado, nada é comparado nem
+            vira amostra.
+          type: boolean
+        term:
+          description: Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir.
+          type: object
+          required:
+          - version
+          - text
+          properties:
+            version:
+              type: string
+            text:
+              type: string
+        consent:
+          $ref: '#/components/schemas/VoiceConsent'
+        sample_count:
+          type: integer
+          minimum: 0
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceSample'
+    VoiceAuditEvent:
+      type: object
+      required:
+      - id
+      - event
+      - person
+      - actor
+      - transcript_id
+      - speaker_id
+      - score
+      - details
+      - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        event:
+          description: Tipo do evento; o cliente mostra cru um valor que não conhece.
+          type: string
+          enum:
+          - comparison
+          - suggested
+          - accepted
+          - rejected
+          - sample_added
+          - sample_removed
+          - link_restored
+          - link_dropped
+          - consent_granted
+          - consent_revoked
+          - voiceprint_deleted
+          - exported
+          - org_opt_in_changed
+          - org_purged
+        person:
+          oneOf:
+          - $ref: '#/components/schemas/PersonRef'
+          - type: 'null'
+        actor:
+          description: Quem agiu; `null` numa ação do sistema (a comparação da ingestão).
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        transcript_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        speaker_id:
+          type:
+          - string
+          - 'null'
+        score:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        details:
+          description: Dados do evento (contagens, limiar, modelo); nunca vetores.
+          type: object
+        created_at:
+          type: string
+          format: date-time
+    VoiceAuditPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceAuditEvent'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    VoiceprintExport:
+      type: object
+      required:
+      - exported_at
+      - exported_by
+      - person
+      - consents
+      - samples
+      - audit
+      properties:
+        exported_at:
+          type: string
+          format: date-time
+        exported_by:
+          $ref: '#/components/schemas/UserRef'
+        person:
+          type: object
+          required:
+          - id
+          - name
+          - email
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            email:
+              type:
+              - string
+              - 'null'
+        consents:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceConsentRecord'
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceSampleExport'
+        audit:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceAuditEvent'
+    VoicePurgeResult:
+      type: object
+      required:
+      - deleted_samples
+      - deleted_suggestions
+      properties:
+        deleted_samples:
+          type: integer
+          minimum: 0
+        deleted_suggestions:
+          type: integer
+          minimum: 0
     Person:
       type: object
       required:
@@ -3994,12 +4505,19 @@ components:
       - suggestion_threshold
       properties:
         enabled:
-          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada.
+          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada.
           type: boolean
         suggestion_threshold:
+          description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
           type: number
           minimum: 0
           maximum: 1
+        consent_term_version:
+          description: Versão do termo de consentimento; sobe sozinha a cada texto novo.
+          type: string
+        consent_term_text:
+          description: Texto do termo que a pessoa aceita ao consentir.
+          type: string
     AdminSettings:
       type: object
       required:
@@ -4102,6 +4620,12 @@ components:
               type: number
               minimum: 0
               maximum: 1
+            consent_term_text:
+              description: Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo
+                que aceitaram.
+              type: string
+              minLength: 1
+              maxLength: 20000
     AgentProvider:
       type: object
       required:
@@ -5891,6 +6415,9 @@ components:
           voice_consent:
             status: none
             updated_at: null
+            term_version: null
+            recorded_by: null
+            sample_count: 0
           transcript_count: 0
           last_seen_at: null
           created_at: '2026-09-12T11:00:00Z'
@@ -5902,6 +6429,11 @@ components:
           voice_consent:
             status: granted
             updated_at: '2026-09-12T11:05:00Z'
+            term_version: '1'
+            recorded_by:
+              id: 01928f3a-1c00-7a00-8000-000000000101
+              name: Mariana Couto
+            sample_count: 5
           transcript_count: 14
           last_seen_at: '2026-09-18T14:00:05Z'
           created_at: '2026-09-12T11:00:00Z'
@@ -5913,6 +6445,11 @@ components:
           voice_consent:
             status: granted
             updated_at: '2026-09-12T11:05:00Z'
+            term_version: '1'
+            recorded_by:
+              id: 01928f3a-1c00-7a00-8000-000000000101
+              name: Mariana Couto
+            sample_count: 2
           transcript_count: 3
           last_seen_at: '2026-09-11T13:00:00Z'
           created_at: '2026-09-12T11:00:00Z'
@@ -5928,6 +6465,11 @@ components:
         voice_consent:
           status: granted
           updated_at: '2026-09-12T11:05:00Z'
+          term_version: '1'
+          recorded_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          sample_count: 2
         transcript_count: 3
         last_seen_at: '2026-09-11T13:00:00Z'
         created_at: '2026-09-12T11:00:00Z'
@@ -6069,6 +6611,12 @@ components:
         voice_identification:
           enabled: true
           suggestion_threshold: 0.75
+          consent_term_version: '1'
+          consent_term_text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada
+            das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como
+            locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11),
+            que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
+            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
           id: 01928f3a-1c00-7a00-8000-000000000101
@@ -6231,6 +6779,206 @@ components:
           queued_at: '2026-09-19T13:41:30Z'
           started_at: null
           updated_at: null
+    SpeakerSuggestionRejected:
+      summary: Locutor 2 sem a sugestão recusada
+      value:
+        id: S2
+        label: Locutor 2
+        person: null
+        suggestions: []
+        talk_ms: 37050
+    VoiceConsentPutRequest:
+      summary: Consentimento colhido por escrito
+      value:
+        status: granted
+        notes: Termo assinado na reunião de abertura do programa (ata de 12/09/2026).
+    Voiceprint:
+      summary: Impressão com duas amostras
+      value:
+        person_id: 01928f3a-1c00-7a00-8000-000000000302
+        consent:
+          status: granted
+          updated_at: '2026-09-12T11:05:00Z'
+          term_version: '1'
+          recorded_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          sample_count: 2
+        opt_in: true
+        term:
+          version: '1'
+          text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada das
+            gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como locutor
+            nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11), que nenhuma
+            sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
+            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
+        sample_count: 2
+        samples:
+        - transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          recording_title: Alinhamento do programa de lideranças
+          speaker_id: S2
+          model: pyannote/wespeaker-voxceleb-resnet34-LM
+          talk_ms: 37050
+          created_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          created_at: '2026-09-18T15:02:17Z'
+        - transcript_id: 01928f3a-1c00-7a00-8000-000000000502
+          recording_title: null
+          speaker_id: S1
+          model: pyannote/wespeaker-voxceleb-resnet34-LM
+          talk_ms: 412300
+          created_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          created_at: '2026-09-12T16:40:00Z'
+    VoiceprintExport:
+      summary: Exportação LGPD de uma pessoa
+      value:
+        exported_at: '2026-09-20T10:00:00Z'
+        exported_by:
+          id: 01928f3a-1c00-7a00-8000-000000000101
+          name: Mariana Couto
+        person:
+          id: 01928f3a-1c00-7a00-8000-000000000302
+          name: Rafael Lima
+          email: rafael.lima@example.com
+        consents:
+        - status: granted
+          term_version: '1'
+          term_text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada
+            das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como
+            locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11),
+            que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
+            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
+          notes: Termo assinado na reunião de abertura do programa (ata de 12/09/2026).
+          recorded_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          recorded_at: '2026-09-12T11:05:00Z'
+        samples:
+        - transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          recording_title: Alinhamento do programa de lideranças
+          speaker_id: S2
+          model: pyannote/wespeaker-voxceleb-resnet34-LM
+          talk_ms: 37050
+          created_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          created_at: '2026-09-18T15:02:17Z'
+          embedding:
+          - 0.009
+          - -0.002
+          - -0.0031
+          - -0.0351
+          - 0.011
+          - -0.0009
+          - 0.066
+          - -0.0623
+        - transcript_id: 01928f3a-1c00-7a00-8000-000000000502
+          recording_title: null
+          speaker_id: S1
+          model: pyannote/wespeaker-voxceleb-resnet34-LM
+          talk_ms: 412300
+          created_by:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          created_at: '2026-09-12T16:40:00Z'
+          embedding:
+          - 0.1554
+          - -0.1944
+          - 0.0035
+          - 0.0544
+          - -0.0126
+          - -0.047
+          - -0.0036
+          - 0.0431
+        audit:
+        - id: 01928f3a-1c00-7a00-8000-000000000d03
+          event: accepted
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          speaker_id: S2
+          score: 0.82
+          details: {}
+          created_at: '2026-09-18T15:02:17Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000d02
+          event: suggested
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor: null
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          speaker_id: S2
+          score: 0.82
+          details:
+            threshold: 0.6
+            model: pyannote/wespeaker-voxceleb-resnet34-LM
+          created_at: '2026-09-18T14:40:02Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000d01
+          event: consent_granted
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          transcript_id: null
+          speaker_id: null
+          score: null
+          details:
+            term_version: '1'
+          created_at: '2026-09-12T11:05:00Z'
+    VoiceAuditPage:
+      summary: Sugestão, aceite e consentimento
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000d03
+          event: accepted
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          speaker_id: S2
+          score: 0.82
+          details: {}
+          created_at: '2026-09-18T15:02:17Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000d02
+          event: suggested
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor: null
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          speaker_id: S2
+          score: 0.82
+          details:
+            threshold: 0.6
+            model: pyannote/wespeaker-voxceleb-resnet34-LM
+          created_at: '2026-09-18T14:40:02Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000d01
+          event: consent_granted
+          person:
+            id: 01928f3a-1c00-7a00-8000-000000000302
+            name: Rafael Lima
+          actor:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          transcript_id: null
+          speaker_id: null
+          score: null
+          details:
+            term_version: '1'
+          created_at: '2026-09-12T11:05:00Z'
+        next_cursor: null
     ProblemUnauthorized:
       summary: Sem credencial
       value:

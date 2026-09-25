@@ -7,7 +7,10 @@
       "notes": "Diretora de Pessoas da Metalúrgica Serra Azul.",
       "voice_consent": {
         "status": "none",
-        "updated_at": null
+        "updated_at": null,
+        "term_version": null,
+        "recorded_by": null,
+        "sample_count": 0
       },
       "transcript_count": 0,
       "last_seen_at": null,
@@ -21,7 +24,13 @@
       "notes": "Consultora EK.",
       "voice_consent": {
         "status": "granted",
-        "updated_at": "2026-09-12T11:05:00Z"
+        "updated_at": "2026-09-12T11:05:00Z",
+        "term_version": "1",
+        "recorded_by": {
+          "id": "01928f3a-1c00-7a00-8000-000000000101",
+          "name": "Mariana Couto"
+        },
+        "sample_count": 5
       },
       "transcript_count": 14,
       "last_seen_at": "2026-09-18T14:00:05Z",
@@ -35,7 +44,13 @@
       "notes": "Gerente de RH da Metalúrgica Serra Azul.",
       "voice_consent": {
         "status": "granted",
-        "updated_at": "2026-09-12T11:05:00Z"
+        "updated_at": "2026-09-12T11:05:00Z",
+        "term_version": "1",
+        "recorded_by": {
+          "id": "01928f3a-1c00-7a00-8000-000000000101",
+          "name": "Mariana Couto"
+        },
+        "sample_count": 2
       },
       "transcript_count": 3,
       "last_seen_at": "2026-09-11T13:00:00Z",

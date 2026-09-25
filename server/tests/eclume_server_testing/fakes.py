@@ -3,7 +3,9 @@
 O worker GPU fake cumpre o lado GPU do contrato de jobs com a transcrição de fixture: publica
 `recordings/{id}/transcript.raw.json` (a fixture de 3 locutores sem `person`/`suggestions`, com
 rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso e enfileira
-`ingest_transcript` (ou `transcription_failed`) em `eclume:default`.
+`ingest_transcript` (ou `transcription_failed`) em `eclume:default`. Os embeddings têm 256
+dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
+toda gravação; `voices=` troca as vozes de uma rodada.
 
 `FakeAgents` substitui a fábrica de providers do job `summarize`: nenhum teste chama um LLM de
 verdade, e cada chamada fica registrada.
@@ -12,6 +14,7 @@ verdade, e cada chamada fica registrada.
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +35,17 @@ if TYPE_CHECKING:
 
 FIXTURE = Path(__file__).resolve().parents[3] / "contracts" / "fixtures" / "transcript-3-locutores.json"
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
+EMBEDDING_DIMS = 256
+
+
+def voice(seed: int, *, jitter: float = 0.0, jitter_seed: int = 0) -> list[float]:
+    """Uma "voz": vetor gaussiano fixo por `seed` (vozes distintas são quase ortogonais), com ruído opcional."""
+    base = random.Random(seed)  # noqa: S311 — dado de teste, sem fim criptográfico
+    noise = random.Random(10_000 + jitter_seed)  # noqa: S311
+    return [base.gauss(0, 1) + jitter * noise.gauss(0, 1) for _ in range(EMBEDDING_DIMS)]
+
+
+DEFAULT_VOICES = {f"S{i}": voice(i) for i in (1, 2, 3)}
 ENGINE_INFO = {
     "engine": "whisperx-local",
     "model": "large-v3-turbo",
@@ -79,8 +93,8 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
     embeddings_key = None
     if options.get("embeddings"):
         embeddings_key = f"{prefix}speaker_embeddings.json"
-        vectors = {f"S{i}": [float(i), 0.5, -0.25] for i in (1, 2, 3)}
-        document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL}
+        vectors = ctx.get("voices") or DEFAULT_VOICES
+        document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL, "dimension": EMBEDDING_DIMS}
         await storage.put_bytes(embeddings_key, json.dumps(document).encode(), "application/json")
     await redis.enqueue_job(
         "ingest_transcript", recording_id, transcript_key, embeddings_key, ENGINE_INFO, _queue_name=DEFAULT_QUEUE
@@ -93,10 +107,12 @@ async def _gpu_startup(ctx: dict[str, Any]) -> None:
     ctx["storage"] = Storage(ctx["settings"])
 
 
-def run_gpu(settings: Settings, *, fail: bool = False) -> list[tuple[str, str, dict[str, Any]]]:
+def run_gpu(
+    settings: Settings, *, fail: bool = False, voices: dict[str, list[float]] | None = None
+) -> list[tuple[str, str, dict[str, Any]]]:
     """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas."""
     calls: list[tuple[str, str, dict[str, Any]]] = []
-    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls}
+    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices}
     run(
         _drain(
             [func(fake_transcribe, name="transcribe")],
@@ -153,10 +169,16 @@ async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
         await worker.close()
 
 
-def transcribed(api: Api, settings: Settings, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
+def transcribed(
+    api: Api,
+    settings: Settings,
+    *,
+    voices: dict[str, list[float]] | None = None,
+    **fields: Any,  # noqa: ANN401
+) -> dict[str, Any]:
     """Sobe um áudio e roda os dois workers: devolve a gravação já com a transcrição de 3 locutores."""
     recording = upload_file(api, audio_bytes(1000), **fields)
-    run_gpu(settings)
+    run_gpu(settings, voices=voices)
     run_cpu(settings)
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["status"] == "transcribed", body

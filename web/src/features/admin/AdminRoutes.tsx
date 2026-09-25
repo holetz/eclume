@@ -6,6 +6,7 @@ import { SecretsPage } from './SecretsPage'
 import { SettingsPage } from './SettingsPage'
 import { TemplatesPage } from './TemplatesPage'
 import { UsersPage } from './UsersPage'
+import { VoicePage } from './VoicePage'
 
 /** Rotas de /admin/*, dentro da moldura com a guarda de papel. */
 export function AdminRoutes() {
@@ -14,6 +15,7 @@ export function AdminRoutes() {
       <Route element={<AdminLayout />}>
         <Route index element={<Navigate to="transcricao" replace />} />
         <Route path="transcricao" element={<SettingsPage />} />
+        <Route path="voz" element={<VoicePage />} />
         <Route path="agentes" element={<AgentsPage />} />
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="usuarios" element={<UsersPage />} />

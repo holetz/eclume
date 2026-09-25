@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import REGCONFIG, TSVECTOR
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.transcripts import segment_json, speaker_json
+from eclume_server.voice import load_suggestions
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -114,7 +115,10 @@ async def search(conn: AsyncConnection, filters: SearchFilters, offset: int, lim
     clean = func.translate(page.c.text, _START + _STOP, "")
     marked = func.ts_headline(_config(), clean, tsquery, _HEADLINE_OPTIONS) if tsquery is not None else clean
     rows = (await conn.execute(select(page, marked.label("marked")).order_by(*order(page.c)))).mappings().all()
-    return [hit_json(row) for row in rows]
+    suggestions = await load_suggestions(conn, list({row["transcript_id"] for row in rows}))
+    return [
+        hit_json({**row, "suggestions": suggestions.get((row["transcript_id"], row["speaker_id"]), [])}) for row in rows
+    ]
 
 
 def hit_json(row: Row) -> dict[str, Any]:

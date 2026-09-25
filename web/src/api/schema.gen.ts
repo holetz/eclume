@@ -473,6 +473,32 @@ export interface paths {
         patch: operations["updateSpeaker"];
         trace?: never;
     };
+    "/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transcript_id: components["parameters"]["TranscriptId"];
+                speaker_id: string;
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Recusar uma sugestão por voz
+         * @description A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
+         *     comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
+         *     Aceitar é o `PATCH` do locutor com `person_id`.
+         */
+        delete: operations["rejectSpeakerSuggestion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transcripts/{transcript_id}/speakers/merge": {
         parameters: {
             query?: never;
@@ -675,6 +701,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/people/{person_id}/voice-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Registrar ou revogar o consentimento de voz
+         * @description Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
+         *     quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
+         *     histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
+         *     as sugestões pendentes da pessoa.
+         */
+        put: operations["setVoiceConsent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/people/{person_id}/voiceprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Impressão de voz da pessoa
+         * @description As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+         */
+        get: operations["getVoiceprint"];
+        put?: never;
+        post?: never;
+        /**
+         * Excluir a impressão de voz
+         * @description Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+         */
+        delete: operations["deleteVoiceprint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/people/{person_id}/voiceprint/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Exportar os dados de voz da pessoa
+         * @description Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha de
+         *     auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
+         */
+        get: operations["exportVoiceprint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -839,6 +939,46 @@ export interface paths {
          * @description Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs.
          */
         patch: operations["updateAdminSettings"];
+        trace?: never;
+    };
+    "/api/v1/admin/voice-audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trilha de auditoria da identificação por voz
+         * @description Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações, do mais novo ao mais antigo.
+         */
+        get: operations["listVoiceAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/voiceprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Apagar todas as impressões de voz da organização
+         * @description Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria ficam.
+         */
+        delete: operations["purgeVoiceprints"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/agent-providers": {
@@ -1412,6 +1552,112 @@ export interface components {
             status: "none" | "granted" | "revoked";
             /** Format: date-time */
             updated_at: string | null;
+            /** @description Versão do termo de consentimento vigente quando o estado foi registrado. */
+            term_version?: string | null;
+            /** @description Quem registrou o estado atual. */
+            recorded_by?: components["schemas"]["UserRef"] | null;
+            /** @description Amostras (locutores confirmados) na impressão de voz da pessoa. */
+            sample_count?: number;
+        };
+        VoiceConsentPut: {
+            /** @enum {string} */
+            status: "granted" | "revoked";
+            /** @description Como o consentimento foi colhido (documento assinado, e-mail, ata). */
+            notes?: string | null;
+        };
+        /** @description Um registro do histórico de consentimento, com o termo exato em vigor. */
+        VoiceConsentRecord: {
+            /** @enum {string} */
+            status: "granted" | "revoked";
+            term_version: string;
+            term_text: string;
+            notes: string | null;
+            recorded_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            recorded_at: string;
+        };
+        /** @description Uma amostra da impressão de voz — um locutor confirmado como a pessoa. */
+        VoiceSample: {
+            /** Format: uuid */
+            transcript_id: string;
+            /** @description Título da gravação, ou `null` se quem pergunta não a vê. */
+            recording_title: string | null;
+            speaker_id: string;
+            /** @description Modelo de embedding da amostra. */
+            model: string;
+            talk_ms: number;
+            created_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description Amostra com o vetor, só na exportação. */
+        VoiceSampleExport: {
+            /** Format: uuid */
+            transcript_id: string;
+            recording_title: string | null;
+            speaker_id: string;
+            model: string;
+            talk_ms: number;
+            created_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+            embedding: number[];
+        };
+        Voiceprint: {
+            /** Format: uuid */
+            person_id: string;
+            /** @description Opt-in de identificação por voz da organização. Desligado, nada é comparado nem vira amostra. */
+            opt_in: boolean;
+            /** @description Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir. */
+            term: {
+                version: string;
+                text: string;
+            };
+            consent: components["schemas"]["VoiceConsent"];
+            sample_count: number;
+            samples: components["schemas"]["VoiceSample"][];
+        };
+        VoiceAuditEvent: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Tipo do evento; o cliente mostra cru um valor que não conhece.
+             * @enum {string}
+             */
+            event: "comparison" | "suggested" | "accepted" | "rejected" | "sample_added" | "sample_removed" | "link_restored" | "link_dropped" | "consent_granted" | "consent_revoked" | "voiceprint_deleted" | "exported" | "org_opt_in_changed" | "org_purged";
+            person: components["schemas"]["PersonRef"] | null;
+            /** @description Quem agiu; `null` numa ação do sistema (a comparação da ingestão). */
+            actor: components["schemas"]["UserRef"] | null;
+            /** Format: uuid */
+            transcript_id: string | null;
+            speaker_id: string | null;
+            score: number | null;
+            /** @description Dados do evento (contagens, limiar, modelo); nunca vetores. */
+            details: Record<string, never>;
+            /** Format: date-time */
+            created_at: string;
+        };
+        VoiceAuditPage: {
+            items: components["schemas"]["VoiceAuditEvent"][];
+            next_cursor: components["schemas"]["NextCursor"];
+        };
+        VoiceprintExport: {
+            /** Format: date-time */
+            exported_at: string;
+            exported_by: components["schemas"]["UserRef"];
+            person: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                email: string | null;
+            };
+            consents: components["schemas"]["VoiceConsentRecord"][];
+            samples: components["schemas"]["VoiceSampleExport"][];
+            audit: components["schemas"]["VoiceAuditEvent"][];
+        };
+        VoicePurgeResult: {
+            deleted_samples: number;
+            deleted_suggestions: number;
         };
         Person: {
             /** Format: uuid */
@@ -1645,9 +1891,14 @@ export interface components {
             default_template_id: string | null;
         };
         VoiceIdentificationSettings: {
-            /** @description Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada. */
+            /** @description Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada. */
             enabled: boolean;
+            /** @description Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração. */
             suggestion_threshold: number;
+            /** @description Versão do termo de consentimento; sobe sozinha a cada texto novo. */
+            consent_term_version?: string;
+            /** @description Texto do termo que a pessoa aceita ao consentir. */
+            consent_term_text?: string;
         };
         AdminSettings: {
             asr: components["schemas"]["AsrSettings"];
@@ -1687,6 +1938,8 @@ export interface components {
             voice_identification?: {
                 enabled?: boolean;
                 suggestion_threshold?: number;
+                /** @description Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo que aceitaram. */
+                consent_term_text?: string;
             };
         };
         AgentProvider: {
@@ -2841,6 +3094,36 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    rejectSpeakerSuggestion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                transcript_id: components["parameters"]["TranscriptId"];
+                speaker_id: string;
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locutor sem a sugestão recusada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Speaker"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     mergeSpeakers: {
         parameters: {
             query?: never;
@@ -3339,6 +3622,114 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    setVoiceConsent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceConsentPut"];
+            };
+        };
+        responses: {
+            /** @description Pessoa com o consentimento novo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Person"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Impressão. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Voiceprint"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    exportVoiceprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exportação. */
+            200: {
+                headers: {
+                    /** @description `attachment; filename="voz-<pessoa>.json"`. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintExport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     search: {
         parameters: {
             query?: {
@@ -3761,6 +4152,61 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listVoiceAudit: {
+        parameters: {
+            query?: {
+                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+                person?: components["parameters"]["PersonFilter"];
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eventos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceAuditPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    purgeVoiceprints: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O que foi apagado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoicePurgeResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listAgentProviders: {

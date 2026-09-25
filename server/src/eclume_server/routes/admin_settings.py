@@ -12,6 +12,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.settings_admin import BLOCKS, AdminSettingsPatch, changes_of, settings_json, validate_merged
+from eclume_server.voice import audit, voice_settings
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -29,6 +30,22 @@ async def _read(conn: Any, principal: Principal, *, lock: bool = False) -> Any: 
     return (await conn.execute(query)).mappings().one()
 
 
+async def _audit_voice(conn: Any, principal: Principal, before: dict[str, Any], after: dict[str, Any]) -> None:  # noqa: ANN401
+    """Termo novo sobe a versão; toda mudança no bloco de voz (o opt-in LGPD) vai para a auditoria."""
+    if after["consent_term_text"] != before["consent_term_text"]:
+        after["consent_term_version"] = str(int(before["consent_term_version"]) + 1)
+    changed = sorted(key for key in after if after[key] != before.get(key))
+    if changed:
+        details = {key: after[key] for key in ("enabled", "suggestion_threshold", "consent_term_version")}
+        await audit(
+            conn,
+            principal.org_id,
+            "org_opt_in_changed",
+            actor_id=principal.user_id,
+            details={"changed": changed, **details},
+        )
+
+
 @router.get("/settings")
 async def get_admin_settings(principal: Admin, ctx: Ctx) -> dict[str, Any]:
     """Configuração atual da organização."""
@@ -44,7 +61,10 @@ async def update_admin_settings(body: AdminSettingsPatch, principal: Admin, ctx:
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         current = await _read(conn, principal, lock=True)
         merged = {block: {**current[block], **changes.get(block, {})} for block in BLOCKS}
+        voice_before = voice_settings(current["voice_identification"])
+        merged["voice_identification"] = voice_settings(merged["voice_identification"])
         await validate_merged(conn, merged)
+        await _audit_voice(conn, principal, voice_before, merged["voice_identification"])
         await conn.execute(
             update(t.org_settings)
             .where(t.org_settings.c.org_id == principal.org_id)
