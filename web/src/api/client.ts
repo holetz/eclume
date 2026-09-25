@@ -10,7 +10,7 @@ export const CSRF_HEADER = 'X-CSRF-Token'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const LOGIN_PATH = '/api/v1/auth/login'
 
-export function readCookie(name: string, cookies: string = document.cookie): string | null {
+export function readCookie(name: string, cookies: string = globalThis.document?.cookie ?? ''): string | null {
   for (const pair of cookies.split(';')) {
     const [key, ...rest] = pair.trim().split('=')
     if (key === name) return decodeURIComponent(rest.join('='))
@@ -46,7 +46,10 @@ export const unauthorizedMiddleware: Middleware = {
   },
 }
 
-export function createApiClient(baseUrl: string = window.location.origin) {
+// Fora do navegador (testes em ambiente node) não há origem; a base só precisa ser absoluta.
+const ORIGIN = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+
+export function createApiClient(baseUrl: string = ORIGIN) {
   const client = createClient<paths>({
     baseUrl,
     credentials: 'same-origin',
