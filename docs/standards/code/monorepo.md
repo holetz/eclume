@@ -45,24 +45,45 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+### Server (`eclume_server`)
+
+A API e o worker CPU do server; persistência, isolamento, autenticação e upload estão em
+[server-nucleo.md](server-nucleo.md). A suíte de `server/tests` usa Postgres, Redis e MinIO reais
+do compose de teste; sem ele, esses testes pulam (a CI liga `ECLUME_TEST_REQUIRE_SERVICES=1` para
+que pulem nunca).
+
+```bash
+docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
+uv run eclume-server migrate
+uv run eclume-server admin bootstrap --org "<organização>" --email <e-mail> --name "<nome>" --password-stdin
+uv run uvicorn eclume_server.app:create_app --factory
+uv run arq eclume_server.worker.WorkerSettings
+```
+
 ## Web — npm em `web/`
 
 Vite + React + TS, eslint (flat config com typescript-eslint, react-hooks e react-refresh) e
-vitest com jsdom e Testing Library. `package-lock.json` é versionado.
+vitest com jsdom e Testing Library. `package-lock.json` é versionado. Os tipos da API saem do
+contrato por `gen:api` (`src/api/schema.gen.ts`, versionado); a estrutura do app está em
+[frontend-web.md](frontend-web.md).
 
 ```bash
 npm --prefix web ci
+npm --prefix web run gen:api
 npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
 ```
 
-Os testes de navegador da conversão de mídia (vitest browser mode, Chrome) ficam fora do
-`npm test` e da CI e rodam só no host de build; o porquê e as fixtures estão em
-[formato-audio-upload.md](formato-audio-upload.md).
+Os testes de navegador ficam fora do `npm test`: os da conversão de mídia (vitest browser mode,
+Chrome; o porquê e as fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o
+E2E Playwright do app contra o mock. Localmente, rodam no host de build; o E2E precisa do mock
+no ar, e `ECLUME_MOCK_URL` indica a porta quando a 4010 está ocupada.
 
 ```bash
 remote-run web 'npx playwright install --with-deps chrome && npm run fixtures && npm run test:browser'
+remote-run . 'ECLUME_MOCK_PORT=4110 docker compose -p eclume-mock-web -f deploy/docker-compose.mock.yml up -d --wait && cd web && npx playwright install chromium && ECLUME_MOCK_URL=http://127.0.0.1:4110 npm run test:e2e'
 ```
 
 ## Desktop — workspace cargo em `desktop/`
@@ -99,10 +120,17 @@ Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta pu
 docker compose -f deploy/docker-compose.dev.yml up -d
 ```
 
+`deploy/docker-compose.test.yml` sobe os mesmos três serviços para a suíte do server, com dados em
+`tmpfs` e portas próprias (`55532`, `56479`, `59100`); rode-o sempre com `-p eclume-test`.
+
 ## CI — `.github/workflows/ci.yml`
 
-Três jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
-`web` e `desktop`, cada um rodando exatamente os comandos acima (com `--locked` no uv e no cargo).
+Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
+`contracts`, `web` e `desktop`, cada um rodando os comandos acima (com `--locked` no uv e no
+cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
+e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
+O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
+`ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
 demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de

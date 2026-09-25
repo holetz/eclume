@@ -1,0 +1,143 @@
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { Link, useSearchParams } from 'react-router'
+import { api, type Schemas } from '../../api/client'
+import { errorMessage, unwrap } from '../../api/problem'
+import { usePageTitle } from '../../app/usePageTitle'
+import { formatDateTime, formatDuration, isActive, sourceLabel } from './format'
+import styles from './LibraryPage.module.css'
+import { JobProgress, StatusBadge } from './RecordingStatus'
+
+type Owner = 'me' | 'shared' | 'all'
+
+const OWNERS: { value: Owner; label: string }[] = [
+  { value: 'me', label: 'Minhas' },
+  { value: 'shared', label: 'Compartilhadas comigo' },
+  { value: 'all', label: 'Todas' },
+]
+
+const POLL_MS = 3000
+
+function parseOwner(value: string | null): Owner {
+  return value === 'shared' || value === 'all' ? value : 'me'
+}
+
+export function LibraryPage() {
+  usePageTitle('Biblioteca')
+  const [params, setParams] = useSearchParams()
+  const owner = parseOwner(params.get('de'))
+
+  const recordings = useInfiniteQuery({
+    queryKey: ['recordings', { owner }],
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/api/v1/recordings', {
+          params: { query: { owner, limit: 25, ...(pageParam ? { cursor: pageParam } : {}) } },
+        }),
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor,
+    // Enquanto algum job anda, a lista se atualiza sozinha.
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) => page.items.some(isActive)) ? POLL_MS : false,
+  })
+
+  const items = recordings.data?.pages.flatMap((page) => page.items) ?? []
+
+  return (
+    <section className={styles.page} aria-labelledby="biblioteca-titulo">
+      <header className={styles.header}>
+        <div>
+          <h1 id="biblioteca-titulo">Biblioteca</h1>
+          <p className="muted">Suas gravações e as compartilhadas com você.</p>
+        </div>
+        <Link to="/importar" className="btn btn-primary">
+          Importar arquivo
+        </Link>
+      </header>
+
+      <fieldset className={styles.filter}>
+        <legend className="visually-hidden">Mostrar</legend>
+        {OWNERS.map((option) => (
+          <label key={option.value} className={styles.filterOption}>
+            <input
+              type="radio"
+              name="owner"
+              value={option.value}
+              checked={owner === option.value}
+              onChange={() => setParams(option.value === 'me' ? {} : { de: option.value }, { replace: true })}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      {recordings.isPending && <p role="status">Carregando gravações…</p>}
+      {recordings.isError && (
+        <div className="alert alert-error" role="alert">
+          {errorMessage(recordings.error)}{' '}
+          <button type="button" className="btn btn-sm" onClick={() => recordings.refetch()}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
+      {recordings.isSuccess && items.length === 0 && <EmptyLibrary owner={owner} />}
+
+      {items.length > 0 && (
+        <ul className={styles.list} aria-label="Gravações">
+          {items.map((recording) => (
+            <RecordingRow key={recording.id} recording={recording} />
+          ))}
+        </ul>
+      )}
+
+      {recordings.hasNextPage && (
+        <button
+          type="button"
+          className={`btn ${styles.more}`}
+          onClick={() => recordings.fetchNextPage()}
+          disabled={recordings.isFetchingNextPage}
+        >
+          {recordings.isFetchingNextPage ? 'Carregando…' : 'Carregar mais'}
+        </button>
+      )}
+    </section>
+  )
+}
+
+function RecordingRow({ recording }: { recording: Schemas['Recording'] }) {
+  return (
+    <li className={`card ${styles.row}`}>
+      <div className={styles.main}>
+        <h2 className={styles.title}>
+          <Link to={`/gravacoes/${recording.id}`}>{recording.title}</Link>
+        </h2>
+        <p className={styles.meta}>
+          <span>{formatDateTime(recording.recorded_at)}</span>
+          <span className="tabular">{formatDuration(recording.duration_ms)}</span>
+          <span>{sourceLabel(recording.source)}</span>
+          {recording.visibility === 'shared' && <span>Compartilhada</span>}
+        </p>
+        <JobProgress recording={recording} />
+      </div>
+      <StatusBadge status={recording.status} />
+    </li>
+  )
+}
+
+function EmptyLibrary({ owner }: { owner: Owner }) {
+  if (owner === 'shared') {
+    return <p className={`card ${styles.empty}`}>Ninguém compartilhou gravações com você ainda.</p>
+  }
+  return (
+    <div className={`card ${styles.empty}`}>
+      <h2>Nenhuma gravação ainda</h2>
+      <p className="muted">
+        Importe um arquivo de áudio ou vídeo, ou instale o <Link to="/app-desktop">app desktop</Link> para gravar
+        reuniões automaticamente.
+      </p>
+      <Link to="/importar" className="btn btn-primary">
+        Importar arquivo
+      </Link>
+    </div>
+  )
+}

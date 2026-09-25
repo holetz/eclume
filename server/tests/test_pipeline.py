@@ -1,0 +1,191 @@
+"""Ponta a ponta com o worker GPU fake: upload → transcribe → ingest → leitura e export."""
+
+from __future__ import annotations
+
+import re
+from typing import TYPE_CHECKING
+
+from sqlalchemy import text
+
+from eclume_server.queue import Queue
+from eclume_server.transcripts import render_markdown
+from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.fakes import ENGINE_INFO, contract_transcript, run_cpu, run_gpu
+from eclume_server_testing.harness import run
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from eclume_server_testing.api import Account, Api
+    from eclume_server_testing.harness import Services
+
+LUMEA_SEGMENT_RE = re.compile(r"^\*\*(?P<speaker>[^*]+)\*\*\s+\[(?P<timestamp>[^\]]+)\]:\s*(?P<text>.*)$")
+
+
+def _metadata() -> dict[str, object]:
+    return {
+        "title": "Alinhamento do programa de lideranças",
+        "recorded_at": "2026-09-18T14:00:05Z",
+        "language": "pt-BR",
+        "source": "desktop",
+        "tags": ["programa-liderancas"],
+    }
+
+
+def test_upload_transcreve_e_o_lumea_le_por_pat(  # noqa: PLR0915 — o fluxo inteiro é o teste
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user(name="Mariana Couto")
+    session = as_user(account)
+    desktop = session.pat("recordings:write", "recordings:read")
+    lumea = session.pat("transcripts:read")
+
+    recording = upload_file(desktop, audio_bytes(3000), **_metadata())
+    calls = run_gpu(services.settings)
+    assert [call[0] for call in calls] == [recording["id"]]
+
+    # O worker GPU terminou e publicou progresso, mas a ingestão ainda não rodou.
+    pending = desktop.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert pending["status"] == "processing"
+    assert pending["job"]["stage"] == "finalizing"
+
+    run_cpu(services.settings)
+    done = desktop.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert done["status"] == "transcribed"
+    assert done["job"]["state"] == "succeeded"
+    assert done["job"]["progress"] == 1
+    assert done["duration_ms"] == 166000
+    transcript_id = done["transcript_id"]
+    assert transcript_id
+
+    listed = lumea.get("/api/v1/transcripts", params={"since": recording["created_at"]}).json()
+    assert [item["id"] for item in listed["items"]] == [transcript_id]
+    summary = listed["items"][0]
+    assert summary["revision"] == 1
+    assert summary["content_hash"] == recording["content_hash"]
+    assert summary["owner"] == {"id": str(account.user_id), "name": "Mariana Couto"}
+    assert [s["label"] for s in summary["speakers"]] == ["Locutor 1", "Locutor 2", "Locutor 3"]
+
+    full = lumea.get(f"/api/v1/transcripts/{transcript_id}").json()
+    source = contract_transcript()
+    assert full["schema_version"] == "1.0"
+    assert full["recording_id"] == recording["id"]
+    assert full["title"] == "Alinhamento do programa de lideranças"
+    assert full["recorded_at"] == "2026-09-18T14:00:05Z"
+    assert full["source"] == "desktop"
+    assert full["tags"] == ["programa-liderancas"]
+    assert full["engine"]["model"] == "large-v3-turbo"
+    assert [(s["id"], s["talk_ms"], s["person"]) for s in full["speakers"]] == [
+        (s["id"], s["talk_ms"], None) for s in source["speakers"]
+    ]
+    assert [(s["id"], s["speaker_id"], s["start_ms"], s["text"]) for s in full["segments"]] == [
+        (s["id"], s["speaker_id"], s["start_ms"], s["text"]) for s in source["segments"]
+    ]
+    assert all("words" not in s for s in full["segments"])
+    with_words = lumea.get(f"/api/v1/transcripts/{transcript_id}", params={"include": "words"}).json()
+    assert with_words["segments"][0]["words"] == source["segments"][0]["words"]
+
+    exported = lumea.get(f"/api/v1/transcripts/{transcript_id}/export", params={"format": "md"})
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("text/markdown")
+    assert exported.headers["content-disposition"] == 'attachment; filename="alinhamento-do-programa-de-liderancas.md"'
+    assert exported.text == render_markdown(full)
+    body = [line for line in exported.text.split("---\n", 2)[2].splitlines() if line.strip()]
+    assert len(body) == len(source["segments"])
+    assert all(LUMEA_SEGMENT_RE.match(line) for line in body)
+    assert lumea.get(f"/api/v1/transcripts/{transcript_id}/export", params={"format": "pdf"}).status_code == 422
+
+    # Escopos: o PAT do lumea não lê gravações; o do desktop não lê transcrições.
+    assert lumea.get(f"/api/v1/recordings/{recording['id']}").json()["code"] == "insufficient_scope"
+    assert desktop.get("/api/v1/transcripts").json()["required_scopes"] == ["transcripts:read"]
+
+    # `since` inclusivo: repetir com o maior `updated_at` visto devolve o item de novo.
+    again = lumea.get("/api/v1/transcripts", params={"since": summary["updated_at"]}).json()
+    assert [item["id"] for item in again["items"]] == [transcript_id]
+
+
+def test_ingestao_idempotente_e_retranscricao_sobe_revisao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3000))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    first = api.get(f"/api/v1/recordings/{recording['id']}").json()
+
+    # Um `ingest_transcript` repetido (reentrega) não muda nada.
+    async def redeliver() -> None:
+        queue = await Queue.connect(services.settings.redis_url)
+        try:
+            key = f"recordings/{recording['id']}/transcript.raw.json"
+            await queue.pool.enqueue_job("ingest_transcript", recording["id"], key, None, ENGINE_INFO)
+        finally:
+            await queue.close()
+
+    run(redeliver())
+    run_cpu(services.settings)
+    transcript = api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()
+    assert transcript["revision"] == 1
+
+    assert api.post(f"/api/v1/recordings/{recording['id']}/retranscribe").status_code == 202
+    calls = run_gpu(services.settings)
+    assert len(calls) == 1
+    run_cpu(services.settings)
+    after = api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()
+    assert after["id"] == first["transcript_id"]
+    assert after["revision"] == 2
+    assert after["updated_at"] > transcript["updated_at"]
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+
+def test_falha_do_worker_gpu_marca_job_e_gravacao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3000))
+    run_gpu(services.settings, fail=True)
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "failed"
+    assert body["job"]["state"] == "failed"
+    assert body["job"]["error"] == {"code": "gpu_oom", "message": "CUDA out of memory"}
+    assert body["job"]["finished_at"] is not None
+    assert body["transcript_id"] is None
+
+
+def test_embeddings_so_com_opt_in_da_organizacao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    api = as_user(account)
+
+    async def opt_in(conn):  # noqa: ANN001, ANN202
+        await conn.execute(
+            text(
+                "UPDATE org_settings SET voice_identification = jsonb_set(voice_identification, '{enabled}', 'true')"
+                " WHERE org_id = :org"
+            ),
+            {"org": account.org_id},
+        )
+
+    without = upload_file(api, audio_bytes(3000))
+    run(services.sql(opt_in))
+    with_opt_in = upload_file(api, audio_bytes(3000))
+    calls = {call[0]: call[2] for call in run_gpu(services.settings)}
+    assert calls[without["id"]]["embeddings"] is False
+    assert calls[with_opt_in["id"]]["embeddings"] is True
+    run_cpu(services.settings)
+
+    async def count(conn):  # noqa: ANN001, ANN202
+        rows = await conn.execute(
+            text(
+                "SELECT r.id::text, e.speaker_id, e.model, vector_dims(e.embedding) FROM speaker_embeddings e"
+                " JOIN transcripts t ON t.id = e.transcript_id JOIN recordings r ON r.id = t.recording_id"
+                " WHERE r.owner_id = :owner ORDER BY e.speaker_id"
+            ),
+            {"owner": account.user_id},
+        )
+        return [tuple(row) for row in rows]
+
+    rows = run(services.sql(count))
+    assert [(r[0], r[1], r[3]) for r in rows] == [(with_opt_in["id"], f"S{i}", 3) for i in (1, 2, 3)]

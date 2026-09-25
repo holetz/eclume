@@ -1,9 +1,17 @@
+import { BrowserRouter } from 'react-router'
+import { AppProviders } from './app/providers'
+import { createQueryClient } from './app/queryClient'
+import { AppRoutes } from './app/routes'
+
+const queryClient = createQueryClient()
+
 function App() {
   return (
-    <main>
-      <h1>eclume</h1>
-      <p>Transcrição institucional: grave, transcreva, encontre pessoas.</p>
-    </main>
+    <AppProviders client={queryClient}>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AppProviders>
   )
 }
 
