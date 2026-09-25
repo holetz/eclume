@@ -20,4 +20,21 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // A biblioteca de conversão é autocontida: nada nela importa do app.
+    files: ['src/lib/media-convert/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(\\.\\./|/)',
+              message: 'src/lib/media-convert/ não importa de fora da própria pasta.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ])
