@@ -119,3 +119,13 @@ describe('erros', () => {
     expect(() => throwIfAborted(AbortSignal.abort())).toThrow(MediaConvertError)
   })
 })
+
+describe('ProgressTracker com bytes pela razão', () => {
+  it('aceita a contagem de bytes dada pelo motor, sem recuar', () => {
+    const tracker = new ProgressTracker(1000)
+    tracker.setRatio(0.5, 500)
+    tracker.setRatio(0.4, 400)
+    tracker.setRatio(0.9, 5000)
+    expect(tracker.snapshot()).toEqual({ ratio: 0.9, bytesRead: 1000, bytesTotal: 1000 })
+  })
+})

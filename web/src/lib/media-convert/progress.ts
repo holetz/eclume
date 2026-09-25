@@ -29,10 +29,16 @@ export class ProgressTracker {
     this.emit()
   }
 
-  /** Atualiza a razão; valores fora de [0, 1] são limitados e recuos são ignorados. */
-  setRatio(ratio: number): void {
+  /**
+   * Atualiza a razão; valores fora de [0, 1] são limitados e recuos são ignorados. `bytesRead`,
+   * quando dado, substitui a contagem (motores que não expõem as leituras da fonte).
+   */
+  setRatio(ratio: number, bytesRead?: number): void {
     if (!Number.isFinite(ratio)) return
     this.ratio = Math.max(this.ratio, Math.min(1, Math.max(0, ratio)))
+    if (bytesRead !== undefined) {
+      this.bytesRead = Math.max(this.bytesRead, Math.min(this.bytesTotal, bytesRead))
+    }
     this.emit()
   }
 
