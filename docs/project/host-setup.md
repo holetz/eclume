@@ -1,3 +1,16 @@
+---
+type: project
+title: Runbook do host GPU
+description: Como preparar o servidor 192.168.15.199 (Ubuntu 24.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context.
+resource: deploy/**
+tags: [host, deploy, gpu, runbook]
+timestamp: 2026-09-24
+audience: both
+authority: current
+source: holetz/eclume#1
+maintainer: holetz
+---
+
 # Preparar o host 192.168.15.199
 
 Este runbook deixa o servidor pronto para receber os containers do eclume e do lumea. O servidor

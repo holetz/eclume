@@ -1,3 +1,16 @@
+---
+type: project
+title: Referências de mercado
+description: Soluções de mercado avaliadas (WhisperX, speaches, Anarlog, Meetily, OpenTranscribe, Scriberr) e como o eclume usa cada uma na estratégia compor.
+resource: **
+tags: [references, market, asr, desktop]
+timestamp: 2026-09-24
+audience: both
+authority: current
+source: holetz/eclume#1
+maintainer: holetz
+---
+
 # Referências de mercado
 
 Estratégia: **compor**. O eclume tem servidor próprio e enxuto. O motor de ASR é o WhisperX,
