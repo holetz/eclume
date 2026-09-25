@@ -17,9 +17,11 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 npm --prefix web ci
+npm --prefix web run gen:api
 npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
+npm --prefix web run test:e2e
 cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace
