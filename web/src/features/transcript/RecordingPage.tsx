@@ -5,6 +5,7 @@ import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
 import { JobProgress, StatusBadge } from '../library/RecordingStatus'
 import { OrganizePanel } from './OrganizePanel'
 import { useRecording, useTranscript } from './queries'
+import { RetryTranscription } from './RetryTranscription'
 import { parseStart } from './segments'
 import styles from './RecordingPage.module.css'
 import { SpeakersPanel } from './SpeakersPanel'
@@ -52,6 +53,7 @@ export function RecordingPage() {
           <span>{data.owner.name}</span>
         </p>
         <JobProgress recording={data} />
+        <RetryTranscription recording={data} />
       </header>
 
       {data.transcript_id === null ? (

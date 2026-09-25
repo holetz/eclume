@@ -297,9 +297,19 @@ describe('Saúde', () => {
         code: 'out_of_memory',
         message: 'VRAM insuficiente',
         failed_at: '2026-09-19T12:00:00Z',
+        retryable: true,
       },
     ]
-    mockAdminApi({ 'GET /api/v1/admin/health': () => health })
+    const http = mockAdminApi({
+      'GET /api/v1/admin/health': () => health,
+      'POST /api/v1/admin/jobs/:id/retry': () => ({
+        job_id: '01928f3a-1c00-7a00-8000-000000000e10',
+        recording_id: '01928f3a-1c00-7a00-8000-000000000309',
+        revision: 2,
+        state: 'queued',
+        queued_at: '2026-09-19T12:05:00Z',
+      }),
+    })
     renderApp('/admin/saude')
     expect(await screen.findByText('Sem sinal')).toBeInTheDocument()
     expect(screen.getByText(/Sem leitura da GPU/)).toBeInTheDocument()
@@ -307,6 +317,11 @@ describe('Saúde', () => {
     expect(within(failure).getByRole('link', { name: 'Abrir gravação' })).toHaveAttribute(
       'href',
       '/gravacoes/01928f3a-1c00-7a00-8000-000000000309',
+    )
+    await userEvent.click(within(failure).getByRole('button', { name: 'Tentar de novo' }))
+    expect(await within(failure).findByText('Na fila de novo.')).toBeInTheDocument()
+    expect(http.requests('POST /api/v1/admin/jobs/:id/retry')[0].url).toContain(
+      '/api/v1/admin/jobs/01928f3a-1c00-7a00-8000-000000000e09/retry',
     )
   })
 })

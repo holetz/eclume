@@ -1,18 +1,33 @@
+import { lazy, Suspense, type ComponentType } from 'react'
 import { Link, Route, Routes } from 'react-router'
-import { AdminRoutes } from '../features/admin/AdminRoutes'
-import { InvitationPage } from '../features/auth/InvitationPage'
 import { LoginPage } from '../features/auth/LoginPage'
-import { CollectionsPage } from '../features/collections/CollectionsPage'
-import { DesktopPage } from '../features/desktop/DesktopPage'
-import { ImportPage } from '../features/import/ImportPage'
 import { LibraryPage } from '../features/library/LibraryPage'
-import { PeoplePage } from '../features/people/PeoplePage'
-import { PersonPage } from '../features/people/PersonPage'
-import { SearchPage } from '../features/search/SearchPage'
-import { TokensPage } from '../features/tokens/TokensPage'
-import { RecordingPage } from '../features/transcript/RecordingPage'
 import { RequireSession } from './RequireSession'
 import { usePageTitle } from './usePageTitle'
+
+// A biblioteca e o login vão no bundle inicial; as outras áreas carregam sob demanda, cada uma no
+// seu chunk (o conversor de mídia do import e o react-markdown dos resumos são os mais pesados).
+const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
+  lazy(() => load().then((module) => ({ default: module[name] })))
+
+const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
+const InvitationPage = named(() => import('../features/auth/InvitationPage'), 'InvitationPage')
+const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
+const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
+const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
+const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
+const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
+const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchPage')
+const TokensPage = named(() => import('../features/tokens/TokensPage'), 'TokensPage')
+const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
+
+function page(Page: ComponentType) {
+  return (
+    <Suspense fallback={<p role="status">Carregando…</p>}>
+      <Page />
+    </Suspense>
+  )
+}
 
 function NotFoundPage() {
   usePageTitle('Página não encontrada')
@@ -30,18 +45,18 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
-      <Route path="/convite/:token" element={<InvitationPage />} />
+      <Route path="/convite/:token" element={page(InvitationPage)} />
       <Route element={<RequireSession />}>
         <Route index element={<LibraryPage />} />
-        <Route path="/gravacoes/:id" element={<RecordingPage />} />
-        <Route path="/importar" element={<ImportPage />} />
-        <Route path="/pessoas" element={<PeoplePage />} />
-        <Route path="/pessoas/:id" element={<PersonPage />} />
-        <Route path="/busca" element={<SearchPage />} />
-        <Route path="/colecoes" element={<CollectionsPage />} />
-        <Route path="/tokens" element={<TokensPage />} />
-        <Route path="/app-desktop" element={<DesktopPage />} />
-        <Route path="/admin/*" element={<AdminRoutes />} />
+        <Route path="/gravacoes/:id" element={page(RecordingPage)} />
+        <Route path="/importar" element={page(ImportPage)} />
+        <Route path="/pessoas" element={page(PeoplePage)} />
+        <Route path="/pessoas/:id" element={page(PersonPage)} />
+        <Route path="/busca" element={page(SearchPage)} />
+        <Route path="/colecoes" element={page(CollectionsPage)} />
+        <Route path="/tokens" element={page(TokensPage)} />
+        <Route path="/app-desktop" element={page(DesktopPage)} />
+        <Route path="/admin/*" element={page(AdminRoutes)} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
