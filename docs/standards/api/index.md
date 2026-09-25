@@ -8,3 +8,4 @@ em [../code/](../code/index.md). Um padrão por arquivo; cada um com `type: stan
 `resource:` derivado.
 
 * [contrato-v1.md](contrato-v1.md) — as convenções da API v1 (sessão e PAT com escopos, erros, paginação, upload multipart S3, transcrição) e a regra de evolução só aditiva
+* [jobs-transcricao.md](jobs-transcricao.md) — o contrato de jobs entre o server e o worker GPU: filas arq, `transcribe`, artefatos no bucket, `ingest_transcript`/`transcription_failed`, progresso e idempotência
