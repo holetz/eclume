@@ -35,8 +35,21 @@ async def idle_unloader(registry: EngineRegistry, idle_seconds: float, every: fl
             logger.info("modelos descarregados após %.0f s ociosos", idle_seconds)
 
 
+def configure_logging(level: int = logging.INFO) -> None:
+    """Log do worker e das engines no stderr; o CLI do arq só configura o logger `arq`."""
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
+    for name in ("eclume_worker", "eclume_engines"):
+        named = logging.getLogger(name)
+        if not named.handlers:
+            named.addHandler(handler)
+            named.setLevel(level)
+            named.propagate = False
+
+
 async def startup(ctx: dict[str, Any]) -> None:
-    """Prepara S3, a engine e a descarga por ociosidade."""
+    """Prepara o log, o S3, a engine e a descarga por ociosidade."""
+    configure_logging()
     ctx["config"] = CONFIG
     ctx["store"] = ArtifactStore.from_config(CONFIG)
     ctx["engines"] = registry = EngineRegistry(CONFIG)

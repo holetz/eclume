@@ -42,6 +42,7 @@ COPY worker-gpu/src worker-gpu/src
 RUN uv sync --frozen --no-dev --package eclume-worker --extra gpu --no-editable --inexact
 
 # O CTranslate2 procura cuBLAS e cuDNN no sistema; eles vêm das wheels nvidia-* do torch.
+# O uid 1000 não tem entrada no passwd: HOME=/tmp dá ao matplotlib e ao onnxruntime onde gravar.
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -51,7 +52,8 @@ ENV PATH=/app/.venv/bin:$PATH \
     HF_HOME=/models/huggingface \
     TORCH_HOME=/models/torch \
     NLTK_DATA=/usr/share/nltk_data \
-    ECLUME_WORK_DIR=/tmp/eclume-work
+    ECLUME_WORK_DIR=/tmp/eclume-work \
+    HOME=/tmp
 
 # punkt_tab é usado pelo alinhamento; embutido para o worker rodar sem rede.
 RUN python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/share/nltk_data', quiet=True)" \
