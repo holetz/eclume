@@ -101,7 +101,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await speakers.getByRole('button', { name: 'Renomear Locutor 2' }).click()
   await speakers.getByLabel('Novo nome de Locutor 2').fill('Rafael')
   await speakers.getByRole('button', { name: 'Salvar' }).click()
-  await expect(speakers.getByText('Rafael Lima')).toBeVisible()
+  await expect(speakers.getByRole('link', { name: 'Rafael Lima' })).toBeVisible()
   await screenshot(page, '3-transcricao')
 
   // Import: conversão real no navegador e upload create → PUT → complete.
