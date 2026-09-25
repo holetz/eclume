@@ -8,11 +8,11 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
-from eclume_server.problems import not_found
+from eclume_server.problems import forbidden, not_found
 from eclume_server.serialize import Row, user_ref
 
 if TYPE_CHECKING:
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
+    from eclume_server.auth import Principal
     from eclume_server.storage import Storage
 
 SCHEMA_VERSION = "1.0"
@@ -362,6 +363,43 @@ def transcript_json(row: Row, speakers: list[Row], segments: list[Row], *, words
         body["engine"] = row["engine"]
     body["segments"] = [segment_json(s, words=words) for s in segments]
     return body
+
+
+# --- edição -----------------------------------------------------------------------------------
+
+
+async def editable_transcript(conn: AsyncConnection, transcript_id: UUID, principal: Principal) -> Row:
+    """Transcrição visível e do usuário; 404 se invisível, 403 se só compartilhada com ele."""
+    row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
+    if row is None:
+        raise not_found("Transcrição inexistente ou sem acesso.")
+    if row["owner_id"] != principal.user_id:
+        raise forbidden("Só o dono da gravação pode editar a transcrição.")
+    return row
+
+
+async def bump_revision(conn: AsyncConnection, transcript_id: UUID) -> None:
+    """Toda edição sobe a `revision` e o `updated_at` (o `?since=` dos clientes enxerga)."""
+    await conn.execute(
+        update(t.transcripts)
+        .where(t.transcripts.c.id == transcript_id)
+        .values(revision=t.transcripts.c.revision + 1, updated_at=datetime.now(UTC))
+    )
+
+
+async def recompute_talk(conn: AsyncConnection, transcript_id: UUID, speaker_ids: set[str]) -> None:
+    """Recalcula `talk_ms` dos locutores dados a partir dos segmentos."""
+    sg = t.segments.c
+    talk = (
+        select(func.coalesce(func.sum(sg.end_ms - sg.start_ms), 0))
+        .where(sg.transcript_id == transcript_id, sg.speaker_id == t.speakers.c.speaker_id)
+        .scalar_subquery()
+    )
+    await conn.execute(
+        update(t.speakers)
+        .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id.in_(speaker_ids))
+        .values(talk_ms=talk)
+    )
 
 
 def _hms(ms: int) -> str:

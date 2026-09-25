@@ -233,6 +233,17 @@ segments = Table(
     Column("words", JSONB),
 )
 
+# `embedding` (pgvector) fica de fora: as consultas tipadas daqui nunca o leem.
+speaker_embeddings = Table(
+    "speaker_embeddings",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    _uuid("org_id"),
+    Column("speaker_id", Text, primary_key=True),
+    Column("model", Text),
+    _ts("created_at"),
+)
+
 people = Table(
     "people",
     metadata,
