@@ -21,10 +21,6 @@ PEOPLE_SEARCH = "holetz/eclume#11 (pessoas-organizacao-e-busca)"
 ADMIN = "holetz/eclume#12 (painel-admin)"
 
 NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
-    ("GET", "/api/v1/admin/agent-providers", ADMIN),
-    ("POST", "/api/v1/admin/agent-providers", ADMIN),
-    ("PATCH", "/api/v1/admin/agent-providers/{provider_id}", ADMIN),
-    ("DELETE", "/api/v1/admin/agent-providers/{provider_id}", ADMIN),
     ("GET", "/api/v1/admin/health", ADMIN),
     ("GET", "/api/v1/admin/invitations", ADMIN),
     ("POST", "/api/v1/admin/invitations", ADMIN),

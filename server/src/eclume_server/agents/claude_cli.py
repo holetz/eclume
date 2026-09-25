@@ -132,6 +132,9 @@ class ClaudeCliProvider:
         self.config = config
         self.claude_bin = claude_bin
         self.env = dict(os.environ if env is None else env)
+        if config.api_key:
+            # Uma chave cadastrada no provider vence o OAuth montado.
+            self.env[API_KEY_ENV] = config.api_key
 
     async def complete(self, system: str, prompt: str) -> Completion:
         """Roda `claude -p` e devolve o `result` do JSON."""
