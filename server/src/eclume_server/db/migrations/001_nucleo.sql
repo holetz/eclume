@@ -233,7 +233,7 @@ CREATE TABLE segments (
     start_ms       bigint NOT NULL,
     end_ms         bigint NOT NULL,
     text           text NOT NULL,
-    confidence     real,
+    confidence     double precision,
     words          jsonb,
     tsv            tsvector GENERATED ALWAYS AS (to_tsvector('portuguese', text)) STORED,
     PRIMARY KEY (transcript_id, segment_id)
