@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { SegmentEditor } from './SegmentEditor'
 import { findSegmentAt, formatClock, speakerColorIndex, speakerName, type Segment, type Transcript } from './segments'
 import styles from './TranscriptView.module.css'
 
@@ -12,6 +13,7 @@ export function TranscriptView({ recordingId, transcript }: TranscriptViewProps)
   const listRef = useRef<HTMLOListElement>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [follow, setFollow] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const { segments, speakers } = transcript
   const active = findSegmentAt(segments, currentMs)
   const withHours = transcript.duration_ms >= 3_600_000
@@ -31,8 +33,8 @@ export function TranscriptView({ recordingId, transcript }: TranscriptViewProps)
   }
 
   function onSegmentClick(event: MouseEvent<HTMLLIElement>, segment: Segment) {
-    // Botões e campos dentro do segmento têm ação própria.
-    if ((event.target as HTMLElement).closest('button, textarea, input, a')) return
+    // Botões e campos dentro do segmento têm ação própria; a fala em edição não toca.
+    if (editingId === segment.id || (event.target as HTMLElement).closest('button, textarea, input, a')) return
     seek(segment.start_ms)
   }
 
@@ -80,8 +82,27 @@ export function TranscriptView({ recordingId, transcript }: TranscriptViewProps)
                   >
                     {clock}
                   </button>
+                  {editingId !== segment.id && (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-sm ${styles.edit}`}
+                      onClick={() => setEditingId(segment.id)}
+                      aria-label={`Corrigir a fala de ${name} em ${clock}`}
+                    >
+                      Corrigir
+                    </button>
+                  )}
                 </div>
-                <p className={styles.text}>{segment.text}</p>
+                {editingId === segment.id ? (
+                  <SegmentEditor
+                    transcriptId={transcript.id}
+                    segment={segment}
+                    label={`Texto da fala de ${name} em ${clock}`}
+                    onClose={() => setEditingId(null)}
+                  />
+                ) : (
+                  <p className={styles.text}>{segment.text}</p>
+                )}
               </li>
             )
           })}

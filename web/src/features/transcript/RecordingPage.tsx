@@ -5,6 +5,7 @@ import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
 import { JobProgress, StatusBadge } from '../library/RecordingStatus'
 import { useRecording, useTranscript } from './queries'
 import styles from './RecordingPage.module.css'
+import { SpeakersPanel } from './SpeakersPanel'
 import { TranscriptView } from './TranscriptView'
 
 export function RecordingPage() {
@@ -65,6 +66,9 @@ export function RecordingPage() {
           <div className={styles.main}>
             <TranscriptView recordingId={data.id} transcript={transcript.data} />
           </div>
+          <aside className={styles.side} aria-label="Locutores e resumos">
+            <SpeakersPanel transcript={transcript.data} />
+          </aside>
         </div>
       )}
     </section>
