@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -107,3 +108,42 @@ def new_user(services: Services, org_id: UUID, *, role: str = "member", name: st
         return await create_user(conn, org_id, email=email, name=name, password=PASSWORD, role=role)
 
     return Account(org_id=org_id, user_id=run(services.sql(create)), email=email, name=name)
+
+
+def audio_bytes(size: int, seed: str = "") -> bytes:
+    """Conteúdo determinístico e único por `seed` (o hash muda com ele)."""
+    block = hashlib.sha256(f"eclume-audio-{seed}-{secrets.token_hex(8)}".encode()).digest()
+    return (block * (size // len(block) + 1))[:size]
+
+
+def put_parts(api: Api, upload: dict[str, Any], data: bytes, *, only: set[int] | None = None) -> list[dict[str, Any]]:
+    """Sobe as partes pelas URLs recebidas e devolve `[{part_number, etag}]`."""
+    size = upload["part_size"]
+    sent = []
+    for part in upload["parts"]:
+        number = part["part_number"]
+        if only is not None and number not in only:
+            continue
+        chunk = data[(number - 1) * size : number * size]
+        response = api.client.put(part["url"], content=chunk, headers=part["headers"])
+        assert response.status_code == 200, response.text
+        sent.append({"part_number": number, "etag": response.headers["ETag"]})
+    return sent
+
+
+def upload_file(api: Api, data: bytes, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Fluxo inteiro (create → partes → complete); devolve a gravação."""
+    body = {
+        "filename": "reuniao.opus",
+        "content_type": "audio/ogg; codecs=opus",
+        "size_bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        **fields,
+    }
+    created = api.post("/api/v1/uploads", json=body)
+    assert created.status_code == 201, created.text
+    upload = created.json()
+    parts = put_parts(api, upload, data)
+    completed = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": parts})
+    assert completed.status_code == 201, completed.text
+    return completed.json()
