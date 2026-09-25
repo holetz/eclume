@@ -1,10 +1,10 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features (biblioteca, gravação, pessoas, busca, coleções) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
 source: holetz/eclume#10
@@ -52,10 +52,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/gravacoes/:id`, `/importar`, `/tokens`, `/app-desktop`).
-- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`. As áreas de
-  outras specs (Pessoas, Busca, Coleções, Administração) já estão lá, desligadas: ligar uma é
-  mudar `enabled` e registrar a rota.
+- **Rotas em pt-BR** (`/entrar`, `/gravacoes/:id`, `/importar`, `/pessoas`, `/pessoas/:id`, `/busca`,
+  `/colecoes`, `/tokens`, `/app-desktop`), e os filtros na query string também em pt-BR (`?de=`,
+  `?colecao=`, `?tag=` na biblioteca; `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
+- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`. Uma área de
+  outra spec (hoje: Administração) já está lá, desligada: ligar é mudar `enabled` e registrar a
+  rota.
+- **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
+  `['tags']`, `['recordings', ...]`): uma mutação que muda contagens ou nomes vistos em outras
+  telas invalida o prefixo inteiro, além de gravar no cache o que a resposta devolveu.
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
@@ -73,6 +78,24 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - Toda ação alcançável por teclado, foco visível, skip link, rótulos em todos os campos,
   `aria-live` em progresso e confirmações. Estado nunca só por cor: o selo tem texto.
 - Enum desconhecido na resposta aparece cru, sem quebrar a tela (o contrato só cresce).
+
+## Pessoas, busca e organização
+
+- **Abrir a gravação num instante** é o link `/gravacoes/:id?t=<ms>`: a página destaca a fala
+  daquele instante, rola até ela e posiciona o áudio (sem tocar, pela política de autoplay). A
+  busca e a página da pessoa geram o link com `recordingAt()`.
+- **`highlight` da busca nunca vira `innerHTML`.** `parseHighlight()` separa o texto em pedaços
+  marcados e não marcados, desfaz o escape e o React renderiza texto puro dentro de `<mark>`.
+- **Datas da busca** são dias locais: `de` vira o início do dia e `ate` o início do dia seguinte
+  (`to` é exclusivo no contrato), convertidos a RFC 3339.
+- **Ligar locutor a pessoa** usa `PersonCombobox`: combobox ARIA 1.2 com lista em popup (setas,
+  Enter, Esc, `aria-activedescendant`), busca no diretório por prefixo e a opção "Cadastrar
+  “nome”" quando ninguém tem aquele nome. Sugestão por voz aparece como botão "Confirmar
+  <pessoa>", que liga com um clique; nunca é aplicada sozinha.
+- **Organização da gravação** (tags, coleções, tipo de reunião, cliente, projeto) é um painel da
+  página da gravação: o dono edita, quem vê por compartilhamento só lê. Os metadados de
+  organização são as chaves `tipo_reuniao`, `cliente` e `projeto` do `RecordingMetadata`; as
+  demais chaves gravadas são preservadas.
 
 ## Upload: `src/upload/multipart.ts`
 
@@ -103,7 +126,8 @@ Depois de recarregar, o import recomeça pela conversão.
   `fetch` do Node).
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
   para o mock, e um cenário percorre login, biblioteca, transcrição, import com conversão real e
-  PAT. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
+  PAT, e outro percorre busca, gravação aberta no segundo do trecho, vínculo de locutor, pessoas
+  e coleções. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
   resposta do login, pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em

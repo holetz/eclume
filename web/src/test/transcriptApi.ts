@@ -9,6 +9,8 @@ export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
     'GET /api/v1/transcripts/:id': () => fixtures.transcript(),
     'GET /api/v1/summary-templates': () => fixtures.summaryTemplatePage(),
     'GET /api/v1/transcripts/:id/summaries': () => fixtures.summaryPage(),
+    'GET /api/v1/collections': () => fixtures.collectionPage(),
+    'GET /api/v1/people': () => fixtures.personPage(),
     ...extra,
   })
 }

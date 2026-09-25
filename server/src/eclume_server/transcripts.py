@@ -8,10 +8,11 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
+from eclume_server.problems import forbidden, not_found
 from eclume_server.serialize import Row, user_ref
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
+    from eclume_server.auth import Principal
     from eclume_server.storage import Storage
 
 SCHEMA_VERSION = "1.0"
@@ -264,15 +266,58 @@ def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
     )
 
 
+def speakers_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+    """Locutores com o nome da pessoa ligada (sob a RLS)."""
+    return select(t.speakers, t.people.c.name.label("person_name")).select_from(
+        t.speakers.outerjoin(t.people, t.people.c.id == t.speakers.c.person_id)
+    )
+
+
 def speaker_json(row: Row) -> dict[str, Any]:
-    """Schema `Speaker`; pessoas e sugestões chegam com as specs de pessoas e de voz."""
+    """Schema `Speaker`, de uma linha de `speakers_select`; sugestões por voz chegam com a #15."""
+    person = None
+    if row["person_id"] is not None:
+        person = {"id": str(row["person_id"]), "name": row["person_name"]}
     return {
         "id": row["speaker_id"],
         "label": row["label"],
-        "person": None,
+        "person": person,
         "suggestions": [],
         "talk_ms": row["talk_ms"],
     }
+
+
+async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[UUID, list[Row]]:
+    """Locutores de cada transcrição, na ordem da transcrição."""
+    rows = (
+        await conn.execute(
+            speakers_select()
+            .where(t.speakers.c.transcript_id.in_(transcript_ids))
+            .order_by(t.speakers.c.transcript_id, t.speakers.c.position)
+        )
+    ).mappings()
+    grouped: dict[UUID, list[Row]] = {transcript_id: [] for transcript_id in transcript_ids}
+    for row in rows:
+        grouped[row["transcript_id"]].append(row)
+    return grouped
+
+
+async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: bool) -> dict[str, Any]:
+    """Transcrição visível completa (schema v1), ou 404."""
+    row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
+    if row is None:
+        raise not_found("Transcrição inexistente ou sem acesso.")
+    speakers = (await load_speakers(conn, [transcript_id]))[transcript_id]
+    segments = (
+        (
+            await conn.execute(
+                select(t.segments).where(t.segments.c.transcript_id == transcript_id).order_by(t.segments.c.position)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return transcript_json(row, speakers, list(segments), words=words)
 
 
 def segment_json(row: Row, *, words: bool) -> dict[str, Any]:
@@ -318,6 +363,43 @@ def transcript_json(row: Row, speakers: list[Row], segments: list[Row], *, words
         body["engine"] = row["engine"]
     body["segments"] = [segment_json(s, words=words) for s in segments]
     return body
+
+
+# --- edição -----------------------------------------------------------------------------------
+
+
+async def editable_transcript(conn: AsyncConnection, transcript_id: UUID, principal: Principal) -> Row:
+    """Transcrição visível e do usuário; 404 se invisível, 403 se só compartilhada com ele."""
+    row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
+    if row is None:
+        raise not_found("Transcrição inexistente ou sem acesso.")
+    if row["owner_id"] != principal.user_id:
+        raise forbidden("Só o dono da gravação pode editar a transcrição.")
+    return row
+
+
+async def bump_revision(conn: AsyncConnection, transcript_id: UUID) -> None:
+    """Toda edição sobe a `revision` e o `updated_at` (o `?since=` dos clientes enxerga)."""
+    await conn.execute(
+        update(t.transcripts)
+        .where(t.transcripts.c.id == transcript_id)
+        .values(revision=t.transcripts.c.revision + 1, updated_at=datetime.now(UTC))
+    )
+
+
+async def recompute_talk(conn: AsyncConnection, transcript_id: UUID, speaker_ids: set[str]) -> None:
+    """Recalcula `talk_ms` dos locutores dados a partir dos segmentos."""
+    sg = t.segments.c
+    talk = (
+        select(func.coalesce(func.sum(sg.end_ms - sg.start_ms), 0))
+        .where(sg.transcript_id == transcript_id, sg.speaker_id == t.speakers.c.speaker_id)
+        .scalar_subquery()
+    )
+    await conn.execute(
+        update(t.speakers)
+        .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id.in_(speaker_ids))
+        .values(talk_ms=talk)
+    )
 
 
 def _hms(ms: int) -> str:

@@ -6,17 +6,24 @@ import styles from './TranscriptView.module.css'
 interface TranscriptViewProps {
   recordingId: string
   transcript: Transcript
+  /** Instante inicial (`?t=` em ms, vindo da busca): posiciona o áudio e destaca a fala. */
+  startMs?: number | null
 }
 
-export function TranscriptView({ recordingId, transcript }: TranscriptViewProps) {
+export function TranscriptView({ recordingId, transcript, startMs = null }: TranscriptViewProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const listRef = useRef<HTMLOListElement>(null)
-  const [currentMs, setCurrentMs] = useState(0)
+  const [currentMs, setCurrentMs] = useState(startMs ?? 0)
   const [follow, setFollow] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { segments, speakers } = transcript
   const active = findSegmentAt(segments, currentMs)
   const withHours = transcript.duration_ms >= 3_600_000
+
+  useEffect(() => {
+    // Sem mídia carregada, o navegador guarda o instante como posição inicial da reprodução.
+    if (startMs !== null && audioRef.current) audioRef.current.currentTime = startMs / 1000
+  }, [startMs])
 
   useEffect(() => {
     if (!follow || active < 0) return
