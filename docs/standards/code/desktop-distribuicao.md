@@ -117,7 +117,10 @@ recentes. O Caddy do eclume serve a pasta em `/downloads/`.
   (`xvfb-run -a dbus-run-session -- ./eclume.AppImage`, com `HOME`/`XDG_*` temporários e
   `SSL_CERT_FILE` = CAs do sistema + `eclume-root.crt`, porque a 0.1.0 só conhece as do sistema e
   o `rustls-native-certs` honra a variável), consulta o `latest.json` de produção aos 30 s, baixa
-  o AppImage da versão nova, confere a assinatura minisign, troca o arquivo e reinicia.
+  o AppImage da versão nova, confere a assinatura minisign, troca o arquivo e reinicia. Feita em
+  2026-09-25 com `desktop-v0.1.1` publicada: `versão 0.1.1 disponível` → `rewriting AppImage` →
+  `versão 0.1.1 instalada` em ~1 s, o arquivo passou a ter o SHA-256 do AppImage 0.1.1 e o app
+  reabriu na versão nova.
 
 ## Chave do updater
 
