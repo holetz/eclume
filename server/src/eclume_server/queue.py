@@ -56,7 +56,11 @@ def transcribe_options(org_settings: Any, language: str | None) -> dict[str, Any
         "engine": asr["engine"],
         "model": asr["model"],
         "compute_type": asr["compute_type"],
+        "batch_size": asr.get("batch_size"),
+        "fallback_model": asr.get("fallback_model"),
+        "endpoint_url": asr.get("endpoint_url"),
         "diarize": bool(diarization.get("enabled")),
+        "diarization_model": diarization.get("model"),
         # Impressão de voz só com o opt-in da organização (LGPD).
         "embeddings": bool(org_settings["voice_identification"].get("enabled")),
     }
