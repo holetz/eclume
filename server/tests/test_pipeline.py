@@ -188,4 +188,4 @@ def test_embeddings_so_com_opt_in_da_organizacao(
         return [tuple(row) for row in rows]
 
     rows = run(services.sql(count))
-    assert [(r[0], r[1], r[3]) for r in rows] == [(with_opt_in["id"], f"S{i}", 3) for i in (1, 2, 3)]
+    assert [(r[0], r[1], r[3]) for r in rows] == [(with_opt_in["id"], f"S{i}", 256) for i in (1, 2, 3)]
