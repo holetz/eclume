@@ -105,4 +105,6 @@ Três jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `ma
 `web` e `desktop`, cada um rodando exatamente os comandos acima (com `--locked` no uv e no cargo).
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
-demanda (`gh workflow run desktop-plataformas.yml`).
+demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de
+`.github/workflows/desktop-release.yml`, só por tag `desktop-v<versão>` ou à mão; o processo está
+em [desktop-distribuicao.md](desktop-distribuicao.md).

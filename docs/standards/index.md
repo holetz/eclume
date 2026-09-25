@@ -31,6 +31,7 @@ derivado (o escopo do repositório que ele governa).
 ### code/
 | Doc | Covers |
 | --- | --- |
+| [desktop-distribuicao.md](code/desktop-distribuicao.md) | Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume e publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh. |
 | [desktop-gravacao.md](code/desktop-gravacao.md) | O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local com estados recording → pending → syncing → synced ou failed, e expõe os traits Uploader e MeetingDetector para o sync e a detecção — este é o formato, o ciclo de vida e os pontos de extensão. |
 | [formato-audio-upload.md](code/formato-audio-upload.md) | Antes do upload, o navegador converte áudio e vídeo para Opus mono 16 kHz em Ogg (32 kbps) pela biblioteca isolada web/src/lib/media-convert — WebCodecs com Mediabunny, ffmpeg.wasm de fallback — e este é o formato, o porquê e a API que o app consome. |
 | [monorepo.md](code/monorepo.md) | Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam. |
