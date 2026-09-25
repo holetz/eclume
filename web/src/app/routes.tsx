@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
+import { DesktopPage } from '../features/desktop/DesktopPage'
 import { ImportPage } from '../features/import/ImportPage'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { TokensPage } from '../features/tokens/TokensPage'
@@ -28,6 +29,7 @@ export function AppRoutes() {
         <Route path="/gravacoes/:id" element={<RecordingPage />} />
         <Route path="/importar" element={<ImportPage />} />
         <Route path="/tokens" element={<TokensPage />} />
+        <Route path="/app-desktop" element={<DesktopPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
