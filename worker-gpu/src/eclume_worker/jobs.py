@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools
 import logging
 import shutil
 import tempfile
@@ -23,6 +24,7 @@ from eclume_engines.hf_token import resolve_hf_token
 from eclume_worker import __version__
 from eclume_worker.config import DEFAULT_QUEUE
 from eclume_worker.progress import ProgressReporter, overall_pct
+from eclume_worker.secrets import SecretError, open_secret
 from eclume_worker.storage import ArtifactStore, embeddings_key, sha256_file, transcript_key
 from eclume_worker.transcript import build_embeddings, build_transcript
 
@@ -37,6 +39,7 @@ logger = logging.getLogger(__name__)
 AUDIO_DOWNLOAD_FAILED = "audio_download_failed"
 UPLOAD_FAILED = "upload_failed"
 INTERNAL_ERROR = "internal_error"
+WARN_HF_TOKEN_UNDECRYPTABLE = "hf_token_undecryptable"  # noqa: S105 — código de aviso, não segredo
 
 
 class JobFailedError(Exception):
@@ -73,7 +76,7 @@ class EngineRegistry:
         self.hf_token = hf_token
         self.clock = clock
         self._lock = threading.Lock()
-        self._name: str | None = None
+        self._key: tuple[str, str | None] | None = None
         self._engine: Engine | None = None
         self._last_used = clock()
 
@@ -81,44 +84,63 @@ class EngineRegistry:
         """`ECLUME_ENGINE` força a engine do processo; senão vale `options.engine`."""
         return self.config.engine or options.get("engine") or DEFAULT_ENGINE
 
-    def _kwargs(self, name: str) -> dict[str, Any]:
+    @property
+    def current_name(self) -> str | None:
+        """Engine criada no processo, se alguma."""
+        return self._key[0] if self._key else None
+
+    @property
+    def busy(self) -> bool:
+        """Há um job usando a engine agora."""
+        return self._lock.locked()
+
+    def loaded_models(self) -> list[dict[str, Any]]:
+        """Modelos residentes da engine, para o heartbeat; engines sem o método não declaram nenhum."""
+        loaded = getattr(self._engine, "loaded_models", None)
+        return loaded() if loaded is not None else []
+
+    def _kwargs(self, name: str, base_url: str | None) -> dict[str, Any]:
         if name == "whisperx-local":
             return {"device": self.config.device, "batch_size": self.config.batch_size}
         if name == "openai-compatible":
-            if not self.config.remote_base_url:
-                msg = "engine openai-compatible sem ECLUME_REMOTE_BASE_URL"
+            if not base_url:
+                msg = "engine openai-compatible sem endpoint_url nas options nem ECLUME_REMOTE_BASE_URL"
                 raise JobFailedError(INTERNAL_ERROR, msg)
-            kwargs: dict[str, Any] = {"base_url": self.config.remote_base_url, "api_key": self.config.remote_api_key}
+            kwargs: dict[str, Any] = {"base_url": base_url, "api_key": self.config.remote_api_key}
             if self.config.remote_model:
                 kwargs["default_model"] = self.config.remote_model
             return kwargs
         return {}
 
-    def _get(self, name: str) -> Engine:
-        if self._name != name or self._engine is None:
+    def _get(self, name: str, base_url: str | None, hf_token: str | None) -> Engine:
+        base_url = (base_url or self.config.remote_base_url) if name == "openai-compatible" else None
+        if self._key != (name, base_url) or self._engine is None:
             if self._engine is not None:
                 self._engine.unload()
             try:
-                self._engine = self.factory(name, **self._kwargs(name))
+                self._engine = self.factory(name, **self._kwargs(name, base_url))
             except ValueError as exc:
                 raise JobFailedError(INTERNAL_ERROR, str(exc)) from exc
-            self._name = name
+            self._key = (name, base_url)
         if hasattr(self._engine, "hf_token"):
-            # relido a cada job: o token pode ser criado depois de o worker subir
-            self._engine.hf_token = self.hf_token()
+            # o da organização (vindo no job) vence; o do ambiente é relido a cada job
+            self._engine.hf_token = hf_token or self.hf_token()
         return self._engine
 
-    def run(
+    def run(  # noqa: PLR0913 — o job passa o que a engine precisa, nomeado
         self,
         name: str,
         audio_path: Path,
         options: EngineOptions,
         progress: Callable[[str, float], None],
+        *,
+        base_url: str | None = None,
+        hf_token: str | None = None,
     ) -> EngineResult:
         """Transcreve segurando o lock, para a descarga ociosa não disputar a engine."""
         with self._lock:
             try:
-                return self._get(name).transcribe(audio_path, options, progress)
+                return self._get(name, base_url, hf_token).transcribe(audio_path, options, progress)
             finally:
                 self._last_used = self.clock()
 
@@ -215,17 +237,27 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"falha ao baixar {audio_key}: {exc}") from exc
     await reporter.report("download", 100)
 
+    hf_token, token_warnings = _organization_hf_token(ctx["config"], options.get("hf_token_encrypted"))
     progress, futures = _thread_progress(reporter, asyncio.get_running_loop())
     engine_started = time.monotonic()
     try:
         result = await asyncio.to_thread(
-            registry.run, registry.resolve_name(options), audio_path, engine_options, progress
+            functools.partial(
+                registry.run,
+                registry.resolve_name(options),
+                audio_path,
+                engine_options,
+                progress,
+                base_url=options.get("endpoint_url"),
+                hf_token=hf_token,
+            )
         )
     except EngineError as exc:
         raise JobFailedError(exc.code, exc.message) from exc
     finally:
         await asyncio.gather(*(asyncio.wrap_future(f) for f in futures), return_exceptions=True)
     processing_s = time.monotonic() - engine_started
+    result.warnings[:0] = token_warnings
     for warning in result.warnings:
         logger.warning("gravação %s: %s", recording_id, warning)
 
@@ -251,6 +283,17 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     await redis.enqueue_job("ingest_transcript", recording_id, t_key, e_key, info, _queue_name=DEFAULT_QUEUE)
     logger.info("gravação %s transcrita: %s", recording_id, info)
     return {"status": "done", "transcript_key": t_key, "embeddings_key": e_key, "engine_info": info}
+
+
+def _organization_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple[str | None, list[str]]:
+    """Token do HF da organização (cifrado nas `options`); não abrir cai no do ambiente, com aviso."""
+    if not encrypted:
+        return None, []
+    try:
+        return open_secret(encrypted, encryption_key=config.encryption_key, secret_key=config.secret_key), []
+    except SecretError as exc:
+        logger.warning("token do HF da organização não abre (%s); usando o do ambiente", exc)
+        return None, [WARN_HF_TOKEN_UNDECRYPTABLE]
 
 
 async def _fail(redis: Any, recording_id: str, code: str, message: str) -> dict:  # noqa: ANN401 — ArqRedis
