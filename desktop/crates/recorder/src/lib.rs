@@ -13,3 +13,5 @@ pub use eclume_audio_capture::AudioSource;
 pub use encode::OggOpusWriter;
 pub use ext::{sync_pending, MeetingDetector, MeetingEvent, SyncReport, Uploader};
 pub use mix::{Mixer, FRAME, TARGET_RATE};
+pub use queue::{Queue, QueueCounts, QueuedRecording, Status};
+pub use session::{ActiveRecording, RecorderConfig};
