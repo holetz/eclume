@@ -4,7 +4,6 @@ import { MediaConvertError, toMediaConvertError } from './errors'
 import { estimateOutputSize, normalizeBitrate } from './estimate'
 import { sha256Hex } from './hash'
 import { ProgressTracker, type ProgressCallback } from './progress'
-import { convertWithWebCodecs, measureOutputDuration, probeWithWebCodecs } from './webcodecs'
 
 export interface ConvertOptions {
   signal?: AbortSignal
@@ -43,11 +42,14 @@ export interface Engines {
 
 type Scope = Parameters<typeof checkEnvironment>[0] & { crypto?: { subtle?: SubtleCrypto } }
 
+// Os dois motores são carregados sob demanda: importar a biblioteca não baixa o Mediabunny
+// nem o ffmpeg.wasm até a primeira conversão.
+const webcodecs = () => import('./webcodecs')
 const defaultEngines: Engines = {
-  webcodecs: convertWithWebCodecs,
+  webcodecs: async (request) => (await webcodecs()).convertWithWebCodecs(request),
   ffmpeg: async (request) => (await import('./ffmpeg')).convertWithFfmpeg(request),
-  probe: probeWithWebCodecs,
-  measureDuration: measureOutputDuration,
+  probe: async (file) => (await webcodecs()).probeWithWebCodecs(file),
+  measureDuration: async (blob) => (await webcodecs()).measureOutputDuration(blob),
 }
 
 /** Só `unsupported` e `failed` justificam tentar o outro motor; `no-audio` e `aborted`, não. */
