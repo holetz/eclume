@@ -1,0 +1,228 @@
+"""Tabelas do núcleo em SQLAlchemy Core, para consultas tipadas.
+
+O DDL vive nas migrations SQL (`migrations/NNN_*.sql`); estas definições só dão tipos às colunas
+(jsonb, arrays, uuid) e nunca criam nada.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+
+metadata = MetaData()
+
+
+def _uuid(name: str, **kwargs: object) -> Column:
+    return Column(name, UUID(as_uuid=True), **kwargs)
+
+
+def _ts(name: str, **kwargs: object) -> Column:
+    return Column(name, DateTime(timezone=True), **kwargs)
+
+
+organizations = Table(
+    "organizations",
+    metadata,
+    _uuid("id", primary_key=True),
+    Column("name", Text),
+    _ts("created_at"),
+)
+
+users = Table(
+    "users",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    Column("email", Text),
+    Column("name", Text),
+    Column("password_hash", Text),
+    Column("role", Text),
+    Column("active", Boolean),
+    _ts("created_at"),
+    _ts("last_login_at"),
+)
+
+sessions = Table(
+    "sessions",
+    metadata,
+    _uuid("id", primary_key=True),
+    Column("token_hash", Text),
+    Column("csrf_token", Text),
+    _uuid("user_id"),
+    _ts("created_at"),
+    _ts("expires_at"),
+)
+
+api_tokens = Table(
+    "api_tokens",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("user_id"),
+    Column("name", Text),
+    Column("token_hash", Text),
+    Column("prefix", Text),
+    Column("scopes", ARRAY(Text)),
+    _ts("created_at"),
+    _ts("last_used_at"),
+    _ts("expires_at"),
+    _ts("revoked_at"),
+)
+
+groups = Table(
+    "groups",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    Column("name", Text),
+    Column("description", Text),
+    _ts("created_at"),
+)
+
+group_members = Table(
+    "group_members",
+    metadata,
+    _uuid("group_id", primary_key=True),
+    _uuid("user_id", primary_key=True),
+    _uuid("org_id"),
+)
+
+org_settings = Table(
+    "org_settings",
+    metadata,
+    _uuid("org_id", primary_key=True),
+    Column("asr", JSONB),
+    Column("diarization", JSONB),
+    Column("summarization", JSONB),
+    Column("voice_identification", JSONB),
+    _ts("updated_at"),
+    _uuid("updated_by"),
+)
+
+recordings = Table(
+    "recordings",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("owner_id"),
+    Column("title", Text),
+    Column("status", Text),
+    Column("source", Text),
+    _ts("recorded_at"),
+    Column("duration_ms", BigInteger),
+    Column("language", Text),
+    Column("size_bytes", BigInteger),
+    Column("content_type", Text),
+    Column("content_hash", Text),
+    Column("audio_key", Text),
+    Column("tags", ARRAY(Text)),
+    Column("collection_ids", ARRAY(UUID(as_uuid=True))),
+    Column("metadata", JSONB),
+    Column("capture", JSONB),
+    _ts("created_at"),
+    _ts("updated_at"),
+)
+
+recording_shares = Table(
+    "recording_shares",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("recording_id"),
+    Column("target_type", Text),
+    _uuid("group_id"),
+    _uuid("created_by"),
+    _ts("created_at"),
+)
+
+uploads = Table(
+    "uploads",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("owner_id"),
+    Column("status", Text),
+    Column("filename", Text),
+    Column("content_type", Text),
+    Column("size_bytes", BigInteger),
+    Column("sha256", Text),
+    Column("part_size", BigInteger),
+    Column("part_count", Integer),
+    _uuid("new_recording_id"),
+    _uuid("recording_id"),
+    Column("audio_key", Text),
+    Column("s3_upload_id", Text),
+    Column("request", JSONB),
+    _ts("expires_at"),
+    _ts("created_at"),
+    _ts("completed_at"),
+)
+
+transcription_jobs = Table(
+    "transcription_jobs",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("recording_id"),
+    Column("revision", Integer),
+    Column("state", Text),
+    Column("attempts", Integer),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("options", JSONB),
+    Column("engine_info", JSONB),
+    _ts("queued_at"),
+    _ts("started_at"),
+    _ts("finished_at"),
+)
+
+transcripts = Table(
+    "transcripts",
+    metadata,
+    _uuid("id", primary_key=True),
+    _uuid("org_id"),
+    _uuid("recording_id"),
+    Column("revision", Integer),
+    Column("language", Text),
+    Column("duration_ms", BigInteger),
+    Column("engine", JSONB),
+    _ts("created_at"),
+    _ts("updated_at"),
+)
+
+speakers = Table(
+    "speakers",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    _uuid("org_id"),
+    Column("speaker_id", Text, primary_key=True),
+    Column("position", Integer),
+    Column("label", Text),
+    _uuid("person_id"),
+    Column("talk_ms", BigInteger),
+)
+
+segments = Table(
+    "segments",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    _uuid("org_id"),
+    Column("segment_id", Text, primary_key=True),
+    Column("position", Integer),
+    Column("speaker_id", Text),
+    Column("start_ms", BigInteger),
+    Column("end_ms", BigInteger),
+    Column("text", Text),
+    Column("confidence", Float),
+    Column("words", JSONB),
+)
