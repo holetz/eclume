@@ -1,0 +1,4036 @@
+openapi: 3.1.0
+info:
+  title: eclume API
+  version: 1.0.0
+  summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
+  description: |
+    Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
+    desktop e integrações por PAT, como o importador do lumea.
+
+    **Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):
+
+    - Tudo sob `/api/v1`. Datas em RFC 3339 (UTC), durações em milissegundos, ids em UUID.
+    - Listagens paginam por cursor opaco: `?cursor=&limit=`, resposta `{items, next_cursor}`;
+      `next_cursor: null` é a última página.
+    - Erros em `application/problem+json` (RFC 9457) com o campo estável `code`.
+    - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores
+      de enum novos em respostas. Mudança incompatível vira `/api/v2`.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: https://192.168.15.199:8443
+    description: Produção no host GPU (Caddy com `tls internal`).
+  - url: http://127.0.0.1:4010
+    description: Mock server (Prism) de `deploy/docker-compose.mock.yml`.
+security:
+  - sessionCookie: []
+tags:
+  - name: meta
+    description: Saúde e versão do contrato.
+  - name: auth
+    description: Sessão do navegador, usuário corrente e convites.
+  - name: tokens
+    description: PATs pessoais. Só com sessão.
+  - name: uploads
+    description: Upload resumível em partes (multipart S3) com deduplicação por hash.
+  - name: recordings
+    description: Gravações, estado do job e compartilhamento.
+  - name: transcripts
+    description: Transcrições, export e edição de locutores e segmentos.
+  - name: people
+    description: Diretório de pessoas da organização.
+  - name: search
+    description: Busca full-text sobre segmentos.
+  - name: organize
+    description: Coleções e tags.
+  - name: groups
+    description: Grupos da organização.
+  - name: summaries
+    description: Templates por usuário e resumos gerados por agente.
+  - name: admin
+    description: Configuração em runtime, usuários e saúde. Só sessão de `admin`.
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [meta]
+      operationId: getHealth
+      summary: Saúde do serviço e versão do contrato
+      security: []
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              examples:
+                ok:
+                  $ref: "#/components/examples/Health"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Abrir sessão com e-mail e senha
+      description: |
+        Define os cookies `eclume_session` (HttpOnly, Secure, SameSite=Lax) e `eclume_csrf`
+        (legível pelo JavaScript). Toda requisição mutável autenticada por sessão ecoa o valor
+        de `eclume_csrf` no header `X-CSRF-Token`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              credenciais:
+                $ref: "#/components/examples/LoginRequest"
+      responses:
+        "204":
+          description: Sessão aberta.
+          headers:
+            Set-Cookie:
+              description: "`eclume_session` e `eclume_csrf`."
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Encerrar a sessão
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Sessão encerrada e cookies removidos.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/invitations/{invitation_token}/accept:
+    post:
+      tags: [auth]
+      operationId: acceptInvitation
+      summary: Aceitar um convite e criar a conta
+      security: []
+      parameters:
+        - name: invitation_token
+          in: path
+          required: true
+          description: Token do link de convite.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationAccept"
+      responses:
+        "204":
+          description: Conta criada e sessão aberta.
+          headers:
+            Set-Cookie:
+              description: "`eclume_session` e `eclume_csrf`."
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Usuário e credencial correntes
+      description: Aceita qualquer credencial válida, sem escopo. O lumea usa para mostrar a conta conectada e os escopos do PAT.
+      security:
+        - sessionCookie: []
+        - pat: []
+      responses:
+        "200":
+          description: Usuário corrente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+              examples:
+                viaPat:
+                  $ref: "#/components/examples/MeViaPat"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/tokens:
+    get:
+      tags: [tokens]
+      operationId: listTokens
+      summary: Listar os PATs do usuário
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: PATs, inclusive revogados, do mais novo para o mais antigo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPage"
+              examples:
+                tokens:
+                  $ref: "#/components/examples/TokenPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [tokens]
+      operationId: createToken
+      summary: Criar um PAT
+      description: O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenCreate"
+            examples:
+              lumea:
+                $ref: "#/components/examples/TokenCreateRequest"
+      responses:
+        "201":
+          description: PAT criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenCreated"
+              examples:
+                lumea:
+                  $ref: "#/components/examples/TokenCreated"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/tokens/{token_id}:
+    parameters:
+      - $ref: "#/components/parameters/TokenId"
+    delete:
+      tags: [tokens]
+      operationId: revokeToken
+      summary: Revogar um PAT
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Revogado. Usos seguintes recebem 401.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/uploads:
+    post:
+      tags: [uploads]
+      operationId: createUpload
+      summary: Iniciar um upload (ou deduplicar)
+      description: |
+        O cliente calcula o `sha256` do arquivo antes de subir. Se o usuário já tem uma gravação
+        com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
+        existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
+        fixado pelo servidor e as URLs das primeiras partes.
+
+        Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
+        por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
+        para o `complete`. A URL é opaca (MinIO pré-assinado ou o próprio
+        `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) e expira em `expires_at`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCreate"
+            examples:
+              desktop:
+                $ref: "#/components/examples/UploadCreateRequest"
+      responses:
+        "200":
+          description: Deduplicado. Já existe gravação com este hash.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+              examples:
+                deduplicado:
+                  $ref: "#/components/examples/UploadDeduplicated"
+        "201":
+          description: Upload criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+              examples:
+                criado:
+                  $ref: "#/components/examples/UploadCreated"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/uploads/{upload_id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      tags: [uploads]
+      operationId: getUpload
+      summary: Estado do upload, para retomar
+      description: "`parts_received` lista as partes que o armazenamento já confirmou; o cliente sobe só as que faltam."
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      responses:
+        "200":
+          description: Upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+              examples:
+                emAndamento:
+                  $ref: "#/components/examples/UploadInProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [uploads]
+      operationId: abortUpload
+      summary: Abortar o upload e descartar as partes
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Abortado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/uploads/{upload_id}/part-urls:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      tags: [uploads]
+      operationId: createPartUrls
+      summary: Pedir URLs para partes
+      description: URLs novas para as partes indicadas, inclusive para substituir URLs expiradas numa retomada.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartUrlsRequest"
+            examples:
+              faltantes:
+                $ref: "#/components/examples/PartUrlsRequest"
+      responses:
+        "200":
+          description: URLs das partes pedidas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartUrls"
+              examples:
+                faltantes:
+                  $ref: "#/components/examples/PartUrls"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/uploads/{upload_id}/parts/{part_number}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+      - name: part_number
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10000
+    put:
+      tags: [uploads]
+      operationId: putUploadPart
+      summary: Enviar uma parte pela API
+      description: |
+        Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT` num
+        URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              contentMediaType: application/octet-stream
+      responses:
+        "200":
+          description: Parte gravada.
+          headers:
+            ETag:
+              description: Identificador da parte, a devolver no `complete`.
+              required: true
+              schema:
+                type: string
+                examples: ['"5d41402abc4b2a76b9719d911017c592"']
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/uploads/{upload_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      tags: [uploads]
+      operationId: completeUpload
+      summary: Concluir o upload e enfileirar a transcrição
+      description: |
+        Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor confere
+        o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
+        Repetir o `complete` de um upload já concluído devolve a mesma gravação.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadComplete"
+            examples:
+              partes:
+                $ref: "#/components/examples/UploadCompleteRequest"
+      responses:
+        "201":
+          description: Gravação criada, job na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+              examples:
+                naFila:
+                  $ref: "#/components/examples/RecordingQueued"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recordings:
+    get:
+      tags: [recordings]
+      operationId: listRecordings
+      summary: Listar gravações visíveis ao usuário
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Since"
+        - name: status
+          in: query
+          description: Filtra por estado.
+          schema:
+            $ref: "#/components/schemas/RecordingStatus"
+        - name: owner
+          in: query
+          description: "`me` (padrão): as minhas; `shared`: compartilhadas comigo; `all`: ambas."
+          schema:
+            type: string
+            enum: [me, shared, all]
+            default: me
+        - $ref: "#/components/parameters/TagFilter"
+        - $ref: "#/components/parameters/CollectionFilter"
+      responses:
+        "200":
+          description: Gravações, da mais recente para a mais antiga.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingPage"
+              examples:
+                biblioteca:
+                  $ref: "#/components/examples/RecordingPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/recordings/{recording_id}:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [recordings]
+      operationId: getRecording
+      summary: Gravação e estado do job
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Gravação.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+              examples:
+                transcrita:
+                  $ref: "#/components/examples/RecordingTranscribed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [recordings]
+      operationId: updateRecording
+      summary: Editar metadados da gravação
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordingPatch"
+            examples:
+              organizar:
+                $ref: "#/components/examples/RecordingPatchRequest"
+      responses:
+        "200":
+          description: Gravação atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [recordings]
+      operationId: deleteRecording
+      summary: Excluir a gravação, o áudio e a transcrição
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/recordings/{recording_id}/audio:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [recordings]
+      operationId: getRecordingAudio
+      summary: Áudio da gravação (redirecionamento)
+      description: Redireciona para uma URL temporária do áudio, que aceita `Range` para o player.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "302":
+          description: Redirecionamento para o áudio.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/recordings/{recording_id}/retranscribe:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [recordings]
+      operationId: retranscribeRecording
+      summary: Transcrever de novo com a configuração atual
+      description: A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetranscribeRequest"
+      responses:
+        "202":
+          description: Job na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/shares:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [recordings]
+      operationId: listShares
+      summary: Compartilhamentos da gravação
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Compartilhamentos. Vazio = gravação privada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePage"
+              examples:
+                comGrupo:
+                  $ref: "#/components/examples/SharePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [recordings]
+      operationId: createShare
+      summary: Compartilhar com um grupo ou com a organização
+      description: Só o dono compartilha. O compartilhamento dá leitura da gravação, da transcrição e dos resumos.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareCreate"
+            examples:
+              grupo:
+                $ref: "#/components/examples/ShareCreateRequest"
+      responses:
+        "201":
+          description: Compartilhado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Share"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/shares/{share_id}:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      - $ref: "#/components/parameters/ShareId"
+    delete:
+      tags: [recordings]
+      operationId: deleteShare
+      summary: Desfazer um compartilhamento
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Desfeito.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/transcripts:
+    get:
+      tags: [transcripts]
+      operationId: listTranscripts
+      summary: Listar transcrições (incremental)
+      description: |
+        Transcrições concluídas visíveis ao usuário, em ordem crescente de `(updated_at, id)`.
+        `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
+        viu e deduplica por `id` + `revision`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/PersonFilter"
+        - name: recording_id
+          in: query
+          description: Transcrição de uma gravação específica.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Transcrições.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptPage"
+              examples:
+                incremental:
+                  $ref: "#/components/examples/TranscriptPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/transcripts/{transcript_id}:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+    get:
+      tags: [transcripts]
+      operationId: getTranscript
+      summary: Transcrição completa
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:read"]
+      parameters:
+        - name: include
+          in: query
+          description: "`words` inclui as palavras com tempo em cada segmento."
+          schema:
+            type: string
+            enum: [words]
+      responses:
+        "200":
+          description: Transcrição, no schema de `contracts/transcript.schema.json`.
+          content:
+            application/json:
+              schema:
+                $ref: "./transcript.schema.json"
+              examples:
+                tresLocutores:
+                  $ref: "#/components/examples/TranscriptThreeSpeakers"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/transcripts/{transcript_id}/export:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+    get:
+      tags: [transcripts]
+      operationId: exportTranscript
+      summary: Exportar a transcrição
+      description: |
+        `md`: frontmatter YAML (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
+        `source`, `revision`, `speakers`) e uma linha por segmento, `**Nome** [HH:MM:SS]: texto`,
+        separadas por linha em branco. O nome é o da pessoa ligada ou, sem pessoa, o `label`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:read"]
+      parameters:
+        - name: format
+          in: query
+          required: true
+          description: Formato do export. Formatos novos entram de forma aditiva.
+          schema:
+            type: string
+            enum: [md]
+      responses:
+        "200":
+          description: Arquivo exportado.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ['attachment; filename="alinhamento-do-programa-de-liderancas.md"']
+          content:
+            text/markdown:
+              schema:
+                type: string
+              examples:
+                tresLocutores:
+                  $ref: "#/components/examples/TranscriptThreeSpeakersMarkdown"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/transcripts/{transcript_id}/speakers/{speaker_id}:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+      - name: speaker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^S[0-9]+$"
+    patch:
+      tags: [transcripts]
+      operationId: updateSpeaker
+      summary: Renomear o locutor ou ligá-lo a uma pessoa
+      description: |
+        `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
+        voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
+        o nome da pessoa. Sobe a `revision`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerPatch"
+            examples:
+              ligarPessoa:
+                $ref: "#/components/examples/SpeakerPatchRequest"
+      responses:
+        "200":
+          description: Locutor atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "./transcript.schema.json#/$defs/Speaker"
+              examples:
+                ligado:
+                  $ref: "#/components/examples/SpeakerLinked"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/transcripts/{transcript_id}/speakers/merge:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+    post:
+      tags: [transcripts]
+      operationId: mergeSpeakers
+      summary: Mesclar locutores
+      description: Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerMerge"
+            examples:
+              mesclar:
+                $ref: "#/components/examples/SpeakerMergeRequest"
+      responses:
+        "200":
+          description: Transcrição depois da mesclagem.
+          content:
+            application/json:
+              schema:
+                $ref: "./transcript.schema.json"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/transcripts/{transcript_id}/segments/{segment_id}:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+      - name: segment_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [transcripts]
+      operationId: updateSegment
+      summary: Corrigir o texto ou o locutor de um segmento
+      description: Corrigir o texto descarta as `words` do segmento. Sobe a `revision`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SegmentPatch"
+            examples:
+              corrigir:
+                $ref: "#/components/examples/SegmentPatchRequest"
+      responses:
+        "200":
+          description: Segmento atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "./transcript.schema.json#/$defs/Segment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/transcripts/{transcript_id}/summaries:
+    parameters:
+      - $ref: "#/components/parameters/TranscriptId"
+    get:
+      tags: [summaries]
+      operationId: listSummaries
+      summary: Resumos da transcrição
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Resumos, da versão mais nova para a mais antiga.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryPage"
+              examples:
+                resumos:
+                  $ref: "#/components/examples/SummaryPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [summaries]
+      operationId: createSummary
+      summary: Gerar um resumo com um template
+      description: Cada geração é uma nova `version` do resumo daquele template.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryCreate"
+            examples:
+              ata:
+                $ref: "#/components/examples/SummaryCreateRequest"
+      responses:
+        "202":
+          description: Resumo na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+              examples:
+                naFila:
+                  $ref: "#/components/examples/SummaryQueued"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/summaries/{summary_id}:
+    parameters:
+      - $ref: "#/components/parameters/SummaryId"
+    get:
+      tags: [summaries]
+      operationId: getSummary
+      summary: Um resumo
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: Resumo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+              examples:
+                pronto:
+                  $ref: "#/components/examples/SummaryDone"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [summaries]
+      operationId: deleteSummary
+      summary: Excluir uma versão de resumo
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/summary-templates:
+    get:
+      tags: [summaries]
+      operationId: listSummaryTemplates
+      summary: Templates do usuário e padrões da organização
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryTemplatePage"
+              examples:
+                templates:
+                  $ref: "#/components/examples/SummaryTemplatePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [summaries]
+      operationId: createSummaryTemplate
+      summary: Criar um template pessoal
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryTemplateCreate"
+            examples:
+              resumoExecutivo:
+                $ref: "#/components/examples/SummaryTemplateCreateRequest"
+      responses:
+        "201":
+          description: Template criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryTemplate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/summary-templates/{template_id}:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+    get:
+      tags: [summaries]
+      operationId: getSummaryTemplate
+      summary: Um template
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: Template.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryTemplate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [summaries]
+      operationId: updateSummaryTemplate
+      summary: Editar um template
+      description: "Templates de `scope: organization` só são editados por `admin`, com sessão."
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryTemplatePatch"
+      responses:
+        "200":
+          description: Template atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryTemplate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [summaries]
+      operationId: deleteSummaryTemplate
+      summary: Excluir um template pessoal
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído. Resumos já gerados ficam.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/people:
+    get:
+      tags: [people]
+      operationId: listPeople
+      summary: Diretório de pessoas da organização
+      security:
+        - sessionCookie: []
+        - pat: ["people:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: q
+          in: query
+          description: Busca por nome ou e-mail (prefixo, sem acento).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pessoas, em ordem alfabética.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonPage"
+              examples:
+                diretorio:
+                  $ref: "#/components/examples/PersonPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [people]
+      operationId: createPerson
+      summary: Cadastrar uma pessoa
+      security:
+        - sessionCookie: []
+        - pat: ["people:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonCreate"
+            examples:
+              pessoa:
+                $ref: "#/components/examples/PersonCreateRequest"
+      responses:
+        "201":
+          description: Pessoa cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/people/{person_id}:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      tags: [people]
+      operationId: getPerson
+      summary: Uma pessoa
+      security:
+        - sessionCookie: []
+        - pat: ["people:read"]
+      responses:
+        "200":
+          description: Pessoa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+              examples:
+                pessoa:
+                  $ref: "#/components/examples/Person"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [people]
+      operationId: updatePerson
+      summary: Editar uma pessoa
+      security:
+        - sessionCookie: []
+        - pat: ["people:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonPatch"
+      responses:
+        "200":
+          description: Pessoa atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [people]
+      operationId: deletePerson
+      summary: Excluir uma pessoa
+      description: Desfaz os vínculos de locutor e apaga a impressão de voz, se houver.
+      security:
+        - sessionCookie: []
+        - pat: ["people:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/people/{person_id}/transcripts:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      tags: [people]
+      operationId: listPersonTranscripts
+      summary: Transcrições em que a pessoa fala
+      description: Exige `people:read` e `transcripts:read` num PAT. As falas da pessoa saem de `GET /api/v1/search?person=`.
+      security:
+        - sessionCookie: []
+        - pat: ["people:read", "transcripts:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Transcrições, da mais recente para a mais antiga.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/search:
+    get:
+      tags: [search]
+      operationId: search
+      summary: Busca full-text sobre segmentos
+      description: |
+        Busca em português (`tsvector` pt) nos segmentos das transcrições visíveis ao usuário.
+        Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:read"]
+      parameters:
+        - name: q
+          in: query
+          description: Termos de busca (sintaxe `websearch_to_tsquery`, aceita "frase exata" e -exclusão).
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PersonFilter"
+        - name: from
+          in: query
+          description: "`recorded_at >= from`."
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: "`recorded_at < to`."
+          schema:
+            type: string
+            format: date-time
+        - $ref: "#/components/parameters/TagFilter"
+        - $ref: "#/components/parameters/CollectionFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Trechos encontrados, por relevância.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchPage"
+              examples:
+                turmas:
+                  $ref: "#/components/examples/SearchPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/collections:
+    get:
+      tags: [organize]
+      operationId: listCollections
+      summary: Coleções do usuário
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Coleções.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionPage"
+              examples:
+                colecoes:
+                  $ref: "#/components/examples/CollectionPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [organize]
+      operationId: createCollection
+      summary: Criar uma coleção
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionCreate"
+      responses:
+        "201":
+          description: Coleção criada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/collections/{collection_id}:
+    parameters:
+      - $ref: "#/components/parameters/CollectionId"
+    patch:
+      tags: [organize]
+      operationId: updateCollection
+      summary: Renomear ou descrever uma coleção
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionPatch"
+      responses:
+        "200":
+          description: Coleção atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [organize]
+      operationId: deleteCollection
+      summary: Excluir uma coleção
+      description: As gravações ficam; só saem da coleção.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tags:
+    get:
+      tags: [organize]
+      operationId: listTags
+      summary: Tags em uso nas gravações visíveis
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Tags com contagem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+              examples:
+                tags:
+                  $ref: "#/components/examples/TagList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/groups:
+    get:
+      tags: [groups]
+      operationId: listGroups
+      summary: Grupos da organização
+      description: Todo membro lista os grupos (para compartilhar); só `admin` cria e edita.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Grupos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupPage"
+              examples:
+                grupos:
+                  $ref: "#/components/examples/GroupPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [groups]
+      operationId: createGroup
+      summary: Criar um grupo (admin)
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupCreate"
+      responses:
+        "201":
+          description: Grupo criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/groups/{group_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [groups]
+      operationId: getGroup
+      summary: Um grupo e os seus membros
+      responses:
+        "200":
+          description: Grupo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [groups]
+      operationId: updateGroup
+      summary: Editar um grupo (admin)
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupPatch"
+      responses:
+        "200":
+          description: Grupo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [groups]
+      operationId: deleteGroup
+      summary: Excluir um grupo (admin)
+      description: Compartilhamentos com o grupo são desfeitos.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/groups/{group_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [groups]
+      operationId: addGroupMember
+      summary: Pôr um usuário no grupo (admin)
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Membro do grupo (idempotente).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [groups]
+      operationId: removeGroupMember
+      summary: Tirar um usuário do grupo (admin)
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Fora do grupo.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/settings:
+    get:
+      tags: [admin]
+      operationId: getAdminSettings
+      summary: Configuração em runtime da organização
+      responses:
+        "200":
+          description: Configuração.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+              examples:
+                padrao:
+                  $ref: "#/components/examples/AdminSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [admin]
+      operationId: updateAdminSettings
+      summary: Alterar a configuração
+      description: Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSettingsPatch"
+            examples:
+              trocarModelo:
+                $ref: "#/components/examples/AdminSettingsPatchRequest"
+      responses:
+        "200":
+          description: Configuração resultante.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/agent-providers:
+    get:
+      tags: [admin]
+      operationId: listAgentProviders
+      summary: Providers de agente de sumarização
+      responses:
+        "200":
+          description: Providers. A chave de API nunca volta; só `api_key_set`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProviderPage"
+              examples:
+                providers:
+                  $ref: "#/components/examples/AgentProviderPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [admin]
+      operationId: createAgentProvider
+      summary: Cadastrar um provider
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentProviderCreate"
+            examples:
+              deepseek:
+                $ref: "#/components/examples/AgentProviderCreateRequest"
+      responses:
+        "201":
+          description: Provider cadastrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProvider"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/agent-providers/{provider_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProviderId"
+    patch:
+      tags: [admin]
+      operationId: updateAgentProvider
+      summary: Editar um provider
+      description: "`api_key: null` apaga a chave guardada; ausente, mantém."
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentProviderPatch"
+      responses:
+        "200":
+          description: Provider atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProvider"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [admin]
+      operationId: deleteAgentProvider
+      summary: Remover um provider
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Removido.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/secrets:
+    get:
+      tags: [admin]
+      operationId: listSecrets
+      summary: Segredos da organização (sem valor)
+      responses:
+        "200":
+          description: Nomes e estado; o valor nunca volta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecretList"
+              examples:
+                segredos:
+                  $ref: "#/components/examples/SecretList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/secrets/{secret_name}:
+    parameters:
+      - name: secret_name
+        in: path
+        required: true
+        description: Nome do segredo (`hf_token`).
+        schema:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,63}$"
+    put:
+      tags: [admin]
+      operationId: putSecret
+      summary: Gravar um segredo (cifrado)
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretPut"
+      responses:
+        "204":
+          description: Gravado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [admin]
+      operationId: deleteSecret
+      summary: Apagar um segredo
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Apagado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      summary: Usuários da organização
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Usuários.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+              examples:
+                usuarios:
+                  $ref: "#/components/examples/UserPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/users/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      tags: [admin]
+      operationId: updateUser
+      summary: Mudar papel ou desativar um usuário
+      description: Desativar encerra as sessões e revoga os PATs do usuário.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPatch"
+      responses:
+        "200":
+          description: Usuário atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/invitations:
+    get:
+      tags: [admin]
+      operationId: listInvitations
+      summary: Convites pendentes e aceitos
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Convites.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [admin]
+      operationId: createInvitation
+      summary: Convidar um usuário
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationCreate"
+            examples:
+              consultor:
+                $ref: "#/components/examples/InvitationCreateRequest"
+      responses:
+        "201":
+          description: Convite criado. `accept_url` volta só nesta resposta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+              examples:
+                consultor:
+                  $ref: "#/components/examples/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/invitations/{invitation_id}:
+    parameters:
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [admin]
+      operationId: revokeInvitation
+      summary: Revogar um convite pendente
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Revogado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/health:
+    get:
+      tags: [admin]
+      operationId: getAdminHealth
+      summary: Saúde da fila, da GPU e dos modelos
+      responses:
+        "200":
+          description: Estado atual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminHealth"
+              examples:
+                gpu:
+                  $ref: "#/components/examples/AdminHealth"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: eclume_session
+      description: |
+        Sessão do navegador, aberta por `POST /api/v1/auth/login`. Tem todas as permissões do
+        usuário. Métodos mutáveis exigem `X-CSRF-Token` igual ao cookie `eclume_csrf`
+        (double-submit). Gestão de PATs, escrita de grupos e `/api/v1/admin/*` aceitam **só**
+        sessão; `/api/v1/admin/*` exige ainda o papel `admin`.
+    pat:
+      type: http
+      scheme: bearer
+      bearerFormat: eclp_<segredo>
+      description: |
+        PAT pessoal: `Authorization: Bearer eclp_<segredo>`. Age como o usuário dono, limitado
+        aos escopos concedidos. Os escopos exigidos por operação estão no requisito de segurança
+        (`pat: [escopo, ...]`, todos obrigatórios). Nenhum escopo implica outro. Faltando
+        escopo, a resposta é 403 com `code: insufficient_scope` e `required_scopes`.
+
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT.
+      schema:
+        type: string
+    Cursor:
+      name: cursor
+      in: query
+      description: Cursor opaco devolvido em `next_cursor`.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      description: Itens por página.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Since:
+      name: since
+      in: query
+      description: Só itens com `updated_at >= since` (inclusivo).
+      schema:
+        type: string
+        format: date-time
+    PersonFilter:
+      name: person
+      in: query
+      description: Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela.
+      schema:
+        type: string
+        format: uuid
+    TagFilter:
+      name: tag
+      in: query
+      description: Só gravações com esta tag.
+      schema:
+        type: string
+    CollectionFilter:
+      name: collection
+      in: query
+      description: Só gravações desta coleção.
+      schema:
+        type: string
+        format: uuid
+    TokenId:
+      name: token_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UploadId:
+      name: upload_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RecordingId:
+      name: recording_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ShareId:
+      name: share_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TranscriptId:
+      name: transcript_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SummaryId:
+      name: summary_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TemplateId:
+      name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PersonId:
+      name: person_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CollectionId:
+      name: collection_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProviderId:
+      name: provider_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Sem credencial, ou credencial inválida, expirada ou revogada.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            examples: ['Bearer realm="eclume"']
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            semCredencial:
+              $ref: "#/components/examples/ProblemUnauthorized"
+    Forbidden:
+      description: Credencial válida sem permissão (escopo, papel ou dono).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            semEscopo:
+              $ref: "#/components/examples/ProblemInsufficientScope"
+    NotFound:
+      description: Não existe ou não é visível ao usuário (o eclume não distingue os dois).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            naoEncontrado:
+              $ref: "#/components/examples/ProblemNotFound"
+    ValidationFailed:
+      description: Corpo ou parâmetros inválidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            invalido:
+              $ref: "#/components/examples/ProblemValidation"
+    Conflict:
+      description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      description: Erro RFC 9457. O cliente decide por `code`, nunca por `title`.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          description: |
+            Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
+            `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
+            `rate_limited`. Códigos novos entram de forma aditiva.
+          type: string
+        required_scopes:
+          description: Com `insufficient_scope`, os escopos que faltaram.
+          type: array
+          items:
+            $ref: "#/components/schemas/Scope"
+        errors:
+          description: Com `validation_failed`, um item por campo inválido.
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                description: Caminho do campo (`size_bytes`, `parts[3].etag`).
+                type: string
+              message:
+                type: string
+
+    Scope:
+      description: Escopo de PAT.
+      type: string
+      enum:
+        - recordings:read
+        - recordings:write
+        - transcripts:read
+        - transcripts:write
+        - people:read
+        - people:write
+        - summaries:read
+        - summaries:write
+
+    Health:
+      type: object
+      required: [status, version, contract_version]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        version:
+          description: Versão do servidor.
+          type: string
+        contract_version:
+          description: Versão deste contrato que o servidor implementa (`info.version`).
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    InvitationAccept:
+      type: object
+      required: [name, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 12
+          writeOnly: true
+
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    GroupRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    User:
+      type: object
+      required: [id, email, name, role, active, created_at, last_login_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: [string, "null"]
+          format: date-time
+
+    UserPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        role:
+          type: string
+          enum: [admin, member]
+        active:
+          type: boolean
+
+    UserPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    Me:
+      type: object
+      required: [user, organization, groups, auth]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        organization:
+          $ref: "#/components/schemas/Organization"
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupRef"
+        auth:
+          type: object
+          required: [method, scopes, token_id]
+          properties:
+            method:
+              type: string
+              enum: [session, pat]
+            scopes:
+              description: Com sessão, todos os escopos.
+              type: array
+              items:
+                $ref: "#/components/schemas/Scope"
+            token_id:
+              description: Id do PAT em uso, ou `null` com sessão.
+              type: [string, "null"]
+              format: uuid
+
+    NextCursor:
+      description: Cursor da próxima página, ou `null` na última.
+      type: [string, "null"]
+
+    Token:
+      type: object
+      required: [id, name, scopes, prefix, created_at, last_used_at, expires_at, revoked_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scope"
+        prefix:
+          description: Começo do segredo, para reconhecer o token (`eclp_7Hq2`).
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: [string, "null"]
+          format: date-time
+        expires_at:
+          type: [string, "null"]
+          format: date-time
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+
+    TokenCreate:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Scope"
+        expires_at:
+          description: Sem valor, o PAT não expira.
+          type: [string, "null"]
+          format: date-time
+
+    TokenCreated:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/Token"
+        secret:
+          description: O PAT completo. Não é mostrado de novo.
+          type: string
+          pattern: "^eclp_[A-Za-z0-9]{32,}$"
+
+    TokenPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    Source:
+      description: Origem do áudio.
+      type: string
+      enum: [desktop, upload, api]
+
+    Capture:
+      description: Contexto da captura, preenchido pelo app desktop.
+      type: object
+      properties:
+        meeting_app:
+          description: App de reunião detectado.
+          type: [string, "null"]
+          enum: [teams, meet, zoom, other, null]
+        device_name:
+          type: [string, "null"]
+        client_version:
+          description: Versão do app que gravou (`eclume-desktop/0.3.0`).
+          type: [string, "null"]
+
+    RecordingMetadata:
+      description: Metadados livres de organização (tipo de reunião, cliente, projeto).
+      type: object
+      additionalProperties:
+        type: string
+
+    UploadCreate:
+      type: object
+      required: [filename, content_type, size_bytes, sha256]
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        content_type:
+          description: Tipo do arquivo (`audio/ogg`, `audio/webm`, `video/mp4`).
+          type: string
+          pattern: "^(audio|video)/[A-Za-z0-9.+-]+$"
+        size_bytes:
+          type: integer
+          minimum: 1
+        sha256:
+          description: SHA-256 do arquivo inteiro, em hex minúsculo.
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        title:
+          description: Sem valor, deriva do nome do arquivo.
+          type: string
+          minLength: 1
+        recorded_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          minimum: 0
+        language:
+          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da organização ou a detecção.
+          type: string
+          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+        source:
+          $ref: "#/components/schemas/Source"
+        capture:
+          $ref: "#/components/schemas/Capture"
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        collection_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        metadata:
+          $ref: "#/components/schemas/RecordingMetadata"
+
+    UploadStatus:
+      type: string
+      enum: [in_progress, completed, aborted, expired, deduplicated]
+
+    PartUrl:
+      type: object
+      required: [part_number, method, url, headers, expires_at]
+      properties:
+        part_number:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        method:
+          type: string
+          enum: [PUT]
+        url:
+          description: URL opaca da parte.
+          type: string
+          format: uri
+        headers:
+          description: Headers que o `PUT` deve levar.
+          type: object
+          additionalProperties:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    ReceivedPart:
+      type: object
+      required: [part_number, etag, size_bytes]
+      properties:
+        part_number:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        etag:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 1
+
+    Upload:
+      type: object
+      required: [id, status, filename, content_type, size_bytes, sha256, part_size, part_count, parts_received, parts, recording_id, expires_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/UploadStatus"
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        part_size:
+          description: Tamanho de toda parte menos a última, em bytes (mínimo 5 MiB).
+          type: integer
+          minimum: 5242880
+        part_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        parts_received:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceivedPart"
+        parts:
+          description: URLs já emitidas para partes pendentes; pode vir parcial ou vazio.
+          type: array
+          items:
+            $ref: "#/components/schemas/PartUrl"
+        recording_id:
+          description: Gravação criada pelo `complete`, ou a existente num `deduplicated`.
+          type: [string, "null"]
+          format: uuid
+        expires_at:
+          description: Depois disso o upload inacabado é descartado (`upload_expired`).
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    PartUrlsRequest:
+      type: object
+      required: [part_numbers]
+      properties:
+        part_numbers:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+            maximum: 10000
+
+    PartUrls:
+      type: object
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartUrl"
+
+    UploadComplete:
+      type: object
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [part_number, etag]
+            properties:
+              part_number:
+                type: integer
+                minimum: 1
+                maximum: 10000
+              etag:
+                type: string
+
+    RecordingStatus:
+      description: "`uploading` → `queued` → `processing` → `transcribed` | `failed`."
+      type: string
+      enum: [uploading, queued, processing, transcribed, failed]
+
+    Job:
+      description: Job de transcrição mais recente da gravação.
+      type: object
+      required: [id, state, stage, progress, attempts, error, queued_at, started_at, finished_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        stage:
+          description: Etapa em curso, ou `null` fora de execução.
+          type: [string, "null"]
+          enum: [asr, alignment, diarization, embeddings, finalizing, null]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+        attempts:
+          type: integer
+          minimum: 0
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  description: "`hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`..."
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+
+    Recording:
+      type: object
+      required: [id, title, status, source, recorded_at, duration_ms, language, size_bytes, content_type, content_hash, owner, visibility, tags, collection_ids, metadata, capture, job, transcript_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/RecordingStatus"
+        source:
+          $ref: "#/components/schemas/Source"
+        recorded_at:
+          type: string
+          format: date-time
+        duration_ms:
+          description: "`null` até o áudio ser lido."
+          type: [integer, "null"]
+          minimum: 0
+        language:
+          description: Idioma pedido ou detectado.
+          type: [string, "null"]
+        size_bytes:
+          type: integer
+          minimum: 1
+        content_type:
+          type: string
+        content_hash:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        owner:
+          $ref: "./transcript.schema.json#/$defs/UserRef"
+        visibility:
+          description: "`private` sem compartilhamento; `shared` com pelo menos um."
+          type: string
+          enum: [private, shared]
+        tags:
+          type: array
+          items:
+            type: string
+        collection_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        metadata:
+          $ref: "#/components/schemas/RecordingMetadata"
+        capture:
+          oneOf:
+            - $ref: "#/components/schemas/Capture"
+            - type: "null"
+        job:
+          oneOf:
+            - $ref: "#/components/schemas/Job"
+            - type: "null"
+        transcript_id:
+          description: Transcrição, depois do primeiro job concluído.
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecordingPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+        recorded_at:
+          type: string
+          format: date-time
+        language:
+          type: string
+          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+        tags:
+          description: Substitui a lista inteira.
+          type: array
+          items:
+            type: string
+            minLength: 1
+        collection_ids:
+          description: Substitui a lista inteira.
+          type: array
+          items:
+            type: string
+            format: uuid
+        metadata:
+          description: Substitui o objeto inteiro.
+          $ref: "#/components/schemas/RecordingMetadata"
+
+    RecordingPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Recording"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    RetranscribeRequest:
+      type: object
+      properties:
+        language:
+          type: string
+          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+
+    Share:
+      type: object
+      required: [id, target, permission, created_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        target:
+          type: object
+          required: [type, id, name]
+          properties:
+            type:
+              type: string
+              enum: [group, organization]
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        permission:
+          type: string
+          enum: [read]
+        created_by:
+          $ref: "./transcript.schema.json#/$defs/UserRef"
+        created_at:
+          type: string
+          format: date-time
+
+    ShareCreate:
+      type: object
+      required: [target_type]
+      properties:
+        target_type:
+          type: string
+          enum: [group, organization]
+        target_id:
+          description: Id do grupo; ignorado para `organization`.
+          type: string
+          format: uuid
+
+    SharePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Share"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    TranscriptSummary:
+      description: Resumo de listagem de uma transcrição (sem segmentos).
+      type: object
+      required: [id, recording_id, title, language, recorded_at, duration_ms, source, content_hash, revision, created_at, updated_at, owner, speakers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        recording_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        language:
+          type: string
+        recorded_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          minimum: 0
+        source:
+          $ref: "#/components/schemas/Source"
+        content_hash:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        revision:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        owner:
+          $ref: "./transcript.schema.json#/$defs/UserRef"
+        speakers:
+          type: array
+          items:
+            $ref: "./transcript.schema.json#/$defs/Speaker"
+        tags:
+          type: array
+          items:
+            type: string
+
+    TranscriptPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranscriptSummary"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    SpeakerPatch:
+      type: object
+      minProperties: 1
+      properties:
+        label:
+          type: string
+          minLength: 1
+        person_id:
+          description: Pessoa a ligar, ou `null` para desfazer.
+          type: [string, "null"]
+          format: uuid
+
+    SpeakerMerge:
+      type: object
+      required: [source_speaker_ids, target_speaker_id]
+      properties:
+        source_speaker_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: "^S[0-9]+$"
+        target_speaker_id:
+          type: string
+          pattern: "^S[0-9]+$"
+
+    SegmentPatch:
+      type: object
+      minProperties: 1
+      properties:
+        text:
+          type: string
+        speaker_id:
+          type: string
+          pattern: "^S[0-9]+$"
+
+    VoiceConsent:
+      description: Consentimento LGPD da pessoa para a impressão de voz. Sem `granted`, nada é comparado.
+      type: object
+      required: [status, updated_at]
+      properties:
+        status:
+          type: string
+          enum: [none, granted, revoked]
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    Person:
+      type: object
+      required: [id, name, email, notes, voice_consent, transcript_count, last_seen_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: [string, "null"]
+          format: email
+        notes:
+          type: [string, "null"]
+        voice_consent:
+          $ref: "#/components/schemas/VoiceConsent"
+        transcript_count:
+          description: Transcrições visíveis ao usuário em que a pessoa fala.
+          type: integer
+          minimum: 0
+        last_seen_at:
+          description: "`recorded_at` da transcrição mais recente em que a pessoa fala."
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PersonCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: [string, "null"]
+          format: email
+        notes:
+          type: [string, "null"]
+
+    PersonPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: [string, "null"]
+          format: email
+        notes:
+          type: [string, "null"]
+
+    PersonPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Person"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    SearchHit:
+      type: object
+      required: [transcript, speaker, segment, highlight, rank]
+      properties:
+        transcript:
+          type: object
+          required: [id, recording_id, title, recorded_at]
+          properties:
+            id:
+              type: string
+              format: uuid
+            recording_id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            recorded_at:
+              type: string
+              format: date-time
+        speaker:
+          $ref: "./transcript.schema.json#/$defs/Speaker"
+        segment:
+          $ref: "./transcript.schema.json#/$defs/Segment"
+        highlight:
+          description: Texto do segmento com os termos entre `<mark>` e `</mark>`; nenhum outro HTML.
+          type: string
+        rank:
+          type: number
+
+    SearchPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    Collection:
+      type: object
+      required: [id, name, description, recording_count, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        recording_count:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CollectionCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+
+    CollectionPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+
+    CollectionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Collection"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    TagList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, count]
+            properties:
+              name:
+                type: string
+              count:
+                type: integer
+                minimum: 0
+
+    Group:
+      type: object
+      required: [id, name, description, member_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        member_count:
+          type: integer
+          minimum: 0
+        members:
+          description: Presente em `GET /api/v1/groups/{group_id}`.
+          type: array
+          items:
+            $ref: "./transcript.schema.json#/$defs/UserRef"
+        created_at:
+          type: string
+          format: date-time
+
+    GroupCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+
+    GroupPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+
+    GroupPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Group"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    SummaryTemplate:
+      type: object
+      required: [id, name, description, instructions, scope, is_default, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        instructions:
+          description: Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+        scope:
+          description: "`user`: pessoal; `organization`: padrão definido pelo admin, só leitura para os demais."
+          type: string
+          enum: [user, organization]
+        is_default:
+          description: Template usado no resumo automático do usuário.
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SummaryTemplateCreate:
+      type: object
+      required: [name, instructions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+        instructions:
+          type: string
+          minLength: 1
+        is_default:
+          type: boolean
+
+    SummaryTemplatePatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: [string, "null"]
+        instructions:
+          type: string
+          minLength: 1
+        is_default:
+          type: boolean
+
+    SummaryTemplatePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SummaryTemplate"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    AgentProviderKind:
+      type: string
+      enum: [ollama, openai-compatible, anthropic, claude-cli]
+
+    AgentProviderRef:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: "#/components/schemas/AgentProviderKind"
+
+    Summary:
+      type: object
+      required: [id, transcript_id, transcript_revision, template, version, status, trigger, provider, model, content_md, error, created_at, completed_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        transcript_id:
+          type: string
+          format: uuid
+        transcript_revision:
+          description: Revisão da transcrição que o resumo leu.
+          type: integer
+          minimum: 1
+        template:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        version:
+          description: Versão do resumo deste template para esta transcrição, a partir de 1.
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [queued, running, done, failed]
+        trigger:
+          type: string
+          enum: [manual, automatic]
+        provider:
+          $ref: "#/components/schemas/AgentProviderRef"
+        model:
+          type: string
+        content_md:
+          description: "Resumo em Markdown, com `status: done`."
+          type: [string, "null"]
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, "null"]
+          format: date-time
+
+    SummaryCreate:
+      type: object
+      required: [template_id]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        provider_id:
+          description: Sem valor, o provider padrão da organização.
+          type: string
+          format: uuid
+
+    SummaryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Summary"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    AsrSettings:
+      type: object
+      required: [engine, model, compute_type, batch_size, default_language, fallback_model, endpoint_url]
+      properties:
+        engine:
+          type: string
+          enum: [whisperx-local, openai-compatible, cpu]
+        model:
+          type: string
+        compute_type:
+          type: string
+        batch_size:
+          description: "`null` = adaptativo à VRAM livre."
+          type: [integer, "null"]
+          minimum: 1
+        default_language:
+          type: [string, "null"]
+        fallback_model:
+          description: Modelo usado depois de um OOM.
+          type: [string, "null"]
+        endpoint_url:
+          description: "Base do servidor remoto, com `engine: openai-compatible`."
+          type: [string, "null"]
+          format: uri
+
+    DiarizationSettings:
+      type: object
+      required: [enabled, model, min_speakers, max_speakers]
+      properties:
+        enabled:
+          type: boolean
+        model:
+          type: string
+        min_speakers:
+          type: [integer, "null"]
+          minimum: 1
+        max_speakers:
+          type: [integer, "null"]
+          minimum: 1
+
+    SummarizationSettings:
+      type: object
+      required: [default_provider_id, auto_summarize, default_template_id]
+      properties:
+        default_provider_id:
+          type: [string, "null"]
+          format: uuid
+        auto_summarize:
+          description: Gera o resumo do template padrão de cada usuário ao fim da transcrição.
+          type: boolean
+        default_template_id:
+          type: [string, "null"]
+          format: uuid
+
+    VoiceIdentificationSettings:
+      type: object
+      required: [enabled, suggestion_threshold]
+      properties:
+        enabled:
+          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada.
+          type: boolean
+        suggestion_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    AdminSettings:
+      type: object
+      required: [asr, diarization, summarization, voice_identification, updated_at, updated_by]
+      properties:
+        asr:
+          $ref: "#/components/schemas/AsrSettings"
+        diarization:
+          $ref: "#/components/schemas/DiarizationSettings"
+        summarization:
+          $ref: "#/components/schemas/SummarizationSettings"
+        voice_identification:
+          $ref: "#/components/schemas/VoiceIdentificationSettings"
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          oneOf:
+            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - type: "null"
+
+    AdminSettingsPatch:
+      description: Cada bloco é mesclado campo a campo; campos ausentes ficam como estão.
+      type: object
+      minProperties: 1
+      properties:
+        asr:
+          type: object
+          properties:
+            engine:
+              type: string
+              enum: [whisperx-local, openai-compatible, cpu]
+            model:
+              type: string
+            compute_type:
+              type: string
+            batch_size:
+              type: [integer, "null"]
+              minimum: 1
+            default_language:
+              type: [string, "null"]
+            fallback_model:
+              type: [string, "null"]
+            endpoint_url:
+              type: [string, "null"]
+              format: uri
+        diarization:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            model:
+              type: string
+            min_speakers:
+              type: [integer, "null"]
+              minimum: 1
+            max_speakers:
+              type: [integer, "null"]
+              minimum: 1
+        summarization:
+          type: object
+          properties:
+            default_provider_id:
+              type: [string, "null"]
+              format: uuid
+            auto_summarize:
+              type: boolean
+            default_template_id:
+              type: [string, "null"]
+              format: uuid
+        voice_identification:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            suggestion_threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+
+    AgentProvider:
+      type: object
+      required: [id, name, kind, base_url, model, api_key_set, enabled, options, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: "#/components/schemas/AgentProviderKind"
+        base_url:
+          description: Base da API (Ollama, OpenAI-compatível). `null` para `anthropic` e `claude-cli`.
+          type: [string, "null"]
+          format: uri
+        model:
+          type: string
+        api_key_set:
+          type: boolean
+        enabled:
+          type: boolean
+        options:
+          description: Parâmetros do provider (`max_tokens`, `temperature`, `context_window`).
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentProviderCreate:
+      type: object
+      required: [name, kind, model]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        kind:
+          $ref: "#/components/schemas/AgentProviderKind"
+        base_url:
+          type: [string, "null"]
+          format: uri
+        model:
+          type: string
+          minLength: 1
+        api_key:
+          type: string
+          minLength: 1
+          writeOnly: true
+        enabled:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+
+    AgentProviderPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        base_url:
+          type: [string, "null"]
+          format: uri
+        model:
+          type: string
+          minLength: 1
+        api_key:
+          type: [string, "null"]
+          writeOnly: true
+        enabled:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+
+    AgentProviderPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentProvider"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    SecretList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, is_set, updated_at]
+            properties:
+              name:
+                type: string
+              is_set:
+                type: boolean
+              updated_at:
+                type: [string, "null"]
+                format: date-time
+
+    SecretPut:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    Invitation:
+      type: object
+      required: [id, email, role, group_ids, expires_at, accepted_at, created_by]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member]
+        group_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: [string, "null"]
+          format: date-time
+        created_by:
+          $ref: "./transcript.schema.json#/$defs/UserRef"
+        accept_url:
+          description: Link de aceite, só na resposta da criação.
+          type: string
+          format: uri
+
+    InvitationCreate:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member]
+          default: member
+        group_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    InvitationPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invitation"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    AdminHealth:
+      type: object
+      required: [queue, gpu, models_loaded, recent_failures, checked_at]
+      properties:
+        queue:
+          type: object
+          required: [queued, running, failed_last_24h]
+          properties:
+            queued:
+              type: integer
+              minimum: 0
+            running:
+              type: integer
+              minimum: 0
+            failed_last_24h:
+              type: integer
+              minimum: 0
+        gpu:
+          description: "`null` quando o worker não reporta GPU (engine CPU ou remota)."
+          oneOf:
+            - type: object
+              required: [name, vram_total_mb, vram_used_mb, utilization_pct]
+              properties:
+                name:
+                  type: string
+                vram_total_mb:
+                  type: integer
+                  minimum: 0
+                vram_used_mb:
+                  type: integer
+                  minimum: 0
+                utilization_pct:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+            - type: "null"
+        models_loaded:
+          type: array
+          items:
+            type: object
+            required: [name, kind, loaded_at, vram_mb]
+            properties:
+              name:
+                type: string
+              kind:
+                type: string
+                enum: [asr, alignment, diarization, embeddings, summarization]
+              loaded_at:
+                type: string
+                format: date-time
+              vram_mb:
+                type: [integer, "null"]
+                minimum: 0
+        recent_failures:
+          type: array
+          items:
+            type: object
+            required: [job_id, recording_id, stage, code, message, failed_at]
+            properties:
+              job_id:
+                type: string
+                format: uuid
+              recording_id:
+                type: string
+                format: uuid
+              stage:
+                type: [string, "null"]
+              code:
+                type: string
+              message:
+                type: string
+              failed_at:
+                type: string
+                format: date-time
+        checked_at:
+          type: string
+          format: date-time
+
+  examples:
+    Health:
+      summary: Serviço no ar
+      externalValue: ./fixtures/health.json
+    LoginRequest:
+      summary: E-mail e senha
+      externalValue: ./fixtures/login-request.json
+    MeViaPat:
+      summary: Consultora autenticada pelo PAT do lumea
+      externalValue: ./fixtures/me-via-pat.json
+    TokenPage:
+      summary: PAT do lumea e PAT do desktop
+      externalValue: ./fixtures/token-page.json
+    TokenCreateRequest:
+      summary: PAT para o importador do lumea
+      externalValue: ./fixtures/token-create-request.json
+    TokenCreated:
+      summary: PAT criado, segredo mostrado uma vez
+      externalValue: ./fixtures/token-created.json
+    UploadCreateRequest:
+      summary: Gravação do desktop, 18 MB em Opus
+      externalValue: ./fixtures/upload-create-request.json
+    UploadCreated:
+      summary: Upload em 3 partes, URLs das partes emitidas
+      externalValue: ./fixtures/upload-created.json
+    UploadDeduplicated:
+      summary: Mesmo hash de uma gravação existente
+      externalValue: ./fixtures/upload-deduplicated.json
+    UploadInProgress:
+      summary: Retomada com a parte 1 recebida
+      externalValue: ./fixtures/upload-in-progress.json
+    PartUrlsRequest:
+      summary: URLs novas para as partes 2 e 3
+      externalValue: ./fixtures/part-urls-request.json
+    PartUrls:
+      summary: URLs das partes 2 e 3
+      externalValue: ./fixtures/part-urls.json
+    UploadCompleteRequest:
+      summary: ETags das 3 partes
+      externalValue: ./fixtures/upload-complete-request.json
+    RecordingQueued:
+      summary: Gravação criada, job na fila
+      externalValue: ./fixtures/recording-queued.json
+    RecordingTranscribed:
+      summary: Gravação transcrita e compartilhada com um grupo
+      externalValue: ./fixtures/recording-transcribed.json
+    RecordingPage:
+      summary: Uma gravação transcrita e uma em processamento
+      externalValue: ./fixtures/recording-page.json
+    RecordingPatchRequest:
+      summary: Tags, coleção e metadados
+      externalValue: ./fixtures/recording-patch-request.json
+    SharePage:
+      summary: Compartilhada com o grupo Consultores
+      externalValue: ./fixtures/share-page.json
+    ShareCreateRequest:
+      summary: Compartilhar com um grupo
+      externalValue: ./fixtures/share-create-request.json
+    TranscriptPage:
+      summary: Listagem incremental com uma transcrição
+      externalValue: ./fixtures/transcript-page.json
+    TranscriptThreeSpeakers:
+      summary: Reunião com 3 locutores, um ligado a pessoa (com `include=words`)
+      externalValue: ./fixtures/transcript-3-locutores.json
+    TranscriptThreeSpeakersMarkdown:
+      summary: Export `md` da reunião com 3 locutores
+      externalValue: ./fixtures/transcript-3-locutores.md
+    SpeakerPatchRequest:
+      summary: Confirmar a sugestão por voz de S2
+      externalValue: ./fixtures/speaker-patch-request.json
+    SpeakerLinked:
+      summary: S2 ligado a Rafael Lima
+      externalValue: ./fixtures/speaker-linked.json
+    SpeakerMergeRequest:
+      summary: Mesclar S3 em S2
+      externalValue: ./fixtures/speaker-merge-request.json
+    SegmentPatchRequest:
+      summary: Corrigir um termo
+      externalValue: ./fixtures/segment-patch-request.json
+    SummaryPage:
+      summary: Ata pronta
+      externalValue: ./fixtures/summary-page.json
+    SummaryCreateRequest:
+      summary: Gerar a ata com o template padrão
+      externalValue: ./fixtures/summary-create-request.json
+    SummaryQueued:
+      summary: Resumo na fila
+      externalValue: ./fixtures/summary-queued.json
+    SummaryDone:
+      summary: Ata pronta
+      externalValue: ./fixtures/summary-done.json
+    SummaryTemplatePage:
+      summary: Padrão da organização e template pessoal
+      externalValue: ./fixtures/summary-template-page.json
+    SummaryTemplateCreateRequest:
+      summary: Template de resumo executivo
+      externalValue: ./fixtures/summary-template-create-request.json
+    PersonPage:
+      summary: Diretório com três pessoas
+      externalValue: ./fixtures/person-page.json
+    Person:
+      summary: Pessoa com consentimento de voz
+      externalValue: ./fixtures/person.json
+    PersonCreateRequest:
+      summary: Cadastrar Juliana Prado
+      externalValue: ./fixtures/person-create-request.json
+    SearchPage:
+      summary: Busca por "turmas"
+      externalValue: ./fixtures/search-page.json
+    CollectionPage:
+      summary: Uma coleção por cliente
+      externalValue: ./fixtures/collection-page.json
+    TagList:
+      summary: Tags em uso
+      externalValue: ./fixtures/tag-list.json
+    GroupPage:
+      summary: Consultores e Diretoria
+      externalValue: ./fixtures/group-page.json
+    AdminSettings:
+      summary: WhisperX na GTX 1660 Super
+      externalValue: ./fixtures/admin-settings.json
+    AdminSettingsPatchRequest:
+      summary: Trocar o modelo e ligar o resumo automático
+      externalValue: ./fixtures/admin-settings-patch-request.json
+    AgentProviderPage:
+      summary: claude -p do servidor e DeepSeek
+      externalValue: ./fixtures/agent-provider-page.json
+    AgentProviderCreateRequest:
+      summary: DeepSeek via API OpenAI-compatível
+      externalValue: ./fixtures/agent-provider-create-request.json
+    SecretList:
+      summary: Token do Hugging Face gravado
+      externalValue: ./fixtures/secret-list.json
+    UserPage:
+      summary: Admin e consultor
+      externalValue: ./fixtures/user-page.json
+    InvitationCreateRequest:
+      summary: Convidar um consultor
+      externalValue: ./fixtures/invitation-create-request.json
+    Invitation:
+      summary: Convite criado
+      externalValue: ./fixtures/invitation.json
+    AdminHealth:
+      summary: Um job rodando na GPU
+      externalValue: ./fixtures/admin-health.json
+    ProblemUnauthorized:
+      summary: Sem credencial
+      externalValue: ./fixtures/problem-unauthorized.json
+    ProblemInsufficientScope:
+      summary: PAT sem o escopo exigido
+      externalValue: ./fixtures/problem-insufficient-scope.json
+    ProblemNotFound:
+      summary: Recurso inexistente ou invisível
+      externalValue: ./fixtures/problem-not-found.json
+    ProblemValidation:
+      summary: Campo inválido
+      externalValue: ./fixtures/problem-validation.json
