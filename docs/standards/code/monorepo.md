@@ -70,8 +70,9 @@ remote-run web 'npx playwright install --with-deps chrome && npm run fixtures &&
 `desktop/Cargo.toml` é o workspace; o app está em `desktop/src-tauri/` e a UI estática em
 `desktop/ui/` (HTML, CSS e JS sem bundler, pela API global do Tauri). Os demais crates do
 workspace ficam em `desktop/crates/`: `audio-capture` (mic e áudio do sistema), `recorder`
-(mixagem, Ogg/Opus e fila) e `resampler`. O formato da gravação e a fila estão em
-[desktop-gravacao.md](desktop-gravacao.md). `tauri::generate_context!` lê `frontendDist` e os
+(mixagem, Ogg/Opus e fila), `resampler`, `detect` (detecção de reuniões) e `sync` (upload por
+PAT). O formato da gravação e a fila estão em [desktop-gravacao.md](desktop-gravacao.md); a
+detecção e o sync, em [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md). `tauri::generate_context!` lê `frontendDist` e os
 ícones em tempo de compilação, então todos são versionados.
 
 **Código de terceiros vendorizado** entra em `desktop/crates/<crate>` com `VENDOR.md` (origem,

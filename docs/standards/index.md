@@ -31,7 +31,8 @@ derivado (o escopo do repositório que ele governa).
 ### code/
 | Doc | Covers |
 | --- | --- |
-| [desktop-gravacao.md](code/desktop-gravacao.md) | O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local com estados recording → pending → syncing → synced ou failed, e expõe os traits Uploader e MeetingDetector para o sync e a detecção — este é o formato, o ciclo de vida e os pontos de extensão. |
+| [desktop-deteccao-e-sync.md](code/desktop-deteccao-e-sync.md) | O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, e sobe cada gravação por PAT pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, o protocolo, o PAT, a CA extra e a retenção. |
+| [desktop-gravacao.md](code/desktop-gravacao.md) | O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local (v2) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida e os pontos de extensão. |
 | [formato-audio-upload.md](code/formato-audio-upload.md) | Antes do upload, o navegador converte áudio e vídeo para Opus mono 16 kHz em Ogg (32 kbps) pela biblioteca isolada web/src/lib/media-convert — WebCodecs com Mediabunny, ffmpeg.wasm de fallback — e este é o formato, o porquê e a API que o app consome. |
 | [monorepo.md](code/monorepo.md) | Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam. |
 <!-- END GENERATED -->
