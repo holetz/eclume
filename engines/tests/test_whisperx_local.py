@@ -44,9 +44,13 @@ class FakeAudio:
 class FakeVram:
     def __init__(self, free: int | None = 6000) -> None:
         self.free = free
+        self.used = [400, 2610, 2610, 3250, 3250, 4230]  # antes/depois de cada carga: ASR, alinhador, pyannote
 
     def free_mb(self) -> int | None:
         return self.free
+
+    def used_mb(self) -> int | None:
+        return self.used.pop(0) if self.free is not None and self.used else None
 
     @contextmanager
     def track(self) -> Iterator[PeakVram]:
@@ -375,3 +379,38 @@ def test_sem_token_devolve_none(tmp_path: Path):
     vazio = tmp_path / "vazio"
     vazio.write_text("  \n")
     assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(vazio)}) is None
+
+
+def test_modelo_residente_para_o_heartbeat(fake: FakeWhisperX):
+    eng = engine()
+    assert eng.loaded_models() == []
+    eng.transcribe(AUDIO, EngineOptions(diarize=False))
+    (aligner,) = eng.loaded_models()
+    assert aligner["kind"] == "alignment"
+    assert aligner["name"] == "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
+    assert aligner["vram_mb"] == 640  # 3250 - 2610 do FakeVram
+    assert aligner["loaded_at"].endswith("Z")
+    eng.transcribe(AUDIO, EngineOptions(model="large-v3"))
+    assert [m["kind"] for m in eng.loaded_models()] == ["diarization"]
+    eng.unload()
+    assert eng.loaded_models() == []
+
+
+def test_opcoes_do_admin_lote_recuo_e_modelo_de_diarizacao(monkeypatch: pytest.MonkeyPatch):
+    fake = FakeWhisperX(oom_models={"large-v3"})
+    install(monkeypatch, fake)
+    options = EngineOptions(
+        model="large-v3", batch_size=2, fallback_model="small", diarization_model="pyannote/outro-pipeline"
+    )
+    result = engine().transcribe(AUDIO, options)
+    transcribes = [args[:2] for name, args in fake.calls if name == "transcribe"]
+    assert transcribes == [("large-v3", 2), ("large-v3", 1), ("small", 2)]
+    assert result.model == "small"
+    assert WARN_FALLBACK_MEDIUM in result.warnings
+    assert ("DiarizationPipeline", ("pyannote/outro-pipeline", "hf_x", "cuda")) in fake.calls
+    assert result.diarization_model == "pyannote/outro-pipeline"
+
+
+def test_lote_do_ambiente_vence_o_do_admin(fake: FakeWhisperX):
+    eng = WhisperXLocalEngine(hf_token=None, vram=FakeVram(6000), batch_size=8)
+    assert eng.transcribe(AUDIO, EngineOptions(diarize=False, batch_size=2)).batch_size == 8
