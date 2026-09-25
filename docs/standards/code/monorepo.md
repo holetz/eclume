@@ -1,0 +1,87 @@
+---
+type: standard
+title: Layout do monorepo e comandos por pilar
+description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam.
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, .github/workflows/ci.yml
+tags: [code, monorepo, toolchain, ci]
+timestamp: 2026-09-24
+audience: both
+authority: current
+source: holetz/eclume#2
+maintainer: holetz
+---
+
+# Layout do monorepo e comandos por pilar
+
+O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própria toolchain. Não há
+`packages/`: o nome da pasta é o nome da peça no épico `holetz/eclume#1`.
+
+| Pilar | O que é | Toolchain |
+|---|---|---|
+| `engines/` | interface de engine de ASR (`eclume_engines`), compartilhada | uv (membro do workspace) |
+| `server/` | API (`eclume_server`) | uv (membro do workspace) |
+| `worker-gpu/` | worker de ASR (`eclume_worker`) | uv (membro do workspace) |
+| `web/` | frontend React + Vite + TS | npm, Node 22 |
+| `desktop/` | app Tauri 2 (`desktop/src-tauri`) | cargo (workspace em `desktop/Cargo.toml`) |
+| `contracts/` | OpenAPI v1 e JSON Schema da transcrição | — |
+| `deploy/` | compose de dev e, depois, de produção | Docker compose |
+| `docs/` | bundle OKF | `cq knowledge` |
+
+## Python — workspace uv
+
+- A raiz `pyproject.toml` é um workspace **virtual** (`[tool.uv] package = false`): declara os
+  membros `engines`, `server` e `worker-gpu`, o grupo `dev` (ruff, pytest) e a config
+  compartilhada de ruff e pytest. Python 3.12 (`.python-version`).
+- Cada membro é um pacote hatchling com `src/` layout e testes em `<pilar>/tests/`. `server` e
+  `worker-gpu` dependem de `eclume-engines` por `[tool.uv.sources] eclume-engines = { workspace = true }`.
+- Uma dependência entra no pacote que a usa, na spec que a usa: o `uv.lock` não carrega torch nem
+  WhisperX antes da spec `engine-asr-whisperx`.
+- O ruff roda com `select = ["ALL"]`; um ignore novo entra com o motivo comentado ao lado.
+
+```bash
+uv sync --all-packages
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+```
+
+## Web — npm em `web/`
+
+Vite + React + TS, eslint (flat config com typescript-eslint, react-hooks e react-refresh) e
+vitest com jsdom e Testing Library. `package-lock.json` é versionado.
+
+```bash
+npm --prefix web ci
+npm --prefix web run lint
+npm --prefix web test
+npm --prefix web run build
+```
+
+## Desktop — workspace cargo em `desktop/`
+
+`desktop/Cargo.toml` é o workspace; o app está em `desktop/src-tauri/` e a UI estática em
+`desktop/ui/`. Crates vendorizados entram em `desktop/crates/`. `tauri::generate_context!` lê
+`frontendDist` e o ícone em tempo de compilação, então os dois são versionados. No Linux, o build
+exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libxdo-dev`,
+`libssl-dev` e `build-essential`.
+
+```bash
+cargo check --manifest-path desktop/Cargo.toml --workspace
+cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
+cargo test --manifest-path desktop/Cargo.toml --workspace
+```
+
+## Serviços de apoio — `deploy/docker-compose.dev.yml`
+
+Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta publicada só em
+`127.0.0.1`**: o Docker publica por fora do ufw.
+
+```bash
+docker compose -f deploy/docker-compose.dev.yml up -d
+```
+
+## CI — `.github/workflows/ci.yml`
+
+Três jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
+`web` e `desktop`, cada um rodando exatamente os comandos acima (com `--locked` no uv e no cargo).
+macOS e Windows ficam fora enquanto o repositório for privado.
