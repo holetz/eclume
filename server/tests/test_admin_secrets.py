@@ -11,6 +11,7 @@ from eclume_server.crypto import decrypt
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
+from eclume_worker.secrets import open_secret
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -103,6 +104,13 @@ def test_token_do_hf_vai_cifrado_so_no_payload_do_job(
     ((_, _, options),) = run_gpu(services.settings)
     assert options["hf_token_encrypted"].startswith("v1:")
     assert decrypt(services.settings, options["hf_token_encrypted"]) == HF
+    # O worker GPU abre o mesmo texto com a chave do ambiente dele (a mesma do server).
+    opened = open_secret(
+        options["hf_token_encrypted"],
+        encryption_key=services.settings.encryption_key,
+        secret_key=services.settings.secret_key,
+    )
+    assert opened == HF
     run_cpu(services.settings)
     # O que fica no banco, e aparece no job, nunca leva o segredo.
     assert all("hf_token_encrypted" not in opts for opts in _jobs_options(services, recording["id"]))
