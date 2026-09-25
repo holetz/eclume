@@ -347,6 +347,13 @@ CREATE POLICY transcription_jobs_write ON transcription_jobs FOR INSERT
 CREATE POLICY transcripts_read ON transcripts FOR SELECT
     USING (org_id = eclume_org() AND EXISTS (SELECT 1 FROM recordings r WHERE r.id = recording_id));
 
+-- Só o dono edita a transcrição (hoje: `updated_at` ao editar metadados da gravação).
+CREATE POLICY transcripts_update ON transcripts FOR UPDATE
+    USING (
+        org_id = eclume_org()
+        AND EXISTS (SELECT 1 FROM recordings r WHERE r.id = recording_id AND r.owner_id = eclume_user())
+    );
+
 CREATE POLICY speakers_read ON speakers FOR SELECT
     USING (org_id = eclume_org() AND EXISTS (SELECT 1 FROM transcripts t WHERE t.id = transcript_id));
 
@@ -381,7 +388,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON recordings         TO eclume_app;
 GRANT SELECT, INSERT, DELETE         ON recording_shares   TO eclume_app;
 GRANT SELECT, INSERT, UPDATE         ON uploads            TO eclume_app;
 GRANT SELECT, INSERT                 ON transcription_jobs TO eclume_app;
-GRANT SELECT                         ON transcripts        TO eclume_app;
+GRANT SELECT, UPDATE                 ON transcripts        TO eclume_app;
 GRANT SELECT                         ON speakers           TO eclume_app;
 GRANT SELECT                         ON segments           TO eclume_app;
 GRANT SELECT                         ON speaker_embeddings TO eclume_app;
