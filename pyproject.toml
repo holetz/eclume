@@ -44,11 +44,17 @@ ignore = [
   "D213",     # conflita com D212 (resumo na primeira linha da docstring)
   "D401",     # imperative mood — o projeto escreve em português
   "CPY001",   # aviso de copyright por arquivo — a licença MIT vive em LICENSE
+  "EM101",    # mensagem em literal no raise — os erros da API (problem+json) levam o texto do ponto do erro
+  "EM102",    # idem, com f-string
+  "TRY003",   # idem: a mensagem longa é o `detail` do problem, não da classe
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "D100", "D103", "ANN201"]
+"server/tests/**" = ["PLR2004", "S105", "S106"]  # asserts de status HTTP e senhas de teste
 "contracts/**" = ["INP001"]  # script e testes soltos: contracts/ não é pacote Python
+# FastAPI e pydantic resolvem as anotações em runtime: os tipos precisam existir fora do TYPE_CHECKING.
+"server/src/eclume_server/{auth,context,routes/*}.py" = ["TC001", "TC002", "TC003"]
 
 [tool.ruff.format]
 quote-style = "double"

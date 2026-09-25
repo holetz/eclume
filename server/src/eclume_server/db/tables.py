@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    FetchedValue,
     Float,
     Integer,
     MetaData,
@@ -26,6 +27,11 @@ def _uuid(name: str, **kwargs: object) -> Column:
     return Column(name, UUID(as_uuid=True), **kwargs)
 
 
+def _pk() -> Column:
+    """`id` gerado pelo banco (`DEFAULT gen_random_uuid()`)."""
+    return _uuid("id", primary_key=True, server_default=FetchedValue())
+
+
 def _ts(name: str, **kwargs: object) -> Column:
     return Column(name, DateTime(timezone=True), **kwargs)
 
@@ -33,7 +39,7 @@ def _ts(name: str, **kwargs: object) -> Column:
 organizations = Table(
     "organizations",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     Column("name", Text),
     _ts("created_at"),
 )
@@ -41,7 +47,7 @@ organizations = Table(
 users = Table(
     "users",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     Column("email", Text),
     Column("name", Text),
@@ -55,7 +61,7 @@ users = Table(
 sessions = Table(
     "sessions",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     Column("token_hash", Text),
     Column("csrf_token", Text),
     _uuid("user_id"),
@@ -66,7 +72,7 @@ sessions = Table(
 api_tokens = Table(
     "api_tokens",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     _uuid("user_id"),
     Column("name", Text),
@@ -82,7 +88,7 @@ api_tokens = Table(
 groups = Table(
     "groups",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     Column("name", Text),
     Column("description", Text),
@@ -136,7 +142,7 @@ recordings = Table(
 recording_shares = Table(
     "recording_shares",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     _uuid("recording_id"),
     Column("target_type", Text),
@@ -148,7 +154,7 @@ recording_shares = Table(
 uploads = Table(
     "uploads",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     _uuid("owner_id"),
     Column("status", Text),
@@ -171,7 +177,7 @@ uploads = Table(
 transcription_jobs = Table(
     "transcription_jobs",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     _uuid("recording_id"),
     Column("revision", Integer),
@@ -189,7 +195,7 @@ transcription_jobs = Table(
 transcripts = Table(
     "transcripts",
     metadata,
-    _uuid("id", primary_key=True),
+    _pk(),
     _uuid("org_id"),
     _uuid("recording_id"),
     Column("revision", Integer),
