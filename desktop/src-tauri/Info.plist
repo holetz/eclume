@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Mesclado pelo bundler do Tauri no Info.plist do eclume.app: o macOS exige as descrições
+       para liberar o microfone e a captura do áudio do sistema (process tap). -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>O eclume grava o microfone durante as reuniões para transcrevê-las.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>O eclume grava o áudio das reuniões que toca no computador para transcrevê-las.</string>
+</dict>
+</plist>
