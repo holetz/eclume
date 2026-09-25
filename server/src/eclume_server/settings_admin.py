@@ -17,6 +17,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import invalid_field
 from eclume_server.serialize import user_ref
+from eclume_server.voice import voice_settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
@@ -85,6 +86,7 @@ class VoiceIdentificationPatch(_Block):
 
     enabled: bool | None = None
     suggestion_threshold: float | None = Field(default=None, ge=0, le=1)
+    consent_term_text: str | None = Field(default=None, min_length=1, max_length=20000)
 
 
 class AdminSettingsPatch(_Block):
@@ -108,6 +110,7 @@ _NULLABLE = {
 def settings_json(row: Row, updated_by_name: str | None) -> dict[str, Any]:
     """Schema `AdminSettings`."""
     body: dict[str, Any] = {block: dict(row[block]) for block in BLOCKS}
+    body["voice_identification"] = voice_settings(body["voice_identification"])
     body["updated_at"] = iso(row["updated_at"])
     body["updated_by"] = user_ref(row["updated_by"], updated_by_name) if row["updated_by"] else None
     return body

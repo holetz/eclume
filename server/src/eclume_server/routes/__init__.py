@@ -21,6 +21,7 @@ from eclume_server.routes import (
     tokens,
     transcripts,
     uploads,
+    voice,
 )
 from eclume_server.routes.not_implemented import include_not_implemented
 
@@ -49,6 +50,7 @@ def include_routes(app: FastAPI) -> None:
         people,
         collections,
         search,
+        voice,
     ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.

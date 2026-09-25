@@ -936,6 +936,9 @@ paths:
             application/json:
               schema:
                 $ref: "./transcript.schema.json#/$defs/Speaker"
+              examples:
+                recusada:
+                  $ref: "#/components/examples/SpeakerSuggestionRejected"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3387,11 +3390,23 @@ components:
 
     Voiceprint:
       type: object
-      required: [person_id, consent, sample_count, samples]
+      required: [person_id, consent, opt_in, term, sample_count, samples]
       properties:
         person_id:
           type: string
           format: uuid
+        opt_in:
+          description: Opt-in de identificação por voz da organização. Desligado, nada é comparado nem vira amostra.
+          type: boolean
+        term:
+          description: Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir.
+          type: object
+          required: [version, text]
+          properties:
+            version:
+              type: string
+            text:
+              type: string
         consent:
           $ref: "#/components/schemas/VoiceConsent"
         sample_count:
@@ -4554,6 +4569,9 @@ components:
     AdminHealth:
       summary: Um job rodando na GPU
       externalValue: ./fixtures/admin-health.json
+    SpeakerSuggestionRejected:
+      summary: Locutor 2 sem a sugestão recusada
+      externalValue: ./fixtures/speaker-suggestion-rejected.json
     VoiceConsentPutRequest:
       summary: Consentimento colhido por escrito
       externalValue: ./fixtures/voice-consent-put-request.json

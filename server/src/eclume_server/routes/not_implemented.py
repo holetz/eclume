@@ -16,16 +16,8 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-_VOZ = "holetz/eclume#15"
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
-    ("DELETE", "/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}", _VOZ),
-    ("PUT", "/api/v1/people/{person_id}/voice-consent", _VOZ),
-    ("GET", "/api/v1/people/{person_id}/voiceprint", _VOZ),
-    ("DELETE", "/api/v1/people/{person_id}/voiceprint", _VOZ),
-    ("GET", "/api/v1/people/{person_id}/voiceprint/export", _VOZ),
-    ("GET", "/api/v1/admin/voice-audit", _VOZ),
-    ("DELETE", "/api/v1/admin/voiceprints", _VOZ),
-)
+# Vazia desde a holetz/eclume#15: todas as operações do contrato v1 estão implementadas.
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:

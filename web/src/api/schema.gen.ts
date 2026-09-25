@@ -1606,6 +1606,13 @@ export interface components {
         Voiceprint: {
             /** Format: uuid */
             person_id: string;
+            /** @description Opt-in de identificação por voz da organização. Desligado, nada é comparado nem vira amostra. */
+            opt_in: boolean;
+            /** @description Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir. */
+            term: {
+                version: string;
+                text: string;
+            };
             consent: components["schemas"]["VoiceConsent"];
             sample_count: number;
             samples: components["schemas"]["VoiceSample"][];

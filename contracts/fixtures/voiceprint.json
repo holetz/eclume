@@ -10,6 +10,11 @@
     },
     "sample_count": 2
   },
+  "opt_in": true,
+  "term": {
+    "version": "1",
+    "text": "Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11), que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento, pedir a exclusão ou a cópia dos meus dados a qualquer momento."
+  },
   "sample_count": 2,
   "samples": [
     {
