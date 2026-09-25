@@ -24,9 +24,12 @@ x-s3-server: &s3-server
   ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD:?defina em deploy/.env.prod}
   ECLUME_S3_BUCKET: eclume
 
+# Server e worker CPU conectam como `eclume_server`: sem superusuário, sem DDL, só DML; as
+# requisições baixam para `eclume_app` (RLS). Só o one-shot `migrate` usa o superusuário, dono do
+# schema (docs/standards/code/server-nucleo.md §Papéis do banco).
 x-server-env: &server-env
   <<: *s3-server
-  ECLUME_DATABASE_URL: postgresql+asyncpg://eclume:${ECLUME_PG_PASSWORD:?defina em deploy/.env.prod}@postgres:5432/eclume
+  ECLUME_DATABASE_URL: postgresql+asyncpg://eclume_server:${ECLUME_RUNTIME_PG_PASSWORD:?defina em deploy/.env.prod}@postgres:5432/eclume
   ECLUME_REDIS_URL: redis://redis:6379/0
   ECLUME_SECRET_KEY: ${ECLUME_SECRET_KEY:?defina em deploy/.env.prod}
   ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
@@ -128,8 +131,8 @@ services:
     <<: *restart
     image: pgvector/pgvector:pg16
     environment:
-      # Superusuário: dono do schema, roda migrations e operações de sistema (BYPASSRLS implícito).
-      # As requisições baixam para eclume_app por transação (docs/standards/code/server-nucleo.md).
+      # Superusuário: dono do schema, usado só pelo one-shot `migrate` (e pelo backup). A aplicação
+      # conecta como eclume_server (docs/standards/code/server-nucleo.md §Papéis do banco).
       POSTGRES_USER: eclume
       POSTGRES_PASSWORD: ${ECLUME_PG_PASSWORD}
       POSTGRES_DB: eclume
@@ -182,11 +185,15 @@ services:
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD}
     entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc mb --ignore-existing local/eclume"]
 
+  # O migrador: o superusuário aplica as migrations e liga o LOGIN de eclume_server com a senha dele.
   migrate:
     <<: *server-image
     profiles: [tools]
     command: ["eclume-server", "migrate"]
-    environment: *server-env
+    environment:
+      <<: *server-env
+      ECLUME_DATABASE_URL: postgresql+asyncpg://eclume:${ECLUME_PG_PASSWORD:?defina em deploy/.env.prod}@postgres:5432/eclume
+      ECLUME_RUNTIME_DB_PASSWORD: ${ECLUME_RUNTIME_PG_PASSWORD:?defina em deploy/.env.prod}
     depends_on:
       postgres: {condition: service_healthy}
 

@@ -47,6 +47,7 @@ if [[ "$GEN_ENV" -eq 1 ]]; then
   [[ ! -e "$ENV_FILE" ]] || { echo "$ENV_FILE já existe; não sobrescrevo segredos." >&2; exit 2; }
   umask 077
   sed -e "s|^ECLUME_PG_PASSWORD=.*|ECLUME_PG_PASSWORD=$(openssl rand -hex 24)|" \
+      -e "s|^ECLUME_RUNTIME_PG_PASSWORD=.*|ECLUME_RUNTIME_PG_PASSWORD=$(openssl rand -hex 24)|" \
       -e "s|^ECLUME_MINIO_PASSWORD=.*|ECLUME_MINIO_PASSWORD=$(openssl rand -hex 24)|" \
       -e "s|^ECLUME_SECRET_KEY=.*|ECLUME_SECRET_KEY=$(openssl rand -hex 32)|" \
       -e "s|^ECLUME_ENCRYPTION_KEY=.*|ECLUME_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
@@ -82,6 +83,16 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 2
   else
     echo "Aviso: falta $ENV_FILE (o deploy real recusa sem ele; --gerar-env)." >&2
+  fi
+fi
+# Env anterior ao papel eclume_server (holetz/eclume#26): gera a senha dele, sem tocar no resto.
+if [[ -f "$ENV_FILE" ]] && ! grep -q '^ECLUME_RUNTIME_PG_PASSWORD=' "$ENV_FILE"; then
+  if [[ "$PLAN_ONLY" -eq 1 ]]; then
+    echo "Aviso: $ENV_FILE sem ECLUME_RUNTIME_PG_PASSWORD; o deploy geraria uma." >&2
+  else
+    printf '\n# Papel eclume_server (conexão da aplicação), gerado pelo deploy.\nECLUME_RUNTIME_PG_PASSWORD=%s\n' \
+      "$(openssl rand -hex 24)" >> "$ENV_FILE"
+    echo "Gerada ECLUME_RUNTIME_PG_PASSWORD em $ENV_FILE." >&2
   fi
 fi
 if [[ -f "$ENV_FILE" ]]; then
