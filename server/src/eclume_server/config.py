@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # Executável da CLI do Claude Code usado pelo provider `claude-cli`.
     claude_bin: str = "claude"
 
+    # Job de transcrição morto (docs/standards/api/jobs-transcricao.md §Job morto): a suspeita só
+    # vira falha depois de durar a graça; progresso parado além do teto é falha mesmo com worker vivo.
+    job_grace_seconds: float = 120
+    job_stall_seconds: float = 30 * 60
+
     upload_part_size: int = 8 * 1024 * 1024
     upload_ttl_days: int = 7
     part_url_ttl_seconds: int = 3600

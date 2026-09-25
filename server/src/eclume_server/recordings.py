@@ -13,6 +13,7 @@ from eclume_server.problems import forbidden, not_found
 from eclume_server.queue import transcribe_options
 from eclume_server.serialize import Row, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
+from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -59,7 +60,11 @@ def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, 
         stage, value = progress
     error = None
     if row["job_error_code"]:
-        error = {"code": row["job_error_code"], "message": row["job_error_message"] or ""}
+        error = {
+            "code": row["job_error_code"],
+            "message": row["job_error_message"] or "",
+            "retryable": is_retryable(row["job_error_code"]),
+        }
     return {
         "id": str(row["job_id"]),
         "state": state,

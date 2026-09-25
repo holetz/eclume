@@ -148,7 +148,7 @@ def test_falha_do_worker_gpu_marca_job_e_gravacao(
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["status"] == "failed"
     assert body["job"]["state"] == "failed"
-    assert body["job"]["error"] == {"code": "gpu_oom", "message": "CUDA out of memory"}
+    assert body["job"]["error"] == {"code": "gpu_oom", "message": "CUDA out of memory", "retryable": True}
     assert body["job"]["finished_at"] is not None
     assert body["transcript_id"] is None
 

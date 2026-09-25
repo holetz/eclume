@@ -1,7 +1,8 @@
 """Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, gera os resumos (`summarize`) e descarta uploads vencidos. Contrato em
+`transcription_failed` —, gera os resumos (`summarize`), descarta uploads vencidos e marca como
+falha recuperável o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
 docs/standards/api/jobs-transcricao.md.
 """
 
@@ -21,6 +22,7 @@ from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
 from eclume_server.queue import DEFAULT_QUEUE, progress_key, summarize_job_id
+from eclume_server.stalled import reap
 from eclume_server.storage import Storage
 from eclume_server.summaries import auto_summarize, run_summary
 from eclume_server.transcripts import fail, ingest
@@ -109,6 +111,12 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
     return len(rows)
 
 
+async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
+    """Marca como falha recuperável os jobs de transcrição que ninguém mais vai terminar."""
+    reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
+    return len(reaped)
+
+
 def worker_settings(settings: Settings) -> dict[str, Any]:
     """Parâmetros do `arq.Worker` para esta configuração."""
     return {
@@ -119,7 +127,11 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
             func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
         ],
-        "cron_jobs": [cron(expire_uploads, minute={0, 30}, run_at_startup=False)],
+        "cron_jobs": [
+            cron(expire_uploads, minute={0, 30}, run_at_startup=False),
+            # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
+            cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
+        ],
         "queue_name": DEFAULT_QUEUE,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
