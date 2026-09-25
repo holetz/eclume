@@ -8,8 +8,11 @@ from eclume_server.routes import (
     admin,
     agent_providers,
     auth,
+    collections,
     groups,
+    people,
     recordings,
+    search,
     summaries,
     tokens,
     transcripts,
@@ -25,7 +28,20 @@ PREFIX = "/api/v1"
 
 def include_routes(app: FastAPI) -> None:
     """Registra as rotas implementadas."""
-    for module in (auth, tokens, uploads, recordings, transcripts, groups, admin, agent_providers, summaries):
+    for module in (
+        auth,
+        tokens,
+        uploads,
+        recordings,
+        transcripts,
+        groups,
+        admin,
+        agent_providers,
+        summaries,
+        people,
+        collections,
+        search,
+    ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.
     app.include_router(recordings.media_router)

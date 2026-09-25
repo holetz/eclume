@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-PEOPLE_SEARCH = "holetz/eclume#11 (pessoas-organizacao-e-busca)"
 ADMIN = "holetz/eclume#12 (painel-admin)"
 
 NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
@@ -30,21 +29,6 @@ NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/admin/settings", ADMIN),
     ("PATCH", "/api/v1/admin/settings", ADMIN),
     ("POST", "/api/v1/auth/invitations/{invitation_token}/accept", ADMIN),
-    ("GET", "/api/v1/collections", PEOPLE_SEARCH),
-    ("POST", "/api/v1/collections", PEOPLE_SEARCH),
-    ("PATCH", "/api/v1/collections/{collection_id}", PEOPLE_SEARCH),
-    ("DELETE", "/api/v1/collections/{collection_id}", PEOPLE_SEARCH),
-    ("GET", "/api/v1/people", PEOPLE_SEARCH),
-    ("POST", "/api/v1/people", PEOPLE_SEARCH),
-    ("GET", "/api/v1/people/{person_id}", PEOPLE_SEARCH),
-    ("PATCH", "/api/v1/people/{person_id}", PEOPLE_SEARCH),
-    ("DELETE", "/api/v1/people/{person_id}", PEOPLE_SEARCH),
-    ("GET", "/api/v1/people/{person_id}/transcripts", PEOPLE_SEARCH),
-    ("GET", "/api/v1/search", PEOPLE_SEARCH),
-    ("GET", "/api/v1/tags", PEOPLE_SEARCH),
-    ("PATCH", "/api/v1/transcripts/{transcript_id}/segments/{segment_id}", PEOPLE_SEARCH),
-    ("POST", "/api/v1/transcripts/{transcript_id}/speakers/merge", PEOPLE_SEARCH),
-    ("PATCH", "/api/v1/transcripts/{transcript_id}/speakers/{speaker_id}", PEOPLE_SEARCH),
 )
 
 

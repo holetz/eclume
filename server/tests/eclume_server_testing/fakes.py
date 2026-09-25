@@ -23,10 +23,12 @@ from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
 from eclume_server.worker import worker_settings
+from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from eclume_server.config import Settings
+    from eclume_server_testing.api import Api
 
 FIXTURE = Path(__file__).resolve().parents[3] / "contracts" / "fixtures" / "transcript-3-locutores.json"
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
@@ -149,3 +151,13 @@ async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
         await worker.main()
     finally:
         await worker.close()
+
+
+def transcribed(api: Api, settings: Settings, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Sobe um áudio e roda os dois workers: devolve a gravação já com a transcrição de 3 locutores."""
+    recording = upload_file(api, audio_bytes(1000), **fields)
+    run_gpu(settings)
+    run_cpu(settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "transcribed", body
+    return body

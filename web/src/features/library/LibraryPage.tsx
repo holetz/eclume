@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
+import { useCollections } from '../collections/queries'
 import { formatDateTime, formatDuration, isActive, sourceLabel } from './format'
 import styles from './LibraryPage.module.css'
 import { JobProgress, StatusBadge } from './RecordingStatus'
@@ -25,13 +26,25 @@ export function LibraryPage() {
   usePageTitle('Biblioteca')
   const [params, setParams] = useSearchParams()
   const owner = parseOwner(params.get('de'))
+  const collection = params.get('colecao')
+  const tag = params.get('tag')
+  const collections = useCollections(collection !== null)
+  const collectionName = collections.data?.items.find((c) => c.id === collection)?.name
 
   const recordings = useInfiniteQuery({
-    queryKey: ['recordings', { owner }],
+    queryKey: ['recordings', { owner, collection, tag }],
     queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/v1/recordings', {
-          params: { query: { owner, limit: 25, ...(pageParam ? { cursor: pageParam } : {}) } },
+          params: {
+            query: {
+              owner,
+              limit: 25,
+              ...(collection ? { collection } : {}),
+              ...(tag ? { tag } : {}),
+              ...(pageParam ? { cursor: pageParam } : {}),
+            },
+          },
         }),
       ),
     initialPageParam: null as string | null,
@@ -64,12 +77,25 @@ export function LibraryPage() {
               name="owner"
               value={option.value}
               checked={owner === option.value}
-              onChange={() => setParams(option.value === 'me' ? {} : { de: option.value }, { replace: true })}
+              onChange={() => {
+                const next = new URLSearchParams(params)
+                if (option.value === 'me') next.delete('de')
+                else next.set('de', option.value)
+                setParams(next, { replace: true })
+              }}
             />
             <span>{option.label}</span>
           </label>
         ))}
       </fieldset>
+
+      {(collection || tag) && (
+        <p className={styles.active}>
+          {collection && <span>Coleção: {collectionName ?? 'carregando…'}</span>}
+          {tag && <span>Tag: {tag}</span>}
+          <Link to={owner === 'me' ? '/' : `/?de=${owner}`}>Limpar filtro</Link>
+        </p>
+      )}
 
       {recordings.isPending && <p role="status">Carregando gravações…</p>}
       {recordings.isError && (

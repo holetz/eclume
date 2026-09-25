@@ -47,3 +47,9 @@ export function speakerColorIndex(speakers: readonly Pick<Speaker, 'id'>[], spea
   const index = speakers.findIndex((s) => s.id === speakerId)
   return index < 0 ? 0 : (index % 6) + 1
 }
+
+/** `?t=` da URL (milissegundos inteiros), ou `null` se ausente ou inválido. */
+export function parseStart(value: string | null): number | null {
+  if (value === null || !/^\d+$/.test(value)) return null
+  return Number(value)
+}

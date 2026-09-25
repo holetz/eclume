@@ -291,3 +291,44 @@ summaries = Table(
     _ts("started_at"),
     _ts("completed_at"),
 )
+
+# --- pessoas, coleções e impressões de voz (003_pessoas_e_busca) ---------------------------------
+
+# `embedding` (pgvector) fica de fora: as consultas tipadas daqui nunca o leem.
+speaker_embeddings = Table(
+    "speaker_embeddings",
+    metadata,
+    _uuid("transcript_id", primary_key=True),
+    _uuid("org_id"),
+    Column("speaker_id", Text, primary_key=True),
+    Column("model", Text),
+    _ts("created_at"),
+)
+
+people = Table(
+    "people",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    Column("name", Text),
+    Column("email", Text),
+    Column("notes", Text),
+    Column("voice_consent_status", Text, server_default=FetchedValue()),
+    _ts("voice_consent_updated_at"),
+    Column("sort_name", Text, server_default=FetchedValue()),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+collections = Table(
+    "collections",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    _uuid("owner_id"),
+    Column("name", Text),
+    Column("description", Text),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)

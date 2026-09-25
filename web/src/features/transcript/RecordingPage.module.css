@@ -49,6 +49,9 @@
   top: var(--space-4);
   display: grid;
   gap: var(--space-5);
+  /* Com locutores, organização e resumos o painel passa da tela: rola por conta própria. */
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
 }
 
 @media (max-width: 72rem) {
@@ -58,5 +61,7 @@
 
   .side {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
