@@ -1,0 +1,91 @@
+{
+  "items": [
+    {
+      "transcript": {
+        "id": "01928f3a-1c00-7a00-8000-000000000501",
+        "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
+        "title": "Alinhamento do programa de lideranças",
+        "recorded_at": "2026-09-18T14:00:05Z"
+      },
+      "speaker": {
+        "id": "S1",
+        "label": "Mariana Couto",
+        "person": {
+          "id": "01928f3a-1c00-7a00-8000-000000000301",
+          "name": "Mariana Couto"
+        },
+        "suggestions": [],
+        "talk_ms": 87150
+      },
+      "segment": {
+        "id": "seg-0010",
+        "speaker_id": "S1",
+        "start_ms": 122500,
+        "end_ms": 139800,
+        "text": "Três turmas de 12 gestores. A primeira começa em outubro, com as lideranças da produção, que é onde o turnover está mais alto.",
+        "confidence": 0.87
+      },
+      "highlight": "Três <mark>turmas</mark> de 12 gestores. A primeira começa em outubro, com as lideranças da produção, que é onde o turnover está mais alto.",
+      "rank": 0.61
+    },
+    {
+      "transcript": {
+        "id": "01928f3a-1c00-7a00-8000-000000000501",
+        "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
+        "title": "Alinhamento do programa de lideranças",
+        "recorded_at": "2026-09-18T14:00:05Z"
+      },
+      "speaker": {
+        "id": "S3",
+        "label": "Locutor 3",
+        "person": null,
+        "suggestions": [],
+        "talk_ms": 29750
+      },
+      "segment": {
+        "id": "seg-0009",
+        "speaker_id": "S3",
+        "start_ms": 113300,
+        "end_ms": 121900,
+        "text": "Certo. Quantas turmas vocês estão pensando?",
+        "confidence": 0.96
+      },
+      "highlight": "Certo. Quantas <mark>turmas</mark> vocês estão pensando?",
+      "rank": 0.43
+    },
+    {
+      "transcript": {
+        "id": "01928f3a-1c00-7a00-8000-000000000501",
+        "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
+        "title": "Alinhamento do programa de lideranças",
+        "recorded_at": "2026-09-18T14:00:05Z"
+      },
+      "speaker": {
+        "id": "S2",
+        "label": "Locutor 2",
+        "person": null,
+        "suggestions": [
+          {
+            "person": {
+              "id": "01928f3a-1c00-7a00-8000-000000000302",
+              "name": "Rafael Lima"
+            },
+            "score": 0.82
+          }
+        ],
+        "talk_ms": 37050
+      },
+      "segment": {
+        "id": "seg-0011",
+        "speaker_id": "S2",
+        "start_ms": 140400,
+        "end_ms": 151200,
+        "text": "Eu consigo fechar a lista da primeira turma até sexta e mando para você por e-mail.",
+        "confidence": 0.92
+      },
+      "highlight": "Eu consigo fechar a lista da primeira <mark>turma</mark> até sexta e mando para você por e-mail.",
+      "rank": 0.38
+    }
+  ],
+  "next_cursor": null
+}

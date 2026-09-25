@@ -1,0 +1,22 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000a01",
+  "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+  "transcript_revision": 3,
+  "template": {
+    "id": "01928f3a-1c00-7a00-8000-000000000901",
+    "name": "Ata de reunião"
+  },
+  "version": 1,
+  "trigger": "manual",
+  "provider": {
+    "id": "01928f3a-1c00-7a00-8000-000000000b01",
+    "name": "Claude (servidor)",
+    "kind": "claude-cli"
+  },
+  "model": "claude-sonnet-4-5",
+  "error": null,
+  "created_at": "2026-09-18T15:03:00Z",
+  "status": "queued",
+  "content_md": null,
+  "completed_at": null
+}

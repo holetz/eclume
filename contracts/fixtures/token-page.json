@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000702",
+      "name": "Desktop — notebook da Mariana",
+      "scopes": [
+        "recordings:read",
+        "recordings:write"
+      ],
+      "prefix": "eclp_Qm9x",
+      "created_at": "2026-09-12T10:20:00Z",
+      "last_used_at": "2026-09-18T14:09:30Z",
+      "expires_at": "2027-09-12T10:20:00Z",
+      "revoked_at": null
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000701",
+      "name": "lumea — importador",
+      "scopes": [
+        "transcripts:read",
+        "people:read"
+      ],
+      "prefix": "eclp_7Hq2",
+      "created_at": "2026-09-12T10:15:00Z",
+      "last_used_at": "2026-09-18T15:05:00Z",
+      "expires_at": null,
+      "revoked_at": null
+    }
+  ],
+  "next_cursor": null
+}

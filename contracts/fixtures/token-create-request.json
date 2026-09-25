@@ -1,0 +1,7 @@
+{
+  "name": "lumea — importador",
+  "scopes": [
+    "transcripts:read",
+    "people:read"
+  ]
+}

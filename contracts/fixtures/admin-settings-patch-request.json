@@ -1,0 +1,8 @@
+{
+  "asr": {
+    "model": "large-v3"
+  },
+  "summarization": {
+    "auto_summarize": true
+  }
+}
