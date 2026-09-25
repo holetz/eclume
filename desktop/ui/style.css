@@ -30,6 +30,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -84,3 +85,41 @@ button.primario[data-recording="true"] { background: var(--rec); color: #fff; }
 .linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .linha input { flex: 1 1 220px; min-width: 0; }
 .rotulo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+button, input, select { font: inherit; }
+select {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 8px;
+}
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.discreto { padding: 3px 8px; font-size: 12px; margin-left: 8px; }
+
+.pergunta {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+}
+.pergunta p { margin: 0; font-weight: 600; }
+
+.config { display: grid; gap: 6px; }
+.config > label, .config details > label { font-weight: 500; margin-top: 10px; }
+.config details { display: grid; gap: 6px; margin-top: 8px; }
+.config details[open] { padding-bottom: 4px; }
+.config summary { cursor: pointer; color: var(--muted); }
+.config details input { width: 100%; }
+.config .marcar { display: flex; gap: 8px; align-items: center; font-weight: 500; margin-top: 14px; }
+.config .acoes { margin-top: 14px; }
+.dica { margin: 0; color: var(--muted); font-size: 12px; }
+code { font-size: 12px; }
+
+.politicas { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.politicas th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 12px; }
+.politicas td { padding: 6px 12px; border-top: 1px solid var(--border); }
+.politicas select { width: 100%; }
+.politicas td:first-child::first-letter { text-transform: uppercase; }

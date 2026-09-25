@@ -1,6 +1,6 @@
-//! Pontos de extensão para a spec `desktop-deteccao-e-sync`: o upload das gravações e a
-//! detecção de reuniões. Esta spec só define os contratos e o laço de sync sobre a fila; as
-//! implementações reais (HTTP por PAT, heurística de processo e mic) chegam lá.
+//! Pontos de extensão do app: o upload das gravações e a detecção de reuniões. Aqui ficam os
+//! contratos e o laço de sync sobre a fila; as implementações reais são o `HttpUploader` do
+//! `eclume-sync` (HTTP por PAT) e o `DebouncedDetector` do `eclume-detect` (mic e processo).
 
 use std::sync::Mutex;
 
@@ -36,7 +36,8 @@ pub struct SyncReport {
 }
 
 /// Sincroniza, uma a uma, as gravações `pending` da fila. Cada falha fica registrada na própria
-/// gravação e não interrompe as demais; as falhas voltam à fila por [`Queue::retry_failed`].
+/// gravação e não interrompe as demais; as falhas voltam à fila por [`Queue::retry_due`], no
+/// prazo do backoff que [`Queue::mark_failed`] agenda.
 pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<SyncReport> {
     let mut report = SyncReport::default();
     loop {

@@ -1,0 +1,6 @@
+{
+  "name": "Devolutiva de assessment",
+  "description": "Padrão da organização para as devolutivas individuais.",
+  "instructions": "Escreva a devolutiva em Markdown com as seções Pontos fortes, Pontos de desenvolvimento e Combinados. Use só o que foi dito na conversa.",
+  "scope": "organization"
+}

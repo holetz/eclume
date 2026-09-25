@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.0.0
+  version: 1.1.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -1015,11 +1015,16 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [summaries]
       operationId: createSummary
       summary: Gerar um resumo com um template
-      description: Cada geração é uma nova `version` do resumo daquele template.
+      description: |
+        Cada geração é uma nova `version` do resumo daquele template. Só o dono da gravação gera
+        resumos; quem vê a transcrição por compartilhamento lê os resumos dela. Sem `provider_id`
+        e sem provider padrão habilitado na organização, responde 422.
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -1123,10 +1128,13 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [summaries]
       operationId: createSummaryTemplate
-      summary: Criar um template pessoal
+      summary: Criar um template pessoal ou da organização
+      description: "`scope: organization` cria um padrão da organização e exige `admin` com sessão."
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -1141,6 +1149,8 @@ paths:
             examples:
               resumoExecutivo:
                 $ref: "#/components/examples/SummaryTemplateCreateRequest"
+              padraoDaOrganizacao:
+                $ref: "#/components/examples/SummaryTemplateCreateOrgRequest"
       responses:
         "201":
           description: Template criado.
@@ -1212,7 +1222,8 @@ paths:
     delete:
       tags: [summaries]
       operationId: deleteSummaryTemplate
-      summary: Excluir um template pessoal
+      summary: Excluir um template
+      description: "Templates de `scope: organization` só são excluídos por `admin`, com sessão."
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -3351,7 +3362,12 @@ components:
           type: string
           minLength: 1
         is_default:
+          description: "Pessoal: o template do resumo automático do usuário. Da organização: o padrão da organização."
           type: boolean
+        scope:
+          description: "Padrão `user`. `organization` exige `admin` com sessão."
+          type: string
+          enum: [user, organization]
 
     SummaryTemplatePatch:
       type: object
@@ -3974,6 +3990,9 @@ components:
     SummaryTemplateCreateRequest:
       summary: Template de resumo executivo
       externalValue: ./fixtures/summary-template-create-request.json
+    SummaryTemplateCreateOrgRequest:
+      summary: Padrão da organização (admin)
+      externalValue: ./fixtures/summary-template-create-org-request.json
     PersonPage:
       summary: Diretório com três pessoas
       externalValue: ./fixtures/person-page.json
