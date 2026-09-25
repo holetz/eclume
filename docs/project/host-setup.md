@@ -173,7 +173,37 @@ docker --context gpu-host compose -p eclume cp caddy:/data/caddy/pki/authorities
 
 ## Instaladores do desktop (sem assinatura de código)
 
+Os instaladores saem do workflow `desktop-release` (tag `desktop-v<versão>`) como um GitHub
+Release privado; o contrato está em
+[desktop-distribuicao.md](../standards/code/desktop-distribuicao.md). Como o repo é privado, os
+clientes baixam do próprio servidor eclume:
+
+- **Pasta servida:** `/srv/eclume/downloads/`, publicada em `https://192.168.15.199:8443/downloads/`
+  pelo Caddy do eclume (spec holetz/eclume#14). Na raiz ficam `latest.json` (manifesto do
+  updater), `instaladores.json` (lista para a página de download) e `INSTALACAO.md`; cada versão
+  fica em `/srv/eclume/downloads/<versão>/`, com as três mais recentes mantidas.
+- **Publicar um release** (no host, onde o `gh` está autenticado):
+  ```bash
+  deploy/publicar-desktop.sh desktop-v0.1.0
+  # da máquina de dev, sem clonar nada no host:
+  ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publicar-desktop.sh
+  ```
+  O script confere o `SHA256SUMS` antes de trocar os manifestos da raiz.
+- **Chave do updater (minisign):** a privada e a senha estão nos secrets do GitHub
+  `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; a cópia de segurança fica em
+  `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` (`chmod 600`), nunca no
+  repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
+  reinstalar o app à mão em todos os clientes.
+
+Avisos da primeira instalação, detalhados para o usuário em
+[desktop/INSTALACAO.md](../../desktop/INSTALACAO.md):
+
 - **Windows:** o SmartScreen avisa na primeira execução. Clique em "Mais informações" e depois em
   "Executar assim mesmo".
-- **macOS:** abra com botão direito → Abrir, ou rode `xattr -dr com.apple.quarantine /Applications/eclume.app`.
-- **Linux** (AppImage/.deb): sem aviso.
+- **macOS:** o Gatekeeper recusa o app não notarizado. Rode
+  `xattr -dr com.apple.quarantine /Applications/eclume.app`, ou tente abrir e libere em Ajustes do
+  Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".
+- **Linux:** o AppImage precisa de `chmod +x` (e, em algumas distros, do FUSE 2); o `.deb` instala
+  com `sudo apt install ./eclume_<versão>_amd64.deb`.
+- **Todos:** o updater e o sync só confiam no servidor depois que a CA raiz do Caddy é instalada
+  no cliente (passo 10).

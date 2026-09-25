@@ -57,6 +57,9 @@ ignore = [
 "server/src/eclume_server/{auth,context,routes/*}.py" = ["TC001", "TC002", "TC003"]
 # Handlers FastAPI recebem um parâmetro por campo da requisição (filtros, path, query).
 "server/src/eclume_server/routes/*.py" = ["PLR0913", "PLR0917"]
+# fakes do WhisperX, do Redis e do S3 nos testes das engines e do worker: assinaturas espelham
+# as reais (argumentos não usados, `Any`), sem docstring por método, com valores de teste literais
+"{engines,worker-gpu}/tests/**" = ["ANN401", "ARG001", "ARG002", "D101", "D102", "D105", "D107", "PLR0913", "PLR0917", "PLR2004", "S105", "S106", "S107", "SLF001"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -66,3 +69,6 @@ testpaths = ["engines/tests", "server/tests", "worker-gpu/tests", "contracts/tes
 addopts = "--import-mode=importlib"
 # Helpers da suíte do server (pacote `eclume_server_testing`), importáveis pelos testes.
 pythonpath = ["server/tests"]
+markers = [
+  "slow: chama serviços reais (LLM); fora da CI, roda no host sob demanda",
+]

@@ -16,7 +16,8 @@ maintainer: holetz
 O pacote `eclume_server` (`server/`) implementa o [contrato v1](../api/contrato-v1.md) com
 FastAPI, SQLAlchemy 2 async (asyncpg), arq/Redis e boto3 contra o MinIO. As consultas são SQL
 Core explícito: o isolamento mora nas políticas do banco, e o SQL que as exercita precisa ser
-legível. O acordo com o worker GPU está em [jobs-transcricao.md](../api/jobs-transcricao.md).
+legível. O acordo com o worker GPU está em [jobs-transcricao.md](../api/jobs-transcricao.md); os
+resumos, templates e providers de agente, em [server-agentes.md](server-agentes.md).
 
 ## Configuração
 
@@ -30,6 +31,8 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_SECRET_KEY` | inseguro, de dev | assina as URLs de parte e de áudio |
 | `ECLUME_PUBLIC_URL` | a da requisição | base absoluta das URLs devolvidas ao cliente |
 | `ECLUME_COOKIE_SECURE` | `true` | `false` só em dev por HTTP puro |
+| `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
+| `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
 
 ## Persistência
 

@@ -19,7 +19,7 @@ from eclume_server.problems import forbidden, unauthorized
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 from eclume_server.serialize import user_json
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()

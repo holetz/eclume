@@ -1,6 +1,6 @@
 # CI do eclume: lint e teste dos pilares e do contrato v1 em Linux a cada PR e a cada push em main.
-# macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os builds de
-# distribuição do desktop entram com a spec `distribuicao-desktop`.
+# macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os instaladores do desktop saem
+# do `desktop-release.yml`, só por tag `desktop-v*` ou à mão.
 name: ci
 
 on:
@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read

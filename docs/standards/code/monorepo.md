@@ -34,8 +34,10 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
   compartilhada de ruff e pytest. Python 3.12 (`.python-version`).
 - Cada membro é um pacote hatchling com `src/` layout e testes em `<pilar>/tests/`. `server` e
   `worker-gpu` dependem de `eclume-engines` por `[tool.uv.sources] eclume-engines = { workspace = true }`.
-- Uma dependência entra no pacote que a usa, na spec que a usa: o `uv.lock` não carrega torch nem
-  WhisperX antes da spec `engine-asr-whisperx`.
+- Uma dependência entra no pacote que a usa, na spec que a usa. Dependência pesada (torch,
+  WhisperX, faster-whisper) entra como **extra** (`eclume-engines[whisperx]`/`[cpu]`,
+  `eclume-worker[gpu]`/`[cpu]`): o `uv.lock` a resolve, mas `uv sync --all-packages` não a
+  instala, e a CI e a máquina de dev seguem sem torch. Só a imagem do worker GPU instala `gpu`.
 - O ruff roda com `select = ["ALL"]`; um ignore novo entra com o motivo comentado ao lado.
 
 ```bash
@@ -91,9 +93,11 @@ remote-run . 'ECLUME_MOCK_PORT=4110 docker compose -p eclume-mock-web -f deploy/
 `desktop/Cargo.toml` é o workspace; o app está em `desktop/src-tauri/` e a UI estática em
 `desktop/ui/` (HTML, CSS e JS sem bundler, pela API global do Tauri). Os demais crates do
 workspace ficam em `desktop/crates/`: `audio-capture` (mic e áudio do sistema), `recorder`
-(mixagem, Ogg/Opus e fila) e `resampler`. O formato da gravação e a fila estão em
-[desktop-gravacao.md](desktop-gravacao.md). `tauri::generate_context!` lê `frontendDist` e os
-ícones em tempo de compilação, então todos são versionados.
+(mixagem, Ogg/Opus e fila), `resampler`, `detect` (detecção de reuniões) e `sync` (upload por
+PAT). O formato da gravação e a fila estão em [desktop-gravacao.md](desktop-gravacao.md); a
+detecção e o sync, em [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md).
+`tauri::generate_context!` lê `frontendDist` e os ícones em tempo de compilação, então todos são
+versionados.
 
 **Código de terceiros vendorizado** entra em `desktop/crates/<crate>` com `VENDOR.md` (origem,
 commit fixado, o que foi trazido e o que mudou), o `LICENSE` original e, no topo de cada arquivo
@@ -133,4 +137,6 @@ O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e rod
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
-demanda (`gh workflow run desktop-plataformas.yml`).
+demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de
+`.github/workflows/desktop-release.yml`, só por tag `desktop-v<versão>` ou à mão; o processo está
+em [desktop-distribuicao.md](desktop-distribuicao.md).

@@ -532,7 +532,9 @@ export interface paths {
         put?: never;
         /**
          * Gerar um resumo com um template
-         * @description Cada geração é uma nova `version` do resumo daquele template.
+         * @description Cada geração é uma nova `version` do resumo daquele template. Só o dono da gravação gera
+         *     resumos; quem vê a transcrição por compartilhamento lê os resumos dela. Sem `provider_id`
+         *     e sem provider padrão habilitado na organização, responde 422.
          */
         post: operations["createSummary"];
         delete?: never;
@@ -571,7 +573,10 @@ export interface paths {
         /** Templates do usuário e padrões da organização */
         get: operations["listSummaryTemplates"];
         put?: never;
-        /** Criar um template pessoal */
+        /**
+         * Criar um template pessoal ou da organização
+         * @description `scope: organization` cria um padrão da organização e exige `admin` com sessão.
+         */
         post: operations["createSummaryTemplate"];
         delete?: never;
         options?: never;
@@ -592,7 +597,10 @@ export interface paths {
         get: operations["getSummaryTemplate"];
         put?: never;
         post?: never;
-        /** Excluir um template pessoal */
+        /**
+         * Excluir um template
+         * @description Templates de `scope: organization` só são excluídos por `admin`, com sessão.
+         */
         delete: operations["deleteSummaryTemplate"];
         options?: never;
         head?: never;
@@ -1536,7 +1544,13 @@ export interface components {
             name: string;
             description?: string | null;
             instructions: string;
+            /** @description Pessoal: o template do resumo automático do usuário. Da organização: o padrão da organização. */
             is_default?: boolean;
+            /**
+             * @description Padrão `user`. `organization` exige `admin` com sessão.
+             * @enum {string}
+             */
+            scope?: "user" | "organization";
         };
         SummaryTemplatePatch: {
             name?: string;
@@ -2872,6 +2886,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createSummary: {
@@ -2983,6 +2998,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createSummaryTemplate: {

@@ -3,7 +3,7 @@
 use eclume_recorder::QueuedRecording;
 use tauri::{AppHandle, State};
 
-use crate::state::{AppState, StatusView};
+use crate::state::{AppState, SettingsInput, SettingsView, StatusView};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -28,6 +28,7 @@ pub fn recordings(
 #[tauri::command(async)]
 pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandResult<StatusView> {
     let result = state.toggle_recording(crate::capture::open_sources);
+    crate::sync::nudge(&app);
     crate::refresh_ui(&app);
     to_js(result.and_then(|()| state.view()))
 }
@@ -38,12 +39,35 @@ pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
 }
 
 #[tauri::command]
-pub fn set_web_url(
+pub fn settings(state: State<'_, AppState>) -> CommandResult<SettingsView> {
+    to_js(state.settings())
+}
+
+#[tauri::command]
+pub fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
-    url: String,
-) -> CommandResult<StatusView> {
-    let result = state.set_web_url(url.trim());
+    input: SettingsInput,
+) -> CommandResult<SettingsView> {
+    let result = state.save_settings(input);
+    if let Ok(action) = &result {
+        crate::auto::execute(&app, *action);
+        // PAT ou servidor novos: as falhas tentam de novo já.
+        if let Err(err) = crate::sync::sync_now(&app) {
+            log::error!("{err:#}");
+        }
+    }
     crate::refresh_ui(&app);
-    to_js(result.and_then(|()| state.view()))
+    to_js(result.and_then(|_| state.settings()))
+}
+
+/// Resposta da janela à pergunta de reunião detectada.
+#[tauri::command]
+pub fn answer_meeting(app: AppHandle, record: bool) {
+    crate::auto::answer(&app, record);
+}
+
+#[tauri::command]
+pub fn sync_now(app: AppHandle) -> CommandResult<()> {
+    to_js(crate::sync::sync_now(&app))
 }
