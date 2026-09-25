@@ -137,4 +137,6 @@ O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e rod
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
-demanda (`gh workflow run desktop-plataformas.yml`).
+demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de
+`.github/workflows/desktop-release.yml`, só por tag `desktop-v<versão>` ou à mão; o processo está
+em [desktop-distribuicao.md](desktop-distribuicao.md).

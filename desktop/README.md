@@ -3,7 +3,12 @@
 App Tauri 2 do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus mono 16 kHz, percebe
 sozinho quando uma reunião começa (Teams, Zoom, Meet, com a política de cada app), guarda a fila
 local de gravações, sobe-as ao servidor por PAT com upload resumível e fica na bandeja do
-sistema. Os instaladores entram na spec `distribuicao-desktop`.
+sistema.
+
+Os instaladores (Windows, Linux e macOS) saem do workflow `desktop-release` e o app se atualiza
+sozinho pelo updater do Tauri; o processo está em
+[docs/standards/code/desktop-distribuicao.md](../docs/standards/code/desktop-distribuicao.md) e o
+passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).
 
 | Caminho | O que é |
 |---|---|
@@ -14,6 +19,7 @@ sistema. Os instaladores entram na spec `distribuicao-desktop`.
 | `crates/resampler/` | reamostrador vendorizado do Anarlog |
 | `crates/detect/` | detecção de reuniões: sinais de mic por SO (adaptados do Anarlog), classificação, debounce e gravação automática |
 | `crates/sync/` | sync: upload resumível do contrato v1 por PAT, PAT no chaveiro do SO e CA extra |
+| `scripts/manifestos_release.py` | monta `latest.json`, `instaladores.json` e `SHA256SUMS` de um release |
 
 O formato da gravação, a fila e os pontos de extensão estão em
 [docs/standards/code/desktop-gravacao.md](../docs/standards/code/desktop-gravacao.md); a detecção,
@@ -42,3 +48,10 @@ O servidor (padrão `https://192.168.15.199:8443`), o PAT, a CA extra, as polít
 retenção se configuram pela janela ("Gravações e configurações" na bandeja) e ficam em
 `config.json` no diretório de config do app — o PAT, no chaveiro do SO. Sem tocar no arquivo,
 `ECLUME_WEB_URL`, `ECLUME_API_URL` e `ECLUME_PAT` sobrepõem servidor, API e PAT.
+
+Os ícones do bundle são gerados de `src-tauri/icons/icon.svg` (os da bandeja, `tray-*.png`, não):
+
+```bash
+npx @tauri-apps/cli@2 icon src-tauri/icons/icon.svg -o /tmp/icones
+# copie só 32x32.png, 128x128.png, 128x128@2x.png, icon.icns, icon.ico e icon.png
+```
