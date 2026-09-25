@@ -45,6 +45,8 @@ pub struct StatusView {
 
 struct Inner {
     active: Option<ActiveRecording>,
+    /// Há um início em curso (dispositivos abrindo), fora do lock.
+    starting: bool,
     syncing: bool,
     config: Config,
     notice: Option<String>,
@@ -91,6 +93,7 @@ impl AppState {
             config_path,
             inner: Mutex::new(Inner {
                 active: None,
+                starting: false,
                 syncing: false,
                 config,
                 notice: None,
@@ -143,11 +146,19 @@ impl AppState {
 
     /// Começa a gravar com as fontes que `open` abrir.
     pub fn start_recording(&self, open: impl FnOnce() -> Result<OpenedSources>) -> Result<()> {
-        let mut inner = self.inner()?;
-        if inner.active.is_some() {
-            bail!("já há uma gravação em andamento");
+        {
+            let mut inner = self.inner()?;
+            if inner.active.is_some() || inner.starting {
+                bail!("já há uma gravação em andamento");
+            }
+            inner.starting = true;
         }
-        let opened = match open() {
+        // Abrir dispositivos pode levar segundos: sem segurar o estado, para a janela e a
+        // bandeja seguirem respondendo enquanto isso.
+        let opened = open();
+        let mut inner = self.inner()?;
+        inner.starting = false;
+        let opened = match opened {
             Ok(opened) => opened,
             Err(err) => {
                 inner.notice = Some(format!("{err:#}"));
