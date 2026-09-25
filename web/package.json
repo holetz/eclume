@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:e2e": "playwright test",
     "fixtures": "bash scripts/media-fixtures.sh",
     "preview": "vite preview",
     "gen:api": "openapi-typescript ../contracts/openapi-v1.bundled.yaml -o src/api/schema.gen.ts"

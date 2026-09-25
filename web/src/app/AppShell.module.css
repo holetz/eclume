@@ -3,6 +3,13 @@
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-areas: 'sidebar main';
+  /* A coluna da navegação continua até o fim de páginas longas. */
+  background: linear-gradient(
+    to right,
+    var(--color-surface) calc(var(--sidebar-width) - 1px),
+    var(--color-border) calc(var(--sidebar-width) - 1px) var(--sidebar-width),
+    transparent var(--sidebar-width)
+  );
 }
 
 .topbar {
@@ -133,6 +140,7 @@
 
 @media (max-width: 56rem) {
   .shell {
+    background: none;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'topbar'

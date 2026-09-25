@@ -83,10 +83,10 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
         <span className={styles.dot} aria-hidden="true" />
         <div className={styles.info}>
           <span className={styles.name}>{speakerName(speaker)}</span>
-          <span className={styles.detail}>
-            {speaker.person ? 'Pessoa confirmada' : 'Sem pessoa ligada'}
-            {speaker.talk_ms != null && ` · ${formatDuration(speaker.talk_ms)} de fala`}
-          </span>
+          <span className={styles.detail}>{speaker.person ? 'Pessoa confirmada' : 'Sem pessoa ligada'}</span>
+          {speaker.talk_ms != null && (
+            <span className={styles.detail}>{formatDuration(speaker.talk_ms)} de fala</span>
+          )}
           {suggestion && (
             <span className={styles.detail}>
               Sugestão por voz: {suggestion.person.name} ({Math.round(suggestion.score * 100)}%)

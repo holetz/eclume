@@ -24,3 +24,7 @@ desktop/src-tauri/gen/
 
 # Fixtures de mídia geradas por web/scripts/media-fixtures.sh
 web/src/lib/media-convert/__fixtures__/
+
+# Saídas do Playwright (web/e2e)
+web/test-results/
+web/playwright-report/

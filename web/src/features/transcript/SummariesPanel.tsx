@@ -87,12 +87,18 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
               onChange={(event) => setChosen(event.target.value)}
               disabled={templateItems.length === 0}
             >
-              {templateItems.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                  {template.scope === 'organization' ? ' (organização)' : ''}
-                </option>
-              ))}
+              {(['user', 'organization'] as const).map((scope) => {
+                const group = templateItems.filter((t) => t.scope === scope)
+                return group.length === 0 ? null : (
+                  <optgroup key={scope} label={scope === 'user' ? 'Seus templates' : 'Da organização'}>
+                    {group.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              })}
             </select>
           </div>
           <button type="submit" className="btn btn-primary btn-sm" disabled={!selected || generate.isPending}>
