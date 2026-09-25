@@ -4,10 +4,10 @@ title: Núcleo do server — persistência, isolamento, autenticação e upload
 description: Como o pacote eclume_server guarda e isola os dados (migrations SQL, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, testes]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#5
+source: holetz/eclume#5, holetz/eclume#12
 maintainer: holetz
 ---
 
@@ -17,7 +17,8 @@ O pacote `eclume_server` (`server/`) implementa o [contrato v1](../api/contrato-
 FastAPI, SQLAlchemy 2 async (asyncpg), arq/Redis e boto3 contra o MinIO. As consultas são SQL
 Core explícito: o isolamento mora nas políticas do banco, e o SQL que as exercita precisa ser
 legível. O acordo com o worker GPU está em [jobs-transcricao.md](../api/jobs-transcricao.md); os
-resumos, templates e providers de agente, em [server-agentes.md](server-agentes.md).
+resumos, templates e providers de agente, em [server-agentes.md](server-agentes.md); o painel
+admin (configuração, segredos, convites e saúde), em [server-admin.md](server-admin.md).
 
 ## Configuração
 
@@ -62,6 +63,9 @@ Tudo por ambiente (`eclume_server/config.py`):
 - **Regra anti-recursão:** as políticas de `recording_shares` e `group_members` filtram só por
   organização e nunca consultam `recordings`; `recordings` consulta as duas. Uma política nova
   que feche esse ciclo quebra com "infinite recursion detected in policy".
+- **`users`** é lida pela organização inteira e escrita só por admin, na própria RLS
+  (`users_read` e `users_admin_update`); `invitations` e `org_secrets` são só de admin em todos os
+  comandos. As regras do painel estão em [server-admin.md](server-admin.md).
 - A API responde **404** para o que a política esconde; quem vê por compartilhamento e tenta
   escrever recebe **403**.
 
