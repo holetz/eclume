@@ -7,8 +7,11 @@ import json
 from typing import TYPE_CHECKING
 
 import redis
+from sqlalchemy import text
 
+from eclume_server.worker import expire_uploads, shutdown, startup
 from eclume_server_testing.api import audio_bytes, put_parts, upload_file
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -231,3 +234,36 @@ def test_escopo_e_dono_do_upload(as_user: Callable[[Account], Api], make_user: C
     stranger = as_user(make_user())
     assert stranger.get(f"/api/v1/uploads/{upload['id']}").status_code == 404
     assert json.loads(stranger.delete(f"/api/v1/uploads/{upload['id']}").text)["code"] == "not_found"
+
+
+def test_uploads_vencidos_sao_descartados_pelo_worker(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    upload = api.post("/api/v1/uploads", json=_body(audio_bytes(100))).json()
+
+    async def age(conn):  # noqa: ANN001, ANN202
+        return (
+            await conn.execute(
+                text(
+                    "UPDATE uploads SET expires_at = now() - interval '1 minute' WHERE id = :id RETURNING s3_upload_id"
+                ),
+                {"id": upload["id"]},
+            )
+        ).scalar_one()
+
+    s3_upload_id = run(services.sql(age))
+    assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "expired"
+
+    async def sweep() -> int:
+        ctx: dict[str, object] = {"settings": services.settings}
+        await startup(ctx)
+        try:
+            return await expire_uploads(ctx)
+        finally:
+            await shutdown(ctx)
+
+    assert run(sweep()) >= 1
+    assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "expired"
+    pending = services.s3().list_multipart_uploads(Bucket=services.settings.s3_bucket).get("Uploads", [])
+    assert s3_upload_id not in {u["UploadId"] for u in pending}
