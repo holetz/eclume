@@ -172,3 +172,61 @@ def test_pat_de_outro_usuario_nao_enxerga_nada(scenario: dict[str, Any]):
     lumea_da_carol = scenario["apis"]["Carol"].pat("transcripts:read", "recordings:read")
     assert lumea_da_carol.get(f"/api/v1/transcripts/{recording['transcript_id']}").status_code == 404
     assert lumea_da_carol.get("/api/v1/transcripts").json()["items"] == []
+
+
+def test_rls_de_usuarios_convites_e_segredos(
+    make_user: Callable[..., Account], make_org: Callable[[], UUID], services: Services
+):
+    """Escrita em `users`, convites e segredos é só de admin da organização, pela própria RLS."""
+    admin = make_user(role="admin")
+    member = make_user(name="Membro")
+    other = make_user(name="Colega")
+    stranger_admin = make_user(role="admin", org_id=make_org())
+
+    async def seed(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text(
+                "INSERT INTO invitations (org_id, email, token_hash, expires_at) "
+                "VALUES (:org, 'novo@exemplo.com.br', 'hash-teste', now() + interval '1 day')"
+            ),
+            {"org": str(admin.org_id)},
+        )
+        await conn.execute(
+            text("INSERT INTO org_secrets (org_id, name, value_encrypted) VALUES (:org, 'hf_token', 'v1:x')"),
+            {"org": str(admin.org_id)},
+        )
+
+    run(services.sql(seed))
+
+    rename = "UPDATE users SET name = 'Invadido' WHERE id = :u"
+    assert _as_app(services, member.org_id, member.user_id, rename, u=str(other.user_id)) == 0
+    assert _as_app(services, member.org_id, member.user_id, rename, u=str(member.user_id)) == 0
+    assert _as_app(services, stranger_admin.org_id, stranger_admin.user_id, rename, u=str(other.user_id)) == 0
+    assert (
+        _as_app(
+            services,
+            admin.org_id,
+            admin.user_id,
+            "UPDATE users SET name = 'Colega B' WHERE id = :u",
+            u=str(other.user_id),
+        )
+        == 1
+    )
+    # Membro segue lendo a organização (grupos, nomes de dono).
+    assert _as_app(services, member.org_id, member.user_id, "SELECT count(*) FROM users")[0][0] == 3
+
+    for table in ("invitations", "org_secrets"):
+        count = f"SELECT count(*) FROM {table}"  # noqa: S608
+        assert _as_app(services, admin.org_id, admin.user_id, count)[0][0] == 1
+        assert _as_app(services, member.org_id, member.user_id, count)[0][0] == 0
+        assert _as_app(services, stranger_admin.org_id, stranger_admin.user_id, count)[0][0] == 0
+        assert _as_app(services, None, None, count)[0][0] == 0
+
+    with pytest.raises(DBAPIError):
+        _as_app(
+            services,
+            member.org_id,
+            member.user_id,
+            "INSERT INTO org_secrets (org_id, name, value_encrypted) VALUES (:org, 'anthropic_api_key', 'v1:y')",
+            org=str(member.org_id),
+        )
