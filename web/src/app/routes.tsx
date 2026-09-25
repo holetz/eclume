@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
+import { CollectionsPage } from '../features/collections/CollectionsPage'
 import { DesktopPage } from '../features/desktop/DesktopPage'
 import { ImportPage } from '../features/import/ImportPage'
 import { LibraryPage } from '../features/library/LibraryPage'
@@ -34,6 +35,7 @@ export function AppRoutes() {
         <Route path="/pessoas" element={<PeoplePage />} />
         <Route path="/pessoas/:id" element={<PersonPage />} />
         <Route path="/busca" element={<SearchPage />} />
+        <Route path="/colecoes" element={<CollectionsPage />} />
         <Route path="/tokens" element={<TokensPage />} />
         <Route path="/app-desktop" element={<DesktopPage />} />
         <Route path="*" element={<NotFoundPage />} />

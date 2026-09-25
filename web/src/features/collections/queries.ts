@@ -8,10 +8,11 @@ export type Collection = Schemas['Collection']
 export const COLLECTIONS_KEY = ['collections'] as const
 export const TAGS_KEY = ['tags'] as const
 
-export function useCollections() {
+export function useCollections(enabled = true) {
   return useQuery({
     queryKey: COLLECTIONS_KEY,
     queryFn: () => unwrap(api.GET('/api/v1/collections', { params: { query: { limit: 200 } } })),
+    enabled,
   })
 }
 

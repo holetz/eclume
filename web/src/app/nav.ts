@@ -15,7 +15,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/importar', label: 'Importar arquivo', group: 'Gravações', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', enabled: true },
   { to: '/busca', label: 'Busca', group: 'Organizar', enabled: true },
-  { to: '/colecoes', label: 'Coleções', group: 'Organizar', enabled: false }, // holetz/eclume#11
+  { to: '/colecoes', label: 'Coleções', group: 'Organizar', enabled: true },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Conta', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Conta', enabled: true },
   { to: '/admin', label: 'Painel admin', group: 'Administração', enabled: false, adminOnly: true }, // holetz/eclume#12

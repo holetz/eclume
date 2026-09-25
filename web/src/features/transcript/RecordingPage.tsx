@@ -3,6 +3,7 @@ import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
 import { JobProgress, StatusBadge } from '../library/RecordingStatus'
+import { OrganizePanel } from './OrganizePanel'
 import { useRecording, useTranscript } from './queries'
 import { parseStart } from './segments'
 import styles from './RecordingPage.module.css'
@@ -75,8 +76,9 @@ export function RecordingPage() {
               startMs={startMs}
             />
           </div>
-          <aside className={styles.side} aria-label="Locutores e resumos">
+          <aside className={styles.side} aria-label="Locutores, organização e resumos">
             <SpeakersPanel transcript={transcript.data} />
+            <OrganizePanel recording={data} />
             <SummariesPanel transcriptId={transcript.data.id} />
           </aside>
         </div>
