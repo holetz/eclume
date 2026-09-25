@@ -57,6 +57,14 @@ npm --prefix web test
 npm --prefix web run build
 ```
 
+Os testes de navegador da conversão de mídia (vitest browser mode, Chrome) ficam fora do
+`npm test` e da CI e rodam só no host de build; o porquê e as fixtures estão em
+[formato-audio-upload.md](formato-audio-upload.md).
+
+```bash
+remote-run web 'npx playwright install --with-deps chrome && npm run fixtures && npm run test:browser'
+```
+
 ## Desktop — workspace cargo em `desktop/`
 
 `desktop/Cargo.toml` é o workspace; o app está em `desktop/src-tauri/` e a UI estática em
