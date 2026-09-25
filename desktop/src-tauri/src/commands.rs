@@ -3,7 +3,7 @@
 use eclume_recorder::QueuedRecording;
 use tauri::{AppHandle, State};
 
-use crate::state::{AppState, StatusView};
+use crate::state::{AppState, SettingsInput, SettingsView, StatusView};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -38,12 +38,17 @@ pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
 }
 
 #[tauri::command]
-pub fn set_web_url(
+pub fn settings(state: State<'_, AppState>) -> CommandResult<SettingsView> {
+    to_js(state.settings())
+}
+
+#[tauri::command]
+pub fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
-    url: String,
-) -> CommandResult<StatusView> {
-    let result = state.set_web_url(url.trim());
+    input: SettingsInput,
+) -> CommandResult<SettingsView> {
+    let result = state.save_settings(input);
     crate::refresh_ui(&app);
-    to_js(result.and_then(|()| state.view()))
+    to_js(result.and_then(|_| state.settings()))
 }

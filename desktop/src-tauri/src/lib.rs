@@ -87,7 +87,8 @@ pub fn run() {
             commands::recordings,
             commands::toggle_recording,
             commands::open_web,
-            commands::set_web_url,
+            commands::settings,
+            commands::save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");

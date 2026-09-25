@@ -1313,7 +1313,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "eclume-audio-capture",
+ "eclume-detect",
  "eclume-recorder",
+ "eclume-sync",
  "env_logger",
  "log",
  "serde",

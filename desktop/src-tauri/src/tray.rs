@@ -169,12 +169,17 @@ mod tests {
             status,
             recording_id: None,
             recording_started_at: None,
+            recording_auto: false,
+            recording_app: None,
+            meeting: None,
+            pending_ask: None,
             counts: QueueCounts {
                 pending,
                 ..QueueCounts::default()
             },
             web_url: String::new(),
             notice: None,
+            sync_notice: None,
         }
     }
 
