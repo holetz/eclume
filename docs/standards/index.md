@@ -11,6 +11,7 @@ derivado (o escopo do repositório que ele governa).
 ## Subtopics
 
 * [agents/](agents/index.md) — o idioma declarado e o contrato de conduta dos agentes
+* [api/](api/index.md) — o contrato de API v1, suas convenções e a regra de evolução só aditiva
 * [code/](code/index.md) — layout do monorepo, toolchains e comandos de cada pilar
 
 ## Current docs
@@ -21,6 +22,11 @@ derivado (o escopo do repositório que ele governa).
 | Doc | Covers |
 | --- | --- |
 | [communication.md](agents/communication.md) | The language a repo declares for the prose its agents author — one BCP-47 tag on the root harness line, governing artifact and conversation alike — and the conduct contract that holds in every repo whether or not a language is declared |
+
+### api/
+| Doc | Covers |
+| --- | --- |
+| [contrato-v1.md](api/contrato-v1.md) | As convenções da API v1 do eclume — autenticação por sessão e PAT com escopos, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva. |
 
 ### code/
 | Doc | Covers |
