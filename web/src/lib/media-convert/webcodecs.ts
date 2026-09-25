@@ -87,7 +87,7 @@ export async function convertWithWebCodecs({
         codec: OUTPUT_FORMAT.codec,
         numberOfChannels: OUTPUT_FORMAT.channels,
         sampleRate: OUTPUT_FORMAT.sampleRate,
-        quality: new Quality(bitrate),
+        quality: new Quality({ bitrate }),
         forceTranscode: true,
       },
       tags: {},
