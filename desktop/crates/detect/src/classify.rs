@@ -177,6 +177,11 @@ fn is_browser(haystack: &str) -> bool {
     BROWSERS.iter().any(|b| haystack.contains(b))
 }
 
+/// Algum navegador usa o mic: só então vale ler os títulos de janela.
+pub fn wants_window_titles(users: &[AudioClient]) -> bool {
+    users.iter().any(|client| is_browser(&client.haystack()))
+}
+
 fn browser_meeting(titles: &[String]) -> Option<AppKey> {
     let titles: Vec<String> = titles.iter().map(|t| t.to_lowercase()).collect();
     BROWSER_TITLES
@@ -265,6 +270,8 @@ mod tests {
             "Meet - abc-defg-hij - Google Chrome".into(),
         ];
         assert_eq!(classify(&snapshot), Some(AppKey::Meet));
+        assert!(wants_window_titles(&snapshot.mic_users));
+        assert!(!wants_window_titles(&[AudioClient::new("zoom", "zoom")]));
 
         snapshot.window_titles = vec!["Chat | Microsoft Teams - Microsoft Edge".into()];
         snapshot.mic_users = vec![AudioClient::new("msedge", "Microsoft Edge")];

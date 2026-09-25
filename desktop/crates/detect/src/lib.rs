@@ -8,7 +8,11 @@
 pub mod auto;
 pub mod classify;
 pub mod debounce;
+pub mod platform;
 
 pub use auto::{default_policy, Action, AutoRecorder, DetectionConfig, Policy, Recording};
-pub use classify::{classify, is_self, AppKey, AudioClient, SignalSource, Snapshot};
+pub use classify::{
+    classify, is_self, wants_window_titles, AppKey, AudioClient, SignalSource, Snapshot,
+};
 pub use debounce::{DebounceConfig, DebouncedDetector, Debouncer};
+pub use platform::SystemSignals;

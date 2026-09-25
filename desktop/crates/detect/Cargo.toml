@@ -1,3 +1,5 @@
+# Sinais de mic por plataforma adaptados de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
+# (crates/detect, MIT; ver VENDOR.md). Classificação, debounce e gravação automática são próprios.
 [package]
 name = "eclume-detect"
 description = "Detecção de reuniões do app desktop do eclume: sinais de mic e processo, debounce e gravação automática."
@@ -12,6 +14,17 @@ eclume-recorder = { path = "../recorder" }
 anyhow = "1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libpulse-binding = "2.30.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cidre = { version = "0.15", default-features = false, features = ["app", "async", "av", "ax", "blocks", "cm", "core_audio", "dispatch", "io_kit", "io_pm", "macos_15_0"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 serde_json = "1"

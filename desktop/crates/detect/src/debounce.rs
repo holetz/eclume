@@ -92,6 +92,8 @@ pub struct DebouncedDetector<S> {
     source: S,
     debouncer: Debouncer,
     clock: Box<dyn FnMut() -> Instant + Send>,
+    /// Última falha registrada no log, para não repetir a mesma a cada segundo.
+    last_error: Option<String>,
 }
 
 impl<S: SignalSource> DebouncedDetector<S> {
@@ -108,6 +110,7 @@ impl<S: SignalSource> DebouncedDetector<S> {
             source,
             debouncer: Debouncer::new(config),
             clock: Box::new(clock),
+            last_error: None,
         }
     }
 
@@ -120,10 +123,17 @@ impl<S: SignalSource> MeetingDetector for DebouncedDetector<S> {
     fn poll(&mut self) -> Option<MeetingEvent> {
         let now = (self.clock)();
         match self.source.snapshot() {
-            Ok(snapshot) => self.debouncer.observe(now, classify(&snapshot)),
+            Ok(snapshot) => {
+                self.last_error = None;
+                self.debouncer.observe(now, classify(&snapshot))
+            }
             // Sem sinal neste instante: não conta nem como presença nem como ausência.
             Err(err) => {
-                log::warn!("falha ao ler os sinais de reunião: {err:#}");
+                let message = format!("{err:#}");
+                if self.last_error.as_deref() != Some(message.as_str()) {
+                    log::warn!("falha ao ler os sinais de reunião: {message}");
+                    self.last_error = Some(message);
+                }
                 None
             }
         }
