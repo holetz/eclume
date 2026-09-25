@@ -6,6 +6,7 @@ export interface AdminSection {
 
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { path: 'transcricao', label: 'Transcrição' },
+  { path: 'voz', label: 'Identificação por voz' },
   { path: 'agentes', label: 'Agentes' },
   { path: 'templates', label: 'Templates padrão' },
   { path: 'usuarios', label: 'Usuários e convites' },
