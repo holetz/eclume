@@ -132,3 +132,49 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
 })
+
+test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {
+  await page.goto('/entrar')
+  await page.getByLabel('E-mail').fill('mariana.couto@example.com')
+  await page.getByLabel('Senha').fill('senha-de-teste')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  const nav = page.getByRole('navigation', { name: 'Principal' })
+
+  // Busca: o mock devolve os três trechos de "turmas", com o termo destacado.
+  await nav.getByRole('link', { name: 'Busca' }).click()
+  await page.getByLabel('Termos').fill('turmas')
+  await page.getByRole('button', { name: 'Buscar' }).click()
+  const results = page.getByRole('list', { name: 'Resultados' })
+  await expect(results.getByRole('listitem')).toHaveCount(3)
+  await expect(results.locator('mark').first()).toHaveText('turmas')
+  await expect(page).toHaveURL(/\/busca\?q=turmas$/)
+  await screenshot(page, '7-busca')
+
+  // O trecho abre a gravação no segundo exato, com a fala destacada.
+  await results.getByRole('link').first().click()
+  await expect(page).toHaveURL(/\/gravacoes\/[0-9a-f-]{36}\?t=122500$/)
+  const falas = page.getByRole('list', { name: 'Falas' })
+  await expect(falas.getByRole('listitem').nth(9)).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('region', { name: 'Organização' }).getByLabel('Cliente')).toHaveValue('Metalúrgica Serra Azul')
+
+  // Ligar o locutor 3 pelo combobox: o mock devolve o locutor ligado a Rafael Lima.
+  const speakers = page.getByRole('region', { name: 'Locutores' })
+  await speakers.getByRole('button', { name: 'Ligar Locutor 3 a uma pessoa' }).click()
+  await speakers.getByRole('combobox', { name: 'Pessoa para Locutor 3' }).fill('Rafael')
+  await speakers.getByRole('option', { name: /Rafael Lima/ }).click()
+  await expect(speakers.getByRole('link', { name: 'Rafael Lima' })).toBeVisible()
+  await screenshot(page, '8-gravacao-no-segundo')
+
+  // Pessoas: diretório e página da pessoa com as falas dela.
+  await nav.getByRole('link', { name: 'Pessoas' }).click()
+  await expect(page.getByRole('list', { name: 'Pessoas' }).getByRole('listitem')).toHaveCount(3)
+  await screenshot(page, '9-pessoas')
+  await page.getByRole('link', { name: 'Rafael Lima' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Rafael Lima' })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Falas da pessoa' }).getByRole('listitem')).toHaveCount(3)
+  await screenshot(page, '10-pessoa')
+
+  await nav.getByRole('link', { name: 'Coleções' }).click()
+  await expect(page.getByRole('heading', { name: 'Metalúrgica Serra Azul' })).toBeVisible()
+  await screenshot(page, '11-colecoes')
+})
