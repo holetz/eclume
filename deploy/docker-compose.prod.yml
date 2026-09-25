@@ -107,6 +107,8 @@ services:
       ECLUME_S3_ACCESS_KEY: ${ECLUME_MINIO_USER}
       ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD}
       ECLUME_S3_BUCKET: eclume
+      # A mesma do server: abre o token do HF que Administração → Segredos manda cifrado no job.
+      ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
     depends_on:
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}

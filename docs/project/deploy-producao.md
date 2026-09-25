@@ -112,7 +112,7 @@ host.
 |---|---|
 | `ECLUME_PG_PASSWORD` | só vale na criação do volume; para trocar depois, `ALTER USER eclume PASSWORD '…'` antes de mudar o env |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
-| `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers; trocar obriga a recadastrá-las ([server-agentes.md](../standards/code/server-agentes.md)) |
+| `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
 | `ECLUME_CLAUDE_CREDENTIALS` | `~/.claude/.credentials.json` do host, montado **gravável** no worker CPU |
 
@@ -219,8 +219,9 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
 
 - **Login do Claude expirado:** o resumo falha com `provider_auth`. Rode `claude` no host, faça o
   login e reenvie o resumo; o arquivo montado é o mesmo, sem reiniciar nada.
-- **Token do Hugging Face:** troque `/srv/eclume/secrets/hf_token` (600). O worker relê a cada
-  job ([worker-gpu.md](worker-gpu.md)).
+- **Token do Hugging Face:** grave em Administração → Segredos (vence o arquivo) ou troque
+  `/srv/eclume/secrets/hf_token` (600). O worker relê a cada job, sem reiniciar
+  ([worker-gpu.md](worker-gpu.md)).
 - **Instaladores do desktop:** `deploy/publicar-desktop.sh` grava em `/srv/eclume/downloads/`,
   que o Caddy já serve ([host-setup.md](host-setup.md), seção dos instaladores).
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
