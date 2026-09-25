@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import boto3
+import redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -115,12 +116,15 @@ def provision() -> Services:
     )
     services = Services(settings=settings, database=database)
     services.s3().create_bucket(Bucket=settings.s3_bucket)
+    # Filas de uma sessão anterior no mesmo banco do Redis travariam os workers em modo burst.
+    redis.Redis.from_url(settings.redis_url).flushdb()
     return services
 
 
 def teardown(services: Services) -> None:
     """Apaga o banco e o bucket da sessão."""
     run(_admin(f'DROP DATABASE IF EXISTS "{services.database}" WITH (FORCE)'))
+    redis.Redis.from_url(services.settings.redis_url).flushdb()
     s3 = services.s3()
     bucket = services.settings.s3_bucket
     for upload in s3.list_multipart_uploads(Bucket=bucket).get("Uploads", []):
