@@ -31,6 +31,8 @@ ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
+bash deploy/deploy.sh --plan --context gpu-host
+bash deploy/deploy.sh --context gpu-host
 cq knowledge validate
 ```
 
@@ -40,6 +42,8 @@ cq knowledge validate
   `web/package-lock.json` ou `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, conforme o pilar.
 - Destino de hospedagem: `192.168.15.199` (Ubuntu, GTX 1660 Super com 6 GB), acessado por
   `docker --context gpu-host`; runbook em [docs/project/host-setup.md](docs/project/host-setup.md).
+  Produção em `https://192.168.15.199:8443` (projeto `eclume`); deploy, segredos e backup em
+  [docs/project/deploy-producao.md](docs/project/deploy-producao.md).
   Esta máquina de desenvolvimento não tem GPU: em dev, o ASR roda em CPU ou aponta para o host.
 
 ## Where knowledge lives

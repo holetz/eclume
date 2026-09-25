@@ -1,0 +1,10 @@
+# Contexto do build do SPA (lido pelo BuildKit por ficar ao lado do Dockerfile).
+*
+!web/
+!contracts/fixtures/
+!deploy/web.Caddyfile
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/src/lib/media-convert/__fixtures__/

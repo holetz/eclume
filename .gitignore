@@ -28,3 +28,7 @@ web/src/lib/media-convert/__fixtures__/
 # Saídas do Playwright (web/e2e)
 web/test-results/
 web/playwright-report/
+
+# Segredos do deploy de produção (deploy/deploy.sh --gerar-env)
+deploy/.env.prod
+deploy/.deploy.lock
