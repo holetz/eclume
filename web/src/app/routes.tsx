@@ -3,6 +3,8 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { DesktopPage } from '../features/desktop/DesktopPage'
 import { ImportPage } from '../features/import/ImportPage'
 import { LibraryPage } from '../features/library/LibraryPage'
+import { PeoplePage } from '../features/people/PeoplePage'
+import { PersonPage } from '../features/people/PersonPage'
 import { TokensPage } from '../features/tokens/TokensPage'
 import { RecordingPage } from '../features/transcript/RecordingPage'
 import { RequireSession } from './RequireSession'
@@ -28,6 +30,8 @@ export function AppRoutes() {
         <Route index element={<LibraryPage />} />
         <Route path="/gravacoes/:id" element={<RecordingPage />} />
         <Route path="/importar" element={<ImportPage />} />
+        <Route path="/pessoas" element={<PeoplePage />} />
+        <Route path="/pessoas/:id" element={<PersonPage />} />
         <Route path="/tokens" element={<TokensPage />} />
         <Route path="/app-desktop" element={<DesktopPage />} />
         <Route path="*" element={<NotFoundPage />} />

@@ -13,7 +13,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Biblioteca', group: 'Gravações', enabled: true },
   { to: '/importar', label: 'Importar arquivo', group: 'Gravações', enabled: true },
-  { to: '/pessoas', label: 'Pessoas', group: 'Organizar', enabled: false }, // holetz/eclume#11
+  { to: '/pessoas', label: 'Pessoas', group: 'Organizar', enabled: true },
   { to: '/busca', label: 'Busca', group: 'Organizar', enabled: false }, // holetz/eclume#11
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', enabled: false }, // holetz/eclume#11
   { to: '/tokens', label: 'Tokens de acesso', group: 'Conta', enabled: true },
