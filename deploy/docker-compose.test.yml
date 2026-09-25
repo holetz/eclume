@@ -32,7 +32,8 @@ services:
       retries: 30
 
   minio:
-    image: minio/minio
+    # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data
     environment:
       MINIO_ROOT_USER: eclume
