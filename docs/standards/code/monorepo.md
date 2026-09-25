@@ -45,6 +45,22 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+### Server (`eclume_server`)
+
+A API e o worker CPU do server; persistência, isolamento, autenticação e upload estão em
+[server-nucleo.md](server-nucleo.md). A suíte de `server/tests` usa Postgres, Redis e MinIO reais
+do compose de teste; sem ele, esses testes pulam (a CI liga `ECLUME_TEST_REQUIRE_SERVICES=1` para
+que pulem nunca).
+
+```bash
+docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
+uv run eclume-server migrate
+uv run eclume-server admin bootstrap --org "<organização>" --email <e-mail> --name "<nome>" --password-stdin
+uv run uvicorn eclume_server.app:create_app --factory
+uv run arq eclume_server.worker.WorkerSettings
+```
+
 ## Web — npm em `web/`
 
 Vite + React + TS, eslint (flat config com typescript-eslint, react-hooks e react-refresh) e
@@ -104,12 +120,17 @@ Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta pu
 docker compose -f deploy/docker-compose.dev.yml up -d
 ```
 
+`deploy/docker-compose.test.yml` sobe os mesmos três serviços para a suíte do server, com dados em
+`tmpfs` e portas próprias (`55532`, `56479`, `59100`); rode-o sempre com `-p eclume-test`.
+
 ## CI — `.github/workflows/ci.yml`
 
 Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
 `contracts`, `web` e `desktop`, cada um rodando os comandos acima (com `--locked` no uv e no
 cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
 e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
+O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
+`ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
 demanda (`gh workflow run desktop-plataformas.yml`).

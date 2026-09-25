@@ -26,6 +26,11 @@ cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace
 docker compose -f deploy/docker-compose.dev.yml up -d
+docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
+uv run eclume-server migrate
+uv run uvicorn eclume_server.app:create_app --factory
+uv run arq eclume_server.worker.WorkerSettings
 cq knowledge validate
 ```
 
