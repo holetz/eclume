@@ -5,7 +5,7 @@
 #   <ECLUME_DATA_DIR>/bin/backup.sh
 #
 # Grava em <ECLUME_DATA_DIR>/backups/:
-#   pg/roles-<data>.sql        papéis do cluster (eclume_app), pré-requisito da restauração
+#   pg/roles-<data>.sql        papéis do cluster (eclume_app, eclume_server), pré-requisito da restauração
 #   pg/eclume-<data>.dump      pg_dump -Fc do banco eclume
 #   caddy/caddy-pki-<data>.tgz CA interna do Caddy (perdê-la troca a CA de todos os clientes)
 #   minio/.espelho/            espelho do bucket (mc mirror --remove)
