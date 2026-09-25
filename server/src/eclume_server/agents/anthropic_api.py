@@ -46,7 +46,10 @@ class AnthropicProvider:
     def _client(self) -> anthropic.AsyncAnthropic:
         if not self.config.api_key:
             # Sem chave explícita o SDK cairia em variáveis de ambiente e perfis do processo.
-            raise ProviderError(PROVIDER_NOT_CONFIGURED, "O provider anthropic não tem api_key cadastrada.")
+            raise ProviderError(
+                PROVIDER_NOT_CONFIGURED,
+                "O provider anthropic não tem api_key cadastrada nem o segredo anthropic_api_key da organização.",
+            )
         # As retentativas são do job de resumo, que registra cada tentativa.
         return anthropic.AsyncAnthropic(
             api_key=self.config.api_key,

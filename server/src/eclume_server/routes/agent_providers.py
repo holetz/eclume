@@ -8,11 +8,10 @@ o job de resumo não roda sem provider cadastrado (docs/standards/code/server-ag
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import AfterValidator, BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 from sqlalchemy import delete, func, insert, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -24,6 +23,7 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, iso, page
 from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.serialize import Row
+from eclume_server.settings_admin import BaseUrl
 from eclume_server.summaries import get_summarization, set_summarization
 
 router = APIRouter(prefix="/admin")
@@ -33,19 +33,6 @@ Kind = Literal["ollama", "openai-compatible", "anthropic", "claude-cli"]
 OptionValue = StrictBool | StrictInt | StrictFloat | StrictStr
 # Tipos que falam HTTP com um servidor escolhido pelo admin.
 _NEEDS_BASE_URL = {"ollama", "openai-compatible"}
-
-
-def _http_url(value: str | None) -> str | None:
-    if value is None:
-        return None
-    parts = urlsplit(value)
-    if parts.scheme not in {"http", "https"} or not parts.netloc:
-        msg = "precisa ser uma URL http(s) absoluta"
-        raise ValueError(msg)
-    return value
-
-
-BaseUrl = Annotated[str | None, AfterValidator(_http_url)]
 
 
 class AgentProviderCreate(BaseModel):
@@ -87,14 +74,12 @@ def provider_json(row: Row) -> dict[str, Any]:
     }
 
 
-def _check_shape(kind: str, base_url: str | None, *, has_key: bool) -> None:
+def _check_shape(kind: str, base_url: str | None) -> None:
     """Invariantes por tipo, na criação e depois de cada edição."""
     if kind in _NEEDS_BASE_URL and not base_url:
         raise invalid_field("base_url", f"obrigatória para {kind}")
     if kind == "claude-cli" and base_url:
         raise invalid_field("base_url", "o claude-cli não usa base_url")
-    if kind == "anthropic" and not has_key:
-        raise invalid_field("api_key", "obrigatória para anthropic")
 
 
 async def _get(conn: AsyncConnection, provider_id: UUID) -> Row:
@@ -121,7 +106,7 @@ async def list_agent_providers(principal: Admin, ctx: Ctx, cursor: Cursor = None
 @router.post("/agent-providers", status_code=201)
 async def create_agent_provider(body: AgentProviderCreate, principal: Admin, ctx: Ctx) -> dict[str, Any]:
     """Cadastra um provider; o primeiro habilitado de uma organização sem padrão vira o padrão."""
-    _check_shape(body.kind, body.base_url, has_key=body.api_key is not None)
+    _check_shape(body.kind, body.base_url)
     values = body.model_dump(exclude={"api_key"})
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         row = (
@@ -164,7 +149,7 @@ async def update_agent_provider(
     async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
         current = await _get(conn, provider_id)
         merged = {**current, **values}
-        _check_shape(merged["kind"], merged["base_url"], has_key=merged["api_key_encrypted"] is not None)
+        _check_shape(merged["kind"], merged["base_url"])
         row = (
             (
                 await conn.execute(

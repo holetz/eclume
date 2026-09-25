@@ -44,6 +44,9 @@ def _http_url(value: str | None) -> str | None:
     return value
 
 
+BaseUrl = Annotated[str | None, AfterValidator(_http_url)]
+
+
 class _Block(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -57,7 +60,7 @@ class AsrPatch(_Block):
     batch_size: int | None = Field(default=None, ge=1)
     default_language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
     fallback_model: str | None = Field(default=None, min_length=1)
-    endpoint_url: Annotated[str | None, AfterValidator(_http_url)] = None
+    endpoint_url: BaseUrl = None
 
 
 class DiarizationPatch(_Block):
