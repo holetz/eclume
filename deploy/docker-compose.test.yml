@@ -1,0 +1,48 @@
+# Serviços efêmeros para a suíte do server (server/tests): Postgres com pgvector, Redis e MinIO.
+# Rode sempre com um projeto próprio, para não colidir com o dev nem com o lumea no host:
+#   docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+# Dados em tmpfs (somem no `down`) e portas só em 127.0.0.1, fora das portas do dev.
+name: eclume-test
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: eclume
+      POSTGRES_PASSWORD: eclume
+      POSTGRES_DB: eclume
+    ports:
+      - "127.0.0.1:${ECLUME_TEST_PG_PORT:-55532}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eclume -d eclume"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${ECLUME_TEST_REDIS_PORT:-56479}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: eclume
+      MINIO_ROOT_PASSWORD: eclume-test-secret
+    ports:
+      - "127.0.0.1:${ECLUME_TEST_MINIO_PORT:-59100}:9000"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
