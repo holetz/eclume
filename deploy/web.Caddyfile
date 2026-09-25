@@ -1,0 +1,18 @@
+# Servidor estático da imagem eclume-web. TLS e roteamento ficam no Caddy de borda.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	root * /srv
+	encode zstd gzip
+	# Os assets do Vite têm hash no nome: cache longo. O resto (o index.html de toda rota do SPA)
+	# nunca é cacheado. O `header` roda antes do `try_files`, então casa o caminho original.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@pages not path /assets/*
+	header @pages Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}
