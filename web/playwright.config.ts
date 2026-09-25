@@ -15,7 +15,8 @@ export default defineConfig({
     locale: 'pt-BR',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // E2E_CHANNEL=chrome usa o Google Chrome instalado (CI); sem ele, o Chromium do Playwright.
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], channel: process.env.E2E_CHANNEL } }],
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: `http://127.0.0.1:${PORT}`,
