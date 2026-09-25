@@ -232,3 +232,62 @@ segments = Table(
     Column("confidence", Float),
     Column("words", JSONB),
 )
+
+# --- agentes de sumarização (002_agentes) ------------------------------------------------------
+
+agent_providers = Table(
+    "agent_providers",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    Column("name", Text),
+    Column("kind", Text),
+    Column("base_url", Text),
+    Column("model", Text),
+    Column("api_key_encrypted", Text),
+    Column("enabled", Boolean),
+    Column("options", JSONB),
+    _ts("created_at"),
+    _ts("updated_at"),
+)
+
+summary_templates = Table(
+    "summary_templates",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    _uuid("owner_id"),
+    Column("name", Text),
+    Column("description", Text),
+    Column("instructions", Text),
+    Column("is_default", Boolean),
+    _ts("created_at"),
+    _ts("updated_at"),
+)
+
+summaries = Table(
+    "summaries",
+    metadata,
+    _pk(),
+    _uuid("org_id"),
+    _uuid("transcript_id"),
+    Column("transcript_revision", Integer),
+    _uuid("template_id"),
+    Column("template_name", Text),
+    Column("instructions", Text),
+    Column("version", Integer),
+    Column("status", Text),
+    Column("trigger", Text),
+    _uuid("provider_id"),
+    Column("provider_name", Text),
+    Column("provider_kind", Text),
+    Column("model", Text),
+    Column("content_md", Text),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("attempts", Integer),
+    _uuid("created_by"),
+    _ts("created_at"),
+    _ts("started_at"),
+    _ts("completed_at"),
+)

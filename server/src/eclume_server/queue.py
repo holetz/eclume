@@ -33,6 +33,11 @@ def transcribe_job_id(recording_id: UUID | str, revision: int) -> str:
     return f"transcribe:{recording_id}:{revision}"
 
 
+def summarize_job_id(summary_id: UUID | str) -> str:
+    """`_job_id` do `summarize`: um por resumo."""
+    return f"summarize:{summary_id}"
+
+
 def progress_key(recording_id: UUID | str) -> str:
     """Hash de progresso que o worker GPU grava."""
     return f"eclume:progress:{recording_id}"
@@ -95,6 +100,12 @@ class Queue:
             options,
             _job_id=transcribe_job_id(recording_id, revision),
             _queue_name=GPU_QUEUE,
+        )
+
+    async def enqueue_summarize(self, summary_id: UUID) -> None:
+        """Enfileira `summarize` no worker CPU; um job por resumo."""
+        await self.pool.enqueue_job(
+            "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
         )
 
     async def progress(self, recording_ids: list[UUID]) -> dict[UUID, tuple[str | None, float]]:

@@ -52,7 +52,7 @@ def _response(method: str, path: str, status: int, body: object) -> httpx.Respon
 
 def test_o_validador_recusa_o_que_o_contrato_nao_diz():
     checker = Conformance()
-    health = {"status": "ok", "version": "0.1.0", "contract_version": "1.0.0"}
+    health = {"status": "ok", "version": "0.1.0", "contract_version": "1.1.0"}
     checker.check(_response("GET", "/api/v1/health", 200, health))
     assert checker.failures == []
 

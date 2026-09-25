@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     session_ttl_days: int = 14
 
+    # Cifra das chaves de API dos providers (base64 de 32 bytes). Sem valor, derivada de
+    # `secret_key` por HKDF: trocar `secret_key` sem esta variável invalida as chaves guardadas.
+    encryption_key: str | None = None
+    # Executável da CLI do Claude Code usado pelo provider `claude-cli`.
+    claude_bin: str = "claude"
+
     upload_part_size: int = 8 * 1024 * 1024
     upload_ttl_days: int = 7
     part_url_ttl_seconds: int = 3600
