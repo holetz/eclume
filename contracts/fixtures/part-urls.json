@@ -1,0 +1,22 @@
+{
+  "parts": [
+    {
+      "part_number": 2,
+      "method": "PUT",
+      "url": "http://127.0.0.1:4010/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/2",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "expires_at": "2026-09-18T16:30:00Z"
+    },
+    {
+      "part_number": 3,
+      "method": "PUT",
+      "url": "http://127.0.0.1:4010/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/3",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "expires_at": "2026-09-18T16:30:00Z"
+    }
+  ]
+}

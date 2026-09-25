@@ -1,0 +1,43 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000601",
+  "filename": "2026-09-18 11-00 Teams.opus",
+  "content_type": "audio/ogg",
+  "size_bytes": 19287595,
+  "sha256": "e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5",
+  "part_size": 8388608,
+  "part_count": 3,
+  "expires_at": "2026-09-25T14:09:10Z",
+  "created_at": "2026-09-18T14:09:10Z",
+  "status": "in_progress",
+  "parts_received": [],
+  "parts": [
+    {
+      "part_number": 1,
+      "method": "PUT",
+      "url": "http://127.0.0.1:4010/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/1",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "expires_at": "2026-09-18T15:09:10Z"
+    },
+    {
+      "part_number": 2,
+      "method": "PUT",
+      "url": "http://127.0.0.1:4010/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/2",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "expires_at": "2026-09-18T15:09:10Z"
+    },
+    {
+      "part_number": 3,
+      "method": "PUT",
+      "url": "http://127.0.0.1:4010/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/3",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "expires_at": "2026-09-18T15:09:10Z"
+    }
+  ],
+  "recording_id": null
+}

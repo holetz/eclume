@@ -1,0 +1,47 @@
+{
+  "items": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000303",
+      "name": "Juliana Prado",
+      "email": "juliana.prado@example.com",
+      "notes": "Diretora de Pessoas da Metalúrgica Serra Azul.",
+      "voice_consent": {
+        "status": "none",
+        "updated_at": null
+      },
+      "transcript_count": 0,
+      "last_seen_at": null,
+      "created_at": "2026-09-12T11:00:00Z",
+      "updated_at": "2026-09-18T15:02:17Z"
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000301",
+      "name": "Mariana Couto",
+      "email": "mariana.couto@example.com",
+      "notes": "Consultora EK.",
+      "voice_consent": {
+        "status": "granted",
+        "updated_at": "2026-09-12T11:05:00Z"
+      },
+      "transcript_count": 14,
+      "last_seen_at": "2026-09-18T14:00:05Z",
+      "created_at": "2026-09-12T11:00:00Z",
+      "updated_at": "2026-09-18T15:02:17Z"
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000302",
+      "name": "Rafael Lima",
+      "email": "rafael.lima@example.com",
+      "notes": "Gerente de RH da Metalúrgica Serra Azul.",
+      "voice_consent": {
+        "status": "granted",
+        "updated_at": "2026-09-12T11:05:00Z"
+      },
+      "transcript_count": 3,
+      "last_seen_at": "2026-09-11T13:00:00Z",
+      "created_at": "2026-09-12T11:00:00Z",
+      "updated_at": "2026-09-18T15:02:17Z"
+    }
+  ],
+  "next_cursor": null
+}

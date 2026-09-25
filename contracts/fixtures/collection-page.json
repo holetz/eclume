@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000801",
+      "name": "Metalúrgica Serra Azul",
+      "description": "Programa de lideranças 2026.",
+      "recording_count": 2,
+      "created_at": "2026-09-12T11:30:00Z",
+      "updated_at": "2026-09-19T13:41:07Z"
+    }
+  ],
+  "next_cursor": null
+}

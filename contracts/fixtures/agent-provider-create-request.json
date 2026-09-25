@@ -1,0 +1,11 @@
+{
+  "name": "DeepSeek",
+  "kind": "openai-compatible",
+  "base_url": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "api_key": "sk-exemplo-nao-e-uma-chave-real",
+  "options": {
+    "temperature": 0.2,
+    "context_window": 64000
+  }
+}

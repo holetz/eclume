@@ -1,0 +1,16 @@
+{
+  "parts": [
+    {
+      "part_number": 1,
+      "etag": "\"a3f1c9e07b2d4e5f8a6b1c0d9e8f7a6b\""
+    },
+    {
+      "part_number": 2,
+      "etag": "\"5c2e8b1f4a7d0c3e6b9a2d5f8c1e4b7a\""
+    },
+    {
+      "part_number": 3,
+      "etag": "\"e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4\""
+    }
+  ]
+}

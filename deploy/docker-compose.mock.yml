@@ -1,0 +1,20 @@
+# Mock server do contrato v1 (Prism), para o lumea, o desktop e o frontend desenvolverem sem o
+# backend real. Serve o bundle gerado por contracts/tools/bundle.py e responde com os exemplos
+# de contracts/fixtures/. A porta é publicada só em 127.0.0.1 por padrão: o Docker publica por
+# fora do ufw. Para um container na bridge alcançar o mock, use ECLUME_MOCK_BIND=172.17.0.1.
+name: eclume-mock
+
+services:
+  mock:
+    image: stoplight/prism:5.15.10
+    # --multiprocess=false: o modo cluster do Prism 5.15 quebra no Node da imagem (isPrimary).
+    command: mock --host 0.0.0.0 --port 4010 --multiprocess=false /contracts/openapi-v1.bundled.yaml
+    volumes:
+      - ../contracts:/contracts:ro
+    ports:
+      - "${ECLUME_MOCK_BIND:-127.0.0.1}:${ECLUME_MOCK_PORT:-4010}:4010"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4010/api/v1/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

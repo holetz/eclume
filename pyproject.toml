@@ -13,6 +13,10 @@ members = ["engines", "server", "worker-gpu"]
 dev = [
   "ruff>=0.6",
   "pytest>=8.0",
+  # testes de contrato (contracts/tests)
+  "jsonschema[format-nongpl]>=4.23",
+  "openapi-spec-validator>=0.7",
+  "pyyaml>=6.0",
 ]
 
 [tool.ruff]
@@ -25,6 +29,8 @@ src = [
   "server/tests",
   "worker-gpu/src",
   "worker-gpu/tests",
+  "contracts/tools",
+  "contracts/tests",
 ]
 
 [tool.ruff.lint]
@@ -40,10 +46,11 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "D100", "D103", "ANN201"]
+"contracts/**" = ["INP001"]  # script e testes soltos: contracts/ não é pacote Python
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["engines/tests", "server/tests", "worker-gpu/tests"]
+testpaths = ["engines/tests", "server/tests", "worker-gpu/tests", "contracts/tests"]
 addopts = "--import-mode=importlib"

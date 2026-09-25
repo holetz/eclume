@@ -1,4 +1,4 @@
-# CI do eclume: lint e teste dos três pilares em Linux a cada PR e a cada push em main.
+# CI do eclume: lint e teste dos pilares e do contrato v1 em Linux a cada PR e a cada push em main.
 # macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os builds de
 # distribuição do desktop entram com a spec `distribuicao-desktop`.
 name: ci
@@ -28,6 +28,23 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --locked
+      - run: uv run python contracts/tools/bundle.py --check
+      - run: uv run pytest contracts/tests
+      - name: Smoke do mock server (Prism)
+        run: |
+          docker compose -f deploy/docker-compose.mock.yml up -d --wait
+          bash contracts/tests/smoke-mock.sh
+      - if: failure()
+        run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   web:
     runs-on: ubuntu-latest
