@@ -2,7 +2,7 @@
 type: standard
 title: Layout do monorepo e comandos por pilar
 description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, .github/workflows/ci.yml
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml
 tags: [code, monorepo, toolchain, ci]
 timestamp: 2026-09-24
 audience: both
@@ -45,6 +45,22 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+### Server (`eclume_server`)
+
+A API e o worker CPU do server; persistência, isolamento, autenticação e upload estão em
+[server-nucleo.md](server-nucleo.md). A suíte de `server/tests` usa Postgres, Redis e MinIO reais
+do compose de teste; sem ele, esses testes pulam (a CI liga `ECLUME_TEST_REQUIRE_SERVICES=1` para
+que pulem nunca).
+
+```bash
+docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
+ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
+uv run eclume-server migrate
+uv run eclume-server admin bootstrap --org "<organização>" --email <e-mail> --name "<nome>" --password-stdin
+uv run uvicorn eclume_server.app:create_app --factory
+uv run arq eclume_server.worker.WorkerSettings
+```
+
 ## Web — npm em `web/`
 
 Vite + React + TS, eslint (flat config com typescript-eslint, react-hooks e react-refresh) e
@@ -68,10 +84,21 @@ remote-run web 'npx playwright install --with-deps chrome && npm run fixtures &&
 ## Desktop — workspace cargo em `desktop/`
 
 `desktop/Cargo.toml` é o workspace; o app está em `desktop/src-tauri/` e a UI estática em
-`desktop/ui/`. Crates vendorizados entram em `desktop/crates/`. `tauri::generate_context!` lê
-`frontendDist` e o ícone em tempo de compilação, então os dois são versionados. No Linux, o build
-exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libxdo-dev`,
-`libssl-dev` e `build-essential`.
+`desktop/ui/` (HTML, CSS e JS sem bundler, pela API global do Tauri). Os demais crates do
+workspace ficam em `desktop/crates/`: `audio-capture` (mic e áudio do sistema), `recorder`
+(mixagem, Ogg/Opus e fila) e `resampler`. O formato da gravação e a fila estão em
+[desktop-gravacao.md](desktop-gravacao.md). `tauri::generate_context!` lê `frontendDist` e os
+ícones em tempo de compilação, então todos são versionados.
+
+**Código de terceiros vendorizado** entra em `desktop/crates/<crate>` com `VENDOR.md` (origem,
+commit fixado, o que foi trazido e o que mudou), o `LICENSE` original e, no topo de cada arquivo
+copiado ou adaptado, a linha `fastrepl/anarlog@<sha>:<caminho>`. Atualizar é portar a partir de
+um commit novo e trocar o SHA registrado.
+
+No Linux, o build exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
+`libxdo-dev`, `libssl-dev` e `build-essential` (Tauri), mais `libasound2-dev` (mic por `cpal`),
+`libpipewire-0.3-dev`, `libpulse-dev`, `clang` (bindgen do PipeWire) e `cmake` (libopus embutida).
+No host de build, o `cmake` vem de `uv tool install cmake`.
 
 ```bash
 cargo check --manifest-path desktop/Cargo.toml --workspace
@@ -88,8 +115,15 @@ Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta pu
 docker compose -f deploy/docker-compose.dev.yml up -d
 ```
 
+`deploy/docker-compose.test.yml` sobe os mesmos três serviços para a suíte do server, com dados em
+`tmpfs` e portas próprias (`55532`, `56479`, `59100`); rode-o sempre com `-p eclume-test`.
+
 ## CI — `.github/workflows/ci.yml`
 
 Três jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
 `web` e `desktop`, cada um rodando exatamente os comandos acima (com `--locked` no uv e no cargo).
-macOS e Windows ficam fora enquanto o repositório for privado.
+O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
+`ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
+macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
+`.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
+demanda (`gh workflow run desktop-plataformas.yml`).

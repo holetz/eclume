@@ -27,7 +27,14 @@ jobs:
       - run: uv sync --all-packages --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - name: Serviços de teste do server (Postgres, Redis, MinIO)
+        run: docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
       - run: uv run pytest
+        env:
+          # A suíte do server falha, em vez de pular, se os serviços não estiverem no ar.
+          ECLUME_TEST_REQUIRE_SERVICES: "1"
+      - if: failure()
+        run: docker compose -p eclume-test -f deploy/docker-compose.test.yml logs
 
   contracts:
     runs-on: ubuntu-latest
@@ -67,12 +74,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Dependências de sistema do Tauri 2
+      - name: Dependências de sistema do Tauri 2 e da captura de áudio
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            libxdo-dev libssl-dev build-essential
+            libxdo-dev libssl-dev build-essential \
+            libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
