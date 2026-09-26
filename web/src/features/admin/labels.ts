@@ -26,13 +26,38 @@ export const LANGUAGES: readonly Option[] = [
 ]
 
 export const PROVIDER_KINDS: readonly Option[] = [
-  { value: 'claude-cli', label: 'Claude Code do servidor', hint: 'Usa o login do Claude Code do host; sem endereço.' },
+  { value: 'claude-cli', label: 'Claude Code do servidor', hint: 'Roda o claude -p no servidor, autenticado pelo token do Claude; sem endereço.' },
   { value: 'anthropic', label: 'API da Anthropic', hint: 'Sem chave própria, usa o segredo anthropic_api_key.' },
   { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter; exige o endereço.' },
   { value: 'ollama', label: 'Ollama', hint: 'Roda só com a fila da GPU vazia; exige o endereço.' },
 ]
 
 export const NEEDS_BASE_URL = new Set(['ollama', 'openai-compatible'])
+
+type ProviderSecret = { label: string; stored: string; missing: string; clear: string; help?: string }
+
+const API_KEY: ProviderSecret = {
+  label: 'Chave de API',
+  stored: 'Guardada',
+  missing: 'Sem chave',
+  clear: 'Apagar a chave guardada',
+}
+
+/** O segredo que cada tipo de provider pede: o `claude-cli` autentica pelo token do `claude setup-token`. */
+const PROVIDER_SECRETS: Record<string, ProviderSecret> = {
+  'claude-cli': {
+    label: 'Token do Claude',
+    stored: 'Token guardado',
+    missing: 'Sem token',
+    clear: 'Apagar o token guardado',
+    help:
+      'Num computador com o Claude Code logado na assinatura, rode claude setup-token, autorize no navegador e cole aqui o token sk-ant-oat01-… que ele imprime. Vale 1 ano: quando os resumos falharem por autenticação, gere outro. Uma chave de API da Anthropic (sk-ant-api…) também serve.',
+  },
+}
+
+export function providerSecret(kind: string): ProviderSecret {
+  return PROVIDER_SECRETS[kind] ?? API_KEY
+}
 
 export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
   hf_token: {

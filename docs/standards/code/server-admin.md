@@ -7,7 +7,7 @@ tags: [code, server, admin, configuracao, segredos, convites, saude, rls]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29
 maintainer: holetz
 ---
 
@@ -17,6 +17,12 @@ As rotas `/api/v1/admin/*` aceitam **só sessão** de um usuário com papel `adm
 membro → 403, como todas as rotas só de sessão em [server-nucleo.md](server-nucleo.md)). Os
 providers de agente (`/admin/agent-providers`) estão em [server-agentes.md](server-agentes.md);
 o acordo com o worker GPU, em [jobs-transcricao.md](../api/jobs-transcricao.md).
+
+Na tela **Admin → Agentes**, o segredo de cada provider tem o rótulo do seu tipo: o `claude-cli`
+("Claude Code do servidor") pede **"Token do Claude"**, com a explicação de como obtê-lo
+(`claude setup-token` num computador logado na assinatura, token `sk-ant-oat01-…` de 1 ano); os
+demais pedem "Chave de API". Os dois vão no mesmo campo cifrado `api_key`, e o server escolhe a
+variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
 
 ## Configuração em runtime (`/admin/settings`)
 

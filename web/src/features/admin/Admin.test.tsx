@@ -140,6 +140,33 @@ describe('Agentes', () => {
   })
 })
 
+describe('Token do Claude', () => {
+  it('o claude-cli pede o token do claude setup-token, os outros a chave de API', async () => {
+    const provider = fixtures.agentProviderPage().items[0]
+    const http = mockAdminApi({ 'POST /api/v1/admin/agent-providers': () => json(provider, 201) })
+    renderApp('/admin/agentes')
+    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
+    const form = screen.getByRole('form', { name: 'Novo provider' })
+    const token = within(form).getByLabelText('Token do Claude')
+    expect(token).toHaveAccessibleDescription(/claude setup-token/)
+    expect(within(form).queryByLabelText('Chave de API')).not.toBeInTheDocument()
+    await userEvent.type(within(form).getByLabelText('Nome'), 'Claude')
+    await userEvent.type(within(form).getByLabelText('Modelo'), 'sonnet')
+    await userEvent.type(token, 'sk-ant-oat01-segredo')
+    await userEvent.click(within(form).getByRole('button', { name: 'Cadastrar' }))
+    expect(await body(http, 'POST /api/v1/admin/agent-providers')).toMatchObject({
+      kind: 'claude-cli',
+      api_key: 'sk-ant-oat01-segredo',
+    })
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
+    const other = screen.getByRole('form', { name: 'Novo provider' })
+    await userEvent.selectOptions(within(other).getByLabelText('Tipo'), 'anthropic')
+    expect(within(other).getByLabelText('Chave de API')).toBeInTheDocument()
+    expect(within(other).queryByLabelText('Token do Claude')).not.toBeInTheDocument()
+  })
+})
+
 describe('Templates padrão', () => {
   it('mostra só os da organização e troca o padrão', async () => {
     const page = fixtures.summaryTemplatePage()
