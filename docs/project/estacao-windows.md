@@ -116,3 +116,8 @@ instalação silenciosa, PAT no chaveiro, sync, detecção de um app no mic com 
 automática que para 15 s depois de o mic soltar, e o updater de 0.1.0 para 0.1.1 com o app
 reaberto. O áudio do sistema chegava mudo ao servidor por um defeito na dívida da mixagem, já
 corrigido. O grupo de microfones dessa máquina entrega silêncio digital, e isso é do driver.
+
+Depois da correção (0.1.2, publicada pelo `desktop-release`), o updater levou o app de 0.1.1 para
+0.1.2 e o reabriu. Uma gravação manual de 35 s com `duas-vozes.ogg` tocando nos alto-falantes saiu
+com 86 KB (antes, 18 KB mudos) e chegou ao servidor transcrita com 13 segmentos e 2 locutores, o
+mesmo resultado da fixture enviada direto. O `eclume.log` registrou a abertura, a gravação e o sync.
