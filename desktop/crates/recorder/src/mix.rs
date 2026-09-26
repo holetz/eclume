@@ -2,9 +2,10 @@
 //!
 //! Cada fonte (uma "faixa") é reamostrada para [`TARGET_RATE`] e somada às outras em blocos de
 //! [`FRAME`] amostras (20 ms), com limitador rígido em ±1,0. Uma faixa que fica mais de
-//! `max_lag` atrás das outras é completada com silêncio — um monitor de sink suspenso não entrega
-//! nada —, e as amostras dela que chegarem depois descontam essa dívida, para que as faixas não
-//! fiquem desalinhadas.
+//! `max_lag` atrás das outras é completada com silêncio — um monitor de sink suspenso ou o
+//! loopback do WASAPI ocioso não entregam nada. Esse silêncio vira uma dívida de no máximo
+//! `max_lag`, descontada só quando a faixa entrega uma rajada à frente das outras; a faixa que
+//! volta a entregar em tempo real entra alinhada, sem perder amostras.
 
 use std::collections::VecDeque;
 
@@ -108,23 +109,28 @@ impl Lane {
     }
 
     fn enqueue(&mut self, samples: impl IntoIterator<Item = f32>) {
-        for sample in samples {
-            if self.debt > 0 {
-                self.debt -= 1;
-            } else {
-                self.queue.push_back(sample);
-            }
-        }
+        self.queue.extend(samples);
     }
 
-    /// Tira `n` amostras; o que faltar vira silêncio e dívida (se a faixa ainda está viva).
-    fn take_into(&mut self, out: &mut [f32]) {
+    /// Desconta a dívida só do que a faixa tem à frente de `ahead_of`: uma rajada atrasada paga,
+    /// e uma faixa que volta a entregar em tempo real depois de um silêncio sem pacotes (o
+    /// loopback do WASAPI ocioso) não perde nada.
+    fn pay_debt(&mut self, ahead_of: usize) {
+        let excess = self.queue.len().saturating_sub(ahead_of);
+        let paid = self.debt.min(excess);
+        self.queue.drain(..paid);
+        self.debt -= paid;
+    }
+
+    /// Tira `n` amostras; o que faltar vira silêncio e dívida (se a faixa ainda está viva), no
+    /// máximo `max_lag`.
+    fn take_into(&mut self, out: &mut [f32], max_lag: usize) {
         let available = self.queue.len().min(out.len());
         for (slot, sample) in out.iter_mut().zip(self.queue.drain(..available)) {
             *slot += sample;
         }
         if !self.ended {
-            self.debt += out.len() - available;
+            self.debt = (self.debt + out.len() - available).min(max_lag);
         }
     }
 }
@@ -153,7 +159,17 @@ impl Mixer {
 
     /// Entrega amostras mono da faixa `lane`, na taxa `rate`.
     pub fn push(&mut self, lane: usize, samples: &[f32], rate: u32) -> Result<()> {
-        self.lanes[lane].push(samples, rate)
+        self.lanes[lane].push(samples, rate)?;
+        let ahead_of = self
+            .lanes
+            .iter()
+            .enumerate()
+            .filter(|(index, other)| *index != lane && !other.ended)
+            .map(|(_, other)| other.queue.len())
+            .max()
+            .unwrap_or(0);
+        self.lanes[lane].pay_debt(ahead_of);
+        Ok(())
     }
 
     /// Marca a faixa como encerrada: daqui em diante ela conta como silêncio.
@@ -210,7 +226,7 @@ impl Mixer {
         out.resize(start + len, 0.0);
         let block = &mut out[start..];
         for lane in &mut self.lanes {
-            lane.take_into(block);
+            lane.take_into(block, self.max_lag);
         }
         for sample in block {
             *sample = sample.clamp(-1.0, 1.0);
@@ -284,6 +300,71 @@ mod tests {
         let out = mixer.pop_ready();
         assert_eq!(out.len(), FRAME);
         assert!(out.iter().all(|s| (*s - 0.75).abs() < 1e-6));
+    }
+
+    /// Mic contínuo a 48 kHz; a faixa do sistema, a 44,1 kHz, só entrega nos segundos em que
+    /// `sistema_toca` diz, como o loopback do WASAPI. Devolve o RMS de cada segundo da saída.
+    fn rms_por_segundo(segundos: usize, sistema_toca: impl Fn(usize) -> bool) -> Vec<f32> {
+        let mut mixer = Mixer::new(&[48_000, 44_100]).unwrap();
+        let mic = sine(48_000, 300.0, 0.005, 0.01);
+        let sys = sine(44_100, 700.0, 0.3, 0.01);
+        let mut out = Vec::new();
+        for tick in 0..segundos * 100 {
+            mixer.push(0, &mic, 48_000).unwrap();
+            if sistema_toca(tick / 100) {
+                mixer.push(1, &sys, 44_100).unwrap();
+            }
+            out.extend(mixer.pop_ready());
+        }
+        out.extend(mixer.drain().unwrap());
+        out.chunks(TARGET_RATE as usize).map(rms).collect()
+    }
+
+    #[test]
+    fn faixa_que_volta_de_silencio_sem_pacotes_entra_inteira() {
+        let niveis = rms_por_segundo(10, |segundo| segundo >= 3);
+        for (segundo, nivel) in niveis.iter().enumerate().take(10).skip(4) {
+            assert!(
+                (0.15..0.3).contains(nivel),
+                "segundo {segundo}: RMS {nivel}"
+            );
+        }
+    }
+
+    #[test]
+    fn faixa_intermitente_preserva_todo_trecho_com_sinal() {
+        let niveis = rms_por_segundo(12, |segundo| (segundo / 2) % 2 == 1);
+        for (segundo, nivel) in niveis.iter().enumerate().take(12) {
+            // Um segundo de cada borda mistura sinal e silêncio pelo atraso tolerado; os demais
+            // seguem o que a faixa entregou.
+            let tocando = (segundo / 2) % 2 == 1;
+            let borda = segundo % 2 == 0;
+            if tocando && !borda {
+                assert!(
+                    (0.15..0.3).contains(nivel),
+                    "segundo {segundo}: RMS {nivel}"
+                );
+            }
+        }
+        let com_sinal = niveis.iter().filter(|nivel| **nivel > 0.15).count();
+        assert!(
+            com_sinal >= 5,
+            "só {com_sinal} segundos com o sistema: {niveis:?}"
+        );
+    }
+
+    #[test]
+    fn divida_nunca_passa_do_atraso_tolerado() {
+        let mut mixer = Mixer::with_max_lag(&[16_000, 16_000], FRAME).unwrap();
+        for _ in 0..50 {
+            mixer.push(0, &[0.1; FRAME], 16_000).unwrap();
+            mixer.pop_ready();
+        }
+        assert!(
+            mixer.lanes[1].debt <= FRAME,
+            "dívida {}",
+            mixer.lanes[1].debt
+        );
     }
 
     #[test]

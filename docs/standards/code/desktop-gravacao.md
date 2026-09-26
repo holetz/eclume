@@ -4,10 +4,10 @@ title: Gravação no app desktop
 description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local (v2) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida e os pontos de extensão.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#6
+source: holetz/eclume#6, holetz/eclume#28
 maintainer: holetz
 ---
 
@@ -42,8 +42,12 @@ sintético; a captura real vive em `eclume-audio-capture` (`desktop/crates/audio
 ([formato-audio-upload.md](formato-audio-upload.md)); só a taxa de bits difere (24 kbps aqui,
 pensando em reuniões longas). A mixagem reamostra cada fonte para 16 kHz (sinc, `rubato`), soma
 com limitador rígido em ±1,0 e, se uma fonte fica mais de 200 ms atrás das outras, completa-a com
-silêncio e desconta essa dívida das amostras que chegarem depois — assim um monitor de sink
-suspenso não trava a gravação nem desalinha as faixas.
+silêncio — assim um monitor de sink suspenso ou o loopback do WASAPI ocioso (que não entrega
+pacote nenhum enquanto nada toca) não travam a gravação. Esse silêncio vira uma dívida de no
+máximo 200 ms, descontada **só do excedente**: das amostras que a fonte entrega à frente da fila
+mais longa das outras, o caso de uma rajada atrasada. A fonte que volta a entregar em tempo real
+depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amostra nova apagava o
+áudio do sistema depois da primeira pausa (holetz/eclume#28).
 
 ## Arquivos e fila
 
