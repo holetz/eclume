@@ -38,7 +38,8 @@ Portas:
 | Builds | uv e Rust stable em `~/.local/bin` e `~/.cargo/bin`, com as deps de build do Tauri instaladas |
 | eclume em produção | projeto `eclume` na 8443 desde 2026-09-25 (holetz/eclume#14), dados em `/srv/eclume`, backup no cron do `holetz` às 03:30; runbook em [deploy-producao.md](deploy-producao.md) |
 
-**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões):
+**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões). Uma estação
+Windows se prepara por [estacao-windows.md](estacao-windows.md):
 
 - Imagens: `docker --context gpu-host compose ... build`, direto no daemon do host, sem registry.
 - Cargo, npm e uv: `remote-run <dir> '<comando>'` (`~/.local/bin/remote-run` na máquina de dev).
