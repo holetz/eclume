@@ -139,9 +139,8 @@ host "set -e
     install -m 600 /dev/null '$DATA_DIR/secrets/hf_token'
     echo 'Aviso: sem token do Hugging Face ($DATA_DIR/secrets/hf_token vazio): transcrição sem diarização.' >&2
   fi"
-creds="$(env_value ECLUME_CLAUDE_CREDENTIALS)"
-if [[ -n "$creds" ]] && ! host "test -s '$creds'"; then
-  echo "Aviso: $creds não existe no host; o provider claude-cli vai falhar até o login (claude no host)." >&2
+if [[ -z "$(env_value ECLUME_CLAUDE_OAUTH_TOKEN)" ]]; then
+  echo "Aviso: ECLUME_CLAUDE_OAUTH_TOKEN vazio em $ENV_FILE; o provider claude-cli vai falhar até o token (claude setup-token no host)." >&2
 fi
 host "umask 077; cat > '$DATA_DIR/secrets/env.prod'" < "$ENV_FILE"
 host "cat > '$DATA_DIR/bin/backup.sh' && chmod 755 '$DATA_DIR/bin/backup.sh'" < deploy/backup.sh
