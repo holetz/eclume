@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # noqa: S105 — nome da variável, não o segredo
+OAUTH_TOKEN_PREFIX = "sk-ant-oat"  # noqa: S105 — prefixo do token do `claude setup-token`
 OAUTH_CREDENTIALS = Path(".claude") / ".credentials.json"
 _AUTH_MARKERS = ("authentication_failed", "not logged in", "please run /login", "invalid api key", "401", "oauth")
 _RATE_MARKERS = ("rate limit", "rate_limit", "429", "overloaded", "529", "usage limit")
@@ -133,8 +134,11 @@ class ClaudeCliProvider:
         self.claude_bin = claude_bin
         self.env = dict(os.environ if env is None else env)
         if config.api_key:
-            # Uma chave cadastrada no provider vence o OAuth montado.
-            self.env[API_KEY_ENV] = config.api_key
+            # O segredo cadastrado no provider vence o do ambiente: o token do `claude setup-token`
+            # autentica por CLAUDE_CODE_OAUTH_TOKEN, uma chave de API por ANTHROPIC_API_KEY.
+            token = config.api_key.startswith(OAUTH_TOKEN_PREFIX)
+            self.env.pop(API_KEY_ENV if token else OAUTH_TOKEN_ENV, None)
+            self.env[OAUTH_TOKEN_ENV if token else API_KEY_ENV] = config.api_key
 
     async def complete(self, system: str, prompt: str) -> Completion:
         """Roda `claude -p` e devolve o `result` do JSON."""
