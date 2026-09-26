@@ -99,3 +99,8 @@ Implementados pela spec `desktop-deteccao-e-sync`; o detalhe está em
 - O endereço do eclume web vem de `config.json` no diretório de config do app (`web_url`, padrão
   `https://192.168.15.199:8443`) e pode ser sobreposto por `ECLUME_WEB_URL`.
 - Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
+- O log (`info`, ou o filtro de `RUST_LOG`) vai para o stderr e para `eclume.log` no diretório de
+  logs do app (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` no Windows,
+  `~/.local/share/io.github.holetz.eclume/logs` no Linux, `~/Library/Logs/io.github.holetz.eclume`
+  no macOS). Acima de 5 MB, o arquivo vira `eclume.log.1` na próxima abertura. No Windows o release
+  não tem console, então o arquivo é o único registro de falhas de captura, sync e atualização.
