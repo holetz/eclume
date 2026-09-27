@@ -27,9 +27,9 @@ export const DENOISE_METHODS: readonly Option[] = [
 /** Para que um provider serve (`used_for`); cada finalidade tem um provider só. */
 export const PURPOSES: readonly Option[] = [
   { value: 'summaries', label: 'Resumos' },
-  { value: 'fields', label: 'Campos' },
-  { value: 'chat', label: 'Chat' },
-  { value: 'agenda_detection', label: 'Detecção do tipo' },
+  { value: 'fields', label: 'Preenchimento de campos' },
+  { value: 'chat', label: 'Chat do resumo' },
+  { value: 'agenda_detection', label: 'Detecção do tipo de agenda' },
 ]
 
 export const PROVIDER_KINDS: readonly Option[] = [
@@ -38,6 +38,13 @@ export const PROVIDER_KINDS: readonly Option[] = [
   { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter; exige o endereço.' },
   { value: 'ollama', label: 'Ollama', hint: 'Roda só com a fila da GPU vazia; exige o endereço.' },
 ]
+
+export const MODEL_PLACEHOLDERS: Record<string, string> = {
+  'claude-cli': 'sonnet',
+  anthropic: 'claude-sonnet-4-5',
+  'openai-compatible': 'deepseek-chat',
+  ollama: 'qwen2.5:7b',
+}
 
 export const NEEDS_BASE_URL = new Set(['ollama', 'openai-compatible'])
 

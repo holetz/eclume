@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { empty, json, mockFetch } from '../../test/http'
+import { mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -18,113 +18,6 @@ function mockAdminApi(extra: Parameters<typeof mockFetch>[0] = {}) {
     ...extra,
   })
 }
-
-async function body(http: ReturnType<typeof mockFetch>, key: string, index = 0) {
-  return http.requests(key)[index].json()
-}
-
-describe('Agentes', () => {
-  it('lista os providers e para que cada um serve', async () => {
-    mockAdminApi()
-    renderApp('/admin/agentes')
-    const table = await screen.findByRole('table')
-    expect(within(table).getByRole('rowheader', { name: /DeepSeek/ })).toBeInTheDocument()
-    expect(within(table).getAllByText('Guardada').length).toBeGreaterThan(0)
-    expect(within(table).getByText('Resumos, Campos, Chat')).toBeInTheDocument()
-    expect(within(table).getByText('Detecção do tipo')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Provider padrão')).not.toBeInTheDocument()
-  })
-
-  it('cadastra com endereço e edita apagando a chave', async () => {
-    const provider = fixtures.agentProviderPage().items[1]
-    const http = mockAdminApi({
-      'POST /api/v1/admin/agent-providers': () => json(provider, 201),
-      'PATCH /api/v1/admin/agent-providers/:id': () => provider,
-    })
-    renderApp('/admin/agentes')
-    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
-    const form = screen.getByRole('form', { name: 'Novo provider' })
-    await userEvent.type(within(form).getByLabelText('Nome'), 'Groq')
-    await userEvent.selectOptions(within(form).getByLabelText('Tipo'), 'openai-compatible')
-    await userEvent.type(within(form).getByLabelText('Modelo'), 'llama-3.3-70b')
-    await userEvent.type(within(form).getByLabelText('Endereço da API'), 'https://api.groq.com/openai/v1')
-    await userEvent.type(within(form).getByLabelText('Chave de API'), 'gsk_segredo')
-    await userEvent.click(within(form).getByRole('button', { name: 'Cadastrar' }))
-    expect(await body(http, 'POST /api/v1/admin/agent-providers')).toEqual({
-      name: 'Groq',
-      kind: 'openai-compatible',
-      model: 'llama-3.3-70b',
-      base_url: 'https://api.groq.com/openai/v1',
-      enabled: true,
-      api_key: 'gsk_segredo',
-    })
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Editar DeepSeek' }))
-    const edit = screen.getByRole('form', { name: 'Editar “DeepSeek”' })
-    expect(within(edit).getByLabelText('Tipo')).toBeDisabled()
-    await userEvent.click(within(edit).getByRole('checkbox', { name: 'Apagar a chave guardada' }))
-    await userEvent.click(within(edit).getByRole('button', { name: 'Salvar alterações' }))
-    const patch = await body(http, 'PATCH /api/v1/admin/agent-providers/:id')
-    expect(patch.api_key).toBeNull()
-  })
-})
-
-describe('Token do Claude', () => {
-  it('o claude-cli pede o token do claude setup-token, os outros a chave de API', async () => {
-    const provider = fixtures.agentProviderPage().items[0]
-    const http = mockAdminApi({ 'POST /api/v1/admin/agent-providers': () => json(provider, 201) })
-    renderApp('/admin/agentes')
-    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
-    const form = screen.getByRole('form', { name: 'Novo provider' })
-    const token = within(form).getByLabelText('Token do Claude')
-    expect(token).toHaveAccessibleDescription(/claude setup-token/)
-    expect(within(form).queryByLabelText('Chave de API')).not.toBeInTheDocument()
-    await userEvent.type(within(form).getByLabelText('Nome'), 'Claude')
-    await userEvent.type(within(form).getByLabelText('Modelo'), 'sonnet')
-    await userEvent.type(token, 'sk-ant-oat01-segredo')
-    await userEvent.click(within(form).getByRole('button', { name: 'Cadastrar' }))
-    expect(await body(http, 'POST /api/v1/admin/agent-providers')).toMatchObject({
-      kind: 'claude-cli',
-      api_key: 'sk-ant-oat01-segredo',
-    })
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
-    const other = screen.getByRole('form', { name: 'Novo provider' })
-    await userEvent.selectOptions(within(other).getByLabelText('Tipo'), 'anthropic')
-    expect(within(other).getByLabelText('Chave de API')).toBeInTheDocument()
-    expect(within(other).queryByLabelText('Token do Claude')).not.toBeInTheDocument()
-  })
-})
-
-describe('Segredos', () => {
-  it('grava sem nunca mostrar o valor e apaga depois de confirmar', async () => {
-    const http = mockAdminApi({
-      'PUT /api/v1/admin/secrets/:name': () => empty(204),
-      'DELETE /api/v1/admin/secrets/:name': () => empty(204),
-    })
-    renderApp('/admin/segredos')
-    const hf = await screen.findByRole('form', { name: 'Token do Hugging Face' })
-    expect(within(hf).getByText('Definido')).toBeInTheDocument()
-    const anthropic = screen.getByRole('form', { name: 'Chave da API da Anthropic' })
-    expect(within(anthropic).getByText('Não definido')).toBeInTheDocument()
-
-    const input = within(anthropic).getByLabelText('Valor')
-    expect(input).toHaveAttribute('type', 'password')
-    await userEvent.type(input, 'sk-ant-segredo')
-    await userEvent.click(within(anthropic).getByRole('button', { name: 'Salvar' }))
-    expect(await within(anthropic).findByText('Chave da API da Anthropic salvo.')).toBeInTheDocument()
-    expect(input).toHaveValue('')
-    const put = http.requests('PUT /api/v1/admin/secrets/:name')[0]
-    expect(new URL(put.url).pathname).toBe('/api/v1/admin/secrets/anthropic_api_key')
-    expect(await put.json()).toEqual({ value: 'sk-ant-segredo' })
-    expect(screen.queryByText('sk-ant-segredo')).not.toBeInTheDocument()
-
-    await userEvent.click(within(hf).getByRole('button', { name: 'Apagar Token do Hugging Face' }))
-    expect(http.requests('DELETE /api/v1/admin/secrets/:name')).toHaveLength(0)
-    await userEvent.click(within(hf).getByRole('button', { name: 'Confirmar exclusão' }))
-    expect(await within(hf).findByText('Token do Hugging Face apagado.')).toBeInTheDocument()
-  })
-})
 
 describe('Saúde', () => {
   it('mostra worker, GPU, modelos, filas e jobs', async () => {

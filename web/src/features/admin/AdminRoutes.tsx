@@ -5,7 +5,6 @@ import { AudioPage } from './AudioPage'
 import { HealthPage } from './HealthPage'
 import { NotFound } from './NotFound'
 import { RequireAdmin } from './RequireAdmin'
-import { SecretsPage } from './SecretsPage'
 import { SpeakersPage } from './SpeakersPage'
 import { TranscriptionPage } from './TranscriptionPage'
 import { UsersPage } from './UsersPage'
@@ -34,8 +33,8 @@ export function AdminRoutes() {
         <Route path="tipos-de-agenda" element={<Pending title="Tipos de agenda padrão" />} />
         <Route path="saude" element={<HealthPage />} />
         <Route path="voz" element={<Navigate to="/admin/locutores" replace />} />
-        {/* Fora da barra até a 2.5 levar os segredos para Locutores e Agentes. */}
-        <Route path="segredos" element={<SecretsPage />} />
+        {/* O token do Hugging Face trava a transcrição; a chave da Anthropic está em Agentes. */}
+        <Route path="segredos" element={<Navigate to="/admin/locutores" replace />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

@@ -344,3 +344,19 @@
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--space-4);
 }
+
+/* Agentes: o painel de edição abaixo da lista e a chave compartilhada depois dele. */
+.providerPanel {
+  max-width: 560px;
+  margin-top: var(--space-6);
+}
+
+.checks {
+  display: grid;
+  gap: 8px;
+}
+
+.sharedKey {
+  max-width: 560px;
+  margin-top: 32px;
+}
