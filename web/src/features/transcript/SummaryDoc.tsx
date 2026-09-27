@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { Dialog } from '../../app/Dialog'
 import styles from './RecordingPage.module.css'
 import { isMissingType, originLabel, useAgendaTypes, useSummaryMutations, useSummaryState } from './summary'
+import { SummaryDiff, SummaryEditor } from './SummaryEditor'
 
 type Recording = Schemas['Recording']
 
@@ -78,6 +79,7 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   const state = useSummaryState(recording.id, recording.transcript_id !== null)
   const { remove, generate } = useSummaryMutations(recording)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [mode, setMode] = useState<'read' | 'edit' | 'compare'>('read')
   const [copied, setCopied] = useState<'ok' | 'error' | null>(null)
 
   if (recording.transcript_id === null) return null
@@ -148,6 +150,11 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
     )
   }
 
+  if (mode === 'edit') return <SummaryEditor recording={recording} state={state.data} onDone={() => setMode('read')} />
+
+  const { generated } = state.data
+  const comparable = generated !== null && generated.id !== current.id
+
   return (
     <section className={styles.summary} aria-label="Resumo">
       <div className="doc-bar">
@@ -160,6 +167,19 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
           <Copy size={14} aria-hidden />
           Copiar com título
         </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMode('edit')}>
+          Editar
+        </button>
+        {comparable && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            aria-pressed={mode === 'compare'}
+            onClick={() => setMode(mode === 'compare' ? 'read' : 'compare')}
+          >
+            {mode === 'compare' ? 'Fechar comparação' : 'Comparar com a gerada'}
+          </button>
+        )}
         <button type="button" className="btn btn-ghost btn-sm" onClick={onChangeType}>
           Trocar tipo
         </button>
@@ -180,9 +200,17 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
           Gerando uma versão nova…
         </p>
       )}
-      <div className={`doc ${styles.doc}`}>
-        <ReactMarkdown>{current.content_md ?? ''}</ReactMarkdown>
-      </div>
+      {mode === 'compare' && comparable ? (
+        <SummaryDiff
+          before={generated.content_md ?? ''}
+          after={current.content_md ?? ''}
+          label={`A gerada (versão ${generated.version}) e a atual (versão ${current.version})`}
+        />
+      ) : (
+        <div className={`doc ${styles.doc}`}>
+          <ReactMarkdown>{current.content_md ?? ''}</ReactMarkdown>
+        </div>
+      )}
       {confirmingDelete && (
         <ConfirmDialog
           title="Excluir o resumo?"

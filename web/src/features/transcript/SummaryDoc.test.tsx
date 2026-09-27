@@ -72,7 +72,9 @@ describe('documento do resumo', () => {
     const section = await summarySection()
     await user.click(within(section).getByRole('button', { name: 'Trocar tipo' }))
     const dialog = screen.getByRole('dialog', { name: 'Trocar o tipo de agenda' })
-    expect(dialog).toHaveTextContent('Trocar o tipo gera um resumo novo pelas instruções do tipo; a versão atual fica guardada.')
+    expect(dialog).toHaveTextContent(
+      'Trocar o tipo gera um resumo novo pelas instruções do tipo; a versão atual fica guardada.',
+    )
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Tipo de agenda' }), '1:1')
     await user.click(within(dialog).getByRole('button', { name: 'Trocar e gerar' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -157,5 +159,131 @@ describe('documento do resumo', () => {
     await user.click(within(section).getByRole('button', { name: 'Tentar de novo' }))
     await waitFor(() => expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(1))
     expect(await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()).toEqual({})
+  })
+})
+
+describe('edição do resumo', () => {
+  async function openEditor() {
+    const section = await summarySection()
+    await userEvent.click(within(section).getByRole('button', { name: 'Editar' }))
+    return screen.getByRole('region', { name: 'Editando o resumo' })
+  }
+
+  it('edita o Markdown e salva sobre a versão aberta', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'PUT /api/v1/recordings/:id/summary': async (request) => ({
+        ...fixtures.summaryState().current,
+        ...((await request.json()) as object),
+        version: 3,
+      }),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    expect(within(editor).getByText('Editando')).toHaveClass('kicker')
+    expect(editor).toHaveTextContent('A versão gerada fica guardada')
+    const text = within(editor).getByRole('textbox', { name: 'Resumo em Markdown' })
+    expect(text).toHaveValue(fixtures.summaryState().current!.content_md)
+    expect(text.closest('.doc')).toHaveClass('doc-editing')
+    await user.clear(text)
+    await user.type(text, '# Ata curta')
+    await user.click(within(editor).getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Editando o resumo' })).not.toBeInTheDocument())
+    expect(await http.requests('PUT /api/v1/recordings/:id/summary')[0].json()).toEqual({
+      content_md: '# Ata curta',
+      base_version: 2,
+    })
+  })
+
+  it('Ctrl+Enter salva; Esc sem mudança cancela e com mudança pede confirmação', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'PUT /api/v1/recordings/:id/summary': () => fixtures.summaryState().current,
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await openEditor()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('region', { name: 'Editando o resumo' })).not.toBeInTheDocument()
+
+    const editor = await openEditor()
+    await user.type(within(editor).getByRole('textbox'), ' mais')
+    await user.keyboard('{Escape}')
+    const confirm = screen.getByRole('dialog', { name: 'Descartar a edição?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Cancelar' }))
+    expect(within(editor).getByRole('textbox')).toHaveValue(`${fixtures.summaryState().current!.content_md} mais`)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    await waitFor(() => expect(http.requests('PUT /api/v1/recordings/:id/summary')).toHaveLength(1))
+  })
+
+  it('quando o resumo muda enquanto edita, guarda o rascunho, mostra a nova e salva sobre ela', async () => {
+    const user = userEvent.setup()
+    let changed = false
+    const http = mockTranscriptApi({
+      'GET /api/v1/recordings/:id/summary': () => {
+        const state = fixtures.summaryState()
+        if (changed) state.current = { ...state.current!, version: 3, origin: 'chat', content_md: '# Ata do chat' }
+        return state
+      },
+      'PUT /api/v1/recordings/:id/summary': async (request) => {
+        const body = (await request.json()) as { base_version: number }
+        if (body.base_version === 2) {
+          changed = true
+          return json({ type: 'about:blank', title: 'summary_changed', status: 409, code: 'summary_changed' }, 409)
+        }
+        return { ...fixtures.summaryState().current, version: 4 }
+      },
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    const text = within(editor).getByRole('textbox')
+    await user.clear(text)
+    await user.type(text, '# Meu rascunho')
+    await user.click(within(editor).getByRole('button', { name: 'Salvar' }))
+    const warning = await within(editor).findByText('O resumo mudou enquanto você editava (agora na versão 3).')
+    expect(warning.closest('.alert')).toHaveClass('alert-warning')
+    expect(text).toHaveValue('# Meu rascunho')
+
+    await user.click(within(editor).getByRole('button', { name: 'Ver a versão 3' }))
+    const diff = within(editor).getByRole('region', { name: 'Seu rascunho e a versão 3' })
+    expect(within(diff).getByText('# Meu rascunho').closest('del')).not.toBeNull()
+    expect(within(diff).getByText('# Ata do chat').closest('ins')).not.toBeNull()
+
+    await user.click(within(editor).getByRole('button', { name: 'Salvar sobre a versão 3' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Editando o resumo' })).not.toBeInTheDocument())
+    const bodies = await Promise.all(http.requests('PUT /api/v1/recordings/:id/summary').map((r) => r.json()))
+    expect(bodies.map((body) => body.base_version)).toEqual([2, 3])
+    expect(bodies[1].content_md).toBe('# Meu rascunho')
+  })
+
+  it('volta à gerada com confirmação', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'POST /api/v1/recordings/:id/summary/revert': () =>
+        json({ ...fixtures.summaryState().generated, version: 3 }, 201),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    await user.click(within(editor).getByRole('button', { name: 'Voltar à gerada' }))
+    const confirm = screen.getByRole('dialog', { name: 'Voltar à versão gerada?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Voltar à gerada' }))
+    await waitFor(() => expect(http.requests('POST /api/v1/recordings/:id/summary/revert')).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Editando o resumo' })).not.toBeInTheDocument())
+  })
+
+  it('compara a atual com a gerada por linha, com sinal para quem não vê cor', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    await user.click(within(section).getByRole('button', { name: 'Comparar com a gerada' }))
+    const diff = within(section).getByRole('region', { name: 'A gerada (versão 1) e a atual (versão 2)' })
+    const removed = diff.querySelectorAll('del')
+    const added = diff.querySelectorAll('ins')
+    expect(removed).toHaveLength(1)
+    expect(added).toHaveLength(1)
+    expect(removed[0]).toHaveTextContent('−- Três turmas de 12 gestores; a primeira')
+    expect(added[0]).toHaveTextContent('+- Três turmas de 12 gestores cada;')
+    await user.click(within(section).getByRole('button', { name: 'Fechar comparação' }))
+    expect(within(section).queryByRole('region', { name: /A gerada/ })).not.toBeInTheDocument()
   })
 })

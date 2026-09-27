@@ -160,3 +160,64 @@
   display: grid;
   gap: var(--space-3);
 }
+
+/* A edição do Markdown na tipografia do documento (16px, 1,65, mesma largura). */
+.editor {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  overflow: hidden;
+}
+
+.editor:focus {
+  outline: none;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.alertActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* A comparação linha a linha: removidas e incluídas com fundo e sinal, para quem não enxerga cor. */
+.diff {
+  display: grid;
+  font-size: 15px;
+  white-space: pre-wrap;
+}
+
+.diff del,
+.diff ins,
+.diff > span {
+  display: block;
+  padding: 1px var(--space-2);
+  text-decoration: none;
+}
+
+.diff del {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+.diff ins {
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+
+.diffSign {
+  display: inline-block;
+  width: 1.25em;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
