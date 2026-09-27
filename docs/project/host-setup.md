@@ -120,8 +120,14 @@ sudo ufw default deny incoming
 sudo ufw allow from 192.168.15.0/24 to any port 22 proto tcp
 sudo ufw allow from 192.168.15.0/24 to any port 443 proto tcp
 sudo ufw allow from 192.168.15.0/24 to any port 8443 proto tcp
+# Anúncio mDNS do eclume (serviço `mdns`, rede do host; holetz/eclume#35).
+sudo ufw allow from 192.168.15.0/24 to any port 5353 proto udp
 sudo ufw enable
 ```
+
+O `mdns` roda com `network_mode: host`, então o 5353/udp passa **pelo** ufw (só as portas
+publicadas pelo Docker passam por fora). Sem a regra, `eclume-server discover` numa estação da LAN
+não acha o servidor; o deploy não tem sudo, então ela é um passo manual, feito uma vez.
 
 > **Atenção:** portas publicadas pelo Docker (`ports:` no compose) **passam por fora do ufw**.
 > Postgres, Redis e MinIO não podem ter `ports:` publicadas, ou devem ser ligados a
