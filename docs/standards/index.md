@@ -27,7 +27,7 @@ derivado (o escopo do repositório que ele governa).
 | Doc | Covers |
 | --- | --- |
 | [contrato-v1.md](api/contrato-v1.md) | As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a 2.0.0 como exceção única. |
-| [jobs-transcricao.md](api/jobs-transcricao.md) | As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs. |
+| [jobs-transcricao.md](api/jobs-transcricao.md) | As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs. |
 
 ### code/
 | Doc | Covers |

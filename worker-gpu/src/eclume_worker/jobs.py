@@ -1,8 +1,9 @@
 """Job `transcribe` da fila `eclume:gpu` (contrato em docs/standards/api/jobs-transcricao.md).
 
-Baixa o áudio, roda a engine numa thread, grava `transcript.raw.json` e `speaker_embeddings.json`
-no bucket e enfileira `ingest_transcript` em `eclume:default`. Em falha, enfileira
-`transcription_failed` e retorna sem relançar: o retry é decisão do server, não do arq.
+Baixa o áudio, pré-processa (`preprocess.py`), roda a engine numa thread (uma vez por canal, com
+os canais separados), grava `transcript.raw.json` e `speaker_embeddings.json` no bucket e enfileira
+`ingest_transcript` em `eclume:default`. Em falha, enfileira `transcription_failed` com a etapa em
+que parou e retorna sem relançar: o retry é decisão do server, não do arq.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from eclume_engines import DEFAULT_ENGINE, EngineError, EngineOptions, get_engin
 from eclume_engines.hf_token import resolve_hf_token
 from eclume_worker import __version__
 from eclume_worker.config import DEFAULT_QUEUE
+from eclume_worker.preprocess import PreprocessError, PreprocessResult, preprocess
 from eclume_worker.progress import ProgressReporter, overall_pct
 from eclume_worker.secrets import SecretError, open_secret
 from eclume_worker.storage import ArtifactStore, embeddings_key, sha256_file, transcript_key
@@ -168,8 +170,11 @@ class EngineRegistry:
                 self._engine.unload()
 
 
-def _engine_info(result: EngineResult, processing_s: float, job_s: float, started_at: str) -> dict[str, Any]:
+def _engine_info(
+    result: EngineResult, processing_s: float, job_s: float, started_at: str, pre: PreprocessResult
+) -> dict[str, Any]:
     return {
+        "preprocess": pre.info(),
         "started_at": started_at,
         "engine": result.engine,
         "model": result.model,
@@ -187,6 +192,52 @@ def _engine_info(result: EngineResult, processing_s: float, job_s: float, starte
         "warnings": list(result.warnings),
         "worker_version": __version__,
     }
+
+
+async def _preprocess(
+    config: WorkerConfig, reporter: ProgressReporter, audio_path: Path, workdir: Path, settings: dict[str, Any] | None
+) -> PreprocessResult:
+    """O pré-processamento numa thread, com a etapa `preprocess` no progresso."""
+    await reporter.report("preprocess")
+    try:
+        pre = await asyncio.to_thread(preprocess, audio_path, workdir, settings, config.rnnoise_model)
+    except PreprocessError as exc:
+        raise JobFailedError(exc.code, exc.message) from exc
+    await reporter.report("preprocess", 100)
+    await reporter.report("asr")
+    return pre
+
+
+def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOptions) -> EngineResult:
+    """O ASR do áudio tratado; com os canais separados, uma vez por canal, e a mescla.
+
+    Cada canal é uma pessoa (`min_speakers = max_speakers = 1`, o que mantém o embedding para a
+    identificação por voz): as falas do canal k ganham o rótulo `CANAL_k` e os segmentos se mesclam
+    pelo início.
+    """
+    if len(paths) == 1:
+        return run(paths[0], options)
+    one = dataclasses.replace(options, min_speakers=1, max_speakers=1)
+    results = [run(path, one) for path in paths]
+    merged = results[0]
+    segments, embeddings = [], {}
+    for channel, result in enumerate(results):
+        label = f"CANAL_{channel}"
+        for segment in result.segments:
+            segment.speaker = label
+            for word in segment.words:
+                word.speaker = label
+            segments.append(segment)
+        if result.speaker_embeddings:
+            embeddings[label] = next(iter(result.speaker_embeddings.values()))
+    return dataclasses.replace(
+        merged,
+        segments=sorted(segments, key=lambda s: s.start),
+        speaker_embeddings=embeddings,
+        duration_s=max(r.duration_s for r in results),
+        warnings=list(dict.fromkeys(w for r in results for w in r.warnings)),
+        peak_vram_mb=max((r.peak_vram_mb for r in results if r.peak_vram_mb is not None), default=None),
+    )
 
 
 def _thread_progress(
@@ -211,18 +262,27 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
     config: WorkerConfig = ctx["config"]
     config.work_dir.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
+    reporter = ProgressReporter(ctx["redis"], recording_id)
     try:
-        return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir)
+        return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
     except JobFailedError as exc:
-        return await _fail(ctx["redis"], recording_id, exc.code, exc.message)
+        return await _fail(ctx["redis"], recording_id, exc.code, exc.message, reporter.stage)
     except Exception as exc:
         logger.exception("gravação %s: erro inesperado", recording_id)
-        return await _fail(ctx["redis"], recording_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
+        return await _fail(ctx["redis"], recording_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}", reporter.stage)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any], workdir: Path) -> dict:
+async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha também lê
+    ctx: dict[str, Any],
+    recording_id: str,
+    audio_key: str,
+    options: dict[str, Any],
+    workdir: Path,
+    *,
+    reporter: ProgressReporter,
+) -> dict:
     started = time.monotonic()
     redis = ctx["redis"]
     store: ArtifactStore = ctx["store"]
@@ -237,8 +297,6 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         engine_options = dataclasses.replace(
             engine_options, model=None, compute_type=None, batch_size=None, fallback_model=None
         )
-    reporter = ProgressReporter(redis, recording_id)
-
     await reporter.report("download")
     audio_path = workdir / (Path(audio_key).name or "audio")
     try:
@@ -248,27 +306,22 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"falha ao baixar {audio_key}: {exc}") from exc
     await reporter.report("download", 100)
 
+    pre = await _preprocess(ctx["config"], reporter, audio_path, workdir, options.get("preprocess"))
+
     hf_token, token_warnings = _organization_hf_token(ctx["config"], options.get("hf_token_encrypted"))
     progress, futures = _thread_progress(reporter, asyncio.get_running_loop())
     engine_started = time.monotonic()
+    run = functools.partial(
+        registry.run, engine_name, progress=progress, base_url=options.get("endpoint_url"), hf_token=hf_token
+    )
     try:
-        result = await asyncio.to_thread(
-            functools.partial(
-                registry.run,
-                engine_name,
-                audio_path,
-                engine_options,
-                progress,
-                base_url=options.get("endpoint_url"),
-                hf_token=hf_token,
-            )
-        )
+        result = await asyncio.to_thread(_asr, run, pre.paths, engine_options)
     except EngineError as exc:
         raise JobFailedError(exc.code, exc.message) from exc
     finally:
         await asyncio.gather(*(asyncio.wrap_future(f) for f in futures), return_exceptions=True)
     processing_s = time.monotonic() - engine_started
-    result.warnings[:0] = token_warnings
+    result.warnings[:0] = [*token_warnings, *pre.warnings]
     for warning in result.warnings:
         logger.warning("gravação %s: %s", recording_id, warning)
 
@@ -280,6 +333,7 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         # O pedido (com a região), ou o que a engine detectou.
         language=options.get("language") or result.language,
         now=datetime.now(UTC),
+        offset_ms=pre.offset_ms,
     )
     await reporter.report("upload")
     t_key, e_key = transcript_key(recording_id), embeddings_key(recording_id)
@@ -289,7 +343,7 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     except Exception as exc:
         raise JobFailedError(UPLOAD_FAILED, f"falha ao gravar os artefatos: {exc}") from exc
 
-    info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at)
+    info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at, pre)
     # 100 antes do retorno: o server apaga o hash ao ingerir, e uma gravação depois o recriaria.
     await reporter.report("upload", 100)
     await redis.enqueue_job("ingest_transcript", recording_id, t_key, e_key, info, _queue_name=DEFAULT_QUEUE)
@@ -308,7 +362,7 @@ def _organization_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple
         return None, [WARN_HF_TOKEN_UNDECRYPTABLE]
 
 
-async def _fail(redis: Any, recording_id: str, code: str, message: str) -> dict:  # noqa: ANN401 — ArqRedis
-    logger.error("gravação %s falhou (%s): %s", recording_id, code, message)
-    await redis.enqueue_job("transcription_failed", recording_id, code, message, _queue_name=DEFAULT_QUEUE)
+async def _fail(redis: Any, recording_id: str, code: str, message: str, stage: str | None) -> dict:  # noqa: ANN401 — ArqRedis
+    logger.error("gravação %s falhou em %s (%s): %s", recording_id, stage, code, message)
+    await redis.enqueue_job("transcription_failed", recording_id, code, message, stage, _queue_name=DEFAULT_QUEUE)
     return {"status": "failed", "error_code": code, "message": message}

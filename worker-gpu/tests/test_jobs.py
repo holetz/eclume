@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -11,11 +12,49 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from eclume_engines import EngineError, EngineOptions, EngineResult, Segment, Word
+from eclume_worker import jobs
 from eclume_worker.config import WorkerConfig
 from eclume_worker.jobs import EngineRegistry, parse_revision, transcribe
+from eclume_worker.preprocess import PreprocessError, PreprocessResult
 
 SCHEMA = json.loads((Path(__file__).parents[2] / "contracts" / "transcript.schema.json").read_text())
 RECORDING = "01928f3a-1c00-7a00-8000-000000000401"
+
+
+@dataclass
+class FakePreprocess:
+    """O `preprocess` sem ffmpeg: devolve o próprio arquivo (ou um por canal) e registra o pedido."""
+
+    offset_ms: int = 0
+    split: bool = False
+    error: Exception | None = None
+    calls: list[tuple[dict[str, Any] | None, str | None]] = field(default_factory=list)
+
+    def __call__(self, src: Path, workdir: Path, config: dict[str, Any] | None, model: str | None) -> PreprocessResult:
+        self.calls.append((config, model))
+        if self.error is not None:
+            raise self.error
+        paths = [src]
+        if self.split:
+            copy = workdir / "canal-1.wav"
+            copy.write_bytes(src.read_bytes())
+            paths.append(copy)
+        return PreprocessResult(
+            paths=paths,
+            offset_ms=self.offset_ms,
+            channels=2 if self.split else 1,
+            split=self.split,
+            fallback=False,
+            steps=[{"step": "resample", "state": "done"}],
+            ffmpeg_version="6.1",
+        )
+
+
+@pytest.fixture(autouse=True)
+def pre(monkeypatch: pytest.MonkeyPatch) -> FakePreprocess:
+    fake = FakePreprocess()
+    monkeypatch.setattr(jobs, "preprocess", fake)
+    return fake
 
 
 class FakeRedis:
@@ -188,7 +227,7 @@ def test_falha_da_engine_leva_o_codigo(tmp_path: Path):
     ctx = contexto(tmp_path, factory=Factory(error=EngineError("out_of_memory", "VRAM insuficiente")))
     rodar(ctx)
     [(name, args, _)] = ctx["redis"].jobs
-    assert (name, args) == ("transcription_failed", (RECORDING, "out_of_memory", "VRAM insuficiente"))
+    assert (name, args) == ("transcription_failed", (RECORDING, "out_of_memory", "VRAM insuficiente", "asr"))
 
 
 def test_erro_inesperado_vira_internal_error(tmp_path: Path):
@@ -335,3 +374,44 @@ def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
     assert options.language is None
     transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
     assert transcript["language"] == "en"
+
+
+def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: FakePreprocess):
+    pre.offset_ms = 2000
+    ctx = contexto(tmp_path, rnnoise_model="/opt/cb.rnnn")
+    options = {"preprocess": {"denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6}}}
+    rodar(ctx, options)
+    assert pre.calls == [(options["preprocess"], "/opt/cb.rnnn")]
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    # Os tempos voltam ao áudio original: a fala de 0 s no tratado é 2 s no original.
+    assert [(s["start_ms"], s["end_ms"]) for s in transcript["segments"]] == [(2000, 4000), (4000, 6000)]
+    assert transcript["segments"][0]["words"][0]["start_ms"] == 2000
+    assert transcript["duration_ms"] == 12000
+    [(_, args, _)] = ctx["redis"].jobs
+    info = args[3]
+    assert info["preprocess"]["offset_ms"] == 2000
+    assert info["preprocess"]["ffmpeg_version"] == "6.1"
+    stages = [stage for stage, _ in ctx["redis"].history]
+    assert stages.index("preprocess") < stages.index("asr")
+
+
+def test_canais_separados_rodam_o_asr_por_canal(tmp_path: Path, pre: FakePreprocess):
+    pre.split = True
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory)
+    rodar(ctx, {"diarize": True, "embeddings": True, "min_speakers": 2})
+    [engine] = factory.created
+    assert [(opts.min_speakers, opts.max_speakers) for _, opts, _ in engine.calls] == [(1, 1), (1, 1)]
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    # Um locutor por canal, falas mescladas pelo início.
+    assert [s["speaker_id"] for s in transcript["segments"]] == ["S1", "S2", "S1", "S2"]
+    embeddings = ctx["store"].saved[f"recordings/{RECORDING}/speaker_embeddings.json"]
+    assert sorted(embeddings["speaker_embeddings"]) == ["S1", "S2"]
+
+
+def test_audio_que_nao_abre_falha_no_preprocessamento(tmp_path: Path, pre: FakePreprocess):
+    pre.error = PreprocessError("o áudio não abre")
+    ctx = contexto(tmp_path)
+    assert rodar(ctx)["error_code"] == "audio_decode_failed"
+    [(name, args, _)] = ctx["redis"].jobs
+    assert (name, args[1], args[3]) == ("transcription_failed", "audio_decode_failed", "preprocess")

@@ -35,7 +35,16 @@ def relogio() -> datetime:
 
 @pytest.mark.parametrize(
     ("stage", "pct", "esperado"),
-    [("download", 0, 0), ("asr", 0, 5), ("asr", 50, 30), ("align", 100, 70), ("upload", 100, 100), ("asr", 150, 55)],
+    [
+        ("download", 0, 0),
+        ("preprocess", 0, 3),
+        ("preprocess", 100, 10),
+        ("asr", 0, 10),
+        ("asr", 50, 32),
+        ("align", 100, 70),
+        ("upload", 100, 100),
+        ("asr", 150, 55),
+    ],
 )
 def test_pct_geral_por_etapa(stage: str, pct: float, esperado: int):
     assert overall_pct(stage, pct) == esperado
@@ -49,7 +58,7 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
         await reporter.report("download")
         await reporter.report("asr", 50)
         await reporter.report("asr", 50)  # repetido: não grava
-        await reporter.report("asr", 10)  # recuo: pct fica em 30
+        await reporter.report("asr", 10)  # recuo: pct fica em 32
         await reporter.report("upload", 100)
 
     asyncio.run(roda())
