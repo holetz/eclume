@@ -184,3 +184,93 @@ describe('tipos de agenda', () => {
     expect(within(screen.getByRole('list', { name: 'Tipos de agenda' })).queryByText('1:1')).not.toBeInTheDocument()
   })
 })
+
+describe('pré-visualizar numa gravação', () => {
+  const RECORDING = '01928f3a-1c00-7a00-8000-000000000401'
+  const queued = () => ({ ...fixtures.previewAgendaType(), status: 'queued', items: [] })
+  const withRecordings = (extra: Record<string, Parameters<typeof mockFetch>[0][string]>) =>
+    mockAgendaTypes({ 'GET /api/v1/recordings': () => fixtures.recordingPage(), ...extra })
+
+  async function previewOn(panel: HTMLElement, recordingTitle: RegExp) {
+    await userEvent.click(within(panel).getByRole('button', { name: 'Pré-visualizar numa gravação' }))
+    const dialog = screen.getByRole('dialog', { name: 'Pré-visualizar numa gravação' })
+    const select = await within(dialog).findByRole('combobox', { name: 'Gravação' })
+    await userEvent.selectOptions(select, within(select).getByRole('option', { name: recordingTitle }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Pré-visualizar' }))
+  }
+
+  it('roda o rascunho na gravação escolhida e mostra detecção, título, tags e resumo, sem salvar', async () => {
+    const http = withRecordings({
+      'POST /api/v1/agenda-types/preview': () => queued(),
+      'GET /api/v1/previews/:id': () => fixtures.previewAgendaType(),
+    })
+    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
+    await userEvent.type(within(panel).getByLabelText('Nome'), ' e mentoria')
+    await previewOn(panel, /^Alinhamento do programa de lideranças · /)
+
+    const recordings = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    expect(Object.fromEntries(recordings)).toEqual({ status: 'transcribed', limit: '20' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(within(panel).getByRole('status')).toHaveTextContent('Pré-visualizando na gravação…')
+    const body = (await http.requests('POST /api/v1/agenda-types/preview')[0].json()) as Schemas['AgendaTypePreviewRequest']
+    expect(body.recording_id).toBe(RECORDING)
+    expect(body.agenda_type).toMatchObject({ name: '1:1 e mentoria', title_pattern: null, default_tags: [] })
+
+    const result = await within(panel).findByRole('region', { name: 'Pré-visualização' }, { timeout: 5000 })
+    expect(within(result).getByText('Este tipo seria escolhido (confiança 82%)')).toHaveClass('badge-success')
+    expect(within(result).getByText('Mentoria · Próximos passos na carreira')).toBeInTheDocument()
+    expect(within(within(result).getByRole('list', { name: 'Tags da pré-visualização' })).getByText('mentoria')).toBeInTheDocument()
+    expect(within(result).getByRole('heading', { level: 2, name: 'Temas' })).toBeInTheDocument()
+    expect(within(result).getByText('Ana revisa o plano até sexta.')).toBeInTheDocument()
+    expect(http.requests('PATCH /api/v1/agenda-types/:id')).toHaveLength(0)
+    expect(http.requests('POST /api/v1/agenda-types')).toHaveLength(0)
+  })
+
+  it('diz qual tipo o agente escolheria quando não é o rascunho, e some ao editar', async () => {
+    const other = fixtures.previewAgendaType()
+    other.items = [{ ...(other.items[0] as Schemas['AgendaTypePreviewItem']), detected: false, detected_type_name: 'Reunião de equipe', confidence: 0.64 }]
+    withRecordings({ 'POST /api/v1/agenda-types/preview': () => other })
+    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
+    await previewOn(panel, /^Alinhamento/)
+
+    const result = await within(panel).findByRole('region', { name: 'Pré-visualização' })
+    const badge = within(result).getByText(/O agente escolheria/)
+    expect(badge).toHaveClass('badge-warning')
+    expect(badge).toHaveTextContent('O agente escolheria Reunião de equipe (confiança 64%)')
+    expect(within(badge).getByText('Reunião de equipe').tagName).toBe('STRONG')
+
+    await userEvent.type(within(panel).getByLabelText('Como identificar'), ' Semanal.')
+    expect(within(panel).queryByRole('region', { name: 'Pré-visualização' })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('status')).toHaveTextContent('O rascunho mudou desde a pré-visualização.')
+  })
+
+  it('explica quando falta o agente e quando não há gravações transcritas', async () => {
+    withRecordings({
+      'POST /api/v1/agenda-types/preview': () => ({
+        ...queued(),
+        status: 'failed',
+        error: { code: 'no_provider', message: 'Nenhum provider serve a finalidade summaries.' },
+      }),
+    })
+    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
+    await previewOn(panel, /^Alinhamento/)
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      'Nenhum agente está configurado para esta pré-visualização. Peça a quem administra o servidor.',
+    )
+  })
+
+  it('sem gravações transcritas, o diálogo avisa e não deixa pré-visualizar', async () => {
+    mockAgendaTypes({ 'GET /api/v1/recordings': () => ({ items: [], next_cursor: null }) })
+    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Pré-visualizar numa gravação' }))
+    const dialog = screen.getByRole('dialog', { name: 'Pré-visualizar numa gravação' })
+    expect(await within(dialog).findByText('Você ainda não tem gravações transcritas para pré-visualizar.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Pré-visualizar' })).toBeDisabled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
+import { AgendaPreviewResult, RecordingPicker } from './AgendaTypePreview'
 import styles from './Organize.module.css'
 import {
   invalidFields,
+  startAgendaTypePreview,
   useDeleteAgendaType,
   useFields,
   useSaveAgendaType,
@@ -12,6 +14,7 @@ import {
   type AgendaTypeDraft,
 } from './queries'
 import { TagInput } from './TagInput'
+import { usePreview } from './usePreview'
 
 const EMPTY: AgendaTypeDraft = { name: '', title_pattern: null, identify: '', default_tags: [], summary_instructions: '' }
 
@@ -42,13 +45,19 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
   const initial = draftOf(type)
   const [draft, setDraft] = useState<AgendaTypeDraft>(initial)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [picking, setPicking] = useState(false)
+  // O rascunho que a pré-visualização em tela usou: editar depois disso a invalida.
+  const [previewedDraft, setPreviewedDraft] = useState<string | null>(null)
   const save = useSaveAgendaType()
+  const preview = usePreview(startAgendaTypePreview)
   const fields = useFields()
   const titleInput = useRef<HTMLInputElement>(null)
   const errors = invalidFields(save.error)
-  const dirty = JSON.stringify(cleanDraft(draft)) !== JSON.stringify(cleanDraft(initial))
+  const draftKey = JSON.stringify(cleanDraft(draft))
+  const dirty = draftKey !== JSON.stringify(cleanDraft(initial))
   const complete = draft.name.trim() !== '' && draft.summary_instructions.trim() !== ''
   const canSave = dirty && complete && !save.isPending
+  const previewing = preview.state === 'queued' || preview.state === 'running'
   const markers = [
     ...BASE_MARKERS,
     ...(fields.data?.items ?? []).filter((field) => !field.builtin).map((field) => `{${field.key}}`),
@@ -195,12 +204,32 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
         </p>
       )}
 
+      <AgendaPreviewResult preview={preview} stale={previewedDraft !== null && previewedDraft !== draftKey} />
+
       <div className="row">
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={!complete || previewing}
+          onClick={() => setPicking(true)}
+        >
+          Pré-visualizar numa gravação
+        </button>
       </div>
 
+      {picking && (
+        <RecordingPicker
+          onClose={() => setPicking(false)}
+          onPick={(recordingId) => {
+            setPicking(false)
+            setPreviewedDraft(draftKey)
+            preview.run({ agenda_type: cleanDraft(draft), recording_id: recordingId })
+          }}
+        />
+      )}
       {confirmDelete && type && (
         <DeleteAgendaTypeDialog type={type} onClose={() => setConfirmDelete(false)} onDeleted={onDeleted} />
       )}
