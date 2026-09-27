@@ -121,7 +121,12 @@ export ANDROID_NDK_HOME="$SDK/ndk/28.2.13676358"
 export ANDROID_NDK_ROOT="$SDK/ndk/28.2.13676358"
 # Sem cache incremental: no host de build, ele só ocupa disco (o limite do deploy é 90 %).
 export CARGO_INCREMENTAL=0
-export PATH="\$HOME/.local/bin:\$JAVA_HOME/bin:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator:\$ANDROID_HOME/build-tools/36.0.0:\$HOME/.cargo/bin:\$PATH"
+# O compilador e o linker do NDK para um cargo fora do Tauri (o check do núcleo para o Android),
+# de qualquer pasta; o tauri android build passa os seus.
+export CC_aarch64_linux_android=aarch64-linux-android26-clang
+export AR_aarch64_linux_android=llvm-ar
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=aarch64-linux-android26-clang
+export PATH="\$HOME/.local/bin:\$JAVA_HOME/bin:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator:\$ANDROID_HOME/build-tools/36.0.0:\$HOME/.cargo/bin:\$PATH:\$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
 EOF
 )
 if [[ ! -f "$ENV_FILE" ]] || [[ "$(cat "$ENV_FILE")" != "$conteudo_env" ]]; then

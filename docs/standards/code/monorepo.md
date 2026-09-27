@@ -148,6 +148,17 @@ remote-run . 'source ~/.config/eclume/android-env.sh && npm --prefix mobile ci &
 O APK de depuração x86_64 (o do emulador) sai em
 `mobile/src-tauri/gen/android/app/build/outputs/apk/*/debug/`.
 
+O job `mobile` da CI roda a UI (lint, vitest e build), o workspace cargo no Linux (fmt, check,
+clippy e testes; o plugin compila no Linux pelo lado sem Android) e um `cargo check` do
+`eclume-mobile-core` para `aarch64-linux-android` com o NDK que o runner já traz
+(`ANDROID_NDK_LATEST_HOME`), sem o gradle: prova a compilação cruzada do libopus (cmake e ninja) e
+do SQLite. O compilador e o linker do NDK entram por `CC_aarch64_linux_android`,
+`AR_aarch64_linux_android` e `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`; no host, o
+`android-env.sh` os exporta pelo nome, com o `bin` do NDK no fim do `PATH`. Não há
+`mobile/.cargo/config.toml`: um `CC` por nome nele valeria também dentro do `tauri android build`,
+que não o acha no `PATH` dele. O APK de release sai de `mobile-release.yml`
+([mobile-distribuicao.md](mobile-distribuicao.md)).
+
 ## Serviços de apoio — `deploy/docker-compose.dev.yml`
 
 Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta publicada só em
@@ -163,8 +174,8 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 ## CI — `.github/workflows/ci.yml`
 
 Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
-`contracts`, `web` e `desktop`, cada um rodando os comandos acima (com `--locked` no uv e no
-cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
+`contracts`, `web`, `desktop` e `mobile`, cada um rodando os comandos acima (com `--locked` no uv e
+no cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
 e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
 O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
