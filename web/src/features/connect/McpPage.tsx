@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
@@ -94,8 +94,17 @@ function CreatedToken({
   mcpUrl: string | undefined
   onAnother: () => void
 }) {
+  // O formulário que tinha o foco sai da tela: o foco vai para o aviso, e o leitor de tela o lê.
+  const region = useRef<HTMLDivElement>(null)
+  useEffect(() => region.current?.focus(), [])
   return (
-    <div className={styles.created}>
+    <div
+      ref={region}
+      tabIndex={-1}
+      role="region"
+      aria-label={`Token “${created.token.name}” criado`}
+      className={styles.created}
+    >
       <div className="alert alert-success">
         <span className="alert-title">Token “{created.token.name}” criado · copie agora</span>
         <span>Ele só aparece uma vez.</span>

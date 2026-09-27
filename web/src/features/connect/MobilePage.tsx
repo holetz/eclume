@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -11,8 +11,11 @@ export function MobilePage() {
   useHelpTopic('app-movel')
   const create = useCreatePairingCode()
   const { mutate } = create
+  // O último código fica na tela enquanto outro é gerado (o `data` da mutação zera a cada pedido).
+  const [pairing, setPairing] = useState<Pairing | null>(null)
+  const generate = useCallback(() => mutate(undefined, { onSuccess: setPairing }), [mutate])
   // Cada página gera o seu código ao abrir: um código novo anula o anterior.
-  useEffect(() => mutate(), [mutate])
+  useEffect(generate, [generate])
 
   return (
     <section className={styles.page}>
@@ -22,16 +25,14 @@ export function MobilePage() {
       </p>
       {create.isError && (
         <p className="alert alert-error" role="alert">
-          {errorMessage(create.error)}
+          {errorMessage(create.error)}{' '}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={generate}>
+            Tentar de novo
+          </button>
         </p>
       )}
-      {create.data ? (
-        <MobilePairing
-          key={create.data.code.id}
-          pairing={create.data}
-          onRegenerate={() => create.mutate()}
-          regenerating={create.isPending}
-        />
+      {pairing ? (
+        <MobilePairing key={pairing.code.id} pairing={pairing} onRegenerate={generate} regenerating={create.isPending} />
       ) : (
         !create.isError && <p role="status">Gerando o código…</p>
       )}
@@ -63,7 +64,9 @@ function MobilePairing({
         {state.phase === 'pending' && pairing.code.pair_url ? (
           <QrCode value={pairing.code.pair_url} label="Código QR para parear o celular" />
         ) : (
-          <div className={`qr-slot ${styles.qrDone}`}>{state.phase === 'used' ? 'Pareado' : 'Código vencido'}</div>
+          <div className={`qr-slot ${styles.qrDone}`}>
+            {state.phase === 'used' ? 'Pareado' : state.phase === 'expired' ? 'Código vencido' : 'Digite o código no app'}
+          </div>
         )}
         <ol className="steps">
           <li>

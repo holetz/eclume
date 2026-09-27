@@ -9,13 +9,20 @@ type Qr = { size: number; rows: string[] }
  */
 export function QrCode({ value, label }: { value: string; label: string }) {
   const [qr, setQr] = useState<Qr | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let active = true
-    import('./qr').then(({ qrMatrix, qrRowPaths, QUIET_ZONE }) => {
-      const matrix = qrMatrix(value)
-      if (active) setQr({ size: matrix.size + 2 * QUIET_ZONE, rows: qrRowPaths(matrix) })
-    })
+    import('./qr').then(
+      ({ qrMatrix, qrRowPaths, QUIET_ZONE }) => {
+        const matrix = qrMatrix(value)
+        if (active) setQr({ size: matrix.size + 2 * QUIET_ZONE, rows: qrRowPaths(matrix) })
+      },
+      // Sem o QR (o chunk não carregou), o código em texto continua na página.
+      () => {
+        if (active) setFailed(true)
+      },
+    )
     return () => {
       active = false
     }
@@ -38,7 +45,7 @@ export function QrCode({ value, label }: { value: string; label: string }) {
           ))}
         </svg>
       ) : (
-        <span role="status">Gerando o código…</span>
+        <span role="status">{failed ? 'Não deu para desenhar o QR: digite o código no app.' : 'Gerando o código…'}</span>
       )}
     </div>
   )
