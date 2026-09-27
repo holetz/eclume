@@ -144,7 +144,9 @@ nas duas.
   PAT não é barrado (ver [Cadastro e aviso](#cadastro-e-aviso)).
 - **Limite de tentativas** (`ratelimit.py`): janela fixa de 1 minuto no Redis
   (`INCR` + `EXPIRE` em `eclume:rl:<rota>:<ip>`), 10 tentativas por IP em `/auth/login`,
-  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`. Estourado, **429**
+  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`; os logins contam
+  também por conta, e a troca de código tem um teto global (ver
+  [server-mcp-e-dispositivos](server-mcp-e-dispositivos.md)). Estourado, **429**
   `rate_limited` com `Retry-After` (segundos até a janela reabrir). O IP é o do uvicorn com
   `--proxy-headers`, que confia no `X-Forwarded-For` do Caddy.
 - **Sessão de admin:** `POST /admin/auth/login` abre `eclume_admin_session` (HttpOnly, Secure,

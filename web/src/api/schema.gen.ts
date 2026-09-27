@@ -210,7 +210,9 @@ export interface paths {
          * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
          *     `kind: device` com `recordings:read` e `recordings:write`, sem validade e revogável em
          *     `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
-         *     conta inativa, 401 com a mesma mensagem do login; tentativas demais do mesmo IP, 429
+         *     conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
+         *     vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
+         *     IP ou para a mesma conta (a janela da conta é comum com `POST /auth/login`), 429
          *     `rate_limited` com `Retry-After`.
          */
         post: operations["deviceLogin"];
@@ -277,8 +279,8 @@ export interface paths {
          * Trocar um código de pareamento por uma credencial de dispositivo
          * @description O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
          *     dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
-         *     vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP, 429
-         *     `rate_limited` com `Retry-After`.
+         *     vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP (ou,
+         *     somando todos os IPs, seis vezes esse limite), 429 `rate_limited` com `Retry-After`.
          */
         post: operations["pairDevice"];
         delete?: never;
@@ -3281,7 +3283,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem). */
+        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -3317,7 +3319,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`), com `Retry-After`. */
+        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`; por IP e, nos logins, também por conta), com `Retry-After`. */
         TooManyRequests: {
             headers: {
                 /** @description Segundos até a janela de tentativas reabrir. */
@@ -3659,6 +3661,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
