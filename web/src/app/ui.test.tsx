@@ -1,15 +1,39 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { Link, MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConfirmDialog } from './ConfirmDialog'
+import { CopyValue } from './CopyValue'
 import { Dialog } from './Dialog'
+import { HelpHint } from './HelpHint'
 import { MenuButton } from './MenuButton'
 import { readStored, writeStored } from './storage'
 
 afterEach(() => {
   vi.restoreAllMocks()
   window.localStorage.clear()
+})
+
+describe('CopyValue', () => {
+  it('copia o valor e anuncia', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+    render(<CopyValue value="https://eclume.local/mcp" />)
+    expect(screen.getByText('https://eclume.local/mcp')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Copiar' }))
+    expect(writeText).toHaveBeenCalledWith('https://eclume.local/mcp')
+    expect(screen.getByRole('status')).toHaveTextContent('Copiado')
+  })
+
+  it('avisa quando a área de transferência recusa', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('negado'))
+    render(<CopyValue value="K7Q-4MX" size="lg" />)
+    expect(screen.getByText('K7Q-4MX').parentElement).toHaveClass('code-block', 'code-block-lg')
+    await user.click(screen.getByRole('button', { name: 'Copiar' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Não foi possível copiar')
+  })
 })
 
 function DialogHarness({ refuse = false }: { refuse?: boolean }) {
@@ -78,6 +102,17 @@ describe('Dialog', () => {
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('dialog').parentElement!)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('põe a mensagem no .dialog-body e, com plain, o conteúdo fora dele', () => {
+    render(
+      <Dialog title="Excluir pessoa?" message="As transcrições ficam." onClose={() => {}} plain>
+        <p role="alert">Falhou.</p>
+      </Dialog>,
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Excluir pessoa?' })
+    expect(dialog.querySelector('.dialog-body')).toHaveTextContent('As transcrições ficam.')
+    expect(screen.getByRole('alert').closest('.dialog-body')).toBeNull()
   })
 })
 
@@ -191,5 +226,53 @@ describe('storage', () => {
     })
     expect(readStored('k')).toBeNull()
     expect(() => writeStored('k', 'v')).not.toThrow()
+  })
+})
+
+function renderHint() {
+  render(
+    <MemoryRouter>
+      <p>
+        Pessoas
+        <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="sugestoes-por-voz">
+          Uma sugestão nunca liga sozinha.
+        </HelpHint>
+      </p>
+      <Link to="/outra">Outra página</Link>
+    </MemoryRouter>,
+  )
+  return screen.getByRole('button', { name: 'Sobre as sugestões por voz' })
+}
+
+describe('HelpHint', () => {
+  it('abre o popover com o texto e o link para o artigo', async () => {
+    const user = userEvent.setup()
+    const hint = renderHint()
+    expect(hint).toHaveAttribute('aria-expanded', 'false')
+    await user.click(hint)
+    expect(hint).toHaveAttribute('aria-expanded', 'true')
+    const popover = screen.getByRole('dialog', { name: 'Sugestões por voz' })
+    expect(popover).toHaveTextContent('Uma sugestão nunca liga sozinha.')
+    expect(screen.getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/sugestoes-por-voz')
+  })
+
+  it('fecha com Esc e devolve o foco ao ?', async () => {
+    const user = userEvent.setup()
+    const hint = renderHint()
+    await user.click(hint)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(hint).toHaveFocus()
+  })
+
+  it('fecha com clique fora e ao navegar', async () => {
+    const user = userEvent.setup()
+    const hint = renderHint()
+    await user.click(hint)
+    await user.click(screen.getByText('Pessoas'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(hint)
+    await user.click(screen.getByRole('link', { name: 'Outra página' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

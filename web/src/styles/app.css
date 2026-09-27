@@ -65,7 +65,8 @@
   gap: var(--space-2);
 }
 
-/* Sem a busca (que chega com os artigos), a gaveta de ajuda tem três linhas: cabeçalho, corpo e rodapé. */
+/* Sem a busca (enquanto o Suspense da gaveta mostra o carregamento), a gaveta de ajuda tem três
+   linhas: cabeçalho, corpo e rodapé. */
 .help-drawer:not(:has(.help-search)) {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
@@ -145,4 +146,38 @@ svg.lucide {
 .main:has(> .bleed) {
   max-width: none;
   padding: 0;
+}
+
+/* O código de vínculo, como no quadro Desktop app. */
+.code-block-lg {
+  max-width: 260px;
+  font-size: 22px;
+  letter-spacing: 0.2em;
+}
+
+/* O título do page-head com a dica em linha ao lado. */
+.page-head-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A dica em linha: o popover abre abaixo do `?`. */
+.hint-anchor {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.hint-anchor > .popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 30;
+  max-width: calc(100vw - 2 * var(--space-4));
+  font-family: var(--font-body);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text);
 }

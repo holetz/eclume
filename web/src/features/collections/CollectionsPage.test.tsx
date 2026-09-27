@@ -55,35 +55,43 @@ describe('coleções', () => {
   it('lista com contagem e leva às gravações da coleção', async () => {
     mockCollections()
     renderApp('/colecoes')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
+    expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
     const list = await screen.findByRole('list', { name: 'Coleções' })
-    expect(within(list).getByRole('heading', { name: 'Metalúrgica Serra Azul' })).toBeInTheDocument()
-    expect(within(list).getByText('2 gravações')).toBeInTheDocument()
-    expect(within(list).getByRole('link', { name: 'Ver gravações' })).toHaveAttribute('href', `/?colecao=${SERRA}`)
+    const row = within(list).getByText('Metalúrgica Serra Azul').closest('li')!
+    expect(row).toHaveClass('list-row')
+    expect(within(row).getByText('2 gravações')).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Ver gravações' })).toHaveAttribute('href', `/?colecao=${SERRA}`)
   })
 
-  it('cria, renomeia e exclui', async () => {
+  it('cria, renomeia e exclui em diálogos', async () => {
     const http = mockCollections()
     renderApp('/colecoes')
     await userEvent.click(await screen.findByRole('button', { name: 'Nova coleção' }))
-    await userEvent.type(screen.getByLabelText('Nome da coleção'), 'Programa de lideranças')
-    await userEvent.click(screen.getByRole('button', { name: 'Criar coleção' }))
-    expect(await screen.findByRole('heading', { name: 'Programa de lideranças' })).toBeInTheDocument()
+    const nova = screen.getByRole('dialog', { name: 'Nova coleção' })
+    await userEvent.type(within(nova).getByLabelText('Nome da coleção'), 'Programa de lideranças')
+    await userEvent.click(within(nova).getByRole('button', { name: 'Criar coleção' }))
+    const list = await screen.findByRole('list', { name: 'Coleções' })
+    expect(await within(list).findByText('Programa de lideranças')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await http.requests('POST /api/v1/collections')[0].json()).toEqual({
       name: 'Programa de lideranças',
       description: null,
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Editar Metalúrgica Serra Azul' }))
-    const nome = screen.getByLabelText('Nome da coleção')
+    const editar = screen.getByRole('dialog', { name: 'Editar coleção' })
+    const nome = within(editar).getByLabelText('Nome da coleção')
     await userEvent.clear(nome)
     await userEvent.type(nome, 'Serra Azul')
-    await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
-    expect(await screen.findByRole('heading', { name: 'Serra Azul' })).toBeInTheDocument()
+    await userEvent.click(within(editar).getByRole('button', { name: 'Salvar' }))
+    expect(await within(list).findByText('Serra Azul')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Excluir Serra Azul' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar exclusão' }))
-    expect(await screen.findByRole('heading', { name: 'Programa de lideranças' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Serra Azul' })).not.toBeInTheDocument()
+    const excluir = screen.getByRole('dialog', { name: 'Excluir Serra Azul?' })
+    await userEvent.click(within(excluir).getByRole('button', { name: 'Excluir coleção' }))
+    await waitFor(() => expect(within(list).queryByText('Serra Azul')).not.toBeInTheDocument())
+    expect(within(list).getByText('Programa de lideranças')).toBeInTheDocument()
   })
 
   it('a biblioteca filtra pela coleção da URL', async () => {

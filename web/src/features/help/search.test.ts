@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest'
+import { buildCatalog } from './catalog'
+import { normalize, queryTerms, searchArticles } from './search'
+
+function art(slug: string, head: Partial<Record<'titulo' | 'topico' | 'termos' | 'ordem', string>>, body: string) {
+  const data = { titulo: 'Sem título', topico: 'comecar', termos: '[]', ordem: '1', ...head }
+  return [
+    `./articles/${slug}.md`,
+    `---\ntitulo: ${data.titulo}\ntopico: ${data.topico}\npaginas: [ajuda]\nrelacionados: []\ntermos: ${data.termos}\nordem: ${data.ordem}\natualizado: 2026-09-27\n---\n${body}`,
+  ] as const
+}
+
+const CATALOG = buildCatalog(
+  Object.fromEntries([
+    art('criar-token', { titulo: 'Crie um token de acesso', topico: 'conectar', ordem: '2' }, 'O token só aparece uma vez. Copie e guarde.'),
+    art('revogar-token', { titulo: 'Revogue um token', topico: 'conectar', ordem: '3' }, 'Revogar corta o acesso na hora.'),
+    art(
+      'sugestoes',
+      { titulo: 'Como funcionam as sugestões por voz', topico: 'transcricao', termos: '[impressão de voz, LGPD]' },
+      '## Consentimento e remoção\n\nA impressão de voz é dado biométrico. Um token não muda nada aqui.',
+    ),
+    art('longo', { titulo: 'Um texto longo', ordem: '2' }, `${'Palavra qualquer. '.repeat(20)}O limiar decide. ${'Outra frase. '.repeat(20)}`),
+  ]),
+)
+
+const slugs = (query: string) => searchArticles(query, CATALOG).map((hit) => hit.article.slug)
+
+describe('normalização', () => {
+  it('tira acento, pontuação e caixa, sem mudar o tamanho', () => {
+    expect(normalize('Remoção: já É!')).toBe('remocao  ja e ')
+    expect(normalize('Remoção: já É!')).toHaveLength('Remoção: já É!'.length)
+    expect(queryTerms('  O token, é?  token ')).toEqual(['token'])
+  })
+})
+
+describe('busca na ajuda', () => {
+  it('casa sem acento e por prefixo de palavra', () => {
+    expect(slugs('sugestoes')).toEqual(['sugestoes'])
+    expect(slugs('SUGEST')).toEqual(['sugestoes'])
+    expect(slugs('biometr')).toEqual(['sugestoes'])
+    expect(slugs('ometrico')).toEqual([])
+  })
+
+  it('exige todos os termos', () => {
+    expect(slugs('token revogar')).toEqual(['revogar-token'])
+    expect(slugs('token girafa')).toEqual([])
+  })
+
+  it('pesa título acima de termos, títulos ## e corpo; empate pela ordem do catálogo', () => {
+    // "token" está no título de dois artigos (5 + corpo 1) e só no corpo de um (1).
+    expect(slugs('token')).toEqual(['criar-token', 'revogar-token', 'sugestoes'])
+    const [hit] = searchArticles('lgpd', CATALOG)
+    expect(hit.score).toBe(4)
+    expect(searchArticles('remocao', CATALOG)[0].score).toBe(3 + 1)
+  })
+
+  it('consulta curta ou vazia não busca', () => {
+    expect(slugs('')).toEqual([])
+    expect(slugs('a')).toEqual([])
+  })
+
+  it('devolve o trecho do corpo em volta da ocorrência, com o termo marcado', () => {
+    const [hit] = searchArticles('limiar', CATALOG)
+    const { text, marks } = hit.snippet!
+    expect(text.length).toBeLessThanOrEqual(162)
+    expect(text.startsWith('…')).toBe(true)
+    expect(text.endsWith('…')).toBe(true)
+    expect(marks).toHaveLength(1)
+    expect(text.slice(...marks[0])).toBe('limiar')
+
+    const [accent] = searchArticles('biometrico', CATALOG)
+    expect(accent.snippet!.text.slice(...accent.snippet!.marks[0])).toBe('biométrico')
+  })
+
+  it('sem ocorrência no corpo, não há trecho', () => {
+    expect(searchArticles('lgpd', CATALOG)[0].snippet).toBeNull()
+  })
+
+  it('respeita o limite', () => {
+    expect(searchArticles('token', CATALOG, 2)).toHaveLength(2)
+  })
+})

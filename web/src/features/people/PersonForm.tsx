@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { errorMessage } from '../../api/problem'
 import styles from './People.module.css'
 
@@ -9,19 +9,20 @@ export interface PersonFields {
 }
 
 interface PersonFormProps {
-  initial?: PersonFields
-  submitLabel: string
+  initial: PersonFields
   pending: boolean
   error: unknown
   onSubmit: (fields: PersonFields) => void
-  onCancel?: () => void
+  onCancel: () => void
+  /** Ação destrutiva à esquerda do rodapé (Excluir pessoa). */
+  danger?: ReactNode
 }
 
-/** Nome, e-mail e notas de uma pessoa; campos vazios viram `null`. */
-export function PersonForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: PersonFormProps) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [email, setEmail] = useState(initial?.email ?? '')
-  const [notes, setNotes] = useState(initial?.notes ?? '')
+/** Edição de nome, e-mail e notas de uma pessoa, no diálogo "Editar"; campos vazios viram `null`. */
+export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger }: PersonFormProps) {
+  const [name, setName] = useState(initial.name)
+  const [email, setEmail] = useState(initial.email ?? '')
+  const [notes, setNotes] = useState(initial.notes ?? '')
   const id = useId()
 
   function submit(event: FormEvent) {
@@ -56,15 +57,14 @@ export function PersonForm({ initial, submitLabel, pending, error, onSubmit, onC
           {errorMessage(error)}
         </p>
       )}
-      <div className={styles.actions}>
-        <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
-          {submitLabel}
+      <div className="dialog-actions">
+        {danger}
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          Cancelar
         </button>
-        {onCancel && (
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancelar
-          </button>
-        )}
+        <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
+          Salvar
+        </button>
       </div>
     </form>
   )

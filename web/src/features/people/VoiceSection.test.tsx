@@ -13,38 +13,46 @@ function mockVoice(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
     'GET /api/v1/people/:id': () => fixtures.person(),
-    'GET /api/v1/people/:id/transcripts': () => fixtures.transcriptPage(),
     'GET /api/v1/people/:id/voiceprint': () => fixtures.voiceprint(),
-    'GET /api/v1/search': () => fixtures.searchPage(),
     ...extra,
   })
 }
 
-async function openVoice() {
-  renderApp(`/pessoas/${RAFAEL}`)
-  return screen.findByRole('region', { name: 'Voz' })
+async function openSamples() {
+  renderApp(`/pessoas/${RAFAEL}?aba=amostras`)
+  return screen.findByRole('tabpanel')
 }
 
-describe('seção Voz da pessoa', () => {
-  it('mostra as amostras, sem consentimento por pessoa', async () => {
+describe('aba Amostras de voz', () => {
+  it('lista as amostras com duração e data, sem aceite por pessoa nem exportação', async () => {
     mockVoice()
-    const voice = await openVoice()
-    expect(await within(voice).findByText(/2 amostras na impressão de voz/)).toBeInTheDocument()
-    const samples = within(voice).getByRole('list', { name: 'Amostras da impressão de voz' })
-    expect(within(samples).getByText('Alinhamento do programa de lideranças')).toBeInTheDocument()
+    const panel = await openSamples()
+    const samples = await within(panel).findByRole('list', { name: 'Amostras de voz' })
+    const rows = within(samples).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Alinhamento do programa de lideranças')
+    expect(rows[0]).toHaveTextContent(/confirmada em 18 de set/)
     expect(within(samples).getByText('Gravação excluída')).toBeInTheDocument()
-    // O aceite do aviso no cadastro substitui o consentimento de cada pessoa.
-    expect(within(voice).queryByText(/consentimento/i)).not.toBeInTheDocument()
-    expect(within(voice).queryByRole('button', { name: /Exportar/ })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('link', { name: 'Como funcionam as sugestões por voz' })).toHaveAttribute(
+      'href',
+      '/ajuda/sugestoes-por-voz',
+    )
+    // O aceite do aviso no cadastro substitui o termo de cada pessoa.
+    expect(within(panel).queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /Exportar/ })).not.toBeInTheDocument()
   })
 
-  it('esquece a voz com confirmação', async () => {
+  it('esquece a voz com confirmação em diálogo', async () => {
     const http = mockVoice({ 'DELETE /api/v1/people/:id/voiceprint': () => empty() })
-    const voice = await openVoice()
-    await userEvent.click(await within(voice).findByRole('button', { name: 'Esquecer a voz' }))
-    expect(within(voice).getByText(/Esquecer apaga todas as amostras/)).toBeInTheDocument()
-    await userEvent.click(within(voice).getByRole('button', { name: 'Confirmar: esquecer a voz' }))
+    const panel = await openSamples()
+    await userEvent.click(await within(panel).findByRole('button', { name: 'Esquecer a voz' }))
+    const dialog = screen.getByRole('dialog', { name: 'Esquecer a voz?' })
+    expect(dialog).toHaveTextContent(
+      'Apaga todas as amostras e as sugestões pendentes desta pessoa. Os vínculos já confirmados ficam.',
+    )
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Esquecer a voz' }))
     expect(await screen.findByText('Voz esquecida.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(http.requests('DELETE /api/v1/people/:id/voiceprint')).toHaveLength(1)
   })
 
@@ -52,8 +60,9 @@ describe('seção Voz da pessoa', () => {
     mockVoice({
       'GET /api/v1/people/:id/voiceprint': () => ({ ...fixtures.voiceprint(), enabled: false, sample_count: 0, samples: [] }),
     })
-    const voice = await openVoice()
-    expect(await within(voice).findByText(/identificação por voz está desligada/)).toBeInTheDocument()
-    expect(within(voice).queryByRole('button', { name: 'Esquecer a voz' })).not.toBeInTheDocument()
+    const panel = await openSamples()
+    expect(await within(panel).findByText(/identificação por voz está desligada/)).toBeInTheDocument()
+    expect(within(panel).getByText('Nenhuma amostra de voz ainda.')).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Esquecer a voz' })).not.toBeInTheDocument()
   })
 })

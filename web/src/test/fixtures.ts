@@ -12,8 +12,12 @@ import defaultAgendaTypePage from '../../../contracts/fixtures/default-agenda-ty
 import fieldPage from '../../../contracts/fixtures/field-page.json'
 import markerPage from '../../../contracts/fixtures/marker-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
+import pairingCodeCreated from '../../../contracts/fixtures/pairing-code-created.json'
+import pairingCodeUsed from '../../../contracts/fixtures/pairing-code-used.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
+import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
+import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
 import person from '../../../contracts/fixtures/person.json'
 import recordingFieldValues from '../../../contracts/fixtures/recording-field-values.json'
 import recordingPage from '../../../contracts/fixtures/recording-page.json'
@@ -22,6 +26,7 @@ import recordingTranscribed from '../../../contracts/fixtures/recording-transcri
 import recordingWeekPage from '../../../contracts/fixtures/recording-week-page.json'
 import searchPage from '../../../contracts/fixtures/search-page.json'
 import secretList from '../../../contracts/fixtures/secret-list.json'
+import serverInfo from '../../../contracts/fixtures/server-info.json'
 import signupInfo from '../../../contracts/fixtures/signup-info.json'
 import signupRequest from '../../../contracts/fixtures/signup-request.json'
 import speakerLinked from '../../../contracts/fixtures/speaker-linked.json'
@@ -74,8 +79,13 @@ export const fixtures = {
   summaryChatExchangeQueued: fresh<Schemas['SummaryChatExchange']>(summaryChatExchangeQueued),
   summaryChatMessageDone: fresh<Schemas['SummaryChatMessage']>(summaryChatMessageDone),
   agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
+  previewFieldRule: fresh<Schemas['Preview']>(previewFieldRule),
+  previewAgendaType: fresh<Schemas['Preview']>(previewAgendaType),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),
   tokenCreated: fresh<Schemas['TokenCreated']>(tokenCreated),
+  serverInfo: fresh<Schemas['ServerInfo']>(serverInfo),
+  pairingCodeCreated: fresh<Schemas['PairingCode']>(pairingCodeCreated),
+  pairingCodeUsed: fresh<Schemas['PairingCode']>(pairingCodeUsed),
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),
   uploadDeduplicated: fresh<Schemas['Upload']>(uploadDeduplicated),
   uploadInProgress: fresh<Schemas['Upload']>(uploadInProgress),

@@ -20,6 +20,7 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCanc
     <Dialog
       title={title}
       onClose={onCancel}
+      message={children}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
@@ -30,8 +31,6 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCanc
           </button>
         </>
       }
-    >
-      {children}
-    </Dialog>
+    />
   )
 }
