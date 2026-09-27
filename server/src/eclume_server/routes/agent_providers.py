@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
-from sqlalchemy import delete, func, insert, select, tuple_, update
+from sqlalchemy import delete, func, insert, select, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from eclume_server.auth import Admin
@@ -23,12 +23,13 @@ from eclume_server.pagination import Cursor, Limit, decode_cursor, iso, page
 from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.serialize import Row
 from eclume_server.settings_admin import BaseUrl
-from eclume_server.summaries import get_summarization, set_summarization
+from eclume_server.summaries import PURPOSES
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Kind = Literal["ollama", "openai-compatible", "anthropic", "claude-cli"]
 OptionValue = StrictBool | StrictInt | StrictFloat | StrictStr
+Purpose = Literal[PURPOSES]  # type: ignore[valid-type]
 # Tipos que falam HTTP com um servidor escolhido pelo admin.
 _NEEDS_BASE_URL = {"ollama", "openai-compatible"}
 
@@ -43,6 +44,7 @@ class AgentProviderCreate(BaseModel):
     api_key: str | None = Field(default=None, min_length=1)
     enabled: bool = True
     options: dict[str, OptionValue] = Field(default_factory=dict)
+    used_for: list[Purpose] | None = None
 
 
 class AgentProviderPatch(BaseModel):
@@ -54,6 +56,7 @@ class AgentProviderPatch(BaseModel):
     api_key: str | None = None
     enabled: bool | None = None
     options: dict[str, OptionValue] | None = None
+    used_for: list[Purpose] | None = None
 
 
 def provider_json(row: Row) -> dict[str, Any]:
@@ -67,6 +70,7 @@ def provider_json(row: Row) -> dict[str, Any]:
         "api_key_set": row["api_key_encrypted"] is not None,
         "enabled": row["enabled"],
         "options": dict(row["options"] or {}),
+        "used_for": [purpose for purpose in PURPOSES if purpose in row["used_for"]],
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
     }
@@ -78,6 +82,34 @@ def _check_shape(kind: str, base_url: str | None) -> None:
         raise invalid_field("base_url", f"obrigatória para {kind}")
     if kind == "claude-cli" and base_url:
         raise invalid_field("base_url", "o claude-cli não usa base_url")
+
+
+async def _lock_purposes(conn: AsyncConnection) -> None:
+    """Serializa as escritas de `used_for` até o fim da transação (o mesmo lock do trigger da 013)."""
+    await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('agent_providers.used_for'))"))
+
+
+async def _claim(conn: AsyncConnection, provider_id: UUID | None, purposes: list[str]) -> None:
+    """Tira dos outros providers as finalidades que este passa a declarar: uma por provider.
+
+    Na criação (`provider_id` nulo) roda antes do insert: o trigger recusa a sobreposição.
+    """
+    if purposes:
+        await conn.execute(
+            text(
+                "UPDATE agent_providers"
+                " SET used_for = ARRAY(SELECT unnest(used_for) EXCEPT SELECT unnest(CAST(:purposes AS text[]))),"
+                " updated_at = now()"
+                " WHERE id IS DISTINCT FROM CAST(:id AS uuid) AND used_for && CAST(:purposes AS text[])"
+            ),
+            {"id": provider_id, "purposes": purposes},
+        )
+
+
+async def _unclaimed(conn: AsyncConnection) -> list[str]:
+    """Finalidades que nenhum provider declara."""
+    claimed = set((await conn.execute(select(func.unnest(t.agent_providers.c.used_for)))).scalars())
+    return [purpose for purpose in PURPOSES if purpose not in claimed]
 
 
 async def _get(conn: AsyncConnection, provider_id: UUID) -> Row:
@@ -102,11 +134,16 @@ async def list_agent_providers(_: Admin, ctx: Ctx, cursor: Cursor = None, limit:
 
 
 @router.post("/agent-providers", status_code=201)
-async def create_agent_provider(body: AgentProviderCreate, admin: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra um provider; o primeiro habilitado de uma plataforma sem padrão vira o padrão."""
+async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -> dict[str, Any]:
+    """Cadastra um provider; sem `used_for`, um habilitado assume as finalidades que ninguém declara."""
     _check_shape(body.kind, body.base_url)
     values = body.model_dump(exclude={"api_key"})
     async with system_tx(ctx.engine) as conn:
+        await _lock_purposes(conn)
+        if values["used_for"] is None:
+            values["used_for"] = await _unclaimed(conn) if body.enabled else []
+        values["used_for"] = list(dict.fromkeys(values["used_for"]))
+        await _claim(conn, None, values["used_for"])
         row = (
             (
                 await conn.execute(
@@ -121,19 +158,16 @@ async def create_agent_provider(body: AgentProviderCreate, admin: Admin, ctx: Ct
             .mappings()
             .one()
         )
-        summarization = await get_summarization(conn)
-        if body.enabled and summarization.get("default_provider_id") is None:
-            await set_summarization(conn, admin.admin_id, default_provider_id=str(row["id"]))
     return provider_json(row)
 
 
 @router.patch("/agent-providers/{provider_id}")
 async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Edita o provider; `api_key: null` apaga a chave guardada."""
+    """Edita o provider; `api_key: null` apaga a chave guardada; `used_for` tira as finalidades dos outros."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
-    for field in ("name", "model", "enabled", "options"):
+    for field in ("name", "model", "enabled", "options", "used_for"):
         if field in values and values[field] is None:
             raise invalid_field(field, "não pode ser nulo")
     if "api_key" in values:
@@ -141,10 +175,14 @@ async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: 
         if key == "":
             raise invalid_field("api_key", "não pode ser vazia")
         values["api_key_encrypted"] = encrypt(ctx.settings, key) if key is not None else None
+    if "used_for" in values:
+        values["used_for"] = list(dict.fromkeys(values["used_for"]))
     async with system_tx(ctx.engine) as conn:
+        await _lock_purposes(conn)
         current = await _get(conn, provider_id)
         merged = {**current, **values}
         _check_shape(merged["kind"], merged["base_url"])
+        await _claim(conn, provider_id, values.get("used_for", []))
         row = (
             (
                 await conn.execute(
@@ -161,8 +199,8 @@ async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: 
 
 
 @router.delete("/agent-providers/{provider_id}", status_code=204)
-async def delete_agent_provider(provider_id: UUID, admin: Admin, ctx: Ctx) -> Response:
-    """Remove o provider; 409 com resumo na fila ou rodando nele. Sendo o padrão, deixa de haver padrão."""
+async def delete_agent_provider(provider_id: UUID, _: Admin, ctx: Ctx) -> Response:
+    """Remove o provider; 409 com resumo na fila ou rodando nele. As finalidades dele ficam sem provider."""
     async with system_tx(ctx.engine) as conn:
         await _get(conn, provider_id)
         # Os resumos em aberto são de todos os usuários.
@@ -176,7 +214,4 @@ async def delete_agent_provider(provider_id: UUID, admin: Admin, ctx: Ctx) -> Re
         if busy:
             raise conflict("Há resumos na fila ou rodando com este provider; espere terminarem.")
         await conn.execute(delete(t.agent_providers).where(t.agent_providers.c.id == provider_id))
-        summarization = await get_summarization(conn)
-        if summarization.get("default_provider_id") == str(provider_id):
-            await set_summarization(conn, admin.admin_id, default_provider_id=None)
     return Response(status_code=204)

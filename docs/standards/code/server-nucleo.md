@@ -17,7 +17,8 @@ O pacote `eclume_server` (`server/`) implementa o [contrato v1](../api/contrato-
 FastAPI, SQLAlchemy 2 async (asyncpg), arq/Redis e boto3 contra o MinIO. As consultas são SQL
 Core explícito: o isolamento mora nas políticas do banco, e o SQL que as exercita precisa ser
 legível. O acordo com o worker GPU está em [jobs-transcricao.md](../api/jobs-transcricao.md); os
-resumos, templates e providers de agente, em [server-agentes.md](server-agentes.md); o painel
+resumos e providers de agente, em [server-agentes.md](server-agentes.md); tipos de agenda, campos e
+etapas do processamento, em [processamento-automatico.md](processamento-automatico.md); o painel
 admin (conta de admin, configuração, segredos, usuários e saúde), em [server-admin.md](server-admin.md).
 
 ## Configuração
@@ -81,8 +82,8 @@ Três papéis, cada um com um motivo:
 ## Isolamento por RLS
 
 - **Cada conta é dona do que é dela.** Toda tabela de conteúdo tem `owner_id` (FK para `users`,
-  `ON DELETE CASCADE`): `recordings`, `uploads`, `collections`, `summary_templates`, `people`,
-  `transcription_jobs`, `transcripts`, `speakers`, `segments`, `speaker_embeddings`, `summaries`,
+  `ON DELETE CASCADE`): `recordings`, `uploads`, `collections`, `agenda_types`, `fields`,
+  `field_values`, `pipeline_steps`, `people`, `transcription_jobs`, `transcripts`, `speakers`, `segments`, `speaker_embeddings`, `summaries`,
   `voice_samples` e `speaker_suggestions`. Nas derivadas, o `owner_id` é desnormalizado da
   gravação na escrita (a ingestão e a criação de job e resumo o copiam).
 - **O único contexto é `app.user_id`** (`eclume_user()`). Toda política é uma igualdade
@@ -151,8 +152,9 @@ nas duas.
 
 - **Cadastro aberto**, sem convite e sem confirmação de e-mail: `POST /auth/signup` (público) com
   nome, e-mail, senha (12+) e `notice_version`. A conta nasce com o aceite do aviso em vigor
-  ("Sou responsável por pedir o consentimento das pessoas que gravo"), os três templates de resumo
-  padrão (`accounts.create_user`, que chama `eclume_seed_summary_templates`) e a sessão aberta,
+  ("Sou responsável por pedir o consentimento das pessoas que gravo"), os tipos de agenda padrão
+  marcados para contas novas e os campos embutidos, título e tags (`accounts.create_user`, que
+  chama `eclume_seed_user_defaults`), e a sessão aberta,
   com os cookies do login. `GET /auth/signup` diz se o cadastro está aberto e devolve o aviso.
 - **Erros:** cadastro fechado (`ECLUME_SIGNUP_OPEN=false`) → 403 `signup_closed`; e-mail já
   cadastrado (sem distinção de caixa, inclusive na corrida, pelo índice único) → 409 `email_taken`;
@@ -248,7 +250,7 @@ nas duas.
   conta, nem pela função do GIN (`test_search.py`).
 - **A plataforma é uma só no banco da sessão de testes.** O teste que muda configuração,
   segredos ou providers usa a fixture `platform` (a `admin` já a usa), que devolve a plataforma
-  aos padrões da migration antes e depois. `make_user()` cria a conta com os templates semeados;
+  aos padrões da migration antes e depois. `make_user()` cria a conta com os tipos de agenda e os campos semeados;
   `admin` abre a sessão de uma conta de admin nova.
 - **A migration que transforma dados** tem teste sobre o formato anterior: `test_migration_008.py`
   aplica até a 007, semeia o banco como a 007 o guardava e confere o que a 008 preserva e remove.

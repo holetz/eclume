@@ -77,7 +77,7 @@ export interface paths {
          * Criar uma conta e abrir a sessão
          * @description Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
          *     (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
-         *     templates de resumo padrão, e a resposta define os cookies de sessão, como o login.
+         *     tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
          *     Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
          *     cadastrado, 409 `email_taken`.
          */
@@ -371,6 +371,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recordings/{recording_id}/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Campos da gravação
+         * @description Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin` nulos.
+         *     Título e tags vêm de `Recording.title`/`tags`.
+         */
+        get: operations["listRecordingFields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/fields/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceitar todos os valores automáticos
+         * @description Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não sobrescreve.
+         */
+        post: operations["acceptRecordingFields"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/fields/{field_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Escrever o valor de um campo
+         * @description Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da escolha,
+         *     até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+         */
+        put: operations["putRecordingField"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/fields/{field_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceitar o valor automático de um campo
+         * @description `auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+         */
+        post: operations["acceptRecordingField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transcripts": {
         parameters: {
             query?: never;
@@ -545,9 +637,10 @@ export interface paths {
         get: operations["listSummaries"];
         put?: never;
         /**
-         * Gerar um resumo com um template
-         * @description Cada geração é uma nova `version` do resumo daquele template. Sem `provider_id` e sem
-         *     provider padrão habilitado na plataforma, responde 422.
+         * Gerar um resumo com um tipo de agenda
+         * @description Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
+         *     resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
+         *     `provider_id` e sem provider padrão habilitado na plataforma, também 422.
          */
         post: operations["createSummary"];
         delete?: never;
@@ -576,43 +669,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/summary-templates": {
+    "/api/v1/agenda-types": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Templates do usuário */
-        get: operations["listSummaryTemplates"];
+        /**
+         * Tipos de agenda do usuário
+         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+         */
+        get: operations["listAgendaTypes"];
         put?: never;
-        /** Criar um template */
-        post: operations["createSummaryTemplate"];
+        /**
+         * Criar um tipo de agenda
+         * @description Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário é 409.
+         */
+        post: operations["createAgendaType"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/summary-templates/{template_id}": {
+    "/api/v1/agenda-types/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pré-visualizar um tipo de agenda numa gravação
+         * @description Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
+         *     o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+         */
+        post: operations["previewAgendaType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda-types/{agenda_type_id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                template_id: components["parameters"]["TemplateId"];
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
             };
             cookie?: never;
         };
-        /** Um template */
-        get: operations["getSummaryTemplate"];
+        /** Um tipo de agenda */
+        get: operations["getAgendaType"];
         put?: never;
         post?: never;
-        /** Excluir um template */
-        delete: operations["deleteSummaryTemplate"];
+        /**
+         * Excluir um tipo de agenda
+         * @description As gravações que o usavam ficam sem tipo; os resumos ficam.
+         */
+        delete: operations["deleteAgendaType"];
         options?: never;
         head?: never;
-        /** Editar um template */
-        patch: operations["updateSummaryTemplate"];
+        /**
+         * Editar um tipo de agenda
+         * @description Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções do
+         *     momento. Nome repetido é 422 em `name`.
+         */
+        patch: operations["updateAgendaType"];
+        trace?: never;
+    };
+    "/api/v1/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Campos do usuário
+         * @description Título e tags vêm embutidos em toda conta; os demais são do usuário.
+         */
+        get: operations["listFields"];
+        put?: never;
+        /**
+         * Criar um campo
+         * @description A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros tipos não têm.
+         */
+        post: operations["createField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fields/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Testar a regra de um campo
+         * @description Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
+         *     mais recentes) com o provider de `fields`, sem gravar nada.
+         */
+        post: operations["previewField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fields/{field_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        /** Um campo */
+        get: operations["getField"];
+        put?: never;
+        post?: never;
+        /**
+         * Excluir um campo
+         * @description Os embutidos não saem: 409 `builtin_field`.
+         */
+        delete: operations["deleteField"];
+        options?: never;
+        head?: never;
+        /**
+         * Editar um campo
+         * @description Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind` (422).
+         */
+        patch: operations["updateField"];
+        trace?: never;
+    };
+    "/api/v1/previews/{preview_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preview_id: components["parameters"]["PreviewId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma pré-visualização
+         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+         */
+        get: operations["getPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/people": {
@@ -901,6 +1122,50 @@ export interface paths {
          * @description `api_key: null` apaga a chave guardada; ausente, mantém.
          */
         patch: operations["updateAgentProvider"];
+        trace?: never;
+    };
+    "/api/v1/admin/default-agenda-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tipos de agenda padrão da plataforma
+         * @description Os marcados com `include_for_new_users` são copiados para cada conta criada depois.
+         */
+        get: operations["listDefaultAgendaTypes"];
+        put?: never;
+        /** Criar um tipo de agenda padrão */
+        post: operations["createDefaultAgendaType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/default-agenda-types/{agenda_type_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir um tipo de agenda padrão */
+        delete: operations["deleteDefaultAgendaType"];
+        options?: never;
+        head?: never;
+        /**
+         * Editar um tipo de agenda padrão
+         * @description Vale para as contas criadas depois; as cópias que as contas já têm ficam como estão.
+         */
+        patch: operations["updateDefaultAgendaType"];
         trace?: never;
     };
     "/api/v1/admin/secrets": {
@@ -1312,10 +1577,11 @@ export interface components {
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
             /**
-             * @description Etapa em curso, ou `null` fora de execução.
+             * @description Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do áudio
+             *     antes do ASR (holetz/eclume#33).
              * @enum {string|null}
              */
-            stage: "asr" | "alignment" | "diarization" | "embeddings" | "finalizing" | null;
+            stage: "preprocessing" | "asr" | "alignment" | "diarization" | "embeddings" | "finalizing" | null;
             progress: number;
             attempts: number;
             error: {
@@ -1352,7 +1618,24 @@ export interface components {
             collection_ids: string[];
             metadata: components["schemas"]["RecordingMetadata"];
             capture: components["schemas"]["Capture"] | null;
+            /**
+             * @description Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
+             *     (`edited`), que a detecção nunca troca.
+             */
+            agenda_type: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /** @enum {string} */
+                origin: "auto" | "edited";
+            } | null;
             job: components["schemas"]["Job"] | null;
+            /**
+             * @description As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+             *     `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
+             *     sai `active`.
+             */
+            pipeline: components["schemas"]["PipelineStep"][];
             /**
              * Format: uuid
              * @description Transcrição, depois do primeiro job concluído.
@@ -1362,6 +1645,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PipelineStep: {
+            /** @enum {string} */
+            step: "received" | "preprocessing" | "transcription" | "fields" | "agenda_type" | "summary";
+            /** @enum {string} */
+            state: "pending" | "active" | "done" | "failed" | "skipped";
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            duration_ms: number | null;
+            /** @description Com `state` `failed`. */
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /**
+             * @description Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+             *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+             */
+            reason: string | null;
         };
         RecordingPatch: {
             title?: string;
@@ -1374,6 +1678,12 @@ export interface components {
             collection_ids?: string[];
             /** @description Substitui o objeto inteiro. */
             metadata?: components["schemas"]["RecordingMetadata"];
+            /**
+             * Format: uuid
+             * @description Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
+             *     `null` tira o tipo e devolve a escolha à detecção.
+             */
+            agenda_type_id?: string | null;
         };
         RecordingPage: {
             items: components["schemas"]["Recording"][];
@@ -1530,39 +1840,287 @@ export interface components {
                 count: number;
             }[];
         };
-        SummaryTemplate: {
+        AgendaType: {
             /** Format: uuid */
             id: string;
             name: string;
-            description: string | null;
-            /** @description Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor. */
-            instructions: string;
-            /** @description Template usado no resumo automático do usuário. */
-            is_default: boolean;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions: string;
+            /** @description Ordem na lista do usuário. */
+            position: number;
         };
-        SummaryTemplateCreate: {
+        /** @description O conteúdo de um tipo de agenda, salvo ou em rascunho. */
+        AgendaTypeDraft: {
             name: string;
-            description?: string | null;
-            instructions: string;
-            /** @description O template do resumo automático do usuário. */
-            is_default?: boolean;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern?: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify?: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags?: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions: string;
         };
-        SummaryTemplatePatch: {
+        AgendaTypeCreate: {
+            name: string;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern?: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify?: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags?: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions: string;
+            /** @description Sem valor, o fim da lista. */
+            position?: number;
+        };
+        AgendaTypePatch: {
             name?: string;
-            description?: string | null;
-            instructions?: string;
-            is_default?: boolean;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern?: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify?: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags?: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions?: string;
+            position?: number;
         };
-        SummaryTemplatePage: {
-            items: components["schemas"]["SummaryTemplate"][];
+        AgendaTypePage: {
+            items: components["schemas"]["AgendaType"][];
             next_cursor: components["schemas"]["NextCursor"];
+        };
+        DefaultAgendaType: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions: string;
+            /** @description Ordem na lista do usuário. */
+            position: number;
+            /** @description Copiado para cada conta criada depois. */
+            include_for_new_users: boolean;
+        };
+        DefaultAgendaTypeCreate: {
+            name: string;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern?: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify?: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags?: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions: string;
+            /** @description Sem valor, o fim da lista. */
+            position?: number;
+            /** @description Sem valor, `true`. */
+            include_for_new_users?: boolean;
+        };
+        DefaultAgendaTypePatch: {
+            name?: string;
+            /**
+             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+             *     título automático fica como está.
+             */
+            title_pattern?: string | null;
+            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            identify?: string;
+            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            default_tags?: string[];
+            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            summary_instructions?: string;
+            position?: number;
+            /** @description Copiado para cada conta criada depois. */
+            include_for_new_users?: boolean;
+        };
+        DefaultAgendaTypePage: {
+            items: components["schemas"]["DefaultAgendaType"][];
+            next_cursor: components["schemas"]["NextCursor"];
+        };
+        /**
+         * @description `text` e `choice` guardam uma string; `list`, um array de strings.
+         * @enum {string}
+         */
+        FieldKind: "text" | "list" | "choice";
+        Field: {
+            /** Format: uuid */
+            id: string;
+            /** @description Slug do nome, único na conta; o marcador `{key}` do padrão de título. */
+            key: string;
+            /**
+             * @description Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+             * @enum {string|null}
+             */
+            builtin: "title" | "tags" | null;
+            name: string;
+            kind: components["schemas"]["FieldKind"];
+            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            options: string[];
+            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            instructions: string;
+            /** @description Preencher automaticamente depois da transcrição. */
+            auto_fill: boolean;
+            position: number;
+        };
+        /** @description O conteúdo de um campo, salvo ou em rascunho. */
+        FieldDraft: {
+            name: string;
+            kind: components["schemas"]["FieldKind"];
+            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            options?: string[];
+            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            instructions?: string;
+            /** @description Preencher automaticamente depois da transcrição. */
+            auto_fill?: boolean;
+        };
+        FieldCreate: {
+            name: string;
+            kind: components["schemas"]["FieldKind"];
+            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            options?: string[];
+            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            instructions?: string;
+            /** @description Preencher automaticamente depois da transcrição. */
+            auto_fill?: boolean;
+            /** @description Sem valor, o fim da lista. */
+            position?: number;
+        };
+        FieldPatch: {
+            name?: string;
+            kind?: components["schemas"]["FieldKind"];
+            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            options?: string[];
+            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            instructions?: string;
+            /** @description Preencher automaticamente depois da transcrição. */
+            auto_fill?: boolean;
+            position?: number;
+        };
+        FieldPage: {
+            items: components["schemas"]["Field"][];
+            next_cursor: components["schemas"]["NextCursor"];
+        };
+        /** @description `text`/`choice` → string; `list` → array de strings; `null` = sem valor. */
+        FieldValue: string | string[] | null;
+        /**
+         * @description `auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou o
+         *     automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+         * @enum {string}
+         */
+        FieldValueOrigin: "auto" | "edited" | "accepted";
+        RecordingFieldValue: {
+            field: components["schemas"]["Field"];
+            value: components["schemas"]["FieldValue"];
+            origin: components["schemas"]["FieldValueOrigin"] | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        RecordingFieldValues: {
+            items: components["schemas"]["RecordingFieldValue"][];
+        };
+        FieldValuePut: {
+            /**
+             * @description `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
+             *     nas tags); `null` limpa (menos o título).
+             */
+            value: string | string[] | null;
+        };
+        FieldPreviewRequest: {
+            field: components["schemas"]["FieldDraft"];
+            /** @description Gravações transcritas do usuário; sem elas, as 3 mais recentes. */
+            recording_ids?: string[];
+        };
+        AgendaTypePreviewRequest: {
+            agenda_type: components["schemas"]["AgendaTypeDraft"];
+            /**
+             * Format: uuid
+             * @description Uma gravação transcrita do usuário.
+             */
+            recording_id: string;
+        };
+        FieldPreviewItem: {
+            /** Format: uuid */
+            recording_id: string;
+            recording_title: string;
+            value: components["schemas"]["FieldValue"];
+        };
+        AgendaTypePreviewItem: {
+            /** Format: uuid */
+            recording_id: string;
+            recording_title: string;
+            /** @description A detecção escolheu o rascunho. */
+            detected: boolean;
+            /** @description O tipo que a detecção escolheu (o rascunho ou um dos salvos). */
+            detected_type_name: string;
+            confidence: number | null;
+            /** @description O título que o rascunho aplicaria. */
+            title: string;
+            /** @description As tags da gravação com as tags padrão do rascunho. */
+            tags: string[];
+            /** @description O resumo com as instruções do rascunho. */
+            summary_md: string;
+        };
+        Preview: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "field_rule" | "agenda_type";
+            /** @enum {string} */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description Com `status: done`: um item por gravação testada. */
+            items: (components["schemas"]["FieldPreviewItem"] | components["schemas"]["AgendaTypePreviewItem"])[];
+            /** @description Com `status: failed`; `no_provider` quando a finalidade não tem provider. */
+            error: {
+                code: string;
+                message: string;
+            } | null;
         };
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
+        /**
+         * @description Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
+         *     `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
+         *     finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+         * @enum {string}
+         */
+        AgentPurpose: "summaries" | "fields" | "chat" | "agenda_detection";
         AgentProviderRef: {
             /** Format: uuid */
             id: string;
@@ -1576,12 +2134,16 @@ export interface components {
             transcript_id: string;
             /** @description Revisão da transcrição que o resumo leu. */
             transcript_revision: number;
-            template: {
+            /**
+             * @description Instantâneo do tipo de agenda cujas instruções o resumo seguiu: o resumo continua
+             *     quando o tipo é renomeado ou excluído.
+             */
+            agenda_type: {
                 /** Format: uuid */
                 id: string;
                 name: string;
             };
-            /** @description Versão do resumo deste template para esta transcrição, a partir de 1. */
+            /** @description Versão do resumo deste tipo de agenda para esta transcrição, a partir de 1. */
             version: number;
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
@@ -1601,8 +2163,11 @@ export interface components {
             completed_at: string | null;
         };
         SummaryCreate: {
-            /** Format: uuid */
-            template_id: string;
+            /**
+             * Format: uuid
+             * @description Sem valor, o tipo de agenda da gravação.
+             */
+            agenda_type_id?: string;
             /**
              * Format: uuid
              * @description Sem valor, o provider padrão da plataforma.
@@ -1620,6 +2185,10 @@ export interface components {
             compute_type: string;
             /** @description `null` = adaptativo à VRAM livre. */
             batch_size: number | null;
+            /**
+             * @description Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
+             *     idioma de cada gravação e o alinhador segue o detectado.
+             */
             default_language: string | null;
             /** @description Modelo usado depois de um OOM. */
             fallback_model: string | null;
@@ -1635,14 +2204,45 @@ export interface components {
             min_speakers: number | null;
             max_speakers: number | null;
         };
-        SummarizationSettings: {
-            /** Format: uuid */
-            default_provider_id: string | null;
-            /** @description Gera o resumo do template padrão do dono ao fim da transcrição. */
-            auto_summarize: boolean;
+        /**
+         * @description Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar canais,
+         *     reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
+         *     para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
+         *     original.
+         */
+        PreprocessingSettings: {
+            denoise: {
+                enabled: boolean;
+                /**
+                 * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                 * @enum {string}
+                 */
+                method: "rnnoise" | "afftdn";
+                /** @description Quanto do sinal tratado entra na mistura. */
+                strength: number;
+            };
+            loudnorm: {
+                enabled: boolean;
+                /** @description Loudness integrado alvo (EBU R128). */
+                target_lufs: number;
+                true_peak_db: number;
+                /** @description Faixa de loudness. */
+                lra: number;
+            };
+            trim_silence: {
+                enabled: boolean;
+                /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                min_silence_s: number;
+                /** @description Abaixo deste nível, é silêncio. */
+                threshold_db: number;
+            };
+            /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+            split_channels: {
+                enabled: boolean;
+            };
         };
         VoiceIdentificationSettings: {
-            /** @description Liga a identificação por voz na plataforma. Desligado, nenhuma impressão é comparada nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento. */
+            /** @description Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento. */
             enabled: boolean;
             /** @description Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração. */
             suggestion_threshold: number;
@@ -1650,8 +2250,8 @@ export interface components {
         AdminSettings: {
             asr: components["schemas"]["AsrSettings"];
             diarization: components["schemas"]["DiarizationSettings"];
-            summarization: components["schemas"]["SummarizationSettings"];
             voice_identification: components["schemas"]["VoiceIdentificationSettings"];
+            preprocessing: components["schemas"]["PreprocessingSettings"];
             /** Format: date-time */
             updated_at: string;
             /** @description Conta de admin que mudou por último. */
@@ -1665,6 +2265,7 @@ export interface components {
                 model?: string;
                 compute_type?: string;
                 batch_size?: number | null;
+                /** @description Código do idioma ou `auto`. */
                 default_language?: string | null;
                 fallback_model?: string | null;
                 /** Format: uri */
@@ -1676,14 +2277,41 @@ export interface components {
                 min_speakers?: number | null;
                 max_speakers?: number | null;
             };
-            summarization?: {
-                /** Format: uuid */
-                default_provider_id?: string | null;
-                auto_summarize?: boolean;
-            };
             voice_identification?: {
                 enabled?: boolean;
                 suggestion_threshold?: number;
+            };
+            /** @description Cada etapa é mesclada campo a campo. */
+            preprocessing?: {
+                denoise?: {
+                    enabled?: boolean;
+                    /**
+                     * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                     * @enum {string}
+                     */
+                    method?: "rnnoise" | "afftdn";
+                    /** @description Quanto do sinal tratado entra na mistura. */
+                    strength?: number;
+                };
+                loudnorm?: {
+                    enabled?: boolean;
+                    /** @description Loudness integrado alvo (EBU R128). */
+                    target_lufs?: number;
+                    true_peak_db?: number;
+                    /** @description Faixa de loudness. */
+                    lra?: number;
+                };
+                trim_silence?: {
+                    enabled?: boolean;
+                    /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                    min_silence_s?: number;
+                    /** @description Abaixo deste nível, é silêncio. */
+                    threshold_db?: number;
+                };
+                /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+                split_channels?: {
+                    enabled?: boolean;
+                };
             };
         };
         AgentProvider: {
@@ -1703,6 +2331,7 @@ export interface components {
             options: {
                 [key: string]: string | number | boolean;
             };
+            used_for: components["schemas"]["AgentPurpose"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1719,6 +2348,8 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
+            /** @description Sem valor, um provider habilitado assume as finalidades que nenhum outro declara. */
+            used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPatch: {
             name?: string;
@@ -1730,6 +2361,8 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
+            /** @description Substitui a lista; as finalidades declaradas saem dos outros providers. */
+            used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPage: {
             items: components["schemas"]["AgentProvider"][];
@@ -1779,9 +2412,21 @@ export interface components {
                 loaded_at: string;
                 vram_mb: number | null;
             }[];
+            /**
+             * @description As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
+             *     sem o conteúdo das gravações.
+             */
             recent_failures: {
-                /** Format: uuid */
-                job_id: string;
+                /**
+                 * Format: uuid
+                 * @description O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                 */
+                job_id: string | null;
+                /**
+                 * @description A etapa do pipeline que falhou (holetz/eclume#33).
+                 * @enum {string}
+                 */
+                step?: "received" | "preprocessing" | "transcription" | "fields" | "agenda_type" | "summary";
                 /** Format: uuid */
                 recording_id: string;
                 stage: string | null;
@@ -1794,6 +2439,29 @@ export interface components {
             }[];
             /** Format: date-time */
             checked_at: string;
+            /**
+             * @description Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
+             *     falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+             */
+            steps: {
+                /** @enum {string} */
+                step: "preprocessing" | "transcription" | "fields" | "agenda_type" | "summary";
+                runs: number;
+                median_ms: number | null;
+                failures: number;
+            }[];
+            /**
+             * @description Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
+             *     `down` ou `absent` (ainda não existe na plataforma).
+             */
+            services: {
+                /** @enum {string} */
+                name: "api" | "postgres" | "redis" | "storage" | "gpu_worker" | "cpu_worker" | "mcp";
+                /** @enum {string} */
+                status: "healthy" | "degraded" | "down" | "absent";
+                detail: string | null;
+                latency_ms: number | null;
+            }[];
             /** @description Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando nenhum worker publicou nos últimos 45 s. */
             worker?: {
                 online: boolean;
@@ -1997,6 +2665,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações em andamento por conta; tente de novo quando algum terminar. */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
@@ -2018,7 +2695,9 @@ export interface components {
         RecordingId: string;
         TranscriptId: string;
         SummaryId: string;
-        TemplateId: string;
+        AgendaTypeId: string;
+        FieldId: string;
+        PreviewId: string;
         PersonId: string;
         CollectionId: string;
         UserId: string;
@@ -2643,6 +3322,123 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listRecordingFields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os campos da gravação com valor e origem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingFieldValues"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    acceptRecordingFields: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os campos da gravação com valor e origem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingFieldValues"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putRecordingField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldValuePut"];
+            };
+        };
+        responses: {
+            /** @description Os campos da gravação com valor e origem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingFieldValues"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    acceptRecordingField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os campos da gravação com valor e origem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingFieldValues"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listTranscripts: {
         parameters: {
             query?: {
@@ -2980,7 +3776,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listSummaryTemplates: {
+    listAgendaTypes: {
         parameters: {
             query?: {
                 /** @description Cursor opaco devolvido em `next_cursor`. */
@@ -2994,13 +3790,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Templates. */
+            /** @description Tipos de agenda. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryTemplatePage"];
+                    "application/json": components["schemas"]["AgendaTypePage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -3008,7 +3804,7 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
-    createSummaryTemplate: {
+    createAgendaType: {
         parameters: {
             query?: never;
             header?: {
@@ -3020,42 +3816,74 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SummaryTemplateCreate"];
+                "application/json": components["schemas"]["AgendaTypeCreate"];
             };
         };
         responses: {
-            /** @description Template criado. */
+            /** @description Tipo criado. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryTemplate"];
+                    "application/json": components["schemas"]["AgendaType"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    previewAgendaType: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgendaTypePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preview"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
-    getSummaryTemplate: {
+    getAgendaType: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                template_id: components["parameters"]["TemplateId"];
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Template. */
+            /** @description Tipo de agenda. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryTemplate"];
+                    "application/json": components["schemas"]["AgendaType"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -3063,7 +3891,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    deleteSummaryTemplate: {
+    deleteAgendaType: {
         parameters: {
             query?: never;
             header?: {
@@ -3071,13 +3899,13 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                template_id: components["parameters"]["TemplateId"];
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. Resumos já gerados ficam. */
+            /** @description Excluído. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3089,7 +3917,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    updateSummaryTemplate: {
+    updateAgendaType: {
         parameters: {
             query?: never;
             header?: {
@@ -3097,29 +3925,223 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                template_id: components["parameters"]["TemplateId"];
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SummaryTemplatePatch"];
+                "application/json": components["schemas"]["AgendaTypePatch"];
             };
         };
         responses: {
-            /** @description Template atualizado. */
+            /** @description Tipo atualizado. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryTemplate"];
+                    "application/json": components["schemas"]["AgendaType"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listFields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campos, na ordem da lista. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    createField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldCreate"];
+            };
+        };
+        responses: {
+            /** @description Campo criado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Field"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    previewField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getField: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Field"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluído, com os valores dele. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                field_id: components["parameters"]["FieldId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldPatch"];
+            };
+        };
+        responses: {
+            /** @description Campo atualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Field"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preview_id: components["parameters"]["PreviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O estado e, pronta, os resultados. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listPeople: {
@@ -3751,6 +4773,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentProvider"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listDefaultAgendaTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tipos padrão, na ordem da lista. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultAgendaTypePage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    createDefaultAgendaType: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultAgendaTypeCreate"];
+            };
+        };
+        responses: {
+            /** @description Tipo padrão criado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultAgendaType"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    deleteDefaultAgendaType: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluído. As cópias das contas ficam. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateDefaultAgendaType: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                agenda_type_id: components["parameters"]["AgendaTypeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultAgendaTypePatch"];
+            };
+        };
+        responses: {
+            /** @description Tipo padrão atualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultAgendaType"];
                 };
             };
             401: components["responses"]["Unauthorized"];

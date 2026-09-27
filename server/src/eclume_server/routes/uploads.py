@@ -23,6 +23,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.fields import mark_edited
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized, validation_failed
 from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
@@ -357,7 +358,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
         recording = await get_visible(conn, recording_id)
     if enqueue is not None:
         await enqueue_transcription(ctx, recording_id, 1, *enqueue)
-    return (await render(ctx, [recording]))[0]
+    return (await render(ctx, principal.user_id, [recording]))[0]
 
 
 async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
@@ -431,6 +432,10 @@ async def _finish(
         )
         return duplicate, None
     await conn.execute(insert(t.recordings).values(**values))
+    # Título e tags pedidos no upload são do usuário; sem título (o nome do arquivo), o automático o troca.
+    await mark_edited(
+        conn, recording_id, principal.user_id, {key: requested[key] for key in ("title", "tags") if requested.get(key)}
+    )
     recording = {"id": recording_id, "owner_id": principal.user_id, "language": values["language"]}
     error = None if matches else ("hash_mismatch", "O SHA-256 do arquivo recebido difere do declarado no upload.")
     options = await insert_job(conn, recording, 1, error=error)

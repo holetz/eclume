@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 _BLOCKS = (
     t.platform_settings.c.asr,
     t.platform_settings.c.diarization,
-    t.platform_settings.c.summarization,
+    t.platform_settings.c.preprocessing,
     t.platform_settings.c.voice_identification,
 )
 

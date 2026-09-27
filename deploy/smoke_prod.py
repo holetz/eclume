@@ -1,11 +1,16 @@
 """Smoke do stack de produção do eclume, pela API pública, só com a biblioteca padrão.
 
 Prova o caminho inteiro: health, SPA, `/downloads/`, o cadastro aberto com o aviso, a sessão de
-admin (provider `claude-cli` padrão), a sessão de usuário (upload multipart de um áudio,
-transcrição diarizada na GPU e um resumo gerado pelo `claude -p` do host).
+admin (provider `claude-cli`), a sessão de usuário (upload multipart de um áudio, transcrição
+diarizada na GPU e um resumo gerado pelo `claude -p` do host).
 
     ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
       | python3 deploy/smoke_prod.py --ca eclume-root.crt
+
+Com `--pipeline`, prova o processamento automático (holetz/eclume#33): retranscreve a gravação
+(a de `--recording`, uma gravação real da biblioteca, ou a do áudio de fixture) e espera as seis
+etapas do pipeline — recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo —
+todas `done`.
 
 A senha vem do stdin (ou de `ECLUME_SMOKE_PASSWORD`) e serve às duas contas com o mesmo e-mail: a
 de admin e a de usuário, que a migration 008 separou com o mesmo hash. Depois de um
@@ -133,7 +138,7 @@ def _ensure_provider(api: Api) -> str:
         {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet", "enabled": True},
         expect=(201,),
     )
-    _step("provider claude-cli cadastrado (o primeiro habilitado vira o padrão da plataforma)")
+    _step(f"provider claude-cli cadastrado, usado para: {', '.join(created['used_for']) or 'nada'}")
     return created["id"]
 
 
@@ -199,12 +204,11 @@ def _transcript_of(api: Api, recording_id: str, timeout_s: int) -> dict[str, Any
 
 
 def _summarize(api: Api, transcript_id: str, provider_id: str, timeout_s: int) -> None:
-    templates = api.json("GET", "/api/v1/summary-templates")["items"]
-    template = next((t for t in templates if t.get("is_default")), templates[0])
+    agenda_type = api.json("GET", "/api/v1/agenda-types")["items"][0]
     summary = api.json(
         "POST",
         f"/api/v1/transcripts/{transcript_id}/summaries",
-        {"template_id": template["id"], "provider_id": provider_id},
+        {"agenda_type_id": agenda_type["id"], "provider_id": provider_id},
         expect=(202,),
     )
 
@@ -216,7 +220,42 @@ def _summarize(api: Api, transcript_id: str, provider_id: str, timeout_s: int) -
 
     result = _wait("o resumo", done, timeout_s)
     first = next((line for line in result["content_md"].splitlines() if line.strip()), "")
-    _step(f"resumo '{template['name']}' pelo {result['model']}: {first[:100]}")
+    _step(f"resumo '{agenda_type['name']}' pelo {result['model']}: {first[:100]}")
+
+
+PIPELINE = ("received", "preprocessing", "transcription", "fields", "agenda_type", "summary")
+
+
+def _pipeline(api: Api, recording_id: str, timeout_s: int) -> None:
+    """Retranscreve a gravação e espera as seis etapas `done`; qualquer outra saída final falha."""
+    retried = api.json("POST", f"/api/v1/recordings/{recording_id}/retranscribe", expect=(202,))
+    _step(f"retranscrição da gravação {recording_id} na fila (etapas: {_states(retried)})")
+
+    def finished() -> dict[str, Any] | None:
+        recording = api.json("GET", f"/api/v1/recordings/{recording_id}")
+        states = {step["step"]: step["state"] for step in recording["pipeline"]}
+        if any(state in {"failed", "skipped"} for state in states.values()):
+            _fail(f"etapa que não terminou feita: {json.dumps(recording['pipeline'], ensure_ascii=False)}")
+        return recording if all(states[step] == "done" for step in PIPELINE) else None
+
+    started = time.monotonic()
+    recording = _wait("as seis etapas do pipeline", finished, timeout_s)
+    _step(f"pipeline completo em {time.monotonic() - started:.0f} s:")
+    for step in recording["pipeline"]:
+        _step(f"  {step['step']:<14} {step['state']:<5} {step['duration_ms']} ms")
+    fields = api.json("GET", f"/api/v1/recordings/{recording_id}/fields")["items"]
+    auto = [f"{item['field']['key']}={item['value']!r}" for item in fields if item["origin"] == "auto"]
+    _step(f"campos automáticos: {', '.join(auto) or 'nenhum'}")
+    agenda_type = recording["agenda_type"] or {}
+    _step(f"tipo de agenda: {agenda_type.get('name')} ({agenda_type.get('origin')}); título: {recording['title']}")
+    summaries = api.json("GET", f"/api/v1/transcripts/{recording['transcript_id']}/summaries")["items"]
+    automatic = next(s for s in summaries if s["trigger"] == "automatic" and s["status"] == "done")
+    first = next((line for line in (automatic["content_md"] or "").splitlines() if line.strip()), "")
+    _step(f"resumo automático '{automatic['agenda_type']['name']}' pelo {automatic['model']}: {first[:100]}")
+
+
+def _states(recording: dict[str, Any]) -> str:
+    return ", ".join(f"{step['step']}={step['state']}" for step in recording["pipeline"])
 
 
 def main() -> int:
@@ -228,6 +267,8 @@ def main() -> int:
     parser.add_argument("--admin-email", help="e-mail da conta de admin (padrão: --email)")
     parser.add_argument("--audio", type=Path, default=FIXTURE)
     parser.add_argument("--timeout", type=int, default=1200, help="espera máxima da transcrição, em segundos")
+    parser.add_argument("--pipeline", action="store_true", help="prova as seis etapas do processamento automático")
+    parser.add_argument("--recording", help="com --pipeline: a gravação a retranscrever (padrão: a do áudio)")
     args = parser.parse_args()
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
     if not password:
@@ -243,9 +284,12 @@ def main() -> int:
     api.json("POST", "/api/v1/auth/login", {"email": args.email, "password": password}, expect=(200, 204))
     me = api.json("GET", "/api/v1/me")
     _step(f"sessão de usuário ok: {me['user']['email']} (aviso pendente: {me['notice_required']})")
-    recording_id = _upload(api, args.audio)
-    transcript = _transcript_of(api, recording_id, args.timeout)
-    _summarize(api, transcript["id"], provider_id, 600)
+    if args.pipeline:
+        _pipeline(api, args.recording or _upload(api, args.audio), args.timeout)
+    else:
+        recording_id = _upload(api, args.audio)
+        transcript = _transcript_of(api, recording_id, args.timeout)
+        _summarize(api, transcript["id"], provider_id, 600)
     print("OK")  # noqa: T201
     return 0
 

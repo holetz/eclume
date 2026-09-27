@@ -143,7 +143,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await expect(falas.getByRole('listitem')).toHaveCount(12)
   await falas.getByRole('button', { name: /Ouvir a partir de 00:39/ }).click()
   await expect(falas.getByRole('listitem').nth(3)).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByRole('list', { name: 'Resumos gerados' }).getByText('Ata de reunião')).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Resumos gerados' }).getByText('Reunião de equipe')).toBeVisible()
 
   // Renomear: o mock devolve o locutor 2 ligado a Rafael Lima.
   const speakers = page.getByRole('region', { name: 'Locutores' })

@@ -15,6 +15,7 @@ modelo de uma etapa descarrega o da anterior). O `fp16` puro é recusado (NaN na
 
 from __future__ import annotations
 
+import dataclasses
 import gc
 import importlib
 import logging
@@ -185,6 +186,8 @@ class WhisperXLocalEngine:
         with self.vram.track() as peak:
             result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
             progress("asr", 100.0)
+            # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
+            options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
             aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
             progress("align", 100.0)
             result, embeddings, diarization_model = self._stage(
@@ -201,7 +204,7 @@ class WhisperXLocalEngine:
             engine=self.name,
             model=model,
             compute_type=compute_type,
-            language=options.language,
+            language=options.language or "pt",
             duration_s=duration_s,
             segments=segments,
             speaker_embeddings=embeddings or {},
@@ -221,7 +224,7 @@ class WhisperXLocalEngine:
             requested = DEFAULT_COMPUTE_TYPE
         return [requested, *(c for c in COMPUTE_TYPE_FALLBACKS if c != requested)]
 
-    def _load_asr(self, whisperx: Any, model: str, compute_types: list[str], language: str) -> tuple[Any, str]:  # noqa: ANN401
+    def _load_asr(self, whisperx: Any, model: str, compute_types: list[str], language: str | None) -> tuple[Any, str]:  # noqa: ANN401
         last_error: Exception | None = None
         for compute_type in compute_types:
             try:

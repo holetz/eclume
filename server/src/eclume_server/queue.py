@@ -19,10 +19,12 @@ DEFAULT_QUEUE = "eclume:default"
 # Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
 GPU_HEALTH_KEY = "eclume:gpu:health"
 DEFAULT_LANGUAGE = "pt"
+AUTO_LANGUAGE = "auto"
 
 # Etapas do worker GPU → `Job.stage` do contrato v1.
 _STAGES = {
     "download": "asr",
+    "preprocess": "preprocessing",
     "asr": "asr",
     "align": "alignment",
     "diarize": "diarization",
@@ -34,6 +36,11 @@ _STAGES = {
 def transcribe_job_id(recording_id: UUID | str, revision: int) -> str:
     """`_job_id` do `transcribe`: um por gravação e revisão."""
     return f"transcribe:{recording_id}:{revision}"
+
+
+def step_job_id(job: str, recording_id: UUID | str, revision: int) -> str:
+    """`_job_id` de uma etapa do pipeline (`fill_fields`, `detect_agenda_type`): uma por revisão."""
+    return f"{job}:{recording_id}:{revision}"
 
 
 def summarize_job_id(summary_id: UUID | str) -> str:
@@ -52,8 +59,8 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
     diarization = platform["diarization"]
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
-        # O ASR recebe o idioma sem região (`pt-BR` → `pt`).
-        "language": chosen.split("-", 1)[0],
+        # O ASR recebe o idioma sem região (`pt-BR` → `pt`); `auto` vira `null`, e a engine detecta.
+        "language": None if chosen == AUTO_LANGUAGE else chosen.split("-", 1)[0],
         "min_speakers": diarization.get("min_speakers"),
         "max_speakers": diarization.get("max_speakers"),
         "engine": asr["engine"],
@@ -66,7 +73,16 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
         "diarization_model": diarization.get("model"),
         # Impressão de voz só com a identificação por voz ligada na plataforma (LGPD).
         "embeddings": bool(platform["voice_identification"].get("enabled")),
+        # O tratamento do áudio antes do ASR; um worker antigo ignora a chave.
+        "preprocess": platform["preprocessing"],
     }
+
+
+async def enqueue_summary(pool: ArqRedis, summary_id: UUID | str) -> None:
+    """Enfileira o `summarize` de um resumo na fila do worker CPU."""
+    await pool.enqueue_job(
+        "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
+    )
 
 
 def job_progress(raw: dict[str, str] | None) -> tuple[str | None, float] | None:
@@ -111,9 +127,7 @@ class Queue:
 
     async def enqueue_summarize(self, summary_id: UUID) -> None:
         """Enfileira `summarize` no worker CPU; um job por resumo."""
-        await self.pool.enqueue_job(
-            "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-        )
+        await enqueue_summary(self.pool, summary_id)
 
     async def enqueue_purge_embedding_objects(self) -> None:
         """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""

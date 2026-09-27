@@ -56,7 +56,7 @@ async def email_taken(conn: AsyncConnection, email: str) -> bool:
 async def create_user(
     conn: AsyncConnection, *, email: str, name: str, password: str, notice_version: str | None = None
 ) -> UUID:
-    """Cria uma conta de usuário ativa, com os templates de resumo padrão; e-mail único na instância.
+    """Cria uma conta de usuário ativa, com os tipos de agenda padrão; e-mail único na instância.
 
     Com `notice_version`, a conta nasce com o aceite do aviso (o cadastro). Roda com o papel de
     conexão: a conta ainda não existe para a RLS.
@@ -78,8 +78,8 @@ async def create_user(
     except IntegrityError as exc:
         # Dois cadastros simultâneos com o mesmo e-mail: o índice único decide.
         raise EmailTakenError(msg) from exc
-    # Os textos dos padrões vivem na migration 008, uma fonte só para contas novas e migradas.
-    await conn.execute(text("SELECT eclume_seed_summary_templates(:user)"), {"user": user_id})
+    # Os padrões vêm de `default_agenda_types` (migration 009), mantidos pelo admin.
+    await conn.execute(text("SELECT eclume_seed_user_defaults(:user)"), {"user": user_id})
     return user_id
 
 

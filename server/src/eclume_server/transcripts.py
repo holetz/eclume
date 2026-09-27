@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,7 @@ from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
+from eclume_server.pipeline import FAILED_STEP, record_gpu_steps, set_step
 from eclume_server.problems import not_found
 from eclume_server.serialize import Row, user_ref
 from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
@@ -134,7 +136,16 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     return model, vectors
 
 
-RECORDING_GONE = "gravação inexistente"
+@dataclass(frozen=True)
+class Ingested:
+    """O desfecho da ingestão: a linha do log e se a transcrição foi gravada agora.
+
+    Só o que foi gravado segue para a cadeia por agente; `gone` diz que a gravação foi excluída.
+    """
+
+    message: str
+    persisted: bool = False
+    gone: bool = False
 
 
 async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
@@ -145,10 +156,11 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     transcript_key: str,
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
-) -> str:
+) -> Ingested:
     """Persiste a transcrição do job em aberto; idempotente por `(recording_id, revision)`.
 
-    Roda com o papel de conexão (worker CPU). Devolve o que aconteceu, para o log.
+    Roda com o papel de conexão (worker CPU). Job já concluído ou falho (pelo reaper, por exemplo)
+    não é gravado de novo.
     """
     recording = (
         (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
@@ -156,7 +168,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if recording is None:
-        return RECORDING_GONE
+        return Ingested("gravação inexistente", gone=True)
     job = (
         (
             await conn.execute(
@@ -171,7 +183,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if job is None or job["state"] not in {"queued", "running"}:
-        return "sem job em aberto (já ingerido?)"
+        return Ingested("sem job em aberto (já ingerido ou falho)")
 
     raw = await storage.read_json(transcript_key)
     speakers, segments, mapping = normalize_raw(raw)
@@ -241,6 +253,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .where(t.transcription_jobs.c.id == job["id"])
         .values(state="succeeded", finished_at=now, attempts=job["attempts"] + 1, engine_info=engine_info)
     )
+    await record_gpu_steps(conn, job, engine_info, now)
     await conn.execute(
         update(t.recordings)
         .where(t.recordings.c.id == recording_id)
@@ -251,11 +264,17 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             updated_at=now,
         )
     )
-    return f"transcrição {transcript_id} gravada (revisão do job {job['revision']})"
+    return Ingested(f"transcrição {transcript_id} gravada (revisão do job {job['revision']})", persisted=True)
 
 
-async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, message: str) -> str:
-    """Marca como falho o job em aberto e a gravação; job já concluído não muda."""
+async def fail(
+    conn: AsyncConnection, recording_id: UUID, error_code: str, message: str, stage: str | None = None
+) -> str:
+    """Marca como falho o job em aberto e a gravação; job já concluído não muda.
+
+    `stage` é a etapa do progresso do worker GPU em que a falha aconteceu: no download ou no
+    pré-processamento, falha o pré-processamento; nas demais (ou sem ela), a transcrição.
+    """
     now = datetime.now(UTC)
     job = (
         (
@@ -285,6 +304,16 @@ async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, messa
     )
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording_id).values(status="failed", updated_at=now)
+    )
+    await set_step(
+        conn,
+        {"id": recording_id, "owner_id": job["owner_id"]},
+        job["revision"],
+        FAILED_STEP.get(stage or "", "transcription"),
+        "failed",
+        error=(error_code or "engine_error", message or ""),
+        started_at=job["started_at"] or job["queued_at"],
+        finished_at=now,
     )
     return f"job {job['id']} falhou: {error_code}"
 

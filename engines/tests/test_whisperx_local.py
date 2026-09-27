@@ -80,12 +80,12 @@ class FakeWhisperX:
         self.calls.append(("load_audio", path))
         return FakeAudio(16_000 * 90)
 
-    def load_model(self, model: str, device: str, *, compute_type: str, language: str) -> Any:
+    def load_model(self, model: str, device: str, *, compute_type: str, language: str | None) -> Any:
         self.calls.append(("load_model", (model, device, compute_type, language)))
         fake = self
 
         class Pipeline:
-            def transcribe(self, audio: Any, *, batch_size: int, language: str, progress_callback: Any) -> dict:
+            def transcribe(self, audio: Any, *, batch_size: int, language: str | None, progress_callback: Any) -> dict:
                 fake.calls.append(("transcribe", (model, batch_size, language)))
                 if model in fake.oom_models or batch_size in fake.oom_batches:
                     msg = "CUDA failed with error out of memory"
@@ -96,7 +96,8 @@ class FakeWhisperX:
                         {"start": 0.0, "end": 2.0, "text": " Olá, tudo bem?"},
                         {"start": 2.5, "end": 4.0, "text": " Tudo ótimo."},
                     ],
-                    "language": language,
+                    # Sem idioma pedido, o WhisperX devolve o detectado.
+                    "language": language or "en",
                 }
 
         return Pipeline()
@@ -460,3 +461,12 @@ def test_opcoes_do_admin_lote_recuo_e_modelo_de_diarizacao(monkeypatch: pytest.M
 def test_lote_do_ambiente_vence_o_do_admin(fake: FakeWhisperX):
     eng = WhisperXLocalEngine(hf_token=None, vram=FakeVram(6000), batch_size=8)
     assert eng.transcribe(AUDIO, EngineOptions(diarize=False, batch_size=2)).batch_size == 8
+
+
+def test_sem_idioma_detecta_e_alinha_pelo_detectado(fake: FakeWhisperX):
+    result = engine().transcribe(AUDIO, EngineOptions(language=None, diarize=False))
+    assert result.language == "en"
+    calls = dict(fake.calls)
+    assert calls["load_model"][3] is None
+    assert calls["transcribe"][2] is None
+    assert calls["load_align_model"][0] == "en"

@@ -22,6 +22,7 @@ _TITLES = {
     "not_found": "Não encontrado",
     "validation_failed": "Requisição inválida",
     "conflict": "Conflito com o estado atual",
+    "rate_limited": "Muitas requisições",
     "upload_expired": "Upload expirado",
     "email_taken": "E-mail já cadastrado",
     "signup_closed": "Cadastro fechado",
@@ -113,6 +114,11 @@ def invalid_field(field: str, message: str) -> ApiProblemError:
 def conflict(detail: str, code: str = "conflict") -> ApiProblemError:
     """409 — o estado atual impede a operação."""
     return ApiProblemError(409, code, detail)
+
+
+def rate_limited(detail: str) -> ApiProblemError:
+    """429 — o limite de pedidos em aberto foi atingido; tente de novo quando algum terminar."""
+    return ApiProblemError(429, "rate_limited", detail)
 
 
 def _field(loc: tuple[Any, ...]) -> str:
