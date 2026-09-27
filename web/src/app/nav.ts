@@ -19,7 +19,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Até holetz/eclume#37 levar o import para o modal da biblioteca.
   { to: '/importar', label: 'Importar arquivo', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
-  // Até #37/#38 decidirem entre coleção e tag.
+  // Coleção convive com tag (mapa v6): agrupa as gravações que o usuário escolhe.
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: false },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: false },

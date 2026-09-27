@@ -1,86 +1,38 @@
-/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
-   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
-:where(.page) h2 {
-  font-size: 20px;
-  margin: 0;
-}
-
-:where(.page) h3 {
-  font-size: 17px;
-  margin: 0;
-}
-
 :where(.page) p {
   margin: 0;
 }
 
 .page {
   display: grid;
-  gap: var(--space-6);
-}
-
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
   gap: var(--space-4);
 }
 
-.header p {
-  margin-top: var(--space-1);
+.page > :global(.page-head) {
+  margin-bottom: var(--space-2);
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: var(--space-3);
 }
 
-.item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6);
-}
-
-.info {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.name {
-  font-size: 15px;
-  font-weight: 620;
+.description {
+  display: block;
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  font-size: 14px;
-  color: var(--color-text-muted);
 }
 
 .form {
   display: grid;
   gap: var(--space-3);
-  max-width: 32rem;
-  padding: var(--space-4) var(--space-6);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 .empty {
-  padding: var(--space-6);
+  padding: var(--space-4) 0;
   color: var(--color-text-muted);
 }

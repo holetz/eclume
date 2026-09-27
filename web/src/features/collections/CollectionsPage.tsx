@@ -3,7 +3,9 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
+import { Dialog } from '../../app/Dialog'
+import { useHelpTopic } from '../../app/help'
+import { PageHead } from '../../app/PageHead'
 import styles from './CollectionsPage.module.css'
 import { COLLECTIONS_KEY, useCollections, type Collection } from './queries'
 
@@ -12,48 +14,29 @@ interface CollectionFields {
   description: string | null
 }
 
+type Editing = { mode: 'nova' } | { mode: 'editar'; collection: Collection } | { mode: 'excluir'; collection: Collection }
+
 export function CollectionsPage() {
-  usePageTitle('Coleções')
+  useHelpTopic('colecoes')
   const collections = useCollections()
-  const queryClient = useQueryClient()
-  const [creating, setCreating] = useState(false)
-  const create = useMutation({
-    mutationFn: (fields: CollectionFields) => unwrap(api.POST('/api/v1/collections', { body: fields })),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: COLLECTIONS_KEY })
-      setCreating(false)
-    },
-  })
+  const [editing, setEditing] = useState<Editing | null>(null)
   const items = collections.data?.items ?? []
+  const close = () => setEditing(null)
 
   return (
-    <section className={styles.page} aria-labelledby="colecoes-titulo">
-      <header className={styles.header}>
-        <div>
-          <h1 id="colecoes-titulo">Coleções</h1>
-          <p className="text-muted">Agrupe suas gravações por cliente, projeto ou programa. Uma gravação pode estar em várias.</p>
-        </div>
-        {!creating && (
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+    <section className={styles.page}>
+      <PageHead
+        kicker="Organizar"
+        title="Coleções"
+        actions={
+          <button type="button" className="btn btn-primary" onClick={() => setEditing({ mode: 'nova' })}>
             Nova coleção
           </button>
-        )}
-      </header>
-
-      {creating && (
-        <div className="card">
-          <CollectionForm
-            submitLabel="Criar coleção"
-            pending={create.isPending}
-            error={create.error}
-            onSubmit={(fields) => create.mutate(fields)}
-            onCancel={() => {
-              create.reset()
-              setCreating(false)
-            }}
-          />
-        </div>
-      )}
+        }
+      />
+      <p className="text-muted">
+        Agrupe as gravações que você escolher, por projeto ou programa. Uma gravação pode estar em várias.
+      </p>
 
       {collections.isPending && <p role="status">Carregando coleções…</p>}
       {collections.isError && (
@@ -62,106 +45,155 @@ export function CollectionsPage() {
         </p>
       )}
       {collections.isSuccess && items.length === 0 && (
-        <p className={`card ${styles.empty}`}>Nenhuma coleção ainda. Crie uma e escolha as gravações na página de cada uma.</p>
+        <p className={styles.empty}>Nenhuma coleção ainda. Crie uma e escolha as gravações na página de cada uma.</p>
       )}
       {items.length > 0 && (
-        <ul className={styles.list} aria-label="Coleções">
+        <ul className={`list ${styles.list}`} aria-label="Coleções">
           {items.map((collection) => (
-            <CollectionItem key={collection.id} collection={collection} />
+            <CollectionRow
+              key={collection.id}
+              collection={collection}
+              onEdit={() => setEditing({ mode: 'editar', collection })}
+              onDelete={() => setEditing({ mode: 'excluir', collection })}
+            />
           ))}
         </ul>
       )}
+
+      {editing?.mode === 'nova' && <CreateDialog onClose={close} />}
+      {editing?.mode === 'editar' && <EditDialog collection={editing.collection} onClose={close} />}
+      {editing?.mode === 'excluir' && <DeleteDialog collection={editing.collection} onClose={close} />}
     </section>
   )
 }
 
-function CollectionItem({ collection }: { collection: Collection }) {
+function CollectionRow({
+  collection,
+  onEdit,
+  onDelete,
+}: {
+  collection: Collection
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const count = collection.recording_count
+  return (
+    <li className="list-row">
+      <span className="list-row-title">{collection.name}</span>
+      <span className="list-row-sub">
+        {collection.description && <span className={styles.description}>{collection.description}</span>}
+        <span className={styles.meta}>
+          <span className="tabular">{count === 1 ? '1 gravação' : `${count} gravações`}</span>
+          <Link to={`/?colecao=${collection.id}`}>Ver gravações</Link>
+        </span>
+      </span>
+      <span className="list-row-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit} aria-label={`Editar ${collection.name}`}>
+          Editar
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onDelete}
+          aria-label={`Excluir ${collection.name}`}
+        >
+          Excluir
+        </button>
+      </span>
+    </li>
+  )
+}
+
+function useInvalidateCollections() {
   const queryClient = useQueryClient()
-  const [editing, setEditing] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const path = { params: { path: { collection_id: collection.id } } }
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: COLLECTIONS_KEY })
-  const save = useMutation({
-    mutationFn: (fields: CollectionFields) =>
-      unwrap(api.PATCH('/api/v1/collections/{collection_id}', { ...path, body: fields })),
+  return () => queryClient.invalidateQueries({ queryKey: COLLECTIONS_KEY })
+}
+
+function CreateDialog({ onClose }: { onClose: () => void }) {
+  const invalidate = useInvalidateCollections()
+  const create = useMutation({
+    mutationFn: (fields: CollectionFields) => unwrap(api.POST('/api/v1/collections', { body: fields })),
     onSuccess: () => {
       invalidate()
-      setEditing(false)
+      onClose()
     },
   })
+  return (
+    <Dialog title="Nova coleção" onClose={onClose}>
+      <CollectionForm
+        submitLabel="Criar coleção"
+        pending={create.isPending}
+        error={create.error}
+        onSubmit={(fields) => create.mutate(fields)}
+        onCancel={onClose}
+      />
+    </Dialog>
+  )
+}
+
+function EditDialog({ collection, onClose }: { collection: Collection; onClose: () => void }) {
+  const invalidate = useInvalidateCollections()
+  const save = useMutation({
+    mutationFn: (fields: CollectionFields) =>
+      unwrap(
+        api.PATCH('/api/v1/collections/{collection_id}', {
+          params: { path: { collection_id: collection.id } },
+          body: fields,
+        }),
+      ),
+    onSuccess: () => {
+      invalidate()
+      onClose()
+    },
+  })
+  return (
+    <Dialog title="Editar coleção" onClose={onClose}>
+      <CollectionForm
+        initial={collection}
+        submitLabel="Salvar"
+        pending={save.isPending}
+        error={save.error}
+        onSubmit={(fields) => save.mutate(fields)}
+        onCancel={onClose}
+      />
+    </Dialog>
+  )
+}
+
+function DeleteDialog({ collection, onClose }: { collection: Collection; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const invalidate = useInvalidateCollections()
   const remove = useMutation({
-    mutationFn: () => unwrap(api.DELETE('/api/v1/collections/{collection_id}', path)),
+    mutationFn: () =>
+      unwrap(api.DELETE('/api/v1/collections/{collection_id}', { params: { path: { collection_id: collection.id } } })),
     onSuccess: () => {
       invalidate()
       queryClient.invalidateQueries({ queryKey: ['recordings'] })
+      onClose()
     },
   })
-  const count = collection.recording_count
-
-  if (editing) {
-    return (
-      <li className="card">
-        <CollectionForm
-          initial={collection}
-          submitLabel="Salvar"
-          pending={save.isPending}
-          error={save.error}
-          onSubmit={(fields) => save.mutate(fields)}
-          onCancel={() => {
-            save.reset()
-            setEditing(false)
-          }}
-        />
-      </li>
-    )
-  }
   return (
-    <li className={`card ${styles.item}`}>
-      <div className={styles.info}>
-        <h2 className={styles.name}>{collection.name}</h2>
-        {collection.description && <p className="text-muted">{collection.description}</p>}
-        <p className={styles.meta}>
-          <span>{count === 1 ? '1 gravação' : `${count} gravações`}</span>
-          <Link to={`/?colecao=${collection.id}`}>Ver gravações</Link>
+    <Dialog
+      title={`Excluir ${collection.name}?`}
+      message="As gravações saem da coleção e continuam na biblioteca."
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Manter
+          </button>
+          <button type="button" className="btn btn-danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
+            Excluir coleção
+          </button>
+        </>
+      }
+    >
+      {remove.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(remove.error)}
         </p>
-        {remove.isError && (
-          <p className="alert alert-error" role="alert">
-            {errorMessage(remove.error)}
-          </p>
-        )}
-      </div>
-      <div className={styles.actions}>
-        {confirming ? (
-          <>
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              Confirmar exclusão
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
-              Manter
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setEditing(true)}
-              aria-label={`Editar ${collection.name}`}
-            >
-              Editar
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={() => setConfirming(true)}
-              aria-label={`Excluir ${collection.name}`}
-            >
-              Excluir
-            </button>
-          </>
-        )}
-      </div>
-    </li>
+      )}
+    </Dialog>
   )
 }
 
@@ -192,19 +224,24 @@ function CollectionForm({ initial, submitLabel, pending, error, onSubmit, onCanc
       </div>
       <div className="field">
         <label htmlFor={`${id}-descricao`}>Descrição</label>
-        <input id={`${id}-descricao`} className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input
+          id={`${id}-descricao`}
+          className="input"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
       </div>
       {error != null && (
         <p className="alert alert-error" role="alert">
           {errorMessage(error)}
         </p>
       )}
-      <div className={styles.actions}>
-        <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
-          {submitLabel}
-        </button>
+      <div className="dialog-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Cancelar
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
+          {submitLabel}
         </button>
       </div>
     </form>
