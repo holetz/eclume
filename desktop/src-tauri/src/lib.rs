@@ -260,6 +260,7 @@ pub fn run() {
             commands::open_data_dir,
             commands::discover_servers,
             commands::prepare_server,
+            commands::confirm_server,
             commands::sign_in,
             commands::pair,
             commands::sign_out,

@@ -171,7 +171,8 @@ impl Decoder {
             .get(10..12)
             .map_or(0, |b| usize::from(u16::from_le_bytes([b[0], b[1]])));
         Ok(Self::Opus {
-            decoder: opus::Decoder::new(OPUS_RATE, layout).context("falha ao criar o decoder Opus")?,
+            decoder: opus::Decoder::new(OPUS_RATE, layout)
+                .context("falha ao criar o decoder Opus")?,
             channels,
             skip,
             buffer: vec![0.0; OPUS_MAX_FRAME * channels],
@@ -179,14 +180,20 @@ impl Decoder {
     }
 
     /// Decodifica um pacote em amostras mono e a taxa delas; `None` num pacote corrompido.
-    fn decode(&mut self, data: &symphonia::core::formats::Packet) -> Result<Option<(Vec<f32>, u32)>> {
+    fn decode(
+        &mut self,
+        data: &symphonia::core::formats::Packet,
+    ) -> Result<Option<(Vec<f32>, u32)>> {
         match self {
             Self::Symphonia(decoder) => match decoder.decode(data) {
                 Ok(buffer) => {
                     let spec = *buffer.spec();
                     let mut samples = SampleBuffer::<f32>::new(buffer.capacity() as u64, spec);
                     samples.copy_interleaved_ref(buffer);
-                    Ok(Some((mono(samples.samples(), spec.channels.count()), spec.rate)))
+                    Ok(Some((
+                        mono(samples.samples(), spec.channels.count()),
+                        spec.rate,
+                    )))
                 }
                 Err(SymphoniaError::DecodeError(err)) => {
                     log::debug!("pacote corrompido ignorado: {err}");
@@ -242,7 +249,9 @@ fn to_opus(
     let total = track.codec_params.n_frames.filter(|&n| n > 0);
 
     let mut writer = OggOpusWriter::new(
-        BufWriter::new(File::create(dest).with_context(|| format!("falha ao criar {}", dest.display()))?),
+        BufWriter::new(
+            File::create(dest).with_context(|| format!("falha ao criar {}", dest.display()))?,
+        ),
         BITRATE,
         rand_serial(),
     )?;
@@ -291,7 +300,11 @@ fn to_opus(
         bail!("nenhuma amostra decodificada");
     }
     let samples = writer.samples();
-    writer.finish()?.into_inner().map_err(|err| err.into_error())?.sync_all()?;
+    writer
+        .finish()?
+        .into_inner()
+        .map_err(|err| err.into_error())?
+        .sync_all()?;
     Ok(samples)
 }
 
@@ -324,7 +337,9 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name)
     }
 
     fn scratch(name: &str) -> PathBuf {
@@ -356,9 +371,13 @@ mod tests {
             .enumerate()
         {
             let mut steps = Vec::new();
-            let out = convert(&fixture(name), &dir, &format!("g{i}"), &AtomicBool::new(false), |f| {
-                steps.push(f)
-            })
+            let out = convert(
+                &fixture(name),
+                &dir,
+                &format!("g{i}"),
+                &AtomicBool::new(false),
+                |f| steps.push(f),
+            )
             .unwrap();
             assert!(out.converted, "{name}");
             assert_eq!(out.path, dir.join(format!("g{i}.ogg")));
@@ -379,7 +398,14 @@ mod tests {
     #[test]
     fn o_que_nao_decodifica_e_copiado_com_o_tipo_da_extensao() {
         let dir = scratch("copia");
-        let out = convert(&fixture("tom.avi"), &dir, "v", &AtomicBool::new(false), |_| {}).unwrap();
+        let out = convert(
+            &fixture("tom.avi"),
+            &dir,
+            "v",
+            &AtomicBool::new(false),
+            |_| {},
+        )
+        .unwrap();
         assert!(!out.converted);
         assert_eq!(out.path, dir.join("v.avi"));
         assert_eq!(out.content_type, "video/x-msvideo");
@@ -395,7 +421,14 @@ mod tests {
     #[test]
     fn cancelar_apaga_o_parcial() {
         let dir = scratch("cancela");
-        let err = convert(&fixture("tom.wav"), &dir, "c", &AtomicBool::new(true), |_| {}).unwrap_err();
+        let err = convert(
+            &fixture("tom.wav"),
+            &dir,
+            "c",
+            &AtomicBool::new(true),
+            |_| {},
+        )
+        .unwrap_err();
         assert!(err.is::<Cancelled>());
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
         std::fs::remove_dir_all(dir).unwrap();

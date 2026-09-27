@@ -5,7 +5,7 @@ import { CSRF_HEADER } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { problem } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { mockTranscriptApi, RECORDING_ID } from '../../test/transcriptApi'
+import { mockTranscriptApi, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -14,6 +14,7 @@ afterEach(() => {
 
 async function openPage() {
   renderApp(`/gravacoes/${RECORDING_ID}`)
+  await openTranscript()
   return screen.findByRole('region', { name: 'Locutores' })
 }
 
@@ -80,8 +81,8 @@ describe('edição da transcrição', () => {
     })
     await openPage()
     const falas = screen.getByRole('list', { name: 'Falas' })
-    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:12' }))
-    const field = within(falas).getByLabelText('Texto da fala de Locutor 2 em 00:12')
+    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
+    const field = within(falas).getByLabelText('Texto da fala de Locutor 2 em 00:00:12')
     await userEvent.clear(field)
     await userEvent.type(field, 'Texto corrigido.{Control>}{Enter}{/Control}')
 
@@ -96,7 +97,7 @@ describe('edição da transcrição', () => {
     const http = mockTranscriptApi()
     await openPage()
     const falas = screen.getByRole('list', { name: 'Falas' })
-    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:12' }))
+    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
     await userEvent.type(within(falas).getByRole('textbox'), ' extra{Escape}')
     expect(within(falas).queryByRole('textbox')).not.toBeInTheDocument()
     expect(http.calls.some((r) => r.method === 'PATCH')).toBe(false)

@@ -1,11 +1,10 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { mockTranscriptApi, RECORDING_ID } from '../../test/transcriptApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -36,6 +35,23 @@ function mockCollections() {
 }
 
 describe('coleções', () => {
+  it('é aberta por "Gerenciar coleções" no filtro da biblioteca, com o cabeçalho do DS', async () => {
+    mockCollections()
+    mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/collections': () => fixtures.collectionPage(),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    renderApp('/?visao=semana&data=2026-09-21')
+    await userEvent.click(await screen.findByRole('link', { name: 'Gerenciar coleções' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
+    expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
+    expect(screen.getByText(/Coleção agrupa gravações; tag marca assuntos\. As duas convivem/)).toBeInTheDocument()
+  })
+
   it('lista com contagem e leva às gravações da coleção', async () => {
     mockCollections()
     renderApp('/colecoes')
@@ -77,49 +93,8 @@ describe('coleções', () => {
       'GET /api/v1/recordings': () => fixtures.recordingPage(),
     })
     renderApp(`/?colecao=${SERRA}`)
-    expect(await screen.findByText('Coleção: Metalúrgica Serra Azul')).toBeInTheDocument()
+    await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
     const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
-    expect(query.get('collection')).toBe(SERRA)
-    expect(screen.getByRole('link', { name: 'Limpar filtro' })).toHaveAttribute('href', '/')
-  })
-})
-
-describe('organização da gravação', () => {
-  it('o dono edita tags, coleções e metadados', async () => {
-    const http = mockTranscriptApi({
-      'PATCH /api/v1/recordings/:id': async (request) => ({
-        ...fixtures.recordingTranscribed(),
-        ...((await request.json()) as object),
-        updated_at: '2026-09-20T10:00:00Z',
-      }),
-      'GET /api/v1/tags': () => fixtures.tagList(),
-    })
-    renderApp(`/gravacoes/${RECORDING_ID}`)
-    const panel = await screen.findByRole('region', { name: 'Organização' })
-    const tags = within(panel).getByLabelText('Tags')
-    expect(tags).toHaveValue('programa-liderancas, cliente-metalurgica')
-    await userEvent.clear(tags)
-    await userEvent.type(tags, 'programa-liderancas, entrevista, entrevista')
-    const cliente = within(panel).getByLabelText('Cliente')
-    await userEvent.clear(cliente)
-    const serra = await within(panel).findByRole('checkbox', { name: 'Metalúrgica Serra Azul' })
-    await userEvent.click(serra)
-    await userEvent.click(within(panel).getByRole('button', { name: 'Salvar organização' }))
-
-    expect(await within(panel).findByText('Organização salva.')).toBeInTheDocument()
-    const body = await http.requests('PATCH /api/v1/recordings/:id')[0].json()
-    expect(body.tags).toEqual(['programa-liderancas', 'entrevista'])
-    expect(body.metadata).toEqual({ tipo_reuniao: 'alinhamento', projeto: 'Programa de lideranças 2026' })
-    expect(body.collection_ids).toEqual([])
-  })
-
-  it('quem vê por compartilhamento só lê', async () => {
-    mockTranscriptApi({
-      'GET /api/v1/recordings/:id': () => ({ ...fixtures.recordingTranscribed(), owner: { id: 'outro', name: 'Outro' } }),
-    })
-    renderApp(`/gravacoes/${RECORDING_ID}`)
-    const panel = await screen.findByRole('region', { name: 'Organização' })
-    expect(within(panel).getByText('Metalúrgica Serra Azul')).toBeInTheDocument()
-    expect(within(panel).queryByRole('button')).not.toBeInTheDocument()
+    expect(query.getAll('collection')).toEqual([SERRA])
   })
 })

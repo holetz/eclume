@@ -1,25 +1,30 @@
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
-import { isInMoreSection, NAV_ITEMS, navGroups } from './nav'
+import { isInMoreSection, isItemActive, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
+import { createQueryClient } from './queryClient'
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
+  // O shell monta a fila de importação, que usa o QueryClient.
   render(
-    <MemoryRouter initialEntries={[at]}>
-      <Routes>
-        <Route element={<AppShell user={user} onLogout={onLogout} />}>
-          <Route path="/tokens" element={<h1>Tokens</h1>} />
-          <Route path="/pessoas" element={<h1>Pessoas</h1>} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={createQueryClient({ retry: false })}>
+      <MemoryRouter initialEntries={[at]}>
+        <Routes>
+          <Route element={<AppShell user={user} onLogout={onLogout} />}>
+            <Route path="/tokens" element={<h1>Tokens</h1>} />
+            <Route path="/pessoas" element={<h1>Pessoas</h1>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
   return onLogout
 }
@@ -34,7 +39,8 @@ describe('navegação', () => {
     const { main, more } = navGroups()
     expect(titles(main)).toEqual(['Gravações', 'Organizar'])
     expect(titles(more)).toEqual(['Minhas configurações'])
-    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções'])
+    // Importar é o modal da biblioteca; a coleção fica em Organizar.
+    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções'])
     expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop'])
   })
 
@@ -57,6 +63,16 @@ describe('navegação', () => {
       'App móvel': '/app-movel',
       'Central de ajuda': '/ajuda',
     })
+  })
+
+  it('acende a Biblioteca também na página da gravação', () => {
+    const library = NAV_ITEMS.find((item) => item.label === 'Biblioteca')!
+    const people = NAV_ITEMS.find((item) => item.label === 'Pessoas')!
+    expect(isItemActive(library, '/')).toBe(true)
+    expect(isItemActive(library, '/gravacoes/01928f3a')).toBe(true)
+    expect(isItemActive(library, '/busca')).toBe(false)
+    expect(isItemActive(people, '/pessoas/p1')).toBe(true)
+    expect(isItemActive(people, '/pessoasx')).toBe(false)
   })
 
   it('reconhece as rotas da seção recolhível', () => {
@@ -94,11 +110,18 @@ describe('AppShell', () => {
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Tokens de acesso' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current')
+    expect(within(nav).queryByRole('link', { name: 'Importar arquivo' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pular para o conteúdo' })).toHaveAttribute('href', '#conteudo')
     expect(screen.getByText('Mariana Couto')).toBeInTheDocument()
     expect(screen.getByText('mariana@exemplo.org')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Sair' }))
     expect(onLogout).toHaveBeenCalled()
+  })
+
+  it('na gravação, a Biblioteca fica marcada como no frame', () => {
+    renderShell(member, vi.fn(), '/gravacoes/01928f3a-1c00-7a00-8000-000000000401')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    expect(within(nav).getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('abre "Configurações e ajuda" sozinha quando a rota está nela', () => {

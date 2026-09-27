@@ -5567,6 +5567,8 @@ export interface operations {
                 tag?: components["parameters"]["TagFilter"];
                 /** @description Só gravações desta coleção. */
                 collection?: components["parameters"]["CollectionFilter"];
+                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível, como em `GET /api/v1/recordings`: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
+                field?: string[];
                 /** @description Cursor opaco devolvido em `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */

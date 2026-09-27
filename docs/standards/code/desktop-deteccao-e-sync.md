@@ -101,7 +101,9 @@ decisão do usuário, então `auto` nunca é padrão.
 | importação | `<nome original>.<extensão enviada>` | `meeting` | `upload` | `file_metadata` ou `user` | Ogg/Opus, ou o do arquivo copiado |
 
    Os marcadores vão com `client_id`, `at_ms` e a nota; o `device_name` do `capture` é o hostname,
-   que o servidor copia para cada marcador.
+   que o servidor copia para cada marcador. Os marcadores ficam editáveis até o upload ser criado
+   (`upload_id` na fila): a retomada reaproveita o upload com os marcadores de quando ele nasceu, e
+   daí em diante a edição é na web.
 2. `200 deduplicated` → confirmado com o `recording_id` existente, sem transferir nada.
 3. `201` → o `upload_id` vai para a fila antes da primeira parte; cada parte que falta sobe por
    `PUT` na `url` recebida, com os `headers` dela, e o `ETag` é guardado. URLs faltantes vêm de
@@ -134,8 +136,9 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   `device_name` (o hostname, o mesmo do `capture`) e `platform` (`windows`, `macos` ou `linux`).
   O segredo `eclp_` que volta é guardado; no pareamento, o e-mail vem de `GET /me`. As recusas
   viram texto: 401 dá "E-mail ou senha incorretos", `invalid_pairing_code` dá "Código inválido ou
-  vencido" e 429 dá "Muitas tentativas; tente em N s" (pelo `Retry-After`). Essas rotas não têm
-  retentativa: é uma ação da pessoa.
+  vencido" (qualquer 401 do pareamento), 403 `notice_required` dá "Aceite o aviso de
+  responsabilidade na web do eclume e entre de novo aqui" e 429 dá "Muitas tentativas; tente em
+  N s" (pelo `Retry-After`). Essas rotas não têm retentativa: é uma ação da pessoa.
 - **O cofre** é o `PatStore` de sempre, porque a credencial também é `eclp_`: o chaveiro do SO
   pelo `keyring` 4 (serviço `eclume-desktop`, conta `pat`: Secret Service no Linux, Credential
   Manager no Windows, Keychain no macOS). Sem chaveiro (sessão sem Secret Service), vai para `pat`
@@ -171,17 +174,24 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   3. guarda o PEM em `<config_dir>/servidor-pendente/servidor-ca.pem` e lê `GET /api/v1/server`
      já com verificação: o `ca_sha256` do descritor precisa ser o mesmo;
   4. ao entrar, o PEM passa a `<config_dir>/servidor-ca.pem`, que vira o `ca_path`.
-- **Sem impressão digital (TOFU).** Com o endereço digitado ou um anúncio sem `ca`, a tela mostra a
-  impressão digital em `.code-block` ("Confira com quem administra o servidor") e só deixa entrar
-  depois de "Confiar e continuar".
+- **Só o instalador dispensa a conferência** (`account::vouched_by_installer`): o TXT do mDNS não
+  é autenticado, e qualquer máquina da rede pode anunciar outra CA. Com o endereço digitado ou
+  anunciado (com ou sem `ca`), a tela mostra a impressão digital em `.code-block` ("Confira com
+  quem administra o servidor") e só deixa entrar depois de "Confiar e continuar", que chama
+  `confirm_server(url, ca_sha256)`. A trava também está no Rust: `sign_in` e `pair` recusam um
+  servidor `first_use` não confirmado, e `confirm_server` recusa quando o servidor preparado já é
+  outro (uma escolha mais nova terminou antes).
 - Um servidor que não publica CA própria (404 no `eclume-root.crt`, sem impressão digital
-  esperada) usa as raízes do sistema; `http://` só vale em desenvolvimento.
+  esperada) usa as raízes do sistema; `http://` só vale em desenvolvimento: o build de release
+  recusa `http://` fora de `localhost` e `127.0.0.1`.
+- **Com a conta ativa**, a aba Servidor não troca o endereço nem a CA: a credencial e a CA fixada
+  valem para aquele servidor ("Saia da conta antes de trocar o servidor ou a CA").
 - **A CA mudou.** Depois de uma falha no sync com a CA fixada, `account::ca_changed` baixa a raiz
   de novo e compara com a guardada. Se mudou, o sync para com "O certificado do servidor mudou" e
   a janela volta à primeira execução, onde a pessoa escolhe o servidor e entra de novo.
 - **Comandos** da janela: `discover_servers`, `prepare_server(url, ca_sha256?)` (devolve `{name,
   url, ca_sha256, trusted_by}`, com `trusted_by` `fingerprint`, `first_use`, `system` ou
-  `unencrypted`), `sign_in`, `pair`, `sign_out`, `test_connection`, `open_signup` (abre
+  `unencrypted`), `confirm_server(url, ca_sha256?)`, `sign_in`, `pair`, `sign_out`, `test_connection`, `open_signup` (abre
   `<url>/cadastro`) e `pick_ca_file`.
 
 ## Servidor, CA extra e retenção

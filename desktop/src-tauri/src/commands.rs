@@ -275,6 +275,16 @@ pub fn prepare_server(
     to_js(state.prepare_server(&RealNet, &url, ca_sha256.as_deref()))
 }
 
+/// A pessoa conferiu a impressão digital do servidor escolhido.
+#[tauri::command]
+pub fn confirm_server(
+    state: State<'_, AppState>,
+    url: String,
+    ca_sha256: Option<String>,
+) -> CommandResult<()> {
+    to_js(state.confirm_server(&url, ca_sha256.as_deref()))
+}
+
 /// Entra com e-mail e senha no servidor escolhido.
 #[tauri::command(async)]
 pub fn sign_in(
@@ -342,12 +352,10 @@ pub fn pick_ca_file(app: AppHandle) -> Option<String> {
 #[tauri::command]
 pub fn open_signup(app: AppHandle, url: String) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
-    to_js(
-        crate::config::validate_web_url(url.trim()).and_then(|()| {
-            let signup = format!("{}/cadastro", url.trim().trim_end_matches('/'));
-            app.opener()
-                .open_url(&signup, None::<&str>)
-                .map_err(anyhow::Error::from)
-        }),
-    )
+    to_js(crate::config::validate_web_url(url.trim()).and_then(|()| {
+        let signup = format!("{}/cadastro", url.trim().trim_end_matches('/'));
+        app.opener()
+            .open_url(&signup, None::<&str>)
+            .map_err(anyhow::Error::from)
+    }))
 }

@@ -3,6 +3,7 @@
 // - pede o upload novo com `Prefer: code=201` (o mock responde 200/deduplicado por padrão);
 // - encaminha o PUT de parte (URL absoluta em 127.0.0.1:4010, outra origem) com a credencial que
 //   o mock exige e os headers CORS que o armazenamento real devolve.
+import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 // As URLs de parte das fixtures apontam para 127.0.0.1:4010; o mock pode estar em outra porta
@@ -10,28 +11,8 @@ import { expect, test, type Page } from '@playwright/test'
 const FIXTURE_ORIGIN = 'http://127.0.0.1:4010'
 const MOCK = process.env.ECLUME_MOCK_URL ?? FIXTURE_ORIGIN
 const SCREENS = process.env.E2E_SCREENSHOTS ? 'test-results/screens' : null
-
-/** WAV mono 16 bits de `seconds` segundos, um tom de 440 Hz. */
-function wav(seconds: number, rate = 48_000): Buffer {
-  const samples = seconds * rate
-  const buffer = Buffer.alloc(44 + samples * 2)
-  buffer.write('RIFF', 0)
-  buffer.writeUInt32LE(36 + samples * 2, 4)
-  buffer.write('WAVEfmt ', 8)
-  buffer.writeUInt32LE(16, 16)
-  buffer.writeUInt16LE(1, 20)
-  buffer.writeUInt16LE(1, 22)
-  buffer.writeUInt32LE(rate, 24)
-  buffer.writeUInt32LE(rate * 2, 28)
-  buffer.writeUInt16LE(2, 32)
-  buffer.writeUInt16LE(16, 34)
-  buffer.write('data', 36)
-  buffer.writeUInt32LE(samples * 2, 40)
-  for (let i = 0; i < samples; i++) {
-    buffer.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 8000), 44 + i * 2)
-  }
-  return buffer
-}
+// As fixtures de mídia de `npm run fixtures`, as mesmas do teste de navegador da conversão.
+const FIXTURES = path.join('src', 'lib', 'media-convert', '__fixtures__')
 
 async function screenshot(page: Page, name: string) {
   if (!SCREENS) return
@@ -100,90 +81,197 @@ test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }
   await expect(submit).toBeDisabled()
   await page.getByText('Sou responsável por pedir o consentimento das pessoas que gravo.').click()
   await submit.click()
-  await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
 })
 
-test('login, biblioteca, transcrição, import e token contra o mock', async ({ page }) => {
+test('biblioteca na semana, no mês e na lista, com o filtro na requisição', async ({ page }) => {
   await login(page, '1-login')
+  // O mock não filtra nem pagina: a semana de 21/09/2026 é o primeiro exemplo de GET /recordings.
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
+  const monday = page.getByRole('list', { name: 'segunda, 21 de setembro' })
+  await expect(monday.getByRole('listitem')).toHaveCount(2)
+  await expect(page.getByRole('listitem', { name: 'Planejamento semanal, 09:00, 58 min, 2 marcadores' })).toBeVisible()
+  await expect(page.getByRole('listitem', { name: /^1:1 Elisa \/ Ana/ })).toHaveAttribute('data-status', 'processing')
+  await expect(page.getByRole('listitem', { name: /^reuniao-03\.mkv/ })).toHaveAttribute('data-status', 'failed')
+  await expect(page.getByRole('listitem', { name: /^Nota · Ligação do fornecedor/ })).toHaveAttribute(
+    'data-kind',
+    'note',
+  )
+  // A conta de usuário não tem papel: o painel admin não está no menu, nem o import (é o modal).
+  const nav = page.getByRole('navigation', { name: 'Principal' })
+  await expect(nav.getByRole('link', { name: 'Painel admin' })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: 'Importar arquivo' })).toHaveCount(0)
+  await screenshot(page, '2-biblioteca-semana')
 
-  // Biblioteca: as duas gravações da fixture, uma em processamento; sem filtro de compartilhadas.
-  const library = page.getByRole('list', { name: 'Gravações' })
-  await expect(page.getByRole('radio', { name: /Compartilhadas/ })).toHaveCount(0)
-  // A conta de usuário não tem papel: o painel admin não está no menu.
-  await expect(page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Painel admin' })).toHaveCount(0)
-  await expect(library.getByRole('listitem')).toHaveCount(2)
-  await expect(library.getByText('Transcrevendo')).toBeVisible()
-  await expect(library.getByText('Separando locutores')).toBeVisible()
-  await screenshot(page, '2-biblioteca')
+  // O filtro vai para a URL e para a query de GET /recordings.
+  const filters = page.getByRole('complementary', { name: 'Filtros' })
+  const filtered = page.waitForRequest(
+    (r) => r.url().includes('/api/v1/recordings?') && new URL(r.url()).searchParams.getAll('kind').join() === 'meeting',
+  )
+  await filters.getByText('Notas', { exact: true }).click()
+  await filtered
+  await expect(page).toHaveURL(/tipo=reuniao/)
+  const tagged = page.waitForRequest((r) => new URL(r.url()).searchParams.get('tag') === 'programa-liderancas')
+  await filters.getByRole('button', { name: 'programa-liderancas' }).click()
+  await tagged
+  await filters.getByRole('button', { name: 'Limpar filtros' }).click()
+  await expect(page).not.toHaveURL(/tipo=/)
 
-  // Transcrição de 3 locutores: clicar numa fala a destaca.
-  await library.getByRole('link', { name: 'Alinhamento do programa de lideranças' }).click()
+  await page.getByText('Mês', { exact: true }).click()
+  await expect(page.getByText('Setembro de 2026')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'terça, 22 de setembro' }).getByRole('link')).toHaveCount(2)
+  await screenshot(page, '2-biblioteca-mes')
+  await page.getByRole('button', { name: 'Abrir a semana de quinta, 24 de setembro' }).click()
+  await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
+
+  const listRequest = page.waitForRequest((r) => new URL(r.url()).searchParams.get('sort') === 'recorded_desc')
+  await page.getByText('Lista', { exact: true }).click()
+  await listRequest
+  await expect(page.getByRole('region', { name: /sáb 26 set$/ })).toBeVisible()
+  await screenshot(page, '2-biblioteca-lista')
+})
+
+test('modal Importar lê a data dos metadados, converte e envia', async ({ page }) => {
+  await login(page)
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await page.getByRole('button', { name: 'Importar arquivos' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Importar arquivos' })
+  await expect(dialog).toBeVisible()
+  await expect(page).toHaveURL(/importar=1/)
+  // audio.m4a de `npm run fixtures`: creation_time 2026-09-19T14:02:00Z, lido antes da conversão.
+  await dialog.getByLabel(/Solte áudio ou vídeo aqui/).setInputFiles(path.join(FIXTURES, 'audio.m4a'))
+  const date = dialog.getByLabel('Início da gravação de audio.m4a')
+  await expect(date).toHaveValue('2026-09-19T11:02')
+  await expect(dialog.getByText('Dos metadados do arquivo')).toBeVisible()
+  await expect(dialog.getByText('0:10')).toBeVisible()
+  await screenshot(page, '3-importar')
+
+  const created = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/v1/uploads'))
+  const partPut = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes('/parts/1'))
+  await dialog.getByRole('button', { name: 'Enviar 1 arquivo' }).click()
+  const body = (await created).postDataJSON()
+  expect(body).toMatchObject({ recorded_at: '2026-09-19T14:02:00.000Z', recorded_at_source: 'file_metadata' })
+  expect(body).not.toHaveProperty('title')
+  expect((await partPut).postDataBuffer()?.subarray(0, 4).toString()).toBe('OggS')
+  await expect(dialog.getByText(/Enviado ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(dialog.getByRole('link', { name: 'Abrir' })).toHaveAttribute('href', /^\/gravacoes\/[0-9a-f-]{36}$/)
+  await dialog.getByRole('button', { name: 'Fechar' }).last().click()
+  await expect(dialog).toBeHidden()
+
+  // A rota antiga abre o modal sobre a biblioteca.
+  await page.goto('/importar')
+  await expect(page).toHaveURL(/\/\?importar=1$/)
+  await expect(page.getByRole('dialog', { name: 'Importar arquivos' })).toBeVisible()
+})
+
+test('gravação centrada no resumo: pipeline, marcadores, transcrição, edição, chat, exportar e excluir', async ({
+  page,
+}) => {
+  // A resposta do chat, consultada pelo id da mensagem na fila, volta pronta com o mesmo id.
+  await page.route('**/api/v1/summary-chat-messages/*', async (route) => {
+    const response = await route.fetch()
+    const done = await response.json()
+    const id = new URL(route.request().url()).pathname.split('/').at(-1)
+    await route.fulfill({ response, json: { ...done, id, content: 'Pronto: as decisões estão em tabela.' } })
+  })
+  await login(page)
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+
+  // O mock devolve a gravação transcrita do exemplo para qualquer id.
+  await expect(page.getByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })).toBeVisible()
+  const nav = page.getByRole('navigation', { name: 'Principal' })
+  await expect(nav.getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('list', { name: 'Processamento' }).getByRole('listitem')).toHaveText([
+    'Áudio recebido',
+    'Pré-processamento',
+    'Transcrição',
+    'Campos preenchidos',
+    'Tipo de agenda',
+    'Resumo pronto',
+  ])
+  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
+  await expect(summary.getByText('Editado por você · versão 2')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Campos' }).getByText('Automático').first()).toBeVisible()
+  await screenshot(page, '4-gravacao')
+
+  // Os ticks e as fichas dos marcadores tocam dali.
+  await expect(page.getByRole('button', { name: 'Marcador em 00:00:42: Decisão sobre as turmas' })).toBeVisible()
+  await page
+    .getByRole('group', { name: 'Marcadores' })
+    .getByRole('button', { name: /00:02:11/ })
+    .click()
+  await expect(page.getByRole('slider', { name: 'Posição no áudio' })).toHaveAttribute('aria-valuetext', '00:02:11')
+
+  // A transcrição recolhida abre com o marcador antes da fala.
+  await page.locator('details.disclosure > summary').click()
   const falas = page.getByRole('list', { name: 'Falas' })
   await expect(falas.getByRole('listitem')).toHaveCount(12)
-  await falas.getByRole('button', { name: /Ouvir a partir de 00:39/ }).click()
-  await expect(falas.getByRole('listitem').nth(3)).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByRole('list', { name: 'Resumos gerados' }).getByText('Reunião de equipe')).toBeVisible()
+  await expect(falas.getByRole('group', { name: 'Marcador em 00:00:42' })).toContainText('Decisão sobre as turmas')
+  await screenshot(page, '5-gravacao-marcadores')
 
-  // Renomear: o mock devolve o locutor 2 ligado a Rafael Lima.
-  const speakers = page.getByRole('region', { name: 'Locutores' })
-  await speakers.getByRole('button', { name: 'Renomear Locutor 2' }).click()
-  await speakers.getByLabel('Novo nome de Locutor 2').fill('Rafael')
-  await speakers.getByRole('button', { name: 'Salvar' }).click()
-  await expect(speakers.getByRole('link', { name: 'Rafael Lima' })).toBeVisible()
-  await screenshot(page, '3-transcricao')
+  // Edição do resumo: salvar manda a versão aberta.
+  await summary.getByRole('button', { name: 'Editar' }).click()
+  const editor = page.getByRole('region', { name: 'Editando o resumo' })
+  await editor.getByRole('textbox', { name: 'Resumo em Markdown' }).fill('# Ata curta')
+  const saved = page.waitForRequest((r) => r.method() === 'PUT' && r.url().endsWith('/summary'))
+  await editor.getByRole('button', { name: 'Salvar' }).click()
+  expect((await saved).postDataJSON()).toEqual({ content_md: '# Ata curta', base_version: 2 })
+  await expect(editor).toBeHidden()
 
-  // Import: conversão real no navegador e upload create → PUT → complete.
-  await navTo(page, 'Importar arquivo')
-  await page.getByLabel('Escolher arquivo').setInputFiles({ name: 'reuniao.wav', mimeType: 'audio/wav', buffer: wav(3) })
-  await expect(page.getByText(/Duração 3 s/)).toBeVisible()
-  await expect(page.getByLabel('Título da gravação')).toHaveValue('reuniao')
-  await screenshot(page, '4-import')
-  const partPut = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes('/parts/1'))
-  await page.getByRole('button', { name: 'Converter e enviar' }).click()
-  await expect(page.getByText('Arquivo enviado. A transcrição entrou na fila.')).toBeVisible({ timeout: 60_000 })
-  const put = await partPut
-  expect(put.postDataBuffer()?.subarray(0, 4).toString()).toBe('OggS')
-  await expect(page.getByRole('link', { name: 'Acompanhar a gravação' })).toHaveAttribute(
-    'href',
-    /^\/gravacoes\/[0-9a-f-]{36}$/,
-  )
+  // Chat: o pedido entra na fila e a resposta chega pela consulta.
+  const chat = page.getByRole('complementary', { name: 'Ajustar o resumo' })
+  await chat.getByRole('textbox', { name: 'Pedido de ajuste' }).fill('Liste as decisões em tabela.')
+  await chat.getByRole('button', { name: 'Enviar' }).click()
+  await expect(chat.getByText('Pronto: as decisões estão em tabela.')).toBeVisible()
 
-  // Token: o segredo aparece uma vez.
-  await navTo(page, 'Tokens de acesso')
-  await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
-  await page.getByRole('button', { name: 'lumea', exact: true }).click()
-  await page.getByRole('button', { name: 'Criar token' }).click()
-  await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
-  await screenshot(page, '5-tokens')
+  // Exportar baixa por fetch.
+  await page.getByRole('button', { name: 'Exportar' }).click()
+  const download = page.waitForEvent('download')
+  await page.getByRole('menuitem', { name: /Transcrição e resumo/ }).click()
+  expect((await download).suggestedFilename()).toMatch(/\.docx$/)
 
-  await navTo(page, 'App desktop')
-  await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
-  await screenshot(page, '6-desktop')
+  // Excluir volta para a biblioteca de onde veio, com o aviso.
+  await page.getByRole('button', { name: 'Excluir', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Excluir a gravação?' })
+  await confirm.getByRole('button', { name: 'Excluir' }).click()
+  await expect(page.getByText('Gravação excluída.')).toBeVisible()
+  await expect(page).toHaveURL(/visao=semana&data=2026-09-21/)
 })
 
-test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {
-  await page.goto('/entrar')
-  await page.getByLabel('E-mail').fill('mariana.couto@example.com')
-  await page.getByLabel('Senha').fill('senha-de-teste')
-  await page.getByRole('button', { name: 'Entrar' }).click()
+test('busca com ficha de campo, gravação no segundo, pessoas, coleções e token contra o mock', async ({ page }) => {
+  await login(page)
   const nav = page.getByRole('navigation', { name: 'Principal' })
 
-  // Busca: o mock devolve os três trechos de "turmas", com o termo destacado.
+  // Busca: o mock devolve os três trechos de "turmas", agrupados na gravação.
   await nav.getByRole('link', { name: 'Busca' }).click()
-  await page.getByLabel('Termos').fill('turmas')
+  await page.getByRole('searchbox', { name: 'Termos' }).fill('turmas')
   await page.getByRole('button', { name: 'Buscar' }).click()
-  const results = page.getByRole('list', { name: 'Resultados' })
+  const results = page.getByRole('region', { name: 'Resultados' })
   await expect(results.getByRole('listitem')).toHaveCount(3)
   await expect(results.locator('mark').first()).toHaveText('turmas')
-  await expect(page).toHaveURL(/\/busca\?q=turmas$/)
+  await expect(page.getByText('3 trechos em 1 gravação')).toBeVisible()
+
+  // A ficha do campo "Cliente" (escolha) vira `field` na requisição.
+  const withField = page.waitForRequest((r) =>
+    (new URL(r.url()).searchParams.get('field') ?? '').endsWith(':Serra Azul'),
+  )
+  await page
+    .getByRole('group', { name: 'Filtros' })
+    .getByRole('button', { name: /^Cliente:/ })
+    .click()
+  await page.getByRole('combobox', { name: 'Cliente' }).selectOption('Serra Azul')
+  await page.getByRole('button', { name: 'Aplicar' }).click()
+  await withField
+  await expect(page).toHaveURL(/campo=/)
   await screenshot(page, '7-busca')
 
-  // O trecho abre a gravação no segundo exato, com a fala destacada.
-  await results.getByRole('link').first().click()
+  // O trecho abre a gravação no segundo exato, com a transcrição aberta e a fala destacada.
+  await results.getByRole('link', { name: /Ouvir em 00:02:02/ }).click()
   await expect(page).toHaveURL(/\/gravacoes\/[0-9a-f-]{36}\?t=122500$/)
   const falas = page.getByRole('list', { name: 'Falas' })
-  await expect(falas.getByRole('listitem').nth(9)).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByRole('region', { name: 'Organização' }).getByLabel('Cliente')).toHaveValue('Metalúrgica Serra Azul')
+  await expect(falas.getByRole('listitem').nth(9).locator('.segment')).toHaveAttribute('aria-current', 'true')
 
   // Ligar o locutor 3 pelo combobox: o mock devolve o locutor ligado a Rafael Lima.
   const speakers = page.getByRole('region', { name: 'Locutores' })
@@ -196,15 +284,22 @@ test('busca, gravação no segundo, pessoas e coleções contra o mock', async (
   // Pessoas: diretório e página da pessoa com as falas dela.
   await nav.getByRole('link', { name: 'Pessoas' }).click()
   await expect(page.getByRole('list', { name: 'Pessoas' }).getByRole('listitem')).toHaveCount(3)
-  await screenshot(page, '9-pessoas')
   await page.getByRole('link', { name: 'Rafael Lima' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Rafael Lima' })).toBeVisible()
   await expect(page.getByRole('list', { name: 'Falas da pessoa' }).getByRole('listitem')).toHaveCount(3)
-  await screenshot(page, '10-pessoa')
 
   await nav.getByRole('link', { name: 'Coleções' }).click()
   await expect(page.getByRole('heading', { name: 'Metalúrgica Serra Azul' })).toBeVisible()
-  await screenshot(page, '11-colecoes')
+
+  // Token: o segredo aparece uma vez.
+  await navTo(page, 'Tokens de acesso')
+  await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
+  await page.getByRole('button', { name: 'lumea', exact: true }).click()
+  await page.getByRole('button', { name: 'Criar token' }).click()
+  await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
+
+  await navTo(page, 'App desktop')
+  await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
 })
 
 test('identificação por voz contra o mock', async ({ page }) => {
@@ -212,7 +307,9 @@ test('identificação por voz contra o mock', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Principal' })
 
   // Gravação: a sugestão por voz do exemplo, com aceitar e recusar; recusar tira a sugestão.
-  await page.getByRole('list', { name: 'Gravações' }).getByRole('link', { name: 'Alinhamento do programa de lideranças' }).click()
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.locator('details.disclosure > summary').click()
   const speakers = page.getByRole('region', { name: 'Locutores' })
   const suggestions = speakers.getByRole('list', { name: 'Sugestões por voz para Locutor 2' })
   await expect(suggestions).toContainText('Parece ser Rafael Lima — 82%')
@@ -233,5 +330,4 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await expect(voice.getByRole('button', { name: 'Confirmar: esquecer a voz' })).toBeVisible()
   await screenshot(page, '16-pessoa-voz')
   await voice.getByRole('button', { name: 'Manter' }).click()
-
 })

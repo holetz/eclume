@@ -110,6 +110,7 @@ No Linux, o build exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`,
 No host de build, o `cmake` vem de `uv tool install cmake`.
 
 ```bash
+cargo fmt --manifest-path desktop/Cargo.toml --all --check
 cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace

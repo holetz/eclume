@@ -136,7 +136,7 @@
       versao: "0.2.0",
       servidores: [
         { name: "192.168.15.199", url: "https://192.168.15.199:8443", ca_sha256: CA, origin: "installer" },
-        { name: "Escritório", url: "https://10.0.0.2", ca_sha256: null, origin: "network" },
+        { name: "Escritório", url: "https://10.0.0.2", ca_sha256: CA, origin: "network" },
       ],
       preparado: null,
       testeDeConexao: { email: CONTA.email, last_upload_at: new Date(2026, 8, 27, 10, 38).getTime() },
@@ -358,18 +358,29 @@
         name: "eclume",
         url,
         ca_sha256: caSha256 ?? "3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d",
-        trusted_by: caSha256 ? "fingerprint" : "first_use",
+        // Como no Rust: só o endereço e a impressão digital do instalador dispensam a conferência.
+        trusted_by: e.servidores.some((s) => s.origin === "installer" && s.url === url && s.ca_sha256 === caSha256)
+          ? "fingerprint"
+          : "first_use",
+        confirmed: false,
       };
       return e.preparado;
     },
+    confirm_server(e, { url }) {
+      if (e.preparado?.url !== url) throw "O servidor escolhido mudou; confira a impressão digital de novo";
+      e.preparado.confirmed = true;
+      return null;
+    },
     sign_in(e, { email, password }) {
       if (!e.preparado) throw "Escolha o servidor antes de entrar";
+      if (e.preparado.trusted_by === "first_use" && !e.preparado.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
       if (password === "errada") throw "E-mail ou senha incorretos";
       entrar(e, email);
       return null;
     },
     pair(e, { code }) {
       if (!e.preparado) throw "Escolha o servidor antes de entrar";
+      if (e.preparado.trusted_by === "first_use" && !e.preparado.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
       if (code.replace("-", "").toUpperCase() !== "K7Q4MX") throw "Código inválido ou vencido";
       entrar(e, CONTA.email);
       return null;

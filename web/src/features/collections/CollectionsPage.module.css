@@ -19,18 +19,6 @@
   gap: var(--space-6);
 }
 
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.header p {
-  margin-top: var(--space-1);
-}
-
 .list {
   list-style: none;
   margin: 0;

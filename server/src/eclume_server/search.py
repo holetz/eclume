@@ -11,10 +11,11 @@ import html
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import any_, cast, func, literal_column, select
+from sqlalchemy import and_, any_, cast, func, literal_column, select
 from sqlalchemy.dialects.postgresql import REGCONFIG, TSVECTOR
 
 from eclume_server.db import tables as t
+from eclume_server.fields import field_filters
 from eclume_server.pagination import iso
 from eclume_server.transcripts import segment_json, speaker_json
 from eclume_server.voice import load_suggestions
@@ -44,6 +45,8 @@ class SearchFilters:
     date_to: datetime | None
     tag: str | None
     collection: UUID | None
+    # `<field_id>:<valor>`, repetível: OU no mesmo campo, E entre campos (como em `GET /recordings`).
+    fields: tuple[str, ...] = ()
 
 
 def _config() -> ColumnElement[Any]:
@@ -102,6 +105,8 @@ async def search(conn: AsyncConnection, filters: SearchFilters, offset: int, lim
         hits = hits.where(filters.tag == any_(r.c.tags))
     if filters.collection is not None:
         hits = hits.where(filters.collection == any_(r.c.collection_ids))
+    if filters.fields:
+        hits = hits.where(and_(*await field_filters(conn, list(filters.fields))))
 
     def order(q: Any) -> list[Any]:  # noqa: ANN401 — colunas da consulta ou da subconsulta
         if tsquery is not None:

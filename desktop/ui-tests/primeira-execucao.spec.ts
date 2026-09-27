@@ -40,17 +40,22 @@ test('sem conta, abre na primeira execução com o servidor do instalador e entr
   expect(feitas).toContainEqual({ comando: 'sign_in', args: { email: 'ana@exemplo.com.br', password: 'segredo' } })
 })
 
-test('servidor achado sem impressão digital pede para conferir antes de entrar', async ({ abrir }) => {
+test('servidor anunciado na rede pede para conferir a impressão digital antes de entrar', async ({ abrir }) => {
   const page = await abrir('primeiraExecucao')
   await page.locator('#bv-servidores .choice').nth(1).click()
   const confianca = page.locator('#bv-confianca')
   await expect(confianca).toBeVisible()
-  await expect(page.locator('#bv-impressao')).toHaveText(/^3F:9A:1C:6E:0B:7D:.*:7B:9D$/)
+  // O anúncio do mDNS traz a impressão digital, mas não é autenticado: a pessoa confere.
+  await expect(page.locator('#bv-impressao')).toHaveText(/^98:E2:09:F5:.*:79:2F$/)
   await expect(page.locator('#bv-entrar')).toBeDisabled()
   await expect(page.locator('#bv-parear')).toBeDisabled()
   await page.locator('#bv-confiar').click()
   await expect(confianca).toBeHidden()
   await expect(page.locator('#bv-entrar')).toBeEnabled()
+  expect(await chamadas(page)).toContainEqual({
+    comando: 'confirm_server',
+    args: { url: 'https://10.0.0.2', caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f' },
+  })
 })
 
 test('Avançado: endereço digitado e código de pareamento', async ({ abrir }) => {

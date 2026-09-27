@@ -85,7 +85,7 @@ impl Devices {
             platform: platform(),
         };
         let request = HttpRequest::new("POST", self.endpoint("/devices/login")).json(&body)?;
-        self.credential(request)
+        self.credential(request, "E-mail ou senha incorretos")
     }
 
     /// Troca o código de pareamento (6 caracteres, com ou sem hífen) pela credencial.
@@ -96,24 +96,27 @@ impl Devices {
             platform: platform(),
         };
         let request = HttpRequest::new("POST", self.endpoint("/devices/pair")).json(&body)?;
-        self.credential(request)
+        self.credential(request, "Código inválido ou vencido")
     }
 
-    fn credential(&self, request: HttpRequest) -> Result<DeviceCredential> {
+    /// `rejected` é o texto de um 401: a senha ou o código recusados.
+    fn credential(&self, request: HttpRequest, rejected: &str) -> Result<DeviceCredential> {
         let response = self.send(request)?;
         if response.is_success() {
             return parse("falha ao entrar", &response);
         }
-        Err(sign_in_error(&response))
+        Err(sign_in_error(&response, rejected))
     }
 }
 
 /// O texto de uma recusa do login ou do pareamento.
-fn sign_in_error(response: &HttpResponse) -> anyhow::Error {
+fn sign_in_error(response: &HttpResponse, rejected: &str) -> anyhow::Error {
     let problem: Problem = serde_json::from_slice(&response.body).unwrap_or_default();
     match (response.status, problem.code.as_deref()) {
-        (401, Some("invalid_pairing_code")) => anyhow!("Código inválido ou vencido"),
-        (401, _) => anyhow!("E-mail ou senha incorretos"),
+        (401, _) => anyhow!("{rejected}"),
+        (403, Some("notice_required")) => {
+            anyhow!("Aceite o aviso de responsabilidade na web do eclume e entre de novo aqui")
+        }
         (429, _) => match response
             .header("retry-after")
             .and_then(|value| value.trim().parse::<u64>().ok())
@@ -225,6 +228,14 @@ mod tests {
             )
             .expect(
                 "POST /api/v1/devices/login",
+                problem(403, "notice_required", None),
+            )
+            .expect(
+                "POST /api/v1/devices/pair",
+                problem(401, "unauthorized", None),
+            )
+            .expect(
+                "POST /api/v1/devices/login",
                 problem(422, "validation_failed", None),
             );
         let (devices, _) = devices(script);
@@ -244,6 +255,14 @@ mod tests {
         assert_eq!(
             text(devices.pair("AAAAAA", "pc")),
             "Muitas tentativas; tente de novo em instantes"
+        );
+        assert_eq!(
+            text(devices.login("a@b.c", "x", "pc")),
+            "Aceite o aviso de responsabilidade na web do eclume e entre de novo aqui"
+        );
+        assert_eq!(
+            text(devices.pair("AAAAAA", "pc")),
+            "Código inválido ou vencido"
         );
         assert!(text(devices.login("a@b.c", "x", "pc")).contains("validation_failed"));
     }
