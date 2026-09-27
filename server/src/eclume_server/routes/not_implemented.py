@@ -30,7 +30,6 @@ NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("PATCH", "/api/v1/markers/{marker_id}", _GRAVACAO),
     ("DELETE", "/api/v1/markers/{marker_id}", _GRAVACAO),
     ("GET", "/api/v1/recordings/{recording_id}/export", _GRAVACAO),
-    ("DELETE", "/api/v1/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}", _GRAVACAO),
 )
 
 

@@ -340,3 +340,14 @@ async def forget(conn: AsyncConnection, person_id: UUID) -> tuple[int, int]:
         )
     )
     return samples.rowcount, suggestions.rowcount
+
+
+async def forget_sample(conn: AsyncConnection, person_id: UUID, key: SpeakerKey) -> bool:
+    """Tira uma amostra da impressão da pessoa, sob a RLS do dono; o locutor segue ligado."""
+    vs = t.voice_samples.c
+    result = await conn.execute(
+        delete(t.voice_samples).where(
+            vs.person_id == person_id, vs.transcript_id == key.transcript_id, vs.speaker_id == key.speaker_id
+        )
+    )
+    return result.rowcount > 0
