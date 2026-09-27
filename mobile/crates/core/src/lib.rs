@@ -4,6 +4,8 @@
 
 pub mod conexao;
 pub mod config;
+pub mod rede;
+pub mod sync;
 
 /// O prefixo do `client_version` e do user agent do app Android.
 pub const CLIENT_PREFIX: &str = "eclume-android";
