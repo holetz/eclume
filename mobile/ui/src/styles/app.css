@@ -39,3 +39,49 @@ body {
   min-height: 44px;
 }
 
+.linha-entre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.duas-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stack-curta {
+  display: grid;
+  gap: 8px;
+}
+
+.erro {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 14px;
+}
+
+/* A impressão digital da CA em blocos de 4, para conferir com a web. */
+.impressao {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  line-height: 1.7;
+  word-spacing: 0.3em;
+  letter-spacing: 0.02em;
+}
+
+/* Lendo o QR: a câmera fica atrás do WebView, e só o visor fica vazado. */
+html.lendo-codigo,
+html.lendo-codigo body,
+html.lendo-codigo #root,
+html.lendo-codigo .m-app {
+  background: transparent;
+}
+
+html.lendo-codigo .viewfinder {
+  background: transparent;
+}
+
