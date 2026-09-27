@@ -9,7 +9,9 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use eclume_detect::{Action, AppKey, AutoRecorder, Policy, Recording};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
-use eclume_recorder::{Kind, MeetingEvent, Queue, QueueCounts, QueuedRecording, METER_BARS};
+use eclume_recorder::{
+    Kind, Marker, MeetingEvent, Queue, QueueCounts, QueuedRecording, METER_BARS,
+};
 use eclume_sync::{PatSource, PatStore, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
@@ -137,6 +139,10 @@ pub struct StatusView {
     pub meeting: Option<MeetingView>,
     /// Pergunta "gravar esta reunião?" esperando resposta.
     pub pending_ask: Option<MeetingView>,
+    /// Marcadores da gravação em curso.
+    pub marker_count: u32,
+    /// O último marcador da gravação em curso, cuja nota a janela deixa editar.
+    pub last_marker: Option<Marker>,
     pub counts: QueueCounts,
     pub web_url: String,
     /// Aviso da última ação (fonte que faltou, erro ao gravar).
@@ -309,6 +315,11 @@ impl AppState {
         let status = self.status()?;
         let inner = self.inner()?;
         let origin = inner.active.as_ref().and(inner.origin);
+        let queue = self.lock_queue()?;
+        let markers = match &inner.active {
+            Some(active) => queue.markers(active.id())?,
+            None => Vec::new(),
+        };
         Ok(StatusView {
             status,
             recording_id: inner.active.as_ref().map(|a| a.id().to_string()),
@@ -319,7 +330,9 @@ impl AppState {
             recording_app: origin.and_then(|o| o.app).map(MeetingView::from),
             meeting: inner.auto.meeting().map(MeetingView::from),
             pending_ask: inner.auto.pending_ask().map(MeetingView::from),
-            counts: self.lock_queue()?.counts()?,
+            marker_count: u32::try_from(markers.len()).unwrap_or(u32::MAX),
+            last_marker: markers.into_iter().max_by_key(|m| m.created_at),
+            counts: queue.counts()?,
             web_url: inner
                 .config
                 .effective_web_url(std::env::var(config::WEB_URL_ENV).ok()),
@@ -369,6 +382,24 @@ impl AppState {
         self.start(Origin::MANUAL, options, open_mic)?;
         self.inner()?.auto.on_manual_start();
         Ok(NoteToggle::Started)
+    }
+
+    /// Marca o instante atual da gravação em curso: a posição no áudio, e não o relógio.
+    pub fn add_marker(&self, note: Option<String>) -> Result<Marker> {
+        let inner = self.inner()?;
+        let active = inner
+            .active
+            .as_ref()
+            .ok_or_else(|| anyhow!("nenhuma gravação em andamento"))?;
+        let at_ms = active.progress().position_ms();
+        self.lock_queue()?
+            .add_marker(active.id(), at_ms, note.as_deref())
+    }
+
+    /// Troca a nota de um marcador enquanto a gravação não subiu.
+    pub fn set_marker_note(&self, client_id: &str, note: Option<String>) -> Result<Marker> {
+        self.lock_queue()?
+            .set_marker_note(client_id, note.as_deref())
     }
 
     /// O medidor da nota em curso; `None` sem nota.
@@ -775,6 +806,53 @@ mod tests {
         };
         assert_eq!(recording.kind, Kind::Note);
         assert_eq!(state.recordings(10).unwrap().len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn marcadores_na_posicao_do_audio_com_nota_editavel() {
+        let (state, dir) = state("marcadores");
+        assert!(
+            state.add_marker(None).is_err(),
+            "sem gravação não há marcador"
+        );
+        state.start_recording(|| sine_sources(60)).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let first = state.add_marker(None).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let second = state
+            .add_marker(Some("decisão do orçamento".into()))
+            .unwrap();
+        assert!(first.at_ms > 0);
+        assert!(
+            second.at_ms > first.at_ms,
+            "{} ≤ {}",
+            second.at_ms,
+            first.at_ms
+        );
+
+        let view = state.view().unwrap();
+        assert_eq!(view.marker_count, 2);
+        assert_eq!(view.last_marker.as_ref(), Some(&second));
+        let edited = state
+            .set_marker_note(&first.client_id, Some("ação".into()))
+            .unwrap();
+        assert_eq!(edited.note.as_deref(), Some("ação"));
+
+        let recording = state.stop_recording().unwrap();
+        let view = state.view().unwrap();
+        assert_eq!(view.marker_count, 0);
+        assert!(view.last_marker.is_none());
+        let saved = state
+            .queue()
+            .lock()
+            .unwrap()
+            .markers(&recording.id)
+            .unwrap();
+        assert_eq!(saved.len(), 2);
+        assert_eq!(saved[0].note.as_deref(), Some("ação"));
+        // Enquanto não subiu, a nota ainda muda.
+        state.set_marker_note(&second.client_id, None).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 

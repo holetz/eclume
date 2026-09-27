@@ -67,6 +67,15 @@ pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
     result.map(|_| ())
 }
 
+/// Marcador pela bandeja ou pelo atalho: não abre nada nem notifica, para não atrapalhar a reunião.
+pub(crate) fn add_marker(app: &AppHandle) {
+    match app.state::<AppState>().add_marker(None) {
+        Ok(marker) => log::info!("marcador em {} ms", marker.at_ms),
+        Err(err) => log::warn!("marcador ignorado: {err:#}"),
+    }
+    refresh_ui(app);
+}
+
 /// Arquivo de log, no diretório de logs do app.
 const LOG_FILE: &str = "eclume.log";
 /// Acima disso, o log vira `eclume.log.1` ao abrir o app.
@@ -168,6 +177,8 @@ pub fn run() {
             commands::toggle_recording,
             commands::new_note,
             commands::note_meter,
+            commands::add_marker,
+            commands::set_marker_note,
             commands::open_web,
             commands::settings,
             commands::save_settings,

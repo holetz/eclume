@@ -16,6 +16,7 @@ use crate::state::{AppState, AppStatus, StatusView};
 const TRAY_ID: &str = "eclume";
 const MENU_STATUS: &str = "status";
 const MENU_TOGGLE: &str = "toggle";
+const MENU_MARKER: &str = "marker";
 const MENU_ASK_RECORD: &str = "ask-record";
 const MENU_ASK_IGNORE: &str = "ask-ignore";
 const MENU_SYNC: &str = "sync-now";
@@ -29,6 +30,8 @@ struct MenuHandles {
     toggle: MenuItem<Wry>,
     /// A pergunta que o menu mostra agora.
     ask: Option<AppKey>,
+    /// O menu tem o item "Adicionar marcador" (só gravando).
+    recording: bool,
 }
 
 struct TrayHandles {
@@ -41,7 +44,11 @@ pub fn is_visible(app: &AppHandle) -> bool {
     app.try_state::<TrayHandles>().is_some()
 }
 
-fn build_menu(app: &AppHandle, ask: Option<AppKey>) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
+fn build_menu(
+    app: &AppHandle,
+    ask: Option<AppKey>,
+    recording: bool,
+) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
     let status = MenuItem::with_id(
         app,
         MENU_STATUS,
@@ -76,6 +83,15 @@ fn build_menu(app: &AppHandle, ask: Option<AppKey>) -> tauri::Result<(Menu<Wry>,
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&toggle)?;
+    if recording {
+        menu.append(&MenuItem::with_id(
+            app,
+            MENU_MARKER,
+            "Adicionar marcador",
+            true,
+            None::<&str>,
+        )?)?;
+    }
     menu.append(&MenuItem::with_id(
         app,
         MENU_SYNC,
@@ -111,13 +127,14 @@ fn build_menu(app: &AppHandle, ask: Option<AppKey>) -> tauri::Result<(Menu<Wry>,
             status,
             toggle,
             ask,
+            recording,
         },
     ))
 }
 
 /// Cria o ícone e o menu da bandeja.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
-    let (menu, handles) = build_menu(app, None)?;
+    let (menu, handles) = build_menu(app, None, false)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(AppStatus::Idle)?)
         .tooltip(crate::APP_NAME)
@@ -150,6 +167,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
                 crate::refresh_ui(&app);
             });
         }
+        MENU_MARKER => crate::add_marker(app),
         MENU_ASK_RECORD => crate::auto::answer(app, true),
         MENU_ASK_IGNORE => crate::auto::answer(app, false),
         MENU_SYNC => {
@@ -194,9 +212,10 @@ pub fn refresh(app: &AppHandle) {
     };
     let line = status_line(&view);
     let ask = view.pending_ask.map(|a| a.app);
+    let recording = view.status == AppStatus::Recording;
     let result = (|| -> tauri::Result<()> {
-        if menu.ask != ask {
-            let (next, next_handles) = build_menu(app, ask)?;
+        if menu.ask != ask || menu.recording != recording {
+            let (next, next_handles) = build_menu(app, ask, recording)?;
             handles.tray.set_menu(Some(next))?;
             *menu = next_handles;
         }
@@ -232,6 +251,11 @@ pub fn status_line(view: &StatusView) -> String {
             (None, true) => parts.push("automático".into()),
             (None, false) => {}
         }
+        match view.marker_count {
+            0 => {}
+            1 => parts.push("1 marcador".into()),
+            n => parts.push(format!("{n} marcadores")),
+        }
     } else if let Some(ask) = view.pending_ask {
         parts.push(format!("reunião no {} detectada", ask.label));
     }
@@ -265,6 +289,8 @@ mod tests {
             recording_started_at: None,
             recording_kind: None,
             note_silence_s: Some(4),
+            marker_count: 0,
+            last_marker: None,
             recording_auto: false,
             recording_app: None,
             meeting: None,
@@ -303,6 +329,13 @@ mod tests {
             status_line(&auto),
             "Gravando · Microsoft Teams (automático)"
         );
+        auto.marker_count = 3;
+        assert_eq!(
+            status_line(&auto),
+            "Gravando · Microsoft Teams (automático) · 3 marcadores"
+        );
+        auto.marker_count = 1;
+        assert!(status_line(&auto).ends_with(" · 1 marcador"));
         let mut asking = view(AppStatus::Idle, 2);
         asking.pending_ask = Some(MeetingView::from(AppKey::Zoom));
         assert_eq!(

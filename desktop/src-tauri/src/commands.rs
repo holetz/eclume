@@ -1,6 +1,6 @@
 //! Comandos Tauri que a janela chama (`window.__TAURI__.core.invoke`).
 
-use eclume_recorder::QueuedRecording;
+use eclume_recorder::{Marker, QueuedRecording};
 use tauri::{AppHandle, State};
 
 use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView};
@@ -43,6 +43,28 @@ pub fn new_note(app: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub fn note_meter(state: State<'_, AppState>) -> CommandResult<Option<NoteMeter>> {
     to_js(state.note_meter())
+}
+
+/// Marca o instante atual da gravação, com nota opcional.
+#[tauri::command]
+pub fn add_marker(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    note: Option<String>,
+) -> CommandResult<Marker> {
+    let result = state.add_marker(note);
+    crate::refresh_ui(&app);
+    to_js(result)
+}
+
+/// Troca a nota de um marcador da gravação em curso.
+#[tauri::command]
+pub fn set_marker_note(
+    state: State<'_, AppState>,
+    client_id: String,
+    note: Option<String>,
+) -> CommandResult<Marker> {
+    to_js(state.set_marker_note(&client_id, note))
 }
 
 #[tauri::command]
