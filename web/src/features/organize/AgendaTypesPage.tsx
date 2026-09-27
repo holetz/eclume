@@ -8,12 +8,18 @@ import { NEW, useGuardedSelection } from './useGuardedSelection'
 
 const SUMMARY_LINE_MAX = 60
 
-/** "Resumo: " com os títulos `##` das instruções, em minúsculas; sem títulos, a primeira linha. */
+/** "Resumo: " com os títulos `##` das instruções, em minúsculas; sem títulos, a primeira linha, cortada numa palavra. */
 function summaryLabel(instructions: string): string {
   const headings = [...instructions.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1].toLowerCase())
   if (headings.length) return `Resumo: ${headings.join(', ')}`
   const first = instructions.split('\n').find((line) => line.trim())?.trim() ?? ''
-  return `Resumo: ${first.slice(0, SUMMARY_LINE_MAX)}`
+  if (first.length <= SUMMARY_LINE_MAX) return `Resumo: ${first}`
+  // Corta na última palavra inteira, sem a pontuação solta do fim.
+  const cut = first
+    .slice(0, SUMMARY_LINE_MAX + 1)
+    .replace(/\s+\S*$/, '')
+    .replace(/[\s,;:.]+$/, '')
+  return `Resumo: ${cut}…`
 }
 
 export function AgendaTypesPage() {

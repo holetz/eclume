@@ -177,7 +177,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             disabled={blocked || ready.length === 0 || reading || missingDate}
             onClick={queue.send}
           >
-            {ready.length === 1 ? 'Enviar 1 arquivo' : `Enviar ${ready.length} arquivos`}
+            {ready.length === 0 ? 'Enviar arquivos' : ready.length === 1 ? 'Enviar 1 arquivo' : `Enviar ${ready.length} arquivos`}
           </button>
         </>
       }
