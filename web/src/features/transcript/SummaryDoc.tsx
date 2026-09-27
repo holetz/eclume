@@ -102,6 +102,7 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   const summaryStep = recording.pipeline.find((step) => step.step === 'summary')
 
   async function copy() {
+    setCopied(null)
     try {
       await navigator.clipboard.writeText(`# ${recording.title}\n\n${current?.content_md ?? ''}`)
       setCopied('ok')

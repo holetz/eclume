@@ -28,5 +28,6 @@ export async function downloadExport(recordingId: string, format: ExportFormat):
   document.body.append(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(href)
+  // Revogar logo após o clique pode abortar o download no Safari e no Firefox.
+  setTimeout(() => URL.revokeObjectURL(href), 60_000)
 }

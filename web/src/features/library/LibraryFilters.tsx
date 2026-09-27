@@ -74,7 +74,8 @@ function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field 
   }
   const apply = () => {
     setDraft(null)
-    set(text.trim() ? [text.trim()] : [])
+    const next = text.trim()
+    if (next !== (values[0] ?? '')) set(next ? [next] : [])
   }
   return (
     <Group title={field.name}>

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { api, type Schemas } from '../../api/client'
-import { unwrap } from '../../api/problem'
+import { ApiError, unwrap } from '../../api/problem'
 import { hms } from './markers'
 import { chatKey, summaryKey } from './queries'
 
@@ -66,6 +66,11 @@ export function useSendChat(recordingId: string) {
       queryClient.setQueryData<ChatPage>(chatKey(recordingId), (page) =>
         merge(page, [exchange.message, exchange.reply]),
       ),
+    // Outro pedido em aberto (em outra aba, por exemplo): relê o histórico para acompanhá-lo.
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'chat_busy')
+        void queryClient.invalidateQueries({ queryKey: chatKey(recordingId) })
+    },
   })
 }
 

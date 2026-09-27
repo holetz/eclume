@@ -103,6 +103,14 @@ export function LibraryPage() {
     setParams(next)
   }
 
+  // Abrir e fechar o modal Importar não empilha histórico: Voltar não o reabre.
+  function setImporting(open: boolean) {
+    const next = new URLSearchParams(params)
+    if (open) next.set('importar', '1')
+    else next.delete('importar')
+    setParams(next, { replace: true })
+  }
+
   const changeFilters = (next: Filters) => setParams(writeFilters(params, next))
   const clearFilters = () => changeFilters(NO_FILTERS)
   const filterCount = activeFilterCount(filters)
@@ -128,7 +136,7 @@ export function LibraryPage() {
                 <Search size={16} aria-hidden />
                 Buscar
               </Link>
-              <button type="button" className="btn btn-primary" onClick={() => update({ importar: '1' })}>
+              <button type="button" className="btn btn-primary" onClick={() => setImporting(true)}>
                 Importar arquivos
               </button>
             </>
@@ -140,7 +148,7 @@ export function LibraryPage() {
             {notice}
           </p>
         )}
-        <ImportBand items={importQueue.items} onOpen={() => update({ importar: '1' })} />
+        <ImportBand items={importQueue.items} onOpen={() => setImporting(true)} />
 
         <div className={`toolbar ${styles.toolbar}`}>
           <span className="toolbar-title" aria-live="polite">
@@ -206,7 +214,7 @@ export function LibraryPage() {
         )}
 
         {emptyLibrary ? (
-          <EmptyLibrary onImport={() => update({ importar: '1' })} />
+          <EmptyLibrary onImport={() => setImporting(true)} />
         ) : (
           <>
             {view === 'semana' && <CalendarWeek days={week.days} recordings={items} busy={range.isPending} />}
@@ -249,7 +257,7 @@ export function LibraryPage() {
       )}
       {importing && (
         <Suspense fallback={null}>
-          <ImportDialog onClose={() => update({ importar: null })} />
+          <ImportDialog onClose={() => setImporting(false)} />
         </Suspense>
       )}
       {narrow && filtersOpen && (

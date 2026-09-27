@@ -72,6 +72,8 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
       event.preventDefault()
       if (current >= 0 && !create.isPending) choose(options[current])
     } else if (event.key === 'Escape') {
+      // Esc limpa ou cancela o combobox sem fechar o diálogo em volta.
+      if (onCancel || text) event.stopPropagation()
       if (onCancel) onCancel()
       else setText('')
     }

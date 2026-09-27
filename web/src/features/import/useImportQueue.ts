@@ -26,8 +26,11 @@ export type ItemState =
 export interface ImportDate {
   /** Valor de `<input type=datetime-local>`, na hora local: `AAAA-MM-DDTHH:MM`. */
   value: string
-  /** `metadata` (lida do arquivo), `file_date` (data de modificação) ou `user` (editada). */
-  source: 'metadata' | 'file_date' | 'user'
+  /**
+   * `metadata` (lida do arquivo), `metadata_day` (só o dia no arquivo, a hora da modificação),
+   * `file_date` (data de modificação) ou `user` (editada).
+   */
+  source: 'metadata' | 'metadata_day' | 'file_date' | 'user'
   detail: string
 }
 
@@ -74,7 +77,7 @@ export function toLocalInput(date: Date): string {
 
 /** A origem que o upload manda: dos metadados sem edição, ou confirmada pela pessoa. */
 export function recordedAtSource(date: ImportDate): 'file_metadata' | 'user' {
-  return date.source === 'metadata' ? 'file_metadata' : 'user'
+  return date.source === 'metadata' || date.source === 'metadata_day' ? 'file_metadata' : 'user'
 }
 
 function describe(error: unknown): string {
@@ -132,7 +135,11 @@ export function useImportQueue(): ImportQueue {
             date:
               current.date.source === 'user'
                 ? current.date
-                : { value: toLocalInput(read.at), source: read.source, detail: read.detail },
+                : {
+                    value: toLocalInput(read.at),
+                    source: read.precision === 'day' ? 'metadata_day' : read.source,
+                    detail: read.detail,
+                  },
             state: current.state.kind === 'reading' ? { kind: 'ready' } : current.state,
           })),
         )

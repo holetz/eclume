@@ -10,6 +10,7 @@ import type { ImportDate, ImportItem } from './useImportQueue'
 
 const SOURCE_LABELS: Record<ImportDate['source'], string> = {
   metadata: 'Dos metadados do arquivo',
+  metadata_day: 'Só o dia nos metadados · a hora é a da modificação, confira',
   file_date: 'Sem data no arquivo · usando a data de modificação, confira',
   user: 'Editada por você',
 }
@@ -22,6 +23,15 @@ function clockDuration(seconds: number | null | undefined): string {
   const m = Math.floor((total % 3600) / 60)
   const s = String(total % 60).padStart(2, '0')
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
+// O que o leitor de tela anuncia: só a troca de estado, não cada ponto de progresso.
+const ANNOUNCED: Partial<Record<ImportItem['state']['kind'], string>> = {
+  converting: 'convertendo',
+  uploading: 'enviando',
+  done: 'enviado',
+  error: 'falhou',
+  canceled: 'cancelado',
 }
 
 function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
@@ -67,8 +77,11 @@ function Row({ item }: { item: ImportItem }) {
   const queue = useImportContext()
   const sourceId = useId()
   const busy = item.state.kind === 'converting' || item.state.kind === 'uploading'
-  const editable = item.state.kind === 'reading' || item.state.kind === 'ready' || item.state.kind === 'error'
-  const warn = item.date.source === 'file_date'
+  // A data vai só na criação do upload: depois de criado, retentar retoma o mesmo e não a reenvia.
+  const editable =
+    item.state.kind === 'reading' || item.state.kind === 'ready' || (item.state.kind === 'error' && !item.state.resumable)
+  const removable = editable || item.state.kind === 'error'
+  const warn = item.date.source === 'file_date' || item.date.source === 'metadata_day'
   return (
     <tr>
       <td>
@@ -94,11 +107,14 @@ function Row({ item }: { item: ImportItem }) {
         </div>
       </td>
       <td className="tabular">{clockDuration(item.probe?.durationSec)}</td>
-      <td aria-live="polite">
+      <td>
         <Status item={item} onRetry={() => queue.retry(item.id)} />
+        <span className="visually-hidden" aria-live="polite">
+          {ANNOUNCED[item.state.kind] && `${item.file.name}: ${ANNOUNCED[item.state.kind]}`}
+        </span>
       </td>
       <td>
-        {(busy || editable || item.state.kind === 'canceled') && (
+        {(busy || removable || item.state.kind === 'canceled') && (
           <button
             type="button"
             className={`btn btn-ghost btn-icon ${styles.remove}`}
@@ -180,7 +196,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
         <label
-          className="dropzone"
+          className={`dropzone ${styles.dropzone}`}
           data-over={over || undefined}
           aria-disabled={blocked || undefined}
           onDragOver={(event) => {

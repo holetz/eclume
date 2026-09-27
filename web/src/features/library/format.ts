@@ -70,16 +70,6 @@ export function stageLabel(stage: Job['stage'] | string): string | null {
   return STAGES[stage] ?? stage
 }
 
-const SOURCES: Record<string, string> = {
-  desktop: 'App desktop',
-  upload: 'Import pelo navegador',
-  api: 'API',
-}
-
-export function sourceLabel(source: string): string {
-  return SOURCES[source] ?? source
-}
-
 /** "45 s", "2 min 46 s", "1 h 05 min". */
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—'

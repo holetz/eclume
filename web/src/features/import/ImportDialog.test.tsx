@@ -92,6 +92,14 @@ describe('modal Importar', () => {
     expect(within(dialog).getByRole('button', { name: 'Enviar 1 arquivo' })).toBeEnabled()
   })
 
+  it('avisa quando os metadados trazem só o dia', async () => {
+    vi.mocked(readRecordedAt).mockResolvedValue({ at: METADATA, source: 'metadata', precision: 'day', detail: 'date' })
+    const { dialog } = await openWithFiles()
+    const m4a = within(dialog).getByLabelText('Início da gravação de kickoff-guion.m4a')
+    expect(m4a).toHaveAccessibleDescription('Só o dia nos metadados · a hora é a da modificação, confira')
+    expect(m4a).toHaveAttribute('data-warning', 'true')
+  })
+
   it('envia com a data confirmada, mostra a situação e o link, e atualiza a biblioteca', async () => {
     let finish!: (value: { recordingId: string; deduplicated: boolean }) => void
     vi.mocked(runUpload)

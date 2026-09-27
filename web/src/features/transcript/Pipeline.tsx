@@ -34,7 +34,12 @@ export function Pipeline({ recording }: { recording: Recording }) {
         {recording.pipeline.map((step) => {
           const note = stepNote(step)
           return (
-            <li key={step.step} data-state={step.state} title={note ?? undefined}>
+            <li
+              key={step.step}
+              data-state={step.state}
+              aria-current={step.state === 'active' ? 'step' : undefined}
+              title={note ?? undefined}
+            >
               {stepLabel(step)}
               {note && <span className="visually-hidden"> ({note})</span>}
             </li>
