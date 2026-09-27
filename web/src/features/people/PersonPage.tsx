@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDate, formatDateTime, formatDuration } from '../library/format'
 import { formatClock } from '../transcript/segments'
@@ -36,7 +35,6 @@ export function PersonPage() {
 function PersonDetail({ person }: { person: Person }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const me = useMe()
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const path = { params: { path: { person_id: person.id } } }
@@ -123,7 +121,7 @@ function PersonDetail({ person }: { person: Person }) {
           />
         </div>
       )}
-      <VoiceSection person={person} isAdmin={me.data?.user.role === 'admin'} />
+      <VoiceSection person={person} />
       <div className={styles.columns}>
         <PersonTranscripts personId={person.id} />
         <PersonSegments personId={person.id} />

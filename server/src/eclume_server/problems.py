@@ -23,6 +23,8 @@ _TITLES = {
     "validation_failed": "Requisição inválida",
     "conflict": "Conflito com o estado atual",
     "upload_expired": "Upload expirado",
+    "email_taken": "E-mail já cadastrado",
+    "signup_closed": "Cadastro fechado",
     "method_not_allowed": "Método não permitido",
     "not_implemented": "Ainda não implementado",
 }

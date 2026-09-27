@@ -35,6 +35,8 @@ x-server-env: &server-env
   ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
   ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
   ECLUME_COOKIE_SECURE: "true"
+  # Cadastro aberto na LAN; `false` fecha o POST /auth/signup sem deploy de código.
+  ECLUME_SIGNUP_OPEN: ${ECLUME_SIGNUP_OPEN:-true}
   # Job de transcrição morto: graça antes de confirmar e teto de progresso parado (segundos).
   ECLUME_JOB_GRACE_SECONDS: ${ECLUME_JOB_GRACE_SECONDS:-120}
   ECLUME_JOB_STALL_SECONDS: ${ECLUME_JOB_STALL_SECONDS:-1800}

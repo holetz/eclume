@@ -66,7 +66,7 @@ def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Calla
     account = make_user()
     api = as_user(account)
     recording = upload_file(api, audio_bytes(100))
-    key = f"orgs/{account.org_id}/users/{account.user_id}/recordings/{recording['id']}/audio"
+    key = f"users/{account.user_id}/recordings/{recording['id']}/audio"
     s3 = services.s3()
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
     assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
@@ -142,52 +142,3 @@ def test_retranscrever_so_sem_job_em_andamento(
     assert again.json()["job"]["state"] == "queued"
     assert again.json()["language"] == "en"
     assert redis.Redis.from_url(services.settings.redis_url).zscore("eclume:gpu", f"transcribe:{recording['id']}:2")
-
-
-def test_compartilhar_com_grupo_e_organizacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    admin = as_user(make_user(role="admin"))
-    owner_account = make_user(name="Mariana Couto")
-    owner = as_user(owner_account)
-    member_account = make_user()
-    member = as_user(member_account)
-    outsider = as_user(make_user())
-
-    group = admin.post("/api/v1/groups", json={"name": "Consultores"}).json()
-    admin.put(f"/api/v1/groups/{group['id']}/members/{member_account.user_id}")
-    recording = upload_file(owner, audio_bytes(100))
-    url = f"/api/v1/recordings/{recording['id']}"
-
-    assert owner.get(f"{url}/shares").json() == {"items": [], "next_cursor": None}
-    assert member.get(url).status_code == 404
-
-    share = owner.post(f"{url}/shares", json={"target_type": "group", "target_id": group["id"]})
-    assert share.status_code == 201
-    assert share.json()["target"] == {"type": "group", "id": group["id"], "name": "Consultores"}
-    assert share.json()["created_by"]["name"] == "Mariana Couto"
-    assert owner.post(f"{url}/shares", json={"target_type": "group", "target_id": group["id"]}).status_code == 409
-    assert owner.post(f"{url}/shares", json={"target_type": "group"}).status_code == 422
-
-    seen = member.get(url)
-    assert seen.status_code == 200
-    assert seen.json()["visibility"] == "shared"
-    assert [r["id"] for r in member.get("/api/v1/recordings", params={"owner": "shared"}).json()["items"]] == [
-        recording["id"]
-    ]
-    assert member.get("/api/v1/recordings").json()["items"] == []
-    assert len(member.get(f"{url}/shares").json()["items"]) == 1
-    assert outsider.get(url).status_code == 404
-
-    assert member.patch(url, json={"title": "x"}).status_code == 403
-    assert member.delete(url).status_code == 403
-    assert member.post(f"{url}/shares", json={"target_type": "organization"}).status_code == 403
-    assert member.post(f"{url}/retranscribe").status_code == 403
-
-    org_share = owner.post(f"{url}/shares", json={"target_type": "organization"}).json()
-    assert org_share["target"]["type"] == "organization"
-    assert outsider.get(url).status_code == 200
-
-    assert owner.delete(f"{url}/shares/{org_share['id']}").status_code == 204
-    assert outsider.get(url).status_code == 404
-    assert admin.delete(f"/api/v1/groups/{group['id']}").status_code == 204
-    assert member.get(url).status_code == 404
-    assert owner.get(url).json()["visibility"] == "private"

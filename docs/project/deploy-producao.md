@@ -1,13 +1,13 @@
 ---
 type: project
 title: Deploy de produção no host GPU
-description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, bootstrap do admin, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
+description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32
 maintainer: holetz
 ---
 
@@ -78,7 +78,7 @@ Da máquina de desenvolvimento, com o contexto `gpu-host` do [runbook do host](h
 bash deploy/deploy.sh --gerar-env              # uma vez: deploy/.env.prod com segredos aleatórios
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
-bash deploy/bootstrap-admin.sh                 # uma vez: organização EK e o admin
+bash deploy/bootstrap-admin.sh                 # uma vez: a conta de admin do painel
 ```
 
 O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do endpoint
@@ -117,16 +117,33 @@ host.
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
+| `ECLUME_SIGNUP_OPEN` | `true` (padrão): qualquer pessoa na LAN cria conta por `POST /api/v1/auth/signup`, com o aceite do aviso. `false` fecha o cadastro sem deploy de código: mude o env e recrie o server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
 | `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker CPU como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
-### Admin e provider
+### Admin, contas e provider
 
-O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a organização **EK** e o admin `admin@example.com`. A
-senha é gerada no host e fica **só** em `/srv/eclume/secrets/admin-password` (600). Ela chega
-ao `eclume-server admin bootstrap --password-stdin` por um pipe e nunca é gravada na estação.
-Com alguma organização no banco, o script não faz nada.
+Não há organização: cada conta de usuário é isolada pela RLS do dono, e o painel é da
+**plataforma**. A **conta de admin** (`admins`) é separada das contas de usuário, com login e
+sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
+([server-admin.md](../standards/code/server-admin.md)).
 
-O provider padrão da organização é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
+- **Contas de usuário** nascem pelo cadastro aberto (`POST /api/v1/auth/signup`; a tela Criar
+  conta do web chega com a holetz/eclume#36), com o aceite do aviso de consentimento. Não há convite nem CLI de usuário; o admin só ativa ou desativa contas em
+  Admin → Usuários. `ECLUME_SIGNUP_OPEN=false` fecha o cadastro.
+- **Conta de admin.** O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a
+  conta de admin `admin@example.com` por `eclume-server admin create`. A senha é
+  gerada no host e fica **só** em `/srv/eclume/secrets/admin-password` (600). Ela chega ao CLI
+  por um pipe (`--password-stdin`) e nunca é gravada na estação. Com alguma conta de admin no
+  banco, o script não faz nada.
+- **Migração da organização (008, holetz/eclume#32).** Os usuários antigos viraram contas
+  independentes, com gravações, pessoas, coleções e templates do dono. Cada admin antigo ganhou
+  uma conta de admin com o **mesmo e-mail e o mesmo hash**: a senha de `admin-password` entra nas
+  duas até alguém trocar uma delas.
+- **Trocar a senha do admin** (encerra as sessões dele):
+  `ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | "${P[@]}" run --rm -T migrate eclume-server admin set-password --email admin@example.com --password-stdin`
+  (grave a nova senha no arquivo antes; `P` como em Operação). A senha da conta de usuário se troca pelo app.
+
+O provider padrão da plataforma é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
 roda o `claude -p` no worker CPU com o token de longa duração. O smoke o cadastra se faltar.
 
 **Token do Claude.** Num computador com o Claude Code logado na assinatura, `claude setup-token`
@@ -149,8 +166,10 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt
 ```
 
-O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA e `/downloads/latest.json`,
-faz login, garante o provider e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
+O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA, `/downloads/latest.json`
+e o cadastro aberto com o aviso, entra pela sessão de admin (garante o provider) e pela de
+usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
+quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
 multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e imprime `OK`. Um
 áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já existe.
 
@@ -166,6 +185,17 @@ multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e i
   com contagens idênticas às da produção. A retenção de 7 e os hardlinks entre instantâneos foram
   conferidos.
 - **Rede:** um container do lumea alcança `https://192.168.15.199:8443` pelo IP do host.
+
+### Conta por usuário em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 organização, 1
+  usuário, 7 gravações, 7 transcrições, 10 resumos, 17 objetos).
+- **Deploy:** a 008 aplicou sem erro; usuários, gravações, transcrições e resumos ficaram com as
+  mesmas contagens, `organizations` sumiu e o admin antigo ganhou a conta de admin com o mesmo
+  e-mail. O disco foi de 87% a 89%.
+- **Smoke:** cadastro aberto (aviso v1), sessão de admin e sessão de usuário com a senha de
+  `admin-password`, transcrição deduplicada e resumo novo pelo `claude-cli` passaram. A conta
+  migrada fica com `notice_required` até aceitar o aviso (`POST /api/v1/me/notice`).
 
 ## CA raiz nos clientes
 
@@ -212,8 +242,8 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-
 ```
 
 - **`--teste [<data>]`** restaura o dump num banco `eclume_restore_teste` e o instantâneo num
-  bucket `eclume-restore-teste`. Depois compara as contagens (organizações, usuários, gravações,
-  transcrições, resumos e objetos) com a produção e apaga os dois.
+  bucket `eclume-restore-teste`. Depois compara as contagens (usuários, gravações, transcrições,
+  resumos e objetos) com a produção e apaga os dois.
 - **`--aplicar <data> --confirmo`** para server e workers e recria o banco `eclume` a partir do
   dump. Depois espelha o instantâneo de volta no bucket, sem apagar objetos que não estão no
   backup, e sobe os serviços.
@@ -228,7 +258,7 @@ P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml
 "${P[@]}" ps --all
 "${P[@]}" logs -f --tail 100 worker-gpu
 "${P[@]}" exec postgres psql -U eclume eclume
-"${P[@]}" run --rm migrate eclume-server admin create-user --org-id <org> --email <e-mail> --name "<nome>" --password-stdin
+"${P[@]}" run --rm -T migrate eclume-server admin create --email <e-mail> --name "<nome>" --password-stdin
 bash deploy/deploy.sh --context gpu-host --services "server web"   # só código do server e do web
 ```
 

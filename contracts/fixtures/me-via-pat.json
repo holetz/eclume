@@ -3,21 +3,12 @@
     "id": "01928f3a-1c00-7a00-8000-000000000101",
     "email": "mariana.couto@example.com",
     "name": "Mariana Couto",
-    "role": "admin",
     "active": true,
     "created_at": "2026-09-10T12:00:00Z",
-    "last_login_at": "2026-09-18T13:55:02Z"
+    "last_login_at": "2026-09-18T13:55:02Z",
+    "notice_version": "1",
+    "notice_accepted_at": "2026-09-28T12:00:00Z"
   },
-  "organization": {
-    "id": "01928f3a-1c00-7a00-8000-000000000001",
-    "name": "EK Consultoria"
-  },
-  "groups": [
-    {
-      "id": "01928f3a-1c00-7a00-8000-000000000201",
-      "name": "Consultores"
-    }
-  ],
   "auth": {
     "method": "pat",
     "scopes": [
@@ -25,5 +16,6 @@
       "people:read"
     ],
     "token_id": "01928f3a-1c00-7a00-8000-000000000701"
-  }
+  },
+  "notice_required": false
 }

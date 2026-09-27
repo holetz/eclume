@@ -60,17 +60,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/invitations/{invitation_token}/accept": {
+    "/api/v1/auth/signup": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Estado do cadastro e o aviso em vigor
+         * @description Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova aceita.
+         */
+        get: operations["getSignupInfo"];
         put?: never;
-        /** Aceitar um convite e criar a conta */
-        post: operations["acceptInvitation"];
+        /**
+         * Criar uma conta e abrir a sessão
+         * @description Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
+         *     (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
+         *     templates de resumo padrão, e a resposta define os cookies de sessão, como o login.
+         *     Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
+         *     cadastrado, 409 `email_taken`.
+         */
+        post: operations["signup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -91,6 +102,26 @@ export interface paths {
         get: operations["getMe"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceitar o aviso de consentimento em vigor
+         * @description Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em `GET /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+         */
+        post: operations["acceptNotice"];
         delete?: never;
         options?: never;
         head?: never;
@@ -265,7 +296,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar gravações visíveis ao usuário */
+        /** Listar as gravações do usuário */
         get: operations["listRecordings"];
         put?: never;
         post?: never;
@@ -340,49 +371,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/recordings/{recording_id}/shares": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                recording_id: components["parameters"]["RecordingId"];
-            };
-            cookie?: never;
-        };
-        /** Compartilhamentos da gravação */
-        get: operations["listShares"];
-        put?: never;
-        /**
-         * Compartilhar com um grupo ou com a organização
-         * @description Só o dono compartilha. O compartilhamento dá leitura da gravação, da transcrição e dos resumos.
-         */
-        post: operations["createShare"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/recordings/{recording_id}/shares/{share_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                recording_id: components["parameters"]["RecordingId"];
-                share_id: components["parameters"]["ShareId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Desfazer um compartilhamento */
-        delete: operations["deleteShare"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/transcripts": {
         parameters: {
             query?: never;
@@ -392,7 +380,7 @@ export interface paths {
         };
         /**
          * Listar transcrições (incremental)
-         * @description Transcrições concluídas visíveis ao usuário, em ordem crescente de `(updated_at, id)`.
+         * @description Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
          *     `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
          *     viu e deduplica por `id` + `revision`.
          */
@@ -558,9 +546,8 @@ export interface paths {
         put?: never;
         /**
          * Gerar um resumo com um template
-         * @description Cada geração é uma nova `version` do resumo daquele template. Só o dono da gravação gera
-         *     resumos; quem vê a transcrição por compartilhamento lê os resumos dela. Sem `provider_id`
-         *     e sem provider padrão habilitado na organização, responde 422.
+         * @description Cada geração é uma nova `version` do resumo daquele template. Sem `provider_id` e sem
+         *     provider padrão habilitado na plataforma, responde 422.
          */
         post: operations["createSummary"];
         delete?: never;
@@ -596,13 +583,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Templates do usuário e padrões da organização */
+        /** Templates do usuário */
         get: operations["listSummaryTemplates"];
         put?: never;
-        /**
-         * Criar um template pessoal ou da organização
-         * @description `scope: organization` cria um padrão da organização e exige `admin` com sessão.
-         */
+        /** Criar um template */
         post: operations["createSummaryTemplate"];
         delete?: never;
         options?: never;
@@ -623,17 +607,11 @@ export interface paths {
         get: operations["getSummaryTemplate"];
         put?: never;
         post?: never;
-        /**
-         * Excluir um template
-         * @description Templates de `scope: organization` só são excluídos por `admin`, com sessão.
-         */
+        /** Excluir um template */
         delete: operations["deleteSummaryTemplate"];
         options?: never;
         head?: never;
-        /**
-         * Editar um template
-         * @description Templates de `scope: organization` só são editados por `admin`, com sessão.
-         */
+        /** Editar um template */
         patch: operations["updateSummaryTemplate"];
         trace?: never;
     };
@@ -644,7 +622,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Diretório de pessoas da organização */
+        /** Diretório de pessoas do usuário */
         get: operations["listPeople"];
         put?: never;
         /** Cadastrar uma pessoa */
@@ -701,31 +679,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/people/{person_id}/voice-consent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                person_id: components["parameters"]["PersonId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Registrar ou revogar o consentimento de voz
-         * @description Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
-         *     quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
-         *     histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
-         *     as sugestões pendentes da pessoa.
-         */
-        put: operations["setVoiceConsent"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/people/{person_id}/voiceprint": {
         parameters: {
             query?: never;
@@ -744,32 +697,9 @@ export interface paths {
         post?: never;
         /**
          * Excluir a impressão de voz
-         * @description Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+         * @description Apaga todas as amostras e as sugestões pendentes da pessoa.
          */
         delete: operations["deleteVoiceprint"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/people/{person_id}/voiceprint/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                person_id: components["parameters"]["PersonId"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Exportar os dados de voz da pessoa
-         * @description Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha de
-         *     auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
-         */
-        get: operations["exportVoiceprint"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -784,7 +714,7 @@ export interface paths {
         };
         /**
          * Busca full-text sobre segmentos
-         * @description Busca em português (`tsvector` pt) nos segmentos das transcrições visíveis ao usuário.
+         * @description Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
          *     Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
          */
         get: operations["search"];
@@ -844,7 +774,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Tags em uso nas gravações visíveis */
+        /** Tags em uso nas gravações do usuário */
         get: operations["listTags"];
         put?: never;
         post?: never;
@@ -854,67 +784,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/groups": {
+    "/api/v1/admin/auth/login": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Grupos da organização
-         * @description Todo membro lista os grupos (para compartilhar); só `admin` cria e edita.
-         */
-        get: operations["listGroups"];
+        get?: never;
         put?: never;
-        /** Criar um grupo (admin) */
-        post: operations["createGroup"];
+        /**
+         * Abrir a sessão de admin
+         * @description Conta de admin, separada das contas de usuário (o mesmo e-mail pode existir nas duas).
+         *     Define os cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+         *     `Path=/api/v1/admin`) e `eclume_admin_csrf` (legível pelo JavaScript). Toda requisição
+         *     mutável em `/api/v1/admin/*` ecoa `eclume_admin_csrf` no header `X-CSRF-Token`.
+         */
+        post: operations["adminLogin"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/groups/{group_id}": {
+    "/api/v1/admin/auth/logout": {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                group_id: components["parameters"]["GroupId"];
-            };
-            cookie?: never;
-        };
-        /** Um grupo e os seus membros */
-        get: operations["getGroup"];
-        put?: never;
-        post?: never;
-        /**
-         * Excluir um grupo (admin)
-         * @description Compartilhamentos com o grupo são desfeitos.
-         */
-        delete: operations["deleteGroup"];
-        options?: never;
-        head?: never;
-        /** Editar um grupo (admin) */
-        patch: operations["updateGroup"];
-        trace?: never;
-    };
-    "/api/v1/groups/{group_id}/members/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                group_id: components["parameters"]["GroupId"];
-                user_id: components["parameters"]["UserId"];
-            };
+            path?: never;
             cookie?: never;
         };
         get?: never;
-        /** Pôr um usuário no grupo (admin) */
-        put: operations["addGroupMember"];
+        put?: never;
+        /** Encerrar a sessão de admin */
+        post: operations["adminLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conta de admin corrente */
+        get: operations["getAdminMe"];
+        put?: never;
         post?: never;
-        /** Tirar um usuário do grupo (admin) */
-        delete: operations["removeGroupMember"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -927,7 +848,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Configuração em runtime da organização */
+        /** Configuração em runtime da plataforma */
         get: operations["getAdminSettings"];
         put?: never;
         post?: never;
@@ -936,49 +857,9 @@ export interface paths {
         head?: never;
         /**
          * Alterar a configuração
-         * @description Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs.
+         * @description Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs. Desligar `voice_identification.enabled` apaga as impressões de voz e as sugestões pendentes de toda a plataforma.
          */
         patch: operations["updateAdminSettings"];
-        trace?: never;
-    };
-    "/api/v1/admin/voice-audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Trilha de auditoria da identificação por voz
-         * @description Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações, do mais novo ao mais antigo.
-         */
-        get: operations["listVoiceAudit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/voiceprints": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Apagar todas as impressões de voz da organização
-         * @description Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria ficam.
-         */
-        delete: operations["purgeVoiceprints"];
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/agent-providers": {
@@ -1029,7 +910,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Segredos da organização (sem valor) */
+        /** Segredos da plataforma (sem valor) */
         get: operations["listSecrets"];
         put?: never;
         post?: never;
@@ -1067,7 +948,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Usuários da organização */
+        /**
+         * Contas de usuário
+         * @description Dados da conta e a contagem de gravações; nunca o conteúdo do usuário.
+         */
         get: operations["listUsers"];
         put?: never;
         post?: never;
@@ -1093,47 +977,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar papel ou desativar um usuário
+         * Desativar ou reativar um usuário
          * @description Desativar encerra as sessões e revoga os PATs do usuário.
          */
         patch: operations["updateUser"];
-        trace?: never;
-    };
-    "/api/v1/admin/invitations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Convites pendentes e aceitos */
-        get: operations["listInvitations"];
-        put?: never;
-        /** Convidar um usuário */
-        post: operations["createInvitation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/invitations/{invitation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                invitation_id: string;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revogar um convite pendente */
-        delete: operations["revokeInvitation"];
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/jobs/{job_id}/retry": {
@@ -1147,7 +994,7 @@ export interface paths {
         put?: never;
         /**
          * Retentar um job de transcrição que falhou
-         * @description Cria o job da revisão seguinte da gravação, com a configuração atual da organização, e o enfileira. Vale para qualquer gravação da organização, inclusive privada, mas só para o job mais recente da gravação e em estado `failed`.
+         * @description Cria o job da revisão seguinte da gravação, com a configuração atual da plataforma, e o enfileira. Vale para a gravação de qualquer usuário, mas só para o job mais recente da gravação e em estado `failed`.
          */
         post: operations["retryTranscriptionJob"];
         delete?: never;
@@ -1188,7 +1035,8 @@ export interface components {
             /**
              * @description Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
              *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-             *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão).
+             *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
+             *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`.
              *     Códigos novos entram de forma aditiva.
              */
             code: string;
@@ -1219,19 +1067,26 @@ export interface components {
             email: string;
             password: string;
         };
-        InvitationAccept: {
+        /** @description Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das pessoas que gravo"). */
+        Notice: {
+            version: string;
+            text: string;
+        };
+        SignupInfo: {
+            /** @description `false` com `ECLUME_SIGNUP_OPEN=false`: o cadastro responde 403 `signup_closed`. */
+            open: boolean;
+            notice: components["schemas"]["Notice"];
+        };
+        SignupRequest: {
             name: string;
+            /** Format: email */
+            email: string;
             password: string;
+            /** @description Versão do aviso aceito; tem de ser a em vigor. */
+            notice_version: string;
         };
-        Organization: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-        };
-        GroupRef: {
-            /** Format: uuid */
-            id: string;
-            name: string;
+        NoticeAccept: {
+            notice_version: string;
         };
         User: {
             /** Format: uuid */
@@ -1239,28 +1094,62 @@ export interface components {
             /** Format: email */
             email: string;
             name: string;
-            /** @enum {string} */
-            role: "admin" | "member";
             active: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             last_login_at: string | null;
+            /** @description Versão do aviso aceito, ou `null` numa conta que ainda não aceitou. */
+            notice_version: string | null;
+            /** Format: date-time */
+            notice_accepted_at: string | null;
+        };
+        /** @description Conta de usuário vista pelo admin (o `User` mais a contagem de gravações). */
+        AdminUser: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            active: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_login_at: string | null;
+            notice_version: string | null;
+            /** Format: date-time */
+            notice_accepted_at: string | null;
+            recording_count: number;
         };
         UserPatch: {
-            name?: string;
-            /** @enum {string} */
-            role?: "admin" | "member";
-            active?: boolean;
+            /** @description `false` desativa a conta, encerra as sessões e revoga os PATs. */
+            active: boolean;
         };
-        UserPage: {
-            items: components["schemas"]["User"][];
+        AdminUserPage: {
+            items: components["schemas"]["AdminUser"][];
             next_cursor: components["schemas"]["NextCursor"];
+        };
+        /** @description Conta de admin, separada das contas de usuário. */
+        AdminAccount: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_login_at: string | null;
+        };
+        AdminRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         Me: {
             user: components["schemas"]["User"];
-            organization: components["schemas"]["Organization"];
-            groups: components["schemas"]["GroupRef"][];
+            /** @description A conta ainda não aceitou o aviso em vigor (`POST /api/v1/me/notice`). */
+            notice_required: boolean;
             auth: {
                 /** @enum {string} */
                 method: "session" | "pat";
@@ -1341,7 +1230,7 @@ export interface components {
             /** Format: date-time */
             recorded_at?: string;
             duration_ms?: number;
-            /** @description Idioma esperado (BCP 47). Sem valor, vale o padrão da organização ou a detecção. */
+            /** @description Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção. */
             language?: string;
             source?: components["schemas"]["Source"];
             capture?: components["schemas"]["Capture"];
@@ -1459,11 +1348,6 @@ export interface components {
             content_type: string;
             content_hash: string;
             owner: components["schemas"]["UserRef"];
-            /**
-             * @description `private` sem compartilhamento; `shared` com pelo menos um.
-             * @enum {string}
-             */
-            visibility: "private" | "shared";
             tags: string[];
             collection_ids: string[];
             metadata: components["schemas"]["RecordingMetadata"];
@@ -1497,35 +1381,6 @@ export interface components {
         };
         RetranscribeRequest: {
             language?: string;
-        };
-        Share: {
-            /** Format: uuid */
-            id: string;
-            target: {
-                /** @enum {string} */
-                type: "group" | "organization";
-                /** Format: uuid */
-                id: string;
-                name: string;
-            };
-            /** @enum {string} */
-            permission: "read";
-            created_by: components["schemas"]["UserRef"];
-            /** Format: date-time */
-            created_at: string;
-        };
-        ShareCreate: {
-            /** @enum {string} */
-            target_type: "group" | "organization";
-            /**
-             * Format: uuid
-             * @description Id do grupo; ignorado para `organization`.
-             */
-            target_id?: string;
-        };
-        SharePage: {
-            items: components["schemas"]["Share"][];
-            next_cursor: components["schemas"]["NextCursor"];
         };
         /** @description Resumo de listagem de uma transcrição (sem segmentos). */
         TranscriptSummary: {
@@ -1569,41 +1424,11 @@ export interface components {
             text?: string;
             speaker_id?: string;
         };
-        /** @description Consentimento LGPD da pessoa para a impressão de voz. Sem `granted`, nada é comparado. */
-        VoiceConsent: {
-            /** @enum {string} */
-            status: "none" | "granted" | "revoked";
-            /** Format: date-time */
-            updated_at: string | null;
-            /** @description Versão do termo de consentimento vigente quando o estado foi registrado. */
-            term_version?: string | null;
-            /** @description Quem registrou o estado atual. */
-            recorded_by?: components["schemas"]["UserRef"] | null;
-            /** @description Amostras (locutores confirmados) na impressão de voz da pessoa. */
-            sample_count?: number;
-        };
-        VoiceConsentPut: {
-            /** @enum {string} */
-            status: "granted" | "revoked";
-            /** @description Como o consentimento foi colhido (documento assinado, e-mail, ata). */
-            notes?: string | null;
-        };
-        /** @description Um registro do histórico de consentimento, com o termo exato em vigor. */
-        VoiceConsentRecord: {
-            /** @enum {string} */
-            status: "granted" | "revoked";
-            term_version: string;
-            term_text: string;
-            notes: string | null;
-            recorded_by: components["schemas"]["UserRef"] | null;
-            /** Format: date-time */
-            recorded_at: string;
-        };
         /** @description Uma amostra da impressão de voz — um locutor confirmado como a pessoa. */
         VoiceSample: {
             /** Format: uuid */
             transcript_id: string;
-            /** @description Título da gravação, ou `null` se quem pergunta não a vê. */
+            /** @description Título da gravação, ou `null` se ela não existe mais. */
             recording_title: string | null;
             speaker_id: string;
             /** @description Modelo de embedding da amostra. */
@@ -1613,74 +1438,13 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        /** @description Amostra com o vetor, só na exportação. */
-        VoiceSampleExport: {
-            /** Format: uuid */
-            transcript_id: string;
-            recording_title: string | null;
-            speaker_id: string;
-            model: string;
-            talk_ms: number;
-            created_by: components["schemas"]["UserRef"] | null;
-            /** Format: date-time */
-            created_at: string;
-            embedding: number[];
-        };
         Voiceprint: {
             /** Format: uuid */
             person_id: string;
-            /** @description Opt-in de identificação por voz da organização. Desligado, nada é comparado nem vira amostra. */
-            opt_in: boolean;
-            /** @description Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir. */
-            term: {
-                version: string;
-                text: string;
-            };
-            consent: components["schemas"]["VoiceConsent"];
+            /** @description Identificação por voz ligada na plataforma. Desligada, nada é comparado nem vira amostra. */
+            enabled: boolean;
             sample_count: number;
             samples: components["schemas"]["VoiceSample"][];
-        };
-        VoiceAuditEvent: {
-            /** Format: uuid */
-            id: string;
-            /**
-             * @description Tipo do evento; o cliente mostra cru um valor que não conhece.
-             * @enum {string}
-             */
-            event: "comparison" | "suggested" | "accepted" | "rejected" | "sample_added" | "sample_removed" | "link_restored" | "link_dropped" | "consent_granted" | "consent_revoked" | "voiceprint_deleted" | "exported" | "org_opt_in_changed" | "org_purged" | "embeddings_purged";
-            person: components["schemas"]["PersonRef"] | null;
-            /** @description Quem agiu; `null` numa ação do sistema (a comparação da ingestão). */
-            actor: components["schemas"]["UserRef"] | null;
-            /** Format: uuid */
-            transcript_id: string | null;
-            speaker_id: string | null;
-            score: number | null;
-            /** @description Dados do evento (contagens, limiar, modelo); nunca vetores. */
-            details: Record<string, never>;
-            /** Format: date-time */
-            created_at: string;
-        };
-        VoiceAuditPage: {
-            items: components["schemas"]["VoiceAuditEvent"][];
-            next_cursor: components["schemas"]["NextCursor"];
-        };
-        VoiceprintExport: {
-            /** Format: date-time */
-            exported_at: string;
-            exported_by: components["schemas"]["UserRef"];
-            person: {
-                /** Format: uuid */
-                id: string;
-                name: string;
-                email: string | null;
-            };
-            consents: components["schemas"]["VoiceConsentRecord"][];
-            samples: components["schemas"]["VoiceSampleExport"][];
-            audit: components["schemas"]["VoiceAuditEvent"][];
-        };
-        VoicePurgeResult: {
-            deleted_samples: number;
-            deleted_suggestions: number;
         };
         Person: {
             /** Format: uuid */
@@ -1689,8 +1453,7 @@ export interface components {
             /** Format: email */
             email: string | null;
             notes: string | null;
-            voice_consent: components["schemas"]["VoiceConsent"];
-            /** @description Transcrições visíveis ao usuário em que a pessoa fala. */
+            /** @description Transcrições do usuário em que a pessoa fala. */
             transcript_count: number;
             /**
              * Format: date-time
@@ -1767,29 +1530,6 @@ export interface components {
                 count: number;
             }[];
         };
-        Group: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            description: string | null;
-            member_count: number;
-            /** @description Presente em `GET /api/v1/groups/{group_id}`. */
-            members?: components["schemas"]["UserRef"][];
-            /** Format: date-time */
-            created_at: string;
-        };
-        GroupCreate: {
-            name: string;
-            description?: string | null;
-        };
-        GroupPatch: {
-            name?: string;
-            description?: string | null;
-        };
-        GroupPage: {
-            items: components["schemas"]["Group"][];
-            next_cursor: components["schemas"]["NextCursor"];
-        };
         SummaryTemplate: {
             /** Format: uuid */
             id: string;
@@ -1797,11 +1537,6 @@ export interface components {
             description: string | null;
             /** @description Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor. */
             instructions: string;
-            /**
-             * @description `user`: pessoal; `organization`: padrão definido pelo admin, só leitura para os demais.
-             * @enum {string}
-             */
-            scope: "user" | "organization";
             /** @description Template usado no resumo automático do usuário. */
             is_default: boolean;
             /** Format: date-time */
@@ -1813,13 +1548,8 @@ export interface components {
             name: string;
             description?: string | null;
             instructions: string;
-            /** @description Pessoal: o template do resumo automático do usuário. Da organização: o padrão da organização. */
+            /** @description O template do resumo automático do usuário. */
             is_default?: boolean;
-            /**
-             * @description Padrão `user`. `organization` exige `admin` com sessão.
-             * @enum {string}
-             */
-            scope?: "user" | "organization";
         };
         SummaryTemplatePatch: {
             name?: string;
@@ -1875,7 +1605,7 @@ export interface components {
             template_id: string;
             /**
              * Format: uuid
-             * @description Sem valor, o provider padrão da organização.
+             * @description Sem valor, o provider padrão da plataforma.
              */
             provider_id?: string;
         };
@@ -1908,20 +1638,14 @@ export interface components {
         SummarizationSettings: {
             /** Format: uuid */
             default_provider_id: string | null;
-            /** @description Gera o resumo do template padrão de cada usuário ao fim da transcrição. */
+            /** @description Gera o resumo do template padrão do dono ao fim da transcrição. */
             auto_summarize: boolean;
-            /** Format: uuid */
-            default_template_id: string | null;
         };
         VoiceIdentificationSettings: {
-            /** @description Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada. */
+            /** @description Liga a identificação por voz na plataforma. Desligado, nenhuma impressão é comparada nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento. */
             enabled: boolean;
             /** @description Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração. */
             suggestion_threshold: number;
-            /** @description Versão do termo de consentimento; sobe sozinha a cada texto novo. */
-            consent_term_version?: string;
-            /** @description Texto do termo que a pessoa aceita ao consentir. */
-            consent_term_text?: string;
         };
         AdminSettings: {
             asr: components["schemas"]["AsrSettings"];
@@ -1930,7 +1654,8 @@ export interface components {
             voice_identification: components["schemas"]["VoiceIdentificationSettings"];
             /** Format: date-time */
             updated_at: string;
-            updated_by: components["schemas"]["UserRef"] | null;
+            /** @description Conta de admin que mudou por último. */
+            updated_by: components["schemas"]["AdminRef"] | null;
         };
         /** @description Cada bloco é mesclado campo a campo; campos ausentes ficam como estão. */
         AdminSettingsPatch: {
@@ -1955,14 +1680,10 @@ export interface components {
                 /** Format: uuid */
                 default_provider_id?: string | null;
                 auto_summarize?: boolean;
-                /** Format: uuid */
-                default_template_id?: string | null;
             };
             voice_identification?: {
                 enabled?: boolean;
                 suggestion_threshold?: number;
-                /** @description Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo que aceitaram. */
-                consent_term_text?: string;
             };
         };
         AgentProvider: {
@@ -2024,51 +1745,6 @@ export interface components {
         };
         SecretPut: {
             value: string;
-        };
-        Invitation: {
-            /** Format: uuid */
-            id: string;
-            /** Format: email */
-            email: string;
-            /** @enum {string} */
-            role: "admin" | "member";
-            group_ids: string[];
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: date-time */
-            accepted_at: string | null;
-            created_by: components["schemas"]["UserRef"];
-            /**
-             * Format: uri
-             * @description Link de aceite, só na resposta da criação.
-             */
-            accept_url?: string;
-            /**
-             * @description `pending` enquanto válido e não aceito; `expired` depois de `expires_at`.
-             * @enum {string}
-             */
-            status?: "pending" | "accepted" | "expired";
-            /** Format: date-time */
-            created_at?: string;
-        };
-        InvitationCreate: {
-            /** Format: email */
-            email: string;
-            /**
-             * @default member
-             * @enum {string}
-             */
-            role: "admin" | "member";
-            group_ids?: string[];
-            /**
-             * @description Validade do link em dias; padrão 7.
-             * @default 7
-             */
-            expires_in_days: number;
-        };
-        InvitationPage: {
-            items: components["schemas"]["Invitation"][];
-            next_cursor: components["schemas"]["NextCursor"];
         };
         /** @description O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`. */
         AdminJobRetried: {
@@ -2135,7 +1811,7 @@ export interface components {
                 queued: number;
                 running: number;
             }[];
-            /** @description Jobs de transcrição da organização ainda não concluídos, com o progresso. */
+            /** @description Jobs de transcrição da plataforma ainda não concluídos, com o progresso. */
             running_jobs?: {
                 /** Format: uuid */
                 job_id: string;
@@ -2285,7 +1961,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo, papel ou dono), ou PAT numa operação que aceita só sessão (`code: session_required`). */
+        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), ou cadastro fechado (`code: signup_closed`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -2294,7 +1970,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Não existe ou não é visível ao usuário (o eclume não distingue os dois). */
+        /** @description Não existe ou não é do usuário (o eclume não distingue os dois). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -2323,7 +1999,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+        /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
         CsrfToken: string;
         /** @description Cursor opaco devolvido em `next_cursor`. */
         Cursor: string;
@@ -2340,13 +2016,11 @@ export interface components {
         TokenId: string;
         UploadId: string;
         RecordingId: string;
-        ShareId: string;
         TranscriptId: string;
         SummaryId: string;
         TemplateId: string;
         PersonId: string;
         CollectionId: string;
-        GroupId: string;
         UserId: string;
         ProviderId: string;
     };
@@ -2406,7 +2080,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -2425,19 +2099,36 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    acceptInvitation: {
+    getSignupInfo: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description Token do link de convite. */
-                invitation_token: string;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cadastro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupInfo"];
+                };
             };
+        };
+    };
+    signup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InvitationAccept"];
+                "application/json": components["schemas"]["SignupRequest"];
             };
         };
         responses: {
@@ -2450,7 +2141,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            404: components["responses"]["NotFound"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -2473,6 +2165,34 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    acceptNotice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoticeAccept"];
+            };
+        };
+        responses: {
+            /** @description Aceite registrado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listTokens: {
@@ -2506,7 +2226,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -2536,7 +2256,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2562,7 +2282,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -2626,7 +2346,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2652,7 +2372,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2717,7 +2437,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2758,8 +2478,6 @@ export interface operations {
                 since?: components["parameters"]["Since"];
                 /** @description Filtra por estado. */
                 status?: components["schemas"]["RecordingStatus"];
-                /** @description `me` (padrão): as minhas; `shared`: compartilhadas comigo; `all`: ambas. */
-                owner?: "me" | "shared" | "all";
                 /** @description Só gravações com esta tag. */
                 tag?: components["parameters"]["TagFilter"];
                 /** @description Só gravações desta coleção. */
@@ -2813,7 +2531,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2839,7 +2557,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2896,7 +2614,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -2923,91 +2641,6 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-        };
-    };
-    listShares: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                recording_id: components["parameters"]["RecordingId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Compartilhamentos. Vazio = gravação privada. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SharePage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createShare: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                recording_id: components["parameters"]["RecordingId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareCreate"];
-            };
-        };
-        responses: {
-            /** @description Compartilhado. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Share"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteShare: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                recording_id: components["parameters"]["RecordingId"];
-                share_id: components["parameters"]["ShareId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Desfeito. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     listTranscripts: {
@@ -3105,7 +2738,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3139,7 +2772,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3169,7 +2802,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3202,7 +2835,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3267,7 +2900,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3325,7 +2958,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3379,7 +3012,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -3434,7 +3067,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3460,7 +3093,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3522,7 +3155,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -3578,7 +3211,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3604,7 +3237,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3663,39 +3296,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    setVoiceConsent: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                person_id: components["parameters"]["PersonId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VoiceConsentPut"];
-            };
-        };
-        responses: {
-            /** @description Pessoa com o consentimento novo. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Person"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationFailed"];
-        };
-    };
     getVoiceprint: {
         parameters: {
             query?: never;
@@ -3725,7 +3325,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3741,33 +3341,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    exportVoiceprint: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                person_id: components["parameters"]["PersonId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Exportação. */
-            200: {
-                headers: {
-                    /** @description `attachment; filename="voz-<pessoa>.json"`. */
-                    "Content-Disposition"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoiceprintExport"];
-                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -3845,7 +3418,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -3875,7 +3448,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3901,7 +3474,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -3952,200 +3525,74 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    listGroups: {
+    adminLogin: {
         parameters: {
-            query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
-                cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
-                limit?: components["parameters"]["Limit"];
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
             };
+        };
+        responses: {
+            /** @description Sessão de admin aberta. */
+            204: {
+                headers: {
+                    /** @description `eclume_admin_session` e `eclume_admin_csrf`. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    adminLogout: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessão encerrada e cookies removidos. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAdminMe: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Grupos. */
+            /** @description Conta de admin. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroupPage"];
+                    "application/json": components["schemas"]["AdminAccount"];
                 };
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createGroup: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GroupCreate"];
-            };
-        };
-        responses: {
-            /** @description Grupo criado. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Group"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-        };
-    };
-    getGroup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                group_id: components["parameters"]["GroupId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grupo. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Group"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteGroup: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                group_id: components["parameters"]["GroupId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Excluído. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateGroup: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                group_id: components["parameters"]["GroupId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GroupPatch"];
-            };
-        };
-        responses: {
-            /** @description Grupo atualizado. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Group"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationFailed"];
-        };
-    };
-    addGroupMember: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                group_id: components["parameters"]["GroupId"];
-                user_id: components["parameters"]["UserId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Membro do grupo (idempotente). */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    removeGroupMember: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                group_id: components["parameters"]["GroupId"];
-                user_id: components["parameters"]["UserId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Fora do grupo. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     getAdminSettings: {
@@ -4174,7 +3621,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -4198,61 +3645,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
-        };
-    };
-    listVoiceAudit: {
-        parameters: {
-            query?: {
-                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
-                person?: components["parameters"]["PersonFilter"];
-                /** @description Cursor opaco devolvido em `next_cursor`. */
-                cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Eventos. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoiceAuditPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["ValidationFailed"];
-        };
-    };
-    purgeVoiceprints: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description O que foi apagado. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoicePurgeResult"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
     listAgentProviders: {
@@ -4281,7 +3673,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -4311,7 +3703,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -4338,7 +3730,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -4393,7 +3785,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -4424,7 +3816,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -4467,7 +3859,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserPage"];
+                    "application/json": components["schemas"]["AdminUserPage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -4478,7 +3870,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -4498,104 +3890,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["User"];
+                    "application/json": components["schemas"]["AdminUser"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
-        };
-    };
-    listInvitations: {
-        parameters: {
-            query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
-                cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Convites. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvitationPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createInvitation: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InvitationCreate"];
-            };
-        };
-        responses: {
-            /** @description Convite criado. `accept_url` volta só nesta resposta. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Invitation"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-        };
-    };
-    revokeInvitation: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
-                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
-            };
-            path: {
-                invitation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revogado. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     retryTranscriptionJob: {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT. */
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {

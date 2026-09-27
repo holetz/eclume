@@ -7,7 +7,7 @@ import secrets
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from eclume_server.accounts import create_org, create_user
+from eclume_server.accounts import create_admin, create_user
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -34,6 +34,8 @@ class Api:
     cookies: dict[str, str] | None = None
     token: str | None = None
     send_csrf: bool = True
+    # A sessão de admin ecoa o próprio cookie de CSRF (`eclume_admin_csrf`).
+    csrf_cookie: str = "eclume_csrf"
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:  # noqa: ANN401
         """Requisição com as credenciais deste usuário."""
@@ -43,7 +45,7 @@ class Api:
         if self.cookies:
             headers.setdefault("Cookie", "; ".join(f"{k}={v}" for k, v in self.cookies.items()))
             if self.send_csrf and method.upper() in _MUTATING:
-                headers.setdefault("X-CSRF-Token", self.cookies["eclume_csrf"])
+                headers.setdefault("X-CSRF-Token", self.cookies[self.csrf_cookie])
         self.client.cookies.clear()
         return self.client.request(method, url, headers=headers, **kwargs)
 
@@ -71,9 +73,8 @@ class Api:
 
 @dataclass
 class Account:
-    """Usuário criado para um teste."""
+    """Conta de usuário (ou de admin) criada para um teste."""
 
-    org_id: UUID
     user_id: UUID
     email: str
     name: str
@@ -89,25 +90,38 @@ def login(client: TestClient, email: str, password: str = PASSWORD) -> Api:
     return Api(client, cookies=cookies)
 
 
-def new_org(services: Services, name: str = "Organização de teste") -> UUID:
-    """Organização nova (com a configuração padrão)."""
+def admin_login(client: TestClient, email: str, password: str = PASSWORD) -> Api:
+    """Abre a sessão de admin e devolve o `Api` com os cookies dela."""
+    client.cookies.clear()
+    response = client.post("/api/v1/admin/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 204, response.text
+    cookies = {name: response.cookies[name] for name in ("eclume_admin_session", "eclume_admin_csrf")}
+    client.cookies.clear()
+    return Api(client, cookies=cookies, csrf_cookie="eclume_admin_csrf")
 
-    async def create(conn: Any) -> UUID:  # noqa: ANN401
-        return await create_org(conn, name)
 
-    return run(services.sql(create))
-
-
-def new_user(services: Services, org_id: UUID, *, role: str = "member", name: str | None = None) -> Account:
-    """Usuário novo na organização, com a senha `PASSWORD`."""
+def new_user(services: Services, *, name: str | None = None, notice_version: str | None = None) -> Account:
+    """Conta de usuário nova, com a senha `PASSWORD`."""
     handle = secrets.token_hex(4)
     email = f"user-{handle}@exemplo.com.br"
     name = name or f"Usuário {handle}"
 
     async def create(conn: Any) -> UUID:  # noqa: ANN401
-        return await create_user(conn, org_id, email=email, name=name, password=PASSWORD, role=role)
+        return await create_user(conn, email=email, name=name, password=PASSWORD, notice_version=notice_version)
 
-    return Account(org_id=org_id, user_id=run(services.sql(create)), email=email, name=name)
+    return Account(user_id=run(services.sql(create)), email=email, name=name)
+
+
+def new_admin(services: Services) -> Account:
+    """Conta de admin nova, com a senha `PASSWORD`."""
+    handle = secrets.token_hex(4)
+    email = f"admin-{handle}@exemplo.com.br"
+    name = f"Admin {handle}"
+
+    async def create(conn: Any) -> UUID:  # noqa: ANN401
+        return await create_admin(conn, email=email, name=name, password=PASSWORD)
+
+    return Account(user_id=run(services.sql(create)), email=email, name=name)
 
 
 def audio_bytes(size: int, seed: str = "") -> bytes:

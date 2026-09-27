@@ -48,7 +48,7 @@ class AnthropicProvider:
             # Sem chave explícita o SDK cairia em variáveis de ambiente e perfis do processo.
             raise ProviderError(
                 PROVIDER_NOT_CONFIGURED,
-                "O provider anthropic não tem api_key cadastrada nem o segredo anthropic_api_key da organização.",
+                "O provider anthropic não tem api_key cadastrada nem o segredo anthropic_api_key da plataforma.",
             )
         # As retentativas são do job de resumo, que registra cada tentativa.
         return anthropic.AsyncAnthropic(

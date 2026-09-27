@@ -63,7 +63,7 @@ async def list_tokens(principal: SessionUser, ctx: Ctx, cursor: Cursor = None, l
     if cursor:
         position = decode_cursor(cursor)
         query = query.where(tuple_(t.api_tokens.c.created_at, t.api_tokens.c.id) < position)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         rows = (await conn.execute(query)).mappings().all()
     return page([token_json(row) for row in rows], list(rows), limit, "created_at")
 
@@ -78,13 +78,12 @@ async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> d
     if body.expires_at is not None and body.expires_at <= datetime.now(UTC):
         raise invalid_field("expires_at", "deve estar no futuro")
     secret, prefix = new_pat()
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = (
             (
                 await conn.execute(
                     insert(t.api_tokens)
                     .values(
-                        org_id=principal.org_id,
                         user_id=principal.user_id,
                         name=body.name,
                         token_hash=sha256_hex(secret),
@@ -104,7 +103,7 @@ async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> d
 @router.delete("/tokens/{token_id}", status_code=204)
 async def revoke_token(token_id: UUID, principal: SessionUser, ctx: Ctx) -> Response:
     """Revoga um PAT do usuário; usos seguintes recebem 401."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         found = (await conn.execute(select(t.api_tokens.c.id).where(t.api_tokens.c.id == token_id))).first()
         if found is None:
             raise not_found("PAT inexistente ou sem acesso.")

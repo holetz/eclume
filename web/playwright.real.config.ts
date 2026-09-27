@@ -1,6 +1,6 @@
 // E2E do app contra o backend real: um stack efêmero (deploy/docker-compose.e2e.yml, projeto
 // eclume-e2e) subido por deploy/e2e-real.sh no host, que passa a URL e o admin descartável:
-//   ECLUME_E2E_URL, ECLUME_E2E_EMAIL, ECLUME_E2E_PASSWORD e ECLUME_E2E_AUDIO (WAV de fala).
+//   ECLUME_E2E_URL, ECLUME_E2E_ADMIN_EMAIL, ECLUME_E2E_ADMIN_PASSWORD e ECLUME_E2E_AUDIO (WAV de fala).
 // O certificado é o da CA interna do Caddy efêmero: o navegador ignora o erro de TLS.
 import { defineConfig, devices } from '@playwright/test'
 

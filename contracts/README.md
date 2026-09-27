@@ -27,7 +27,9 @@ cada rota responde com o exemplo declarado, que vem de `fixtures/`.
 
 - **Credencial.** Rotas protegidas exigem a *presença* da credencial: `Authorization: Bearer
   eclp_<qualquer coisa>` ou o cookie `eclume_session`. Sem ela, 401 com o problem de
-  `fixtures/problem-unauthorized.json`. O mock **não** confere escopos.
+  `fixtures/problem-unauthorized.json`. O mock **não** confere escopos. As rotas
+  `/api/v1/admin/*` exigem o cookie `eclume_admin_session` da conta de admin; PAT ou sessão de
+  usuário ali dão 401.
 - **Validação.** O corpo e os parâmetros são validados contra o contrato; requisição inválida
   recebe 422.
 - **Escolher a resposta.** `Prefer: code=<status>` escolhe o status e `Prefer: example=<nome>` o
@@ -92,3 +94,6 @@ A v1 só recebe mudanças **aditivas**:
   `schema_version`; atualiza as fixtures; regenera o bundle; e passa em `uv run pytest contracts/tests`.
 - **Quebra de compatibilidade** vira `/api/v2` com `openapi-v2.yaml` próprio. A v1 continua servida
   durante a transição, anunciando o fim com os headers `Deprecation` e `Sunset`.
+- **Exceção única: a 2.0.0.** O fim da organização (conta por usuário, admin com sessão própria)
+  saiu sob `/api/v1`, porque o desktop e o lumea não usam nada do que mudou; o porquê está no
+  standard.

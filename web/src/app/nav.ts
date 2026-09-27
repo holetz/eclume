@@ -1,13 +1,12 @@
 // Navegação principal numa lista única. As áreas de outras specs já estão previstas e desligadas:
 // para ligá-las, a spec dona muda `enabled` e registra a rota em routes.tsx.
-export type NavGroup = 'Gravações' | 'Organizar' | 'Conta' | 'Administração'
+export type NavGroup = 'Gravações' | 'Organizar' | 'Conta'
 
 export interface NavItem {
   to: string
   label: string
   group: NavGroup
   enabled: boolean
-  adminOnly?: boolean
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -18,16 +17,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', enabled: true },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Conta', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Conta', enabled: true },
-  { to: '/admin', label: 'Painel admin', group: 'Administração', enabled: true, adminOnly: true },
 ]
 
-export type Role = 'admin' | 'member'
-
-/** Itens visíveis para o papel, agrupados na ordem da lista; grupos vazios somem. */
-export function navGroups(role: Role, items: readonly NavItem[] = NAV_ITEMS) {
+/**
+ * Itens ligados, agrupados na ordem da lista; grupos vazios somem. O painel admin não entra: ele
+ * tem conta e login próprios (/admin/entrar).
+ */
+export function navGroups(items: readonly NavItem[] = NAV_ITEMS) {
   const groups = new Map<NavGroup, NavItem[]>()
   for (const item of items) {
-    if (!item.enabled || (item.adminOnly && role !== 'admin')) continue
+    if (!item.enabled) continue
     groups.set(item.group, [...(groups.get(item.group) ?? []), item])
   }
   return [...groups].map(([group, entries]) => ({ group, items: entries }))

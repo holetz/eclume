@@ -11,7 +11,7 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, 
   lazy(() => load().then((module) => ({ default: module[name] })))
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
-const InvitationPage = named(() => import('../features/auth/InvitationPage'), 'InvitationPage')
+const AdminLoginPage = named(() => import('../features/admin/AdminLoginPage'), 'AdminLoginPage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
 const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
@@ -45,7 +45,9 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
-      <Route path="/convite/:token" element={page(InvitationPage)} />
+      {/* O painel admin fica fora da sessão do usuário: conta, login e guarda próprios. */}
+      <Route path="/admin/entrar" element={page(AdminLoginPage)} />
+      <Route path="/admin/*" element={page(AdminRoutes)} />
       <Route element={<RequireSession />}>
         <Route index element={<LibraryPage />} />
         <Route path="/gravacoes/:id" element={page(RecordingPage)} />
@@ -56,7 +58,6 @@ export function AppRoutes() {
         <Route path="/colecoes" element={page(CollectionsPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
-        <Route path="/admin/*" element={page(AdminRoutes)} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

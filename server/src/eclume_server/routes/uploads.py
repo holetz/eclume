@@ -181,7 +181,6 @@ async def create_upload(
     expires_at = now + timedelta(days=ctx.settings.upload_ttl_days)
     request_fields = body.model_dump(mode="json", exclude={"filename", "content_type", "size_bytes", "sha256"})
     base = {
-        "org_id": principal.org_id,
         "owner_id": principal.user_id,
         "filename": body.filename,
         "content_type": body.content_type,
@@ -192,7 +191,7 @@ async def create_upload(
         "expires_at": expires_at,
     }
     try:
-        async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+        async with user_tx(ctx.engine, principal.user_id) as conn:
             await check_collections(conn, body.collection_ids)
             duplicate = (
                 await conn.execute(
@@ -248,7 +247,7 @@ async def create_upload(
                 )
 
             recording_id = uuid4()
-            key = audio_key(principal.org_id, principal.user_id, recording_id)
+            key = audio_key(principal.user_id, recording_id)
             s3_upload_id = await ctx.storage.create_multipart(key, body.content_type)
             row = (
                 (
@@ -277,7 +276,7 @@ async def create_upload(
 @router.get("/uploads/{upload_id}")
 async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Estado do upload, com as partes já confirmadas pelo armazenamento."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     return upload_json(row, await _received(ctx, row), [])
 
@@ -285,7 +284,7 @@ async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, 
 @router.delete("/uploads/{upload_id}", status_code=204)
 async def abort_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Aborta um upload em andamento e descarta as partes; nos demais estados, nada muda."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] == "in_progress":
             await ctx.storage.abort_multipart(row["audio_key"], row["s3_upload_id"])
@@ -300,7 +299,7 @@ async def create_part_urls(
     """URLs novas para as partes pedidas (inclusive para trocar URLs expiradas)."""
     if len(set(body.part_numbers)) != len(body.part_numbers):
         raise invalid_field("part_numbers", "números repetidos")
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     _require_open(row)
     beyond = [n for n in body.part_numbers if n > row["part_count"]]
@@ -347,7 +346,7 @@ async def put_part(
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição."""
     enqueue: tuple[str, dict[str, Any]] | None = None
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] in {"completed", "deduplicated"}:
             recording_id = row["recording_id"]
@@ -398,7 +397,6 @@ async def _finish(
     capture = requested.get("capture")
     values = {
         "id": recording_id,
-        "org_id": principal.org_id,
         "owner_id": principal.user_id,
         "title": requested.get("title") or PurePath(row["filename"]).stem or row["filename"],
         "status": "queued" if matches else "failed",
@@ -433,7 +431,7 @@ async def _finish(
         )
         return duplicate, None
     await conn.execute(insert(t.recordings).values(**values))
-    recording = {"id": recording_id, "org_id": principal.org_id, "language": values["language"]}
+    recording = {"id": recording_id, "owner_id": principal.user_id, "language": values["language"]}
     error = None if matches else ("hash_mismatch", "O SHA-256 do arquivo recebido difere do declarado no upload.")
     options = await insert_job(conn, recording, 1, error=error)
     await conn.execute(

@@ -231,8 +231,8 @@ function SettingsForm({ settings }: { settings: Settings }) {
           <span>
             <span>Resumir automaticamente ao fim da transcrição</span>
             <span className="hint">
-              Usa o provider padrão (em <Link to="/admin/agentes">Agentes</Link>) e o template padrão de cada usuário
-              ou, na falta dele, o da organização (em <Link to="/admin/templates">Templates padrão</Link>).
+              Usa o provider padrão (em <Link to="/admin/agentes">Agentes</Link>) e o template padrão de cada
+              usuário; quem não tem template padrão fica sem resumo automático.
             </span>
           </span>
         </label>

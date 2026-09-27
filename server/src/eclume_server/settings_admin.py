@@ -1,4 +1,4 @@
-"""Configuração em runtime da organização (`org_settings`) e segredos cifrados (`org_secrets`).
+"""Configuração em runtime da plataforma (`platform_settings`) e segredos cifrados (`platform_secrets`).
 
 Regras em docs/standards/code/server-admin.md: o `PATCH` mescla campo a campo por bloco, valida o
 estado resultante e vale para os próximos jobs; os segredos só entram, nunca saem pela API.
@@ -16,7 +16,6 @@ from sqlalchemy import select
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import invalid_field
-from eclume_server.serialize import user_ref
 from eclume_server.voice import voice_settings
 
 if TYPE_CHECKING:
@@ -78,7 +77,6 @@ class SummarizationPatch(_Block):
 
     default_provider_id: UUID | None = None
     auto_summarize: bool | None = None
-    default_template_id: UUID | None = None
 
 
 class VoiceIdentificationPatch(_Block):
@@ -86,7 +84,6 @@ class VoiceIdentificationPatch(_Block):
 
     enabled: bool | None = None
     suggestion_threshold: float | None = Field(default=None, ge=0, le=1)
-    consent_term_text: str | None = Field(default=None, min_length=1, max_length=20000)
 
 
 class AdminSettingsPatch(_Block):
@@ -102,17 +99,17 @@ class AdminSettingsPatch(_Block):
 _NULLABLE = {
     "asr": {"batch_size", "default_language", "fallback_model", "endpoint_url"},
     "diarization": {"min_speakers", "max_speakers"},
-    "summarization": {"default_provider_id", "default_template_id"},
+    "summarization": {"default_provider_id"},
     "voice_identification": set(),
 }
 
 
 def settings_json(row: Row, updated_by_name: str | None) -> dict[str, Any]:
-    """Schema `AdminSettings`."""
+    """Schema `AdminSettings`; `updated_by` é a conta de admin."""
     body: dict[str, Any] = {block: dict(row[block]) for block in BLOCKS}
     body["voice_identification"] = voice_settings(body["voice_identification"])
     body["updated_at"] = iso(row["updated_at"])
-    body["updated_by"] = user_ref(row["updated_by"], updated_by_name) if row["updated_by"] else None
+    body["updated_by"] = {"id": str(row["updated_by"]), "name": updated_by_name} if row["updated_by"] else None
     return body
 
 
@@ -131,7 +128,7 @@ def changes_of(body: AdminSettingsPatch) -> dict[str, dict[str, Any]]:
 
 
 async def validate_merged(conn: AsyncConnection, merged: dict[str, dict[str, Any]]) -> None:
-    """Regras entre campos e referências, sobre a configuração resultante (sob a RLS do admin)."""
+    """Regras entre campos e referências, sobre a configuração resultante."""
     asr, diarization, summarization = merged["asr"], merged["diarization"], merged["summarization"]
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
         raise invalid_field("asr.endpoint_url", "obrigatória com a engine openai-compatible")
@@ -145,25 +142,10 @@ async def validate_merged(conn: AsyncConnection, merged: dict[str, dict[str, Any
         ).scalar()
         if not enabled:
             raise invalid_field("summarization.default_provider_id", "precisa ser um provider habilitado")
-    template_id = summarization.get("default_template_id")
-    if template_id is not None:
-        owner = (
-            await conn.execute(
-                select(t.summary_templates.c.id).where(
-                    t.summary_templates.c.id == UUID(template_id), t.summary_templates.c.owner_id.is_(None)
-                )
-            )
-        ).scalar()
-        if owner is None:
-            raise invalid_field("summarization.default_template_id", "precisa ser um template da organização")
 
 
-async def secret_encrypted(conn: AsyncConnection, org_id: UUID, name: str) -> str | None:
-    """Texto cifrado do segredo da organização, ou `None`; leia com o papel de sistema."""
+async def secret_encrypted(conn: AsyncConnection, name: str) -> str | None:
+    """Texto cifrado do segredo da plataforma, ou `None`; leia com o papel de conexão."""
     return (
-        await conn.execute(
-            select(t.org_secrets.c.value_encrypted).where(
-                t.org_secrets.c.org_id == org_id, t.org_secrets.c.name == name
-            )
-        )
+        await conn.execute(select(t.platform_secrets.c.value_encrypted).where(t.platform_secrets.c.name == name))
     ).scalar()

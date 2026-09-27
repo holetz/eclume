@@ -5,7 +5,6 @@
       "name": "Ata de reunião",
       "description": "Decisões e encaminhamentos com responsável.",
       "instructions": "Escreva uma ata em português com as seções Decisões e Encaminhamentos. Cada encaminhamento tem responsável e prazo, quando ditos. Não invente o que não foi dito.",
-      "scope": "organization",
       "is_default": true,
       "created_at": "2026-09-10T12:05:00Z",
       "updated_at": "2026-09-10T12:05:00Z"
@@ -15,7 +14,6 @@
       "name": "Resumo executivo",
       "description": null,
       "instructions": "Resuma em até cinco tópicos o que importa para a diretoria do cliente: riscos, decisões e próximos passos.",
-      "scope": "user",
       "is_default": false,
       "created_at": "2026-09-15T09:30:00Z",
       "updated_at": "2026-09-15T09:30:00Z"

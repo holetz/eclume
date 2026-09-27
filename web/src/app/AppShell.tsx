@@ -1,13 +1,12 @@
 import { useId, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import styles from './AppShell.module.css'
-import { navGroups, type Role } from './nav'
+import { navGroups } from './nav'
 import { applyThemePreference, readThemePreference, type ThemePreference } from './theme'
 
 export interface ShellUser {
   name: string
   email: string
-  role: Role
 }
 
 interface AppShellProps {
@@ -54,7 +53,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           eclume
         </NavLink>
         <nav aria-label="Principal" className={styles.nav}>
-          {navGroups(user.role).map(({ group, items }) => (
+          {navGroups().map(({ group, items }) => (
             <div key={group} className={styles.group}>
               <h2 className={styles.groupTitle}>{group}</h2>
               <ul>

@@ -4,11 +4,10 @@ import { AgentsPage } from './AgentsPage'
 import { HealthPage } from './HealthPage'
 import { SecretsPage } from './SecretsPage'
 import { SettingsPage } from './SettingsPage'
-import { TemplatesPage } from './TemplatesPage'
 import { UsersPage } from './UsersPage'
 import { VoicePage } from './VoicePage'
 
-/** Rotas de /admin/*, dentro da moldura com a guarda de papel. */
+/** Rotas de /admin/*, dentro da moldura com a guarda da sessão de admin. */
 export function AdminRoutes() {
   return (
     <Routes>
@@ -17,7 +16,6 @@ export function AdminRoutes() {
         <Route path="transcricao" element={<SettingsPage />} />
         <Route path="voz" element={<VoicePage />} />
         <Route path="agentes" element={<AgentsPage />} />
-        <Route path="templates" element={<TemplatesPage />} />
         <Route path="usuarios" element={<UsersPage />} />
         <Route path="segredos" element={<SecretsPage />} />
         <Route path="saude" element={<HealthPage />} />

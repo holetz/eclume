@@ -1,4 +1,4 @@
-"""Pessoas da organização: diretório, cadastro e as transcrições em que cada uma fala."""
+"""Pessoas do usuário: diretório, cadastro e as transcrições em que cada uma fala."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("people:read"))]
 Writer = Annotated[Principal, Depends(requires("people:write"))]
 TranscriptReader = Annotated[Principal, Depends(requires("people:read", "transcripts:read"))]
-EMAIL_TAKEN = "Já existe uma pessoa com este e-mail na organização."
+EMAIL_TAKEN = "Já existe uma pessoa sua com este e-mail."
 
 
 def _optional_email(value: str | None) -> str | None:
@@ -65,7 +65,7 @@ async def list_people(
     if cursor:
         position = decode_named_position(cursor)
         query = query.where(tuple_(c.sort_name, c.id) > position)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         rows = (await conn.execute(query)).mappings().all()
     next_cursor = encode_position(rows[limit - 1]["sort_name"], rows[limit - 1]["id"]) if len(rows) > limit else None
     return {"items": [person_json(row) for row in rows[:limit]], "next_cursor": next_cursor}
@@ -73,13 +73,13 @@ async def list_people(
 
 @router.post("/people", status_code=201)
 async def create_person(body: PersonCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra uma pessoa; e-mail repetido na organização é 409."""
+    """Cadastra uma pessoa; e-mail repetido entre as pessoas do usuário é 409."""
     try:
-        async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+        async with user_tx(ctx.engine, principal.user_id) as conn:
             person_id = (
                 await conn.execute(
                     insert(t.people)
-                    .values(org_id=principal.org_id, created_by=principal.user_id, **body.model_dump())
+                    .values(owner_id=principal.user_id, created_by=principal.user_id, **body.model_dump())
                     .returning(t.people.c.id)
                 )
             ).scalar_one()
@@ -92,7 +92,7 @@ async def create_person(body: PersonCreate, principal: Writer, ctx: Ctx) -> dict
 @router.get("/people/{person_id}")
 async def read_person(person_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
     """Uma pessoa."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         return person_json(await get_person(conn, person_id))
 
 
@@ -105,7 +105,7 @@ async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, c
     if "name" in values and values["name"] is None:
         raise invalid_field("name", "não pode ser nulo")
     try:
-        async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+        async with user_tx(ctx.engine, principal.user_id) as conn:
             await get_person(conn, person_id)
             await conn.execute(
                 update(t.people).where(t.people.c.id == person_id).values(**values, updated_at=datetime.now(UTC))
@@ -120,7 +120,7 @@ async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, c
 @router.delete("/people/{person_id}", status_code=204)
 async def delete_person(person_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Exclui a pessoa; os locutores ligados a ela ficam sem pessoa e mantêm o `label`."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         result = await conn.execute(delete(t.people).where(t.people.c.id == person_id))
     if result.rowcount == 0:
         raise not_found("Pessoa inexistente ou sem acesso.")
@@ -131,7 +131,7 @@ async def delete_person(person_id: UUID, principal: Writer, ctx: Ctx) -> Respons
 async def list_person_transcripts(
     person_id: UUID, principal: TranscriptReader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """Transcrições visíveis em que a pessoa fala, da gravação mais recente para a mais antiga."""
+    """Transcrições do usuário em que a pessoa fala, da gravação mais recente para a mais antiga."""
     tc = t.transcripts.c
     recorded_at = t.recordings.c.recorded_at
     query = (
@@ -142,7 +142,7 @@ async def list_person_transcripts(
     )
     if cursor:
         query = query.where(tuple_(recorded_at, tc.id) < decode_cursor(cursor))
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         rows = list((await conn.execute(query)).mappings().all())
         speakers = await load_speakers(conn, [row["id"] for row in rows[:limit]])

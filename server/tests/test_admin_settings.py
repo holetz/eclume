@@ -18,16 +18,12 @@ if TYPE_CHECKING:
 URL = "/api/v1/admin/settings"
 
 
-@pytest.fixture
-def admin(as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> Api:
-    return as_user(make_user(role="admin", name="Mariana Couto"))
-
-
-def test_so_admin_com_sessao(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    member = as_user(make_user())
-    assert member.get(URL).status_code == 403
-    assert member.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 403
+def test_so_a_sessao_de_admin(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    user = as_user(make_user())
+    assert user.get(URL).status_code == 401
+    assert user.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 401
+    assert user.pat("recordings:read").get(URL).status_code == 401
+    assert admin.get(URL).status_code == 200
 
 
 def test_leitura_e_merge_por_bloco(admin: Api):
@@ -36,8 +32,8 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     body = initial.json()
     assert body["asr"]["model"] == "large-v3-turbo"
     assert body["updated_by"] is None
-    default_template = body["summarization"]["default_template_id"]
-    assert default_template is not None
+    assert body["summarization"] == {"default_provider_id": None, "auto_summarize": False}
+    assert body["voice_identification"] == {"enabled": False, "suggestion_threshold": 0.55}
 
     patched = admin.patch(
         URL,
@@ -52,9 +48,10 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     assert result["asr"] == {**body["asr"], "model": "large-v3", "compute_type": "int8", "batch_size": 2}
     assert result["diarization"]["min_speakers"] == 2
     assert result["diarization"]["enabled"] is True
-    # O merge é por campo: o template padrão gravado pela #9 continua lá.
     assert result["summarization"] == {**body["summarization"], "auto_summarize": True}
-    assert result["updated_by"]["name"] == "Mariana Couto"
+    # Quem mudou é a conta de admin, não um usuário.
+    me = admin.get("/api/v1/admin/me").json()
+    assert result["updated_by"] == {"id": me["id"], "name": me["name"]}
     assert admin.get(URL).json() == result
 
     cleared = admin.patch(URL, json={"asr": {"batch_size": None}, "diarization": {"min_speakers": None}})
@@ -78,8 +75,10 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"diarization": {"min_speakers": 5, "max_speakers": 2}}, "diarization.min_speakers"),
         ({"diarization": {"enabled": None}}, "diarization.enabled"),
         ({"summarization": {"default_provider_id": "01928f3a-1c00-7a00-8000-000000000b01"}}, None),
+        # O padrão de template era da organização: agora é de cada usuário.
         ({"summarization": {"default_template_id": "01928f3a-1c00-7a00-8000-000000000901"}}, None),
         ({"voice_identification": {"suggestion_threshold": 1.5}}, None),
+        ({"voice_identification": {"consent_term_text": "Autorizo."}}, None),
     ],
 )
 def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
@@ -90,7 +89,7 @@ def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
         assert field in {e["field"] for e in response.json()["errors"]}
 
 
-def test_referencias_de_provider_e_template(admin: Api):
+def test_referencia_de_provider(admin: Api):
     provider = admin.post(
         "/api/v1/admin/agent-providers",
         json={
@@ -100,18 +99,8 @@ def test_referencias_de_provider_e_template(admin: Api):
             "base_url": "https://api.deepseek.com/v1",
         },
     ).json()
-    personal = admin.post("/api/v1/summary-templates", json={"name": "Meu", "instructions": "Resuma."}).json()
-    organization = admin.post(
-        "/api/v1/summary-templates", json={"name": "Da org", "instructions": "Resuma.", "scope": "organization"}
-    ).json()
-
-    assert admin.patch(URL, json={"summarization": {"default_template_id": personal["id"]}}).status_code == 422
-    ok = admin.patch(
-        URL, json={"summarization": {"default_template_id": organization["id"], "default_provider_id": provider["id"]}}
-    )
+    ok = admin.patch(URL, json={"summarization": {"default_provider_id": provider["id"]}})
     assert ok.status_code == 200
-    templates = admin.get("/api/v1/summary-templates").json()["items"]
-    assert next(t for t in templates if t["id"] == organization["id"])["is_default"] is True
 
     admin.patch(f"/api/v1/admin/agent-providers/{provider['id']}", json={"enabled": False})
     assert admin.patch(URL, json={"summarization": {"default_provider_id": provider["id"]}}).status_code == 422

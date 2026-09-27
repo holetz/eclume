@@ -4,19 +4,23 @@
       "id": "01928f3a-1c00-7a00-8000-000000000101",
       "email": "mariana.couto@example.com",
       "name": "Mariana Couto",
-      "role": "admin",
       "active": true,
       "created_at": "2026-09-10T12:00:00Z",
-      "last_login_at": "2026-09-18T13:55:02Z"
+      "last_login_at": "2026-09-18T13:55:02Z",
+      "notice_version": null,
+      "notice_accepted_at": null,
+      "recording_count": 37
     },
     {
       "id": "01928f3a-1c00-7a00-8000-000000000102",
       "email": "paulo.andrade@example.com",
       "name": "Paulo Andrade",
-      "role": "member",
       "active": true,
       "created_at": "2026-09-11T17:20:44Z",
-      "last_login_at": "2026-09-17T19:03:10Z"
+      "last_login_at": "2026-09-17T19:03:10Z",
+      "notice_version": "1",
+      "notice_accepted_at": "2026-09-28T12:00:00Z",
+      "recording_count": 12
     }
   ],
   "next_cursor": null

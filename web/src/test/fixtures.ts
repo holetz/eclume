@@ -1,11 +1,11 @@
-// Fixtures do contrato v1 (contracts/fixtures/), tipadas pelo schema gerado. Os testes usam os
+// Fixtures do contrato (contracts/fixtures/), tipadas pelo schema gerado. Os testes usam os
 // mesmos exemplos que o mock server serve.
 import type { Schemas } from '../api/client'
 import adminHealth from '../../../contracts/fixtures/admin-health.json'
+import adminMe from '../../../contracts/fixtures/admin-me.json'
 import adminSettings from '../../../contracts/fixtures/admin-settings.json'
+import adminUserPage from '../../../contracts/fixtures/admin-user-page.json'
 import agentProviderPage from '../../../contracts/fixtures/agent-provider-page.json'
-import groupPage from '../../../contracts/fixtures/group-page.json'
-import invitation from '../../../contracts/fixtures/invitation.json'
 import collectionPage from '../../../contracts/fixtures/collection-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
@@ -29,10 +29,7 @@ import transcriptPage from '../../../contracts/fixtures/transcript-page.json'
 import uploadCreated from '../../../contracts/fixtures/upload-created.json'
 import uploadDeduplicated from '../../../contracts/fixtures/upload-deduplicated.json'
 import uploadInProgress from '../../../contracts/fixtures/upload-in-progress.json'
-import userPage from '../../../contracts/fixtures/user-page.json'
-import voiceAuditPage from '../../../contracts/fixtures/voice-audit-page.json'
 import voiceprint from '../../../contracts/fixtures/voiceprint.json'
-import voiceprintExport from '../../../contracts/fixtures/voiceprint-export.json'
 
 type Transcript = import('../api/schema.gen').operations['getTranscript']['responses'][200]['content']['application/json']
 
@@ -66,15 +63,12 @@ export const fixtures = {
   adminHealth: fresh<Schemas['AdminHealth']>(adminHealth),
   agentProviderPage: fresh<Schemas['AgentProviderPage']>(agentProviderPage),
   secretList: fresh<Schemas['SecretList']>(secretList),
-  userPage: fresh<Schemas['UserPage']>(userPage),
-  invitation: fresh<Schemas['Invitation']>(invitation),
-  groupPage: fresh<Schemas['GroupPage']>(groupPage),
+  adminMe: fresh<Schemas['AdminAccount']>(adminMe),
+  adminUserPage: fresh<Schemas['AdminUserPage']>(adminUserPage),
   person: fresh<Schemas['Person']>(person),
   personPage: fresh<Schemas['PersonPage']>(personPage),
   searchPage: fresh<Schemas['SearchPage']>(searchPage),
   collectionPage: fresh<Schemas['CollectionPage']>(collectionPage),
   tagList: fresh<Schemas['TagList']>(tagList),
   voiceprint: fresh<Schemas['Voiceprint']>(voiceprint),
-  voiceprintExport: fresh<Schemas['VoiceprintExport']>(voiceprintExport),
-  voiceAuditPage: fresh<Schemas['VoiceAuditPage']>(voiceAuditPage),
 }

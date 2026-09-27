@@ -15,7 +15,6 @@
         "id": "01928f3a-1c00-7a00-8000-000000000101",
         "name": "Mariana Couto"
       },
-      "visibility": "private",
       "tags": [],
       "collection_ids": [
         "01928f3a-1c00-7a00-8000-000000000801"
@@ -57,7 +56,6 @@
         "client_version": "eclume-desktop/0.3.0"
       },
       "status": "transcribed",
-      "visibility": "shared",
       "tags": [
         "programa-liderancas",
         "cliente-metalurgica"
