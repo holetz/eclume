@@ -1,12 +1,18 @@
 import type { Schemas } from '../../api/client'
-import { stageLabel, statusInfo } from './format'
+import { recordingState, stageLabel } from './format'
 import styles from './RecordingStatus.module.css'
 
 type Recording = Schemas['Recording']
 
-export function StatusBadge({ status }: { status: Recording['status'] }) {
-  const { label, tone } = statusInfo(status)
-  return <span className={`badge badge-${tone}`}>{label}</span>
+/** O estado da gravação em palavra (`recordingState`), com o aviso "Sem resumo" quando a etapa falhou. */
+export function StatusBadge({ recording }: { recording: Pick<Recording, 'status' | 'pipeline'> }) {
+  const { label, tone, noSummary } = recordingState(recording)
+  return (
+    <>
+      <span className={`badge badge-${tone}`}>{label}</span>
+      {noSummary && <span className="badge badge-warning">Sem resumo</span>}
+    </>
+  )
 }
 
 /** Progresso do job: etapa, barra e erro. Nada quando não há job para mostrar. */

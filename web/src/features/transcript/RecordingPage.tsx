@@ -43,7 +43,7 @@ export function RecordingPage() {
         </Link>
         <div className={styles.titleRow}>
           <h1 id="gravacao-titulo">{data.title}</h1>
-          <StatusBadge status={data.status} />
+          <StatusBadge recording={data} />
         </div>
         <p className={styles.meta}>
           <span>{formatDateTime(data.recorded_at)}</span>

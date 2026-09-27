@@ -4,7 +4,7 @@ import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
 import { useCollections } from '../collections/queries'
-import { formatDateTime, formatDuration, isActive, sourceLabel } from './format'
+import { formatDateTime, formatDuration, recordingState, sourceLabel } from './format'
 import styles from './LibraryPage.module.css'
 import { JobProgress, StatusBadge } from './RecordingStatus'
 
@@ -37,7 +37,7 @@ export function LibraryPage() {
     getNextPageParam: (page) => page.next_cursor,
     // Enquanto algum job anda, a lista se atualiza sozinha.
     refetchInterval: (query) =>
-      query.state.data?.pages.some((page) => page.items.some(isActive)) ? POLL_MS : false,
+      query.state.data?.pages.some((page) => page.items.some((item) => recordingState(item).state === 'busy')) ? POLL_MS : false,
   })
 
   const items = recordings.data?.pages.flatMap((page) => page.items) ?? []
@@ -109,7 +109,7 @@ function RecordingRow({ recording }: { recording: Schemas['Recording'] }) {
         </p>
         <JobProgress recording={recording} />
       </div>
-      <StatusBadge status={recording.status} />
+      <StatusBadge recording={recording} />
     </li>
   )
 }

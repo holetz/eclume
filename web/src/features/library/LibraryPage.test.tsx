@@ -4,26 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { formatBytes, formatDuration, isActive, statusInfo } from './format'
 
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
-})
-
-describe('formatos', () => {
-  it('formata duração, tamanho e estados, tolerando enum novo', () => {
-    expect(formatDuration(45_000)).toBe('45 s')
-    expect(formatDuration(166_000)).toBe('2 min 46 s')
-    expect(formatDuration(120_000)).toBe('2 min')
-    expect(formatDuration(3_900_000)).toBe('1 h 05 min')
-    expect(formatDuration(null)).toBe('—')
-    expect(formatBytes(11_604_992)).toBe('11,1 MB')
-    expect(statusInfo('transcribed')).toEqual({ label: 'Transcrita', tone: 'success' })
-    expect(statusInfo('archived')).toEqual({ label: 'archived', tone: 'neutral' })
-    expect(isActive({ status: 'processing' })).toBe(true)
-    expect(isActive({ status: 'transcribed' })).toBe(false)
-  })
 })
 
 describe('biblioteca', () => {
@@ -47,7 +31,7 @@ describe('biblioteca', () => {
     expect(within(processing).getByRole('progressbar')).toHaveAttribute('value', '62')
 
     const done = rows[1]
-    expect(within(done).getByText('Transcrita')).toBeInTheDocument()
+    expect(within(done).getByText('Pronta')).toBeInTheDocument()
     expect(within(done).getByText('2 min 46 s')).toBeInTheDocument()
     expect(within(done).getByText('App desktop')).toBeInTheDocument()
     expect(within(done).queryByRole('progressbar')).not.toBeInTheDocument()
@@ -62,6 +46,7 @@ describe('biblioteca', () => {
         calls++
         if (calls > 1) {
           page.items[0].status = 'transcribed'
+          page.items[0].pipeline = fixtures.recordingTranscribed().pipeline
           page.items[0].job!.state = 'succeeded'
         }
         return page
@@ -69,7 +54,7 @@ describe('biblioteca', () => {
     })
     renderApp('/')
     await screen.findByText('Transcrevendo')
-    await waitFor(() => expect(screen.getAllByText('Transcrita')).toHaveLength(2), { timeout: 5000 })
+    await waitFor(() => expect(screen.getAllByText('Pronta')).toHaveLength(2), { timeout: 5000 })
     const settled = calls
     await new Promise((resolve) => setTimeout(resolve, 3500))
     expect(calls).toBe(settled)

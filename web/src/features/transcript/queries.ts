@@ -1,7 +1,7 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { unwrap } from '../../api/problem'
-import { isActive } from '../library/format'
+import { recordingState } from '../library/format'
 import type { Transcript } from './segments'
 
 const POLL_MS = 3000
@@ -14,7 +14,7 @@ export function useRecording(id: string) {
     queryKey: recordingKey(id),
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}', { params: { path: { recording_id: id } } })),
-    refetchInterval: (query) => (query.state.data && isActive(query.state.data) ? POLL_MS : false),
+    refetchInterval: (query) => (query.state.data && recordingState(query.state.data).state === 'busy' ? POLL_MS : false),
   })
 }
 

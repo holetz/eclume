@@ -1,6 +1,10 @@
 import react from '@vitejs/plugin-react'
 import { configDefaults, defineConfig } from 'vitest/config'
 
+// A biblioteca posiciona as gravações pela hora local: os testes fixam o fuso das fixtures do mock,
+// para passarem igual na estação e no host de build.
+process.env.TZ = 'America/Sao_Paulo'
+
 export default defineConfig({
   plugins: [react()],
   // O @ffmpeg/ffmpeg cria o próprio worker por URL relativa; o pré-bundle do Vite a quebraria.
