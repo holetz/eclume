@@ -123,3 +123,13 @@ html.lendo-codigo .viewfinder {
   font-size: 13px;
   font-weight: 600;
 }
+
+.botao-texto {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}

@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { usePonte } from '../ponte/ponte'
 import type { EstadoApp } from '../ponte/tipos'
+import { Configuracoes } from '../telas/Configuracoes'
+import { Detalhe } from '../telas/Detalhe'
 import { Endereco } from '../telas/Endereco'
 import { Entrar } from '../telas/Entrar'
 import { Gravando } from '../telas/Gravando'
@@ -10,6 +12,7 @@ import { Servidor } from '../telas/Servidor'
 import { useEstadoApp } from './estado'
 import { Marca } from './Marca'
 import { useRota } from './rotas'
+import { aplicarRecortes, seguirTemaDoSistema } from './tema'
 
 /** A casca do app: a tela sai do `EstadoApp` (conexão, sessão) e da rota do hash. */
 export default function App() {
@@ -17,7 +20,13 @@ export default function App() {
   const estado = useEstadoApp()
   const [rota, ir] = useRota()
 
+  useEffect(() => seguirTemaDoSistema(), [])
+
   useEffect(() => {
+    ponte
+      .recortes()
+      .then(aplicarRecortes)
+      .catch(() => {})
     const aoMudar = () => ponte.visibilidade(document.visibilityState === 'visible').catch(() => {})
     document.addEventListener('visibilitychange', aoMudar)
     return () => document.removeEventListener('visibilitychange', aoMudar)
@@ -42,6 +51,8 @@ function Tela({ estado, rota, ir }: { estado: EstadoApp; rota: string; ir: (rota
       return <Entrar servidor={conexao.servidor} ir={ir} />
     case 'conectado':
       if (estado.sessao || estado.folha) return <Gravando estado={estado} />
+      if (rota === '/configuracoes') return <Configuracoes ir={ir} espacoLivre={estado.espaco_livre} />
+      if (rota.startsWith('/gravacao/')) return <Detalhe id={decodeURIComponent(rota.slice(10))} ir={ir} />
       return <Inicio estado={estado} ir={ir} />
   }
 }
