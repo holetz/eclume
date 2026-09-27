@@ -16,6 +16,7 @@ from eclume_server.routes import (
     agent_providers,
     auth,
     collections,
+    devices,
     exports,
     fields,
     markers,
@@ -44,6 +45,7 @@ def include_routes(app: FastAPI) -> None:
     for module in (
         auth,
         server_info,
+        devices,
         tokens,
         uploads,
         recordings,

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     session_ttl_days: int = 14
     # A sessão de admin é mais curta: o painel muda a plataforma inteira.
     admin_session_ttl_hours: int = 12
+    # Tentativas por minuto e por IP nas rotas que conferem credencial (login, cadastro, login de
+    # admin, `/devices/*`); a mais recebe 429 `rate_limited`.
+    credential_attempts_per_minute: int = 10
     # Cadastro aberto (`POST /auth/signup`); `false` o fecha sem deploy de código.
     signup_open: bool = True
 
