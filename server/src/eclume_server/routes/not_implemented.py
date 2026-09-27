@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 
 _DISPOSITIVOS = "holetz/eclume#35"
 NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
-    ("GET", "/api/v1/server", _DISPOSITIVOS),
     ("POST", "/api/v1/devices/login", _DISPOSITIVOS),
     ("POST", "/api/v1/devices/pairing-codes", _DISPOSITIVOS),
     ("GET", "/api/v1/devices/pairing-codes/{pairing_code_id}", _DISPOSITIVOS),
