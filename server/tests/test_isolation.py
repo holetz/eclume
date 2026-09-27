@@ -24,12 +24,12 @@ if TYPE_CHECKING:
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
 
-# Toda tabela de conteúdo tem `owner_id` e a política `<tabela>_own` (migration 008).
+# Toda tabela de conteúdo tem `owner_id` e a política `<tabela>_own` (migrations 008 em diante).
 CONTENT_TABLES = (
     "recordings",
     "uploads",
     "collections",
-    "summary_templates",
+    "agenda_types",
     "people",
     "transcription_jobs",
     "transcripts",
@@ -121,7 +121,7 @@ def scenario(
     async def summary(conn: Any) -> None:  # noqa: ANN401
         await conn.execute(
             text(
-                "INSERT INTO summaries (owner_id, transcript_id, transcript_revision, template_id, template_name,"
+                "INSERT INTO summaries (owner_id, transcript_id, transcript_revision, agenda_type_id, agenda_type_name,"
                 " instructions, version, status, trigger, provider_id, provider_name, provider_kind, model)"
                 " SELECT owner_id, id, revision, gen_random_uuid(), 'Ata', 'x', 1, 'done', 'manual',"
                 " gen_random_uuid(), 'p', 'claude-cli', 'm' FROM transcripts WHERE id = :t"
@@ -163,7 +163,7 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
         assert owned > 0, table
         count = f"SELECT count(*) FROM {table}"  # noqa: S608
         assert _as_app(services, alice.user_id, count)[0][0] == owned, table
-        # Bob vê só as dele (os templates semeados no cadastro), nada da Alice.
+        # Bob vê só as dele (os tipos de agenda semeados no cadastro), nada da Alice.
         assert _as_app(services, bob.user_id, count)[0][0] == _owned(services, table, bob.user_id), table
         of_alice = f"SELECT count(*) FROM {table} WHERE owner_id = :o"  # noqa: S608
         assert _as_app(services, bob.user_id, of_alice, o=alice.user_id)[0][0] == 0, table
@@ -190,6 +190,37 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
             "INSERT INTO collections (owner_id, name) VALUES (:o, 'Intrusa')",
             o=alice.user_id,
         )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        (
+            "INSERT INTO transcription_jobs (owner_id, recording_id, revision, state)"
+            " SELECT :o, recording_id, 99, 'queued' FROM transcripts WHERE id = :t"
+        ),
+        (
+            "INSERT INTO summaries (owner_id, transcript_id, transcript_revision, agenda_type_id, agenda_type_name,"
+            " instructions, version, status, trigger, provider_id, provider_name, provider_kind, model)"
+            " VALUES (:o, :t, 1, gen_random_uuid(), 'Ata', 'x', 99, 'done', 'manual', gen_random_uuid(), 'p',"
+            " 'claude-cli', 'm')"
+        ),
+        "UPDATE segments SET owner_id = :o WHERE transcript_id = :t",
+        (
+            "UPDATE recordings SET agenda_type_id = (SELECT id FROM agenda_types WHERE owner_id = :o LIMIT 1)"
+            " WHERE id = (SELECT recording_id FROM transcripts WHERE id = :t)"
+        ),
+    ],
+)
+def test_filho_so_tem_o_dono_do_pai(scenario: dict[str, Any], services: Services, sql: str):
+    """Nem o papel de conexão (fora da RLS) liga o conteúdo de uma conta ao de outra: FKs compostas."""
+    bob = scenario["accounts"]["bob"]
+
+    async def go(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(text(sql), {"o": bob.user_id, "t": scenario["recording"]["transcript_id"]})
+
+    with pytest.raises(DBAPIError, match="foreign key"):
+        run(services.sql(go))
 
 
 def test_sem_contexto_de_rls_nada_e_visivel(scenario: dict[str, Any], services: Services):

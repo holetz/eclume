@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import secrets
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
 from eclume_server.accounts import NOTICE_TEXT, NOTICE_VERSION
 from eclume_server.app import create_app
-from eclume_server_testing.api import Api
+from eclume_server_testing.api import Api, agenda_types
 from eclume_server_testing.conformance import CONFORMANCE
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ def test_estado_do_cadastro_e_o_aviso(client: TestClient):
     assert "consentimento das pessoas que gravo" in NOTICE_TEXT
 
 
-def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_templates(client: TestClient):
+def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_tipos_de_agenda(client: TestClient, services: Services):
     body = _body()
     client.cookies.clear()
     response = client.post("/api/v1/auth/signup", json=body)
@@ -48,9 +49,9 @@ def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_templates(client: TestCl
     assert me["user"]["notice_accepted_at"] is not None
     assert me["user"]["last_login_at"] is not None
     assert me["notice_required"] is False
-    templates = api.get("/api/v1/summary-templates").json()["items"]
-    assert [t["name"] for t in templates] == ["Ata de reunião", "Resumo executivo", "Decisões e ações"]
-    assert [t["name"] for t in templates if t["is_default"]] == ["Ata de reunião"]
+    user_id = api.get("/api/v1/me").json()["user"]["id"]
+    types = agenda_types(services, UUID(user_id))
+    assert [t["name"] for t in types] == ["Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 
     # O login com a senha do cadastro funciona.
     client.cookies.clear()

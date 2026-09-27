@@ -7,7 +7,10 @@ import secrets
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import select
+
 from eclume_server.accounts import create_admin, create_user
+from eclume_server.db import tables as t
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -122,6 +125,17 @@ def new_admin(services: Services) -> Account:
         return await create_admin(conn, email=email, name=name, password=PASSWORD)
 
     return Account(user_id=run(services.sql(create)), email=email, name=name)
+
+
+def agenda_types(services: Services, user_id: UUID) -> list[dict[str, Any]]:
+    """Tipos de agenda da conta, na ordem da lista, lidos pelo papel de conexão."""
+    c = t.agenda_types.c
+    query = select(t.agenda_types).where(c.owner_id == user_id).order_by(c.position, c.created_at, c.id)
+
+    async def read(conn: Any) -> list[dict[str, Any]]:  # noqa: ANN401
+        return [dict(row) for row in (await conn.execute(query)).mappings()]
+
+    return run(services.sql(read))
 
 
 def audio_bytes(size: int, seed: str = "") -> bytes:

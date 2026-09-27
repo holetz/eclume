@@ -1,4 +1,4 @@
-"""Resumos: configuração da plataforma, templates, criação versionada e o job `summarize`.
+"""Resumos: configuração da plataforma, criação versionada pelo tipo de agenda e o job `summarize`.
 
 Contrato e decisões em docs/standards/code/server-agentes.md.
 """
@@ -62,21 +62,8 @@ async def set_summarization(conn: AsyncConnection, admin_id: UUID | None, **chan
 # --- formas JSON ------------------------------------------------------------------------------------
 
 
-def template_json(row: Row) -> dict[str, Any]:
-    """Schema `SummaryTemplate`."""
-    return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "description": row["description"],
-        "instructions": row["instructions"],
-        "is_default": row["is_default"],
-        "created_at": iso(row["created_at"]),
-        "updated_at": iso(row["updated_at"]),
-    }
-
-
 def summary_json(row: Row) -> dict[str, Any]:
-    """Schema `Summary`, com template e provider em instantâneo."""
+    """Schema `Summary`, com tipo de agenda e provider em instantâneo."""
     error = None
     if row["error_code"]:
         error = {"code": row["error_code"], "message": row["error_message"] or ""}
@@ -84,7 +71,7 @@ def summary_json(row: Row) -> dict[str, Any]:
         "id": str(row["id"]),
         "transcript_id": str(row["transcript_id"]),
         "transcript_revision": row["transcript_revision"],
-        "template": {"id": str(row["template_id"]), "name": row["template_name"]},
+        "agenda_type": {"id": str(row["agenda_type_id"]), "name": row["agenda_type_name"]},
         "version": row["version"],
         "status": row["status"],
         "trigger": row["trigger"],
@@ -100,29 +87,29 @@ def summary_json(row: Row) -> dict[str, Any]:
 # --- criação -----------------------------------------------------------------------------------------
 
 
-async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, template, provider e gatilho
+async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, tipo, provider e gatilho
     conn: AsyncConnection,
     *,
     transcript: Row,
-    template: Row,
+    agenda_type: Row,
     provider: Row,
     trigger: str,
     created_by: UUID,
 ) -> Row:
-    """Insere um resumo `queued` com a próxima `version` do par (transcrição, template).
+    """Insere um resumo `queued` com a próxima `version` do par (transcrição, tipo de agenda).
 
-    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão).
-    O lock do par serializa gerações simultâneas do mesmo template.
+    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão). As instruções do
+    tipo entram como instantâneo. O lock do par serializa gerações simultâneas do mesmo tipo.
     """
     s = t.summaries.c
     await conn.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
-        {"pair": f"summary:{transcript['id']}:{template['id']}"},
+        {"pair": f"summary:{transcript['id']}:{agenda_type['id']}"},
     )
     version = (
         await conn.execute(
             select(func.coalesce(func.max(s.version), 0) + 1).where(
-                s.transcript_id == transcript["id"], s.template_id == template["id"]
+                s.transcript_id == transcript["id"], s.agenda_type_id == agenda_type["id"]
             )
         )
     ).scalar_one()
@@ -134,9 +121,9 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
                     owner_id=transcript["owner_id"],
                     transcript_id=transcript["id"],
                     transcript_revision=transcript["revision"],
-                    template_id=template["id"],
-                    template_name=template["name"],
-                    instructions=template["instructions"],
+                    agenda_type_id=agenda_type["id"],
+                    agenda_type_name=agenda_type["name"],
+                    instructions=agenda_type["summary_instructions"],
                     version=version,
                     status="queued",
                     trigger=trigger,
@@ -160,9 +147,9 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | None:
     """Cria o resumo automático da transcrição recém-ingerida, se a plataforma pede.
 
-    Roda com o papel de conexão, na transação do `ingest_transcript`. O template é o padrão do dono
-    (`is_default`); sem ele, não há resumo automático. O provider é o padrão da plataforma. Um resumo
-    automático por revisão da transcrição.
+    Roda com o papel de conexão, na transação do `ingest_transcript`. As instruções são as do tipo de
+    agenda da gravação; sem tipo, não há resumo automático. O provider é o padrão da plataforma. Um
+    resumo automático por revisão da transcrição.
     """
     transcript = (
         (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
@@ -188,18 +175,19 @@ async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | No
     if provider is None:
         log.warning("resumo automático sem provider padrão habilitado na plataforma")
         return None
-    templates = t.summary_templates.c
-    template = (
+    agenda_type = (
         (
             await conn.execute(
-                select(t.summary_templates).where(templates.owner_id == transcript["owner_id"], templates.is_default)
+                select(t.agenda_types)
+                .join(t.recordings, t.recordings.c.agenda_type_id == t.agenda_types.c.id)
+                .where(t.recordings.c.id == recording_id)
             )
         )
         .mappings()
         .first()
     )
-    if template is None:
-        log.info("resumo automático de %s: o dono %s não tem template padrão", recording_id, transcript["owner_id"])
+    if agenda_type is None:
+        log.info("resumo automático de %s: a gravação não tem tipo de agenda", recording_id)
         return None
     s = t.summaries.c
     already = (
@@ -216,7 +204,7 @@ async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | No
     row = await create_summary(
         conn,
         transcript=transcript,
-        template=template,
+        agenda_type=agenda_type,
         provider=provider,
         trigger="automatic",
         created_by=transcript["owner_id"],

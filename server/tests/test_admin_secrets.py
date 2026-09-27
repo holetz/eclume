@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import text
 
 from eclume_server.crypto import decrypt
-from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
 from eclume_worker.secrets import open_secret
@@ -110,26 +110,27 @@ def test_provider_anthropic_sem_chave_usa_o_segredo_da_plataforma(
     assert provider.status_code == 201, provider.text
     assert provider.json()["api_key_set"] is False
     provider_id = provider.json()["id"]
-    user = as_user(make_user())
+    account = make_user()
+    user = as_user(account)
     recording = upload_file(user, audio_bytes(1700), title="Resumo pela chave da plataforma")
     run_gpu(services.settings)
     run_cpu(services.settings)
     transcript_id = user.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
-    template_id = next(t["id"] for t in user.get("/api/v1/summary-templates").json()["items"] if t["is_default"])
+    agenda_type_id = str(agenda_types(services, account.user_id)[0]["id"])
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
 
     # Sem chave nenhuma, o provider recebe `api_key` nula (e o real recusa com provider_not_configured).
-    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    user.post(url, json={"agenda_type_id": agenda_type_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key is None
 
     admin.put(f"{URL}/anthropic_api_key", json={"value": "sk-ant-da-plataforma"})
-    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    user.post(url, json={"agenda_type_id": agenda_type_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key == "sk-ant-da-plataforma"
 
     # A chave própria do provider tem precedência sobre a da plataforma.
     admin.patch(f"/api/v1/admin/agent-providers/{provider_id}", json={"api_key": "sk-ant-do-provider"})
-    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    user.post(url, json={"agenda_type_id": agenda_type_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key == "sk-ant-do-provider"

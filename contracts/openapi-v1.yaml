@@ -52,7 +52,7 @@ tags:
   - name: organize
     description: Coleções e tags.
   - name: summaries
-    description: Templates por usuário e resumos gerados por agente.
+    description: Resumos gerados por agente com as instruções de um tipo de agenda.
   - name: admin
     description: >-
       Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
@@ -147,7 +147,7 @@ paths:
       description: |
         Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
         (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
-        templates de resumo padrão, e a resposta define os cookies de sessão, como o login.
+        tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
         Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
         cadastrado, 409 `email_taken`.
       security: []
@@ -1030,10 +1030,11 @@ paths:
     post:
       tags: [summaries]
       operationId: createSummary
-      summary: Gerar um resumo com um template
+      summary: Gerar um resumo com um tipo de agenda
       description: |
-        Cada geração é uma nova `version` do resumo daquele template. Sem `provider_id` e sem
-        provider padrão habilitado na plataforma, responde 422.
+        Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
+        resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
+        `provider_id` e sem provider padrão habilitado na plataforma, também 422.
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -1105,137 +1106,6 @@ paths:
       responses:
         "204":
           description: Excluído.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/v1/summary-templates:
-    get:
-      tags: [summaries]
-      operationId: listSummaryTemplates
-      summary: Templates do usuário
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:read"]
-      parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: Templates.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplatePage"
-              examples:
-                templates:
-                  $ref: "#/components/examples/SummaryTemplatePage"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-    post:
-      tags: [summaries]
-      operationId: createSummaryTemplate
-      summary: Criar um template
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:write"]
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SummaryTemplateCreate"
-            examples:
-              resumoExecutivo:
-                $ref: "#/components/examples/SummaryTemplateCreateRequest"
-      responses:
-        "201":
-          description: Template criado.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplate"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-
-  /api/v1/summary-templates/{template_id}:
-    parameters:
-      - $ref: "#/components/parameters/TemplateId"
-    get:
-      tags: [summaries]
-      operationId: getSummaryTemplate
-      summary: Um template
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:read"]
-      responses:
-        "200":
-          description: Template.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplate"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    patch:
-      tags: [summaries]
-      operationId: updateSummaryTemplate
-      summary: Editar um template
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:write"]
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SummaryTemplatePatch"
-      responses:
-        "200":
-          description: Template atualizado.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplate"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-    delete:
-      tags: [summaries]
-      operationId: deleteSummaryTemplate
-      summary: Excluir um template
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:write"]
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Excluído. Resumos já gerados ficam.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2165,13 +2035,6 @@ components:
         format: uuid
     SummaryId:
       name: summary_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    TemplateId:
-      name: template_id
       in: path
       required: true
       schema:
@@ -3282,72 +3145,6 @@ components:
                 type: integer
                 minimum: 0
 
-    SummaryTemplate:
-      type: object
-      required: [id, name, description, instructions, is_default, created_at, updated_at]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type: [string, "null"]
-        instructions:
-          description: Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor.
-          type: string
-        is_default:
-          description: Template usado no resumo automático do usuário.
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    SummaryTemplateCreate:
-      type: object
-      required: [name, instructions]
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type: [string, "null"]
-        instructions:
-          type: string
-          minLength: 1
-        is_default:
-          description: O template do resumo automático do usuário.
-          type: boolean
-
-    SummaryTemplatePatch:
-      type: object
-      minProperties: 1
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type: [string, "null"]
-        instructions:
-          type: string
-          minLength: 1
-        is_default:
-          type: boolean
-
-    SummaryTemplatePage:
-      type: object
-      required: [items, next_cursor]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/SummaryTemplate"
-        next_cursor:
-          $ref: "#/components/schemas/NextCursor"
-
     AgentProviderKind:
       type: string
       enum: [ollama, openai-compatible, anthropic, claude-cli]
@@ -3366,7 +3163,7 @@ components:
 
     Summary:
       type: object
-      required: [id, transcript_id, transcript_revision, template, version, status, trigger, provider, model, content_md, error, created_at, completed_at]
+      required: [id, transcript_id, transcript_revision, agenda_type, version, status, trigger, provider, model, content_md, error, created_at, completed_at]
       properties:
         id:
           type: string
@@ -3378,7 +3175,10 @@ components:
           description: Revisão da transcrição que o resumo leu.
           type: integer
           minimum: 1
-        template:
+        agenda_type:
+          description: |
+            Instantâneo do tipo de agenda cujas instruções o resumo seguiu: o resumo continua
+            quando o tipo é renomeado ou excluído.
           type: object
           required: [id, name]
           properties:
@@ -3388,7 +3188,7 @@ components:
             name:
               type: string
         version:
-          description: Versão do resumo deste template para esta transcrição, a partir de 1.
+          description: Versão do resumo deste tipo de agenda para esta transcrição, a partir de 1.
           type: integer
           minimum: 1
         status:
@@ -3423,9 +3223,9 @@ components:
 
     SummaryCreate:
       type: object
-      required: [template_id]
       properties:
-        template_id:
+        agenda_type_id:
+          description: Sem valor, o tipo de agenda da gravação.
           type: string
           format: uuid
         provider_id:
@@ -3492,7 +3292,7 @@ components:
           type: [string, "null"]
           format: uuid
         auto_summarize:
-          description: Gera o resumo do template padrão do dono ao fim da transcrição.
+          description: Gera o resumo pelo tipo de agenda da gravação ao fim da transcrição.
           type: boolean
 
     VoiceIdentificationSettings:
@@ -3969,7 +3769,7 @@ components:
       summary: Ata pronta
       externalValue: ./fixtures/summary-page.json
     SummaryCreateRequest:
-      summary: Gerar a ata com o template padrão
+      summary: Gerar o resumo com um tipo de agenda
       externalValue: ./fixtures/summary-create-request.json
     SummaryQueued:
       summary: Resumo na fila
@@ -3977,12 +3777,6 @@ components:
     SummaryDone:
       summary: Ata pronta
       externalValue: ./fixtures/summary-done.json
-    SummaryTemplatePage:
-      summary: Ata de reunião (padrão) e resumo executivo
-      externalValue: ./fixtures/summary-template-page.json
-    SummaryTemplateCreateRequest:
-      summary: Template de resumo executivo
-      externalValue: ./fixtures/summary-template-create-request.json
     PersonPage:
       summary: Diretório com três pessoas
       externalValue: ./fixtures/person-page.json
