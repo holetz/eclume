@@ -15,10 +15,11 @@ from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy import select, update
 
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import insufficient_scope, session_required, unauthorized
+from eclume_server.problems import insufficient_scope, notice_required, session_required, unauthorized
 from eclume_server.security import PAT_PREFIX, sha256_hex
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ CSRF_HEADER = "X-CSRF-Token"
 ALL_SCOPES = (
     "recordings:read",
     "recordings:write",
+    "recordings:delete",
     "transcripts:read",
     "transcripts:write",
     "people:read",
@@ -53,6 +55,8 @@ class Principal:
     scopes: tuple[str, ...]
     token_id: UUID | None = None
     session_id: UUID | None = None
+    # A conta ainda não aceitou o aviso em vigor (só apurado com sessão).
+    notice_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,7 +96,7 @@ def _check_csrf(request: Request, expected: str, cookie: str) -> None:
 
 async def _from_session(ctx: AppContext, token: str, request: Request) -> Principal:
     query = (
-        select(t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"))
+        select(t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"), t.users.c.notice_version)
         .join(t.users, t.users.c.id == t.sessions.c.user_id)
         .where(
             t.sessions.c.token_hash == sha256_hex(token),
@@ -105,7 +109,8 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
     if row is None:
         raise unauthorized("Sessão inválida ou expirada.")
     _check_csrf(request, row["csrf_token"], CSRF_COOKIE)
-    return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"])
+    pending = row["notice_version"] != NOTICE_VERSION
+    return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"], notice_pending=pending)
 
 
 async def authenticate(request: Request, ctx: AppContext) -> Principal:
@@ -126,11 +131,19 @@ async def authenticate(request: Request, ctx: AppContext) -> Principal:
     raise unauthorized()
 
 
-def requires(*scopes: str, session_only: bool = False) -> Callable[[Request, AppContext], Awaitable[Principal]]:
-    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão."""
+def requires(
+    *scopes: str, session_only: bool = False, before_notice: bool = False
+) -> Callable[[Request, AppContext], Awaitable[Principal]]:
+    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão.
+
+    A sessão de uma conta sem o aceite do aviso em vigor só alcança as rotas `before_notice`
+    (`/me`, `/me/notice`, logout); o PAT não é barrado (desktop e lumea de contas migradas).
+    """
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
         principal = await authenticate(request, ctx)
+        if principal.notice_pending and not before_notice:
+            raise notice_required()
         if principal.method == "pat":
             if session_only:
                 # Credencial válida, mas não a aceita aqui (o contrato declara só `sessionCookie`).

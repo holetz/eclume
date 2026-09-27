@@ -41,6 +41,7 @@ media_router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("recordings:write"))]
+Deleter = Annotated[Principal, Depends(requires("recordings:delete"))]
 Status = Literal["uploading", "queued", "processing", "transcribed", "failed"]
 Sort = Literal["created_desc", "recorded_asc", "recorded_desc"]
 Many = Annotated[list[str] | None, Query()]
@@ -263,7 +264,7 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
 
 
 @router.delete("/recordings/{recording_id}", status_code=204)
-async def delete_recording(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
+async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> Response:
     """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
 
     As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.

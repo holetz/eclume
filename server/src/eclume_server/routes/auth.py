@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.2.0"
+CONTRACT_VERSION = "2.3.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -143,7 +143,9 @@ async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, n
 
 
 @router.post("/auth/logout", status_code=204)
-async def logout(principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx) -> Response:
+async def logout(
+    principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))], ctx: Ctx
+) -> Response:
     """Encerra a sessão corrente e remove os cookies."""
     if principal.session_id is None:
         raise forbidden("Logout exige sessão.")
@@ -158,7 +160,9 @@ async def logout(principal: Annotated[Principal, Depends(requires(session_only=T
 
 @router.post("/me/notice", status_code=204)
 async def accept_notice(
-    body: NoticeAccept, principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx
+    body: NoticeAccept,
+    principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))],
+    ctx: Ctx,
 ) -> Response:
     """Registra o aceite do aviso em vigor pela conta corrente."""
     _check_notice(body.notice_version)
@@ -172,7 +176,7 @@ async def accept_notice(
 
 
 @router.get("/me")
-async def me(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
+async def me(principal: Annotated[Principal, Depends(requires(before_notice=True))], ctx: Ctx) -> dict[str, Any]:
     """Conta e credencial correntes, e se falta aceitar o aviso em vigor."""
     async with system_tx(ctx.engine) as conn:
         user = (await conn.execute(select(t.users).where(t.users.c.id == principal.user_id))).mappings().one()

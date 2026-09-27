@@ -26,6 +26,8 @@ _TITLES = {
     "upload_expired": "Upload expirado",
     "email_taken": "E-mail já cadastrado",
     "signup_closed": "Cadastro fechado",
+    "notice_required": "Aviso não aceito",
+    "invalid_pairing_code": "Código de pareamento inválido",
     "method_not_allowed": "Método não permitido",
     "not_implemented": "Ainda não implementado",
 }
@@ -84,6 +86,11 @@ def forbidden(detail: str) -> ApiProblemError:
 def session_required() -> ApiProblemError:
     """403 — PAT numa operação que aceita só sessão do navegador."""
     return ApiProblemError(403, "session_required", "Esta operação aceita só sessão do navegador, não PAT.")
+
+
+def notice_required() -> ApiProblemError:
+    """403 — sessão de conta que ainda não aceitou o aviso em vigor."""
+    return ApiProblemError(403, "notice_required", "Aceite o aviso em vigor em POST /api/v1/me/notice.")
 
 
 def insufficient_scope(missing: list[str]) -> ApiProblemError:
