@@ -12,6 +12,10 @@
   <body>
     <section class="tray tray-window" data-vista="principal" aria-label="eclume">
       <div class="tray-section">
+        <div class="alert" id="aviso" role="alert" hidden>
+          <span class="alert-title" id="aviso-titulo"></span>
+          <span id="aviso-texto"></span>
+        </div>
         <div class="row row-between">
           <span class="brand brand-sm"
             ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -22,7 +26,7 @@
               <rect x="20.5" y="9" width="3" height="6"></rect></svg
             >eclume</span
           >
-          <div class="row">
+          <div class="row row-tight">
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-ajuda"
               data-icone="ajuda" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-configuracoes"
@@ -30,6 +34,43 @@
           </div>
         </div>
         <span class="status-line" id="linha-status" role="status">Carregando…</span>
+        <button type="button" class="btn btn-rec btn-rec-lg" id="gravar" aria-pressed="false">
+          Iniciar gravação
+        </button>
+        <div class="grid-2">
+          <button type="button" class="btn btn-secondary" id="nova-nota">
+            Nova nota<kbd id="atalho-nota"></kbd>
+          </button>
+          <button type="button" class="btn btn-secondary" id="importar">Importar arquivo…</button>
+        </div>
+      </div>
+
+      <div class="tray-section" id="pergunta" hidden>
+        <div class="alert alert-warning">
+          <span class="alert-title">Reunião detectada</span>
+          <span id="pergunta-texto"></span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="pergunta-gravar">Gravar</button>
+          <button type="button" class="btn btn-secondary" id="pergunta-agora-nao">Agora não</button>
+        </div>
+      </div>
+
+      <div class="tray-section">
+        <div class="row row-between">
+          <span class="kicker">Fila de envio</span>
+          <span class="text-muted tiny" id="fila-resumo"></span>
+        </div>
+        <ul class="queue" id="fila"></ul>
+        <span class="text-muted small" id="fila-vazia" hidden>Nenhuma gravação ainda.</span>
+      </div>
+
+      <div class="tray-section stack-tight" id="conta">
+        <strong class="small" id="conta-nome"></strong>
+        <span class="text-muted tiny"
+          ><a href="#" id="conta-servidor"></a> · <span id="conta-versao"></span> ·
+          <a href="#" id="conta-acao"></a
+        ></span>
       </div>
     </section>
   </body>

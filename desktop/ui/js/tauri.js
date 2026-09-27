@@ -8,3 +8,8 @@ export function invoke(comando, args) {
 export function listen(evento, handler) {
   return window.__TAURI__.event.listen(evento, handler);
 }
+
+/** A versão do app (`tauri.conf.json`). */
+export function versao() {
+  return window.__TAURI__.app.getVersion();
+}

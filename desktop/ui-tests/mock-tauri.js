@@ -54,11 +54,60 @@
         gravacao("b", { started_at: hoje(8, 18), duration_ms: 1 * MIN }),
         gravacao("c", { started_at: hoje(8, 18) - 24 * 60 * MIN + 8 * 60 * MIN, duration_ms: 22 * MIN }),
       ],
+      settings: {
+        web_url: "https://192.168.15.199:8443",
+        api_url: null,
+        ca_path: null,
+        detection_enabled: true,
+        apps: [
+          ["teams", "Microsoft Teams", "ask"],
+          ["zoom", "Zoom", "ask"],
+          ["meet", "Google Meet", "ask"],
+          ["webex", "Webex", "ask"],
+          ["slack", "Slack", "ask"],
+          ["navegador", "navegador", "ask"],
+          ["outro", "outro app", "ignore"],
+        ].map(([app, label, policy]) => ({ app, label, policy })),
+        retention_days: 7,
+        pat_source: "keyring",
+      },
+      versao: "0.2.0",
     };
   }
 
   const cenarios = {
     ocioso() {},
+    gravando(e) {
+      Object.assign(e.status, {
+        status: "recording",
+        recording_id: "r1",
+        recording_started_at: agora - (12 * MIN + 4_000),
+        recording_auto: true,
+        recording_app: { app: "teams", label: "Microsoft Teams" },
+        meeting: { app: "teams", label: "Microsoft Teams" },
+      });
+      e.recordings.unshift(gravacao("r1", { status: "recording", started_at: agora - 12 * MIN, duration_ms: null }));
+    },
+    pergunta(e) {
+      e.status.meeting = { app: "zoom", label: "Zoom" };
+      e.status.pending_ask = { app: "zoom", label: "Zoom" };
+    },
+    fila(e) {
+      e.status.counts = { recording: 0, pending: 1, syncing: 1, synced: 1, failed: 1 };
+      e.recordings = [
+        gravacao("s", { status: "syncing", started_at: hoje(9, 0) }),
+        gravacao("n", { status: "synced", started_at: hoje(8, 18), duration_ms: 1 * MIN, kind: "note" }),
+        gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
+        gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
+      ];
+    },
+    vazio(e) {
+      e.recordings = [];
+      e.status.counts = { recording: 0, pending: 0, syncing: 0, synced: 0, failed: 0 };
+      e.settings.pat_source = null;
+      e.settings.detection_enabled = false;
+      e.status.sync_notice = "Sem PAT: as gravações ficam na fila até você configurar o PAT nas configurações.";
+    },
   };
 
   const ouvintes = new Map();
@@ -80,6 +129,23 @@
   const comandos = {
     status: (e) => e.status,
     recordings: (e) => e.recordings,
+    settings: (e) => e.settings,
+    open_web: () => null,
+    answer_meeting(e) {
+      e.status.pending_ask = null;
+      return null;
+    },
+    toggle_recording(e) {
+      if (e.status.status === "recording") {
+        Object.assign(e.status, { status: "idle", recording_id: null, recording_started_at: null, recording_auto: false, recording_app: null });
+      } else {
+        Object.assign(e.status, { status: "recording", recording_id: "novo", recording_started_at: Date.now() });
+      }
+      return e.status;
+    },
+    new_note() {
+      throw "Já há uma gravação em andamento";
+    },
   };
 
   window.__mock = mock;
@@ -90,6 +156,11 @@
         const handler = comandos[comando];
         if (!handler) throw `comando sem mock: ${comando}`;
         return structuredClone(handler(mock.estado, args ?? {}));
+      },
+    },
+    app: {
+      async getVersion() {
+        return mock.estado.versao;
       },
     },
     event: {

@@ -68,3 +68,7 @@
 .meter i {
   transition: height 80ms linear;
 }
+
+.row-tight {
+  gap: 4px;
+}

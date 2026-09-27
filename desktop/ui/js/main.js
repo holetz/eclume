@@ -2,6 +2,7 @@
 // sistema, trata as teclas da janela e consulta o estado do Rust a cada segundo.
 import { invoke, listen } from "./tauri.js";
 import { preencherIcones } from "./icones.js";
+import * as principal from "./vistas/principal.js";
 
 /** As vistas registradas: nome → { entrar?(params), sair?(), atualizar?(estado) }. */
 const vistas = new Map();
@@ -18,6 +19,11 @@ const app = {
   voltar: () => ir("principal"),
   atualizar,
 };
+
+/** Registra a vista cuja seção já está no HTML: `modulo.montar(secao, app)` devolve a vista. */
+function registrar(nome, modulo) {
+  vistas.set(nome, modulo.montar(document.querySelector(`[data-vista="${nome}"]`), app));
+}
 
 /** Mostra a vista `nome`; devolve `false` se ela não existe. */
 function ir(nome, params) {
@@ -57,14 +63,7 @@ function aoTeclar(evento) {
   if (destino && ir(destino)) evento.preventDefault();
 }
 
-// A seção principal existe desde o início; as vistas próprias chegam nas próximas etapas.
-vistas.set("principal", {
-  atualizar(estado) {
-    const linha = document.getElementById("linha-status");
-    linha.dataset.status = estado.status;
-    linha.textContent = { idle: "Ocioso", recording: "Gravando", syncing: "Enviando" }[estado.status];
-  },
-});
+registrar("principal", principal);
 
 const temaEscuro = window.matchMedia("(prefers-color-scheme: dark)");
 aplicarTema(temaEscuro.matches);
