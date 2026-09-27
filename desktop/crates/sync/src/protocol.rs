@@ -95,10 +95,7 @@ impl Client {
         token: &str,
         retry: RetryPolicy,
     ) -> Result<Self> {
-        let base = Url::parse(api_url).with_context(|| format!("endereço inválido: {api_url}"))?;
-        if !matches!(base.scheme(), "http" | "https") || base.host().is_none() {
-            bail!("endereço inválido: use http:// ou https:// seguido do host");
-        }
+        let base = parse_base(api_url)?;
         let token = token.trim();
         if !token.starts_with(PAT_PREFIX) || token.len() <= PAT_PREFIX.len() {
             bail!("PAT inválido: um PAT do eclume começa com {PAT_PREFIX}");
@@ -173,6 +170,12 @@ impl Client {
         } else {
             Err(api_error("falha ao conferir o PAT", &response))
         }
+    }
+
+    /// Quem é o dono do token: `GET /api/v1/me` (o e-mail da conta depois do pareamento).
+    pub fn me(&self) -> Result<api::Me> {
+        let request = HttpRequest::new("GET", self.endpoint("/me"));
+        self.call_json("falha ao ler a conta", request)
     }
 
     fn get_upload(&self, upload_id: &str) -> Result<Option<Upload>> {
@@ -352,7 +355,16 @@ fn finished(upload: Upload) -> Result<Uploaded> {
     })
 }
 
-fn parse<T: DeserializeOwned>(what: &str, response: &HttpResponse) -> Result<T> {
+/// Um endereço de servidor: `http://` ou `https://` seguido do host.
+pub fn parse_base(url: &str) -> Result<Url> {
+    let base = Url::parse(url.trim()).with_context(|| format!("endereço inválido: {url}"))?;
+    if !matches!(base.scheme(), "http" | "https") || base.host().is_none() {
+        bail!("endereço inválido: use http:// ou https:// seguido do host");
+    }
+    Ok(base)
+}
+
+pub(crate) fn parse<T: DeserializeOwned>(what: &str, response: &HttpResponse) -> Result<T> {
     serde_json::from_slice(&response.body)
         .with_context(|| format!("{what}: resposta fora do contrato"))
 }
@@ -371,26 +383,23 @@ fn read_part(file: &mut File, number: u32, part_size: u64, size: u64) -> Result<
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod script {
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
-    use super::*;
-    use crate::api::Capture;
-    use eclume_recorder::{Kind, RecordedAtSource, Source};
+    use anyhow::Result;
 
-    const BASE: &str = "https://eclume.test:8443";
-    const PAT: &str = "eclp_teste";
+    use crate::transport::{HttpRequest, HttpResponse, Transport};
 
     /// Transporte roteirizado: confere método e caminho de cada requisição, em ordem, e responde.
     #[derive(Default)]
-    struct Script {
+    pub struct Script {
         steps: Mutex<VecDeque<(String, Result<HttpResponse>)>>,
         seen: Mutex<Vec<HttpRequest>>,
     }
 
     impl Script {
-        fn expect(self, call: &str, response: Result<HttpResponse>) -> Self {
+        pub fn expect(self, call: &str, response: Result<HttpResponse>) -> Self {
             self.steps
                 .lock()
                 .unwrap()
@@ -398,7 +407,7 @@ mod tests {
             self
         }
 
-        fn seen(&self) -> Vec<HttpRequest> {
+        pub fn seen(&self) -> Vec<HttpRequest> {
             self.seen.lock().unwrap().clone()
         }
     }
@@ -423,7 +432,7 @@ mod tests {
         }
     }
 
-    fn json(status: u16, body: serde_json::Value) -> Result<HttpResponse> {
+    pub fn json(status: u16, body: serde_json::Value) -> Result<HttpResponse> {
         Ok(HttpResponse {
             status,
             headers: vec![("content-type".into(), "application/json".into())],
@@ -431,7 +440,7 @@ mod tests {
         })
     }
 
-    fn etag(value: &str) -> Result<HttpResponse> {
+    pub fn etag(value: &str) -> Result<HttpResponse> {
         Ok(HttpResponse {
             status: 200,
             headers: vec![("etag".into(), value.into())],
@@ -439,9 +448,22 @@ mod tests {
         })
     }
 
-    fn status(code: u16) -> Result<HttpResponse> {
+    pub fn status(code: u16) -> Result<HttpResponse> {
         json(code, serde_json::json!({}))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::script::{etag, json, status, Script};
+    use super::*;
+    use crate::api::Capture;
+    use eclume_recorder::{Kind, RecordedAtSource, Source};
+
+    const BASE: &str = "https://eclume.test:8443";
+    const PAT: &str = "eclp_teste";
 
     fn part(n: u32, base: &str) -> serde_json::Value {
         serde_json::json!({
@@ -833,5 +855,27 @@ mod tests {
         client.check().unwrap();
         let err = client.check().unwrap_err();
         assert!(format!("{err:#}").contains("insufficient_scope"), "{err:#}");
+    }
+
+    #[test]
+    fn me_le_a_conta_do_token() {
+        let script = Script::default().expect(
+            "GET /api/v1/me",
+            json(
+                200,
+                serde_json::json!({
+                    "user": {"id": "u", "email": "ana@exemplo.com.br", "name": "Ana"},
+                    "auth": {"method": "pat", "scopes": [], "token_id": "t-1"},
+                    "notice_required": false
+                }),
+            ),
+        );
+        let (client, script, _) = make_client(script);
+        let me = client.me().unwrap();
+        assert_eq!(me.user.email, "ana@exemplo.com.br");
+        assert_eq!(me.auth.token_id.as_deref(), Some("t-1"));
+        assert!(script.seen()[0]
+            .headers
+            .contains(&("Authorization".into(), format!("Bearer {PAT}"))));
     }
 }
