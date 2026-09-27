@@ -5,7 +5,6 @@ import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { mockTranscriptApi, RECORDING_ID } from '../../test/transcriptApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -97,45 +96,5 @@ describe('coleções', () => {
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
     const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
     expect(query.getAll('collection')).toEqual([SERRA])
-  })
-})
-
-describe('organização da gravação', () => {
-  it('o dono edita tags, coleções e metadados', async () => {
-    const http = mockTranscriptApi({
-      'PATCH /api/v1/recordings/:id': async (request) => ({
-        ...fixtures.recordingTranscribed(),
-        ...((await request.json()) as object),
-        updated_at: '2026-09-20T10:00:00Z',
-      }),
-      'GET /api/v1/tags': () => fixtures.tagList(),
-    })
-    renderApp(`/gravacoes/${RECORDING_ID}`)
-    const panel = await screen.findByRole('region', { name: 'Organização' })
-    const tags = within(panel).getByLabelText('Tags')
-    expect(tags).toHaveValue('programa-liderancas, cliente-metalurgica')
-    await userEvent.clear(tags)
-    await userEvent.type(tags, 'programa-liderancas, entrevista, entrevista')
-    const cliente = within(panel).getByLabelText('Cliente')
-    await userEvent.clear(cliente)
-    const serra = await within(panel).findByRole('checkbox', { name: 'Metalúrgica Serra Azul' })
-    await userEvent.click(serra)
-    await userEvent.click(within(panel).getByRole('button', { name: 'Salvar organização' }))
-
-    expect(await within(panel).findByText('Organização salva.')).toBeInTheDocument()
-    const body = await http.requests('PATCH /api/v1/recordings/:id')[0].json()
-    expect(body.tags).toEqual(['programa-liderancas', 'entrevista'])
-    expect(body.metadata).toEqual({ tipo_reuniao: 'alinhamento', projeto: 'Programa de lideranças 2026' })
-    expect(body.collection_ids).toEqual([])
-  })
-
-  it('quem vê por compartilhamento só lê', async () => {
-    mockTranscriptApi({
-      'GET /api/v1/recordings/:id': () => ({ ...fixtures.recordingTranscribed(), owner: { id: 'outro', name: 'Outro' } }),
-    })
-    renderApp(`/gravacoes/${RECORDING_ID}`)
-    const panel = await screen.findByRole('region', { name: 'Organização' })
-    expect(within(panel).getByText('Metalúrgica Serra Azul')).toBeInTheDocument()
-    expect(within(panel).queryByRole('button')).not.toBeInTheDocument()
   })
 })

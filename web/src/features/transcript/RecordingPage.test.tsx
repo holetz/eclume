@@ -1,12 +1,113 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { mockFetch } from '../../test/http'
+import { empty, mockFetch, problem } from '../../test/http'
 import { renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('cabeçalho, pipeline, exportar e excluir', () => {
+  it('mostra a data, a hora e a duração no kicker, o título e as seis etapas', async () => {
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
+    expect(title.previousElementSibling).toHaveTextContent('sex 18 set 2026 · 11:00 · 2 min 46 s')
+    expect(title.previousElementSibling).toHaveClass('kicker')
+    expect(screen.getByRole('link', { name: '← Biblioteca' })).toHaveAttribute('href', '/')
+
+    const steps = within(screen.getByRole('list', { name: 'Processamento' })).getAllByRole('listitem')
+    expect(steps.map((step) => step.textContent)).toEqual([
+      'Áudio recebido',
+      'Pré-processamento',
+      'Transcrição',
+      'Campos preenchidos',
+      'Tipo de agenda',
+      'Resumo pronto',
+    ])
+    expect(steps.every((step) => step.dataset.state === 'done')).toBe(true)
+    expect(document.querySelector('aside.chat')).toHaveTextContent('Ajustar o resumo')
+  })
+
+  it('etapa pulada ou que falhou diz o motivo, e a data do envio aparece no kicker', async () => {
+    const recording = fixtures.recordingTranscribed()
+    recording.recorded_at_source = 'upload'
+    recording.pipeline = recording.pipeline.map((step) =>
+      step.step === 'summary'
+        ? { ...step, state: 'failed', error: { code: 'provider_timeout', message: 'O agente não respondeu a tempo.' } }
+        : step.step === 'agenda_type'
+          ? { ...step, state: 'skipped', reason: 'no_types' }
+          : step,
+    )
+    mockTranscriptApi({ 'GET /api/v1/recordings/:id': () => recording })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const skipped = await screen.findByText('Tipo de agenda', { selector: 'li' })
+    expect(skipped).toHaveAttribute('data-state', 'skipped')
+    expect(skipped).toHaveAttribute('title', 'nenhum tipo de agenda cadastrado')
+    const failed = screen.getByText(/^Resumo/, { selector: 'li' })
+    expect(failed).toHaveAttribute('data-state', 'failed')
+    expect(failed).toHaveTextContent('(O agente não respondeu a tempo.)')
+    expect(screen.getByText(/· data do envio$/)).toHaveClass('kicker')
+  })
+
+  it('exporta pelo menu com fetch e mostra o erro da API num alerta', async () => {
+    const user = userEvent.setup()
+    const createObjectURL = vi.fn(() => 'blob:export')
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const http = mockTranscriptApi({
+      'GET /api/v1/recordings/:id/export': (request) =>
+        new URL(request.url).searchParams.get('format') === 'md'
+          ? problem('summary_missing', 409, { detail: 'A gravação ainda não tem resumo.' })
+          : new Response('conteúdo', {
+              headers: { 'Content-Disposition': 'attachment; filename="alinhamento-do-programa.docx"' },
+            }),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const button = await screen.findByRole('button', { name: 'Exportar' })
+    expect(button).toHaveAttribute('aria-haspopup', 'menu')
+    await user.click(button)
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      'TranscriçãoTXT',
+      'Transcrição com temposSRT',
+      'ResumoMD',
+      'Transcrição e resumoDOCX',
+    ])
+    await user.click(screen.getByRole('menuitem', { name: /Transcrição e resumo/ }))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    const link = click.mock.contexts[0] as HTMLAnchorElement
+    expect(link.download).toBe('alinhamento-do-programa.docx')
+    expect(http.requests('GET /api/v1/recordings/:id/export')[0].url).toMatch(/format=docx$/)
+
+    await user.click(screen.getByRole('button', { name: 'Exportar' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Resumo/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('A gravação ainda não tem resumo.')
+    click.mockRestore()
+  })
+
+  it('exclui com confirmação e volta para a biblioteca de onde veio, com o aviso', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'DELETE /api/v1/recordings/:id': () => empty(),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await user.click(await screen.findByRole('button', { name: 'Excluir' }))
+    const dialog = screen.getByRole('dialog', { name: 'Excluir a gravação?' })
+    expect(dialog).toHaveTextContent('O áudio, a transcrição, o resumo com as versões, o chat e os marcadores são apagados.')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(http.requests('DELETE /api/v1/recordings/:id')).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Excluir' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Excluir' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Biblioteca' })).toBeInTheDocument()
+    expect(screen.getByText('Gravação excluída.')).toHaveAttribute('role', 'status')
+    expect(http.requests('DELETE /api/v1/recordings/:id')).toHaveLength(1)
+  })
+})
 
 describe('página da gravação', () => {
   it('mostra as falas com locutor e tempo, e o player do áudio', async () => {

@@ -1,90 +1,92 @@
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
-import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
-import { JobProgress, StatusBadge } from '../library/RecordingStatus'
-import { OrganizePanel } from './OrganizePanel'
-import { useRecording, useTranscript } from './queries'
-import { RetryTranscription } from './RetryTranscription'
-import { parseStart } from './segments'
+import { Pipeline } from './Pipeline'
+import { useRecording, useRefreshOnPipeline, useTranscript } from './queries'
+import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
+import { parseStart } from './segments'
 import { SpeakersPanel } from './SpeakersPanel'
-import { SummariesPanel } from './SummariesPanel'
 import { TranscriptView } from './TranscriptView'
+
+/** A URL da biblioteca de onde a pessoa veio (calendário, lista ou busca); sem ela, a biblioteca. */
+function useBackTo(): string {
+  const { state } = useLocation()
+  const from = (state as { from?: unknown } | null)?.from
+  return typeof from === 'string' && from.startsWith('/') ? from : '/'
+}
 
 export function RecordingPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const backTo = useBackTo()
   const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
+  useRefreshOnPipeline(recording.data)
   usePageTitle(recording.data?.title ?? 'Gravação')
+
+  const back = (
+    <Link to={backTo} className={styles.back}>
+      ← Biblioteca
+    </Link>
+  )
 
   if (recording.isPending) return <p role="status">Carregando gravação…</p>
   if (recording.isError) {
     return (
-      <section className={styles.page}>
-        <Link to="/" className={styles.back}>
-          ← Biblioteca
-        </Link>
+      <div className={styles.content}>
+        {back}
         <p className="alert alert-error" role="alert">
           {errorMessage(recording.error)}
         </p>
-      </section>
+      </div>
     )
   }
 
   const data = recording.data
   return (
-    <section className={styles.page} aria-labelledby="gravacao-titulo">
-      <header className={styles.header}>
-        <Link to="/" className={styles.back}>
-          ← Biblioteca
-        </Link>
-        <div className={styles.titleRow}>
-          <h1 id="gravacao-titulo">{data.title}</h1>
-          <StatusBadge recording={data} />
-        </div>
-        <p className={styles.meta}>
-          <span>{formatDateTime(data.recorded_at)}</span>
-          <span className="tabular">{formatDuration(data.duration_ms)}</span>
-          <span>{sourceLabel(data.source)}</span>
-          {data.language && <span>{data.language}</span>}
-          <span>{data.owner.name}</span>
-        </p>
-        <JobProgress recording={data} />
-        <RetryTranscription recording={data} />
-      </header>
+    <div className={`bleed ${styles.layout}`}>
+      <div className={styles.content}>
+        {back}
+        <RecordingHeader
+          recording={data}
+          hasSummary
+          onDeleted={() => navigate(backTo, { state: { notice: 'Gravação excluída.' } })}
+        />
+        <Pipeline recording={data} />
 
-      {data.transcript_id === null ? (
-        <p className={`card ${styles.pending}`}>
-          {data.status === 'failed'
-            ? 'Não há transcrição: o job falhou.'
-            : 'A transcrição aparece aqui assim que o processamento terminar.'}
-        </p>
-      ) : transcript.isPending ? (
-        <p role="status">Carregando transcrição…</p>
-      ) : transcript.isError ? (
-        <p className="alert alert-error" role="alert">
-          {errorMessage(transcript.error)}
-        </p>
-      ) : (
-        <div className={styles.layout}>
-          <div className={styles.main}>
+        {data.transcript_id === null ? (
+          <p className={styles.pending}>
+            {data.status === 'failed'
+              ? 'Não há transcrição: o job falhou.'
+              : 'A transcrição aparece aqui assim que o processamento terminar.'}
+          </p>
+        ) : transcript.isPending ? (
+          <p role="status">Carregando transcrição…</p>
+        ) : transcript.isError ? (
+          <p className="alert alert-error" role="alert">
+            {errorMessage(transcript.error)}
+          </p>
+        ) : (
+          <>
+            <SpeakersPanel transcript={transcript.data} />
             <TranscriptView
               key={startMs ?? 'inicio'}
               recordingId={data.id}
               transcript={transcript.data}
               startMs={startMs}
             />
-          </div>
-          <aside className={styles.side} aria-label="Locutores, organização e resumos">
-            <SpeakersPanel transcript={transcript.data} />
-            <OrganizePanel recording={data} />
-            <SummariesPanel transcriptId={transcript.data.id} />
-          </aside>
+          </>
+        )}
+      </div>
+      <aside className={`chat ${styles.chat}`} aria-label="Ajustar o resumo">
+        <div className="chat-head">
+          <strong>Ajustar o resumo</strong>
+          <span className="text-muted">Trabalha sobre o resumo. Só lê a transcrição quando o pedido precisa.</span>
         </div>
-      )}
-    </section>
+      </aside>
+    </div>
   )
 }

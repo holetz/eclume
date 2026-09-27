@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { lazy, Suspense, useEffect, useId, useState, useSyncExternalStore } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useLocation, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
@@ -77,6 +77,8 @@ export function LibraryPage() {
     if (params.size > 0) writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params))
   }, [params])
 
+  // O aviso que a gravação excluída deixa ao voltar para a biblioteca.
+  const notice = (useLocation().state as { notice?: string } | null)?.notice
   const importQueue = useImportContext()
   const importing = params.get('importar') === '1'
   const view = readView(params) ?? (narrow ? 'lista' : 'semana')
@@ -133,6 +135,11 @@ export function LibraryPage() {
           }
         />
 
+        {notice && (
+          <p className={`alert alert-success ${styles.band}`} role="status">
+            {notice}
+          </p>
+        )}
         <ImportBand items={importQueue.items} onOpen={() => update({ importar: '1' })} />
 
         <div className={`toolbar ${styles.toolbar}`}>

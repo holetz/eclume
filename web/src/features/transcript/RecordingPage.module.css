@@ -1,73 +1,93 @@
-/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
-   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
-:where(.page) h2 {
-  font-size: 20px;
+/* A gravação centrada no resumo (frame "Recording"): o conteúdo e a coluna do chat, em largura total
+   (.bleed). Especificidade de elemento nos títulos: as classes deste módulo continuam vencendo. */
+:where(.content) p {
   margin: 0;
-}
-
-:where(.page) h3 {
-  font-size: 17px;
-  margin: 0;
-}
-
-:where(.page) p {
-  margin: 0;
-}
-
-.page {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.header {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.back {
-  justify-self: start;
-  font-size: 14px;
-}
-
-.titleRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-  font-size: 14px;
-  color: var(--color-text-muted);
-}
-
-.pending {
-  padding: var(--space-6);
-  color: var(--color-text-muted);
 }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 18rem;
+  grid-template-columns: minmax(0, 1fr) 340px;
   align-items: start;
-  gap: var(--space-8);
+  min-height: 100vh;
 }
 
-.main {
+.content {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  padding: 20px var(--space-8) var(--space-8);
+}
+
+.back {
+  justify-self: start;
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-4);
+  margin: 12px 0 14px;
+}
+
+.titleBlock {
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
-.side {
-  position: sticky;
-  top: var(--space-4);
+/* O título da gravação no tamanho do h2 do DS, como no frame. */
+.title {
+  margin: 0;
+  font-size: 32px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerAlert {
+  flex-basis: 100%;
+}
+
+.pipeline {
   display: grid;
-  gap: var(--space-6);
-  /* Com locutores, organização e resumos o painel passa da tela: rola por conta própria. */
-  max-height: calc(100vh - 2 * var(--space-4));
-  overflow-y: auto;
+  gap: var(--space-2);
+  margin-bottom: 12px;
+}
+
+.pipelineNote {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.progress {
+  max-width: 24rem;
+}
+
+.pending {
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+/* O documento e os campos, lado a lado. */
+.docGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+/* O chat acompanha a rolagem na altura da tela. */
+.chat:global(.chat) {
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
 @media (max-width: 72rem) {
@@ -75,9 +95,21 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .side {
+  .chat:global(.chat) {
     position: static;
-    max-height: none;
-    overflow: visible;
+    height: auto;
+    min-height: 28rem;
+    border-left: 0;
+    border-top: 2px solid var(--color-divider);
+  }
+}
+
+@media (max-width: 56rem) {
+  .content {
+    padding: var(--space-6) var(--space-4) var(--space-8);
+  }
+
+  .docGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
