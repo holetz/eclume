@@ -7,7 +7,7 @@
   background: linear-gradient(
     to right,
     var(--color-surface) calc(var(--sidebar-width) - 1px),
-    var(--color-border) calc(var(--sidebar-width) - 1px) var(--sidebar-width),
+    var(--color-divider) calc(var(--sidebar-width) - 1px) var(--sidebar-width),
     transparent var(--sidebar-width)
   );
 }
@@ -17,7 +17,7 @@
 }
 
 .brand {
-  font-size: var(--text-lg);
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--color-text);
@@ -25,7 +25,7 @@
 }
 
 .brand:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
 }
 
 .sidebar {
@@ -35,10 +35,10 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5) var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-4);
   background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-divider);
   overflow-y: auto;
 }
 
@@ -48,7 +48,7 @@
 
 .nav {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .group ul {
@@ -61,7 +61,7 @@
 
 .groupTitle {
   padding: 0 var(--space-2) var(--space-1);
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -71,21 +71,20 @@
 .link {
   display: block;
   padding: var(--space-2);
-  border-radius: var(--radius);
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text);
   text-decoration: none;
 }
 
 .link:hover {
   color: var(--color-text);
-  background: var(--color-surface-2);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 
 .link[aria-current='page'] {
   font-weight: 620;
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
+  color: var(--color-accent-ink);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
@@ -94,7 +93,7 @@
   display: grid;
   gap: var(--space-3);
   padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-divider);
 }
 
 .user {
@@ -104,12 +103,12 @@
 }
 
 .userName {
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 600;
 }
 
 .userEmail {
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -118,20 +117,20 @@
 .theme {
   display: grid;
   gap: var(--space-1);
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
 .theme select {
   min-height: 2.25rem;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .main {
   grid-area: main;
   width: 100%;
   max-width: var(--content-width);
-  padding: var(--space-6) var(--space-6) var(--space-7);
+  padding: var(--space-8) var(--space-8) calc(var(--space-8) * 1.5);
 }
 
 .main:focus {
@@ -157,7 +156,7 @@
     justify-content: space-between;
     padding: var(--space-2) var(--space-4);
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .brandSide {
@@ -181,6 +180,6 @@
   }
 
   .main {
-    padding: var(--space-5) var(--space-4) var(--space-6);
+    padding: var(--space-6) var(--space-4) var(--space-8);
   }
 }

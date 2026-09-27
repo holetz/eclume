@@ -1,7 +1,7 @@
 .voice {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
 }
 
 .body {
@@ -17,7 +17,7 @@
 }
 
 .detail {
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
@@ -36,23 +36,22 @@
 .term {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
   white-space: pre-line;
-  background: var(--color-surface-2);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
   border-left: 3px solid var(--color-accent);
-  border-radius: var(--radius-sm);
 }
 
 .check {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .samples summary {
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 560;
 }
 
@@ -66,10 +65,10 @@
 
 .samples li {
   display: grid;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .termTitle {
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 560;
 }

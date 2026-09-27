@@ -2,5 +2,4 @@
    layout de cada tela fica no CSS Module do componente. */
 @import './fonts.css';
 @import './eclume.css';
-@import './legacy-tokens.css';
 @import './app.css';
