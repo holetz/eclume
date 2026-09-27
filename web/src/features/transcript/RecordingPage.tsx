@@ -1,7 +1,11 @@
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
+import { MarkerBar } from './MarkerBar'
+import { useMarkers } from './markers'
 import { Pipeline } from './Pipeline'
+import { PlaybackProvider } from './PlaybackProvider'
+import { Player } from './Player'
 import { useRecording, useRefreshOnPipeline, useTranscript } from './queries'
 import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
@@ -24,6 +28,7 @@ export function RecordingPage() {
   const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
+  const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
   useRefreshOnPipeline(recording.data)
   usePageTitle(recording.data?.title ?? 'Gravação')
 
@@ -57,29 +62,32 @@ export function RecordingPage() {
         />
         <Pipeline recording={data} />
 
-        {data.transcript_id === null ? (
-          <p className={styles.pending}>
-            {data.status === 'failed'
-              ? 'Não há transcrição: o job falhou.'
-              : 'A transcrição aparece aqui assim que o processamento terminar.'}
-          </p>
-        ) : transcript.isPending ? (
-          <p role="status">Carregando transcrição…</p>
-        ) : transcript.isError ? (
-          <p className="alert alert-error" role="alert">
-            {errorMessage(transcript.error)}
-          </p>
-        ) : (
-          <>
-            <SpeakersPanel transcript={transcript.data} />
-            <TranscriptView
-              key={startMs ?? 'inicio'}
-              recordingId={data.id}
-              transcript={transcript.data}
-              startMs={startMs}
-            />
-          </>
-        )}
+        <PlaybackProvider recordingId={data.id} durationMs={data.duration_ms} startMs={startMs}>
+          {data.transcript_id !== null && (
+            <>
+              <Player markers={markers.data ?? []} />
+              <MarkerBar markers={markers.data ?? []} />
+            </>
+          )}
+          {data.transcript_id === null ? (
+            <p className={styles.pending}>
+              {data.status === 'failed'
+                ? 'Não há transcrição: o job falhou.'
+                : 'A transcrição aparece aqui assim que o processamento terminar.'}
+            </p>
+          ) : transcript.isPending ? (
+            <p role="status">Carregando transcrição…</p>
+          ) : transcript.isError ? (
+            <p className="alert alert-error" role="alert">
+              {errorMessage(transcript.error)}
+            </p>
+          ) : (
+            <>
+              <SpeakersPanel transcript={transcript.data} />
+              <TranscriptView transcript={transcript.data} />
+            </>
+          )}
+        </PlaybackProvider>
       </div>
       <aside className={`chat ${styles.chat}`} aria-label="Ajustar o resumo">
         <div className="chat-head">
