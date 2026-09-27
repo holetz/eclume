@@ -1,9 +1,9 @@
 import { lazy, Suspense, type ComponentType } from 'react'
-import { Link, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
 import { LibraryPage } from '../features/library/LibraryPage'
+import { NotFoundPage } from './NotFoundPage'
 import { RequireSession } from './RequireSession'
-import { usePageTitle } from './usePageTitle'
 
 // A biblioteca e o login vão no bundle inicial; as outras áreas carregam sob demanda, cada uma no
 // seu chunk (o conversor de mídia do import e o react-markdown dos resumos são os mais pesados).
@@ -26,18 +26,6 @@ function page(Page: ComponentType) {
     <Suspense fallback={<p role="status">Carregando…</p>}>
       <Page />
     </Suspense>
-  )
-}
-
-function NotFoundPage() {
-  usePageTitle('Página não encontrada')
-  return (
-    <section>
-      <h1>Página não encontrada</h1>
-      <p className="text-muted">
-        O endereço não existe ou mudou. <Link to="/">Voltar à biblioteca</Link>.
-      </p>
-    </section>
   )
 }
 

@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
 import { isInMoreSection, NAV_ITEMS, navGroups } from './nav'
+import { NotFoundPage } from './NotFoundPage'
+import { PageHead } from './PageHead'
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org', role: 'member' }
 
@@ -16,6 +18,7 @@ function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
         <Route element={<AppShell user={user} onLogout={onLogout} />}>
           <Route path="/tokens" element={<h1>Tokens</h1>} />
           <Route path="/pessoas" element={<h1>Pessoas</h1>} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -134,5 +137,23 @@ describe('AppShell', () => {
     expect(button).toHaveAttribute('aria-expanded', 'true')
     await userEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
+describe('PageHead e 404', () => {
+  it('mostra kicker, título e ações, e dá o título da aba', () => {
+    render(<PageHead kicker="Organizar" title="Pessoas" actions={<button type="button">Adicionar</button>} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).toBeInTheDocument()
+    expect(screen.getByText('Organizar')).toHaveClass('kicker')
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toBeInTheDocument()
+    expect(document.title).toBe('Pessoas · eclume')
+  })
+
+  it('uma rota inexistente mostra a página não encontrada dentro do shell', () => {
+    renderShell(member, vi.fn(), '/nao-existe')
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('heading', { level: 1, name: 'Página não encontrada' })).toBeInTheDocument()
+    expect(within(main).getByRole('link', { name: 'Voltar à biblioteca' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('navigation', { name: 'Principal' })).toBeInTheDocument()
   })
 })
