@@ -16,7 +16,7 @@
 
 .page {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .header {
@@ -37,7 +37,42 @@
 }
 
 .search {
-  max-width: 28rem;
+  max-width: 320px;
+}
+
+.page > :global(.page-head) {
+  margin-bottom: var(--space-2);
+}
+
+/* A tabela rola no próprio contêiner em telas estreitas, sem rolar a página. */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableWrap :global(.table) {
+  min-width: 36rem;
+}
+
+.newRow td {
+  vertical-align: top;
+}
+
+.newRow:hover {
+  background: none;
+}
+
+.rowError {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-danger);
+}
+
+.speaker {
+  color: var(--color-text);
+}
+
+.speaker a {
+  color: inherit;
 }
 
 .form {

@@ -1,6 +1,6 @@
 // Consultas do diretório de pessoas. Toda chave começa em ['people'], para uma mutação invalidar
 // o diretório inteiro de uma vez (contagens e nomes aparecem em várias telas).
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 
@@ -20,6 +20,15 @@ export function usePeople(q: string) {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
+  })
+}
+
+/** Cadastra uma pessoa e atualiza o diretório. */
+export function useCreatePerson() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['PersonCreate']) => unwrap(api.POST('/api/v1/people', { body })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: PEOPLE_KEY }),
   })
 }
 
