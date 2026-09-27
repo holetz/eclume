@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -84,8 +85,9 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
     await redis.hset(progress_key(recording_id), mapping={"stage": "upload", "pct": "100", "updated_at": "agora"})
     await redis.expire(progress_key(recording_id), 86400)
     if ctx.get("fail"):
+        code, message = ctx.get("failure") or ("gpu_oom", "CUDA out of memory")
         await redis.enqueue_job(
-            "transcription_failed", recording_id, "gpu_oom", "CUDA out of memory", _queue_name=DEFAULT_QUEUE
+            "transcription_failed", recording_id, code, message, ctx.get("fail_stage", "asr"), _queue_name=DEFAULT_QUEUE
         )
         return "falhou"
     await storage.sha256(audio_key)  # o áudio existe e é legível
@@ -98,8 +100,26 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
         vectors = ctx.get("voices") or DEFAULT_VOICES
         document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL, "dimension": EMBEDDING_DIMS}
         await storage.put_bytes(embeddings_key, json.dumps(document).encode(), "application/json")
+    # O job começou no worker há pouco, antes da ingestão.
+    info = dict(ENGINE_INFO) | {"started_at": (datetime.now(UTC) - timedelta(seconds=5)).isoformat()}
+    if "preprocess" in options:
+        # O pré-processamento feito como a configuração pediu; `preprocess_fallback` simula a queda.
+        failed = ctx.get("preprocess_fallback", False)
+        steps = [
+            {"step": name, "state": ("failed" if failed else "done") if block.get("enabled") else "skipped"}
+            | ({"error": "arnndn: modelo inválido"} if failed and block.get("enabled") else {})
+            for name, block in options["preprocess"].items()
+        ]
+        info["preprocess"] = {
+            "steps": steps,
+            "ms": 1500,
+            "offset_ms": 0,
+            "channels": 1,
+            "split": False,
+            "fallback": failed,
+        }
     await redis.enqueue_job(
-        "ingest_transcript", recording_id, transcript_key, embeddings_key, ENGINE_INFO, _queue_name=DEFAULT_QUEUE
+        "ingest_transcript", recording_id, transcript_key, embeddings_key, info, _queue_name=DEFAULT_QUEUE
     )
     ctx["calls"].append((recording_id, audio_key, options))
     return "ok"
@@ -110,11 +130,19 @@ async def _gpu_startup(ctx: dict[str, Any]) -> None:
 
 
 def run_gpu(
-    settings: Settings, *, fail: bool = False, voices: dict[str, list[float]] | None = None
+    settings: Settings,
+    *,
+    fail: bool = False,
+    voices: dict[str, list[float]] | None = None,
+    **behavior: Any,  # noqa: ANN401
 ) -> list[tuple[str, str, dict[str, Any]]]:
-    """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas."""
+    """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas.
+
+    `behavior` ajusta o fake: `fail_stage` e `failure` (código, mensagem) na falha, e
+    `preprocess_fallback` para a cadeia do pré-processamento caída para só o formato.
+    """
     calls: list[tuple[str, str, dict[str, Any]]] = []
-    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices}
+    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices, **behavior}
     run(
         _drain(
             [func(fake_transcribe, name="transcribe")],

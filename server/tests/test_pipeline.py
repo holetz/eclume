@@ -249,3 +249,59 @@ def test_etapas_do_pipeline_por_revisao(
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert _states(api.get(f"/api/v1/recordings/{recording['id']}").json())["transcription"] == "done"
+
+
+def _step(body: dict, name: str) -> dict:
+    return next(step for step in body["pipeline"] if step["step"] == name)
+
+
+def test_pre_processamento_vai_nas_options_e_vira_etapa(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3200))
+    ((_, _, options),) = run_gpu(services.settings)
+    assert options["preprocess"] == {
+        "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6},
+        "loudnorm": {"enabled": True, "target_lufs": -16, "true_peak_db": -1.5, "lra": 11},
+        "trim_silence": {"enabled": True, "min_silence_s": 3, "threshold_db": -50},
+        "split_channels": {"enabled": False},
+    }
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    pre, transcription = _step(body, "preprocessing"), _step(body, "transcription")
+    assert (pre["state"], pre["duration_ms"]) == ("done", 1500)
+    assert pre["finished_at"] == transcription["started_at"]
+
+    # A cadeia que caiu para só o formato: a etapa falha e a transcrição segue.
+    api.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
+    run_gpu(services.settings, preprocess_fallback=True)
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert _step(body, "preprocessing")["error"] == {"code": "preprocess_failed", "message": "arnndn: modelo inválido"}
+    assert _step(body, "transcription")["state"] == "done"
+
+
+def test_falha_no_pre_processamento_marca_a_etapa_certa(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3300))
+
+    async def progress() -> None:
+        queue = await Queue.connect(services.settings.redis_url)
+        try:
+            await queue.pool.hset(progress_key(recording["id"]), mapping={"stage": "preprocess", "pct": "5"})
+        finally:
+            await queue.close()
+
+    run(progress())
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["job"]["stage"] == "preprocessing"
+    assert _step(body, "preprocessing")["state"] == "active"
+
+    run_gpu(services.settings, fail=True, fail_stage="preprocess", failure=("audio_decode_failed", "não abre"))
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert _step(body, "preprocessing")["error"] == {"code": "audio_decode_failed", "message": "não abre"}
+    assert _step(body, "transcription")["state"] == "pending"

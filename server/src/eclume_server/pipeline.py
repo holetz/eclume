@@ -7,6 +7,7 @@ decisões em docs/standards/code/processamento-automatico.md.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
@@ -16,13 +17,15 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 
 if TYPE_CHECKING:
-    from datetime import datetime
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
     from eclume_server.serialize import Row
 
+PREPROCESS_FAILED = "preprocess_failed"
+# Etapa do progresso do worker GPU em que a falha aconteceu → etapa do pipeline que ela derruba.
+FAILED_STEP = {"download": "preprocessing", "preprocess": "preprocessing"}
 STEPS = ("received", "preprocessing", "transcription", "fields", "agenda_type", "summary")
 FINISHED = ("done", "failed", "skipped")
 # Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
@@ -137,6 +140,63 @@ def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, 
             if item["step"] == active and item["state"] == "pending":
                 item["state"] = "active"
     return steps
+
+
+def _started(engine_info: dict[str, Any], fallback: datetime) -> datetime:
+    try:
+        return datetime.fromisoformat(engine_info["started_at"])
+    except (KeyError, TypeError, ValueError):
+        return fallback
+
+
+async def record_gpu_steps(conn: AsyncConnection, job: Row, engine_info: dict[str, Any], now: datetime) -> None:
+    """Pré-processamento e transcrição feitos, pelo `engine_info` do worker GPU.
+
+    O pré-processamento começa com o job no worker e dura `preprocess.ms`; a transcrição vem em
+    seguida. A cadeia que caiu para só o formato sai `failed` (`preprocess_failed`), e a transcrição
+    seguiu. Um worker sem pré-processamento deixa a etapa pulada.
+    """
+    recording, revision = {"id": job["recording_id"], "owner_id": job["owner_id"]}, job["revision"]
+    started = _started(engine_info, job["started_at"] or job["queued_at"])
+    pre = engine_info.get("preprocess")
+    if not isinstance(pre, dict):
+        await set_step(
+            conn,
+            recording,
+            revision,
+            "preprocessing",
+            "skipped",
+            detail={"reason": "worker_without_preprocess"},
+            started_at=started,
+            finished_at=started,
+        )
+        transcription_start = started
+    else:
+        # O fim do pré-processamento nunca passa do fim do job (relógios do worker e do server).
+        transcription_start = min(started + timedelta(milliseconds=int(pre.get("ms") or 0)), now)
+        failed = [step for step in pre.get("steps", []) if step.get("state") == "failed"]
+        error = (PREPROCESS_FAILED, str(failed[0].get("error") or "")[:500]) if failed else None
+        await set_step(
+            conn,
+            recording,
+            revision,
+            "preprocessing",
+            "failed" if error else "done",
+            error=error,
+            detail={key: pre.get(key) for key in ("steps", "offset_ms", "channels", "split", "fallback", "warnings")},
+            started_at=started,
+            finished_at=transcription_start,
+        )
+    await set_step(
+        conn,
+        recording,
+        revision,
+        "transcription",
+        "done",
+        detail={"warnings": engine_info.get("warnings") or []},
+        started_at=transcription_start,
+        finished_at=now,
+    )
 
 
 async def get_step(conn: AsyncConnection, recording_id: UUID, revision: int, step: str) -> Row | None:

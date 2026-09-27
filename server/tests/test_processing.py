@@ -187,10 +187,7 @@ def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, s
     assert [(s["trigger"], s["status"], s["agenda_type"]["name"]) for s in summaries] == [
         ("automatic", "done", "Conversa com cliente")
     ]
-    states = {step["step"]: step["state"] for step in recording["pipeline"]}
-    assert states == dict.fromkeys(("received", "transcription", "fields", "agenda_type", "summary"), "done") | {
-        "preprocessing": "pending"
-    }
+    assert {step["state"] for step in recording["pipeline"]} == {"done"}
 
 
 def test_tipo_do_usuario_nao_e_trocado_e_sem_tipos_nao_ha_resumo(user: Api, services: Services):

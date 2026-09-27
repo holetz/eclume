@@ -3320,9 +3320,11 @@ components:
           type: string
           enum: [queued, running, succeeded, failed, cancelled]
         stage:
-          description: Etapa em curso, ou `null` fora de execução.
+          description: |
+            Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do áudio
+            antes do ASR (holetz/eclume#33).
           type: [string, "null"]
-          enum: [asr, alignment, diarization, embeddings, finalizing, null]
+          enum: [preprocessing, asr, alignment, diarization, embeddings, finalizing, null]
         progress:
           type: number
           minimum: 0

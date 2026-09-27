@@ -3621,11 +3621,17 @@ components:
           - failed
           - cancelled
         stage:
-          description: Etapa em curso, ou `null` fora de execução.
+          description: 'Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do
+            áudio
+
+            antes do ASR (holetz/eclume#33).
+
+            '
           type:
           - string
           - 'null'
           enum:
+          - preprocessing
           - asr
           - alignment
           - diarization

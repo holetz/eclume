@@ -105,6 +105,12 @@ def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
         "diarize": True,
         "diarization_model": "pyannote/speaker-diarization-community-1",
         "embeddings": False,
+        "preprocess": {
+            "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6},
+            "loudnorm": {"enabled": True, "target_lufs": -16, "true_peak_db": -1.5, "lra": 11},
+            "trim_silence": {"enabled": True, "min_silence_s": 3, "threshold_db": -50},
+            "split_channels": {"enabled": False},
+        },
     }
     stored = services.s3().get_object(Bucket=services.settings.s3_bucket, Key=key)["Body"].read()
     assert stored == data

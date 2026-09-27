@@ -24,6 +24,7 @@ AUTO_LANGUAGE = "auto"
 # Etapas do worker GPU → `Job.stage` do contrato v1.
 _STAGES = {
     "download": "asr",
+    "preprocess": "preprocessing",
     "asr": "asr",
     "align": "alignment",
     "diarize": "diarization",
@@ -72,6 +73,8 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
         "diarization_model": diarization.get("model"),
         # Impressão de voz só com a identificação por voz ligada na plataforma (LGPD).
         "embeddings": bool(platform["voice_identification"].get("enabled")),
+        # O tratamento do áudio antes do ASR; um worker antigo ignora a chave.
+        "preprocess": platform["preprocessing"],
     }
 
 

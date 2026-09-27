@@ -108,10 +108,12 @@ async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: i
     return result
 
 
-async def transcription_failed(ctx: dict[str, Any], recording_id: str, error_code: str, message: str) -> str:
-    """Marca o job e a gravação como falhos."""
+async def transcription_failed(
+    ctx: dict[str, Any], recording_id: str, error_code: str, message: str, stage: str | None = None
+) -> str:
+    """Marca o job e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou."""
     async with system_tx(ctx["engine"]) as conn:
-        result = await fail(conn, UUID(recording_id), error_code, message)
+        result = await fail(conn, UUID(recording_id), error_code, message, stage)
     await ctx["redis"].delete(progress_key(recording_id))
     log.info("transcription_failed %s: %s", recording_id, result)
     return result
