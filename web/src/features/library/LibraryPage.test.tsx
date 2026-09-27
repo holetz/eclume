@@ -141,3 +141,88 @@ describe('biblioteca na semana', () => {
     expect(any.some((query) => query.get('limit') === '1' && !query.has('from'))).toBe(true)
   })
 })
+
+describe('biblioteca no mês e na lista', () => {
+  it('mostra o mês com até três gravações por dia, e o dia abre a semana', async () => {
+    saturdayMorning()
+    const page = fixtures.recordingWeekPage()
+    // Mais duas no dia 24 (quinta): quatro no dia, três visíveis e "+1".
+    page.items.push(
+      { ...page.items[6], id: '01928f3a-1c00-7a00-8000-0000000004b1', title: 'Extra 1' },
+      { ...page.items[6], id: '01928f3a-1c00-7a00-8000-0000000004b2', title: 'Extra 2' },
+    )
+    const http = mockLibrary(() => page)
+    renderApp('/?visao=mes&data=2026-09-21')
+
+    expect(await screen.findByText('Setembro de 2026')).toHaveClass('toolbar-title')
+    expect(screen.getByRole('radio', { name: 'Mês' })).toBeChecked()
+    expect(document.querySelectorAll('.cal-dow')).toHaveLength(7)
+    expect(document.querySelectorAll('.cal-cell')).toHaveLength(35)
+    expect(document.querySelectorAll('.cal-cell[data-outside]')).toHaveLength(5)
+    expect(screen.getByRole('group', { name: 'sábado, 26 de setembro' })).toHaveAttribute('aria-current', 'date')
+
+    const tuesday = await screen.findByRole('group', { name: 'terça, 22 de setembro' })
+    await waitFor(() => expect(within(tuesday).getAllByRole('link')).toHaveLength(2))
+    expect(within(tuesday).getByRole('link', { name: 'Nota · Rascunho da pauta' })).toHaveClass('cal-dot')
+    const thursday = screen.getByRole('group', { name: 'quinta, 24 de setembro' })
+    expect(within(thursday).getAllByRole('link')).toHaveLength(3)
+    expect(within(thursday).getByText('+1')).toBeInTheDocument()
+
+    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    expect(query.get('from')).toBe('2026-08-31T03:00:00.000Z')
+    expect(query.get('to')).toBe('2026-10-05T03:00:00.000Z')
+
+    await userEvent.click(within(thursday).getByRole('button', { name: 'Abrir a semana de quinta, 24 de setembro' }))
+    expect(await screen.findByText('21–27 de setembro de 2026')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
+  })
+
+  it('anda de mês em mês', async () => {
+    mockLibrary()
+    renderApp('/?visao=mes&data=2026-09-21')
+    await screen.findByText('Setembro de 2026')
+    await userEvent.click(screen.getByRole('button', { name: 'Próximo mês' }))
+    expect(await screen.findByText('Outubro de 2026')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Mês anterior' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Mês anterior' }))
+    expect(await screen.findByText('Agosto de 2026')).toBeInTheDocument()
+  })
+
+  it('lista por dia, da mais recente, com o estado e Carregar mais', async () => {
+    saturdayMorning()
+    const recent = fixtures.recordingWeekPage()
+    recent.items.reverse()
+    const first = { items: recent.items.slice(0, 6), next_cursor: 'c2' }
+    const second = { items: recent.items.slice(6), next_cursor: null }
+    const http = mockLibrary((request) => (new URL(request.url).searchParams.get('cursor') === 'c2' ? second : first))
+    renderApp('/?visao=lista')
+
+    const today = await screen.findByRole('region', { name: 'Hoje · sáb 26 set' })
+    expect(within(today).getByText('1 item')).toBeInTheDocument()
+    const row = within(today).getByRole('link', { name: /1:1 Elisa \/ Ana/ })
+    expect(row).toHaveClass('rec-row')
+    expect(row).toHaveTextContent('10:30')
+    expect(row).toHaveTextContent('· 39 min')
+    expect(within(row).getByText('Resumindo')).toHaveClass('badge-progress')
+    expect(screen.queryByRole('button', { name: 'Próxima semana' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hoje' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Carregar mais' }))
+    const monday = await screen.findByRole('region', { name: 'seg 21 set' })
+    expect(within(monday).getByText('2 itens')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
+
+    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    expect(query.get('sort')).toBe('recorded_desc')
+    expect(query.get('limit')).toBe('50')
+    expect(query.has('from')).toBe(false)
+  })
+
+  it('em tela estreita, sem visão na URL, abre na lista', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 56rem)' }))
+    mockLibrary()
+    renderApp('/')
+    expect(await screen.findByRole('radio', { name: 'Lista' })).toBeChecked()
+    expect(await screen.findAllByRole('region')).not.toHaveLength(0)
+  })
+})
