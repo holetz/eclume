@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
+import { HelpHint } from '../../app/HelpHint'
 import { formatDate, formatDuration } from '../library/format'
 import type { Person } from './queries'
 import { useDeleteVoiceprint, useVoiceprint, type Voiceprint } from './voice'
@@ -51,7 +52,11 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
       )}
       <p className={styles.detail}>
         Uma amostra entra quando você liga um locutor a esta pessoa na página da gravação.{' '}
-        <Link to="/ajuda/sugestoes-por-voz">Como funcionam as sugestões por voz</Link>
+        <Link to="/ajuda/sugestoes-por-voz">Como funcionam as sugestões por voz</Link>{' '}
+        <HelpHint subject="a impressão de voz" title="Impressão de voz" article="esquecer-a-voz">
+          As amostras são os trechos em que você confirmou que um locutor era esta pessoa. Esquecer a voz
+          apaga todas, e os vínculos confirmados ficam.
+        </HelpHint>
       </p>
       {voiceprint.sample_count > 0 && (
         <div>

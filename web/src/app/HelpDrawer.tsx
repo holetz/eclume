@@ -1,13 +1,19 @@
 import { X } from 'lucide-react'
-import { useEffect, useId, useRef } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef } from 'react'
 import { Link } from 'react-router'
-import type { HelpTopic } from './help'
+import type { HelpPageKey } from '../features/help/pages'
 import { NAV_ITEMS } from './nav'
+
+// O corpo (busca, "Nesta página" e atalhos) traz o catálogo dos artigos: só carrega na primeira abertura.
+const HelpDrawerBody = lazy(() => import('../features/help/HelpDrawerBody'))
 
 const HELP_CENTER = NAV_ITEMS.find((item) => item.to === '/ajuda')
 
-/** O `.help-drawer` do Design System: links da página, atalhos e o caminho para a central de ajuda. */
-export function HelpDrawer({ topic, onClose }: { topic: HelpTopic | null; onClose: () => void }) {
+/**
+ * O `.help-drawer` do Design System: busca, artigos da página, atalhos e o caminho para a central
+ * de ajuda. Um link da gaveta navega e a mantém aberta, como no DS.
+ */
+export function HelpDrawer({ pageKey, onClose }: { pageKey: HelpPageKey | null; onClose: () => void }) {
   const titleId = useId()
   const closeButton = useRef<HTMLButtonElement>(null)
 
@@ -27,45 +33,17 @@ export function HelpDrawer({ topic, onClose }: { topic: HelpTopic | null; onClos
           <X size={16} aria-hidden />
         </button>
       </div>
-      <div className="help-drawer-body">
-        {topic && (
-          <div className="help-section">
-            <span className="kicker">Nesta página · {topic.title}</span>
-            <ul className="help-links">
-              {topic.links.map((link) => (
-                <li key={link.to}>
-                  <Link to={link.to} onClick={onClose}>
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+      <Suspense
+        fallback={
+          <div className="help-drawer-body">
+            <p role="status">Carregando…</p>
           </div>
-        )}
-        <div className="help-section">
-          <span className="kicker">Atalhos</span>
-          <dl className="shortcuts">
-            <div>
-              <dt>Abrir a ajuda</dt>
-              <dd>
-                <kbd className="kbd">?</kbd>
-              </dd>
-            </div>
-            <div>
-              <dt>Fechar a ajuda</dt>
-              <dd>
-                <kbd className="kbd">Esc</kbd>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+        }
+      >
+        <HelpDrawerBody pageKey={pageKey} />
+      </Suspense>
       <div className="help-drawer-foot">
-        {HELP_CENTER?.enabled && (
-          <Link to={HELP_CENTER.to} onClick={onClose}>
-            Abrir a central de ajuda
-          </Link>
-        )}
+        {HELP_CENTER?.enabled && <Link to={HELP_CENTER.to}>Abrir a central de ajuda</Link>}
         <span className="text-muted">
           Pressione <kbd className="kbd">?</kbd> a qualquer momento
         </span>

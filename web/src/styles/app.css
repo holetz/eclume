@@ -141,6 +141,13 @@ dialog.dialog::backdrop {
   letter-spacing: 0.2em;
 }
 
+/* O título do page-head com a dica em linha ao lado. */
+.page-head-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* A dica em linha: o popover abre abaixo do `?`. */
 .hint-anchor {
   position: relative;

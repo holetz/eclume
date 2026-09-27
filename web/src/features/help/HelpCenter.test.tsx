@@ -121,3 +121,25 @@ describe('artigo da ajuda', () => {
     expect(screen.getByRole('link', { name: 'central de ajuda' })).toHaveAttribute('href', '/ajuda')
   })
 })
+
+describe('ajuda nas páginas', () => {
+  it('? na página de Pessoas abre a gaveta com os artigos dela, e a dica leva ao artigo', async () => {
+    mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    renderApp('/pessoas')
+    await screen.findByRole('heading', { level: 1, name: 'Pessoas' })
+    await userEvent.click(screen.getByRole('button', { name: 'Sobre as sugestões por voz' }))
+    const popover = screen.getByRole('dialog', { name: 'Sugestões por voz' })
+    expect(within(popover).getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/sugestoes-por-voz')
+    await userEvent.keyboard('{Escape}')
+
+    await userEvent.keyboard('?')
+    const drawer = screen.getByRole('dialog', { name: 'Ajuda' })
+    expect(await within(drawer).findByText('Nesta página · Pessoas')).toBeInTheDocument()
+    await userEvent.click(within(drawer).getByRole('link', { name: 'Ligue um locutor a uma pessoa' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Ligue um locutor a uma pessoa' })).toBeInTheDocument()
+    expect(within(drawer).getByText('Nesta página · Central de ajuda')).toBeInTheDocument()
+  })
+})

@@ -2,6 +2,7 @@ import { useDeferredValue, useId, useRef, useState, type KeyboardEvent } from 'r
 import { Link, useSearchParams } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
+import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
 import { formatDate } from '../library/format'
 import styles from './People.module.css'
@@ -17,7 +18,16 @@ export function PeoplePage() {
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Organizar" title="Pessoas" />
+      <PageHead
+        kicker="Organizar"
+        title="Pessoas"
+        hint={
+          <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="sugestoes-por-voz">
+            O eclume compara a voz de um locutor sem pessoa com as amostras das pessoas que você
+            cadastrou. Uma sugestão nunca liga sozinha: só vira vínculo quando você aceita.
+          </HelpHint>
+        }
+      />
       <p className="text-muted">Quem fala nas suas gravações. Ligue os locutores a elas na página da gravação.</p>
 
       <div className="toolbar">

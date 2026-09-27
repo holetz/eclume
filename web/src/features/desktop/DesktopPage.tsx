@@ -1,10 +1,12 @@
 import { Link } from 'react-router'
+import { useHelpTopic } from '../../app/help'
 import { usePageTitle } from '../../app/usePageTitle'
 import styles from './DesktopPage.module.css'
 import { detectOs, PLATFORMS } from './links'
 
 export function DesktopPage() {
   usePageTitle('App desktop')
+  useHelpTopic('app-desktop')
   const current = detectOs(navigator.userAgent)
   const platforms = [...PLATFORMS].sort((a, b) => Number(b.os === current) - Number(a.os === current))
 

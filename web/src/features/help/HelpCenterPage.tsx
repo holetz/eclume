@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { isEditableTarget, useHelpTopic } from '../../app/help'
+import { isSearchShortcut, useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { ArticleBody } from './ArticleBody'
 import { ARTICLES, articlesByTopic, getTopic, QUESTIONS, TOPICS, type Topic, type TopicKey } from './catalog'
@@ -19,7 +19,7 @@ export function HelpCenterPage() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || isEditableTarget(event)) return
+      if (!isSearchShortcut(event)) return
       event.preventDefault()
       searchInput.current?.focus()
     }

@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
+import { useHelpTopic } from '../../app/help'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDate, formatDateTime } from '../library/format'
 import { EXPIRATIONS, expiresAt, PRESETS, SCOPES, scopeLabel, type Scope } from './scopes'
@@ -14,6 +15,7 @@ const TOKENS_KEY = ['tokens'] as const
 
 export function TokensPage() {
   usePageTitle('Tokens de acesso')
+  useHelpTopic('tokens')
   const [created, setCreated] = useState<Schemas['TokenCreated'] | null>(null)
   const tokens = useInfiniteQuery({
     queryKey: TOKENS_KEY,
