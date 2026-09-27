@@ -4,92 +4,412 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eclume</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="eclume.css" />
+    <link rel="stylesheet" href="app.css" />
+    <script type="module" src="js/main.js"></script>
   </head>
   <body>
-    <main>
-      <header class="topo">
-        <div>
-          <h1>eclume</h1>
-          <p class="estado" id="estado" data-status="idle">Ocioso</p>
+    <section class="tray tray-window" data-vista="principal" aria-label="eclume">
+      <div class="tray-section">
+        <div class="alert" id="aviso" role="alert" hidden>
+          <span class="alert-title" id="aviso-titulo"></span>
+          <span id="aviso-texto"></span>
         </div>
-        <button type="button" id="alternar" class="primario">Iniciar gravação</button>
-      </header>
-
-      <section class="pergunta" id="pergunta" aria-live="polite" hidden>
-        <p id="pergunta-texto">Reunião detectada.</p>
-        <div class="linha">
-          <button type="button" id="pergunta-gravar" class="primario">Gravar</button>
-          <button type="button" id="pergunta-ignorar">Ignorar esta reunião</button>
-        </div>
-      </section>
-
-      <p class="aviso" id="aviso" hidden></p>
-      <p class="aviso" id="aviso-sync" hidden></p>
-
-      <section aria-labelledby="titulo-fila">
-        <div class="secao-topo">
-          <h2 id="titulo-fila">Gravações</h2>
-          <span class="resumo">
-            <span id="resumo"></span>
-            <button type="button" id="sincronizar" class="discreto">Sincronizar agora</button>
-          </span>
-        </div>
-        <ul class="fila" id="fila"></ul>
-        <p class="vazio" id="vazio">Nenhuma gravação ainda.</p>
-      </section>
-
-      <section aria-labelledby="titulo-config">
-        <h2 id="titulo-config">Configurações</h2>
-        <form id="form-config" class="config">
-          <label for="web-url">Servidor do eclume</label>
-          <div class="linha">
-            <input id="web-url" type="url" required spellcheck="false" autocomplete="off" />
-            <button type="button" id="abrir-web">Abrir</button>
+        <div class="row row-between">
+          <span class="brand brand-sm"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="0.5" y="8" width="3" height="8"></rect>
+              <rect x="5.5" y="3" width="3" height="18"></rect>
+              <rect x="10.5" y="0" width="3" height="24"></rect>
+              <rect x="15.5" y="5.5" width="3" height="13"></rect>
+              <rect x="20.5" y="9" width="3" height="6"></rect></svg
+            >eclume</span
+          >
+          <div class="row row-tight">
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-ajuda"
+              data-icone="ajuda" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-configuracoes"
+              data-icone="configuracoes" aria-label="Configurações"></button>
           </div>
-
-          <label for="pat">Token pessoal (PAT)</label>
-          <div class="linha">
-            <input id="pat" type="password" spellcheck="false" autocomplete="off" placeholder="eclp_…" />
-            <button type="button" id="esquecer-pat">Esquecer</button>
+        </div>
+        <div class="menu menu-ajuda" role="menu" id="menu-ajuda" aria-label="Ajuda" hidden>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-primeiros-passos">Primeiros passos</button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-permissoes">Permissões de microfone</button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-atalhos">
+            Atalhos de teclado<kbd id="ajuda-atalhos-tecla"></kbd>
+          </button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-central">
+            Abrir a central de ajuda<kbd>↗</kbd>
+          </button>
+          <div class="menu-sep"></div>
+          <button type="button" class="menu-item menu-item-dica" role="menuitem" id="ajuda-problema">
+            Relatar um problema…<small>Anexe o eclume.log</small>
+          </button>
+          <div class="menu-sep"></div>
+          <span class="menu-item" aria-disabled="true" id="ajuda-versao"></span>
+        </div>
+        <span class="status-line" id="linha-status" role="status">Carregando…</span>
+        <div class="row row-meter" id="nota" hidden>
+          <div class="meter" id="medidor" aria-hidden="true"></div>
+          <span class="mono tiny" id="nota-silencio"></span>
+        </div>
+        <button type="button" class="btn btn-rec btn-rec-lg" id="gravar" aria-pressed="false">
+          Iniciar gravação
+        </button>
+        <span class="text-muted small" id="gravacao-automatica" hidden
+          >Iniciada automaticamente. Para quando a reunião acabar.</span
+        >
+        <div class="stack-tight" id="marcadores" hidden>
+          <div class="row">
+            <button type="button" class="btn btn-secondary btn-sm" id="marcador">
+              Marcador<kbd id="atalho-marcador"></kbd>
+            </button>
+            <span class="marker-count" id="contagem-marcadores"></span>
           </div>
-          <p class="dica" id="pat-origem">Crie o PAT no eclume web com o escopo <code>recordings:write</code>.</p>
+          <div class="field" id="nota-marcador" hidden>
+            <label for="nota-marcador-texto" id="nota-marcador-rotulo"></label>
+            <input class="input" id="nota-marcador-texto" maxlength="500" placeholder="Nota curta (opcional)" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <button type="button" class="btn btn-secondary" id="nova-nota">
+            Nova nota<kbd id="atalho-nota"></kbd>
+          </button>
+          <button type="button" class="btn btn-secondary" id="importar">Importar arquivo…</button>
+        </div>
+      </div>
 
-          <details>
-            <summary>Avançado</summary>
-            <label for="api-url">Endereço da API</label>
-            <input id="api-url" type="url" spellcheck="false" autocomplete="off" placeholder="igual ao servidor" />
-            <label for="ca-path">CA extra (arquivo PEM)</label>
-            <input id="ca-path" type="text" spellcheck="false" autocomplete="off" placeholder="/caminho/eclume-root.crt" />
-            <p class="dica">Para confiar na CA interna do servidor sem instalá-la no sistema.</p>
+      <div class="tray-section" id="politica" hidden>
+        <div class="row row-between">
+          <span class="kicker" id="politica-titulo"></span>
+          <a href="#" class="small" id="politica-configuracoes">Mudar nas configurações</a>
+        </div>
+        <span class="seg" role="radiogroup" id="politica-opcoes">
+          <label class="seg-opt"><input type="radio" name="politica" value="auto" />Gravar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ask" />Perguntar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ignore" />Ignorar</label>
+        </span>
+      </div>
+
+      <div class="tray-section" id="pergunta" hidden>
+        <div class="alert alert-warning">
+          <span class="alert-title">Reunião detectada</span>
+          <span id="pergunta-texto"></span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="pergunta-gravar">Gravar</button>
+          <button type="button" class="btn btn-secondary" id="pergunta-agora-nao">Agora não</button>
+        </div>
+      </div>
+
+      <div class="tray-section">
+        <div class="row row-between">
+          <span class="kicker">Fila de envio</span>
+          <span class="text-muted tiny" id="fila-resumo"></span>
+        </div>
+        <ul class="queue" id="fila"></ul>
+        <span class="text-muted small" id="fila-vazia" hidden>Nenhuma gravação ainda.</span>
+      </div>
+
+      <div class="tray-section stack-tight" id="conta">
+        <strong class="small" id="conta-nome"></strong>
+        <span class="text-muted tiny"
+          ><a href="#" id="conta-servidor"></a> · <span id="conta-versao"></span> ·
+          <a href="#" id="conta-acao"></a
+        ></span>
+      </div>
+    </section>
+
+    <section class="tray tray-window" data-vista="primeira-execucao" aria-label="Bem-vindo" hidden>
+      <div class="tray-section">
+        <div class="row row-between">
+          <span class="brand brand-sm"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="0.5" y="8" width="3" height="8"></rect>
+              <rect x="5.5" y="3" width="3" height="18"></rect>
+              <rect x="10.5" y="0" width="3" height="24"></rect>
+              <rect x="15.5" y="5.5" width="3" height="13"></rect>
+              <rect x="20.5" y="9" width="3" height="6"></rect></svg
+            >eclume</span
+          >
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="bv-voltar"
+            data-icone="fechar" aria-label="Voltar" hidden></button>
+        </div>
+        <h4 class="flush">Bem-vindo</h4>
+        <div class="alert alert-error" id="bv-aviso" role="alert" hidden>
+          <span id="bv-aviso-texto"></span>
+        </div>
+        <span class="text-muted small" id="bv-procurando">Procurando o servidor na rede…</span>
+        <div class="stack stack-tight" id="bv-servidores" role="radiogroup" aria-label="Servidor"></div>
+        <div class="alert alert-warning" id="bv-confianca" hidden>
+          <span class="alert-title">Confira com quem administra o servidor</span>
+          <span>A impressão digital do certificado de <span id="bv-confianca-servidor"></span> é:</span>
+          <span class="code-block"><span id="bv-impressao"></span></span>
+          <div class="row">
+            <button type="button" class="btn btn-primary btn-sm" id="bv-confiar">Confiar e continuar</button>
+          </div>
+        </div>
+      </div>
+      <form class="tray-section" id="bv-entrar-form">
+        <div class="field">
+          <label for="bv-email">E-mail</label>
+          <input class="input" type="email" id="bv-email" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="bv-senha">Senha</label>
+          <input class="input" type="password" id="bv-senha" autocomplete="current-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="bv-entrar">Entrar</button>
+        <span class="text-muted small">Sem conta? <a href="#" id="bv-cadastro">Crie uma na web</a></span>
+      </form>
+      <div class="tray-section">
+        <details class="disclosure" id="bv-avancado">
+          <summary>Avançado<span class="text-muted">Entrar com um código ou digitar o endereço</span></summary>
+          <div class="stack">
+            <div class="field">
+              <label for="bv-codigo">Código de pareamento</label>
+              <div class="row">
+                <input class="input mono input-codigo" id="bv-codigo" maxlength="7" autocomplete="off"
+                  placeholder="K7Q-4MX" />
+                <button type="button" class="btn btn-secondary" id="bv-parear">Entrar com o código</button>
+              </div>
+              <span class="text-muted tiny">Gere o código na web, em Configurações · App desktop. Vale por 10 minutos.</span>
+            </div>
+            <div class="field">
+              <label for="bv-endereco">Endereço do servidor</label>
+              <div class="row">
+                <input class="input mono input-endereco" id="bv-endereco" placeholder="192.168.15.199:8443" />
+                <button type="button" class="btn btn-secondary" id="bv-usar-endereco">Usar este endereço</button>
+              </div>
+              <a href="#" class="small" id="bv-procurar">Procurar na rede de novo</a>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="tray tray-window" data-vista="importar" aria-label="Importar um arquivo" hidden>
+      <div class="tray-section">
+        <div class="row row-between">
+          <h4 class="flush">Importar um arquivo</h4>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="importar-fechar"
+            data-icone="fechar" aria-label="Fechar"></button>
+        </div>
+        <label class="dropzone" id="importar-alvo">
+          <strong>Solte o áudio ou o vídeo aqui</strong>
+          <span class="text-muted">ou <a href="#" id="importar-escolher">escolha um arquivo</a></span>
+        </label>
+      </div>
+
+      <div class="tray-section" id="importar-arquivo" hidden>
+        <div class="field">
+          <label for="importar-data" id="importar-nome"></label>
+          <input class="input mono" type="datetime-local" id="importar-data" step="60" />
+          <span class="date-source" id="importar-origem"></span>
+        </div>
+        <div class="stack-tight" id="importar-andamento" hidden>
+          <progress class="progress" id="importar-progresso" max="1" value="0"></progress>
+          <span class="progress-row"><span>Convertendo para Opus…</span><span id="importar-porcento"></span></span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="importar-confirmar">Pôr na fila de envio</button>
+          <button type="button" class="btn btn-secondary" id="importar-cancelar">Cancelar</button>
+        </div>
+      </div>
+
+      <div class="tray-section" id="importar-erro" hidden>
+        <div class="alert alert-error" role="alert">
+          <span class="alert-title">Não deu para importar</span>
+          <span id="importar-erro-texto"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tray tray-window" data-vista="atalhos" aria-label="Atalhos de teclado" hidden>
+      <div class="tray-section">
+        <div class="row row-between">
+          <div>
+            <span class="kicker">Ajuda</span>
+            <h2 class="flush titulo-folha">Atalhos de teclado</h2>
+          </div>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="atalhos-fechar"
+            data-icone="fechar" aria-label="Fechar"></button>
+        </div>
+      </div>
+      <div class="tray-section">
+        <span class="kicker text-muted">Em qualquer lugar do computador</span>
+        <dl class="shortcuts" id="atalhos-globais"></dl>
+        <span class="kicker text-muted">Nesta janela</span>
+        <dl class="shortcuts" id="atalhos-janela"></dl>
+      </div>
+      <div class="tray-section">
+        <a href="#" class="small" id="atalhos-mudar">Mudar os atalhos nas configurações</a>
+      </div>
+    </section>
+
+    <section class="tray tray-window" data-vista="configuracoes" aria-label="Configurações" hidden>
+      <div class="tray-section tray-section-tabs">
+        <div class="row">
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="config-voltar"
+            data-icone="voltar" aria-label="Voltar"></button>
+          <h4 class="flush">Configurações</h4>
+        </div>
+        <div class="tabs tabs-flush" role="tablist">
+          <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="true">Reuniões</button>
+          <button type="button" class="tab" role="tab" data-aba="audio" aria-selected="false">Áudio</button>
+          <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
+          <button type="button" class="tab" role="tab" data-aba="servidor" aria-selected="false">Servidor</button>
+        </div>
+      </div>
+
+      <div class="tray-section" id="config-aviso-secao">
+        <div class="alert" id="config-aviso" role="status" hidden>
+          <span id="config-aviso-texto"></span>
+        </div>
+      </div>
+
+      <div data-painel="reunioes">
+        <div class="tray-section">
+          <label class="switch"><input type="checkbox" id="detectar" /><span class="track"></span>Detectar reuniões</label>
+          <span class="text-muted small"
+            >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
+          >
+        </div>
+        <div class="tray-section tray-section-list">
+          <div class="row row-between">
+            <span class="kicker">Quando uma reunião começa no</span>
+            <a href="#" class="small" id="restaurar-padroes">Restaurar padrões</a>
+          </div>
+          <div class="list" id="apps"></div>
+          <span class="text-muted small"
+            >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
+            parar.</span
+          >
+        </div>
+      </div>
+
+      <div data-painel="audio" hidden>
+        <div class="tray-section">
+          <span class="kicker">Fontes</span>
+          <div class="field">
+            <label for="microfone">Microfone</label>
+            <select class="input" id="microfone"></select>
+          </div>
+          <div class="row row-meter">
+            <div class="meter meter-accent" id="medidor-teste" aria-hidden="true"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="testar-nivel">Fale para testar o nível</button>
+          </div>
+          <label class="switch"
+            ><input type="checkbox" id="audio-sistema" /><span class="track"></span>Gravar também o áudio do
+            sistema</label
+          >
+          <span class="text-muted small"
+            >Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um
+            arquivo só.</span
+          >
+        </div>
+        <div class="tray-section">
+          <span class="kicker">Atalhos em qualquer lugar do computador</span>
+          <div class="list" id="atalhos"></div>
+        </div>
+        <div class="tray-section">
+          <span class="kicker">Notas por voz</span>
+          <div class="list">
+            <div class="list-row">
+              <span class="list-row-title">Parar depois de silêncio</span>
+              <span class="list-row-sub">Encerra a nota quando você para de falar</span>
+              <span class="list-row-actions">
+                <span class="seg" role="radiogroup" aria-label="Parar depois de silêncio" id="silencio">
+                  <label class="seg-opt"><input type="radio" name="silencio" value="2" />2 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="4" />4 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="8" />8 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="0" />Nunca</label>
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div data-painel="armazenamento" hidden>
+        <div class="tray-section">
+          <span class="kicker">Depois que o servidor confirma uma gravação</span>
+          <label class="choice"
+            ><input type="radio" name="retencao" value="apagar" /><span class="dot"></span
+            ><strong>Apagar a cópia local</strong><small>Libera espaço na hora</small></label
+          >
+          <label class="choice"
+            ><input type="radio" name="retencao" value="dias" /><span class="dot"></span
+            ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small></label
+          >
+          <div class="row row-indent">
+            <input class="input mono input-dias" id="retencao-dias" type="number" min="1" max="3650"
+              aria-label="Dias" />
+            <span class="text-muted small">dias</span>
+          </div>
+          <label class="choice"
+            ><input type="radio" name="retencao" value="sempre" /><span class="dot"></span
+            ><strong>Manter para sempre</strong><small>Nada é apagado deste computador</small></label
+          >
+          <span class="text-muted small">Gravações ainda não enviadas nunca são apagadas.</span>
+        </div>
+        <div class="tray-section">
+          <div class="field">
+            <span class="field-label">Pasta local</span>
+            <div class="code-block">
+              <span id="pasta-local"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="mostrar-pasta">Mostrar</button>
+            </div>
+          </div>
+          <div class="row row-between">
+            <span class="text-muted small" id="espaco-usado"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="tentar-de-novo">Tentar de novo as falhas</button>
+          </div>
+        </div>
+      </div>
+
+      <div data-painel="servidor" hidden>
+        <div class="tray-section">
+          <div class="row row-between">
+            <div class="stack stack-tight">
+              <strong id="servidor-conta"></strong>
+              <span class="text-muted small" id="servidor-conta-sub"></span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="servidor-entrar" hidden>Entrar com e-mail e senha</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="servidor-sair">Sair</button>
+          </div>
+          <span class="status-line" id="servidor-conexao" hidden></span>
+        </div>
+        <div class="tray-section">
+          <div class="field">
+            <label for="servidor-endereco">Endereço do servidor</label>
+            <input class="input mono" id="servidor-endereco" />
+          </div>
+          <details class="disclosure">
+            <summary>Avançado<span class="text-muted">Para servidores com API separada ou certificado próprio</span></summary>
+            <div class="stack">
+              <div class="field">
+                <label for="servidor-api">Endereço da API</label>
+                <input class="input mono" id="servidor-api" placeholder="O mesmo do servidor" />
+              </div>
+              <div class="field">
+                <span class="field-label">Autoridade certificadora extra</span>
+                <div class="code-block">
+                  <span id="servidor-ca"></span>
+                  <button type="button" class="btn btn-ghost btn-sm" id="servidor-ca-limpar" hidden>Remover</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="servidor-ca-escolher">Escolher…</button>
+                </div>
+                <span class="text-muted tiny">Arquivo PEM. Só é preciso quando o servidor usa um certificado próprio.</span>
+              </div>
+            </div>
           </details>
-
-          <label class="marcar">
-            <input id="deteccao" type="checkbox" />
-            Detectar reuniões automaticamente
-          </label>
-          <table class="politicas" id="politicas" aria-label="O que fazer quando uma reunião começa">
-            <thead><tr><th scope="col">App</th><th scope="col">Quando a reunião começa</th></tr></thead>
-            <tbody></tbody>
-          </table>
-
-          <label for="retencao">Arquivo local depois de sincronizado</label>
-          <select id="retencao">
-            <option value="0">Apagar assim que o servidor confirmar</option>
-            <option value="1">Manter por 1 dia</option>
-            <option value="7">Manter por 7 dias</option>
-            <option value="30">Manter por 30 dias</option>
-            <option value="90">Manter por 90 dias</option>
-            <option value="sempre">Manter sempre</option>
-          </select>
-
-          <div class="linha acoes">
-            <button type="submit" class="primario">Salvar</button>
-            <span class="resumo" id="config-status" role="status"></span>
+          <div class="row">
+            <button type="button" class="btn btn-primary" id="servidor-salvar">Salvar</button>
+            <button type="button" class="btn btn-secondary" id="servidor-testar">Testar conexão</button>
           </div>
-        </form>
-      </section>
-    </main>
+        </div>
+      </div>
+    </section>
   </body>
 </html>

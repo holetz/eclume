@@ -8,16 +8,26 @@
 //! Esquema v2: `upload_id` e `sha256` guardam o upload em curso para a retomada,
 //! `next_attempt_at` agenda a próxima tentativa depois de uma falha, `synced_at` marca a
 //! confirmação do servidor, `purged_at` a remoção do arquivo local pela retenção e
-//! `meeting_app` o app da reunião que a detecção viu (`teams`, `meet`, `zoom`, `other`). Uma fila v1
-//! ganha as colunas na abertura, sem perder linhas.
+//! `meeting_app` o app da reunião que a detecção viu (`teams`, `meet`, `zoom`, `other`).
+//!
+//! Esquema v3: `kind` separa reunião de nota por voz, `recorded_at_source` diz de onde veio a
+//! data de início (captura, metadados do arquivo importado ou a pessoa), `source` separa a
+//! gravação do app da importação de arquivo, e `original_name`/`content_type` guardam o nome e o
+//! tipo do arquivo importado. A tabela `markers` guarda os marcadores de cada gravação até o
+//! upload. Uma fila v1 ou v2 ganha as colunas e a tabela na abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
+use serde::Serialize;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
+
+/// Tamanho máximo da nota de um marcador, em caracteres (o limite do contrato).
+pub const MAX_MARKER_NOTE: usize = 500;
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS recordings (
@@ -37,20 +47,154 @@ CREATE TABLE IF NOT EXISTS recordings (
     next_attempt_at INTEGER,
     synced_at       INTEGER,
     purged_at       INTEGER,
-    meeting_app     TEXT
+    meeting_app     TEXT,
+    kind               TEXT NOT NULL DEFAULT 'meeting',
+    recorded_at_source TEXT NOT NULL DEFAULT 'capture',
+    source             TEXT NOT NULL DEFAULT 'desktop',
+    original_name      TEXT,
+    content_type       TEXT
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
+CREATE TABLE IF NOT EXISTS markers (
+    client_id    TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    at_ms        INTEGER NOT NULL,
+    note         TEXT,
+    created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS markers_recording ON markers (recording_id, at_ms);
 ";
 
-/// Colunas que a v2 acrescentou, com o tipo, para migrar uma fila v1.
-const V2_COLUMNS: [(&str, &str); 6] = [
+/// Colunas que a v2 e a v3 acrescentaram, com o tipo, para migrar uma fila anterior.
+const ADDED_COLUMNS: [(&str, &str); 11] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
     ("next_attempt_at", "INTEGER"),
     ("synced_at", "INTEGER"),
     ("purged_at", "INTEGER"),
     ("meeting_app", "TEXT"),
+    ("kind", "TEXT NOT NULL DEFAULT 'meeting'"),
+    ("recorded_at_source", "TEXT NOT NULL DEFAULT 'capture'"),
+    ("source", "TEXT NOT NULL DEFAULT 'desktop'"),
+    ("original_name", "TEXT"),
+    ("content_type", "TEXT"),
 ];
+
+/// Um enum guardado como texto na fila, lido, escrito e serializado no vocabulário do contrato.
+macro_rules! text_enum {
+    ($(#[$meta:meta])* $name:ident { $($(#[$vmeta:meta])* $variant:ident = $text:literal),+ $(,)? }) => {
+        $(#[$meta])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+        pub enum $name {
+            $($(#[$vmeta])* #[serde(rename = $text)] $variant),+
+        }
+
+        impl $name {
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $text),+
+                }
+            }
+
+            pub fn parse(value: &str) -> Option<Self> {
+                match value {
+                    $($text => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+
+        impl FromSql for $name {
+            fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+                let text = value.as_str()?;
+                Self::parse(text).ok_or_else(|| {
+                    FromSqlError::Other(
+                        format!("{} desconhecido na fila: {text}", stringify!($name)).into(),
+                    )
+                })
+            }
+        }
+
+        impl ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+                Ok(self.as_str().into())
+            }
+        }
+    };
+}
+
+text_enum! {
+    /// A natureza da gravação (`kind` do contrato).
+    Kind {
+        /// Reunião ou gravação manual: microfone e áudio do sistema.
+        Meeting = "meeting",
+        /// Nota por voz: só o microfone, parada por silêncio.
+        Note = "note",
+    }
+}
+
+text_enum! {
+    /// De onde veio a data de início (`recorded_at_source` do contrato).
+    RecordedAtSource {
+        /// O relógio do computador na captura.
+        Capture = "capture",
+        /// Lida dos metadados do arquivo importado e confirmada.
+        FileMetadata = "file_metadata",
+        /// Digitada pela pessoa na importação.
+        User = "user",
+    }
+}
+
+text_enum! {
+    /// Como o áudio chegou (`source` do contrato).
+    Source {
+        /// Gravado pelo app.
+        Desktop = "desktop",
+        /// Arquivo importado.
+        Upload = "upload",
+    }
+}
+
+/// Um arquivo importado, pronto para entrar na fila.
+#[derive(Clone, Debug)]
+pub struct NewImport<'a> {
+    pub id: &'a str,
+    /// O arquivo em `gravacoes/` (convertido para Opus ou a cópia do original).
+    pub path: &'a Path,
+    /// Início da gravação, em ms Unix.
+    pub recorded_at: i64,
+    pub recorded_at_source: RecordedAtSource,
+    /// Nome do arquivo escolhido, sem extensão.
+    pub original_name: &'a str,
+    /// Tipo do arquivo em `path`; `None` para Ogg/Opus.
+    pub content_type: Option<&'a str>,
+    pub duration_ms: i64,
+    pub bytes: i64,
+}
+
+/// Um marcador de uma gravação: um instante no áudio, com nota opcional.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Marker {
+    /// UUID v4, a chave de idempotência do upload.
+    pub client_id: String,
+    pub recording_id: String,
+    /// Posição no áudio, em ms.
+    pub at_ms: i64,
+    pub note: Option<String>,
+    pub created_at: i64,
+}
+
+impl Marker {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            client_id: row.get("client_id")?,
+            recording_id: row.get("recording_id")?,
+            at_ms: row.get("at_ms")?,
+            note: row.get("note")?,
+            created_at: row.get("created_at")?,
+        })
+    }
+}
 
 /// Espera antes da próxima tentativa, depois de `attempts` tentativas: 30 s dobrando a cada
 /// falha, até 1 h.
@@ -124,6 +268,13 @@ pub struct QueuedRecording {
     pub purged_at: Option<i64>,
     /// App da reunião detectada, no vocabulário do contrato (`capture.meeting_app`).
     pub meeting_app: Option<String>,
+    pub kind: Kind,
+    pub recorded_at_source: RecordedAtSource,
+    pub source: Source,
+    /// Nome do arquivo importado, sem extensão.
+    pub original_name: Option<String>,
+    /// Tipo do arquivo; `None` é Ogg/Opus.
+    pub content_type: Option<String>,
 }
 
 impl QueuedRecording {
@@ -149,6 +300,11 @@ impl QueuedRecording {
                 synced_at: row.get("synced_at")?,
                 purged_at: row.get("purged_at")?,
                 meeting_app: row.get("meeting_app")?,
+                kind: row.get("kind")?,
+                recorded_at_source: row.get("recorded_at_source")?,
+                source: row.get("source")?,
+                original_name: row.get("original_name")?,
+                content_type: row.get("content_type")?,
             },
             status,
         ))
@@ -366,6 +522,125 @@ impl Queue {
         Ok(())
     }
 
+    /// Muda a natureza da gravação (uma nota nasce como gravação e vira `note` logo depois).
+    pub fn set_kind(&self, id: &str, kind: Kind) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET kind = ?2 WHERE id = ?1",
+            params![id, kind],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está na fila");
+        }
+        Ok(())
+    }
+
+    /// Registra um arquivo importado, já pronto: nasce `pending`, com `source = upload`.
+    pub fn begin_import(&self, import: &NewImport<'_>) -> Result<()> {
+        self.conn
+            .execute(
+                "INSERT INTO recordings (id, path, started_at, ended_at, duration_ms, bytes, status,
+                     recorded_at_source, source, original_name, content_type)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, 'upload', ?8, ?9)",
+                params![
+                    import.id,
+                    import.path.to_string_lossy(),
+                    import.recorded_at,
+                    import.recorded_at.saturating_add(import.duration_ms),
+                    import.duration_ms,
+                    import.bytes,
+                    import.recorded_at_source,
+                    import.original_name,
+                    import.content_type,
+                ],
+            )
+            .context("falha ao registrar o arquivo importado")?;
+        Ok(())
+    }
+
+    /// Tira da fila uma gravação que ainda não subiu (a nota sem voz), com os marcadores dela.
+    /// Devolve a linha removida, para o chamador apagar o arquivo.
+    pub fn discard(&mut self, id: &str) -> Result<QueuedRecording> {
+        let recording = self
+            .get(id)?
+            .with_context(|| format!("gravação {id} não está na fila"))?;
+        if matches!(recording.status, Status::Syncing | Status::Synced) {
+            bail!("gravação {id} já foi para o servidor");
+        }
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM markers WHERE recording_id = ?1", params![id])?;
+        tx.execute("DELETE FROM recordings WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        Ok(recording)
+    }
+
+    /// Acrescenta um marcador em `at_ms` a uma gravação que ainda não subiu.
+    pub fn add_marker(&self, recording_id: &str, at_ms: i64, note: Option<&str>) -> Result<Marker> {
+        self.ensure_editable(recording_id)?;
+        let marker = Marker {
+            client_id: uuid::Uuid::new_v4().to_string(),
+            recording_id: recording_id.to_string(),
+            at_ms: at_ms.max(0),
+            note: checked_note(note)?,
+            created_at: now_ms(),
+        };
+        self.conn.execute(
+            "INSERT INTO markers (client_id, recording_id, at_ms, note, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                marker.client_id,
+                marker.recording_id,
+                marker.at_ms,
+                marker.note,
+                marker.created_at
+            ],
+        )?;
+        Ok(marker)
+    }
+
+    /// Troca a nota de um marcador (vazia apaga) enquanto a gravação não subiu.
+    pub fn set_marker_note(&self, client_id: &str, note: Option<&str>) -> Result<Marker> {
+        let marker = self
+            .conn
+            .query_row(
+                "SELECT * FROM markers WHERE client_id = ?1",
+                params![client_id],
+                Marker::from_row,
+            )
+            .optional()?
+            .with_context(|| format!("marcador {client_id} não existe"))?;
+        self.ensure_editable(&marker.recording_id)?;
+        let note = checked_note(note)?;
+        self.conn.execute(
+            "UPDATE markers SET note = ?2 WHERE client_id = ?1",
+            params![client_id, note],
+        )?;
+        Ok(Marker { note, ..marker })
+    }
+
+    /// Os marcadores de uma gravação, na ordem do áudio.
+    pub fn markers(&self, recording_id: &str) -> Result<Vec<Marker>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM markers WHERE recording_id = ?1 ORDER BY at_ms, created_at")?;
+        let rows = stmt.query_map(params![recording_id], Marker::from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Marcadores só mudam antes do upload: depois, a edição é da web.
+    fn ensure_editable(&self, recording_id: &str) -> Result<()> {
+        match self.get(recording_id)? {
+            None => bail!("gravação {recording_id} não está na fila"),
+            Some(rec) if matches!(rec.status, Status::Syncing | Status::Synced) => {
+                bail!("a gravação já foi para o servidor: edite os marcadores na web")
+            }
+            // O upload retomado leva os marcadores de quando foi criado.
+            Some(rec) if rec.upload_id.is_some() => {
+                bail!("o envio desta gravação já começou: edite os marcadores na web")
+            }
+            Some(_) => Ok(()),
+        }
+    }
+
     /// Gravações confirmadas até `synced_before` (ms Unix) cujo arquivo local ainda existe.
     pub fn purge_candidates(&self, synced_before: i64) -> Result<Vec<QueuedRecording>> {
         self.query(
@@ -453,6 +728,15 @@ impl Queue {
     }
 }
 
+/// A nota aparada; vazia vira `None`, e acima de [`MAX_MARKER_NOTE`] caracteres é erro.
+fn checked_note(note: Option<&str>) -> Result<Option<String>> {
+    let note = note.map(str::trim).filter(|n| !n.is_empty());
+    if note.is_some_and(|n| n.chars().count() > MAX_MARKER_NOTE) {
+        bail!("a nota do marcador passa de {MAX_MARKER_NOTE} caracteres");
+    }
+    Ok(note.map(str::to_string))
+}
+
 fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     if changed == 0 {
         bail!("gravação {id} não está em sync");
@@ -460,14 +744,14 @@ fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     Ok(())
 }
 
-/// Acrescenta as colunas da v2 a uma fila v1 (o `CREATE TABLE IF NOT EXISTS` não mexe numa
-/// tabela que já existe).
+/// Acrescenta as colunas da v2 e da v3 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
+/// mexe numa tabela que já existe; a tabela `markers` nasce no `SCHEMA`).
 fn migrate(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
     let existing = stmt
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (column, kind) in V2_COLUMNS {
+    for (column, kind) in ADDED_COLUMNS {
         if !existing.iter().any(|name| name == column) {
             conn.execute_batch(&format!(
                 "ALTER TABLE recordings ADD COLUMN {column} {kind}"
@@ -667,6 +951,156 @@ mod tests {
         assert!(queue.purge_candidates(i64::MAX).unwrap().is_empty());
         assert!(queue.mark_purged("ok", 43).is_err());
         assert!(queue.mark_purged("pendente", 43).is_err());
+    }
+
+    #[test]
+    fn queue_migra_fila_v2_real_com_os_padroes_da_v3() {
+        let dir = std::env::temp_dir().join(format!("eclume-queue-v2-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("queue.sqlite");
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fila-v2.sqlite"),
+            &db,
+        )
+        .unwrap();
+
+        let queue = Queue::open(&db).unwrap();
+        let version: i32 = queue
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let rows = queue.list(10).unwrap();
+        assert_eq!(rows.len(), 3);
+        for rec in &rows {
+            assert_eq!(rec.kind, Kind::Meeting);
+            assert_eq!(rec.recorded_at_source, RecordedAtSource::Capture);
+            assert_eq!(rec.source, Source::Desktop);
+            assert_eq!(rec.original_name, None);
+            assert_eq!(rec.content_type, None);
+        }
+        let synced = queue.get("1790000000000-a1b2").unwrap().unwrap();
+        assert_eq!(synced.status, Status::Synced);
+        assert_eq!(synced.meeting_app.as_deref(), Some("teams"));
+        let failed = queue.get("1790100000000-c3d4").unwrap().unwrap();
+        assert_eq!(failed.upload_id.as_deref(), Some("up-9"));
+        assert!(
+            queue
+                .get("1790200000000-e5f6")
+                .unwrap()
+                .unwrap()
+                .interrupted
+        );
+
+        let marker = queue
+            .add_marker("1790200000000-e5f6", 1_500, Some("decisão"))
+            .unwrap();
+        drop(queue);
+        let queue = Queue::open(&db).unwrap();
+        assert_eq!(queue.markers("1790200000000-e5f6").unwrap(), [marker]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn queue_nota_importacao_e_descarte() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        queue
+            .begin("nota", Path::new("/tmp/nota.ogg.part"), 5)
+            .unwrap();
+        queue.set_kind("nota", Kind::Note).unwrap();
+        assert!(queue.set_kind("nao-existe", Kind::Note).is_err());
+        queue.add_marker("nota", 10, None).unwrap();
+        let discarded = queue.discard("nota").unwrap();
+        assert_eq!(discarded.kind, Kind::Note);
+        assert!(queue.get("nota").unwrap().is_none());
+        assert!(queue.markers("nota").unwrap().is_empty());
+
+        let path = PathBuf::from("/tmp/imp.ogg");
+        queue
+            .begin_import(&NewImport {
+                id: "imp",
+                path: &path,
+                recorded_at: 1_000,
+                recorded_at_source: RecordedAtSource::FileMetadata,
+                original_name: "kickoff-guion",
+                content_type: None,
+                duration_ms: 2_832_000,
+                bytes: 9_000,
+            })
+            .unwrap();
+        let imported = queue.get("imp").unwrap().unwrap();
+        assert_eq!(imported.status, Status::Pending);
+        assert_eq!(imported.source, Source::Upload);
+        assert_eq!(imported.kind, Kind::Meeting);
+        assert_eq!(imported.recorded_at_source, RecordedAtSource::FileMetadata);
+        assert_eq!(imported.original_name.as_deref(), Some("kickoff-guion"));
+        assert_eq!(imported.ended_at, Some(2_833_000));
+        assert_eq!(imported.path, path);
+
+        let json = serde_json::to_value(&imported).unwrap();
+        assert_eq!(json["kind"], "meeting");
+        assert_eq!(json["recorded_at_source"], "file_metadata");
+        assert_eq!(json["source"], "upload");
+
+        queue.claim_next().unwrap().unwrap();
+        assert!(queue.discard("imp").is_err(), "o que sobe não é descartado");
+    }
+
+    #[test]
+    fn queue_marcadores_ordenados_com_nota_limitada_ate_o_upload() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        queue.begin("g", Path::new("/tmp/g.ogg.part"), 1).unwrap();
+        let tarde = queue.add_marker("g", 9_000, Some("  ")).unwrap();
+        let cedo = queue.add_marker("g", 2_000, Some(" ação ")).unwrap();
+        assert_eq!(tarde.note, None);
+        assert_eq!(cedo.note.as_deref(), Some("ação"));
+        assert_ne!(tarde.client_id, cedo.client_id);
+        assert_eq!(
+            uuid::Uuid::parse_str(&cedo.client_id)
+                .unwrap()
+                .get_version_num(),
+            4
+        );
+        assert_eq!(
+            queue
+                .markers("g")
+                .unwrap()
+                .iter()
+                .map(|m| m.at_ms)
+                .collect::<Vec<_>>(),
+            [2_000, 9_000]
+        );
+
+        let longa = "é".repeat(MAX_MARKER_NOTE + 1);
+        assert!(queue.add_marker("g", 1, Some(&longa)).is_err());
+        assert!(queue
+            .set_marker_note(&tarde.client_id, Some(&longa))
+            .is_err());
+        let limite = "é".repeat(MAX_MARKER_NOTE);
+        let editado = queue
+            .set_marker_note(&tarde.client_id, Some(&limite))
+            .unwrap();
+        assert_eq!(editado.note.as_deref(), Some(limite.as_str()));
+        assert!(queue.set_marker_note("nao-existe", None).is_err());
+        assert!(queue.add_marker("nao-existe", 1, None).is_err());
+
+        queue
+            .finish("g", Path::new("/tmp/g.ogg"), 2, 10_000, 3)
+            .unwrap();
+        queue.add_marker("g", 9_500, None).unwrap();
+        queue.claim_next().unwrap().unwrap();
+        assert!(queue.add_marker("g", 9_900, None).is_err());
+        assert!(queue.set_marker_note(&cedo.client_id, None).is_err());
+        assert_eq!(queue.markers("g").unwrap().len(), 3);
+
+        // Falhou com o upload já criado: a retomada levaria os marcadores antigos.
+        queue
+            .set_upload_state("g", Some("up-1"), Some("ab12"))
+            .unwrap();
+        queue.mark_failed("g", "rede").unwrap();
+        assert!(queue.add_marker("g", 9_900, None).is_err());
+        queue.set_upload_state("g", None, None).unwrap();
+        queue.add_marker("g", 9_900, None).unwrap();
     }
 
     #[test]

@@ -1,9 +1,11 @@
 # eclume desktop
 
 App Tauri 2 do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus mono 16 kHz, percebe
-sozinho quando uma reunião começa (Teams, Zoom, Meet, com a política de cada app), guarda a fila
-local de gravações, sobe-as ao servidor por PAT com upload resumível e fica na bandeja do
-sistema.
+sozinho quando uma reunião começa (Teams, Zoom, Meet, com a política de cada app), grava notas por
+voz que param no silêncio, marca instantes durante a gravação, importa arquivos de áudio e vídeo,
+guarda a fila local e a sobe ao servidor com upload resumível, e fica na bandeja do sistema. Na
+primeira execução, a pessoa entra com e-mail e senha no servidor embutido no instalador (ou achado
+na rede por mDNS), com a CA fixada pela impressão digital.
 
 Os instaladores (Windows, Linux e macOS) saem do workflow `desktop-release` e o app se atualiza
 sozinho pelo updater do Tauri; o processo está em
@@ -13,20 +15,26 @@ passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).
 | Caminho | O que é |
 |---|---|
 | `src-tauri/` | o app: bandeja, janela, estado, config e comandos |
-| `ui/` | a janela de status e fila (HTML, CSS e JS, sem bundler) |
+| `ui/` | a janela no Design System do eclume (HTML e módulos ES, sem bundler) |
+| `ui-tests/` | testes Playwright da janela com o Tauri simulado, inclusive a verificação visual |
 | `crates/audio-capture/` | captura do mic (`cpal`) e do áudio do sistema (PipeWire/Pulse, WASAPI, Core Audio), adaptada do Anarlog |
-| `crates/recorder/` | mixagem para 16 kHz, encoder Ogg/Opus, fila SQLite, sessão de gravação e traits de sync/detecção |
+| `crates/recorder/` | mixagem para 16 kHz, encoder Ogg/Opus, detector de silêncio da nota, fila SQLite (v3, com marcadores), sessão de gravação e traits de sync/detecção |
 | `crates/resampler/` | reamostrador vendorizado do Anarlog |
 | `crates/detect/` | detecção de reuniões: sinais de mic por SO (adaptados do Anarlog), classificação, debounce e gravação automática |
-| `crates/sync/` | sync: upload resumível do contrato v1 por PAT, PAT no chaveiro do SO e CA extra |
+| `crates/sync/` | sync: upload resumível do contrato v1, login e pareamento de dispositivo, CA fixada, descoberta mDNS e a credencial no chaveiro do SO |
+| `crates/import/` | importação: duração e data do arquivo (`mvhd`, tags, modificação) e conversão para Opus pelo `symphonia` |
 | `scripts/manifestos_release.py` | monta `latest.json`, `instaladores.json` e `SHA256SUMS` de um release |
+| `scripts/sincronizar_ds.sh` | copia o `eclume.css` e as fontes do Design System para `ui/` |
+| `scripts/cdp.mjs` | `eval` e captura na janela real pelo CDP do WebView2 |
+| `scripts/prova-windows.ps1`, `scripts/prova_nota.py` | a prova da nota por voz numa estação Windows |
 
-O formato da gravação, a fila e os pontos de extensão estão em
+O formato da gravação, a nota por voz, os marcadores e a fila estão em
 [docs/standards/code/desktop-gravacao.md](../docs/standards/code/desktop-gravacao.md); a detecção,
-as políticas, o sync, o PAT e a retenção, em
-[docs/standards/code/desktop-deteccao-e-sync.md](../docs/standards/code/desktop-deteccao-e-sync.md); o layout,
-os comandos e a regra de vendorização, em
-[docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md).
+as políticas, a conta, o sync e a retenção, em
+[docs/standards/code/desktop-deteccao-e-sync.md](../docs/standards/code/desktop-deteccao-e-sync.md); a
+janela, em [desktop-interface.md](../docs/standards/code/desktop-interface.md); a importação, em
+[desktop-importacao.md](../docs/standards/code/desktop-importacao.md); o layout, os comandos e a
+regra de vendorização, em [docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md).
 
 No Linux, o build exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
 `libxdo-dev`, `libssl-dev`, `build-essential`, `libasound2-dev`, `libpipewire-0.3-dev`,
@@ -42,12 +50,17 @@ cargo run --manifest-path desktop/Cargo.toml -p eclume-desktop --example gravar 
 cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example sinais -- 10
 # sync contra o mock do contrato (deploy/docker-compose.mock.yml em 127.0.0.1:4010)
 ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test --manifest-path desktop/Cargo.toml -p eclume-sync --test mock
+# a janela num Chromium, com o Tauri simulado (capturas em ui-tests/capturas/)
+npm --prefix desktop/ui-tests ci && npm --prefix desktop/ui-tests test
+# um build com o servidor embutido, como o desktop-release faz
+ECLUME_SERVER_URL=https://192.168.15.199:8443 ECLUME_SERVER_CA_SHA256=<sha256> cargo build --manifest-path desktop/Cargo.toml -p eclume-desktop
 ```
 
-O servidor (padrão `https://192.168.15.199:8443`), o PAT, a CA extra, as políticas por app e a
-retenção se configuram pela janela ("Gravações e configurações" na bandeja) e ficam em
-`config.json` no diretório de config do app — o PAT, no chaveiro do SO. Sem tocar no arquivo,
-`ECLUME_WEB_URL`, `ECLUME_API_URL` e `ECLUME_PAT` sobrepõem servidor, API e PAT.
+O servidor e a conta (na primeira execução), a CA extra, as políticas por app, o microfone, os
+atalhos, a parada por silêncio e a retenção se configuram pela janela ("Abrir o eclume" na
+bandeja) e ficam em `config.json` no diretório de config do app — a credencial, no chaveiro do
+SO. Sem tocar no arquivo, `ECLUME_WEB_URL`, `ECLUME_API_URL` e `ECLUME_PAT` sobrepõem servidor,
+API e credencial (dev e testes).
 
 Os ícones do bundle são gerados de `src-tauri/icons/icon.svg` (os da bandeja, `tray-*.png`, não):
 

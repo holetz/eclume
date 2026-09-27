@@ -7,7 +7,10 @@ use anyhow::{bail, Context, Result};
 use eclume_detect::DetectionConfig;
 use serde::{Deserialize, Serialize};
 
-/// Endereço padrão do eclume web: o host GPU, pela porta do eclume.
+use crate::shortcuts::Shortcuts;
+
+/// Endereço do eclume web quando o build não embutiu servidor nenhum (build local, e a
+/// `config.json` de uma versão anterior sem `web_url`).
 pub const DEFAULT_WEB_URL: &str = "https://192.168.15.199:8443";
 /// Variável de ambiente que sobrepõe `web_url` sem mexer no arquivo.
 pub const WEB_URL_ENV: &str = "ECLUME_WEB_URL";
@@ -17,12 +20,71 @@ pub const API_URL_ENV: &str = "ECLUME_API_URL";
 pub const DEFAULT_RETENTION_DAYS: u32 = 7;
 /// Teto da retenção configurável (10 anos).
 pub const MAX_RETENTION_DAYS: u32 = 3650;
+/// As paradas por silêncio que a nota oferece, em segundos (além de "Nunca").
+pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
+/// A parada por silêncio padrão da nota, em segundos.
+pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
+
+/// O servidor embutido no instalador pelo release por servidor (`desktop-release.yml` passa as
+/// variáveis do repositório ao `tauri build`): a primeira execução o mostra como "Veio com este
+/// instalador" e fixa a CA pela impressão digital.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct EmbeddedServer {
+    pub url: String,
+    pub ca_sha256: Option<String>,
+}
+
+/// O servidor embutido neste build; `None` num build sem `ECLUME_SERVER_URL`.
+pub fn embedded_server() -> Option<EmbeddedServer> {
+    embedded_from(
+        option_env!("ECLUME_SERVER_URL"),
+        option_env!("ECLUME_SERVER_CA_SHA256"),
+    )
+}
+
+/// Lê as variáveis do build: vazias (variável do repositório ausente) ou inválidas não valem.
+fn embedded_from(url: Option<&str>, ca_sha256: Option<&str>) -> Option<EmbeddedServer> {
+    let url = url
+        .map(str::trim)
+        .filter(|url| validate_web_url(url).is_ok())?;
+    Some(EmbeddedServer {
+        url: url.trim_end_matches('/').to_string(),
+        ca_sha256: ca_sha256.and_then(|ca| eclume_sync::pin::normalize_fingerprint(ca).ok()),
+    })
+}
+
+/// A conta em que este computador entrou com e-mail e senha ou código de pareamento.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Account {
+    pub email: String,
+    /// O token de dispositivo, que a web desvincula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+}
+
+/// Como o app fala com o servidor, o que decide a primeira execução.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Connection {
+    /// Nenhuma credencial guardada: a janela abre na primeira execução.
+    FirstRun,
+    /// Um PAT colado numa versão anterior (ou `ECLUME_PAT`): continua sincronizando, e a aba
+    /// Servidor oferece entrar com e-mail e senha.
+    PersonalToken,
+    /// A credencial de dispositivo de uma conta.
+    Account,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Endereço do servidor do eclume: o eclume web (item da bandeja) e, sem `api_url`, a API.
     #[serde(default = "default_web_url")]
     pub web_url: String,
+    /// A conta em que este computador entrou; `null` antes de entrar e com um PAT antigo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Account>,
     /// Endereço da API quando difere do eclume web.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
@@ -36,29 +98,104 @@ pub struct Config {
     /// `null` guarda para sempre.
     #[serde(default = "default_retention_days")]
     pub retention_days: Option<u32>,
+    /// Silêncio que encerra uma nota por voz, em segundos; `null` é "Nunca".
+    #[serde(default = "default_note_silence")]
+    pub note_silence_s: Option<u32>,
+    /// Atalhos globais de gravar, nova nota e marcador.
+    #[serde(default)]
+    pub shortcuts: Shortcuts,
+    /// O microfone pelo nome; `null` é o padrão do sistema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mic: Option<String>,
+    /// Gravar também o áudio do sistema nas reuniões.
+    #[serde(default = "default_system_audio")]
+    pub system_audio: bool,
+    /// A versão que abriu por último; `null` antes da primeira abertura.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_version: Option<String>,
+    /// A versão que o updater instalou, com as notas, guardada antes de instalar; some quando a
+    /// pessoa fecha o aviso "Atualizado para X".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_update: Option<PendingUpdate>,
 }
 
+/// Uma atualização instalada pelo updater: a versão e as notas do release (`body` do
+/// `latest.json`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingUpdate {
+    pub version: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+fn default_system_audio() -> bool {
+    true
+}
+
+/// O servidor embutido, ou o padrão de um build sem servidor.
 fn default_web_url() -> String {
-    DEFAULT_WEB_URL.to_string()
+    embedded_server().map_or_else(|| DEFAULT_WEB_URL.to_string(), |server| server.url)
 }
 
 fn default_retention_days() -> Option<u32> {
     Some(DEFAULT_RETENTION_DAYS)
 }
 
+fn default_note_silence() -> Option<u32> {
+    Some(DEFAULT_NOTE_SILENCE_S)
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             web_url: default_web_url(),
+            account: None,
             api_url: None,
             ca_path: None,
             detection: DetectionConfig::default(),
             retention_days: default_retention_days(),
+            note_silence_s: default_note_silence(),
+            shortcuts: Shortcuts::default(),
+            mic: None,
+            system_audio: true,
+            last_version: None,
+            pending_update: None,
         }
     }
 }
 
 impl Config {
+    /// A primeira execução aparece sem credencial guardada; um PAT sem `account` é de uma versão
+    /// anterior e segue valendo.
+    pub fn connection(&self, has_token: bool) -> Connection {
+        match (has_token, &self.account) {
+            (false, _) => Connection::FirstRun,
+            (true, None) => Connection::PersonalToken,
+            (true, Some(_)) => Connection::Account,
+        }
+    }
+
+    /// O aviso "Atualizado para X" da janela: a atualização guardada é a desta versão.
+    pub fn update_notice(&self, current: &str) -> Option<&PendingUpdate> {
+        self.pending_update
+            .as_ref()
+            .filter(|update| update.version == current)
+    }
+
+    /// Registra a abertura de `current`. Devolve a atualização quando esta é a primeira abertura
+    /// depois de o updater instalá-la (para a notificação sair uma vez só); na primeira
+    /// instalação, sem `last_version`, não há aviso.
+    pub fn open_version(&mut self, current: &str) -> Option<PendingUpdate> {
+        let previous = self.last_version.replace(current.to_string());
+        let just_updated = previous.as_deref().is_some_and(|v| v != current);
+        if previous.is_none() {
+            self.pending_update = None;
+        }
+        just_updated
+            .then(|| self.update_notice(current).cloned())
+            .flatten()
+    }
+
     /// Lê o arquivo; ausente ou inválido cai no padrão (inválido fica registrado no log).
     pub fn load(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
@@ -110,7 +247,12 @@ impl Config {
         {
             bail!("retenção acima de {MAX_RETENTION_DAYS} dias");
         }
-        Ok(())
+        if let Some(seconds) = self.note_silence_s {
+            if !NOTE_SILENCE_CHOICES.contains(&seconds) {
+                bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
+            }
+        }
+        self.shortcuts.validate()
     }
 }
 
@@ -136,8 +278,66 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_padrao_aponta_para_o_host() {
-        assert_eq!(Config::default().web_url, "https://192.168.15.199:8443");
+    fn config_padrao_aponta_para_o_servidor_embutido_ou_o_host() {
+        let expected = embedded_server().map_or(DEFAULT_WEB_URL.to_string(), |s| s.url);
+        assert_eq!(Config::default().web_url, expected);
+        assert_eq!(DEFAULT_WEB_URL, "https://192.168.15.199:8443");
+    }
+
+    #[test]
+    fn servidor_embutido_no_build() {
+        // O verify roda também com ECLUME_SERVER_URL=https://eclume.teste:8443.
+        match option_env!("ECLUME_SERVER_URL").filter(|url| !url.trim().is_empty()) {
+            Some(url) => {
+                let server = embedded_server().expect("o build embutiu um servidor");
+                assert_eq!(server.url, url.trim().trim_end_matches('/'));
+                assert_eq!(Config::default().web_url, server.url);
+            }
+            None => assert_eq!(embedded_server(), None),
+        }
+    }
+
+    #[test]
+    fn variaveis_do_build_vazias_ou_invalidas_nao_embutem() {
+        let ca = "98E209F5457514B7B12EC349D22B3B0D93C03C3F10E52350EA5F9E0B3D97792F";
+        assert_eq!(
+            embedded_from(Some(" https://eclume.teste:8443/ "), Some(ca)),
+            Some(EmbeddedServer {
+                url: "https://eclume.teste:8443".into(),
+                ca_sha256: Some(ca.to_ascii_lowercase()),
+            })
+        );
+        assert_eq!(
+            embedded_from(Some("https://eclume.teste"), Some("")),
+            Some(EmbeddedServer {
+                url: "https://eclume.teste".into(),
+                ca_sha256: None,
+            })
+        );
+        assert_eq!(embedded_from(Some(""), Some(ca)), None);
+        assert_eq!(embedded_from(Some("eclume.teste"), None), None);
+        assert_eq!(embedded_from(None, None), None);
+    }
+
+    #[test]
+    fn primeira_execucao_so_sem_credencial() {
+        let mut config = Config::default();
+        assert_eq!(config.connection(false), Connection::FirstRun);
+        // Quem já usa um PAT (0.1.x) não vê a primeira execução.
+        assert_eq!(config.connection(true), Connection::PersonalToken);
+        config.account = Some(Account {
+            email: "ana@exemplo.com.br".into(),
+            token_id: Some("t-1".into()),
+            server_name: Some("eclume".into()),
+        });
+        assert_eq!(config.connection(true), Connection::Account);
+        // A credencial sumiu do chaveiro: entra de novo.
+        assert_eq!(config.connection(false), Connection::FirstRun);
+        let back: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(back.account, config.account);
+        let legacy: Config =
+            serde_json::from_str(r#"{"web_url": "https://192.168.15.199:8443"}"#).unwrap();
+        assert_eq!(legacy.account, None);
     }
 
     #[test]
@@ -181,9 +381,9 @@ mod tests {
         );
         assert_eq!(
             config.effective_web_url(Some("ftp://x".into())),
-            DEFAULT_WEB_URL
+            default_web_url()
         );
-        assert_eq!(config.effective_web_url(None), DEFAULT_WEB_URL);
+        assert_eq!(config.effective_web_url(None), default_web_url());
     }
 
     #[test]
@@ -194,14 +394,20 @@ mod tests {
         assert_eq!(config.api_url, None);
         assert!(config.detection.enabled);
         assert_eq!(config.retention_days, Some(DEFAULT_RETENTION_DAYS));
-        let keep: Config = serde_json::from_str(r#"{"retention_days": null}"#).unwrap();
+        assert_eq!(config.note_silence_s, Some(DEFAULT_NOTE_SILENCE_S));
+        assert_eq!(config.shortcuts, Shortcuts::default());
+        assert_eq!(config.mic, None);
+        assert!(config.system_audio);
+        let keep: Config =
+            serde_json::from_str(r#"{"retention_days": null, "note_silence_s": null}"#).unwrap();
         assert_eq!(keep.retention_days, None);
+        assert_eq!(keep.note_silence_s, None);
     }
 
     #[test]
     fn config_endereco_da_api() {
         let mut config = Config::default();
-        assert_eq!(config.effective_api_url(None, None), DEFAULT_WEB_URL);
+        assert_eq!(config.effective_api_url(None, None), default_web_url());
         assert_eq!(
             config.effective_api_url(None, Some("http://web:5173".into())),
             "http://web:5173"
@@ -224,9 +430,45 @@ mod tests {
         config.retention_days = Some(MAX_RETENTION_DAYS + 1);
         assert!(config.validate().is_err());
         config.retention_days = Some(0);
+        config.note_silence_s = Some(3);
+        assert!(config.validate().is_err());
+        config.note_silence_s = None;
+        config.validate().unwrap();
+        config.shortcuts.marker = config.shortcuts.note.clone();
+        assert!(config.validate().is_err());
+        config.shortcuts = Shortcuts::default();
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
         assert!(format!("{err:#}").contains("CA extra"), "{err:#}");
+    }
+
+    #[test]
+    fn aviso_de_atualizacao_uma_vez_e_ate_fechar() {
+        let pending = PendingUpdate {
+            version: "0.2.0".into(),
+            notes: Some("Nova nota".into()),
+        };
+        // Primeira instalação: nada a avisar.
+        let mut fresh = Config::default();
+        assert_eq!(fresh.open_version("0.2.0"), None);
+        assert_eq!(fresh.last_version.as_deref(), Some("0.2.0"));
+
+        let mut config = Config {
+            last_version: Some("0.1.2".into()),
+            pending_update: Some(pending.clone()),
+            ..Config::default()
+        };
+        assert_eq!(config.open_version("0.2.0"), Some(pending.clone()));
+        assert_eq!(config.update_notice("0.2.0"), Some(&pending));
+        // Reabrir não notifica de novo, mas o aviso da janela fica até ser fechado.
+        assert_eq!(config.open_version("0.2.0"), None);
+        assert_eq!(config.update_notice("0.2.0"), Some(&pending));
+        // Uma atualização guardada que não chegou a instalar não vira aviso.
+        assert_eq!(config.update_notice("0.1.2"), None);
+
+        let text = serde_json::to_string(&config).unwrap();
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.pending_update, Some(pending));
     }
 
     #[test]

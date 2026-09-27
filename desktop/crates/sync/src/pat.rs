@@ -1,4 +1,5 @@
-//! Onde o PAT fica: no chaveiro do SO (Secret Service no Linux, Credential Manager no Windows,
+//! Onde a credencial fica — a de dispositivo, emitida pelo login ou pelo pareamento, ou o PAT
+//! colado numa versão anterior; as duas são tokens `eclp_` e usam a mesma entrada: no chaveiro do SO (Secret Service no Linux, Credential Manager no Windows,
 //! Keychain no macOS), pelo crate `keyring`. Sem chaveiro disponível (sessão sem Secret Service,
 //! por exemplo), num arquivo `pat` no diretório de config com permissão 0600 — o mesmo nível de
 //! proteção de um `~/.netrc`, e a janela avisa. `ECLUME_PAT` sobrepõe os dois, para dev e testes.

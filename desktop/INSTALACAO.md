@@ -16,11 +16,23 @@ O `SHA256SUMS` da pasta da versão traz o hash de cada arquivo, para quem quiser
 download (`sha256sum -c SHA256SUMS` no Linux, `shasum -a 256 <arquivo>` no macOS,
 `Get-FileHash <arquivo>` no PowerShell).
 
-## Antes de instalar: o certificado do eclume
+## Depois de instalar: entrar
 
-O servidor eclume usa um certificado próprio (a CA interna do Caddy). O navegador e o app só
-confiam nele depois que a CA raiz do eclume é instalada no sistema. Sem ela, o app não sincroniza
-nem se atualiza. Peça o arquivo `eclume-root.crt` ao administrador e instale:
+Na primeira vez, o app abre a tela **Bem-vindo** e já mostra o servidor: "eclume em
+192.168.15.199 · Veio com este instalador". Entre com o **e-mail e a senha** da sua conta no
+eclume. Sem conta, "Crie uma na web" abre o cadastro.
+
+- O app confia no certificado do servidor sozinho: ele baixa a CA do eclume e confere a
+  impressão digital que veio no instalador. **Não é preciso instalar certificado no sistema.**
+- Em **Avançado**, dá para entrar com o **código de pareamento** de 6 caracteres que a web mostra
+  em Configurações · App desktop, ou digitar outro endereço. Um endereço digitado mostra a
+  impressão digital do certificado: confira com quem administra o servidor antes de "Confiar e
+  continuar".
+- "Sair" (na janela ou em Configurações · Servidor) desliga este computador da conta; as
+  gravações que ainda não subiram esperam o próximo login.
+
+O navegador continua precisando da CA raiz do eclume para abrir o eclume web sem aviso. Peça o
+arquivo `eclume-root.crt` ao administrador e instale:
 
 - **Windows:** clique duas vezes no arquivo → "Instalar certificado" → "Máquina local" →
   "Colocar todos os certificados no repositório a seguir" → "Autoridades de Certificação Raiz
@@ -29,6 +41,17 @@ nem se atualiza. Peça o arquivo `eclume-root.crt` ao administrador e instale:
 - **Linux (Debian/Ubuntu):** `sudo cp eclume-root.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates`.
 - **Firefox** usa repositório próprio: importe em Configurações → Privacidade e Segurança →
   Certificados → Ver certificados → Autoridades.
+
+## Atalhos
+
+| Ação | Windows e Linux | macOS |
+|---|---|---|
+| Iniciar ou parar a gravação | `Ctrl+Alt+R` | `⌘⇧R` |
+| Nova nota por voz (para sozinha depois de 4 s de silêncio) | `Ctrl+Alt+N` | `⌘⇧N` |
+| Adicionar marcador durante a gravação | `Ctrl+Alt+M` | `⌘⇧K` |
+
+Os atalhos valem com o app em segundo plano e mudam em Configurações · Áudio. Arquivos de áudio
+ou vídeo gravados fora do app entram por **Importar arquivo…** (ou arrastados para a janela).
 
 ## Windows
 

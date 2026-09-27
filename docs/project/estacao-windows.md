@@ -1,13 +1,13 @@
 ---
 type: project
 title: Estação de desenvolvimento e teste no Windows
-description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, CA e PAT no app, depuração pela janela via CDP do WebView2, log do app e build cruzado de binários Windows no host com cargo xwin.
+description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, instalar e entrar no app sem PAT, depuração e captura da janela pelo CDP do WebView2 (cdp.mjs), a prova da nota por voz, log do app e build cruzado de binários Windows no host com cargo xwin.
 resource: desktop/**, deploy/**
 tags: [windows, estacao, desktop, runbook, cross-build]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#28, holetz/eclume#34
+source: holetz/eclume#28, holetz/eclume#34, holetz/eclume#40
 maintainer: holetz
 ---
 
@@ -66,17 +66,23 @@ dependem do git, como a do cliente gerado (`npm --prefix web run gen:api` seguid
 jsdom) também rodam no host: na estação alguns `findBy` de 1 s estouram o tempo por lentidão do
 jsdom no Windows, sem ser regressão.
 
-## 3. App instalado: CA, PAT e log
+## 3. App instalado: entrar e log
 
-- **CA.** `curl -k -O https://192.168.15.199:8443/downloads/eclume-root.crt`, confira a impressão
-  digital e, num PowerShell **como administrador**, `certutil -addstore -f Root eclume-root.crt`.
-  O `curl.exe` do Windows exige `--ssl-no-revoke`, porque a CA interna não publica CRL. Navegadores
-  e o app não são afetados. Sem administrador, o app ainda sincroniza e se atualiza apontando a
-  **CA extra** (`ca_path`) para o `.crt` nas configurações.
-- **Instalar.** `eclume_<versão>_x64-setup.exe /S` instala em silêncio, por usuário, em
+- **Instalar.** Baixe o NSIS de `https://192.168.15.199:8443/downloads/` (o `instaladores.json`
+  diz qual) e rode `eclume_<versão>_x64-setup.exe /S`, que instala em silêncio, por usuário, em
   `%LOCALAPPDATA%\eclume`. Config, fila e gravações ficam em
-  `%APPDATA%\io.github.holetz.eclume`, e o PAT fica no Gerenciador de Credenciais (alvo
-  `pat.eclume-desktop`).
+  `%APPDATA%\io.github.holetz.eclume`. O `curl.exe` do Windows exige `-k` (ou a CA no
+  sistema) e `--ssl-no-revoke`, porque a CA interna não publica CRL.
+- **Entrar, sem PAT e sem CA no sistema (0.2.0+).** O instalador do `/downloads` traz o endereço
+  do servidor e a impressão digital da CA raiz embutidos: a primeira execução mostra "eclume em
+  192.168.15.199 · Veio com este instalador", baixa o `eclume-root.crt`, confere a impressão
+  digital e o guarda em `%APPDATA%\io.github.holetz.eclume\servidor-ca.pem`. Basta o e-mail e a
+  senha da conta (ou o código de pareamento da web, em "Avançado"). A credencial de dispositivo
+  fica no Gerenciador de Credenciais (alvo `pat.eclume-desktop`, o mesmo do PAT antigo).
+  ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#conta-e-credencial)).
+- **Versões 0.1.x** pediam a CA no sistema (`certutil -addstore -f Root eclume-root.crt`, como
+  administrador) ou a CA extra nas configurações, e um PAT colado. Quem atualiza de uma delas
+  continua com o PAT e pode trocar pela conta em Configurações · Servidor.
 - **Log.** `%LOCALAPPDATA%\io.github.holetz.eclume\logs\eclume.log`
   ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-e-bandeja)).
 
@@ -89,14 +95,38 @@ $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9229"
 Start-Process "$env:LOCALAPPDATA\eclume\eclume-desktop.exe"
 ```
 
-`http://127.0.0.1:9229/json` lista a janela, e um `Runtime.evaluate` com `awaitPromise` chama os
-mesmos comandos que ela chama: `window.__TAURI__.core.invoke('status')`, `'recordings'`,
-`'toggle_recording'`, `'save_settings'`, `'answer_meeting'` e `'sync_now'`. Para ter áudio do
+`http://127.0.0.1:9229/json` lista a janela. O `desktop/scripts/cdp.mjs` (Node 22, sem
+dependência) avalia na janela com `awaitPromise` e captura o que ela mostra:
+
+```bash
+node desktop/scripts/cdp.mjs eval "window.__TAURI__.core.invoke('status')"
+node desktop/scripts/cdp.mjs eval "document.querySelector('[data-vista]:not([hidden])').dataset.vista"
+node desktop/scripts/cdp.mjs screenshot janela.png
+```
+
+A expressão chama os mesmos comandos que a janela: `'status'`, `'recordings'`,
+`'toggle_recording'`, `'new_note'`, `'add_marker'`, `'save_settings'`, `'answer_meeting'`,
+`'sync_now'`, e na primeira execução `'discover_servers'`, `'prepare_server'` e `'sign_in'`.
+`CDP_PORT` troca a porta. Para ter áudio do
 sistema numa gravação de teste, toque um WAV com
 `(New-Object System.Media.SoundPlayer x.wav).PlaySync()`. A detecção ignora qualquer
 executável cujo **nome** contenha "eclume": rode o simulador de reunião com outro nome.
 
-## 5. Binários Windows cruzados no host
+## 5. Prova da nota por voz
+
+`powershell -NoProfile -File desktop/scripts/prova-windows.ps1` faz a prova de ponta a ponta nesta
+estação: baixa e instala o NSIS de `/downloads`, abre o app com a porta 9229, captura a primeira
+execução (com o servidor embutido), entra com a conta de teste (`ECLUME_PROVA_EMAIL` e
+`ECLUME_PROVA_SENHA`), grava uma nota pelo atalho `Ctrl+Alt+N` falando um texto pela voz do
+Windows nos alto-falantes, e confere pela API (`desktop/scripts/prova_nota.py`) que a nota chegou à
+biblioteca com `kind=note`, `eclume-desktop/<versão>` e `transcribed`. A nota só para sozinha
+com voz no microfone: com o microfone mudo, ela é descartada ("não ouvimos voz") e a prova fica
+pendente de uma pessoa falar. O atalho sintetizado (`keybd_event`) só chega ao app com a sessão
+**desbloqueada**: com a tela bloqueada, a entrada vai para a tela de logon e o atalho não dispara.
+A prova troca a credencial do app instalado pela da conta de teste; depois dela, "Sair" e entre
+de novo com a conta de uso.
+
+## 6. Binários Windows cruzados no host
 
 Para diagnosticar a captura (WASAPI) sem MSVC na estação, compile no host para
 `x86_64-pc-windows-msvc` com o `cargo xwin` e traga o `.exe`:
@@ -106,6 +136,11 @@ remote-run desktop 'cargo xwin build --release --target x86_64-pc-windows-msvc -
 scp gpu-host:build/desktop/target/x86_64-pc-windows-msvc/release/examples/gravar.exe .
 ./gravar.exe 12 ./saida    # grava 12 s de mic + sistema e imprime o .ogg
 ```
+
+Um `target/` semeado de outra pasta do host (`~/build/desktop`, por exemplo) guarda nos build
+scripts o caminho antigo: quando entra um plugin novo do Tauri, o build falha lendo
+`~/build/desktop/target/.../permissions`. Resolve com `cargo clean -p tauri` (e o mesmo com
+`--target x86_64-pc-windows-msvc`).
 
 O host tem a toolchain instalada no espaço do `holetz`, sem apt: o target `x86_64-pc-windows-msvc`
 (`rustup target add`), o `cargo-xwin` (`cargo install --locked cargo-xwin`), o `ninja` e o

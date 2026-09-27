@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eclume_recorder::{sync_pending, Queue, Status, SyncReport};
+use eclume_recorder::{sync_pending, Kind, NewImport, Queue, RecordedAtSource, Status, SyncReport};
 use eclume_sync::{
     Client, HttpRequest, HttpResponse, HttpUploader, RetryPolicy, Transport, UreqTransport,
 };
@@ -136,6 +136,69 @@ fn upload_deduplicado() {
     assert_eq!(recording.remote_id.as_deref(), Some(RECORDING_ID));
     // Deduplicado não abre upload: nada a retomar.
     assert_eq!(recording.upload_id, None);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// O Prism valida o corpo pelo contrato: um pedido fora dele volta 422 e a gravação falha.
+fn assert_synced(queue: &Arc<Mutex<Queue>>, id: &str, report: SyncReport) {
+    let queue = queue.lock().unwrap();
+    let recording = queue.get(id).unwrap().unwrap();
+    assert_eq!(
+        report,
+        SyncReport {
+            synced: 1,
+            failed: 0
+        },
+        "{:?}",
+        recording.last_error
+    );
+    assert_eq!(recording.remote_id.as_deref(), Some(RECORDING_ID));
+}
+
+#[test]
+fn nota_com_marcadores_passa_pelo_contrato() {
+    let Some(base) = mock_url() else { return };
+    let (queue, dir) = queue_with_recording("nota", 1024);
+    {
+        let queue = queue.lock().unwrap();
+        queue.set_kind("g", Kind::Note).unwrap();
+        queue.add_marker("g", 4_000, Some("decisão")).unwrap();
+        queue.add_marker("g", 9_500, None).unwrap();
+    }
+    let uploader =
+        HttpUploader::from_client(client(&base, false, false), Arc::clone(&queue), VERSION);
+
+    let report = sync_pending(&queue, &uploader).unwrap();
+    assert_synced(&queue, "g", report);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn importacao_copiada_passa_pelo_contrato() {
+    let Some(base) = mock_url() else { return };
+    let dir = std::env::temp_dir().join(format!("eclume-mock-import-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("i.avi");
+    std::fs::write(&path, vec![7u8; 1024]).unwrap();
+    let queue = Queue::open_in_memory().unwrap();
+    queue
+        .begin_import(&NewImport {
+            id: "i",
+            path: &path,
+            recorded_at: 1_758_733_205_000,
+            recorded_at_source: RecordedAtSource::User,
+            original_name: "kickoff-guion",
+            content_type: Some("video/x-msvideo"),
+            duration_ms: 2_820_000,
+            bytes: 1024,
+        })
+        .unwrap();
+    let queue = Arc::new(Mutex::new(queue));
+    let uploader =
+        HttpUploader::from_client(client(&base, false, false), Arc::clone(&queue), VERSION);
+
+    let report = sync_pending(&queue, &uploader).unwrap();
+    assert_synced(&queue, "i", report);
     std::fs::remove_dir_all(dir).unwrap();
 }
 

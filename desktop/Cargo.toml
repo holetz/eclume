@@ -9,10 +9,11 @@ members = [
     "crates/recorder",
     "crates/detect",
     "crates/sync",
+    "crates/import",
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 rust-version = "1.88"

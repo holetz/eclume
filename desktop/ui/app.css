@@ -1,0 +1,189 @@
+/* Camada de produto do desktop: só o que a janela precisa e o Design System (eclume.css) não
+   define. A CSP da janela bloqueia style="", então as utilidades que os exemplos do DS fazem por
+   atributo de estilo moram aqui. */
+
+[hidden] {
+  display: none !important;
+}
+
+/* A .tray-window do DS é um painel de 520 × 600 com moldura; no app ela é a janela inteira. */
+.tray.tray-window {
+  width: 100%;
+  min-height: 100vh;
+  border: 0;
+  box-shadow: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.row-between {
+  justify-content: space-between;
+}
+
+/* Primeira execução: o código de 6 caracteres cabe inteiro; o endereço ocupa a linha. */
+.input-codigo {
+  width: 12ch;
+  text-transform: uppercase;
+}
+
+.input-endereco {
+  flex: 1;
+  min-width: 0;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stack-tight {
+  gap: 4px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.brand-sm {
+  font-size: 18px;
+}
+
+.btn-icon-sm {
+  width: 28px;
+  height: 28px;
+}
+
+.btn kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.tiny {
+  font-size: 12px;
+}
+
+/* O medidor de nível com 16 barras; a altura de cada uma vem de --h, por setProperty. */
+.meter i {
+  transition: height 80ms linear;
+}
+
+.row-tight {
+  gap: 4px;
+}
+
+.row-meter {
+  gap: var(--space-4);
+}
+
+#politica-opcoes {
+  justify-self: start;
+}
+
+.flush {
+  margin: 0;
+}
+
+/* O cabeçalho das configurações cola nas abas, como no frame "Settings". */
+.tray-section-tabs {
+  padding-bottom: 0;
+}
+
+.tabs-flush {
+  border-bottom: 0;
+}
+
+.tray-section-list {
+  gap: 0;
+}
+
+.tray-section-list > .row-between {
+  padding-bottom: var(--space-2);
+}
+
+.tray-section-list > .text-muted {
+  padding-top: var(--space-3);
+}
+
+.row-indent {
+  padding-left: 32px;
+}
+
+.input-dias {
+  width: 88px;
+}
+
+/* A seção do aviso só ocupa espaço quando há aviso. */
+#config-aviso-secao:has(#config-aviso[hidden]) {
+  display: none;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+/* O medidor do teste de nível usa o acento, como o frame "Settings · Audio". */
+.meter-accent {
+  color: var(--color-accent);
+}
+
+/* A combinação de um atalho global, na aba Áudio. */
+.kbd-atalho {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.kbd-atalho[data-capturando] {
+  border-color: var(--color-accent);
+}
+
+.list-row-sub[data-problema] {
+  color: var(--color-warning);
+}
+
+/* O menu de ajuda fica ancorado no ícone de ajuda, sobre a janela. */
+.tray-window {
+  position: relative;
+}
+
+.menu-ajuda {
+  position: absolute;
+  top: 52px;
+  right: 44px;
+  z-index: 2;
+  width: 280px;
+}
+
+.menu-item-dica {
+  flex-wrap: wrap;
+}
+
+.menu-item-dica small {
+  width: 100%;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+#abrir-ajuda[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.titulo-folha {
+  font-size: 20px;
+}

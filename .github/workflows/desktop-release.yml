@@ -22,6 +22,10 @@ on:
         description: "Incluir o macOS (10× o custo do Linux)"
         type: boolean
         default: true
+      notas:
+        description: "Notas do release, que o app mostra no aviso \"Atualizado para X\""
+        type: string
+        default: ""
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -110,6 +114,10 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # O servidor embutido no instalador (config::embedded_server): endereço e impressão
+          # digital da CA raiz, gravados pela holetz/eclume#35 como variáveis do repositório.
+          ECLUME_SERVER_URL: ${{ vars.ECLUME_SERVER_URL }}
+          ECLUME_SERVER_CA_SHA256: ${{ vars.ECLUME_SERVER_CA_SHA256 }}
           # linuxdeploy sem FUSE e sem o strip que falha em binários com .relr.dyn.
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
@@ -157,10 +165,11 @@ jobs:
         env:
           VERSAO: ${{ needs.plano.outputs.versao }}
           BASE_URL: ${{ vars.ECLUME_DOWNLOADS_URL || 'https://192.168.15.199:8443/downloads' }}
+          NOTAS: ${{ inputs.notas }}
         run: |
           cp desktop/INSTALACAO.md dist/
           python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSAO" \
-            --base-url "$BASE_URL" --notas "eclume desktop $VERSAO"
+            --base-url "$BASE_URL" --notas "${NOTAS:-eclume desktop $VERSAO}"
           cat dist/latest.json
           ls -la dist
       - uses: actions/upload-artifact@v7

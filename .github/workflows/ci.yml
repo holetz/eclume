@@ -117,10 +117,20 @@ jobs:
             libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
+      - run: cargo fmt --manifest-path desktop/Cargo.toml --all --check
       - run: cargo check --manifest-path desktop/Cargo.toml --workspace --locked
       - run: cargo clippy --manifest-path desktop/Cargo.toml --workspace --locked -- -D warnings
       - run: cargo test --manifest-path desktop/Cargo.toml --workspace --locked
+      # A UI da janela (desktop/ui) num Chromium, com o Tauri simulado.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/ui-tests/package-lock.json
+      - run: npm --prefix desktop/ui-tests ci
+      - run: npm --prefix desktop/ui-tests exec -- playwright install --with-deps chromium
+      - run: npm --prefix desktop/ui-tests test
