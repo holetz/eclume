@@ -25,10 +25,6 @@ NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
     ("POST", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
     ("GET", "/api/v1/summary-chat-messages/{message_id}", _GRAVACAO),
-    ("GET", "/api/v1/recordings/{recording_id}/markers", _GRAVACAO),
-    ("POST", "/api/v1/recordings/{recording_id}/markers", _GRAVACAO),
-    ("PATCH", "/api/v1/markers/{marker_id}", _GRAVACAO),
-    ("DELETE", "/api/v1/markers/{marker_id}", _GRAVACAO),
     ("GET", "/api/v1/recordings/{recording_id}/export", _GRAVACAO),
 )
 
