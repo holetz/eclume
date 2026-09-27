@@ -130,7 +130,8 @@ cada um no tipo do dono, com o mesmo id. Os tipos, os tipos padrão do admin e a
   partiram; o `provider_*` fica nulo na `manual` e é o do chat na `chat` (`CHECK (origin <>
   'generated' OR provider_id IS NOT NULL)`). `created_by` é quem gerou, editou ou pediu.
 - **Versão atual:** a de maior `version` com `status: done`; uma geração em `queued`/`running` não
-  a troca até terminar. **Gerada de referência:** a `generated` concluída mais recente.
+  a troca até terminar. Se uma edição ou um ajuste entrou enquanto ela rodava, a geração toma o
+  próximo número ao terminar (sob o lock da transcrição) e vira a atual; os números podem pular. **Gerada de referência:** a `generated` concluída mais recente.
   `GET /recordings/{id}/summary` devolve `{current, generated, pending, version_count}`; o
   "comparar com a gerada" é do cliente, com as duas versões.
 - **Edição à mão** (`PUT /recordings/{id}/summary`, `summaries:write`) com concorrência otimista:
@@ -165,8 +166,8 @@ dito**.
   transcrição da mensagem, com até 8 trechos em ordem de tempo, ou "nenhum trecho". Cada consulta
   fica em `reads` (`{tool, from_ms, to_ms, clipped}` ou `{tool, query, hits}`).
 - **Limites:** `MAX_TOOL_CALLS = 4`; depois delas o prompt pede a resposta, e outra ferramenta é
-  `chat_tool_limit`. O parser pega o último objeto JSON da saída (tolera a cerca de código `json`
-  e texto em volta); uma saída inválida recebe **um** pedido de correção, e a segunda é
+  `chat_tool_limit`. O parser pega o último objeto JSON válido da saída (tolera a cerca de código
+  `json` e texto em volta; com várias cercas, vale a última); uma saída inválida recebe **um** pedido de correção, e a segunda é
   `provider_bad_output`.
 - **Segurança:** transcrição, resumo e resultados vão delimitados e declarados como dado no
   sistema. O único efeito possível é uma versão nova de texto, e o `claude-cli` segue com
@@ -185,6 +186,11 @@ dito**.
   tentativa após 10 s; `gpu_busy` falha na hora ("A GPU está transcrevendo; tente em instantes"),
   porque um chat não espera horas. Mensagem apagada (resumo ou gravação excluídos) → o job termina
   sem chamar o agente.
+- **Resposta que ninguém vai terminar:** se o enfileiramento falha, a rota passa a resposta a
+  `failed` (`internal_error`) antes de devolver o erro; se o worker morre, o cron
+  `reap_stalled_jobs` falha, a cada minuto, as respostas em aberto há mais de 15 min
+  (`summary_chat.reap_stalled_chats`, acima do pior caso do job). Sem isso o índice único deixaria
+  a gravação em `chat_busy` para sempre.
 - **Por que job e não resposta síncrona:** o `claude` e a credencial dele vivem no worker CPU, o
   Ollama depende da fila da GPU que só o worker consulta, e uma chamada leva de segundos a
   minutos; o ciclo 202 + consulta já existe no cliente para o resumo.

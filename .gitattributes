@@ -4,3 +4,5 @@
 Dockerfile text eol=lf
 *.Dockerfile text eol=lf
 *.Caddyfile text eol=lf
+# O cliente gerado é comparado byte a byte com a saída do gen:api.
+web/src/api/schema.gen.ts text eol=lf

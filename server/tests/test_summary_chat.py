@@ -6,12 +6,16 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
 from eclume_server.agents.chat import CHAT_SYSTEM
+from eclume_server.db.session import make_engine
+from eclume_server.summary_chat import reap_stalled_chats
 from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, contract_transcript, run_cpu, run_gpu
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -135,6 +139,35 @@ def test_resumo_mudou_durante_o_ajuste(owner: dict[str, Any], services: Services
     assert (done["status"], done["content"], done["summary_id"]) == ("done", "Encurtei.", None)
     assert done["error"]["code"] == "summary_changed"
     assert _state(api, recording_id)["current"]["id"] == edited.json()["id"]
+
+
+def test_resposta_abandonada_nao_trava_o_chat(owner: dict[str, Any], services: Services):
+    api: Api = owner["api"]
+    recording_id = _recording(owner, services)
+    exchange = _ask(api, recording_id)
+
+    async def reap_after(minutes: int) -> int:
+        await services.sql(
+            lambda conn: conn.execute(
+                text("UPDATE summary_chat_messages SET created_at = created_at - make_interval(mins => :m)"),
+                {"m": minutes},
+            )
+        )
+        engine = make_engine(services.settings.database_url)
+        try:
+            return await reap_stalled_chats(engine)
+        finally:
+            await engine.dispose()
+
+    # Dentro do pior caso do job, a resposta segue em aberto.
+    assert run(reap_after(5)) == 0
+    assert _reply(api, exchange)["status"] == "queued"
+    # Worker morto: a varredura falha a resposta e a gravação aceita um pedido novo.
+    assert run(reap_after(15)) == 1
+    stalled = _reply(api, exchange)
+    assert (stalled["status"], stalled["error"]["code"]) == ("failed", "internal_error")
+    _ask(api, recording_id, "De novo")
+    run_cpu(services.settings, FakeAgents(replies={"chat": [_json(action="reply", message="Ok.", summary_md=None)]}))
 
 
 def test_falhas_do_agente(owner: dict[str, Any], services: Services):

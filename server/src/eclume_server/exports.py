@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, timezone
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
@@ -33,10 +33,14 @@ if TYPE_CHECKING:
 BRASILIA = timezone(timedelta(hours=-3), "BRT")
 MEDIA_TYPES = {
     "txt": "text/plain; charset=utf-8",
-    "srt": "application/x-subrip",
+    "srt": "application/x-subrip; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+
+
+# Controles que o XML do DOCX não aceita (o python-docx recusa o texto inteiro).
+_XML_INVALID = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 def slug(title: str, fallback: str = "transcricao") -> str:
@@ -122,8 +126,9 @@ def _srt_time(ms: int) -> str:
 
 def render_srt(export: Export) -> str:
     """Uma legenda por fala: número, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`."""
+    # Uma linha em branco dentro do texto encerraria o bloco: a fala sai numa linha só.
     blocks = [
-        f"{n}\n{_srt_time(line.start_ms)} --> {_srt_time(line.end_ms)}\n{line.speaker}: {line.text}"
+        f"{n}\n{_srt_time(line.start_ms)} --> {_srt_time(line.end_ms)}\n{line.speaker}: {' '.join(line.text.split())}"
         for n, line in enumerate(export.lines, 1)
     ]
     return "\n\n".join(blocks) + "\n"
@@ -186,6 +191,7 @@ def _markdown(doc: DocxDocument, markdown: str) -> None:
 
 def render_docx(export: Export) -> bytes:
     """Título, data/duração/participantes, o resumo (se houver) e a transcrição, um parágrafo por fala."""
+    export = _xml_safe(export)
     doc = Document()
     doc.add_heading(export.title, level=0)
     doc.add_paragraph(" · ".join(export.meta()))
@@ -200,6 +206,19 @@ def render_docx(export: Export) -> bytes:
     buffer = BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
+
+
+def _xml_safe(export: Export) -> Export:
+    def clean(text: str) -> str:
+        return _XML_INVALID.sub("", text)
+
+    return replace(
+        export,
+        title=clean(export.title),
+        participants=[clean(name) for name in export.participants],
+        lines=[replace(line, speaker=clean(line.speaker), text=clean(line.text)) for line in export.lines],
+        summary_md=clean(export.summary_md) if export.summary_md else export.summary_md,
+    )
 
 
 RENDERERS: dict[str, Any] = {"txt": render_txt, "srt": render_srt, "md": render_md, "docx": render_docx}

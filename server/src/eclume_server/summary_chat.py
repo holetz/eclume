@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from arq import Retry
@@ -59,6 +60,9 @@ CHAT_BUSY = "chat_busy"
 # O teto de um ajuste inteiro (todas as chamadas do laço): um chat não espera como um resumo.
 CHAT_TIMEOUT_S = 5 * 60
 CHAT_RETRY_S = 10
+# Além do pior caso do job (duas tentativas no teto do arq e a espera entre elas), a resposta em
+# aberto não vai mais terminar: o worker morreu ou o job nunca chegou à fila.
+CHAT_STALE_S = 15 * 60
 # Falha passageira do outro lado: uma nova tentativa só.
 _RETRYABLE = {PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_UNAVAILABLE}
 GONE = "gravação apagada"
@@ -254,6 +258,34 @@ async def _fail(engine: AsyncEngine, message_id: UUID, code: str, message: str) 
         )
     log.warning("chat %s falhou: %s — %s", message_id, code, message)
     return f"falhou: {code}"
+
+
+async def abandon_reply(engine: AsyncEngine, message_id: UUID) -> None:
+    """Falha a resposta cujo job não entrou na fila: sem isso, a gravação ficaria em `chat_busy`."""
+    await _fail(engine, message_id, INTERNAL_ERROR, "O pedido de ajuste não chegou ao worker; peça de novo.")
+
+
+async def reap_stalled_chats(engine: AsyncEngine) -> int:
+    """Falha as respostas em aberto há mais de `CHAT_STALE_S`, que ninguém mais vai terminar."""
+    m = t.summary_chat_messages.c
+    async with system_tx(engine) as conn:
+        result = await conn.execute(
+            update(t.summary_chat_messages)
+            .where(
+                m.role == "assistant",
+                m.status.in_(["queued", "running"]),
+                m.created_at < func.now() - timedelta(seconds=CHAT_STALE_S),
+            )
+            .values(
+                status="failed",
+                error_code=INTERNAL_ERROR,
+                error_message="O ajuste não terminou; peça de novo.",
+                completed_at=func.now(),
+            )
+        )
+    if result.rowcount:
+        log.warning("chat: %d resposta(s) em aberto abandonada(s)", result.rowcount)
+    return result.rowcount
 
 
 async def _save(engine: AsyncEngine, reply: Row, provider: Row, result: ChatResult) -> str:
