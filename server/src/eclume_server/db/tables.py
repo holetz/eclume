@@ -244,6 +244,39 @@ default_agenda_types = Table(
     Column("include_for_new_users", Boolean, server_default=FetchedValue()),
 )
 
+# --- campos e valores (010_campos_e_valores) ----------------------------------------------------
+
+fields = Table(
+    "fields",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("key", Text),
+    Column("name", Text),
+    Column("kind", Text),
+    Column("builtin", Text),
+    Column("options", ARRAY(Text), server_default=FetchedValue()),
+    Column("instructions", Text, server_default=FetchedValue()),
+    Column("auto_fill", Boolean, server_default=FetchedValue()),
+    Column("position", Integer, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+field_values = Table(
+    "field_values",
+    metadata,
+    _uuid("recording_id", primary_key=True),
+    _uuid("field_id", primary_key=True),
+    _uuid("owner_id"),
+    Column("value", JSONB(none_as_null=False)),
+    Column("origin", Text),
+    Column("transcript_revision", Integer),
+    Column("provider_name", Text),
+    Column("model", Text),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
 summaries = Table(
     "summaries",
     metadata,

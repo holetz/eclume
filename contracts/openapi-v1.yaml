@@ -55,6 +55,10 @@ tags:
     description: >-
       Tipos de agenda do usuário: como reconhecer a gravação, o título e as tags que ela ganha e
       as instruções do resumo.
+  - name: fields
+    description: >-
+      Campos do usuário (título e tags embutidos, mais os próprios) e as regras com que o agente
+      os preenche.
   - name: summaries
     description: Resumos gerados por agente com as instruções de um tipo de agenda.
   - name: admin
@@ -1256,6 +1260,141 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/fields:
+    get:
+      tags: [fields]
+      operationId: listFields
+      summary: Campos do usuário
+      description: |
+        Título e tags vêm embutidos em toda conta; os demais são do usuário.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Campos, na ordem da lista.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldPage"
+              examples:
+                campos:
+                  $ref: "#/components/examples/FieldPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags: [fields]
+      operationId: createField
+      summary: Criar um campo
+      description: |
+        A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros tipos não têm.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldCreate"
+      responses:
+        "201":
+          description: Campo criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/fields/{field_id}:
+    parameters:
+      - $ref: "#/components/parameters/FieldId"
+    get:
+      tags: [fields]
+      operationId: getField
+      summary: Um campo
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Campo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [fields]
+      operationId: updateField
+      summary: Editar um campo
+      description: |
+        Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind` (422).
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldPatch"
+      responses:
+        "200":
+          description: Campo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [fields]
+      operationId: deleteField
+      summary: Excluir um campo
+      description: |
+        Os embutidos não saem: 409 `builtin_field`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído, com os valores dele.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/people:
     get:
       tags: [people]
@@ -2290,6 +2429,13 @@ components:
         format: uuid
     AgendaTypeId:
       name: agenda_type_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FieldId:
+      name: field_id
       in: path
       required: true
       schema:
@@ -3705,6 +3851,147 @@ components:
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
 
+    FieldKind:
+      description: "`text` e `choice` guardam uma string; `list`, um array de strings."
+      type: string
+      enum: [text, list, choice]
+
+    Field:
+      type: object
+      required: [id, key, name, kind, builtin, options, instructions, auto_fill, position]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          description: Slug do nome, único na conta; o marcador `{key}` do padrão de título.
+          type: string
+          pattern: "^[a-z0-9_]{1,64}$"
+        builtin:
+          description: Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+          type: [string, "null"]
+          enum: [title, tags, null]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+
+    FieldDraft:
+      description: O conteúdo de um campo, salvo ou em rascunho.
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+
+    FieldCreate:
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+
+    FieldPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+
+    FieldPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Field"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
     AgentProviderKind:
       type: string
       enum: [ollama, openai-compatible, anthropic, claude-cli]
@@ -4346,6 +4633,9 @@ components:
     AgendaTypeCreateRequest:
       summary: Tipo de agenda para mentorias
       externalValue: ./fixtures/agenda-type-create-request.json
+    FieldPage:
+      summary: Os embutidos e um campo de escolha
+      externalValue: ./fixtures/field-page.json
     PersonPage:
       summary: Diretório com três pessoas
       externalValue: ./fixtures/person-page.json
