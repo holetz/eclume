@@ -40,6 +40,8 @@ PartNumber = Annotated[int, Path(ge=1, le=10000)]
 MAX_PARTS = 10_000
 FIRST_PART_URLS = 100
 LANGUAGE = r"^[a-z]{2,3}(-[A-Z]{2})?$"
+Kind = Literal["meeting", "note"]
+RecordedAtSource = Literal["capture", "file_metadata", "user", "upload"]
 
 
 class Capture(BaseModel):
@@ -59,6 +61,8 @@ class UploadCreate(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     title: str | None = Field(default=None, min_length=1)
     recorded_at: datetime | None = None
+    recorded_at_source: RecordedAtSource | None = None
+    kind: Kind | None = None
     duration_ms: int | None = Field(default=None, ge=0)
     language: str | None = Field(default=None, pattern=LANGUAGE)
     source: Literal["desktop", "upload", "api"] | None = None
@@ -178,6 +182,8 @@ async def create_upload(
     part_count = math.ceil(body.size_bytes / part_size)
     if part_count > MAX_PARTS:
         raise invalid_field("size_bytes", f"arquivo maior que {MAX_PARTS} partes de {part_size} bytes")
+    if body.recorded_at is None and body.recorded_at_source not in {None, "upload"}:
+        raise invalid_field("recorded_at_source", "sem recorded_at, a data é a do envio (upload)")
     now = _now()
     expires_at = now + timedelta(days=ctx.settings.upload_ttl_days)
     request_fields = body.model_dump(mode="json", exclude={"filename", "content_type", "size_bytes", "sha256"})
@@ -377,6 +383,15 @@ async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
         raise validation_failed(errors)
 
 
+def recorded_at_source(requested: dict[str, Any], source: str) -> str:
+    """A origem pedida, ou a regra: o relógio do desktop, a data informada, ou a hora do envio."""
+    if requested.get("recorded_at_source"):
+        return requested["recorded_at_source"]
+    if not requested.get("recorded_at"):
+        return "upload"
+    return "capture" if source == "desktop" else "user"
+
+
 async def _finish(
     ctx: AppContext,
     conn: AsyncConnection,
@@ -396,13 +411,16 @@ async def _finish(
     existing = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
     now = _now()
     capture = requested.get("capture")
+    source = requested.get("source") or ("api" if principal.method == "pat" else "upload")
     values = {
         "id": recording_id,
         "owner_id": principal.user_id,
         "title": requested.get("title") or PurePath(row["filename"]).stem or row["filename"],
         "status": "queued" if matches else "failed",
-        "source": requested.get("source") or ("api" if principal.method == "pat" else "upload"),
+        "kind": requested.get("kind") or "meeting",
+        "source": source,
         "recorded_at": datetime.fromisoformat(requested["recorded_at"]) if requested.get("recorded_at") else now,
+        "recorded_at_source": recorded_at_source(requested, source),
         "duration_ms": requested.get("duration_ms"),
         "language": requested.get("language"),
         "size_bytes": row["size_bytes"],

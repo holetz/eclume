@@ -52,6 +52,17 @@ def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user
         "pt-BR",
     )
     assert body["updated_at"] > recording["updated_at"]
+    # Corrigir a data a torna informada pela pessoa; a natureza muda à mão.
+    assert recording["recorded_at_source"] == "upload"
+    redated = owner.patch(
+        f"/api/v1/recordings/{recording['id']}", json={"recorded_at": "2026-09-01T10:00:00Z", "kind": "note"}
+    ).json()
+    assert (redated["recorded_at"], redated["recorded_at_source"], redated["kind"]) == (
+        "2026-09-01T10:00:00Z",
+        "user",
+        "note",
+    )
+    assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={"kind": None}).status_code == 422
     assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={}).status_code == 422
     assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={"title": None}).status_code == 422
     assert (

@@ -30,7 +30,7 @@ from eclume_server.recordings import (
     start_next_revision,
 )
 from eclume_server.routes.collections import check_collections
-from eclume_server.routes.uploads import LANGUAGE
+from eclume_server.routes.uploads import LANGUAGE, Kind
 from eclume_server.security import sign, signature_matches
 from eclume_server.summaries import start_auto_summary
 
@@ -48,6 +48,7 @@ class RecordingPatch(BaseModel):
 
     title: str | None = Field(default=None, min_length=1)
     recorded_at: datetime | None = None
+    kind: Kind | None = None
     language: str | None = Field(default=None, pattern=LANGUAGE)
     tags: list[Annotated[str, Field(min_length=1)]] | None = None
     collection_ids: list[UUID] | None = None
@@ -139,6 +140,8 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
             raise invalid_field(field, "não pode ser nulo")
     type_changed = "agenda_type_id" in values
     agenda_type_id = values.pop("agenda_type_id", None)
+    if "recorded_at" in values:
+        values["recorded_at_source"] = "user"
     summary_id = None
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_visible(conn, recording_id)

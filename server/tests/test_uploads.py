@@ -218,11 +218,30 @@ def test_validacao_da_criacao(as_user: Callable[[Account], Api], make_user: Call
         ({"size_bytes": 10_001 * 5 * MIB}, "size_bytes"),
         ({"language": "portugues"}, "language"),
         ({"collection_ids": ["01928f3a-1c00-7a00-8000-000000000801"]}, "collection_ids"),
+        ({"kind": "palestra"}, "kind"),
+        ({"recorded_at_source": "capture"}, "recorded_at_source"),
     ]
     for fields, field in cases:
         response = api.post("/api/v1/uploads", json=_body(data, **fields))
         assert response.status_code == 422, fields
         assert response.json()["errors"][0]["field"] == field
+
+
+def test_origem_da_data_e_natureza(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    when = "2026-09-18T14:00:05Z"
+
+    def origin(**fields: object) -> tuple[str, str, str]:
+        recording = upload_file(api, audio_bytes(100), **fields)
+        return recording["recorded_at_source"], recording["kind"], recording["recorded_at"]
+
+    # O desktop manda o relógio da captura; o navegador, a data que a pessoa confirmou ou digitou.
+    assert origin(source="desktop", recorded_at=when) == ("capture", "meeting", when)
+    assert origin(recorded_at=when) == ("user", "meeting", when)
+    assert origin(recorded_at=when, recorded_at_source="file_metadata", kind="note") == ("file_metadata", "note", when)
+    source, kind, recorded_at = origin()
+    assert (source, kind) == ("upload", "meeting")
+    assert recorded_at != when
 
 
 def test_escopo_e_dono_do_upload(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
