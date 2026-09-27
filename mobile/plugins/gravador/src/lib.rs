@@ -105,6 +105,30 @@ impl<R: Runtime> Gravador<R> {
         }
     }
 
+    /// Abre o instalador do sistema para o APK em `caminho` (no cache do app). Devolve `false`
+    /// quando o sistema foi antes pedir a permissão de instalar de fontes desconhecidas.
+    pub fn abrir_instalador(&self, caminho: &str) -> Resultado<bool> {
+        #[cfg(mobile)]
+        {
+            #[derive(serde::Deserialize)]
+            struct Aberto {
+                aberto: bool,
+            }
+            return self
+                .handle
+                .run_mobile_plugin::<Aberto>(
+                    "abrirInstalador",
+                    serde_json::json!({ "caminho": caminho }),
+                )
+                .map(|r| r.aberto);
+        }
+        #[cfg(not(mobile))]
+        {
+            let _ = caminho;
+            Ok(false)
+        }
+    }
+
     /// Tira a notificação e para o serviço.
     pub fn parar_servico(&self) -> Resultado<()> {
         #[cfg(mobile)]

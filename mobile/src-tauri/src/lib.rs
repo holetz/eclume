@@ -206,6 +206,8 @@ pub fn run() {
             comandos::salvar_configuracoes,
             comandos::sair,
             comandos::visibilidade,
+            comandos::verificar_atualizacao,
+            comandos::atualizar,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app móvel do eclume");

@@ -10,8 +10,8 @@ use comum::{dirs_temp, json, Roteiro, CA_SHA256};
 use eclume_mobile_core::config::Servidor;
 use eclume_mobile_core::rede::{sondar, Andamento, EstadoRede, Rede, Sonda};
 use eclume_mobile_core::sync::{
-    buscar_etapas, buscar_tipos_de_agenda, bytes_sincronizados, excluir_sincronizadas, reter,
-    sincronizar, uploader, Medidor,
+    baixar_apk, buscar_etapas, buscar_manifesto, buscar_tipos_de_agenda, bytes_sincronizados,
+    excluir_sincronizadas, mais_nova, reter, sincronizar, uploader, Medidor,
 };
 use eclume_recorder::{now_ms, Queue, Source, Status};
 use eclume_sync::transport::HttpResponse;
@@ -260,4 +260,74 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
         .any(|(k, v)| k == "Authorization" && v == "Bearer eclp_x"));
     let etapas = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
     assert_eq!(etapas[1].state, "active");
+}
+
+#[test]
+fn atualizacao_pelo_movel_json_confere_o_apk() {
+    assert!(mais_nova("0.2.0", "0.1.0"));
+    assert!(mais_nova("0.10.0", "0.9.9"));
+    assert!(!mais_nova("0.1.0", "0.1.0"));
+    assert!(!mais_nova("0.0.9", "0.1.0"));
+    assert!(!mais_nova("versão", "0.1.0"));
+
+    let apk = b"PK apk novo".to_vec();
+    let sha = eclume_sync::pin::sha256_hex(&apk);
+    let roteiro = Roteiro::default();
+    assert_eq!(
+        {
+            roteiro.responde("GET", "/downloads/movel.json", comum::texto(404, ""));
+            buscar_manifesto(&roteiro, &servidor()).unwrap()
+        },
+        None
+    );
+    roteiro.responde(
+        "GET",
+        "/downloads/movel.json",
+        json(
+            200,
+            serde_json::json!({
+                "versao": "0.2.0", "publicado_em": "2026-09-27T18:30:05Z", "notas": "Correções",
+                "apk": {"arquivo": "eclume-0.2.0.apk", "url": "/downloads/movel/0.2.0/eclume-0.2.0.apk",
+                        "tamanho": apk.len(), "sha256": sha},
+                "min_android": "8.0", "certificado_sha256": "ab".repeat(32),
+                "instalacao": "/downloads/movel/INSTALACAO.md"
+            }),
+        ),
+    );
+    let manifesto = buscar_manifesto(&roteiro, &servidor()).unwrap().unwrap();
+    assert_eq!(manifesto.versao, "0.2.0");
+
+    let (dirs, _guard) = dirs_temp("apk");
+    roteiro.responde(
+        "GET",
+        "/downloads/movel/0.2.0/eclume-0.2.0.apk",
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: apk.clone(),
+        }),
+    );
+    let caminho = baixar_apk(&roteiro, &servidor(), &manifesto, &dirs.dados).unwrap();
+    assert_eq!(std::fs::read(&caminho).unwrap(), apk);
+    let pedido = roteiro
+        .pedido("GET", "/downloads/movel/0.2.0/eclume-0.2.0.apk")
+        .unwrap();
+    assert_eq!(
+        pedido.url,
+        format!("{URL}/downloads/movel/0.2.0/eclume-0.2.0.apk")
+    );
+
+    // Um APK que não bate com o manifesto não é instalado.
+    roteiro.responde(
+        "GET",
+        "/downloads/movel/0.2.0/eclume-0.2.0.apk",
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: b"PK adulterado".to_vec(),
+        }),
+    );
+    let erro = baixar_apk(&roteiro, &servidor(), &manifesto, &dirs.sem_backup).unwrap_err();
+    assert!(format!("{erro:#}").contains("não confere"), "{erro:#}");
+    assert!(!dirs.sem_backup.exists());
 }

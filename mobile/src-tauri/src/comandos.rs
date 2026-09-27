@@ -229,3 +229,48 @@ pub fn visibilidade<R: Runtime>(app: AppHandle<R>, visivel: bool) -> Resultado<(
     }
     Ok(())
 }
+
+/// Uma versão nova no `movel.json`.
+#[derive(Clone, Debug, Serialize)]
+pub struct Atualizacao {
+    pub versao: String,
+    pub notas: Option<String>,
+}
+
+/// Lê o `movel.json` do servidor (pela CA fixada) e devolve a versão nova, se houver.
+#[tauri::command]
+pub async fn verificar_atualizacao() -> Resultado<Option<Atualizacao>> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let manifesto = core::verificar_atualizacao(nucleo()?, true).map_err(texto)?;
+        Ok(manifesto.map(|m| Atualizacao {
+            versao: m.versao,
+            notas: m.notas.filter(|n| !n.trim().is_empty()),
+        }))
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Baixa o APK da versão nova, confere o SHA-256 e abre o instalador do sistema.
+#[tauri::command]
+pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_eclume_gravador::GravadorExt;
+
+        let apk = core::baixar_atualizacao(nucleo()?).map_err(texto)?;
+        let aberto = app
+            .gravador()
+            .abrir_instalador(&apk.to_string_lossy())
+            .map_err(|err| err.to_string())?;
+        if aberto {
+            Ok(())
+        } else {
+            Err(
+                "Permita instalar apps do eclume na tela que abriu e toque em atualizar de novo"
+                    .into(),
+            )
+        }
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}

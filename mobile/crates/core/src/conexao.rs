@@ -32,6 +32,11 @@ use crate::config::{Config, Dirs, Servidor};
 pub trait Transportes: Send + Sync {
     fn inseguro(&self) -> Arc<dyn Transport>;
     fn fixado(&self, ca: &Path, prazo: Duration) -> Result<Arc<dyn Transport>>;
+
+    /// O fixado para baixar um arquivo grande (o APK da atualização).
+    fn baixador(&self, ca: &Path) -> Result<Arc<dyn Transport>> {
+        self.fixado(ca, REQUEST_TIMEOUT)
+    }
 }
 
 /// Os transportes reais, em `ureq`.
@@ -52,7 +57,18 @@ impl Transportes for TransportesReais {
             prazo,
         )?))
     }
+
+    fn baixador(&self, ca: &Path) -> Result<Arc<dyn Transport>> {
+        let trust = eclume_sync::transport::TrustMode::Pinned(ca.to_path_buf());
+        Ok(Arc::new(
+            UreqTransport::with_trust(&trust, &self.user_agent, REQUEST_TIMEOUT)?
+                .com_limite(LIMITE_DO_APK),
+        ))
+    }
 }
+
+/// O maior APK que o app aceita baixar.
+const LIMITE_DO_APK: u64 = 256 * 1024 * 1024;
 
 /// Uma raiz baixada que espera a pessoa conferir ("Confiar" ou "Cancelar").
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,6 +165,11 @@ impl Conexao {
     /// O token do dispositivo, se houver.
     pub fn token(&self) -> Result<Option<String>> {
         Ok(self.credencial.load()?.map(|(token, _)| token))
+    }
+
+    /// O transporte fixado para baixar a atualização.
+    pub fn baixador(&self) -> Result<Arc<dyn Transport>> {
+        self.transportes.baixador(&self.dirs.ca())
     }
 
     /// O transporte fixado na CA salva, com o prazo dado.

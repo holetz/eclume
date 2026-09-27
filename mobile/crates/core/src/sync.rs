@@ -312,3 +312,91 @@ pub fn buscar_etapas(
     )?;
     Ok(gravacao.pipeline)
 }
+
+/// O `movel.json` do servidor (holetz/eclume#41, docs/standards/code/mobile-distribuicao.md).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Manifesto {
+    pub versao: String,
+    #[serde(default)]
+    pub notas: Option<String>,
+    pub apk: ApkDoManifesto,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApkDoManifesto {
+    pub arquivo: String,
+    /// Caminho absoluto no servidor (`/downloads/movel/<versão>/<arquivo>`) ou URL completa.
+    pub url: String,
+    pub tamanho: u64,
+    pub sha256: String,
+}
+
+/// Onde o servidor publica o manifesto do app móvel.
+pub const CAMINHO_DO_MANIFESTO: &str = "/downloads/movel.json";
+
+fn endereco(servidor: &Servidor, caminho: &str) -> String {
+    if caminho.starts_with("https://") {
+        caminho.to_string()
+    } else {
+        format!("{}{caminho}", servidor.url.trim_end_matches('/'))
+    }
+}
+
+/// Lê o `movel.json` (público) pela CA fixada; `None` quando o servidor ainda não publicou um.
+pub fn buscar_manifesto(
+    transporte: &dyn Transport,
+    servidor: &Servidor,
+) -> Result<Option<Manifesto>> {
+    let resposta = transporte.send(HttpRequest::new(
+        "GET",
+        endereco(servidor, CAMINHO_DO_MANIFESTO),
+    ))?;
+    if resposta.status == 404 {
+        return Ok(None);
+    }
+    if !resposta.is_success() {
+        return Err(api_error("falha ao ler o movel.json", &resposta));
+    }
+    Ok(Some(
+        serde_json::from_slice(&resposta.body).context("movel.json inválido")?,
+    ))
+}
+
+fn partes(versao: &str) -> Option<(u64, u64, u64)> {
+    let mut it = versao.trim().trim_start_matches('v').split('.');
+    let parte = |p: Option<&str>| p.and_then(|t| t.parse::<u64>().ok());
+    let tripla = (parte(it.next())?, parte(it.next())?, parte(it.next())?);
+    it.next().is_none().then_some(tripla)
+}
+
+/// Se `candidata` é mais nova que `atual` (X.Y.Z); versões fora do formato nunca são.
+pub fn mais_nova(candidata: &str, atual: &str) -> bool {
+    matches!((partes(candidata), partes(atual)), (Some(c), Some(a)) if c > a)
+}
+
+/// Baixa o APK do manifesto pela CA fixada para `destino`, conferindo tamanho e SHA-256. Um APK
+/// que não confere é apagado e vira erro.
+pub fn baixar_apk(
+    transporte: &dyn Transport,
+    servidor: &Servidor,
+    manifesto: &Manifesto,
+    destino: &Path,
+) -> Result<std::path::PathBuf> {
+    let resposta = transporte.send(HttpRequest::new(
+        "GET",
+        endereco(servidor, &manifesto.apk.url),
+    ))?;
+    if !resposta.is_success() {
+        return Err(api_error("falha ao baixar a atualização", &resposta));
+    }
+    let hash = eclume_sync::pin::sha256_hex(&resposta.body);
+    if resposta.body.len() as u64 != manifesto.apk.tamanho || hash != manifesto.apk.sha256 {
+        anyhow::bail!("O APK baixado não confere com o movel.json; nada foi instalado");
+    }
+    std::fs::create_dir_all(destino)
+        .with_context(|| format!("falha ao criar {}", destino.display()))?;
+    let caminho = destino.join(format!("eclume-{}.apk", manifesto.versao));
+    std::fs::write(&caminho, &resposta.body)
+        .with_context(|| format!("falha ao gravar {}", caminho.display()))?;
+    Ok(caminho)
+}

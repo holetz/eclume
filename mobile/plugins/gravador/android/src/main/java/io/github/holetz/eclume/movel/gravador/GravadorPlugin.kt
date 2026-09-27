@@ -17,6 +17,11 @@ class DescobrirArgs {
     var segundos: Int = 10
 }
 
+@InvokeArg
+class InstaladorArgs {
+    lateinit var caminho: String
+}
+
 /**
  * O plugin `eclume-gravador`: o que só o sistema faz, pedido pelo Rust do app (`run_mobile_plugin`) ou
  * pela UI (`plugin:eclume-gravador|…`). As permissões `microfone` e `notificacoes` são pedidas pela UI
@@ -31,6 +36,7 @@ class DescobrirArgs {
 class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
         Conectividade.acompanhar(activity)
+        SyncWorker.agendar(activity)
     }
 
     @Command
@@ -80,5 +86,14 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
             put("insetTopo", estado.insetTopo.toDouble())
             put("insetBase", estado.insetBase.toDouble())
         })
+    }
+
+    /** Abre o instalador do sistema para o APK baixado (`aberto: false` quando antes foi pedir a
+     * permissão de instalar de fontes desconhecidas). */
+    @Command
+    fun abrirInstalador(invoke: Invoke) {
+        val args = invoke.parseArgs(InstaladorArgs::class.java)
+        val aberto = Atualizador.abrir(activity, args.caminho)
+        invoke.resolve(JSObject().apply { put("aberto", aberto) })
     }
 }

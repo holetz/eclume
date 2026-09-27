@@ -143,7 +143,12 @@ pub struct Core {
     visivel: bool,
     folha: Option<Folha>,
     etapas: HashMap<String, Vec<Etapa>>,
+    /// A versão nova do `movel.json`, se houver.
+    atualizacao: Option<sync::Manifesto>,
 }
+
+/// De quanto em quanto tempo o `movel.json` é lido, na rede do eclume.
+pub const INTERVALO_DA_ATUALIZACAO_MS: i64 = 24 * 60 * 60 * 1_000;
 
 impl Core {
     /// Abre o núcleo: config, fila e a recuperação do que uma queda deixou para trás.
@@ -168,6 +173,7 @@ impl Core {
             visivel: true,
             folha: None,
             etapas: HashMap::new(),
+            atualizacao: None,
         })
     }
 
@@ -567,6 +573,60 @@ impl Core {
         sync::excluir_sincronizadas(&self.fila).map(|(_, bytes)| bytes)
     }
 
+    // --- atualização ---------------------------------------------------------------------------
+
+    /// A leitura do `movel.json`: na rede do eclume, uma vez por dia (ou já, com `forcar`).
+    pub fn preparar_atualizacao(&self, forcar: bool) -> Result<Option<PlanoDeLeitura>> {
+        let vencida = self
+            .config
+            .atualizacao_verificada_em
+            .is_none_or(|em| now_ms() - em >= INTERVALO_DA_ATUALIZACAO_MS);
+        if !self.rede.na_rede() || !(forcar || vencida) {
+            return Ok(None);
+        }
+        self.leitura(REQUEST_TIMEOUT)
+    }
+
+    /// Guarda o manifesto lido: só uma versão maior que a instalada vira atualização.
+    pub fn guardar_manifesto(&mut self, manifesto: Option<sync::Manifesto>) -> Result<()> {
+        self.atualizacao = manifesto.filter(|m| sync::mais_nova(&m.versao, &self.versao));
+        self.config.atualizacao_verificada_em = Some(now_ms());
+        self.salvar_config()
+    }
+
+    pub fn atualizacao(&self) -> Option<&sync::Manifesto> {
+        self.atualizacao.as_ref()
+    }
+
+    /// Onde o APK baixado fica: o cache do app (`<dados do app>/cache`), que o `FileProvider`
+    /// do Android expõe ao instalador.
+    fn pasta_do_apk(&self) -> std::path::PathBuf {
+        self.dirs
+            .dados
+            .parent()
+            .unwrap_or(&self.dirs.dados)
+            .join("cache")
+    }
+
+    /// O download da atualização a fazer fora da trava.
+    pub fn preparar_download(&self) -> Result<PlanoDeDownload> {
+        let manifesto = self
+            .atualizacao
+            .clone()
+            .context("Nenhuma versão nova para baixar")?;
+        let servidor = self
+            .config
+            .servidor
+            .clone()
+            .context("nenhum servidor pareado")?;
+        Ok(PlanoDeDownload {
+            transporte: self.conexao.baixador()?,
+            servidor,
+            manifesto,
+            destino: self.pasta_do_apk(),
+        })
+    }
+
     // --- configurações --------------------------------------------------------------------------
 
     pub fn preferencias(&self) -> Preferencias {
@@ -611,6 +671,26 @@ impl PlanoDeLeitura {
             &self.servidor,
             &self.token,
             remote_id,
+        )
+    }
+}
+
+/// O download do APK, montado sob a trava e feito fora dela.
+pub struct PlanoDeDownload {
+    transporte: Arc<dyn eclume_sync::transport::Transport>,
+    servidor: Servidor,
+    manifesto: sync::Manifesto,
+    destino: std::path::PathBuf,
+}
+
+impl PlanoDeDownload {
+    /// Baixa e confere o APK; devolve o caminho dele.
+    pub fn executar(&self) -> Result<std::path::PathBuf> {
+        sync::baixar_apk(
+            self.transporte.as_ref(),
+            &self.servidor,
+            &self.manifesto,
+            &self.destino,
         )
     }
 }
@@ -692,12 +772,33 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
             }
         }
     }
+    if let Err(err) = verificar_atualizacao(nucleo, false) {
+        log::warn!("{err:#}");
+    }
     let Some(plano) = trancar(nucleo)?.preparar_sync(agora)? else {
         return Ok(None);
     };
     let (relatorio, recusada) = plano.executar()?;
     trancar(nucleo)?.concluir_sync(recusada)?;
     Ok(Some(relatorio))
+}
+
+/// Lê o `movel.json` (uma vez por dia, ou já com `forcar`) e devolve a versão nova, se houver.
+pub fn verificar_atualizacao(
+    nucleo: &Mutex<Core>,
+    forcar: bool,
+) -> Result<Option<sync::Manifesto>> {
+    if let Some(plano) = trancar(nucleo)?.preparar_atualizacao(forcar)? {
+        let manifesto = sync::buscar_manifesto(plano.transporte.as_ref(), &plano.servidor)?;
+        trancar(nucleo)?.guardar_manifesto(manifesto)?;
+    }
+    Ok(trancar(nucleo)?.atualizacao().cloned())
+}
+
+/// Baixa a atualização (fora da trava) e devolve o caminho do APK conferido.
+pub fn baixar_atualizacao(nucleo: &Mutex<Core>) -> Result<std::path::PathBuf> {
+    let plano = trancar(nucleo)?.preparar_download()?;
+    plano.executar()
 }
 
 /// Atualiza as etapas no servidor de uma gravação (fora da trava) e devolve o detalhe.

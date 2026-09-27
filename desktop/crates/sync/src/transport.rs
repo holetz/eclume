@@ -79,7 +79,7 @@ pub trait Transport: Send + Sync {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// O prazo total padrão de uma requisição.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
-/// Teto do corpo de resposta lido (as respostas do upload são JSON pequenos).
+/// Teto padrão do corpo de resposta lido (as respostas do upload são JSON pequenos).
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Em quem o transporte confia.
@@ -95,6 +95,7 @@ pub enum TrustMode {
 /// Transporte real em `ureq`.
 pub struct UreqTransport {
     agent: ureq::Agent,
+    max_response: u64,
 }
 
 impl UreqTransport {
@@ -124,6 +125,12 @@ impl UreqTransport {
         Ok(Self::with_tls(tls, user_agent, timeout))
     }
 
+    /// Troca o teto do corpo de resposta (o app móvel baixa o APK da atualização por aqui).
+    pub fn com_limite(mut self, bytes: u64) -> Self {
+        self.max_response = bytes;
+        self
+    }
+
     /// Sem verificação de TLS: só para baixar a CA raiz que o `pin.rs` confere pela impressão
     /// digital. Nunca leva credencial.
     pub fn insecure(user_agent: &str) -> Self {
@@ -141,6 +148,7 @@ impl UreqTransport {
             .build();
         Self {
             agent: config.into(),
+            max_response: MAX_RESPONSE_BYTES,
         }
     }
 }
@@ -219,7 +227,7 @@ impl Transport for UreqTransport {
         let body = response
             .body_mut()
             .with_config()
-            .limit(MAX_RESPONSE_BYTES)
+            .limit(self.max_response)
             .read_to_vec()
             .with_context(|| format!("falha ao ler a resposta de {}", request.url))?;
         Ok(HttpResponse {
