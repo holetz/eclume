@@ -23,13 +23,15 @@ if TYPE_CHECKING:
 
 MAX_NOTE = 500
 MAX_BATCH = 1000
+# O teto do `bigint`: acima dele, 422 em vez de erro do banco.
+MAX_AT_MS = 2**63 - 1
 
 
 class MarkerInput(BaseModel):
     """Schema `MarkerInput`."""
 
     client_id: UUID
-    at_ms: int = Field(ge=0)
+    at_ms: int = Field(ge=0, le=MAX_AT_MS)
     note: str | None = Field(default=None, max_length=MAX_NOTE)
 
 
@@ -76,7 +78,8 @@ async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marco
     await conn.execute(
         statement.on_conflict_do_update(
             index_elements=["recording_id", "client_id"],
-            set_={"note": statement.excluded.note, "updated_at": func.now()},
+            # Um reenvio sem nota não apaga a nota editada depois (na web).
+            set_={"note": func.coalesce(statement.excluded.note, t.markers.c.note), "updated_at": func.now()},
         )
     )
 

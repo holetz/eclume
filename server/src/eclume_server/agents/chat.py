@@ -95,7 +95,7 @@ def parse_time(value: object) -> int | None:
 def parse_action(text: str) -> dict[str, Any] | None:
     """O último objeto JSON da saída (dentro ou fora de cerca) que é uma ação válida, ou `None`."""
     fenced = _FENCE.findall(text)
-    candidates = [*fenced, text] if fenced else [text]
+    candidates = [*reversed(fenced), text]
     for candidate in candidates:
         action = _last_object(candidate)
         if action is not None and _valid(action):
@@ -166,7 +166,8 @@ async def _read(tools: TranscriptTools, action: dict[str, Any], budget: int) -> 
             break
         lines.append(line)
     if cut_at is not None:
-        clipped, end = True, cut_at
+        # A primeira fala pode ter começado antes de `from`: o trecho nunca termina antes de começar.
+        clipped, end = True, max(start, cut_at)
     body = "\n".join(lines) or "(nenhuma fala nesse trecho)"
     if clipped:
         body += f"\n(cortado em {hms(end)})"

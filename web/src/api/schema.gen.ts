@@ -597,8 +597,8 @@ export interface paths {
         put?: never;
         /**
          * Enviar marcadores em lote
-         * @description Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica. Sem
-         *     `device_name`, vale o do dispositivo da credencial, se houver.
+         * @description Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica; um
+         *     reenvio sem nota mantém a que já existe. `device_name` é o do corpo (sem ele, nulo).
          */
         post: operations["upsertMarkers"];
         delete?: never;
@@ -900,7 +900,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Resumos da transcrição */
+        /**
+         * Resumos da transcrição
+         * @description Da maior `version` para a menor; os números podem pular (ver `Summary`).
+         */
         get: operations["listSummaries"];
         put?: never;
         /**
@@ -2610,7 +2613,11 @@ export interface components {
          * @enum {string}
          */
         SummaryOrigin: "generated" | "manual" | "chat";
-        /** @description Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`. */
+        /**
+         * @description Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
+         *     Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
+         *     atual; por isso os números podem pular.
+         */
         Summary: {
             /** Format: uuid */
             id: string;

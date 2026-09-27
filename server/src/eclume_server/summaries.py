@@ -614,18 +614,26 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     except Exception:
         log.exception("resumo %s: falha inesperada", summary_id)
         return await _fail(engine, summary_id, INTERNAL_ERROR, "Falha inesperada ao gerar o resumo.", attempts)
-    await _update_open(
-        engine,
-        summary_id,
-        status="done",
-        content_md=completion.text,
-        model=completion.model,
-        attempts=attempts,
-        error_code=None,
-        error_message=None,
-        completed_at=func.now(),
-    )
     async with system_tx(engine) as conn:
+        await lock_versions(conn, summary["transcript_id"])
+        values: dict[str, Any] = {
+            "status": "done",
+            "content_md": completion.text,
+            "model": completion.model,
+            "attempts": attempts,
+            "error_code": None,
+            "error_message": None,
+            "completed_at": func.now(),
+        }
+        # Uma edição ou um ajuste que chegou durante a geração pegou um número acima: a geração
+        # pedida toma o próximo ao terminar, para virar a atual.
+        following = await next_version(conn, summary["transcript_id"])
+        if following > summary["version"] + 1:
+            values["version"] = following
+        s = t.summaries.c
+        await conn.execute(
+            update(t.summaries).where(s.id == summary_id, s.status.in_(["queued", "running"])).values(**values)
+        )
         await _finish_step(conn, summary_id, "done", None)
     return "done"
 

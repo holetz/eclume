@@ -236,7 +236,8 @@ nas duas.
 - **Marcadores** (`markers`): um instante `at_ms` com nota opcional (até 500 caracteres) e o
   `device_name` de quem marcou, ligados à gravação por FK composta com o dono. Idempotentes por
   `UNIQUE (recording_id, client_id)`: o `client_id` é gerado pelo app, e reenviar o mesmo marcador
-  só atualiza a nota (`ON CONFLICT DO UPDATE`; no mesmo lote, o último vale). Chegam de dois
+  só atualiza a nota (`ON CONFLICT DO UPDATE`; no mesmo lote, o último vale); um reenvio sem nota
+  mantém a que já existe, editada na web. Chegam de dois
   jeitos: no `UploadCreate.markers` (até 1 000, gravados no `complete` com o `device_name` da
   captura e, num upload deduplicado — na criação ou no `complete` —, mesclados na gravação
   existente, porque o app pode ter caído depois de subir o áudio), ou depois em

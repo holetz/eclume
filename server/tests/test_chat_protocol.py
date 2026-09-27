@@ -133,6 +133,10 @@ def test_cerca_json_e_texto_em_volta_sao_aceitos():
     assert _run(Scripted([fenced])).message == "Ok"
     two = _json(action="search_transcript", query="x") + " e depois " + _json(action="reply", message="Último")
     assert parse_action(two) == {"action": "reply", "message": "Último"}
+    # Com duas cercas, vale a última ação válida.
+    draft = "```json\n" + _json(action="reply", message="Rascunho") + "\n```"
+    final = "```json\n" + _json(action="reply", message="Final") + "\n```"
+    assert parse_action(f"{draft}\nCorrigindo:\n{final}") == {"action": "reply", "message": "Final"}
 
 
 def test_saida_invalida_pede_correcao_uma_vez():
@@ -187,6 +191,25 @@ def test_leitura_cortada_pela_janela_do_modelo():
     assert read["clipped"] is True
     assert read["to_ms"] < MAX_READ_MS
     assert f"(cortado em {hms(read['to_ms'])})" in provider.prompts[1][1]
+
+
+def test_corte_na_primeira_fala_nao_termina_antes_do_inicio():
+    @dataclass
+    class LongTools(Tools):
+        async def read(self, from_ms: int, to_ms: int) -> list[tuple[int, str]]:  # noqa: ARG002 — assinatura das ferramentas
+            """Uma fala longa que começou antes do trecho pedido."""
+            return [(from_ms - 30_000, "[00:02:50] Locutor 1: " + "palavra " * 2_000)]
+
+    small = ProviderConfig(kind="ollama", model="m", options={"context_window": 1_200, "max_tokens": 200})
+    provider = Scripted(
+        [
+            _json(action="read_transcript", **{"from": "00:03:20", "to": "00:04:00"}),
+            _json(action="reply", message="Nada lido.", summary_md=None),
+        ],
+        config=small,
+    )
+    (read,) = asyncio.run(run_chat(provider, CONTEXT, LongTools())).reads
+    assert read == {"tool": "read_transcript", "from_ms": 200_000, "to_ms": 200_000, "clipped": True}
 
 
 def test_pedido_na_transcricao_e_so_dado():

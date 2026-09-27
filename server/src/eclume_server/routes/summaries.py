@@ -17,7 +17,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.pagination import Cursor, Limit, decode_cursor, page
+from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
 from eclume_server.problems import invalid_field, not_found
 from eclume_server.serialize import Row
 from eclume_server.summaries import (
@@ -107,20 +107,21 @@ async def _summary(conn: AsyncConnection, summary_id: UUID) -> Row:
 async def list_summaries(
     transcript_id: UUID, principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """Resumos da transcrição, do mais novo para o mais antigo."""
+    """Resumos da transcrição, da maior `version` para a menor (a geração toma o número ao terminar)."""
     c = t.summaries.c
     query = (
         select(t.summaries)
         .where(c.transcript_id == transcript_id)
-        .order_by(c.created_at.desc(), c.id.desc())
+        .order_by(c.version.desc(), c.id.desc())
         .limit(limit + 1)
     )
     if cursor:
-        query = query.where(tuple_(c.created_at, c.id) < decode_cursor(cursor))
+        query = query.where(tuple_(c.version, c.id) < decode_ordered_position(cursor))
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await _transcript(conn, transcript_id)
         rows = list((await conn.execute(query)).mappings().all())
-    return page([summary_json(row) for row in rows], rows, limit, "created_at")
+    next_cursor = encode_position(rows[limit - 1]["version"], rows[limit - 1]["id"]) if len(rows) > limit else None
+    return {"items": [summary_json(row) for row in rows[:limit]], "next_cursor": next_cursor}
 
 
 @router.post("/transcripts/{transcript_id}/summaries", status_code=202)
