@@ -18,9 +18,18 @@ export const COMPUTE_TYPES: readonly Option[] = [
 ]
 
 export const LANGUAGES: readonly Option[] = [
+  { value: 'auto', label: 'Detectar automaticamente' },
   { value: 'pt', label: 'Português' },
   { value: 'en', label: 'Inglês' },
   { value: 'es', label: 'Espanhol' },
+]
+
+/** Para que um provider serve (`used_for`); cada finalidade tem um provider só. */
+export const PURPOSES: readonly Option[] = [
+  { value: 'summaries', label: 'Resumos' },
+  { value: 'fields', label: 'Campos' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'agenda_detection', label: 'Detecção do tipo' },
 ]
 
 export const PROVIDER_KINDS: readonly Option[] = [

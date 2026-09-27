@@ -47,7 +47,6 @@ function SettingsForm({ settings }: { settings: Settings }) {
   const [diarize, setDiarize] = useState(settings.diarization.enabled)
   const [minSpeakers, setMinSpeakers] = useState(settings.diarization.min_speakers?.toString() ?? '')
   const [maxSpeakers, setMaxSpeakers] = useState(settings.diarization.max_speakers?.toString() ?? '')
-  const [autoSummarize, setAutoSummarize] = useState(settings.summarization.auto_summarize)
   const [saved, setSaved] = useState(false)
   const ids = {
     engine: useId(),
@@ -79,7 +78,6 @@ function SettingsForm({ settings }: { settings: Settings }) {
           default_language: language,
         },
         diarization: { enabled: diarize, min_speakers: optionalInt(minSpeakers), max_speakers: optionalInt(maxSpeakers) },
-        summarization: { auto_summarize: autoSummarize },
       },
       { onSuccess: () => setSaved(true) },
     )
@@ -222,20 +220,6 @@ function SettingsForm({ settings }: { settings: Settings }) {
             />
           </div>
         </div>
-      </fieldset>
-
-      <fieldset className={styles.fieldset}>
-        <legend>Resumo</legend>
-        <label className={styles.check}>
-          <input type="checkbox" checked={autoSummarize} onChange={(e) => setAutoSummarize(e.target.checked)} />
-          <span>
-            <span>Resumir automaticamente ao fim da transcrição</span>
-            <span className="field-hint">
-              Usa o provider padrão (em <Link to="/admin/agentes">Agentes</Link>) e o template padrão de cada
-              usuário; quem não tem template padrão fica sem resumo automático.
-            </span>
-          </span>
-        </label>
       </fieldset>
 
       {update.isError && (
