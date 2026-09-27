@@ -1,0 +1,202 @@
+//! A CA do servidor fixada pela impressão digital (holetz/eclume#35, "Fixação da CA pelos apps").
+//!
+//! O Caddy `tls internal` troca o certificado folha a cada ~12 h e não envia a raiz na cadeia, por
+//! isso o app fixa a **raiz**: baixa `<url>/downloads/eclume-root.crt` numa conexão sem
+//! verificação (só esse arquivo), confere o SHA-256 do DER do primeiro certificado com a impressão
+//! digital esperada (do instalador, do mDNS ou do QR) e grava o PEM, que o `transport.rs` e o
+//! updater somam às raízes do SO. Sem impressão digital esperada, confia na primeira (TOFU) e a
+//! mostra à pessoa. O descritor `GET /api/v1/server`, já com verificação, confirma o que veio.
+
+use std::path::{Path, PathBuf};
+
+use anyhow::{anyhow, bail, Context, Result};
+use sha2::{Digest, Sha256};
+use ureq::tls::PemItem;
+
+use crate::api::ServerInfo;
+use crate::protocol::{api_error, parse_base};
+use crate::transport::{HttpRequest, Transport};
+
+/// Onde a CA fica publicada no servidor.
+pub const ROOT_PATH: &str = "/downloads/eclume-root.crt";
+/// O arquivo da CA fixada, na pasta de configuração do app.
+pub const PINNED_FILE: &str = "servidor-ca.pem";
+/// A mensagem quando a raiz do servidor não é mais a fixada.
+pub const CA_CHANGED: &str = "O certificado do servidor mudou";
+
+/// A raiz baixada e a sua impressão digital.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RootCa {
+    pub pem: Vec<u8>,
+    /// SHA-256 do DER, em hex minúsculo (o formato do `ca_sha256` do contrato).
+    pub sha256: String,
+}
+
+/// SHA-256 em hex minúsculo.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Uma impressão digital como o contrato escreve: 64 hex minúsculos. Aceita maiúsculas e `:`.
+pub fn normalize_fingerprint(value: &str) -> Result<String> {
+    let hex: String = value
+        .trim()
+        .chars()
+        .filter(|c| *c != ':')
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if hex.len() != 64 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("impressão digital inválida: esperava o SHA-256 em 64 caracteres hexadecimais");
+    }
+    Ok(hex)
+}
+
+/// O PEM e a impressão digital do primeiro certificado.
+pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
+    let der = ureq::tls::parse_pem(pem)
+        .find_map(|item| match item {
+            Ok(PemItem::Certificate(cert)) => Some(cert.der().to_vec()),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("a CA do servidor não é um certificado PEM"))?;
+    Ok(RootCa {
+        pem: pem.to_vec(),
+        sha256: sha256_hex(&der),
+    })
+}
+
+/// Baixa a raiz de `url` por `insecure` (um transporte sem verificação de TLS, usado só aqui) e
+/// confere com `expected`; sem `expected`, devolve a raiz para a pessoa conferir (TOFU).
+pub fn fetch_root(insecure: &dyn Transport, url: &str, expected: Option<&str>) -> Result<RootCa> {
+    let base = parse_base(url)?;
+    let address = format!("{}{ROOT_PATH}", base.as_str().trim_end_matches('/'));
+    let response = insecure
+        .send(HttpRequest::new("GET", address.clone()))
+        .with_context(|| format!("não foi possível falar com o servidor em {base}"))?;
+    if !response.is_success() {
+        return Err(api_error("falha ao baixar a CA do servidor", &response));
+    }
+    let root = root_from_pem(&response.body)?;
+    if let Some(expected) = expected {
+        if root.sha256 != normalize_fingerprint(expected)? {
+            bail!(
+                "a CA em {address} não confere com a impressão digital esperada; \
+                 confira o endereço com quem administra o servidor"
+            );
+        }
+    }
+    Ok(root)
+}
+
+/// Grava a raiz em `<config_dir>/servidor-ca.pem` e devolve o caminho, o `ca_path` do app.
+pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(config_dir)
+        .with_context(|| format!("falha ao criar {}", config_dir.display()))?;
+    let path = config_dir.join(PINNED_FILE);
+    std::fs::write(&path, &root.pem)
+        .with_context(|| format!("falha ao gravar {}", path.display()))?;
+    Ok(path)
+}
+
+/// Confere, pelo descritor lido já com verificação, que o servidor anuncia a raiz fixada. Um
+/// descritor sem `ca_sha256` (raiz ainda não publicada) não contradiz nada.
+pub fn confirm(info: &ServerInfo, pinned: &str) -> Result<()> {
+    match info.ca_sha256.as_deref() {
+        Some(announced) if normalize_fingerprint(announced)? != pinned => bail!(CA_CHANGED),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::script::{json, Script};
+    use crate::transport::HttpResponse;
+
+    const CA: &str = include_str!("../tests/fixtures/ca-teste.pem");
+    const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
+
+    fn pem(body: &str) -> Result<HttpResponse> {
+        Ok(HttpResponse {
+            status: 200,
+            headers: vec![("content-type".into(), "application/x-x509-ca-cert".into())],
+            body: body.as_bytes().to_vec(),
+        })
+    }
+
+    fn info(ca: Option<&str>) -> ServerInfo {
+        ServerInfo {
+            name: "eclume".into(),
+            url: "https://eclume.test:8443".into(),
+            ca_sha256: ca.map(str::to_string),
+            version: "0.1.0".into(),
+            contract_version: "2.3.0".into(),
+        }
+    }
+
+    #[test]
+    fn impressao_digital_do_der_do_primeiro_certificado() {
+        let root = root_from_pem(CA.as_bytes()).unwrap();
+        assert_eq!(root.sha256, CA_SHA256);
+        let two = format!("{CA}{CA}");
+        assert_eq!(root_from_pem(two.as_bytes()).unwrap().sha256, CA_SHA256);
+        assert!(root_from_pem(b"<html>login</html>").is_err());
+    }
+
+    #[test]
+    fn normaliza_a_impressao_digital() {
+        let colons = CA_SHA256
+            .to_uppercase()
+            .as_bytes()
+            .chunks(2)
+            .map(|c| std::str::from_utf8(c).unwrap())
+            .collect::<Vec<_>>()
+            .join(":");
+        assert_eq!(normalize_fingerprint(&colons).unwrap(), CA_SHA256);
+        assert!(normalize_fingerprint("abc").is_err());
+        assert!(normalize_fingerprint(&"z".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn baixa_confere_e_grava() {
+        let script = Script::default()
+            .expect("GET /downloads/eclume-root.crt", pem(CA))
+            .expect("GET /downloads/eclume-root.crt", pem(CA))
+            .expect("GET /downloads/eclume-root.crt", pem(CA))
+            .expect(
+                "GET /downloads/eclume-root.crt",
+                json(404, serde_json::json!({})),
+            );
+        let url = "https://eclume.test:8443/";
+        let root = fetch_root(&script, url, Some(&CA_SHA256.to_uppercase())).unwrap();
+        assert_eq!(root.sha256, CA_SHA256);
+
+        let tofu = fetch_root(&script, url, None).unwrap();
+        assert_eq!(tofu.sha256, CA_SHA256);
+
+        let err = fetch_root(&script, url, Some(&"0".repeat(64))).unwrap_err();
+        assert!(format!("{err:#}").contains("não confere"), "{err:#}");
+        assert!(fetch_root(&script, url, None).is_err());
+
+        let dir = std::env::temp_dir().join(format!("eclume-pin-{}", std::process::id()));
+        let path = save(&root, &dir).unwrap();
+        assert_eq!(path.file_name().unwrap(), PINNED_FILE);
+        assert_eq!(std::fs::read(&path).unwrap(), CA.as_bytes());
+        assert_eq!(
+            crate::transport::read_pem_certs(&path).unwrap().len(),
+            1,
+            "o PEM gravado serve de ca_path"
+        );
+    }
+
+    #[test]
+    fn descritor_confirma_ou_acusa_a_troca() {
+        confirm(&info(Some(CA_SHA256)), CA_SHA256).unwrap();
+        confirm(&info(None), CA_SHA256).unwrap();
+        let err = confirm(&info(Some(&"a".repeat(64))), CA_SHA256).unwrap_err();
+        assert_eq!(err.to_string(), CA_CHANGED);
+    }
+}

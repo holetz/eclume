@@ -5,6 +5,7 @@
 pub mod api;
 pub mod devices;
 pub mod pat;
+pub mod pin;
 pub mod protocol;
 pub mod transport;
 pub mod uploader;
