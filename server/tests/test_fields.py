@@ -215,6 +215,21 @@ def test_regra_do_campo_tem_teto(user: Api):
     assert user.patch(f"{URL}/{field['id']}", json={"instructions": "x" * 4001}).status_code == 422
 
 
+def test_automatico_nao_sobrescreve_o_que_o_usuario_escreveu(user: Api, services: Services):
+    notes = user.post(URL, json={"name": "Pendências", "kind": "list"}).json()
+    recording = upload_file(user, audio_bytes(1500), title="Kickoff")
+    rid = recording["id"]
+    user.put(f"/api/v1/recordings/{rid}/fields/{notes['id']}", json={"value": ["ligar"]})
+    title_id = _values(user, rid)["titulo"]["field"]["id"]
+    # Como o `fill_fields` que chega depois da edição: a gravação do valor não passa por cima.
+    _auto(services, rid, title_id, "Outro título")
+    _auto(services, rid, notes["id"], ["automático"])
+    values = _values(user, rid)
+    assert (values["titulo"]["value"], values["titulo"]["origin"]) == ("Kickoff", "edited")
+    assert (values["pendencias"]["value"], values["pendencias"]["origin"]) == (["ligar"], "edited")
+    assert user.get(f"/api/v1/recordings/{rid}").json()["title"] == "Kickoff"
+
+
 def test_valores_de_outra_conta_nao_existem(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):

@@ -172,10 +172,12 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
     transcript_revision: int | None = None,
     provider_name: str | None = None,
     model: str | None = None,
-) -> None:
+) -> bool:
     """Grava o valor e a origem; título e tags vão também para `recordings`, que a busca lê.
 
-    Serve às rotas (sob a RLS do dono) e ao preenchimento automático (papel de conexão).
+    Serve às rotas (sob a RLS do dono) e ao preenchimento automático (papel de conexão). O valor
+    `auto` só substitui outro `auto`: o que o usuário escreveu ou aceitou no meio-tempo fica, e a
+    função devolve `False`.
     """
     fv = t.field_values
     values = {
@@ -186,21 +188,29 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
         "model": model,
         "updated_at": func.now(),
     }
-    await conn.execute(
+    written = await conn.execute(
         pg_insert(fv)
         .values(recording_id=recording_id, field_id=field["id"], owner_id=field["owner_id"], **values)
-        .on_conflict_do_update(index_elements=[fv.c.recording_id, fv.c.field_id], set_=values)
+        .on_conflict_do_update(
+            index_elements=[fv.c.recording_id, fv.c.field_id],
+            set_=values,
+            where=(fv.c.origin == "auto") if origin == "auto" else None,
+        )
+        .returning(fv.c.field_id)
     )
+    if written.first() is None:
+        return False
     # O embutido tem o nome da coluna de `recordings` em que o valor também vive.
     column = field["builtin"]
     if column is None or value is None:
-        return
+        return True
     now = func.now()
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording_id).values({column: value, "updated_at": now})
     )
     # Título e tags aparecem na transcrição: o `?since=` dos clientes precisa ver a mudança.
     await conn.execute(update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now))
+    return True
 
 
 async def builtin_fields(conn: AsyncConnection, owner_id: UUID) -> dict[str, Row]:
@@ -339,7 +349,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
             value = values.get(row["key"])
             if row["id"] not in still or (value is None and row["builtin"] == "title"):
                 continue
-            await set_value(
+            written = await set_value(
                 conn,
                 recording_id,
                 row,
@@ -349,7 +359,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
                 provider_name=provider_row["name"],
                 model=completion.model,
             )
-            filled += value is not None
+            filled += written and value is not None
         await set_step(
             conn, recording, revision, "fields", "done", detail={"filled": filled, "model": completion.model}
         )
