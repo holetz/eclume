@@ -7,9 +7,7 @@ import { isInMoreSection, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
 
-const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org', role: 'member' }
-
-const admin: ShellUser = { ...member, role: 'admin' }
+const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
   render(
@@ -32,25 +30,24 @@ describe('navegação', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
   const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
 
-  it('agrupa em Gravações, Organizar e Administração, e o resto em Configurações e ajuda', () => {
-    const { main, more } = navGroups('admin')
-    expect(titles(main)).toEqual(['Gravações', 'Organizar', 'Administração'])
+  it('agrupa em Gravações e Organizar, e o resto em Configurações e ajuda', () => {
+    const { main, more } = navGroups()
+    expect(titles(main)).toEqual(['Gravações', 'Organizar'])
     expect(titles(more)).toEqual(['Minhas configurações'])
-    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções', 'Painel admin'])
+    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções'])
     expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop'])
   })
 
-  it('deixa fora os itens desligados e o admin para quem não é admin', () => {
-    const { main, more } = navGroups('member')
-    expect(titles(main)).toEqual(['Gravações', 'Organizar'])
+  it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
+    const { main, more } = navGroups()
     expect(labels([...main, ...more])).not.toContain('Campos e regras')
     expect(labels([...main, ...more])).not.toContain('Central de ajuda')
-    expect(labels(main)).not.toContain('Painel admin')
+    expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
   it('liga as áreas futuras nas rotas do mapa de telas', () => {
     const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
-    const { main, more } = navGroups('member', all)
+    const { main, more } = navGroups(all)
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
     expect(routes).toMatchObject({
@@ -73,22 +70,21 @@ describe('navegação', () => {
 describe('AppShell', () => {
   afterEach(() => document.documentElement.removeAttribute('data-theme'))
 
-  it('mostra os grupos na ordem, com Administração só para admin', () => {
-    renderShell(admin)
+  it('mostra os grupos na ordem', () => {
+    renderShell()
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     // O <details> também tem o papel group; os grupos de links são os rotulados pelo título.
     const titles = within(nav)
       .getAllByRole('group')
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
-    expect(titles).toEqual(['Gravações', 'Organizar', 'Administração', 'Minhas configurações'])
+    expect(titles).toEqual(['Gravações', 'Organizar', 'Minhas configurações'])
     expect(within(nav).getByText('Configurações e ajuda').tagName).toBe('SUMMARY')
     expect(within(nav).queryByRole('link', { name: 'Campos e regras' })).not.toBeInTheDocument()
   })
 
-  it('não mostra Administração a quem não é admin', () => {
+  it('não mostra o painel admin', () => {
     renderShell()
-    expect(screen.queryByRole('group', { name: 'Administração' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Painel admin' })).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Gravações' })).toBeInTheDocument()
   })

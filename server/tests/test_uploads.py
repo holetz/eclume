@@ -80,7 +80,6 @@ def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
     assert recording["title"] == "Alinhamento do programa de lideranças"
     assert recording["source"] == "desktop"
     assert recording["owner"] == {"id": str(account.user_id), "name": "Mariana Couto"}
-    assert recording["visibility"] == "private"
     assert recording["content_hash"] == f"sha256:{upload['sha256']}"
     assert recording["job"]["state"] == "queued"
     assert recording["job"]["error"] is None
@@ -92,7 +91,7 @@ def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
     assert function == "transcribe"
     recording_id, key, options = args
     assert recording_id == recording["id"]
-    assert key == f"orgs/{account.org_id}/users/{account.user_id}/recordings/{recording['id']}/audio"
+    assert key == f"users/{account.user_id}/recordings/{recording['id']}/audio"
     assert options == {
         "language": "pt",
         "min_speakers": None,

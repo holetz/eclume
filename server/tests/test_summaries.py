@@ -17,7 +17,6 @@ from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -34,16 +33,14 @@ def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN
     return run(services.sql(go))
 
 
-def _summarization(services: Services, org_id: UUID) -> dict[str, Any]:
-    rows = _sql(services, "SELECT summarization FROM org_settings WHERE org_id = :org", org=org_id)
-    return rows[0][0]
+def _summarization(services: Services) -> dict[str, Any]:
+    return _sql(services, "SELECT summarization FROM platform_settings")[0][0]
 
 
-def _set_summarization(services: Services, org_id: UUID, **changes: Any) -> None:  # noqa: ANN401
+def _set_summarization(services: Services, **changes: Any) -> None:  # noqa: ANN401
     _sql(
         services,
-        "UPDATE org_settings SET summarization = summarization || CAST(:changes AS jsonb) WHERE org_id = :org",
-        org=org_id,
+        "UPDATE platform_settings SET summarization = summarization || CAST(:changes AS jsonb)",
         changes=json.dumps(changes),
     )
 
@@ -63,31 +60,33 @@ def _templates(api: Api) -> dict[str, dict[str, Any]]:
 
 
 @pytest.fixture
-def team(as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> dict[str, Any]:
-    """Admin e membro de uma organização, com sessão."""
-    admin = make_user(role="admin")
+def team(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> dict[str, Any]:
+    """Sessão de admin (plataforma nos padrões) e um usuário, com sessão."""
     member = make_user()
-    return {"admin": as_user(admin), "member": as_user(member), "admin_account": admin, "member_account": member}
+    return {"admin": admin, "member": as_user(member), "member_account": member}
 
 
 # --- templates ------------------------------------------------------------------------------------
 
 
-def test_organizacao_nasce_com_os_templates_padrao(team: dict[str, Any], services: Services, org: UUID):
+def test_conta_nasce_com_os_templates_padrao(team: dict[str, Any], services: Services):
     templates = _templates(team["member"])
     assert list(templates) == DEFAULTS
-    assert all(item["scope"] == "organization" for item in templates.values())
+    assert all("scope" not in item for item in templates.values())
     assert [name for name, item in templates.items() if item["is_default"]] == ["Ata de reunião"]
-    assert _summarization(services, org)["default_template_id"] == templates["Ata de reunião"]["id"]
+    assert "default_template_id" not in _summarization(services)
 
 
-def test_template_pessoal_e_padrao_pessoal(team: dict[str, Any]):
+def test_template_pessoal_e_padrao_pessoal(
+    team: dict[str, Any], as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     member: Api = team["member"]
     first = member.post(
         "/api/v1/summary-templates", json={"name": "Meu", "instructions": "Resuma.", "is_default": True}
     )
     assert first.status_code == 201, first.text
-    assert (first.json()["scope"], first.json()["is_default"]) == ("user", True)
+    assert first.json()["is_default"] is True
+    assert _templates(member)["Ata de reunião"]["is_default"] is False
     second = member.post(
         "/api/v1/summary-templates", json={"name": "Outro", "instructions": "Liste.", "is_default": True}
     ).json()
@@ -100,60 +99,47 @@ def test_template_pessoal_e_padrao_pessoal(team: dict[str, Any]):
     assert member.patch(f"/api/v1/summary-templates/{second['id']}", json={}).status_code == 422
     assert member.patch(f"/api/v1/summary-templates/{second['id']}", json={"name": None}).status_code == 422
 
-    # Template pessoal é invisível para os colegas.
-    assert team["admin"].get(f"/api/v1/summary-templates/{second['id']}").status_code == 404
-    assert "Outro" not in _templates(team["admin"])
+    # Template é invisível para as outras contas.
+    other = as_user(make_user())
+    assert other.get(f"/api/v1/summary-templates/{second['id']}").status_code == 404
+    assert other.patch(f"/api/v1/summary-templates/{second['id']}", json={"name": "x"}).status_code == 404
+    assert other.delete(f"/api/v1/summary-templates/{second['id']}").status_code == 404
+    assert "Outro" not in _templates(other)
 
     assert member.delete(f"/api/v1/summary-templates/{second['id']}").status_code == 204
     assert member.get(f"/api/v1/summary-templates/{second['id']}").status_code == 404
 
 
-def test_padroes_da_organizacao_sao_do_admin_com_sessao(team: dict[str, Any], services: Services, org: UUID):
-    admin: Api = team["admin"]
+# --- providers ------------------------------------------------------------------------------------
+
+
+def test_os_templates_padrao_sao_do_usuario(team: dict[str, Any]):
     member: Api = team["member"]
     ata = _templates(member)["Ata de reunião"]
-    body = {"name": "Devolutiva", "instructions": "Escreva a devolutiva.", "scope": "organization"}
-
-    assert member.post("/api/v1/summary-templates", json=body).status_code == 403
-    assert member.patch(f"/api/v1/summary-templates/{ata['id']}", json={"name": "x"}).status_code == 403
-    assert member.delete(f"/api/v1/summary-templates/{ata['id']}").status_code == 403
-    admin_pat = admin.pat("summaries:write", "summaries:read")
-    forbidden = admin_pat.post("/api/v1/summary-templates", json=body)
-    assert forbidden.status_code == 403
-    assert forbidden.json()["code"] == "forbidden"
-
-    created = admin.post("/api/v1/summary-templates", json=body | {"is_default": True})
-    assert created.status_code == 201, created.text
-    devolutiva = created.json()
-    assert (devolutiva["scope"], devolutiva["is_default"]) == ("organization", True)
-    assert _summarization(services, org)["default_template_id"] == devolutiva["id"]
-    assert _templates(member)["Ata de reunião"]["is_default"] is False
-    assert member.get(f"/api/v1/summary-templates/{devolutiva['id']}").json()["name"] == "Devolutiva"
-
-    back = admin.patch(f"/api/v1/summary-templates/{ata['id']}", json={"is_default": True})
-    assert back.json()["is_default"] is True
-    assert admin.delete(f"/api/v1/summary-templates/{ata['id']}").status_code == 204
-    assert _summarization(services, org)["default_template_id"] is None
+    renamed = member.patch(f"/api/v1/summary-templates/{ata['id']}", json={"name": "Minha ata"})
+    assert renamed.status_code == 200
+    assert member.delete(f"/api/v1/summary-templates/{ata['id']}").status_code == 204
+    assert list(_templates(member)) == DEFAULTS[1:]
 
 
 # --- providers ------------------------------------------------------------------------------------
 
 
-def test_providers_sao_so_do_admin_com_sessao(team: dict[str, Any]):
-    assert team["member"].get("/api/v1/admin/agent-providers").status_code == 403
-    assert team["member"].post("/api/v1/admin/agent-providers", json=CLAUDE).status_code == 403
-    pat = team["admin"].pat("summaries:read", "summaries:write")
-    assert pat.get("/api/v1/admin/agent-providers").status_code == 403
+def test_providers_sao_so_da_sessao_de_admin(team: dict[str, Any]):
+    assert team["member"].get("/api/v1/admin/agent-providers").status_code == 401
+    assert team["member"].post("/api/v1/admin/agent-providers", json=CLAUDE).status_code == 401
+    pat = team["member"].pat("summaries:read", "summaries:write")
+    assert pat.get("/api/v1/admin/agent-providers").status_code == 401
 
 
-def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Services, org: UUID):
+def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Services):
     admin: Api = team["admin"]
     claude = admin.post("/api/v1/admin/agent-providers", json=CLAUDE)
     assert claude.status_code == 201, claude.text
     claude = claude.json()
     assert (claude["api_key_set"], claude["base_url"], claude["enabled"]) == (False, None, True)
-    # O primeiro provider habilitado vira o padrão da organização.
-    assert _summarization(services, org)["default_provider_id"] == claude["id"]
+    # O primeiro provider habilitado vira o padrão da plataforma.
+    assert _summarization(services)["default_provider_id"] == claude["id"]
 
     invalid = [
         {"name": "x", "kind": "openai-compatible", "model": "m"},
@@ -177,7 +163,7 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     ).json()
     assert deepseek["api_key_set"] is True
     assert deepseek["options"] == {"temperature": 0.2, "context_window": 64000}
-    assert _summarization(services, org)["default_provider_id"] == claude["id"]
+    assert _summarization(services)["default_provider_id"] == claude["id"]
     stored = _sql(services, "SELECT api_key_encrypted FROM agent_providers WHERE id = :id", id=deepseek["id"])[0][0]
     assert "sk-segredo-do-teste" not in stored
 
@@ -193,38 +179,34 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     assert admin.patch(f"/api/v1/admin/agent-providers/{deepseek['id']}", json={"base_url": None}).status_code == 422
 
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 204
-    assert _summarization(services, org)["default_provider_id"] is None
+    assert _summarization(services)["default_provider_id"] is None
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 404
 
 
-def test_rls_de_providers_e_configuracao(team: dict[str, Any], services: Services, org: UUID):
-    """Sob `eclume_app`, membro não cadastra provider nem muda a configuração; admin muda."""
+def test_rls_de_providers_e_configuracao(team: dict[str, Any], services: Services):
+    """Sob `eclume_app`, o usuário lê o provider sem a chave e a configuração, e não escreve em nenhum."""
     member: Account = team["member_account"]
-    admin: Account = team["admin_account"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE | {"api_key": "sk-x"})
 
-    async def as_app(conn: Any, user: Account, statement: str) -> int:  # noqa: ANN401
-        await enter_user_context(conn, org, user.user_id)
-        return (await conn.execute(text(statement))).rowcount
+    async def as_app(conn: Any, statement: str) -> Any:  # noqa: ANN401
+        await enter_user_context(conn, member.user_id)
+        return (await conn.execute(text(statement))).all()
 
-    update = "UPDATE org_settings SET summarization = summarization"
-    assert run(services.sql(lambda conn: as_app(conn, member, update))) == 0
-    assert run(services.sql(lambda conn: as_app(conn, admin, update))) == 1
-
-    async def insert_provider(conn: Any) -> None:  # noqa: ANN401
-        await enter_user_context(conn, org, member.user_id)
-        await conn.execute(
-            text("INSERT INTO agent_providers (org_id, name, kind, model) VALUES (:org, 'x', 'claude-cli', 'm')"),
-            {"org": org},
-        )
-
-    with pytest.raises(Exception, match="row-level security"):
-        run(services.sql(insert_provider))
+    assert run(services.sql(lambda conn: as_app(conn, "SELECT name FROM agent_providers"))) == [("Claude (servidor)",)]
+    assert len(run(services.sql(lambda conn: as_app(conn, "SELECT summarization FROM platform_settings")))) == 1
+    for statement in (
+        "SELECT api_key_encrypted FROM agent_providers",
+        "UPDATE platform_settings SET summarization = summarization RETURNING 1",
+        "INSERT INTO agent_providers (name, kind, model) VALUES ('x', 'claude-cli', 'm') RETURNING 1",
+    ):
+        with pytest.raises(Exception, match="permission denied"):
+            run(services.sql(lambda conn, s=statement: as_app(conn, s)))
 
 
 # --- resumos --------------------------------------------------------------------------------------
 
 
-def test_resumo_sob_demanda_versionado(  # noqa: PLR0915 — o ciclo inteiro é o teste
+def test_resumo_sob_demanda_versionado(
     team: dict[str, Any], make_user: Callable[..., Account], as_user: Callable[[Account], Api], services: Services
 ):
     owner_account = make_user(name="Mariana Couto")
@@ -274,20 +256,12 @@ def test_resumo_sob_demanda_versionado(  # noqa: PLR0915 — o ciclo inteiro é 
     reader_only = owner.pat("summaries:read")
     assert reader_only.post(url, json={"template_id": ata["id"]}).json()["code"] == "insufficient_scope"
 
-    # Quem vê por compartilhamento lê os resumos, mas não gera nem exclui.
-    recording_id = owner.get(f"/api/v1/transcripts/{transcript_id}").json()["recording_id"]
-    owner.post(f"/api/v1/recordings/{recording_id}/shares", json={"target_type": "organization"})
-    colleague: Api = team["member"]
-    assert len(colleague.get(url).json()["items"]) == 3
-    assert colleague.post(url, json={"template_id": ata["id"]}).status_code == 403
-    assert colleague.delete(f"/api/v1/summaries/{first['id']}").status_code == 403
-
-    # Outra organização não enxerga nada.
-    from eclume_server_testing.api import new_org, new_user  # noqa: PLC0415 — só este teste
-
-    stranger = as_user(new_user(services, new_org(services, "Outra")))
+    # Outra conta não enxerga, não gera nem exclui.
+    stranger: Api = team["member"]
     assert stranger.get(url).status_code == 404
+    assert stranger.post(url, json={"template_id": ata["id"]}).status_code == 404
     assert stranger.get(f"/api/v1/summaries/{first['id']}").status_code == 404
+    assert stranger.delete(f"/api/v1/summaries/{first['id']}").status_code == 404
 
     # Excluir uma versão não mexe nas outras; o job que ainda estava na fila não faz nada.
     assert writer.delete(f"/api/v1/summaries/{second['id']}").status_code == 204
@@ -347,25 +321,24 @@ def test_resumo_automatico_apos_a_transcricao(
     make_user: Callable[..., Account],
     as_user: Callable[[Account], Api],
     services: Services,
-    org: UUID,
 ):
     owner_account = make_user()
     owner = as_user(owner_account)
     uploader = owner.pat("recordings:write", "recordings:read")
     team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
 
-    # Sem o flag da organização, nada é gerado.
+    # Sem o flag da plataforma, nada é gerado.
     transcript_id = _transcribed(uploader, services)
     assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
 
-    _set_summarization(services, org, auto_summarize=True)
+    _set_summarization(services, auto_summarize=True)
     agents = FakeAgents()
     transcript_id = _transcribed(uploader, services, agents)
     (automatic,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
     assert (automatic["trigger"], automatic["status"]) == ("automatic", "done")
     assert automatic["template"]["name"] == "Ata de reunião"
 
-    # O padrão pessoal do dono vence o da organização.
+    # Trocar o padrão do dono troca o template do resumo automático.
     owner.post(
         "/api/v1/summary-templates", json={"name": "Minha ata", "instructions": "Só decisões.", "is_default": True}
     )
@@ -373,3 +346,9 @@ def test_resumo_automatico_apos_a_transcricao(
     (personal,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
     assert personal["template"]["name"] == "Minha ata"
     assert "Só decisões." in agents.calls[-1][2]
+
+    # Sem template padrão, não há resumo automático.
+    minha = _templates(owner)["Minha ata"]
+    owner.patch(f"/api/v1/summary-templates/{minha['id']}", json={"is_default": False})
+    transcript_id = _transcribed(uploader, services, agents)
+    assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []

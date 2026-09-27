@@ -4,10 +4,10 @@ title: Contrato de jobs de transcrição (server ↔ worker GPU)
 description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin e o token do HF cifrado nas options), os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32
 maintainer: holetz
 ---
 
@@ -40,7 +40,7 @@ argumentos:
   - `fallback_model` — modelo depois de um OOM persistente (padrão `medium`);
   - `diarization_model` — pipeline de diarização (padrão `pyannote/speaker-diarization-community-1`);
   - `endpoint_url` — base da engine `openai-compatible`; vence `ECLUME_REMOTE_BASE_URL`;
-  - `hf_token_encrypted` — o token do Hugging Face da organização, cifrado. Vai só no payload
+  - `hf_token_encrypted` — o token do Hugging Face da plataforma (`platform_secrets`), cifrado. Vai só no payload
     enfileirado, nunca em `transcription_jobs.options`. Formato: `v1:` + base64(nonce de 12 bytes +
     cifra AES-256-GCM + tag), com a chave de `ECLUME_ENCRYPTION_KEY` (base64 de 32 bytes) ou, sem
     ela, HKDF-SHA256 de `ECLUME_SECRET_KEY` com `info=eclume-secrets-v1` — **as mesmas no server
@@ -126,7 +126,7 @@ de progresso e o heartbeat:
   `job_stalled`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e `upload_failed` saem com
   `Job.error.retryable = true` (contrato 1.4.0).
 - **Retentar é explícito.** O dono retranscreve (`POST /recordings/{id}/retranscribe`); o admin
-  retenta qualquer gravação da organização por `POST /admin/jobs/{job_id}/retry`
+  retenta a gravação de qualquer usuário por `POST /admin/jobs/{job_id}/retry`
   ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
   configuração atual. Não há retentativa automática: repetiria um OOM ou um áudio ruim em laço.
 - **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela.
@@ -139,9 +139,9 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
 
 ## Como o server cumpre a sua parte
 
-- **Opções.** `options` sai da configuração da organização (`org_settings`): o idioma é o da
-  gravação, sem região (`pt-BR` → `pt`), ou o padrão da organização; `diarize` é a diarização
-  ligada; `embeddings` só é `true` com o opt-in de identificação por voz da organização (LGPD).
+- **Opções.** `options` sai da configuração da plataforma (`platform_settings`): o idioma é o da
+  gravação, sem região (`pt-BR` → `pt`), ou o padrão da plataforma; `diarize` é a diarização
+  ligada; `embeddings` só é `true` com a identificação por voz ligada na plataforma (LGPD).
 - **Revisão.** A `revision` do job é a da transcrição que ele vai produzir: 1 no primeiro;
   numa retranscrição, uma acima da maior entre a transcrição e o último job.
 - **Estado do job.** Com o hash de progresso presente, o job aparece `running` e a gravação

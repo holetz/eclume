@@ -31,7 +31,7 @@ export function HealthPage() {
       <div className={styles.intro}>
         <h2 id="saude-titulo">Saúde</h2>
         <p className="text-muted">
-          Filas, worker GPU e jobs da organização. Atualiza sozinha a cada {HEALTH_REFRESH_MS / 1000} segundos.
+          Filas, worker GPU e jobs da plataforma. Atualiza sozinha a cada {HEALTH_REFRESH_MS / 1000} segundos.
         </p>
         {health.data && <p className={styles.meta}>Verificado às {formatDateTime(health.data.checked_at)}.</p>}
       </div>
@@ -154,7 +154,7 @@ function HealthView({ health }: { health: Health }) {
       <section className={styles.section} aria-labelledby="saude-jobs">
         <h3 id="saude-jobs">Transcrições em andamento</h3>
         {jobs.length === 0 ? (
-          <p className="text-muted">Nenhuma transcrição da organização na fila ou rodando.</p>
+          <p className="text-muted">Nenhuma transcrição na fila ou rodando.</p>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>

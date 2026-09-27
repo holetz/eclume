@@ -37,7 +37,7 @@ export function RequireSession() {
   const { user } = me.data
   return (
     <AppShell
-      user={{ name: user.name, email: user.email, role: user.role }}
+      user={{ name: user.name, email: user.email }}
       onLogout={() => logout.mutate()}
       loggingOut={logout.isPending}
     />

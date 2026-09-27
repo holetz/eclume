@@ -1,7 +1,8 @@
 // Navegação do shell em duas seções: a principal e a recolhível "Configurações e ajuda". As áreas
 // de outras specs já estão previstas e desligadas: para ligá-las, a spec dona muda `enabled` e
-// registra a rota em routes.tsx. As rotas seguem o mapa de telas v6.
-export type NavGroup = 'Gravações' | 'Organizar' | 'Administração' | 'Minhas configurações' | 'Ajuda'
+// registra a rota em routes.tsx. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem
+// conta e login próprios (/admin/entrar).
+export type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
 export type NavSection = 'main' | 'more'
 
 export interface NavItem {
@@ -10,7 +11,6 @@ export interface NavItem {
   group: NavGroup
   section: NavSection
   enabled: boolean
-  adminOnly?: boolean
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -23,8 +23,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: false },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: false },
-  // Até #39 separar o painel admin com login próprio.
-  { to: '/admin', label: 'Painel admin', group: 'Administração', section: 'main', enabled: true, adminOnly: true },
   { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'more', enabled: false },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'more', enabled: true },
@@ -32,21 +30,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'more', enabled: false },
 ]
 
-export type Role = 'admin' | 'member'
-
 export interface NavGroupEntry {
   group: NavGroup
   items: NavItem[]
 }
 
-/** Itens visíveis para o papel, agrupados na ordem da lista e separados por seção; grupos vazios somem. */
-export function navGroups(
-  role: Role,
-  items: readonly NavItem[] = NAV_ITEMS,
-): Record<NavSection, NavGroupEntry[]> {
+/** Itens ligados, agrupados na ordem da lista e separados por seção; grupos vazios somem. */
+export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSection, NavGroupEntry[]> {
   const sections: Record<NavSection, Map<NavGroup, NavItem[]>> = { main: new Map(), more: new Map() }
   for (const item of items) {
-    if (!item.enabled || (item.adminOnly && role !== 'admin')) continue
+    if (!item.enabled) continue
     const groups = sections[item.section]
     groups.set(item.group, [...(groups.get(item.group) ?? []), item])
   }

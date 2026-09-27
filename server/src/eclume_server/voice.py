@@ -1,9 +1,10 @@
-"""Identificação por voz: amostras da impressão, comparação na ingestão, sugestões e auditoria.
+"""Identificação por voz: amostras da impressão, comparação na ingestão e sugestões.
 
 Regras em docs/standards/code/identificacao-por-voz.md. A impressão de uma pessoa é o conjunto das
 amostras dela (`voice_samples`), uma por locutor confirmado; comparar é o cosseno entre o embedding
-do locutor novo e o centroide normalizado dessas amostras. Nada é comparado nem guardado como
-amostra sem o opt-in da organização e o consentimento `granted` da pessoa.
+do locutor novo e o centroide normalizado dessas amostras, só entre pessoas do dono da transcrição.
+Nada é comparado nem guardado como amostra com a identificação por voz desligada na plataforma; o
+aceite do aviso no cadastro cobre o consentimento de quem o usuário grava.
 """
 
 from __future__ import annotations
@@ -11,9 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
-from sqlalchemy import and_, func, insert, literal, select, text, update
+from sqlalchemy import and_, delete, func, insert, literal, select, text, update
 
 from eclume_server.db import tables as t
 
@@ -34,78 +34,31 @@ MAX_SUGGESTIONS = 3
 # menos nesta fração, nos dois sentidos.
 RESTORE_OVERLAP = 0.5
 
-DEFAULT_TERM_VERSION = "1"
-DEFAULT_TERM_TEXT = (
-    "Autorizo a organização a criar e guardar uma impressão da minha voz, calculada das gravações de "
-    "reuniões de que participo, com a única finalidade de sugerir meu nome como locutor nas transcrições "
-    "do eclume. Sei que a impressão de voz é dado pessoal sensível (biométrico, LGPD, art. 11), que "
-    "nenhuma sugestão vira identificação sem a confirmação de uma pessoa, e que posso, a qualquer "
-    "momento, revogar este consentimento, pedir a exclusão da impressão ou uma cópia dos meus dados."
-)
-VOICE_DEFAULTS: dict[str, Any] = {
-    "enabled": False,
-    "suggestion_threshold": DEFAULT_THRESHOLD,
-    "consent_term_version": DEFAULT_TERM_VERSION,
-    "consent_term_text": DEFAULT_TERM_TEXT,
-}
+VOICE_DEFAULTS: dict[str, Any] = {"enabled": False, "suggestion_threshold": DEFAULT_THRESHOLD}
 
 
 def voice_settings(block: dict[str, Any] | None) -> dict[str, Any]:
-    """Bloco `voice_identification` com os padrões do termo para o que a organização não gravou."""
-    return {**VOICE_DEFAULTS, **(block or {})}
+    """Bloco `voice_identification` (`enabled`, `suggestion_threshold`), com os padrões."""
+    block = block or {}
+    return {key: block.get(key, default) for key, default in VOICE_DEFAULTS.items()}
 
 
-async def org_voice(conn: AsyncConnection, org_id: UUID) -> dict[str, Any]:
-    """Configuração de voz da organização (legível sob a RLS por qualquer membro)."""
-    block = (
-        await conn.execute(select(t.org_settings.c.voice_identification).where(t.org_settings.c.org_id == org_id))
-    ).scalar()
-    return voice_settings(block)
-
-
-async def audit(  # noqa: PLR0913 — os campos do evento
-    conn: AsyncConnection,
-    org_id: UUID,
-    event: str,
-    *,
-    person_id: UUID | None = None,
-    actor_id: UUID | None = None,
-    transcript_id: UUID | None = None,
-    speaker_id: str | None = None,
-    score: float | None = None,
-    details: dict[str, Any] | None = None,
-) -> None:
-    """Um evento na trilha; o nome da pessoa é copiado para sobreviver à exclusão dela."""
-    name = select(t.people.c.name).where(t.people.c.id == person_id).scalar_subquery() if person_id else None
-    await conn.execute(
-        # Id gerado aqui: sem `RETURNING`, que exigiria ler a trilha (só admin lê).
-        insert(t.voice_audit).values(
-            id=uuid4(),
-            org_id=org_id,
-            person_id=person_id,
-            person_name=name,
-            actor_id=actor_id,
-            event=event,
-            transcript_id=transcript_id,
-            speaker_id=speaker_id,
-            score=score,
-            details=details or {},
-        )
-    )
+async def platform_voice(conn: AsyncConnection) -> dict[str, Any]:
+    """Configuração de voz da plataforma (legível sob a RLS por qualquer usuário)."""
+    return voice_settings((await conn.execute(select(t.platform_settings.c.voice_identification))).scalar())
 
 
 # --- amostras -----------------------------------------------------------------------------------
 
 _ADD_SAMPLE = text(
     """
-    INSERT INTO voice_samples (transcript_id, speaker_id, org_id, person_id, model, embedding, talk_ms, created_by)
-    SELECT e.transcript_id, e.speaker_id, e.org_id, sp.person_id, e.model, e.embedding, sp.talk_ms, :actor
+    INSERT INTO voice_samples (transcript_id, speaker_id, owner_id, person_id, model, embedding, talk_ms, created_by)
+    SELECT e.transcript_id, e.speaker_id, e.owner_id, sp.person_id, e.model, e.embedding, sp.talk_ms, :actor
     FROM speaker_embeddings e
     JOIN speakers sp ON sp.transcript_id = e.transcript_id AND sp.speaker_id = e.speaker_id
-    JOIN people p ON p.id = sp.person_id AND p.org_id = e.org_id
-    JOIN org_settings o ON o.org_id = e.org_id
+    CROSS JOIN platform_settings o
     WHERE e.transcript_id = :transcript AND e.speaker_id = :speaker
-      AND p.voice_consent_status = 'granted'
+      AND sp.person_id IS NOT NULL
       AND (o.voice_identification ->> 'enabled')::boolean
       AND sp.talk_ms >= :min_talk
     ON CONFLICT (transcript_id, speaker_id) DO NOTHING
@@ -115,7 +68,7 @@ _ADD_SAMPLE = text(
 
 
 async def add_sample(conn: AsyncConnection, transcript_id: UUID, speaker_id: str, actor_id: UUID | None) -> bool:
-    """Guarda o locutor (já ligado) como amostra da pessoa, se o opt-in e o consentimento deixam."""
+    """Guarda o locutor (já ligado) como amostra da pessoa, com a identificação por voz ligada."""
     params = {"transcript": transcript_id, "speaker": speaker_id, "actor": actor_id, "min_talk": MIN_SAMPLE_TALK_MS}
     return (await conn.execute(_ADD_SAMPLE, params)).first() is not None
 
@@ -206,47 +159,27 @@ def match_links(old: list[OldLink], new_segments: list[dict[str, Any]]) -> tuple
 
 
 async def restore_links(
-    conn: AsyncConnection, org_id: UUID, transcript_id: UUID, old: list[OldLink], new_segments: list[dict[str, Any]]
+    conn: AsyncConnection, transcript_id: UUID, old: list[OldLink], new_segments: list[dict[str, Any]]
 ) -> None:
-    """Reaplica aos locutores novos os vínculos confirmados antes da retranscrição (papel de sistema)."""
-    matched, dropped = match_links(old, new_segments)
+    """Reaplica aos locutores novos os vínculos confirmados antes da retranscrição (papel de conexão)."""
+    matched, _ = match_links(old, new_segments)
     for new_id, link in matched.items():
         await conn.execute(
             update(t.speakers)
             .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == new_id)
             .values(person_id=link.person_id, label=link.label)
         )
-        sampled = await add_sample(conn, transcript_id, new_id, None)
-        await audit(
-            conn,
-            org_id,
-            "link_restored",
-            person_id=link.person_id,
-            transcript_id=transcript_id,
-            speaker_id=new_id,
-            details={"previous_speaker_id": link.speaker_id, "sample": sampled},
-        )
-    for link in dropped:
-        await audit(
-            conn,
-            org_id,
-            "link_dropped",
-            person_id=link.person_id,
-            transcript_id=transcript_id,
-            speaker_id=link.speaker_id,
-            details={"reason": "sem locutor novo com a mesma fala"},
-        )
+        await add_sample(conn, transcript_id, new_id, None)
 
 
-# Centroide normalizado das amostras de cada pessoa com consentimento, do mesmo modelo e dimensão;
-# cosseno com cada locutor sem pessoa e com fala suficiente. Só a organização da transcrição.
+# Centroide normalizado das amostras de cada pessoa, do mesmo modelo e dimensão; cosseno com cada
+# locutor sem pessoa e com fala suficiente. Só as pessoas do dono da transcrição.
 _COMPARE = text(
     """
     WITH prints AS (
         SELECT s.person_id, l2_normalize(avg(l2_normalize(s.embedding))) AS centroid, count(*) AS samples
         FROM voice_samples s
-        JOIN people p ON p.id = s.person_id
-        WHERE s.org_id = :org AND p.voice_consent_status = 'granted'
+        WHERE s.owner_id = :owner
           AND s.model = :model AND vector_dims(s.embedding) = :dims
           AND s.transcript_id <> :transcript
         GROUP BY s.person_id
@@ -266,18 +199,18 @@ _COMPARE = text(
 )
 
 
-async def suggest(conn: AsyncConnection, org_id: UUID, transcript_id: UUID, model: str, dims: int) -> int:
+async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, model: str, dims: int) -> int:
     """Compara os locutores da transcrição com as impressões e grava as sugestões acima do limiar.
 
-    Roda na ingestão, com o papel de sistema: filtra a organização explicitamente. Devolve quantas
-    sugestões gravou; a comparação fica na auditoria mesmo sem nenhuma.
+    Roda na ingestão, com o papel de conexão: filtra o dono explicitamente. Devolve quantas
+    sugestões gravou.
     """
-    settings = await org_voice(conn, org_id)
+    settings = await platform_voice(conn)
     if not settings["enabled"]:
         return 0
     threshold = float(settings["suggestion_threshold"])
     params = {
-        "org": org_id,
+        "owner": owner_id,
         "transcript": transcript_id,
         "model": model,
         "dims": dims,
@@ -295,34 +228,11 @@ async def suggest(conn: AsyncConnection, org_id: UUID, transcript_id: UUID, mode
             insert(t.speaker_suggestions).values(
                 transcript_id=transcript_id,
                 speaker_id=row.speaker_id,
-                org_id=org_id,
+                owner_id=owner_id,
                 person_id=row.person_id,
                 score=min(1.0, float(row.score)),
             )
         )
-        await audit(
-            conn,
-            org_id,
-            "suggested",
-            person_id=row.person_id,
-            transcript_id=transcript_id,
-            speaker_id=row.speaker_id,
-            score=min(1.0, float(row.score)),
-            details={"threshold": threshold, "model": model, "samples": row.samples},
-        )
-    await audit(
-        conn,
-        org_id,
-        "comparison",
-        transcript_id=transcript_id,
-        details={
-            "model": model,
-            "threshold": threshold,
-            "people": len({row.person_id for row in rows}),
-            "speakers": len({row.speaker_id for row in rows}),
-            "suggestions": len(suggested),
-        },
-    )
     return len(suggested)
 
 
@@ -332,16 +242,12 @@ async def suggest(conn: AsyncConnection, org_id: UUID, transcript_id: UUID, mode
 async def load_suggestions(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[tuple[UUID, str], list[dict]]:
     """Sugestões pendentes de locutores sem pessoa, por `(transcrição, locutor)`, maior `score` antes.
 
-    Com o opt-in da organização desligado, nenhuma aparece.
+    Com a identificação por voz desligada na plataforma, nenhuma aparece.
     """
     if not transcript_ids:
         return {}
     ss, sp, pe = t.speaker_suggestions.c, t.speakers.c, t.people.c
-    enabled = (
-        select(t.org_settings.c.voice_identification["enabled"].as_boolean())
-        .where(t.org_settings.c.org_id == ss.org_id)
-        .scalar_subquery()
-    )
+    enabled = select(t.platform_settings.c.voice_identification["enabled"].as_boolean()).scalar_subquery()
     query = (
         select(ss.transcript_id, ss.speaker_id, ss.person_id, ss.score, pe.name)
         .select_from(
@@ -385,10 +291,10 @@ async def on_link(
     """
     if new_person is None or new_person == old_person:
         return
-    org_id, actor_id = principal.org_id, principal.user_id
+    actor_id = principal.user_id
     transcript_id, speaker_id = key.transcript_id, key.speaker_id
     ss = t.speaker_suggestions.c
-    accepted = await conn.execute(
+    await conn.execute(
         update(t.speaker_suggestions)
         .where(
             ss.transcript_id == transcript_id,
@@ -397,35 +303,12 @@ async def on_link(
             ss.status == "pending",
         )
         .values(status="accepted", decided_by=actor_id, decided_at=datetime.now(UTC))
-        .returning(ss.score)
     )
-    score = accepted.scalar()
-    if score is not None:
-        await audit(
-            conn,
-            org_id,
-            "accepted",
-            person_id=new_person,
-            actor_id=actor_id,
-            transcript_id=transcript_id,
-            speaker_id=speaker_id,
-            score=score,
-        )
-    if await add_sample(conn, transcript_id, speaker_id, actor_id):
-        await audit(
-            conn,
-            org_id,
-            "sample_added",
-            person_id=new_person,
-            actor_id=actor_id,
-            transcript_id=transcript_id,
-            speaker_id=speaker_id,
-        )
+    await add_sample(conn, transcript_id, speaker_id, actor_id)
 
 
 async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, person_id: UUID) -> bool:
     """Marca a sugestão pendente como recusada; `False` se não havia."""
-    org_id, actor_id = principal.org_id, principal.user_id
     transcript_id, speaker_id = key.transcript_id, key.speaker_id
     ss = t.speaker_suggestions.c
     result = await conn.execute(
@@ -436,32 +319,24 @@ async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, p
             ss.person_id == person_id,
             ss.status == "pending",
         )
-        .values(status="rejected", decided_by=actor_id, decided_at=datetime.now(UTC))
-        .returning(ss.score)
+        .values(status="rejected", decided_by=principal.user_id, decided_at=datetime.now(UTC))
     )
-    score = result.scalar()
-    if score is None:
-        return False
-    await audit(
-        conn,
-        org_id,
-        "rejected",
-        person_id=person_id,
-        actor_id=actor_id,
-        transcript_id=transcript_id,
-        speaker_id=speaker_id,
-        score=score,
-    )
-    return True
+    return result.rowcount > 0
 
 
 async def purge_embeddings(conn: AsyncConnection) -> tuple[int, int]:
-    """Apaga os `speaker_embeddings` e as sugestões pendentes da organização (só admin, sob a RLS)."""
-    row = (await conn.execute(text("SELECT * FROM eclume_purge_speaker_embeddings()"))).one()
-    return int(row.embeddings), int(row.suggestions)
+    """Apaga os `speaker_embeddings` e as sugestões pendentes de toda a plataforma (papel de conexão)."""
+    embeddings = await conn.execute(delete(t.speaker_embeddings))
+    suggestions = await conn.execute(delete(t.speaker_suggestions).where(t.speaker_suggestions.c.status == "pending"))
+    return embeddings.rowcount, suggestions.rowcount
 
 
-async def forget(conn: AsyncConnection, person_id: UUID | None) -> tuple[int, int]:
-    """Apaga as amostras e as sugestões pendentes da pessoa (ou da organização, com `None`)."""
-    row = (await conn.execute(text("SELECT * FROM eclume_voice_forget(:person)"), {"person": person_id})).one()
-    return int(row.samples), int(row.suggestions)
+async def forget(conn: AsyncConnection, person_id: UUID) -> tuple[int, int]:
+    """Apaga as amostras e as sugestões pendentes da pessoa, sob a RLS do dono."""
+    samples = await conn.execute(delete(t.voice_samples).where(t.voice_samples.c.person_id == person_id))
+    suggestions = await conn.execute(
+        delete(t.speaker_suggestions).where(
+            t.speaker_suggestions.c.person_id == person_id, t.speaker_suggestions.c.status == "pending"
+        )
+    )
+    return samples.rowcount, suggestions.rowcount

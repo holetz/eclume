@@ -1,20 +1,20 @@
 ---
 type: standard
 title: Agentes de sumarização — providers, templates e resumos
-description: Como o server gera resumos de transcrições — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, templates pessoais e padrões da organização, resumos versionados no job summarize do worker CPU com erros tipados e retentativas, map-reduce para transcrições longas e o resumo automático após a ingestão.
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql
+description: Como o server gera resumos de transcrições — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma, templates do usuário semeados no cadastro, resumos versionados no job summarize do worker CPU com erros tipados e retentativas, map-reduce para transcrições longas e o resumo automático após a ingestão.
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql
 tags: [code, server, agentes, resumos, templates, llm, claude]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32
 maintainer: holetz
 ---
 
 # Agentes de sumarização — providers, templates e resumos
 
-O server transforma uma transcrição num resumo Markdown seguindo um template, com um agente que a
-organização escolhe. As rotas seguem o [contrato v1](../api/contrato-v1.md); a persistência e o
+O server transforma uma transcrição num resumo Markdown seguindo um template do usuário, com um
+agente que o admin cadastra na plataforma. As rotas seguem o [contrato v1](../api/contrato-v1.md); a persistência e o
 isolamento seguem o [núcleo do server](server-nucleo.md); o job roda na fila `eclume:default` do
 [contrato de jobs](../api/jobs-transcricao.md).
 
@@ -72,44 +72,46 @@ nunca devolve a chave, só `api_key_set`; `PATCH` com `api_key: null` apaga.
 
 ## Rotas de provider e a fronteira com o painel admin
 
-`/admin/agent-providers` (só sessão de `admin`) é desta peça, porque o job não roda sem provider;
-`/admin/settings`, `/admin/secrets` e o painel são da holetz/eclume#12, que reutiliza `crypto`.
+`/admin/agent-providers` (só a sessão de admin) é desta peça, porque o job não roda sem provider;
+`/admin/settings`, `/admin/secrets` e o painel estão em [server-admin.md](server-admin.md).
 
+- **Providers são da plataforma:** `agent_providers` não tem dono nem RLS. As rotas de admin
+  escrevem com o papel de conexão; `eclume_app` só lê as colunas sem segredo (`GRANT SELECT`
+  coluna a coluna, sem `api_key_encrypted`), e o resumo resolve o provider sob a RLS do usuário
+  com `summaries.PROVIDER_PUBLIC`. Quem abre a chave é o worker, com o papel de conexão.
 - `base_url` é obrigatória para `ollama` e `openai-compatible` e proibida para `claude-cli`.
-- O primeiro provider habilitado de uma organização sem `default_provider_id` vira o padrão;
-  excluir o padrão deixa a organização sem padrão.
-- Excluir com resumo `queued`/`running` no provider → 409.
-- `org_settings` é lido por todos da organização e escrito só por `admin` (política
-  `org_settings_admin_update`).
+- O primeiro provider habilitado de uma plataforma sem `default_provider_id` vira o padrão;
+  excluir o padrão deixa a plataforma sem padrão.
+- Excluir com resumo `queued`/`running` no provider, de qualquer usuário → 409.
+- O bloco `summarization` (`default_provider_id`, `auto_summarize`) mora em `platform_settings`,
+  lido por todos e escrito só pelas rotas de admin.
 
 ## Templates
 
-`summary_templates` com `owner_id` nulo é padrão da organização (`scope: organization`).
+`summary_templates` é só do usuário (`owner_id NOT NULL`, política de dono): não há template da
+plataforma nem `scope`. Template de outro usuário é 404.
 
-- Criar com `scope: organization`, editar ou excluir um padrão da organização exige `admin` **com
-  sessão**; PAT, mesmo de admin, recebe 403 `forbidden`. Template pessoal de outro usuário é 404.
-- **Padrão da organização** = `org_settings.summarization.default_template_id`, fonte única; o
-  `is_default` de um template da organização é calculado dele e, marcado, grava ali.
-- **Padrão pessoal** = `is_default` guardado no template do usuário, no máximo um (índice único
-  parcial); marcar um desmarca o anterior.
-- Toda organização nasce com **Ata de reunião** (padrão), **Resumo executivo** e **Decisões e
-  ações**, pela função SQL `eclume_seed_summary_templates(org)` da migration `002_agentes`, que
-  `create_org` também chama: os textos têm uma fonte só.
+- **Padrão** = `is_default` guardado no template, no máximo um por usuário (índice único
+  parcial); marcar um desmarca o anterior. É o template do resumo automático.
+- Toda conta nasce com **Ata de reunião** (padrão), **Resumo executivo** e **Decisões e ações**,
+  pela função SQL `eclume_seed_summary_templates(user)` da migration `008`, que
+  `accounts.create_user` chama no cadastro: os textos têm uma fonte só. A função não faz nada para
+  quem já tem template. O usuário edita e exclui os seus, inclusive os semeados.
 
 ## Resumos
 
 - `summaries` guarda instantâneos: `template_name`, `instructions`, `provider_name`,
   `provider_kind` e `model`. Editar ou excluir o template ou o provider não mexe nos resumos.
 - `version` = maior versão do par (transcrição, template) + 1, sob `pg_advisory_xact_lock` do par.
-- Visibilidade herda a transcrição (RLS por `EXISTS` em `transcripts`); **gerar e excluir é só do
-  dono da gravação** — quem vê por compartilhamento lê e recebe 403 ao escrever.
+- `summaries` tem `owner_id` (o dono da transcrição) e a política de dono: só o dono lê, gera e
+  exclui; outra conta recebe 404.
 - `POST /transcripts/{id}/summaries` usa `provider_id` ou o `default_provider_id`; ausente,
   inexistente ou desabilitado → 422. Responde 202 `queued` e enfileira
   `summarize(summary_id)` em `eclume:default` com `_job_id = "summarize:{summary_id}"`.
 - **Automático:** `ingest_transcript` chama `auto_summarize` na mesma transação da ingestão. Com
-  `summarization.auto_summarize` ligado e provider padrão habilitado, gera o template padrão
-  pessoal do dono, senão o da organização, com `trigger: automatic`; no máximo um por revisão da
-  transcrição.
+  `summarization.auto_summarize` ligado na plataforma e provider padrão habilitado, gera o template
+  padrão (`is_default`) do dono, com `trigger: automatic`; no máximo um por revisão da
+  transcrição. Dono sem template padrão → sem resumo automático, e o log registra o motivo.
 
 ## O job `summarize`
 

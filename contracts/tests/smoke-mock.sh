@@ -56,4 +56,18 @@ code=$(status -X PUT -H "$PAT" -H 'Content-Type: application/octet-stream' --dat
   "$BASE/api/v1/uploads/01928f3a-1c00-7a00-8000-000000000601/parts/1")
 [ "$code" = 200 ] || fail "PUT parte → $code"
 
+code=$(status "$BASE/api/v1/auth/signup")
+[ "$code" = 200 ] || fail "GET auth/signup → $code"
+python3 - "$OUT" <<'PY' || fail "cadastro sem o aviso"
+import json, sys
+s = json.load(open(sys.argv[1], encoding="utf-8"))
+assert s["open"] is True and s["notice"]["version"], s
+PY
+
+code=$(status -H "$PAT" "$BASE/api/v1/admin/me")
+[ "$code" = 401 ] || fail "GET admin/me com PAT → $code (esperado 401)"
+
+code=$(status -H 'Cookie: eclume_admin_session=mock' "$BASE/api/v1/admin/me")
+[ "$code" = 200 ] || fail "GET admin/me com a sessão de admin → $code"
+
 echo "mock ok: $BASE"

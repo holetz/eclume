@@ -102,10 +102,10 @@ describe('biblioteca', () => {
     expect(await screen.findByText('Terceira gravação')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Compartilhadas comigo' }))
-    await screen.findAllByRole('listitem')
+    // Cada conta vê só as próprias gravações: não há filtro Minhas/Compartilhadas.
+    expect(screen.queryByRole('radio', { name: /Compartilhadas/ })).not.toBeInTheDocument()
     const owners = http.requests('GET /api/v1/recordings').map((r) => new URL(r.url).searchParams.get('owner'))
-    expect(owners).toContain('shared')
+    expect(owners.every((owner) => owner === null)).toBe(true)
   })
 
   it('biblioteca vazia convida a importar', async () => {

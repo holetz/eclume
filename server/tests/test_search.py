@@ -12,7 +12,6 @@ from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -125,33 +124,25 @@ def _matches_as(services: Services, account: Account) -> int:
 
     async def go(conn: Any) -> int:  # noqa: ANN401
         await conn.execute(text("SET LOCAL ROLE eclume_app"))
-        await conn.execute(
-            text("SELECT set_config('app.org_id', :org, true), set_config('app.user_id', :user, true)"),
-            {"org": str(account.org_id), "user": str(account.user_id)},
-        )
+        await conn.execute(text("SELECT set_config('app.user_id', :user, true)"), {"user": str(account.user_id)})
         query = "SELECT count(*) FROM eclume_segment_matches(websearch_to_tsquery('eclume_pt', 'turmas'))"
         return (await conn.execute(text(query))).scalar_one()
 
     return run(services.sql(go))
 
 
-def test_busca_nunca_devolve_segmento_inacessivel(
+def test_busca_nunca_devolve_segmento_de_outra_conta(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
     services: Services,
 ):
-    accounts = {name: make_user(name=name) for name in ("Alice", "Bob", "Carol")}
-    accounts["Dave"] = make_user(org_id=make_org(), name="Dave")
+    accounts = {name: make_user(name=name) for name in ("Alice", "Bob", "Dave")}
     apis = {name: as_user(account) for name, account in accounts.items()}
-    admin = as_user(make_user(role="admin"))
-    group = admin.post("/api/v1/groups", json={"name": "Consultores"}).json()
-    admin.put(f"/api/v1/groups/{group['id']}/members/{accounts['Carol'].user_id}")
     recording = transcribed(apis["Alice"], services.settings, title="Reunião sigilosa")
     person = apis["Alice"].post("/api/v1/people", json={"name": "Rafael"}).json()
     base = f"/api/v1/transcripts/{recording['transcript_id']}"
     apis["Alice"].patch(f"{base}/speakers/S2", json={"person_id": person["id"]})
-    # Dave, de outra organização, tem a própria gravação com os mesmos termos.
+    # Dave tem a própria gravação com os mesmos termos.
     transcribed(apis["Dave"], services.settings)
 
     def finds(name: str) -> bool:
@@ -163,21 +154,11 @@ def test_busca_nunca_devolve_segmento_inacessivel(
         return recording["id"] in found
 
     assert finds("Alice")
-    assert not any(finds(name) for name in ("Bob", "Carol", "Dave"))
+    assert not any(finds(name) for name in ("Bob", "Dave"))
     assert apis["Bob"].pat("transcripts:read").get("/api/v1/search", params={"q": "turmas"}).json()["items"] == []
     assert len(ids(apis["Dave"], q="turmas")) == 3  # só a gravação dele
 
-    shares = f"/api/v1/recordings/{recording['id']}/shares"
-    group_share = apis["Alice"].post(shares, json={"target_type": "group", "target_id": group["id"]}).json()
-    assert finds("Carol")
-    assert not finds("Bob")
-    org_share = apis["Alice"].post(shares, json={"target_type": "organization"}).json()
-    assert finds("Bob")
-    assert not finds("Dave")
-    for share in (group_share, org_share):
-        apis["Alice"].delete(f"{shares}/{share['id']}")
-    assert not any(finds(name) for name in ("Bob", "Carol", "Dave"))
-
-    # A função do GIN nunca atravessa a organização; dentro dela, só devolve chaves.
+    # A função do GIN nunca atravessa a conta: devolve só as chaves do usuário da transação.
     assert _matches_as(services, accounts["Dave"]) == 3
-    assert _matches_as(services, accounts["Bob"]) == 3
+    assert _matches_as(services, accounts["Bob"]) == 0
+    assert _matches_as(services, accounts["Alice"]) == 3

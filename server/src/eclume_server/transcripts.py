@@ -12,16 +12,15 @@ from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
-from eclume_server.problems import forbidden, not_found
+from eclume_server.problems import not_found
 from eclume_server.serialize import Row, user_ref
-from eclume_server.voice import capture_links, load_suggestions, org_voice, restore_links, suggest
+from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-    from eclume_server.auth import Principal
     from eclume_server.storage import Storage
 
 SCHEMA_VERSION = "1.0"
@@ -101,7 +100,7 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     conn: AsyncConnection,
     storage: Storage,
     transcript_id: UUID,
-    org: UUID,
+    owner_id: UUID,
     embeddings_key: str | None,
     mapping: dict[str, str],
     *,
@@ -109,22 +108,28 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 ) -> tuple[str | None, dict[str, list[float]]]:
     """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
 
-    O opt-in vale no momento da ingestão: um job enfileirado antes do desligamento não guarda o
-    vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
+    A identificação por voz vale no momento da ingestão: um job enfileirado antes do desligamento
+    não guarda o vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
     """
     if not embeddings_key:
         return None, {}
-    if not keep or not (await org_voice(conn, org))["enabled"]:
+    if not keep or not (await platform_voice(conn))["enabled"]:
         await storage.delete_keys([embeddings_key])
         return None, {}
     model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
     for sid, vector in vectors.items():
         await conn.execute(
             text(
-                "INSERT INTO speaker_embeddings (transcript_id, org_id, speaker_id, model, embedding)"
-                " VALUES (:transcript, :org, :speaker, :model, CAST(:vector AS vector))"
+                "INSERT INTO speaker_embeddings (transcript_id, owner_id, speaker_id, model, embedding)"
+                " VALUES (:transcript, :owner, :speaker, :model, CAST(:vector AS vector))"
             ),
-            {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
+            {
+                "transcript": transcript_id,
+                "owner": owner_id,
+                "speaker": sid,
+                "model": model,
+                "vector": json.dumps(vector),
+            },
         )
     return model, vectors
 
@@ -143,7 +148,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
 ) -> str:
     """Persiste a transcrição do job em aberto; idempotente por `(recording_id, revision)`.
 
-    Roda com o papel de sistema (worker CPU). Devolve o que aconteceu, para o log.
+    Roda com o papel de conexão (worker CPU). Devolve o que aconteceu, para o log.
     """
     recording = (
         (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
@@ -194,7 +199,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         transcript_id = (
             await conn.execute(
                 insert(t.transcripts)
-                .values(org_id=recording["org_id"], recording_id=recording_id, revision=job["revision"], **values)
+                .values(owner_id=recording["owner_id"], recording_id=recording_id, revision=job["revision"], **values)
                 .returning(t.transcripts.c.id)
             )
         ).scalar_one()
@@ -209,27 +214,27 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             await conn.execute(delete(table).where(table.c.transcript_id == transcript_id))
         await conn.execute(text("DELETE FROM speaker_embeddings WHERE transcript_id = :id"), {"id": transcript_id})
 
-    org = recording["org_id"]
+    owner = recording["owner_id"]
     if speakers:
         await conn.execute(
             insert(t.speakers),
-            [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(speakers)],
+            [{"transcript_id": transcript_id, "owner_id": owner, "position": i, **s} for i, s in enumerate(speakers)],
         )
     if segments:
         await conn.execute(
             insert(t.segments),
-            [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(segments)],
+            [{"transcript_id": transcript_id, "owner_id": owner, "position": i, **s} for i, s in enumerate(segments)],
         )
     model, vectors = await _store_embeddings(
-        conn, storage, transcript_id, org, embeddings_key, mapping, keep=bool(options.get("embeddings"))
+        conn, storage, transcript_id, owner, embeddings_key, mapping, keep=bool(options.get("embeddings"))
     )
     # Retranscrever não desfaz o que alguém confirmou: os vínculos voltam pela sobreposição de fala.
     if old_links:
-        await restore_links(conn, org, transcript_id, old_links, segments)
+        await restore_links(conn, transcript_id, old_links, segments)
     if vectors:
         dims = {len(vector) for vector in vectors.values()}
         if len(dims) == 1:
-            await suggest(conn, org, transcript_id, model, dims.pop())
+            await suggest(conn, owner, transcript_id, model, dims.pop())
 
     await conn.execute(
         update(t.transcription_jobs)
@@ -288,7 +293,7 @@ async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, messa
 
 
 def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
-    """Transcrições visíveis (sob a RLS) com os campos que vêm da gravação e do dono."""
+    """Transcrições do usuário (sob a RLS) com os campos que vêm da gravação e do dono."""
     r = t.recordings.c
     return select(
         t.transcripts,
@@ -343,7 +348,7 @@ async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> di
 
 
 async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: bool) -> dict[str, Any]:
-    """Transcrição visível completa (schema v1), ou 404."""
+    """Transcrição do usuário completa (schema v1), ou 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
@@ -408,13 +413,11 @@ def transcript_json(row: Row, speakers: list[Row], segments: list[Row], *, words
 # --- edição -----------------------------------------------------------------------------------
 
 
-async def editable_transcript(conn: AsyncConnection, transcript_id: UUID, principal: Principal) -> Row:
-    """Transcrição visível e do usuário; 404 se invisível, 403 se só compartilhada com ele."""
+async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
+    """Transcrição do usuário (sob a RLS, só o dono a vê), ou 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
-    if row["owner_id"] != principal.user_id:
-        raise forbidden("Só o dono da gravação pode editar a transcrição.")
     return row
 
 

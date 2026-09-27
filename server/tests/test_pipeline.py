@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+import pytest
 from sqlalchemy import text
 
 from eclume_server.queue import Queue
@@ -153,7 +154,8 @@ def test_falha_do_worker_gpu_marca_job_e_gravacao(
     assert body["transcript_id"] is None
 
 
-def test_embeddings_so_com_opt_in_da_organizacao(
+@pytest.mark.usefixtures("platform")
+def test_embeddings_so_com_a_voz_ligada_na_plataforma(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -162,10 +164,9 @@ def test_embeddings_so_com_opt_in_da_organizacao(
     async def opt_in(conn):  # noqa: ANN001, ANN202
         await conn.execute(
             text(
-                "UPDATE org_settings SET voice_identification = jsonb_set(voice_identification, '{enabled}', 'true')"
-                " WHERE org_id = :org"
-            ),
-            {"org": account.org_id},
+                "UPDATE platform_settings"
+                " SET voice_identification = jsonb_set(voice_identification, '{enabled}', 'true')"
+            )
         )
 
     without = upload_file(api, audio_bytes(3000))

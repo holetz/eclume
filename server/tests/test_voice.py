@@ -1,4 +1,4 @@
-"""Identificação por voz: opt-in, consentimento, sugestão, confirmação, recusa, LGPD e isolamento."""
+"""Identificação por voz: liga-desliga da plataforma, sugestão, confirmação, recusa, LGPD e isolamento."""
 
 from __future__ import annotations
 
@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from sqlalchemy import text
 
-from eclume_server.voice import DEFAULT_TERM_VERSION, DEFAULT_THRESHOLD
+from eclume_server.voice import DEFAULT_THRESHOLD
 from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.fakes import DEFAULT_VOICES, EMBEDDING_DIMS, run_cpu, run_gpu, transcribed, voice
+from eclume_server_testing.fakes import DEFAULT_VOICES, run_cpu, run_gpu, transcribed, voice
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -28,25 +27,21 @@ def _sql(services: Services, sql: str, **params: Any) -> list[tuple[Any, ...]]: 
     return run(services.sql(go))
 
 
-class Org:
-    """Uma organização de teste com admin, dono de gravações e helpers de voz."""
+class Conta:
+    """Uma conta de usuário de teste, com a sessão de admin da plataforma e helpers de voz."""
 
     def __init__(self, services: Services, admin: Api, owner: Account, owner_api: Api) -> None:
-        """Admin e dono (membro) da mesma organização."""
+        """Admin da plataforma e o dono das gravações."""
         self.services, self.admin, self.owner, self.owner_id = services, admin, owner_api, owner.user_id
 
-    def opt_in(self, *, enabled: bool = True) -> None:
-        """Liga (ou desliga) o opt-in pelo admin."""
+    def voice_on(self, *, enabled: bool = True) -> None:
+        """Liga (ou desliga) a identificação por voz na plataforma, pelo admin."""
         response = self.admin.patch("/api/v1/admin/settings", json={"voice_identification": {"enabled": enabled}})
         assert response.status_code == 200, response.text
 
-    def person(self, name: str, *, consent: bool = True) -> dict[str, Any]:
-        """Cadastra a pessoa e, por padrão, registra o consentimento."""
-        person = self.owner.post("/api/v1/people", json={"name": name}).json()
-        if consent:
-            granted = self.owner.put(f"/api/v1/people/{person['id']}/voice-consent", json={"status": "granted"})
-            assert granted.status_code == 200, granted.text
-        return person
+    def person(self, name: str) -> dict[str, Any]:
+        """Cadastra a pessoa."""
+        return self.owner.post("/api/v1/people", json={"name": name}).json()
 
     def transcript(self, voices: dict[str, list[float]] | None = None) -> str:
         """Uma gravação transcrita do dono; devolve o id da transcrição."""
@@ -67,33 +62,24 @@ class Org:
         """Amostras da impressão da pessoa."""
         return self.owner.get(f"/api/v1/people/{person_id}/voiceprint").json()["sample_count"]
 
-    def events(self, person_id: str | None = None) -> list[str]:
-        """Eventos da auditoria, do mais novo ao mais antigo."""
-        params = {"person": person_id, "limit": 200} if person_id else {"limit": 200}
-        return [e["event"] for e in self.admin.get("/api/v1/admin/voice-audit", params=params).json()["items"]]
-
 
 @pytest.fixture
-def new_org(
-    as_user: Callable[[Account], Api],
-    make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
-    services: Services,
-) -> Callable[[], Org]:
-    def make() -> Org:
-        org_id = make_org()
-        owner = make_user(org_id=org_id)
-        return Org(services, as_user(make_user(role="admin", org_id=org_id)), owner, as_user(owner))
+def new_account(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+) -> Callable[[], Conta]:
+    def make() -> Conta:
+        owner = make_user()
+        return Conta(services, admin, owner, as_user(owner))
 
     return make
 
 
 @pytest.fixture
-def ek(new_org: Callable[[], Org]) -> Org:
-    return new_org()
+def ek(new_account: Callable[[], Conta]) -> Conta:
+    return new_account()
 
 
-def test_sem_opt_in_nada_e_comparado_nem_guardado(ek: Org, services: Services):
+def test_desligada_nada_e_comparado_nem_guardado(ek: Conta, services: Services):
     rafael = ek.person("Rafael Lima")
     first = ek.transcript()
     ek.link(first, "S2", rafael["id"])
@@ -101,24 +87,24 @@ def test_sem_opt_in_nada_e_comparado_nem_guardado(ek: Org, services: Services):
     second = ek.transcript()
     assert all(s["suggestions"] == [] for s in ek.speakers(second).values())
     assert _sql(services, "SELECT count(*) FROM speaker_embeddings WHERE transcript_id = :t", t=second) == [(0,)]
-    assert ek.events() == ["consent_granted"]
     settings = ek.admin.get("/api/v1/admin/settings").json()["voice_identification"]
-    assert settings["enabled"] is False
-    assert settings["suggestion_threshold"] == DEFAULT_THRESHOLD
-    assert settings["consent_term_version"] == DEFAULT_TERM_VERSION
+    assert settings == {"enabled": False, "suggestion_threshold": DEFAULT_THRESHOLD}
+    voiceprint = ek.owner.get(f"/api/v1/people/{rafael['id']}/voiceprint").json()
+    assert voiceprint == {"person_id": rafael["id"], "enabled": False, "sample_count": 0, "samples": []}
 
 
-def test_sem_consentimento_nada_e_comparado_nem_guardado(ek: Org):
-    ek.opt_in()
-    rafael = ek.person("Rafael Lima", consent=False)
+def test_ligada_a_confirmacao_vira_amostra_sem_consentimento_por_pessoa(ek: Conta):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
     ek.link(ek.transcript(), "S2", rafael["id"])
-    assert ek.samples(rafael["id"]) == 0
-    assert all(s["suggestions"] == [] for s in ek.speakers(ek.transcript()).values())
-    assert "sample_added" not in ek.events()
+    # O aceite do aviso no cadastro cobre o consentimento de quem o usuário grava.
+    voiceprint = ek.owner.get(f"/api/v1/people/{rafael['id']}/voiceprint").json()
+    assert (voiceprint["enabled"], voiceprint["sample_count"]) == (True, 1)
+    assert "voice_consent" not in ek.owner.get(f"/api/v1/people/{rafael['id']}").json()
 
 
-def test_sugere_acima_do_limiar_e_a_confirmacao_reforca(ek: Org):
-    ek.opt_in()
+def test_sugere_acima_do_limiar_e_a_confirmacao_reforca(ek: Conta):
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
     ek.link(ek.transcript(), "S2", rafael["id"])
     assert ek.samples(rafael["id"]) == 1
@@ -136,17 +122,14 @@ def test_sugere_acima_do_limiar_e_a_confirmacao_reforca(ek: Org):
     accepted = ek.link(second, "S2", rafael["id"])
     assert (accepted["person"]["name"], accepted["suggestions"]) == ("Rafael Lima", [])
     assert ek.samples(rafael["id"]) == 2
-    events = ek.events(rafael["id"])
-    assert {"consent_granted", "sample_added", "suggested", "accepted"} <= set(events)
-    assert "comparison" in ek.events()
 
     # Voz diferente: abaixo do limiar, nenhuma sugestão.
     far = dict(DEFAULT_VOICES, S2=voice(99))
     assert ek.speakers(ek.transcript(far))["S2"]["suggestions"] == []
 
 
-def test_sugestoes_em_ordem_de_score(ek: Org):
-    ek.opt_in()
+def test_sugestoes_em_ordem_de_score(ek: Conta):
+    ek.voice_on()
     rafael, juliana = ek.person("Rafael Lima"), ek.person("Juliana Prado")
     first = ek.transcript()
     ek.link(first, "S2", rafael["id"])
@@ -161,19 +144,18 @@ def test_sugestoes_em_ordem_de_score(ek: Org):
     assert ek.link(second, "S2", juliana["id"])["suggestions"] == []
 
 
-def test_opt_in_desligado_esconde_sugestoes(ek: Org):
-    ek.opt_in()
+def test_desligada_esconde_as_sugestoes(ek: Conta):
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
     ek.link(ek.transcript(), "S2", rafael["id"])
     second = ek.transcript()
     assert ek.speakers(second)["S2"]["suggestions"]
-    ek.opt_in(enabled=False)
+    ek.voice_on(enabled=False)
     assert ek.speakers(second)["S2"]["suggestions"] == []
-    assert ek.events()[:2] == ["embeddings_purged", "org_opt_in_changed"]
 
 
-def test_recusar_sugestao(ek: Org):
-    ek.opt_in()
+def test_recusar_sugestao(ek: Conta):
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
     ek.link(ek.transcript(), "S2", rafael["id"])
     second = ek.transcript()
@@ -182,19 +164,19 @@ def test_recusar_sugestao(ek: Org):
     url = f"{base}/speakers/S2/suggestions/{rafael['id']}"
 
     assert ek.owner.pat("transcripts:write").delete(url).status_code == 403
-    assert ek.admin.delete(url).status_code in {403, 404}
+    # A sessão de admin não é credencial de usuário.
+    assert ek.admin.delete(url).status_code == 401
     rejected = ek.owner.delete(url)
     assert rejected.status_code == 200, rejected.text
     assert (rejected.json()["id"], rejected.json()["suggestions"]) == ("S2", [])
     assert ek.owner.get(base).json()["revision"] == revision + 1
     assert ek.owner.delete(url).status_code == 404
     assert ek.speakers(second)["S2"]["suggestions"] == []
-    assert "rejected" in ek.events(rafael["id"])
     assert ek.samples(rafael["id"]) == 1
 
 
-def test_desligar_e_religar_removem_a_contribuicao(ek: Org):
-    ek.opt_in()
+def test_desligar_e_religar_removem_a_contribuicao(ek: Conta):
+    ek.voice_on()
     rafael, juliana = ek.person("Rafael Lima"), ek.person("Juliana Prado")
     tid = ek.transcript()
     ek.link(tid, "S2", rafael["id"])
@@ -204,7 +186,6 @@ def test_desligar_e_religar_removem_a_contribuicao(ek: Org):
     ek.link(tid, "S2", rafael["id"])
     ek.link(tid, "S2", juliana["id"])
     assert (ek.samples(rafael["id"]), ek.samples(juliana["id"])) == (0, 1)
-    assert ek.events(rafael["id"]).count("sample_removed") == 2
     # Mesclar leva a amostra do locutor que some.
     ek.owner.post(
         f"/api/v1/transcripts/{tid}/speakers/merge", json={"source_speaker_ids": ["S2"], "target_speaker_id": "S1"}
@@ -212,145 +193,56 @@ def test_desligar_e_religar_removem_a_contribuicao(ek: Org):
     assert ek.samples(juliana["id"]) == 0
 
 
-def test_revogar_apaga_a_impressao_e_as_sugestoes(ek: Org):
-    ek.opt_in()
+def test_esquecer_a_voz_apaga_amostras_e_sugestoes(ek: Conta):
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
     ek.link(ek.transcript(), "S2", rafael["id"])
     second = ek.transcript()
     assert ek.speakers(second)["S2"]["suggestions"]
-
-    revoked = ek.owner.put(
-        f"/api/v1/people/{rafael['id']}/voice-consent", json={"status": "revoked", "notes": "Pediu por e-mail."}
-    )
-    assert revoked.status_code == 200
-    consent = revoked.json()["voice_consent"]
-    assert (consent["status"], consent["term_version"], consent["sample_count"]) == ("revoked", "1", 0)
-    assert consent["recorded_by"]["name"]
-    assert ek.speakers(second)["S2"]["suggestions"] == []
-    # Revogado, ligar não cria amostra.
-    ek.link(second, "S2", rafael["id"])
-    assert ek.samples(rafael["id"]) == 0
-    assert ek.owner.put(f"/api/v1/people/{rafael['id']}/voice-consent", json={"status": "none"}).status_code == 422
-    assert (
-        ek.owner.pat("people:write")
-        .put(f"/api/v1/people/{rafael['id']}/voice-consent", json={"status": "granted"})
-        .status_code
-        == 403
-    )
-
-
-def test_excluir_a_impressao_mantem_o_consentimento(ek: Org):
-    ek.opt_in()
-    rafael = ek.person("Rafael Lima")
-    ek.link(ek.transcript(), "S2", rafael["id"])
-    ek.link(ek.transcript(), "S2", rafael["id"])
     assert ek.samples(rafael["id"]) == 2
     voiceprint = ek.owner.get(f"/api/v1/people/{rafael['id']}/voiceprint").json()
     assert {s["speaker_id"] for s in voiceprint["samples"]} == {"S2"}
     assert all("embedding" not in s for s in voiceprint["samples"])
-    assert ek.owner.delete(f"/api/v1/people/{rafael['id']}/voiceprint").status_code == 204
+    assert all(s["recording_title"] for s in voiceprint["samples"])
+
+    url = f"/api/v1/people/{rafael['id']}/voiceprint"
+    assert ek.owner.pat("people:write").delete(url).status_code == 403
+    assert ek.owner.delete(url).status_code == 204
     assert ek.samples(rafael["id"]) == 0
-    assert ek.owner.get(f"/api/v1/people/{rafael['id']}").json()["voice_consent"]["status"] == "granted"
-    assert "voiceprint_deleted" in ek.events(rafael["id"])
+    assert ek.speakers(second)["S2"]["suggestions"] == []
+    # A pessoa fica; só a voz dela sai.
+    assert ek.owner.get(f"/api/v1/people/{rafael['id']}").status_code == 200
 
 
-def test_exportacao_traz_consentimentos_amostras_e_auditoria(ek: Org):
-    ek.opt_in()
-    rafael = ek.person("Rafael Lima")
-    ek.link(ek.transcript(), "S2", rafael["id"])
-    url = f"/api/v1/people/{rafael['id']}/voiceprint/export"
-    assert ek.owner.get(url).status_code == 403
-    response = ek.admin.get(url)
-    assert response.status_code == 200
-    assert response.headers["content-disposition"] == 'attachment; filename="voz-rafael-lima.json"'
-    body = response.json()
-    assert body["person"]["name"] == "Rafael Lima"
-    [consent] = body["consents"]
-    assert (consent["status"], consent["term_version"]) == ("granted", "1")
-    assert "LGPD" in consent["term_text"]
-    [sample] = body["samples"]
-    assert len(sample["embedding"]) == EMBEDDING_DIMS
-    assert {"exported", "sample_added", "consent_granted"} <= {e["event"] for e in body["audit"]}
-
-
-def test_termo_novo_sobe_a_versao(ek: Org):
-    changed = ek.admin.patch(
-        "/api/v1/admin/settings", json={"voice_identification": {"consent_term_text": "Termo revisto pelo jurídico."}}
-    )
-    assert changed.json()["voice_identification"]["consent_term_version"] == "2"
-    rafael = ek.person("Rafael Lima")
-    assert ek.owner.get(f"/api/v1/people/{rafael['id']}").json()["voice_consent"]["term_version"] == "2"
-    body = ek.admin.get(f"/api/v1/people/{rafael['id']}/voiceprint/export").json()
-    assert body["consents"][0]["term_text"] == "Termo revisto pelo jurídico."
-    assert ek.events()[-1] == "org_opt_in_changed"
-
-
-def test_purga_da_organizacao(ek: Org):
-    ek.opt_in()
-    rafael, juliana = ek.person("Rafael Lima"), ek.person("Juliana Prado")
-    tid = ek.transcript()
-    ek.link(tid, "S2", rafael["id"])
-    ek.link(tid, "S3", juliana["id"])
-    ek.transcript()
-    assert ek.owner.delete("/api/v1/admin/voiceprints").status_code == 403
-    purged = ek.admin.delete("/api/v1/admin/voiceprints")
-    assert purged.json() == {"deleted_samples": 2, "deleted_suggestions": 2}
-    assert ek.samples(rafael["id"]) == ek.samples(juliana["id"]) == 0
-    assert ek.events()[0] == "org_purged"
-
-
-def test_auditoria_so_para_admin_e_paginada(ek: Org):
-    ek.opt_in()
-    rafael = ek.person("Rafael Lima")
-    ek.link(ek.transcript(), "S2", rafael["id"])
-    assert ek.owner.get("/api/v1/admin/voice-audit").status_code == 403
-    first = ek.admin.get("/api/v1/admin/voice-audit", params={"limit": 2}).json()
-    assert len(first["items"]) == 2
-    assert first["next_cursor"]
-    rest = ek.admin.get("/api/v1/admin/voice-audit", params={"limit": 200, "cursor": first["next_cursor"]}).json()
-    ids = [e["id"] for e in first["items"] + rest["items"]]
-    assert len(ids) == len(set(ids))
-    assert all(
-        e["person"]["id"] == rafael["id"]
-        for e in ek.admin.get("/api/v1/admin/voice-audit", params={"person": rafael["id"]}).json()["items"]
-    )
-
-
-def test_outra_organizacao_nunca_e_comparada(new_org: Callable[[], Org], services: Services):
-    ek, other = new_org(), new_org()
-    for org in (ek, other):
-        org.opt_in()
+def test_outra_conta_nunca_e_comparada(new_account: Callable[[], Conta], services: Services):
+    ek, other = new_account(), new_account()
+    ek.voice_on()
     stranger = other.person("Pessoa de fora")
     other.link(other.transcript(), "S2", stranger["id"])
     assert other.samples(stranger["id"]) == 1
-    # A mesma voz na outra organização: nenhuma sugestão, nenhuma leitura.
+    # A mesma voz na conta da EK: nenhuma sugestão, nenhuma leitura, nenhuma exclusão.
     assert all(s["suggestions"] == [] for s in ek.speakers(ek.transcript()).values())
     assert ek.owner.get(f"/api/v1/people/{stranger['id']}/voiceprint").status_code == 404
-    assert ek.admin.get(f"/api/v1/people/{stranger['id']}/voiceprint/export").status_code == 404
-    assert ek.admin.delete("/api/v1/admin/voiceprints").json()["deleted_samples"] == 0
+    assert ek.owner.delete(f"/api/v1/people/{stranger['id']}/voiceprint").status_code == 404
     assert other.samples(stranger["id"]) == 1
-
-    ek_org = _sql(services, "SELECT org_id FROM users WHERE id = :u", u=ek.owner_id)[0][0]
 
     async def as_app(conn: Any) -> list[int]:  # noqa: ANN401
         await conn.execute(text("SET LOCAL ROLE eclume_app"))
-        await conn.execute(
-            text("SELECT set_config('app.org_id', :org, true), set_config('app.user_id', :user, true)"),
-            {"org": str(ek_org), "user": str(ek.owner_id)},
-        )
+        await conn.execute(text("SELECT set_config('app.user_id', :user, true)"), {"user": str(ek.owner_id)})
         sql = "SELECT count(*) FROM {} WHERE person_id = :p"
         return [
             (await conn.execute(text(sql.format(table)), {"p": stranger["id"]})).scalar()
-            for table in ("voice_samples", "speaker_suggestions", "voice_consents", "voice_audit")
+            for table in ("voice_samples", "speaker_suggestions")
         ]
 
-    assert run(services.sql(as_app)) == [0, 0, 0, 0]
+    assert run(services.sql(as_app)) == [0, 0]
     assert _sql(services, "SELECT count(*) FROM voice_samples WHERE person_id = :p", p=stranger["id"]) == [(1,)]
 
 
-def test_retranscricao_restaura_os_vinculos(ek: Org, services: Services):
-    ek.opt_in()
-    rafael, mariana = ek.person("Rafael Lima"), ek.person("Mariana Couto", consent=False)
+def test_retranscricao_restaura_os_vinculos(ek: Conta, services: Services):
+    ek.voice_on()
+    rafael, mariana = ek.person("Rafael Lima"), ek.person("Mariana Couto")
     recording = transcribed(ek.owner, services.settings)
     tid = recording["transcript_id"]
     ek.link(tid, "S2", rafael["id"])
@@ -366,12 +258,11 @@ def test_retranscricao_restaura_os_vinculos(ek: Org, services: Services):
     assert speakers["S1"]["person"]["id"] == mariana["id"]
     assert speakers["S3"]["person"] is None
     assert ek.samples(rafael["id"]) == 1
-    assert ek.samples(mariana["id"]) == 0
+    assert ek.samples(mariana["id"]) == 1
     assert _sql(
         services,
         "SELECT count(*) FROM voice_samples s LEFT JOIN speakers sp USING (transcript_id, speaker_id) WHERE sp.person_id IS NULL",
     ) == [(0,)]
-    assert ek.events(rafael["id"]).count("link_restored") == 1
 
 
 # --- LGPD: purga dos embeddings por gravação e exclusão completa ----------------------------------
@@ -390,12 +281,11 @@ def _embeddings(services: Services, tid: str) -> int:
     return _sql(services, "SELECT count(*) FROM speaker_embeddings WHERE transcript_id = :t", t=tid)[0][0]
 
 
-def test_desligar_o_opt_in_purga_os_embeddings_so_da_organizacao(
-    ek: Org, new_org: Callable[[], Org], services: Services
+def test_desligar_purga_os_embeddings_da_plataforma_inteira(
+    ek: Conta, new_account: Callable[[], Conta], services: Services
 ):
-    other = new_org()
-    for org in (ek, other):
-        org.opt_in()
+    other = new_account()
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
     ek.link(ek.transcript(), "S2", rafael["id"])
     tid = ek.transcript()
@@ -406,37 +296,27 @@ def test_desligar_o_opt_in_purga_os_embeddings_so_da_organizacao(
     assert _embeddings(services, tid) == 3
     assert _objects(services, embeddings_key) == [embeddings_key]
 
-    ek.opt_in(enabled=False)
-    assert _sql(
-        services,
-        "SELECT count(*) FROM speaker_embeddings WHERE org_id = (SELECT org_id FROM transcripts WHERE id = :t)",
-        t=tid,
-    ) == [(0,)]
-    assert _sql(
-        services, "SELECT count(*) FROM speaker_suggestions WHERE transcript_id = :t AND status = 'pending'", t=tid
-    ) == [(0,)]
-    purged = ek.admin.get("/api/v1/admin/voice-audit").json()["items"][0]
-    assert purged["event"] == "embeddings_purged"
-    assert purged["details"]["deleted_embeddings"] >= 3
-    assert purged["details"]["deleted_suggestions"] >= 1
-    # A amostra de quem consentiu fica; revogá-la é o fluxo de consentimento.
+    ek.voice_on(enabled=False)
+    # Desligar vale para todas as contas: os embeddings por gravação e as sugestões pendentes saem.
+    assert _embeddings(services, tid) == _embeddings(services, other_tid) == 0
+    assert _sql(services, "SELECT count(*) FROM speaker_suggestions WHERE status = 'pending'") == [(0,)]
+    # As amostras (locutores confirmados) ficam; esquecer uma voz é pela pessoa.
     assert ek.samples(rafael["id"]) == 1
 
     run_cpu(services.settings)
     assert _objects(services, embeddings_key) == []
     assert _objects(services, f"recordings/{rid}/transcript.raw.json")  # só os embeddings saem
-    assert _embeddings(services, other_tid) == 3
-    assert _objects(services, f"recordings/{other_rid}/speaker_embeddings.json")
+    assert _objects(services, f"recordings/{other_rid}/speaker_embeddings.json") == []
 
 
-def test_ingestao_com_opt_in_desligado_no_meio_nao_guarda_embeddings(ek: Org, services: Services):
-    ek.opt_in()
+def test_ingestao_com_a_voz_desligada_no_meio_nao_guarda_embeddings(ek: Conta, services: Services):
+    ek.voice_on()
     recording = upload_file(ek.owner, audio_bytes(2100))
     job = _sql(
         services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
     )
     assert job == [("true",)]
-    ek.opt_in(enabled=False)
+    ek.voice_on(enabled=False)
     run_gpu(services.settings)
     run_cpu(services.settings)
     tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
@@ -444,8 +324,8 @@ def test_ingestao_com_opt_in_desligado_no_meio_nao_guarda_embeddings(ek: Org, se
     assert _objects(services, f"recordings/{recording['id']}/speaker_embeddings.json") == []
 
 
-def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumos(ek: Org, services: Services):
-    ek.opt_in()
+def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumos(ek: Conta, services: Services):
+    ek.voice_on()
     rafael = ek.person("Rafael Lima")
     tid = ek.transcript()
     ek.link(tid, "S2", rafael["id"])

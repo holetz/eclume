@@ -4,13 +4,12 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
 import { HelpProvider } from './HelpProvider'
-import { isInMoreSection, navGroups, type NavGroupEntry, type Role } from './nav'
+import { isInMoreSection, navGroups, type NavGroupEntry } from './nav'
 import { applyThemePreference, readThemePreference, type ThemePreference } from './theme'
 
 export interface ShellUser {
   name: string
   email: string
-  role: Role
 }
 
 interface AppShellProps {
@@ -54,7 +53,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
   const moreShown = moreOpen || (inMore && moreClosedAt !== pathname)
   const navId = useId()
   const themeId = useId()
-  const { main, more } = navGroups(user.role)
+  const { main, more } = navGroups()
 
   function changeTheme(value: ThemePreference) {
     setTheme(value)

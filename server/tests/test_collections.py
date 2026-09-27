@@ -92,19 +92,13 @@ def test_colecoes_sao_do_usuario(as_user: Callable[[Account], Api], make_user: C
     assert (denied.status_code, denied.json()["required_scopes"]) == (403, ["recordings:write"])
 
 
-def test_tags_das_gravacoes_visiveis(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_tags_das_gravacoes_do_usuario(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     alice = as_user(make_user())
     bob = as_user(make_user())
-    first = upload_file(alice, audio_bytes(100), tags=["cliente-a", "entrevista"])
+    upload_file(alice, audio_bytes(100), tags=["cliente-a", "entrevista"])
     upload_file(alice, audio_bytes(100), tags=["cliente-a"])
     upload_file(bob, audio_bytes(100), tags=["interno"])
     assert alice.get("/api/v1/tags").json() == {
         "items": [{"name": "cliente-a", "count": 2}, {"name": "entrevista", "count": 1}]
     }
     assert bob.get("/api/v1/tags").json() == {"items": [{"name": "interno", "count": 1}]}
-    alice.post(f"/api/v1/recordings/{first['id']}/shares", json={"target_type": "organization"})
-    assert bob.get("/api/v1/tags").json()["items"] == [
-        {"name": "cliente-a", "count": 1},
-        {"name": "entrevista", "count": 1},
-        {"name": "interno", "count": 1},
-    ]

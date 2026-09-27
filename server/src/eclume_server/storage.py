@@ -26,9 +26,13 @@ _CHUNK = 1024 * 1024
 _DELETE_BATCH = 1000
 
 
-def audio_key(org_id: UUID, owner_id: UUID, recording_id: UUID) -> str:
-    """Chave do áudio: a gravação vive sob o dono (`orgs/{org}/users/{id}/...`)."""
-    return f"orgs/{org_id}/users/{owner_id}/recordings/{recording_id}/audio"
+def audio_key(owner_id: UUID, recording_id: UUID) -> str:
+    """Chave do áudio: a gravação vive sob o dono (`users/{id}/...`).
+
+    Gravações da época da organização guardam a chave antiga (`orgs/{org}/users/...`) em
+    `recordings.audio_key`, que é sempre a fonte: o objeto não muda de lugar.
+    """
+    return f"users/{owner_id}/recordings/{recording_id}/audio"
 
 
 def embeddings_object_key(recording_id: UUID | str) -> str:

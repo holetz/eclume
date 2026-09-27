@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-# Vazia desde a holetz/eclume#15: todas as operações do contrato v1 estão implementadas.
+# Vazia desde a holetz/eclume#32: todas as operações do contrato estão implementadas.
 NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
 
 

@@ -11,7 +11,7 @@ import { sectionTitle } from './sections'
 type Provider = Schemas['AgentProvider']
 type ProviderKind = Schemas['AgentProviderKind']
 
-/** Providers de agente de sumarização (da #9) e o provider padrão da organização. */
+/** Providers de agente de sumarização da plataforma e o provider padrão. */
 export function AgentsPage() {
   usePageTitle(sectionTitle('agentes'))
   const providers = useProviders()
@@ -157,7 +157,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
       )
     },
     onSuccess: () => {
-      // Criar o primeiro provider pode torná-lo o padrão da organização.
+      // Criar o primeiro provider pode torná-lo o padrão da plataforma.
       void queryClient.invalidateQueries({ queryKey: PROVIDERS_KEY })
       void queryClient.invalidateQueries({ queryKey: SETTINGS_KEY })
       onDone()

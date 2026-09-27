@@ -1,4 +1,4 @@
-"""`health`, sessão (`auth/login`, `auth/logout`) e `me`."""
+"""`health`, cadastro (`auth/signup`), sessão (`auth/login`, `auth/logout`), `me` e o aceite do aviso."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
-from eclume_server import __version__, invitations
-from eclume_server.accounts import MIN_PASSWORD
+from eclume_server import __version__
+from eclume_server.accounts import MIN_PASSWORD, NOTICE_VERSION, EmailTakenError, create_user, notice
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
-from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, invalid_field, unauthorized
+from eclume_server.db.session import system_tx, user_tx
+from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 from eclume_server.serialize import user_json
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "1.4.0"
+CONTRACT_VERSION = "2.0.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -44,9 +44,31 @@ class LoginRequest(BaseModel):
     """Schema `LoginRequest`."""
 
     email: str
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=1024)
 
     _email = field_validator("email")(check_email)
+
+
+class SignupRequest(BaseModel):
+    """Schema `SignupRequest`."""
+
+    name: str = Field(min_length=1)
+    email: str
+    password: str = Field(min_length=MIN_PASSWORD, max_length=1024)
+    notice_version: str = Field(min_length=1)
+
+    _email = field_validator("email")(check_email)
+
+
+class NoticeAccept(BaseModel):
+    """Schema `NoticeAccept`."""
+
+    notice_version: str = Field(min_length=1)
+
+
+def _check_notice(version: str) -> None:
+    if version != NOTICE_VERSION:
+        raise invalid_field("notice_version", f"aceite o aviso em vigor (versão {NOTICE_VERSION})")
 
 
 @router.get("/health")
@@ -75,6 +97,36 @@ async def login(body: LoginRequest, ctx: Ctx) -> Response:
         return await _open_session(conn, ctx, user["id"], now)
 
 
+@router.get("/auth/signup")
+async def signup_info(ctx: Ctx) -> dict[str, Any]:
+    """Se o cadastro está aberto, e o aviso que a conta nova aceita."""
+    return {"open": ctx.settings.signup_open, "notice": notice()}
+
+
+@router.post("/auth/signup", status_code=204)
+async def signup(body: SignupRequest, ctx: Ctx) -> Response:
+    """Cria a conta com o aceite do aviso e abre a sessão, como o login."""
+    if not ctx.settings.signup_open:
+        raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
+    if not body.name.strip():
+        raise invalid_field("name", "não pode ser vazio")
+    _check_notice(body.notice_version)
+    now = datetime.now(UTC)
+    async with system_tx(ctx.engine) as conn:
+        try:
+            user_id = await create_user(
+                conn,
+                email=body.email,
+                name=body.name.strip(),
+                password=body.password,
+                notice_version=body.notice_version,
+            )
+        except EmailTakenError as exc:
+            raise conflict("Já existe uma conta com este e-mail.", code="email_taken") from exc
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
+        return await _open_session(conn, ctx, user_id, now)
+
+
 async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, now: datetime) -> Response:
     """Cria a sessão no banco e devolve o 204 com os cookies `eclume_session` e `eclume_csrf`."""
     token, csrf = new_session_token(), new_session_token()
@@ -88,25 +140,6 @@ async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, n
     response.set_cookie(SESSION_COOKIE, token, max_age=max_age, httponly=True, secure=secure, samesite="lax")
     response.set_cookie(CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure, samesite="lax")
     return response
-
-
-class InvitationAccept(BaseModel):
-    """Schema `InvitationAccept`."""
-
-    name: str = Field(min_length=1)
-    password: str = Field(min_length=MIN_PASSWORD)
-
-
-@router.post("/auth/invitations/{invitation_token}/accept", status_code=204)
-async def accept_invitation(invitation_token: str, body: InvitationAccept, ctx: Ctx) -> Response:
-    """Cria a conta do convite e abre a sessão, como o login."""
-    if not body.name.strip():
-        raise invalid_field("name", "não pode ser vazio")
-    now = datetime.now(UTC)
-    async with system_tx(ctx.engine) as conn:
-        user_id = await invitations.accept(conn, invitation_token, name=body.name, password=body.password)
-        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
-        return await _open_session(conn, ctx, user_id, now)
 
 
 @router.post("/auth/logout", status_code=204)
@@ -123,32 +156,29 @@ async def logout(principal: Annotated[Principal, Depends(requires(session_only=T
     return response
 
 
+@router.post("/me/notice", status_code=204)
+async def accept_notice(
+    body: NoticeAccept, principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx
+) -> Response:
+    """Registra o aceite do aviso em vigor pela conta corrente."""
+    _check_notice(body.notice_version)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await conn.execute(
+            update(t.users)
+            .where(t.users.c.id == principal.user_id)
+            .values(notice_version=body.notice_version, notice_accepted_at=func.now())
+        )
+    return Response(status_code=204)
+
+
 @router.get("/me")
 async def me(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
-    """Usuário, organização, grupos e credencial correntes."""
+    """Conta e credencial correntes, e se falta aceitar o aviso em vigor."""
     async with system_tx(ctx.engine) as conn:
         user = (await conn.execute(select(t.users).where(t.users.c.id == principal.user_id))).mappings().one()
-        org = (
-            (await conn.execute(select(t.organizations).where(t.organizations.c.id == principal.org_id)))
-            .mappings()
-            .one()
-        )
-        groups = (
-            (
-                await conn.execute(
-                    select(t.groups.c.id, t.groups.c.name)
-                    .join(t.group_members, t.group_members.c.group_id == t.groups.c.id)
-                    .where(t.group_members.c.user_id == principal.user_id)
-                    .order_by(t.groups.c.name)
-                )
-            )
-            .mappings()
-            .all()
-        )
     return {
         "user": user_json(user),
-        "organization": {"id": str(org["id"]), "name": org["name"]},
-        "groups": [{"id": str(g["id"]), "name": g["name"]} for g in groups],
+        "notice_required": user["notice_version"] != NOTICE_VERSION,
         "auth": {
             "method": principal.method,
             "scopes": list(principal.scopes),
