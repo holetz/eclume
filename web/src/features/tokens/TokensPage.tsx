@@ -93,7 +93,7 @@ export function TokensPage() {
       )}
 
       {creating && (
-        <Dialog title="Novo token" onClose={() => setCreating(false)} size="lg">
+        <Dialog title="Novo token" onClose={() => setCreating(false)} size="lg" plain>
           <TokenForm
             showIndividual
             onCancel={() => setCreating(false)}

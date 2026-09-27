@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37
 maintainer: holetz
 ---
 
@@ -308,7 +308,11 @@ nas duas.
   `-exclusão`), junção com `eclume_segment_matches(tsquery)` para usar o GIN, ordem `ts_rank_cd`
   desc, depois `recorded_at` desc e a posição da fala. Só com `person`: as falas da pessoa em ordem
   cronológica, `rank` 0. Sem `q` nem `person` → 422. Filtros `person`, `from`/`to` (`recorded_at`),
-  `tag` e `collection` combinam com qualquer um dos modos.
+  `tag`, `collection` e `field` combinam com qualquer um dos modos.
+- `field=<field_id>:<valor>` (repetível) tem a semântica da biblioteca: OU no mesmo campo, E entre
+  campos, lista por item, título e tags como os embutidos. O predicado é um só,
+  `fields.field_filters`, sobre `recordings`, usado por `GET /recordings` e por `GET /search`; o
+  campo é lido sob a RLS, então o `field_id` de outra conta não encontra nada.
 - `highlight` = `ts_headline` com `HighlightAll` e marcadores sentinela (`\x02`/`\x03`, tirados
   antes do texto); o Python escapa o texto e só então troca os marcadores por `<mark>`/`</mark>`.
   Nenhum outro HTML chega ao cliente.

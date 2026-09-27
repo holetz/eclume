@@ -30,6 +30,7 @@ export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: str
 
   return (
     <Dialog
+      plain
       title="Pré-visualizar numa gravação"
       onClose={onClose}
       actions={

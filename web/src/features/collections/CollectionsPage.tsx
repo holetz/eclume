@@ -35,7 +35,7 @@ export function CollectionsPage() {
         }
       />
       <p className="text-muted">
-        Agrupe as gravações que você escolher, por projeto ou programa. Uma gravação pode estar em várias.
+        Coleção agrupa gravações; tag marca assuntos. As duas convivem, e uma gravação pode estar em várias coleções.
       </p>
 
       {collections.isPending && <p role="status">Carregando coleções…</p>}
@@ -119,7 +119,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
     },
   })
   return (
-    <Dialog title="Nova coleção" onClose={onClose}>
+    <Dialog title="Nova coleção" onClose={onClose} plain>
       <CollectionForm
         submitLabel="Criar coleção"
         pending={create.isPending}
@@ -147,7 +147,7 @@ function EditDialog({ collection, onClose }: { collection: Collection; onClose: 
     },
   })
   return (
-    <Dialog title="Editar coleção" onClose={onClose}>
+    <Dialog title="Editar coleção" onClose={onClose} plain>
       <CollectionForm
         initial={collection}
         submitLabel="Salvar"
@@ -174,6 +174,7 @@ function DeleteDialog({ collection, onClose }: { collection: Collection; onClose
   })
   return (
     <Dialog
+      plain
       title={`Excluir ${collection.name}?`}
       message="As gravações saem da coleção e continuam na biblioteca."
       onClose={onClose}

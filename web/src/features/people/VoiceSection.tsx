@@ -70,6 +70,7 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
       </p>
       {confirming && (
         <Dialog
+          plain
           title="Esquecer a voz?"
           message="Apaga todas as amostras e as sugestões pendentes desta pessoa. Os vínculos já confirmados ficam."
           onClose={() => setConfirming(false)}

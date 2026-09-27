@@ -200,6 +200,7 @@ function DeleteFieldDialog({ field, onClose, onDeleted }: { field: Field; onClos
   const remove = useDeleteField()
   return (
     <Dialog
+      plain
       title={`Excluir ${field.name}?`}
       message="O campo sai de todas as gravações, com os valores já preenchidos."
       onClose={onClose}

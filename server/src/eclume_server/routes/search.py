@@ -39,6 +39,7 @@ async def search_segments(
     date_to: Annotated[datetime | None, Query(alias="to")] = None,
     tag: str | None = None,
     collection: UUID | None = None,
+    field: Annotated[list[str] | None, Query()] = None,
     cursor: Cursor = None,
     limit: Limit = 50,
 ) -> dict[str, Any]:
@@ -47,7 +48,7 @@ async def search_segments(
     if not q and person is None:
         raise invalid_field("q", "informe q ou person")
     offset = _offset(cursor)
-    filters = SearchFilters(q, person, date_from, date_to, tag, collection)
+    filters = SearchFilters(q, person, date_from, date_to, tag, collection, tuple(field or ()))
     async with user_tx(ctx.engine, principal.user_id) as conn:
         items = await search(conn, filters, offset, limit)
     next_cursor = encode_position(offset + limit) if len(items) > limit else None

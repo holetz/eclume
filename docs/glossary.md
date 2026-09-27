@@ -30,6 +30,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
 - [artigo de ajuda](standards/code/web-central-de-ajuda.md#o-cabeçalho) — Arquivo Markdown em `web/src/features/help/articles/<slug>.md`, com cabeçalho (título, tópico, chaves de página, relacionados, termos, ordem, data), servido em `/ajuda/<slug>`.
 - [aviso de consentimento](standards/code/server-nucleo.md) — Texto versionado que a pessoa aceita no cadastro ("Sou responsável por pedir o consentimento das pessoas que gravo"), no lugar do consentimento de voz por pessoa; versão nova pede novo aceite no login.
+- [biblioteca no tempo](standards/code/frontend-web.md#biblioteca-no-tempo) — A tela inicial do web: as gravações no calendário (semana como agenda, mês e lista), posicionadas pelo início e pela duração.
 - [campo](standards/code/processamento-automatico.md) — Dado de uma gravação que o usuário define (texto, lista ou escolha), com uma regra de preenchimento; título e tags são os campos embutidos de toda conta.
 - [central de ajuda](standards/code/web-central-de-ajuda.md) — A ajuda do usuário no web (`/ajuda`): artigos em pt-BR que moram no build, seis tópicos, perguntas frequentes e busca local, sem servidor.
 - [chat de ajuste](standards/code/server-agentes.md#chat-de-ajuste) — Conversa em que o usuário pede uma mudança no resumo e o agente de chat responde, lendo a transcrição só quando o pedido depende do que foi dito; uma resposta que muda o resumo vira versão `chat`.
@@ -52,11 +53,13 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - **épico** — Spec orquestradora (`holetz/eclume#1`) cujas tasks apontam para specs filhas, cada uma uma issue própria.
 - [etapa do pipeline](standards/code/processamento-automatico.md) — Um dos seis passos do processamento de uma gravação por revisão (recebido, pré-processamento, transcrição, campos, tipo de agenda, resumo), com estado `pending`, `active`, `done`, `failed` ou `skipped`.
 - [ffmpeg.wasm](standards/code/formato-audio-upload.md) — O ffmpeg compilado para WebAssembly, fallback da conversão no navegador para contêineres e codecs que o WebCodecs não atende.
+- [fila de importação](standards/code/frontend-web.md#importar-modal-e-fila) — Os arquivos escolhidos no modal Importar, convertidos e enviados um por vez pelo shell, que sobrevivem a fechar o modal e a navegar.
 - [gaveta de ajuda](standards/code/frontend-web.md) — O painel lateral `.help-drawer` do web, aberto com `?` ou pelo botão Ajuda do cabeçalho da página, com os links de ajuda daquela página e os atalhos de teclado.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
 - [impressão de voz](standards/code/identificacao-por-voz.md) — Conjunto de amostras de uma pessoa (embeddings de locutores confirmados como ela, do mesmo modelo da diarização), comparado por centroide para sugeri-la em transcrições novas; dado biométrico sensível pela LGPD, só com a identificação ligada na plataforma e só entre as pessoas do dono.
 - [impressão digital da CA](standards/code/server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps) — SHA-256, em hex, do DER do certificado raiz do Caddy publicado em `/downloads/eclume-root.crt`; os apps a conferem para fixar essa raiz sem instalá-la no sistema.
+- [início da gravação](standards/code/formato-audio-upload.md#o-início-da-gravação-lido-antes-da-conversão) — O `recorded_at` de uma gravação importada, lido dos metadados do arquivo antes da conversão e confirmado pela pessoa no modal Importar.
 - **lumea** — Plataforma de desenvolvimento humano e organizacional da EK, que importa transcrições do eclume por PAT.
 - [marcador](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Instante de uma gravação (`at_ms`), com nota opcional e o dispositivo que marcou, enviado pelos apps de forma idempotente por `client_id`.
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
@@ -67,6 +70,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [origem do valor](standards/code/processamento-automatico.md) — De onde veio o valor de um campo: `auto` (o agente), `edited` (o usuário escreveu) ou `accepted` (o usuário aceitou o automático); os dois últimos o automático não sobrescreve.
 - [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
 - [painel de administração](standards/code/frontend-web.md) — App à parte dentro do web (`/admin/entrar`, `/admin/*`), com login, sessão e moldura próprios, onde a conta de admin configura a plataforma sem ver conteúdo de usuário.
+- [painel de filtros](standards/code/frontend-web.md#biblioteca-no-tempo) — O `.filters` recolhível à direita da biblioteca (tipo, situação, tags, pessoas, coleções e campos do usuário), cujos filtros vão na URL e na consulta.
 - **PAT** — Personal Access Token: token pessoal com escopo, guardado como hash, usado pelo lumea e pelo desktop para acessar a API.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `contracts/`, `deploy/`.

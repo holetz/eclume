@@ -11,15 +11,15 @@ export interface NavItem {
   group: NavGroup
   section: NavSection
   enabled: boolean
+  /** Prefixos de rota que também acendem o item (a gravação pertence à Biblioteca). */
+  matches?: string[]
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true },
+  { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
-  // Até holetz/eclume#37 levar o import para o modal da biblioteca.
-  { to: '/importar', label: 'Importar arquivo', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
-  // Coleção convive com tag (mapa v6): agrupa as gravações que o usuário escolhe.
+  // A coleção convive com a tag e fica em Organizar (holetz/eclume#38).
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
@@ -48,10 +48,14 @@ export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSect
   return { main: entries(sections.main), more: entries(sections.more) }
 }
 
+/** Se o item está aceso na rota: a própria rota (a raiz só nela mesma), as filhas e os `matches`. */
+export function isItemActive(item: NavItem, pathname: string): boolean {
+  if (item.matches?.some((prefix) => pathname.startsWith(prefix))) return true
+  if (item.to === '/') return pathname === '/'
+  return pathname === item.to || pathname.startsWith(`${item.to}/`)
+}
+
 /** Se a rota atual pertence a um item da seção recolhível. */
 export function isInMoreSection(pathname: string, items: readonly NavItem[] = NAV_ITEMS): boolean {
-  return items.some(
-    (item) =>
-      item.section === 'more' && item.enabled && (pathname === item.to || pathname.startsWith(`${item.to}/`)),
-  )
+  return items.some((item) => item.section === 'more' && item.enabled && isItemActive(item, pathname))
 }

@@ -249,6 +249,7 @@ function DeleteAgendaTypeDialog({
   const remove = useDeleteAgendaType()
   return (
     <Dialog
+      plain
       title={`Excluir ${type.name}?`}
       message="As gravações deste tipo ficam sem tipo. Os resumos já feitos continuam."
       onClose={onClose}

@@ -171,7 +171,7 @@ function EditDialog({ person, onClose, onDelete }: { person: Person; onClose: ()
     },
   })
   return (
-    <Dialog title="Editar pessoa" onClose={onClose}>
+    <Dialog title="Editar pessoa" onClose={onClose} plain>
       <PersonForm
         initial={person}
         pending={save.isPending}
@@ -201,6 +201,7 @@ function DeleteDialog({ person, onClose }: { person: Person; onClose: () => void
   })
   return (
     <Dialog
+      plain
       title={`Excluir ${person.name}?`}
       message="Excluir desfaz os vínculos com os locutores e apaga a impressão de voz. As transcrições ficam."
       onClose={onClose}

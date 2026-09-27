@@ -1,9 +1,10 @@
 import { useId, useState, type SyntheticEvent } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
+import { ImportProvider } from '../features/import/ImportProvider'
 import { HelpProvider } from './HelpProvider'
-import { isInMoreSection, navGroups, type NavGroupEntry } from './nav'
+import { isInMoreSection, isItemActive, navGroups, type NavGroupEntry } from './nav'
 import { ShellFrame } from './ShellFrame'
 import { applyThemePreference, readThemePreference, type ThemePreference } from './theme'
 
@@ -26,15 +27,21 @@ const THEMES: { value: ThemePreference; label: string }[] = [
 
 function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
   const baseId = useId()
+  const { pathname } = useLocation()
   return groups.map(({ group, items }, index) => (
     <div key={group} className="nav-group" role="group" aria-labelledby={`${baseId}-${index}`}>
       <span className="nav-group-title" id={`${baseId}-${index}`}>
         {group}
       </span>
       {items.map((item) => (
-        <NavLink key={item.to} to={item.to} end={item.to === '/'} className="nav-link">
+        <Link
+          key={item.to}
+          to={item.to}
+          className="nav-link"
+          aria-current={isItemActive(item, pathname) ? 'page' : undefined}
+        >
           {item.label}
-        </NavLink>
+        </Link>
       ))}
     </div>
   ))
@@ -107,7 +114,9 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           </>
         }
       >
-        <Outlet />
+        <ImportProvider>
+          <Outlet />
+        </ImportProvider>
       </ShellFrame>
     </HelpProvider>
   )

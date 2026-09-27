@@ -61,6 +61,21 @@ describe('runUpload', () => {
     })
   })
 
+  it('manda o início da gravação, a origem e a natureza, e sem título deixa o nome ao servidor', async () => {
+    const http = mockFetch({ 'POST /api/v1/uploads': () => fixtures.uploadDeduplicated() })
+    await runUpload(
+      { ...file(), title: undefined, recordedAt: '2026-09-19T14:02:00.000Z', recordedAtSource: 'file_metadata', kind: 'meeting' },
+      options,
+    )
+    const body = await http.calls[0].json()
+    expect(body).toMatchObject({
+      recorded_at: '2026-09-19T14:02:00.000Z',
+      recorded_at_source: 'file_metadata',
+      kind: 'meeting',
+    })
+    expect(body).not.toHaveProperty('title')
+  })
+
   it('cria, envia as partes com os headers recebidos e conclui com os ETags em ordem', async () => {
     const http = mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),

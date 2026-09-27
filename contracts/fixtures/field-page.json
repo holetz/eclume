@@ -35,6 +35,17 @@
       "instructions": "A empresa cliente de que a conversa trata; nenhuma, se for interna.",
       "auto_fill": true,
       "position": 3
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d04",
+      "key": "projeto",
+      "name": "Projeto",
+      "kind": "text",
+      "builtin": null,
+      "options": [],
+      "instructions": "O projeto ou programa de que a conversa trata, como está escrito na conversa.",
+      "auto_fill": true,
+      "position": 4
     }
   ],
   "next_cursor": null

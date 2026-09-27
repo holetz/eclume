@@ -205,6 +205,17 @@ usa o Edge.
 ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com   ECLUME_ADMIN_PASSWORD="$(ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password)"   npm --prefix web run test:e2e:prod
 ```
 
+**Biblioteca e gravação no navegador** (`web/e2e-real/producao.spec.ts`, no Google Chrome do host):
+com a conta de usuário, confere pelo painel admin (mesma senha) que há provider para resumos e
+chat, importa um M4A pelo modal e confere a data lida dos metadados, acha o evento na segunda
+21/09/2026 às 09:00, espera o pipeline até "Resumo pronto", edita o resumo, pede um ajuste ao
+chat, baixa o DOCX (assinatura `PK`) e exclui a gravação da prova. Os screenshots, claro e escuro,
+ficam no host em `~/build/<pasta>/test-results/prod/`.
+
+```bash
+remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && ECLUME_E2E_URL=https://192.168.15.199:8443 ECLUME_E2E_EMAIL=admin@example.com ECLUME_E2E_PASSWORD="$(cat /srv/eclume/secrets/admin-password)" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
+```
+
 **MCP e pareamento** (`deploy/smoke_mcp.py`, com o SDK `mcp`, então por `uv run`): confere que o
 descritor traz a impressão digital da CA dada, cria um PAT de leitura de 1 hora, e o cliente MCP
 real lista as 9 ferramentas, busca e lê uma gravação e tem a exclusão recusada por falta de
@@ -312,6 +323,19 @@ bash deploy/prova-web-prod.sh
   `before.rules` padrão do Ubuntu já aceita o mDNS multicast.
 - **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
   digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
+
+### Biblioteca e gravação em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 24 resumos, 18 objetos).
+- **Deploy:** de uma exportação com LF, só `server` e `web` (holetz/eclume#37: a biblioteca no
+  tempo, o modal Importar, a gravação centrada no resumo, a busca com o filtro `field`). Nenhuma
+  migration (schema em dia); os scripts em `/srv/eclume/bin/` ficaram sem CRLF; disco em 86%.
+- **Navegador:** a prova passou em 1,3 min no Chrome do host: o M4A entrou com a data dos
+  metadados (09:00 da segunda 21/09), o evento apareceu na semana, o pipeline chegou ao resumo
+  pelo `claude-cli`, a edição virou versão "Editado por você", o chat leu a transcrição (00:00:00 a
+  00:00:30) e criou a versão "Ajustado pelo chat", o DOCX baixou, e a gravação da prova foi
+  excluída.
 
 ### Organizar, configurações e ajuda em produção (2026-09-27)
 

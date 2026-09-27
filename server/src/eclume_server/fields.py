@@ -10,9 +10,10 @@ import logging
 import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from eclume_server.agents.extraction import (
@@ -37,8 +38,7 @@ from eclume_server.summaries import (
 )
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
+    from sqlalchemy import ColumnElement
     from sqlalchemy.ext.asyncio import AsyncConnection
 
     from eclume_server.serialize import Row
@@ -50,6 +50,8 @@ RESERVED_KEYS = frozenset({"assunto", "data", "tipo"})
 MAX_KEY = 64
 # Itens de um valor de lista escrito pelo usuário.
 MAX_VALUE_ITEMS = 50
+# O filtro por campo da biblioteca e da busca: `<field_id>:<valor>`.
+FIELD_FILTER = r"^([0-9a-fA-F-]{36}):(.+)$"
 log = logging.getLogger(__name__)
 
 
@@ -364,3 +366,41 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
             conn, recording, revision, "fields", "done", detail={"filled": filled, "model": completion.model}
         )
     return f"{filled} campo(s) preenchido(s)"
+
+
+async def field_filters(conn: AsyncConnection, raw: list[str]) -> list[ColumnElement[bool]]:
+    """Um filtro por campo (`<field_id>:<valor>`): OU entre os valores do mesmo campo.
+
+    Título e tags são embutidos e vivem na gravação; os demais, em `field_values` (texto ou escolha
+    é o valor igual; lista, um dos itens). Um campo que a conta não tem não encontra nada. Os
+    predicados usam `recordings`: valem em `GET /recordings` e em `GET /search`.
+    """
+    wanted: dict[UUID, list[str]] = {}
+    for item in raw:
+        match = re.fullmatch(FIELD_FILTER, item)
+        if match is None:
+            raise invalid_field("field", "use <field_id>:<valor>")
+        try:
+            field_id = UUID(match.group(1))
+        except ValueError as exc:
+            raise invalid_field("field", "field_id inválido") from exc
+        wanted.setdefault(field_id, []).append(match.group(2))
+    builtins = dict(
+        (await conn.execute(select(t.fields.c.id, t.fields.c.builtin).where(t.fields.c.id.in_(wanted)))).all()
+    )
+    r, fv = t.recordings.c, t.field_values.c
+    filters = []
+    for field_id, values in wanted.items():
+        if field_id not in builtins:
+            filters.append(false())
+        elif builtins[field_id] == "title":
+            filters.append(r.title.in_(values))
+        elif builtins[field_id] == "tags":
+            filters.append(r.tags.overlap(values))
+        else:
+            matches = [
+                or_(fv.value == func.to_jsonb(value), fv.value.contains(func.jsonb_build_array(value)))
+                for value in values
+            ]
+            filters.append(exists(select(1).where(fv.recording_id == r.id, fv.field_id == field_id, or_(*matches))))
+    return filters
