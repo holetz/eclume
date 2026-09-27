@@ -49,7 +49,7 @@ async def update_admin_settings(body: AdminSettingsPatch, admin: Admin, ctx: Ctx
         merged = merge(current, changes)
         voice_before = voice_settings(current["voice_identification"])
         merged["voice_identification"] = voice_settings(merged["voice_identification"])
-        validate_merged(merged)
+        validate_merged(merged, changes)
         turned_off = voice_before["enabled"] and not merged["voice_identification"]["enabled"]
         if turned_off:
             # LGPD: desligada, nenhuma impressão de voz por gravação fica guardada na plataforma.

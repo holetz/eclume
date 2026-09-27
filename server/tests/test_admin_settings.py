@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -162,3 +164,21 @@ def test_identificacao_por_voz_exige_a_separacao(admin: Api):
     assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 422
     assert admin.patch(URL, json={"voice_identification": {"enabled": False}}).status_code == 200
     assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 200
+
+
+def test_estado_antigo_sem_separacao_nao_trava_outro_bloco(admin: Api, services: Services):
+    # Um estado de antes da regra: voz ligada com a separação desligada.
+    async def legacy(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text(
+                "UPDATE platform_settings SET"
+                " voice_identification = voice_identification || '{\"enabled\": true}',"
+                " diarization = diarization || '{\"enabled\": false}'"
+            )
+        )
+
+    run(services.sql(legacy))
+    assert admin.patch(URL, json={"asr": {"batch_size": 8}}).status_code == 200
+    assert admin.patch(URL, json={"preprocessing": {"denoise": {"strength": 0.4}}}).status_code == 200
+    # Tocar a separação ainda exige a regra.
+    assert admin.patch(URL, json={"diarization": {"min_speakers": 2}}).status_code == 422

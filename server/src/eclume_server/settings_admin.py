@@ -177,13 +177,18 @@ def merge(current: dict[str, Any], changes: dict[str, dict[str, Any]]) -> dict[s
     return merged
 
 
-def validate_merged(merged: dict[str, dict[str, Any]]) -> None:
-    """Regras entre campos, sobre a configuração resultante."""
+def validate_merged(merged: dict[str, dict[str, Any]], changes: dict[str, dict[str, Any]]) -> None:
+    """Regras entre campos, sobre a configuração resultante.
+
+    A regra voz → separação de locutores só vale quando o `PATCH` toca um dos dois blocos: um
+    estado antigo que a quebra não trava a edição de outro bloco.
+    """
     asr, diarization = merged["asr"], merged["diarization"]
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
         raise invalid_field("asr.endpoint_url", "obrigatória com a engine openai-compatible")
     low, high = diarization.get("min_speakers"), diarization.get("max_speakers")
-    if merged["voice_identification"].get("enabled") and not diarization.get("enabled"):
+    touches_voice = "voice_identification" in changes or "diarization" in changes
+    if touches_voice and merged["voice_identification"].get("enabled") and not diarization.get("enabled"):
         # A impressão de voz é por locutor: sem a separação, não há o que comparar.
         raise invalid_field("voice_identification.enabled", "exige a separação de locutores ligada")
     if low is not None and high is not None and low > high:

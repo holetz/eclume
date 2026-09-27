@@ -71,8 +71,9 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   16xx dá NaN nele ([worker-gpu.md](/docs/project/worker-gpu.md)); `diarization.model` só
   `pyannote/speaker-diarization-community-1`, o único pipeline que a engine carrega;
   `min_speakers ≤ max_speakers`; `endpoint_url` obrigatória com `engine: openai-compatible`;
-  `voice_identification.enabled` exige `diarization.enabled` (a impressão é por locutor). As
-  regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
+  `voice_identification.enabled` exige `diarization.enabled` (a impressão é por locutor), checada
+  só quando o `PATCH` toca um dos dois blocos: um estado antigo que a quebra não trava a edição de
+  outro bloco. As regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
 - **Idioma automático:** `asr.default_language: "auto"` manda `options.language = null`, e a
   engine detecta o idioma de cada gravação (o idioma da gravação, quando dito, vence).
 - **Bloco `preprocessing`:** `denoise` (`enabled`, `method` `rnnoise`/`afftdn`, `strength` 0–1),
