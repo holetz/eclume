@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import redis
 
 from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.fakes import transcribed
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -34,6 +35,76 @@ def test_listar_obter_e_filtrar(as_user: Callable[[Account], Api], make_user: Ca
     assert api.get(f"/api/v1/recordings/{first['id']}").json()["tags"] == ["cliente-a"]
     since = api.get("/api/v1/recordings", params={"since": second["updated_at"]}).json()
     assert [r["id"] for r in since["items"]] == [second["id"]]
+
+
+def _ids(api: Api, **params: object) -> list[str]:
+    response = api.get("/api/v1/recordings", params=params)
+    assert response.status_code == 200, response.text
+    return [r["id"] for r in response.json()["items"]]
+
+
+def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+
+    def recording(when: str, **fields: object) -> str:
+        return upload_file(api, audio_bytes(100), recorded_at=when, **fields)["id"]
+
+    a = recording("2026-09-01T10:00:00Z", tags=["x"])
+    b = recording("2026-09-03T10:00:00Z", tags=["y"], kind="note")
+    c = recording("2026-09-10T10:00:00Z", tags=["x", "z"])
+
+    # A semana: `from` inclusivo, `to` exclusivo, pelo início da gravação.
+    week = {"from": "2026-09-01T10:00:00Z", "to": "2026-09-10T10:00:00Z", "sort": "recorded_asc"}
+    assert _ids(api, **week) == [a, b]
+    assert _ids(api, sort="recorded_desc") == [c, b, a]
+    # Paginando pela data de gravação, nada se perde nem se repete.
+    seen, cursor = [], None
+    while True:
+        page = api.get(
+            "/api/v1/recordings", params={"sort": "recorded_asc", "limit": 1} | ({"cursor": cursor} if cursor else {})
+        ).json()
+        seen += [r["id"] for r in page["items"]]
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == [a, b, c]
+
+    # OU dentro do mesmo filtro, E entre filtros.
+    assert set(_ids(api, tag=["x", "y"])) == {a, b, c}
+    assert _ids(api, tag="x", kind="meeting", sort="recorded_asc") == [a, c]
+    assert _ids(api, tag="y", kind="meeting") == []
+    assert _ids(api, kind="note") == [b]
+    assert set(_ids(api, kind=["note", "meeting"])) == {a, b, c}
+    assert set(_ids(api, status=["queued", "failed"])) == {a, b, c}
+
+    # Campos do usuário: o valor do campo próprio e os embutidos (título e tags).
+    field = api.post("/api/v1/fields", json={"name": "Cliente", "kind": "text"}).json()
+    team = api.post("/api/v1/fields", json={"name": "Equipes", "kind": "list"}).json()
+    assert api.put(f"/api/v1/recordings/{a}/fields/{field['id']}", json={"value": "Serra Azul"}).status_code == 200
+    assert api.put(f"/api/v1/recordings/{b}/fields/{field['id']}", json={"value": "Outro"}).status_code == 200
+    assert api.put(f"/api/v1/recordings/{c}/fields/{team['id']}", json={"value": ["rh", "ti"]}).status_code == 200
+    assert _ids(api, field=f"{field['id']}:Serra Azul") == [a]
+    assert set(_ids(api, field=[f"{field['id']}:Serra Azul", f"{field['id']}:Outro"])) == {a, b}
+    assert _ids(api, field=[f"{field['id']}:Serra Azul", f"{team['id']}:ti"]) == []
+    assert _ids(api, field=f"{team['id']}:ti") == [c]
+    tags_field = next(f for f in api.get("/api/v1/fields").json()["items"] if f["builtin"] == "tags")
+    assert set(_ids(api, field=f"{tags_field['id']}:z")) == {c}
+    assert api.get("/api/v1/recordings", params={"field": "sem-dois-pontos"}).status_code == 422
+
+
+def test_biblioteca_por_pessoa(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    with_rafael = transcribed(api, services.settings)
+    without = transcribed(api, services.settings)
+    rafael = api.post("/api/v1/people", json={"name": "Rafael Lima"}).json()
+    linked = api.patch(
+        f"/api/v1/transcripts/{with_rafael['transcript_id']}/speakers/S2", json={"person_id": rafael["id"]}
+    )
+    assert linked.status_code == 200, linked.text
+    assert _ids(api, person=rafael["id"]) == [with_rafael["id"]]
+    assert without["id"] in _ids(api)
 
 
 def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):

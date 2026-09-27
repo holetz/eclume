@@ -3616,7 +3616,7 @@ export interface operations {
                 collection?: string[];
                 /** @description Pessoa ligada a um locutor da transcrição; repetível. */
                 person?: string[];
-                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Num campo de lista, basta o valor ser um dos itens. */
+                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
                 field?: string[];
             };
             header?: never;
