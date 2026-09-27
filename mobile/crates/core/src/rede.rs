@@ -154,7 +154,10 @@ pub fn sondar(transport: std::sync::Arc<dyn Transport>, servidor: &Servidor) -> 
         },
         // Com a CA fixada, uma cadeia de outra raiz falha no TLS: é a CA que mudou, não a rede.
         Err(err) if erro_de_certificado(&err) => Sonda::CaMudou,
-        Err(_) => Sonda::SemResposta,
+        Err(err) => {
+            log::info!("sonda sem resposta: {err:#}");
+            Sonda::SemResposta
+        }
     }
 }
 

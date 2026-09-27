@@ -331,3 +331,70 @@ fn atualizacao_pelo_movel_json_confere_o_apk() {
     assert!(format!("{erro:#}").contains("não confere"), "{erro:#}");
     assert!(!dirs.sem_backup.exists());
 }
+
+/// Um ciclo inteiro pelo núcleo (sonda, tipos, atualização, sync) não pode travar a si mesmo: a
+/// rede roda fora da trava do núcleo.
+#[test]
+fn ciclo_completo_nao_trava_o_nucleo() {
+    use eclume_mobile_core::{ciclo, trancar, Core};
+
+    let (dirs, _guard) = dirs_temp("ciclo");
+    let roteiro = Roteiro::default();
+    roteiro.responde(
+        "GET",
+        "/downloads/eclume-root.crt",
+        comum::texto(200, comum::CA_PEM),
+    );
+    roteiro.responde(
+        "GET",
+        "/api/v1/server",
+        json(
+            200,
+            serde_json::json!({"name": "eclume", "url": URL, "ca_sha256": CA_SHA256}),
+        ),
+    );
+    roteiro.responde(
+        "POST",
+        "/api/v1/devices/login",
+        json(
+            201,
+            serde_json::json!({"token": {"id": "t1", "name": "Pixel 8"}, "secret": "eclp_segredo",
+                "server": {"name": "eclume", "url": URL, "ca_sha256": CA_SHA256}}),
+        ),
+    );
+    roteiro.responde(
+        "GET",
+        "/api/v1/agenda-types",
+        json(
+            200,
+            serde_json::json!({"items": [{"id": "t1", "name": "Reunião"}], "next_cursor": null}),
+        ),
+    );
+    roteiro.responde("GET", "/downloads/movel.json", comum::texto(404, ""));
+    let nucleo = std::sync::Arc::new(std::sync::Mutex::new(
+        Core::abrir(dirs, "0.1.0", Arc::new(comum::TransportesFalsos(roteiro))).unwrap(),
+    ));
+    {
+        let mut core = trancar(&nucleo).unwrap();
+        core.conectar_endereco(URL).unwrap();
+        core.confiar_ca().unwrap();
+        core.entrar("ana@eclume.test", "senha").unwrap();
+        core.mudou_rede(true);
+    }
+    let (fim, recebe) = std::sync::mpsc::channel();
+    let n = std::sync::Arc::clone(&nucleo);
+    std::thread::spawn(move || {
+        let _ = fim.send(
+            ciclo(&n, true)
+                .map(|r| r.is_some())
+                .map_err(|e| format!("{e:#}")),
+        );
+    });
+    let resultado = recebe
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("o ciclo travou o núcleo");
+    assert_eq!(resultado, Ok(false));
+    let core = trancar(&nucleo).unwrap();
+    assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
+    assert_eq!(core.config().tipos_de_agenda[0].nome, "Reunião");
+}

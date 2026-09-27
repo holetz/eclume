@@ -292,7 +292,11 @@ impl Core {
 
     /// O plugin avisou o Wi-Fi não medido. Devolve se a sonda deve rodar de novo.
     pub fn mudou_rede(&mut self, wifi_nao_medido: bool) -> bool {
-        self.rede.mudou_wifi(wifi_nao_medido)
+        let mudou = self.rede.mudou_wifi(wifi_nao_medido);
+        if mudou {
+            log::info!("Wi-Fi não medido: {wifi_nao_medido}");
+        }
+        mudou
     }
 
     pub fn definir_visivel(&mut self, visivel: bool) {
@@ -326,7 +330,11 @@ impl Core {
     }
 
     pub fn registrar_sonda(&mut self, agora_ms: i64, sonda: Sonda) {
+        let antes = self.rede.estado();
         self.rede.registrar_sonda(agora_ms, sonda);
+        if self.rede.estado() != antes {
+            log::info!("sonda {sonda:?}: rede {:?}", self.rede.estado());
+        }
     }
 
     /// O sync a rodar: na rede do eclume, sem outro em curso, com algo pendente e (sem `agora`)
@@ -765,7 +773,10 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
     }
     // Os tipos de agenda mudam pouco: só são lidos quando a sonda roda.
     if sondagem.rodou {
-        if let Some(plano) = trancar(nucleo)?.preparar_tipos()? {
+        // O plano sai da trava antes da rede: no `if let` (edição 2021), o guard temporário
+        // viveria o bloco inteiro, e a trava de novo lá dentro travaria para sempre.
+        let plano = trancar(nucleo)?.preparar_tipos()?;
+        if let Some(plano) = plano {
             match plano.tipos() {
                 Ok(tipos) => trancar(nucleo)?.guardar_tipos(tipos)?,
                 Err(err) => log::warn!("{err:#}"),
@@ -788,7 +799,8 @@ pub fn verificar_atualizacao(
     nucleo: &Mutex<Core>,
     forcar: bool,
 ) -> Result<Option<sync::Manifesto>> {
-    if let Some(plano) = trancar(nucleo)?.preparar_atualizacao(forcar)? {
+    let plano = trancar(nucleo)?.preparar_atualizacao(forcar)?;
+    if let Some(plano) = plano {
         let manifesto = sync::buscar_manifesto(plano.transporte.as_ref(), &plano.servidor)?;
         trancar(nucleo)?.guardar_manifesto(manifesto)?;
     }
@@ -803,7 +815,8 @@ pub fn baixar_atualizacao(nucleo: &Mutex<Core>) -> Result<std::path::PathBuf> {
 
 /// Atualiza as etapas no servidor de uma gravação (fora da trava) e devolve o detalhe.
 pub fn detalhe(nucleo: &Mutex<Core>, id: &str) -> Result<DetalheLocal> {
-    if let Some((plano, remoto)) = trancar(nucleo)?.preparar_etapas(id)? {
+    let plano = trancar(nucleo)?.preparar_etapas(id)?;
+    if let Some((plano, remoto)) = plano {
         match plano.etapas(&remoto) {
             Ok(etapas) => trancar(nucleo)?.guardar_etapas(id, etapas),
             Err(err) => log::warn!("{err:#}"),
