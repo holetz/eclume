@@ -1441,6 +1441,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/agenda-types/{agenda_type_id}:
     parameters:
     - $ref: '#/components/parameters/AgendaTypeId'
@@ -1628,6 +1630,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/fields/{field_id}:
     parameters:
     - $ref: '#/components/parameters/FieldId'
@@ -2914,6 +2918,13 @@ components:
               $ref: '#/components/examples/ProblemValidation'
     Conflict:
       description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: 'Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações
+        em andamento por conta; tente de novo quando algum terminar.'
       content:
         application/problem+json:
           schema:

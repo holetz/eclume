@@ -148,7 +148,8 @@ ficam.
 "Testar numa gravação" (`POST /fields/preview`) e "Pré-visualizar numa gravação"
 (`POST /agenda-types/preview`) rodam o job `run_preview` sobre um rascunho, sem gravar nada no
 banco: o estado vive no Redis (`eclume:preview:{id}`, com `owner_id`, `kind`, `status` e `result`)
-por 1 h, e `GET /previews/{id}` de outra conta é 404.
+por 1 h, e `GET /previews/{id}` de outra conta é 404. Cada conta tem no máximo 3 em aberto (na
+fila ou rodando, em `eclume:preview:open:{owner_id}`); a quarta é 429 `rate_limited`.
 
 - `field_rule` roda `FIELDS_SYSTEM` só com o campo em rascunho, em até 3 gravações transcritas (as
   indicadas, ou as 3 mais recentes do usuário).

@@ -124,3 +124,19 @@ def test_previa_de_outra_conta_nao_existe(
     )
     assert refused.status_code == 422
     assert user.pat("recordings:read").post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 403
+
+
+def test_no_maximo_tres_em_aberto_por_conta(
+    user: Api, services: Services, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    _recording(user, services, "Reunião A")
+    for _ in range(3):
+        assert user.post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
+    fourth = user.post("/api/v1/fields/preview", json={"field": CLIENT})
+    assert (fourth.status_code, fourth.json()["code"]) == (429, "rate_limited")
+    # O limite é por conta.
+    assert as_user(make_user()).post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
+    # Terminadas, liberam a vez.
+    run_cpu(services.settings)
+    assert user.post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
+    run_cpu(services.settings)

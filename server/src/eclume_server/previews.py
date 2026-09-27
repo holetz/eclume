@@ -2,6 +2,7 @@
 
 O estado vive no Redis (`eclume:preview:{id}`, hash com `owner_id`, `kind`, `status`, `request`,
 `result` e `error`) por 1 h; o job `run_preview` do worker CPU o preenche. Nada vai para o banco.
+Cada conta tem no máximo `MAX_OPEN` em aberto (`eclume:preview:open:{owner_id}`); além disso, 429.
 Contrato em docs/standards/code/processamento-automatico.md.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -23,6 +25,7 @@ from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.fields import known_tags
+from eclume_server.problems import rate_limited
 from eclume_server.queue import DEFAULT_QUEUE
 from eclume_server.summaries import (
     INTERNAL_ERROR,
@@ -43,6 +46,9 @@ if TYPE_CHECKING:
 
 TTL_S = 3600
 MAX_RECORDINGS = 3
+# Pré-visualizações em aberto (na fila ou rodando) por conta: cada uma ocupa o agente.
+MAX_OPEN = 3
+_OPEN = {"queued", "running"}
 NO_PROVIDER = "no_provider"
 log = logging.getLogger(__name__)
 
@@ -52,8 +58,30 @@ def preview_key(preview_id: UUID | str) -> str:
     return f"eclume:preview:{preview_id}"
 
 
+def open_key(owner_id: UUID | str) -> str:
+    """Conjunto ordenado (pelo instante do pedido) das pré-visualizações em aberto da conta."""
+    return f"eclume:preview:open:{owner_id}"
+
+
+async def _open_count(redis: ArqRedis, owner_id: UUID) -> int:
+    """Quantas a conta tem em aberto, tirando do conjunto as que terminaram ou expiraram."""
+    key = open_key(owner_id)
+    await redis.zremrangebyscore(key, "-inf", time.time() - TTL_S)
+    for member in await redis.zrange(key, 0, -1):
+        preview_id = member.decode() if isinstance(member, bytes) else member
+        status = await redis.hget(preview_key(preview_id), "status")
+        if (status.decode() if isinstance(status, bytes) else status) not in _OPEN:
+            await redis.zrem(key, preview_id)
+    return await redis.zcard(key)
+
+
 async def create_preview(redis: ArqRedis, owner_id: UUID, kind: str, request: dict[str, Any]) -> dict[str, Any]:
-    """Guarda o pedido e enfileira `run_preview`; devolve o schema `Preview` na fila."""
+    """Guarda o pedido e enfileira `run_preview`; devolve o schema `Preview` na fila.
+
+    Com `MAX_OPEN` em aberto, 429 `rate_limited`.
+    """
+    if await _open_count(redis, owner_id) >= MAX_OPEN:
+        raise rate_limited(f"Já há {MAX_OPEN} pré-visualizações em andamento; espere uma terminar.")
     preview_id = uuid4()
     key = preview_key(preview_id)
     await redis.hset(
@@ -61,6 +89,8 @@ async def create_preview(redis: ArqRedis, owner_id: UUID, kind: str, request: di
         mapping={"owner_id": str(owner_id), "kind": kind, "status": "queued", "request": json.dumps(request)},
     )
     await redis.expire(key, TTL_S)
+    await redis.zadd(open_key(owner_id), {str(preview_id): time.time()})
+    await redis.expire(open_key(owner_id), TTL_S)
     await redis.enqueue_job("run_preview", str(preview_id), _job_id=f"preview:{preview_id}", _queue_name=DEFAULT_QUEUE)
     return {"id": str(preview_id), "kind": kind, "status": "queued", "items": [], "error": None}
 
@@ -205,6 +235,8 @@ async def run_preview(ctx: dict[str, Any], preview_id: str) -> str:
         error = {"code": INTERNAL_ERROR, "message": type(exc).__name__}
     else:
         await redis.hset(key, mapping={"status": "done", "result": json.dumps(items, ensure_ascii=False)})
+        await redis.zrem(open_key(state["owner_id"]), preview_id)
         return "done"
     await redis.hset(key, mapping={"status": "failed", "error": json.dumps(error, ensure_ascii=False)})
+    await redis.zrem(open_key(state["owner_id"]), preview_id)
     return f"falhou: {error['code']}"

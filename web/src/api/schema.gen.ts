@@ -2665,6 +2665,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações em andamento por conta; tente de novo quando algum terminar. */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
@@ -3854,6 +3863,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getAgendaType: {
@@ -4021,6 +4031,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getField: {
