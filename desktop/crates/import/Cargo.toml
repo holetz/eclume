@@ -8,9 +8,15 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+eclume-recorder = { path = "../recorder" }
 anyhow = "1"
 log = "0.4"
+# O Opus que o symphonia só demultiplexa: a mesma libopus do recorder.
+opus = "0.4"
 serde = { version = "1", features = ["derive"] }
 # Rust puro (MPL-2.0, sem modificação). As features padrão trazem FLAC, MKV/WebM, Ogg, PCM,
 # Vorbis e WAV; somam-se AAC, ALAC, MP3 e o contêiner MP4/MOV/M4A.
 symphonia = { version = "0.5", features = ["aac", "alac", "mp3", "isomp4"] }
+
+[dev-dependencies]
+ogg = "0.9"

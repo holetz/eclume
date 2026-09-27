@@ -1395,7 +1395,10 @@ name = "eclume-import"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "eclume-recorder",
  "log",
+ "ogg",
+ "opus",
  "serde",
  "symphonia",
 ]
