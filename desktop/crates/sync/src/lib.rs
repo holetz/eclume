@@ -4,6 +4,7 @@
 
 pub mod api;
 pub mod devices;
+pub mod discovery;
 pub mod pat;
 pub mod pin;
 pub mod protocol;
