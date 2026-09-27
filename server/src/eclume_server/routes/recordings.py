@@ -88,7 +88,7 @@ async def list_recordings(
         rows = list((await conn.execute(query)).mappings().all())
     has_more = len(rows) > limit
     rows = rows[:limit]
-    items = await render(ctx, rows)
+    items = await render(ctx, principal.user_id, rows)
     if status in {"queued", "processing"}:
         items = [item for item in items if item["status"] == status]
     next_cursor = encode_cursor(rows[-1]["created_at"], rows[-1]["id"]) if has_more else None
@@ -100,7 +100,7 @@ async def get_recording(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict
     """Gravação e estado do job."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await get_visible(conn, recording_id)
-    return (await render(ctx, [row]))[0]
+    return (await render(ctx, principal.user_id, [row]))[0]
 
 
 @router.patch("/recordings/{recording_id}")
@@ -136,7 +136,7 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
             update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now)
         )
         row = await get_visible(conn, recording_id)
-    return (await render(ctx, [row]))[0]
+    return (await render(ctx, principal.user_id, [row]))[0]
 
 
 @router.delete("/recordings/{recording_id}", status_code=204)
@@ -211,4 +211,4 @@ async def retranscribe(
         revision, options = await start_next_revision(conn, row, language)
         refreshed = await get_visible(conn, recording_id)
     await enqueue_transcription(ctx, recording_id, revision, row["audio_key"], options)
-    return (await render(ctx, [refreshed]))[0]
+    return (await render(ctx, principal.user_id, [refreshed]))[0]

@@ -245,6 +245,25 @@ default_agenda_types = Table(
     Column("include_for_new_users", Boolean, server_default=FetchedValue()),
 )
 
+# --- etapas do pipeline (012_etapas_do_pipeline) ---------------------------------------------------
+
+pipeline_steps = Table(
+    "pipeline_steps",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    Column("revision", Integer),
+    Column("step", Text),
+    Column("state", Text),
+    _ts("started_at"),
+    _ts("finished_at"),
+    Column("duration_ms", Integer, server_default=FetchedValue()),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("detail", JSONB, server_default=FetchedValue()),
+)
+
 # --- campos e valores (010_campos_e_valores) ----------------------------------------------------
 
 fields = Table(

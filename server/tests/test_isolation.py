@@ -32,6 +32,7 @@ CONTENT_TABLES = (
     "agenda_types",
     "fields",
     "field_values",
+    "pipeline_steps",
     "people",
     "transcription_jobs",
     "transcripts",

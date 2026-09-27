@@ -3571,6 +3571,7 @@ components:
       - capture
       - agenda_type
       - job
+      - pipeline
       - transcript_id
       - created_at
       - updated_at
@@ -3651,6 +3652,20 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Job'
           - type: 'null'
+        pipeline:
+          description: 'As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou
+            sai
+
+            `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
+
+            sai `active`.
+
+            '
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/PipelineStep'
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type:
@@ -3663,6 +3678,71 @@ components:
         updated_at:
           type: string
           format: date-time
+    PipelineStep:
+      type: object
+      required:
+      - step
+      - state
+      - started_at
+      - finished_at
+      - duration_ms
+      - error
+      - reason
+      properties:
+        step:
+          type: string
+          enum:
+          - received
+          - preprocessing
+          - transcription
+          - fields
+          - agenda_type
+          - summary
+        state:
+          type: string
+          enum:
+          - pending
+          - active
+          - done
+          - failed
+          - skipped
+        started_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        finished_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        duration_ms:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        error:
+          description: Com `state` `failed`.
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
+        reason:
+          description: 'Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+
+            '
+          type:
+          - string
+          - 'null'
     RecordingPatch:
       type: object
       minProperties: 1
@@ -6044,6 +6124,49 @@ components:
           queued_at: '2026-09-18T14:09:31Z'
           started_at: null
           finished_at: null
+        pipeline:
+        - step: received
+          state: done
+          started_at: '2026-09-18T15:00:00Z'
+          finished_at: '2026-09-18T15:00:00Z'
+          duration_ms: 0
+          error: null
+          reason: null
+        - step: preprocessing
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: transcription
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: fields
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: agenda_type
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: summary
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
         transcript_id: null
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
@@ -6090,6 +6213,49 @@ components:
           queued_at: '2026-09-18T14:09:31Z'
           started_at: '2026-09-18T14:09:33Z'
           finished_at: '2026-09-18T14:09:41Z'
+        pipeline:
+        - step: received
+          state: done
+          started_at: '2026-09-18T15:00:00Z'
+          finished_at: '2026-09-18T15:00:00Z'
+          duration_ms: 0
+          error: null
+          reason: null
+        - step: preprocessing
+          state: done
+          started_at: '2026-09-18T15:00:04Z'
+          finished_at: '2026-09-18T15:00:12Z'
+          duration_ms: 8000
+          error: null
+          reason: null
+        - step: transcription
+          state: done
+          started_at: '2026-09-18T15:00:12Z'
+          finished_at: '2026-09-18T15:01:30Z'
+          duration_ms: 78000
+          error: null
+          reason: null
+        - step: fields
+          state: done
+          started_at: '2026-09-18T15:01:31Z'
+          finished_at: '2026-09-18T15:01:40Z'
+          duration_ms: 9000
+          error: null
+          reason: null
+        - step: agenda_type
+          state: done
+          started_at: '2026-09-18T15:01:40Z'
+          finished_at: '2026-09-18T15:01:44Z'
+          duration_ms: 4000
+          error: null
+          reason: null
+        - step: summary
+          state: done
+          started_at: '2026-09-18T15:01:44Z'
+          finished_at: '2026-09-18T15:02:10Z'
+          duration_ms: 26000
+          error: null
+          reason: null
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T15:02:17Z'
@@ -6126,6 +6292,49 @@ components:
             queued_at: '2026-09-19T13:41:07Z'
             started_at: '2026-09-19T13:41:09Z'
             finished_at: null
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-18T15:00:00Z'
+            finished_at: '2026-09-18T15:00:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: transcription
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: fields
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: agenda_type
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: summary
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
           transcript_id: null
           created_at: '2026-09-19T13:41:07Z'
           updated_at: '2026-09-19T13:42:55Z'
@@ -6166,6 +6375,49 @@ components:
             queued_at: '2026-09-18T14:09:31Z'
             started_at: '2026-09-18T14:09:33Z'
             finished_at: '2026-09-18T14:09:41Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-18T15:00:00Z'
+            finished_at: '2026-09-18T15:00:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-18T15:00:04Z'
+            finished_at: '2026-09-18T15:00:12Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-18T15:00:12Z'
+            finished_at: '2026-09-18T15:01:30Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-18T15:01:31Z'
+            finished_at: '2026-09-18T15:01:40Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-18T15:01:40Z'
+            finished_at: '2026-09-18T15:01:44Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-18T15:01:44Z'
+            finished_at: '2026-09-18T15:02:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
           transcript_id: 01928f3a-1c00-7a00-8000-000000000501
           created_at: '2026-09-18T14:09:31Z'
           updated_at: '2026-09-18T15:02:17Z'

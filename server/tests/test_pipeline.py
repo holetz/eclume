@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import text
 
-from eclume_server.queue import Queue
+from eclume_server.queue import Queue, progress_key
 from eclume_server.transcripts import render_markdown
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import ENGINE_INFO, contract_transcript, run_cpu, run_gpu
@@ -152,6 +152,11 @@ def test_falha_do_worker_gpu_marca_job_e_gravacao(
     assert body["job"]["error"] == {"code": "gpu_oom", "message": "CUDA out of memory", "retryable": True}
     assert body["job"]["finished_at"] is not None
     assert body["transcript_id"] is None
+    steps = {step["step"]: step for step in body["pipeline"]}
+    assert steps["received"]["state"] == "done"
+    assert steps["transcription"]["state"] == "failed"
+    assert steps["transcription"]["error"] == {"code": "gpu_oom", "message": "CUDA out of memory"}
+    assert steps["summary"]["state"] == "pending"
 
 
 @pytest.mark.usefixtures("platform")
@@ -190,3 +195,57 @@ def test_embeddings_so_com_a_voz_ligada_na_plataforma(
 
     rows = run(services.sql(count))
     assert [(r[0], r[1], r[3]) for r in rows] == [(with_opt_in["id"], f"S{i}", 256) for i in (1, 2, 3)]
+
+
+def _states(body: dict) -> dict[str, str]:
+    return {step["step"]: step["state"] for step in body["pipeline"]}
+
+
+def test_etapas_do_pipeline_por_revisao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3100))
+    assert [step["step"] for step in recording["pipeline"]] == [
+        "received",
+        "preprocessing",
+        "transcription",
+        "fields",
+        "agenda_type",
+        "summary",
+    ]
+    assert _states(recording) == {
+        "received": "done",
+        "preprocessing": "pending",
+        "transcription": "pending",
+        "fields": "pending",
+        "agenda_type": "pending",
+        "summary": "pending",
+    }
+
+    # Com o worker GPU reportando progresso, a transcrição sai em andamento.
+    async def progress() -> None:
+        queue = await Queue.connect(services.settings.redis_url)
+        try:
+            await queue.pool.hset(progress_key(recording["id"]), mapping={"stage": "asr", "pct": "40"})
+        finally:
+            await queue.close()
+
+    run(progress())
+    running = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert _states(running)["transcription"] == "active"
+
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    transcription = next(step for step in body["pipeline"] if step["step"] == "transcription")
+    assert transcription["state"] == "done"
+    assert transcription["finished_at"] is not None
+    assert transcription["duration_ms"] >= 0
+
+    # A retranscrição abre uma revisão nova: a cadeia recomeça.
+    retried = api.post(f"/api/v1/recordings/{recording['id']}/retranscribe").json()
+    assert (_states(retried)["received"], _states(retried)["transcription"]) == ("done", "pending")
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert _states(api.get(f"/api/v1/recordings/{recording['id']}").json())["transcription"] == "done"

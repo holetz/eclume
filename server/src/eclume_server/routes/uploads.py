@@ -358,7 +358,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
         recording = await get_visible(conn, recording_id)
     if enqueue is not None:
         await enqueue_transcription(ctx, recording_id, 1, *enqueue)
-    return (await render(ctx, [recording]))[0]
+    return (await render(ctx, principal.user_id, [recording]))[0]
 
 
 async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:

@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, insert, select, true, update
 
 from eclume_server.db import tables as t
-from eclume_server.db.session import system_tx
+from eclume_server.db.session import system_tx, user_tx
 from eclume_server.pagination import iso
+from eclume_server.pipeline import load_pipelines, pipeline_json, set_step
 from eclume_server.problems import not_found
 from eclume_server.queue import transcribe_options
 from eclume_server.serialize import Row, user_ref
@@ -77,8 +78,8 @@ def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, 
     }
 
 
-def recording_json(row: Row, progress: tuple[str | None, float] | None = None) -> dict[str, Any]:
-    """Schema `Recording`, com o progresso em curso publicado pelo worker GPU."""
+def recording_json(row: Row, pipeline: list[Row], progress: tuple[str | None, float] | None = None) -> dict[str, Any]:
+    """Schema `Recording`, com as etapas e o progresso em curso publicado pelo worker GPU."""
     job = _job_json(row, progress)
     agenda_type = None
     if row["agenda_type_id"] is not None:
@@ -108,6 +109,7 @@ def recording_json(row: Row, progress: tuple[str | None, float] | None = None) -
         "capture": row["capture"],
         "agenda_type": agenda_type,
         "job": job,
+        "pipeline": pipeline_json(pipeline, (progress[0] or "asr") if progress is not None else None),
         "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
@@ -122,11 +124,13 @@ async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa
     return row
 
 
-async def render(ctx: AppContext, rows: list[Row]) -> list[dict[str, Any]]:
-    """Formas JSON, com o progresso do Redis para os jobs em aberto."""
+async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[str, Any]]:
+    """Formas JSON, com as etapas do pipeline e o progresso do Redis para os jobs em aberto."""
     open_jobs = [row["id"] for row in rows if row["job_state"] in {"queued", "running"}]
     progress = await ctx.queue.progress(open_jobs)
-    return [recording_json(row, progress.get(row["id"])) for row in rows]
+    async with user_tx(ctx.engine, user_id) as conn:
+        pipelines = await load_pipelines(conn, [row["id"] for row in rows])
+    return [recording_json(row, pipelines.get(row["id"], []), progress.get(row["id"])) for row in rows]
 
 
 async def insert_job(
@@ -149,6 +153,8 @@ async def insert_job(
     if error is not None:
         values |= {"state": "failed", "error_code": error[0], "error_message": error[1], "finished_at": func.now()}
     await conn.execute(insert(t.transcription_jobs).values(**values))
+    # O áudio está no bucket: a revisão nova começa com o recebido (falho, se o hash divergiu).
+    await set_step(conn, recording, revision, "received", "failed" if error else "done", error=error)
     return options
 
 

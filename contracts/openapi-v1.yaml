@@ -3251,7 +3251,7 @@ components:
 
     Recording:
       type: object
-      required: [id, title, status, source, recorded_at, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, metadata, capture, agenda_type, job, transcript_id, created_at, updated_at]
+      required: [id, title, status, source, recorded_at, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, metadata, capture, agenda_type, job, pipeline, transcript_id, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3318,6 +3318,16 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Job"
             - type: "null"
+        pipeline:
+          description: |
+            As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+            `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
+            sai `active`.
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PipelineStep"
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type: [string, "null"]
@@ -3328,6 +3338,42 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    PipelineStep:
+      type: object
+      required: [step, state, started_at, finished_at, duration_ms, error, reason]
+      properties:
+        step:
+          type: string
+          enum: [received, preprocessing, transcription, fields, agenda_type, summary]
+        state:
+          type: string
+          enum: [pending, active, done, failed, skipped]
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+        duration_ms:
+          type: [integer, "null"]
+          minimum: 0
+        error:
+          description: Com `state` `failed`.
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        reason:
+          description: |
+            Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+          type: [string, "null"]
 
     RecordingPatch:
       type: object

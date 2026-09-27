@@ -12,6 +12,7 @@ from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
+from eclume_server.pipeline import set_step
 from eclume_server.problems import not_found
 from eclume_server.serialize import Row, user_ref
 from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
@@ -137,6 +138,14 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 RECORDING_GONE = "gravação inexistente"
 
 
+def _started(engine_info: dict[str, Any], job: Row) -> datetime:
+    """Quando o worker GPU pegou o job (`engine_info.started_at`); sem isso, quando entrou na fila."""
+    try:
+        return datetime.fromisoformat(engine_info["started_at"])
+    except (KeyError, TypeError, ValueError):
+        return job["started_at"] or job["queued_at"]
+
+
 async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
     conn: AsyncConnection,
     storage: Storage,
@@ -241,6 +250,16 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .where(t.transcription_jobs.c.id == job["id"])
         .values(state="succeeded", finished_at=now, attempts=job["attempts"] + 1, engine_info=engine_info)
     )
+    await set_step(
+        conn,
+        recording,
+        job["revision"],
+        "transcription",
+        "done",
+        detail={"warnings": engine_info.get("warnings") or []},
+        started_at=_started(engine_info, job),
+        finished_at=now,
+    )
     await conn.execute(
         update(t.recordings)
         .where(t.recordings.c.id == recording_id)
@@ -285,6 +304,16 @@ async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, messa
     )
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording_id).values(status="failed", updated_at=now)
+    )
+    await set_step(
+        conn,
+        {"id": recording_id, "owner_id": job["owner_id"]},
+        job["revision"],
+        "transcription",
+        "failed",
+        error=(error_code or "engine_error", message or ""),
+        started_at=job["started_at"] or job["queued_at"],
+        finished_at=now,
     )
     return f"job {job['id']} falhou: {error_code}"
 
