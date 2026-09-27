@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -10,13 +11,15 @@ import pytest
 import redis
 
 from eclume_server.agents.base import ProviderError
-from eclume_server.health import CPU_HEALTH_KEY
+from eclume_server.health import CPU_HEALTH_KEY, connected_assistants
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+
+    from fastapi.testclient import TestClient
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -224,10 +227,10 @@ def test_servicos(admin: Api, cache: redis.Redis):
         "storage": "healthy",
         "gpu_worker": "down",
         "cpu_worker": "down",
-        "mcp": "absent",
+        "mcp": "healthy",
     }
     assert services["postgres"]["detail"] == "RLS ativa"
-    assert all(item["latency_ms"] is not None for name, item in services.items() if name != "mcp")
+    assert all(item["latency_ms"] is not None for item in services.values())
 
     cache.hset(GPU_HEALTH_KEY, mapping=BEAT)
     cache.set(CPU_HEALTH_KEY, b"Oct-01 12:00:00 j_complete=1")
@@ -235,3 +238,30 @@ def test_servicos(admin: Api, cache: redis.Redis):
     assert (services["gpu_worker"]["status"], services["gpu_worker"]["detail"]) == ("healthy", "whisperx-local")
     assert services["cpu_worker"]["status"] == "healthy"
     cache.delete(CPU_HEALTH_KEY)
+
+
+def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(
+    admin: Api, client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    def connected() -> int:
+        mcp = next(item for item in admin.get(URL).json()["services"] if item["name"] == "mcp")
+        assert mcp["status"] == "healthy"
+        match = re.match(r"(nenhum|\d+) assistentes? conectados? nas últimas 24 h", mcp["detail"])
+        assert match is not None, mcp["detail"]
+        return 0 if match.group(1) == "nenhum" else int(match.group(1))
+
+    before = connected()
+    session = as_user(make_user())
+    token = session.pat("recordings:read").token
+    session.pat("recordings:read").get("/api/v1/recordings")  # uso pela API não conta
+    for _ in range(2):  # o mesmo assistente duas vezes conta uma
+        client.cookies.clear()
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream"},
+        )
+        assert response.status_code == 200
+    assert connected() == before + 1
+    assert connected_assistants(1) == "1 assistente conectado nas últimas 24 h"
+    assert connected_assistants(2) == "2 assistentes conectados nas últimas 24 h"
