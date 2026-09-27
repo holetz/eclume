@@ -44,7 +44,7 @@ class LoginRequest(BaseModel):
     """Schema `LoginRequest`."""
 
     email: str
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=1024)
 
     _email = field_validator("email")(check_email)
 
@@ -54,7 +54,7 @@ class SignupRequest(BaseModel):
 
     name: str = Field(min_length=1)
     email: str
-    password: str = Field(min_length=MIN_PASSWORD)
+    password: str = Field(min_length=MIN_PASSWORD, max_length=1024)
     notice_version: str = Field(min_length=1)
 
     _email = field_validator("email")(check_email)

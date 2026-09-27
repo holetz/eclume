@@ -6,6 +6,7 @@ A conta de admin é separada das contas de usuário: a sessão de admin (`eclume
 
 from __future__ import annotations
 
+import hmac
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated
@@ -84,7 +85,7 @@ async def _from_pat(ctx: AppContext, secret: str) -> Principal:
 
 
 def _check_csrf(request: Request, expected: str, cookie: str) -> None:
-    if request.method in _MUTATING and request.headers.get(CSRF_HEADER) != expected:
+    if request.method in _MUTATING and not hmac.compare_digest(request.headers.get(CSRF_HEADER, ""), expected):
         # Sem o double-submit a sessão não é uma credencial completa: 401, que toda operação declara.
         raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {cookie}.")
 

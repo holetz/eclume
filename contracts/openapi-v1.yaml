@@ -2337,6 +2337,7 @@ components:
         password:
           type: string
           minLength: 1
+          maxLength: 1024
           writeOnly: true
 
     Notice:
@@ -2372,6 +2373,7 @@ components:
         password:
           type: string
           minLength: 12
+          maxLength: 1024
           writeOnly: true
         notice_version:
           description: Versão do aviso aceito; tem de ser a em vigor.

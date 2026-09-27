@@ -2468,6 +2468,7 @@ components:
         password:
           type: string
           minLength: 1
+          maxLength: 1024
           writeOnly: true
     Notice:
       description: Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das
@@ -2509,6 +2510,7 @@ components:
         password:
           type: string
           minLength: 12
+          maxLength: 1024
           writeOnly: true
         notice_version:
           description: Versão do aviso aceito; tem de ser a em vigor.
