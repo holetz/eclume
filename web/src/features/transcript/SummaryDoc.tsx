@@ -5,8 +5,9 @@ import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { Dialog } from '../../app/Dialog'
+import { useAgendaTypes } from '../organize/queries'
 import styles from './RecordingPage.module.css'
-import { isMissingType, originLabel, useAgendaTypes, useSummaryMutations, useSummaryState } from './summary'
+import { isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
 import { SummaryDiff, SummaryEditor } from './SummaryEditor'
 
 type Recording = Schemas['Recording']
@@ -30,6 +31,7 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
   return (
     <Dialog
       title="Trocar o tipo de agenda"
+      plain
       onClose={onClose}
       actions={
         <>
@@ -63,7 +65,7 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
             ))}
           </select>
         </div>
-        <p>Trocar o tipo gera um resumo novo pelas instruções do tipo; a versão atual fica guardada.</p>
+        <p className="text-muted">Trocar o tipo gera um resumo novo pelas instruções do tipo; a versão atual fica guardada.</p>
         {changeType.isError && (
           <p className="alert alert-error" role="alert">
             {errorMessage(changeType.error)}

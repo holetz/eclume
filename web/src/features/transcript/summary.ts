@@ -20,14 +20,6 @@ export function useSummaryState(recordingId: string, enabled = true) {
   })
 }
 
-export function useAgendaTypes() {
-  return useQuery({
-    queryKey: ['agenda-types'],
-    queryFn: () => unwrap(api.GET('/api/v1/agenda-types', { params: { query: { limit: 200 } } })),
-    staleTime: 60_000,
-  })
-}
-
 /** "Do tipo de agenda", "Editado por você", "Voltou à gerada" ou "Ajustado pelo chat". */
 export function originLabel(summary: Pick<Summary, 'origin' | 'restored_from_id'>): string {
   if (summary.origin === 'generated') return 'Do tipo de agenda'

@@ -29,7 +29,7 @@ export function invalidFields(error: unknown): Record<string, string> {
 }
 
 export const FIELDS_KEY = ['fields'] as const
-// A mesma chave (e a mesma página) que o painel de resumos da gravação usa.
+// Uma consulta só, usada também pelo painel de resumos da gravação (troca do tipo).
 export const AGENDA_TYPES_KEY = ['agenda-types'] as const
 
 export function useFields() {
@@ -83,7 +83,7 @@ export function useDeleteField() {
 export function useAgendaTypes() {
   return useQuery({
     queryKey: AGENDA_TYPES_KEY,
-    queryFn: () => unwrap(api.GET('/api/v1/agenda-types', { params: { query: { limit: 100 } } })),
+    queryFn: () => unwrap(api.GET('/api/v1/agenda-types', { params: { query: { limit: 200 } } })),
   })
 }
 
