@@ -28,9 +28,12 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 ## Terms
 
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
+- [artigo de ajuda](standards/code/web-central-de-ajuda.md#o-cabeçalho) — Arquivo Markdown em `web/src/features/help/articles/<slug>.md`, com cabeçalho (título, tópico, chaves de página, relacionados, termos, ordem, data), servido em `/ajuda/<slug>`.
 - [aviso de consentimento](standards/code/server-nucleo.md) — Texto versionado que a pessoa aceita no cadastro ("Sou responsável por pedir o consentimento das pessoas que gravo"), no lugar do consentimento de voz por pessoa; versão nova pede novo aceite no login.
 - [campo](standards/code/processamento-automatico.md) — Dado de uma gravação que o usuário define (texto, lista ou escolha), com uma regra de preenchimento; título e tags são os campos embutidos de toda conta.
+- [central de ajuda](standards/code/web-central-de-ajuda.md) — A ajuda do usuário no web (`/ajuda`): artigos em pt-BR que moram no build, seis tópicos, perguntas frequentes e busca local, sem servidor.
 - [chat de ajuste](standards/code/server-agentes.md#chat-de-ajuste) — Conversa em que o usuário pede uma mudança no resumo e o agente de chat responde, lendo a transcrição só quando o pedido depende do que foi dito; uma resposta que muda o resumo vira versão `chat`.
+- [chave de página (ajuda)](standards/code/web-central-de-ajuda.md#o-cabeçalho) — Nome de uma tela (`pessoas`, `campos`, `mcp`…) que ela declara com `useHelpTopic` e que os artigos listam em `paginas`, para a gaveta mostrar "Nesta página".
 - [código de pareamento](standards/code/server-mcp-e-dispositivos.md#credencial-de-dispositivo) — Código de 6 caracteres (`K7Q-4MX`, sem os ambíguos), válido por 10 minutos e de uso único, que a web gera com o link do QR e o app troca por uma credencial de dispositivo em `POST /devices/pair`; o banco guarda só o HMAC.
 - [coleção](standards/code/server-nucleo.md) — Agrupamento de gravações de um usuário (por cliente, projeto ou programa); uma gravação pode estar em várias.
 - [configuração da plataforma](standards/code/server-admin.md) — A linha única de `platform_settings` que o admin edita (transcrição, locutores, voz, pré-processamento) e que vale para todas as contas.
@@ -42,6 +45,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [descritor do servidor](standards/code/server-mcp-e-dispositivos.md#descritor-do-servidor) — `GET /api/v1/server`, público: nome, endereço, endereço MCP, impressão digital da CA raiz e versões; a fonte do mDNS, do QR, do pareamento e do instalador com endereço embutido.
 - [Design System do eclume](standards/code/web-design-system.md) — O repositório `eclume-design` (tokens, classes, componentes e as telas do mapa v6) que é a base visual do web: o `styles.css` dele entra como `web/src/styles/eclume.css`, cópia fiel.
 - **diarização** — Separação de uma gravação em trechos por locutor ("quem falou quando"), feita no worker GPU pelo pyannote.
+- [dica em linha](standards/code/web-central-de-ajuda.md#busca-gaveta-e-dica) — O "?" (`HelpHint`) ao lado de uma regra que não é óbvia na tela, que abre um popover curto com o link para o artigo.
 - [eclume_pt](standards/code/server-nucleo.md) — Configuração de busca textual do Postgres: `portuguese` com `unaccent` antes do stemmer, usada no `tsvector` dos segmentos.
 - **eclume** — Serviço de transcrição institucional e auto-hospedado (eco + lume), extraído do lumea e ligado a ele só por contrato de API.
 - **engine** — Implementação da interface de ASR do pacote `eclume_engines` (`whisperx-local`, remota OpenAI-compatível ou CPU para dev).
