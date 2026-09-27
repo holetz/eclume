@@ -16,8 +16,22 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-# Vazia desde a holetz/eclume#32: todas as operações do contrato estão implementadas.
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
+_GRAVACAO = "holetz/eclume#34"
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
+    ("GET", "/api/v1/recordings/{recording_id}/summary", _GRAVACAO),
+    ("PUT", "/api/v1/recordings/{recording_id}/summary", _GRAVACAO),
+    ("DELETE", "/api/v1/recordings/{recording_id}/summary", _GRAVACAO),
+    ("POST", "/api/v1/recordings/{recording_id}/summary/revert", _GRAVACAO),
+    ("GET", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
+    ("POST", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
+    ("GET", "/api/v1/summary-chat-messages/{message_id}", _GRAVACAO),
+    ("GET", "/api/v1/recordings/{recording_id}/markers", _GRAVACAO),
+    ("POST", "/api/v1/recordings/{recording_id}/markers", _GRAVACAO),
+    ("PATCH", "/api/v1/markers/{marker_id}", _GRAVACAO),
+    ("DELETE", "/api/v1/markers/{marker_id}", _GRAVACAO),
+    ("GET", "/api/v1/recordings/{recording_id}/export", _GRAVACAO),
+    ("DELETE", "/api/v1/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}", _GRAVACAO),
+)
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:

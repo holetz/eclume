@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.1.0
+  version: 2.2.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -581,6 +581,14 @@ paths:
       - recordings
       operationId: listRecordings
       summary: Listar as gravações do usuário
+      description: 'A biblioteca: por intervalo de `recorded_at` (semana, mês) e com filtros. Os filtros
+        são
+
+        repetíveis: valores repetidos do mesmo filtro combinam por OU, e filtros diferentes, por E
+
+        (`?tag=a&tag=b&kind=note` = nota com a tag `a` ou `b`).
+
+        '
       security:
       - sessionCookie: []
       - pat:
@@ -589,16 +597,78 @@ paths:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
       - $ref: '#/components/parameters/Since'
+      - name: from
+        in: query
+        description: '`recorded_at >= from`.'
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        description: '`recorded_at < to`.'
+        schema:
+          type: string
+          format: date-time
+      - name: sort
+        in: query
+        description: '`created_desc` (padrão, a mais recente enviada primeiro), `recorded_asc` ou `recorded_desc`
+          (pelo início da gravação). O cursor vale só para a mesma ordenação.'
+        schema:
+          type: string
+          enum:
+          - created_desc
+          - recorded_asc
+          - recorded_desc
+          default: created_desc
+      - name: kind
+        in: query
+        description: Natureza da gravação; repetível.
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordingKind'
       - name: status
         in: query
-        description: Filtra por estado.
+        description: Estado da gravação; repetível.
         schema:
-          $ref: '#/components/schemas/RecordingStatus'
-      - $ref: '#/components/parameters/TagFilter'
-      - $ref: '#/components/parameters/CollectionFilter'
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordingStatus'
+      - name: tag
+        in: query
+        description: Tag; repetível.
+        schema:
+          type: array
+          items:
+            type: string
+      - name: collection
+        in: query
+        description: Coleção; repetível.
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+      - name: person
+        in: query
+        description: Pessoa ligada a um locutor da transcrição; repetível.
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+      - name: field
+        in: query
+        description: Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Num campo de lista,
+          basta o valor ser um dos itens.
+        schema:
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9a-fA-F-]{36}:.+$
       responses:
         '200':
-          description: Gravações, da mais recente para a mais antiga.
+          description: Gravações, na ordem de `sort`.
           content:
             application/json:
               schema:
@@ -758,6 +828,359 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/summary:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - summaries
+      operationId: getRecordingSummary
+      summary: Estado do resumo da gravação
+      description: 'A versão atual (a de maior `version` concluída), a gerada de referência (a gerada
+        mais
+
+        recente concluída, para comparar e voltar) e a geração em andamento. Sem transcrição, 409
+
+        `transcript_missing`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      responses:
+        '200':
+          description: Estado do resumo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryState'
+              examples:
+                editado:
+                  $ref: '#/components/examples/SummaryState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    put:
+      tags:
+      - summaries
+      operationId: editRecordingSummary
+      summary: Editar o resumo à mão
+      description: 'Grava o Markdown como uma versão `manual`, que vira a atual. `base_version` é a versão
+        que
+
+        a pessoa abriu (0 sem resumo concluído); se outra versão entrou nesse meio-tempo, 409
+
+        `summary_changed` e nada é sobrescrito.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummaryEdit'
+            examples:
+              editar:
+                $ref: '#/components/examples/SummaryEditRequest'
+      responses:
+        '200':
+          description: A versão nova.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - summaries
+      operationId: deleteRecordingSummary
+      summary: Excluir o resumo inteiro
+      description: Apaga todas as versões e o chat de ajuste da gravação.
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluído.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/summary/revert:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags:
+      - summaries
+      operationId: revertRecordingSummary
+      summary: Voltar à versão gerada
+      description: 'Cria uma versão `manual` com o conteúdo da gerada de referência e `restored_from_id`
+
+        apontando para ela: nada se perde. Sem versão gerada, 409 `summary_missing`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '201':
+          description: A versão nova.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/summary/chat:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - summaries
+      operationId: listSummaryChat
+      summary: Mensagens do chat de ajuste
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Mensagens, em ordem cronológica.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryChatPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags:
+      - summaries
+      operationId: sendSummaryChat
+      summary: Pedir um ajuste do resumo ao agente
+      description: 'Grava o pedido e a resposta do agente em `queued`; o cliente consulta
+
+        `GET /api/v1/summary-chat-messages/{message_id}` da resposta até `done` ou `failed`. O
+
+        agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
+
+        leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
+
+        pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
+
+        `transcript_missing`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummaryChatRequest'
+            examples:
+              encurtar:
+                $ref: '#/components/examples/SummaryChatRequest'
+      responses:
+        '202':
+          description: Pedido e resposta na fila.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryChatExchange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/recordings/{recording_id}/markers:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - recordings
+      operationId: listMarkers
+      summary: Marcadores da gravação
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Marcadores em ordem de `at_ms` (página única).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkerPage'
+              examples:
+                marcadores:
+                  $ref: '#/components/examples/MarkerPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - recordings
+      operationId: upsertMarkers
+      summary: Enviar marcadores em lote
+      description: 'Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica.
+        Sem
+
+        `device_name`, vale o do dispositivo da credencial, se houver.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkerBatch'
+            examples:
+              doCelular:
+                $ref: '#/components/examples/MarkerBatchRequest'
+      responses:
+        '200':
+          description: Todos os marcadores da gravação, em ordem de `at_ms`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkerPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/recordings/{recording_id}/export:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - recordings
+      operationId: exportRecording
+      summary: Exportar a gravação
+      description: "- `txt`: título, data (horário de Brasília), duração, participantes e uma linha\n\
+        \  `[HH:MM:SS] Nome: texto` por segmento.\n- `srt`: uma legenda por segmento, `HH:MM:SS,mmm -->\
+        \ HH:MM:SS,mmm` e `Nome: texto`.\n- `md`: `# Título`, uma linha com a data e o tipo de agenda,\
+        \ e o resumo atual. Sem resumo,\n  409 `summary_missing`.\n- `docx`: título, data, duração e participantes,\
+        \ o resumo (títulos e listas do Markdown\n  viram estilos do Word) e a transcrição; sem resumo,\
+        \ só a transcrição.\n\nExige `transcripts:read` num PAT, e também `summaries:read` para `md` e\
+        \ `docx`. Sem\ntranscrição, 409 `transcript_missing`.\n"
+      security:
+      - sessionCookie: []
+      - pat:
+        - transcripts:read
+      parameters:
+      - name: format
+        in: query
+        required: true
+        description: Formato do export. Formatos novos entram de forma aditiva.
+        schema:
+          type: string
+          enum:
+          - txt
+          - srt
+          - md
+          - docx
+      responses:
+        '200':
+          description: Arquivo exportado, com o nome em slug do título.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples:
+                - attachment; filename="alinhamento-do-programa-de-liderancas.docx"
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/x-subrip:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                contentMediaType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/recordings/{recording_id}/fields:
     parameters:
     - $ref: '#/components/parameters/RecordingId'
@@ -1323,6 +1746,100 @@ paths:
       - sessionCookie: []
       - pat:
         - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluído.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/summary-chat-messages/{message_id}:
+    parameters:
+    - name: message_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - summaries
+      operationId: getSummaryChatMessage
+      summary: Uma mensagem do chat de ajuste
+      description: O cliente consulta a resposta do agente até `done` ou `failed`.
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      responses:
+        '200':
+          description: Mensagem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryChatMessage'
+              examples:
+                pronta:
+                  $ref: '#/components/examples/SummaryChatMessageDone'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/markers/{marker_id}:
+    parameters:
+    - name: marker_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      tags:
+      - recordings
+      operationId: updateMarker
+      summary: Editar a nota de um marcador
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkerPatch'
+      responses:
+        '200':
+          description: Marcador atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Marker'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - recordings
+      operationId: deleteMarker
+      summary: Excluir um marcador
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -1965,6 +2482,38 @@ paths:
       responses:
         '204':
           description: Excluída.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}:
+    parameters:
+    - $ref: '#/components/parameters/PersonId'
+    - $ref: '#/components/parameters/TranscriptId'
+    - name: speaker_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^S[0-9]+$
+    delete:
+      tags:
+      - voice
+      operationId: deleteVoiceSample
+      summary: Remover uma amostra da impressão de voz
+      description: 'Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões
+        que a
+
+        impressão já fez não mudam.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Removida.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2917,7 +3466,8 @@ components:
             invalido:
               $ref: '#/components/examples/ProblemValidation'
     Conflict:
-      description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento).
+      description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento,
+        resumo mudado desde a versão aberta, chat com pedido em aberto).
       content:
         application/problem+json:
           schema:
@@ -2957,9 +3507,13 @@ components:
 
             `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
 
-            desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`.
+            desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
 
-            Códigos novos entram de forma aditiva.
+            desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
+
+            `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
+
+            aberto). Códigos novos entram de forma aditiva.
 
             '
           type: string
@@ -3414,8 +3968,40 @@ components:
           type: string
           minLength: 1
         recorded_at:
+          description: Início da gravação. Sem valor, vale a hora do envio (`recorded_at_source` `upload`).
           type: string
           format: date-time
+        recorded_at_source:
+          description: 'De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
+
+            `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
+
+            `recorded_at`, `upload`.
+
+            '
+          $ref: '#/components/schemas/RecordedAtSource'
+        kind:
+          $ref: '#/components/schemas/RecordingKind'
+        agenda_type_id:
+          description: 'Tipo de agenda escolhido ao parar a gravação no celular: vira o tipo escolhido
+            pelo
+
+            usuário (origem `edited`) e dispensa a detecção.
+
+            '
+          type: string
+          format: uuid
+        markers:
+          description: 'Marcadores feitos durante a gravação, com o `device_name` da captura. Idempotentes
+            por
+
+            `client_id`: num upload deduplicado, entram na gravação existente.
+
+            '
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/MarkerInput'
         duration_ms:
           type: integer
           minimum: 0
@@ -3690,14 +4276,37 @@ components:
           - string
           - 'null'
           format: date-time
+    RecordingKind:
+      description: '`meeting` (reunião, o padrão) ou `note` (nota por voz).'
+      type: string
+      enum:
+      - meeting
+      - note
+    RecordedAtSource:
+      description: 'Origem de `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (lida
+        do
+
+        arquivo e confirmada na importação), `user` (digitada ou corrigida) ou `upload` (sem data;
+
+        vale a hora do envio).
+
+        '
+      type: string
+      enum:
+      - capture
+      - file_metadata
+      - user
+      - upload
     Recording:
       type: object
       required:
       - id
       - title
       - status
+      - kind
       - source
       - recorded_at
+      - recorded_at_source
       - duration_ms
       - language
       - size_bytes
@@ -3712,6 +4321,7 @@ components:
       - job
       - pipeline
       - transcript_id
+      - marker_count
       - created_at
       - updated_at
       properties:
@@ -3722,11 +4332,16 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/RecordingStatus'
+        kind:
+          $ref: '#/components/schemas/RecordingKind'
         source:
           $ref: '#/components/schemas/Source'
         recorded_at:
+          description: Início da gravação; o fim é `recorded_at + duration_ms`.
           type: string
           format: date-time
+        recorded_at_source:
+          $ref: '#/components/schemas/RecordedAtSource'
         duration_ms:
           description: '`null` até o áudio ser lido.'
           type:
@@ -3811,6 +4426,10 @@ components:
           - string
           - 'null'
           format: uuid
+        marker_count:
+          description: Marcadores da gravação.
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
@@ -3890,8 +4509,11 @@ components:
           type: string
           minLength: 1
         recorded_at:
+          description: Corrigir a data passa `recorded_at_source` a `user`.
           type: string
           format: date-time
+        kind:
+          $ref: '#/components/schemas/RecordingKind'
         language:
           type: string
           pattern: ^[a-z]{2,3}(-[A-Z]{2})?$
@@ -3996,6 +4618,10 @@ components:
           type: array
           items:
             type: string
+        kind:
+          $ref: '#/components/schemas/RecordingKind'
+        recorded_at_source:
+          $ref: '#/components/schemas/RecordedAtSource'
     TranscriptPage:
       type: object
       required:
@@ -4051,15 +4677,23 @@ components:
       type: object
       required:
       - transcript_id
+      - recording_id
       - recording_title
       - speaker_id
       - model
       - talk_ms
+      - excerpt
       - created_by
       - created_at
       properties:
         transcript_id:
           type: string
+          format: uuid
+        recording_id:
+          description: Gravação da amostra, ou `null` se ela não existe mais.
+          type:
+          - string
+          - 'null'
           format: uuid
         recording_title:
           description: Título da gravação, ou `null` se ela não existe mais.
@@ -4075,6 +4709,25 @@ components:
         talk_ms:
           type: integer
           minimum: 0
+        excerpt:
+          description: 'A fala mais longa do locutor, para ouvir a amostra no áudio da gravação
+
+            (`GET /api/v1/recordings/{recording_id}/audio`); `null` sem gravação ou sem fala.
+
+            '
+          oneOf:
+          - type: object
+            required:
+            - start_ms
+            - end_ms
+            properties:
+              start_ms:
+                type: integer
+                minimum: 0
+              end_ms:
+                type: integer
+                minimum: 0
+          - type: 'null'
         created_by:
           oneOf:
           - $ref: '#/components/schemas/UserRef'
@@ -4113,6 +4766,8 @@ components:
       - notes
       - transcript_count
       - last_seen_at
+      - voice_sample_count
+      - speaking_time_ms
       - created_at
       - updated_at
       properties:
@@ -4140,6 +4795,14 @@ components:
           - string
           - 'null'
           format: date-time
+        voice_sample_count:
+          description: Amostras da impressão de voz da pessoa.
+          type: integer
+          minimum: 0
+        speaking_time_ms:
+          description: Soma das falas dos locutores ligados à pessoa, em todas as transcrições.
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
@@ -5058,7 +5721,21 @@ components:
           type: string
         kind:
           $ref: '#/components/schemas/AgentProviderKind'
+    SummaryOrigin:
+      description: 'Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
+
+        (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+
+        '
+      type: string
+      enum:
+      - generated
+      - manual
+      - chat
     Summary:
+      description: 'Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
+
+        '
       type: object
       required:
       - id
@@ -5066,12 +5743,16 @@ components:
       - transcript_revision
       - agenda_type
       - version
+      - origin
       - status
       - trigger
       - provider
       - model
       - content_md
       - error
+      - restored_from_id
+      - chat_message_id
+      - created_by
       - created_at
       - completed_at
       properties:
@@ -5086,25 +5767,37 @@ components:
           type: integer
           minimum: 1
         agenda_type:
-          description: 'Instantâneo do tipo de agenda cujas instruções o resumo seguiu: o resumo continua
+          description: 'Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual`
+            ou
 
-            quando o tipo é renomeado ou excluído.
+            `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
+
+            excluído. `null` numa edição sem versão anterior.
 
             '
-          type: object
-          required:
-          - id
-          - name
-          properties:
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
+          oneOf:
+          - type: object
+            required:
+            - id
+            - name
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+          - type: 'null'
         version:
-          description: Versão do resumo deste tipo de agenda para esta transcrição, a partir de 1.
+          description: 'Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à
+            gerada
+
+            ou ajuste por chat sobe a versão.
+
+            '
           type: integer
           minimum: 1
+        origin:
+          $ref: '#/components/schemas/SummaryOrigin'
         status:
           type: string
           enum:
@@ -5118,9 +5811,14 @@ components:
           - manual
           - automatic
         provider:
-          $ref: '#/components/schemas/AgentProviderRef'
+          description: O agente que escreveu a versão; `null` numa versão `manual`.
+          oneOf:
+          - $ref: '#/components/schemas/AgentProviderRef'
+          - type: 'null'
         model:
-          type: string
+          type:
+          - string
+          - 'null'
         content_md:
           description: 'Resumo em Markdown, com `status: done`.'
           type:
@@ -5138,6 +5836,24 @@ components:
               message:
                 type: string
           - type: 'null'
+        restored_from_id:
+          description: Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        chat_message_id:
+          description: Numa versão `chat`, a resposta do agente que a produziu.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_by:
+          description: Id do usuário que pediu a geração, editou ou pediu o ajuste.
+          type:
+          - string
+          - 'null'
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -5167,6 +5883,313 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Summary'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    SummaryState:
+      description: O resumo da gravação como a tela o mostra.
+      type: object
+      required:
+      - current
+      - generated
+      - pending
+      - version_count
+      properties:
+        current:
+          description: A versão atual (maior `version` concluída).
+          oneOf:
+          - $ref: '#/components/schemas/Summary'
+          - type: 'null'
+        generated:
+          description: A gerada de referência (a `generated` concluída mais recente), para comparar e
+            voltar.
+          oneOf:
+          - $ref: '#/components/schemas/Summary'
+          - type: 'null'
+        pending:
+          description: A geração em `queued` ou `running`, se houver.
+          oneOf:
+          - $ref: '#/components/schemas/Summary'
+          - type: 'null'
+        version_count:
+          description: Versões guardadas, de todas as origens.
+          type: integer
+          minimum: 0
+    SummaryEdit:
+      type: object
+      required:
+      - content_md
+      - base_version
+      properties:
+        content_md:
+          type: string
+          minLength: 1
+          maxLength: 200000
+        base_version:
+          description: A versão que a pessoa abriu para editar; 0 sem resumo concluído.
+          type: integer
+          minimum: 0
+    SummaryChatRequest:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ChatRead:
+      description: 'Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
+
+        `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+
+        '
+      type: object
+      required:
+      - tool
+      properties:
+        tool:
+          type: string
+          enum:
+          - read_transcript
+          - search_transcript
+        from_ms:
+          type: integer
+          minimum: 0
+        to_ms:
+          type: integer
+          minimum: 0
+        clipped:
+          type: boolean
+        query:
+          type: string
+        hits:
+          type: integer
+          minimum: 0
+    SummaryChatMessage:
+      type: object
+      required:
+      - id
+      - recording_id
+      - role
+      - content
+      - status
+      - reply_to
+      - base_summary_id
+      - summary_id
+      - reads
+      - provider
+      - model
+      - error
+      - created_by
+      - created_at
+      - completed_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        recording_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+        content:
+          description: O pedido, ou a resposta do agente (`null` até `done`).
+          type:
+          - string
+          - 'null'
+        status:
+          description: A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+          type: string
+          enum:
+          - queued
+          - running
+          - done
+          - failed
+        reply_to:
+          description: Na resposta do agente, o pedido que ela responde.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        base_summary_id:
+          description: A versão atual quando o pedido chegou.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        summary_id:
+          description: A versão `chat` que a resposta criou, se mudou o resumo.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        reads:
+          description: As consultas do agente à transcrição, em ordem.
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatRead'
+        provider:
+          oneOf:
+          - $ref: '#/components/schemas/AgentProviderRef'
+          - type: 'null'
+        model:
+          type:
+          - string
+          - 'null'
+        error:
+          description: 'Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...),
+            ou com
+
+            `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
+
+            versão nova.
+
+            '
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
+        created_by:
+          description: Id do usuário que fez o pedido.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    SummaryChatExchange:
+      type: object
+      required:
+      - message
+      - reply
+      properties:
+        message:
+          $ref: '#/components/schemas/SummaryChatMessage'
+        reply:
+          $ref: '#/components/schemas/SummaryChatMessage'
+    SummaryChatPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SummaryChatMessage'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    MarkerInput:
+      type: object
+      required:
+      - client_id
+      - at_ms
+      properties:
+        client_id:
+          description: Id gerado pelo app; reenviar o mesmo não duplica.
+          type: string
+          format: uuid
+        at_ms:
+          description: Instante desde o início da gravação.
+          type: integer
+          minimum: 0
+        note:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+    MarkerBatch:
+      type: object
+      required:
+      - markers
+      properties:
+        markers:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/MarkerInput'
+        device_name:
+          description: Quem marcou ("iPhone 15 · Jane").
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+    MarkerPatch:
+      type: object
+      required:
+      - note
+      properties:
+        note:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+    Marker:
+      type: object
+      required:
+      - id
+      - recording_id
+      - client_id
+      - at_ms
+      - note
+      - device_name
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        recording_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+          format: uuid
+        at_ms:
+          description: Instante desde o início; pode passar da duração, que só se conhece depois.
+          type: integer
+          minimum: 0
+        note:
+          type:
+          - string
+          - 'null'
+        device_name:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MarkerPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Marker'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     AsrSettings:
@@ -6037,7 +7060,7 @@ components:
           type: string
           pattern: ^1\.[0-9]+$
           examples:
-          - '1.0'
+          - '1.1'
         id:
           description: Id da transcrição. Estável entre revisões e retranscrições.
           type: string
@@ -6108,6 +7131,23 @@ components:
           items:
             type: string
             minLength: 1
+        kind:
+          description: 'Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema
+            1.1.'
+          type: string
+          enum:
+          - meeting
+          - note
+        recorded_at_source:
+          description: 'De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata`
+            (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload`
+            (hora do envio). Desde o schema 1.1.'
+          type: string
+          enum:
+          - capture
+          - file_metadata
+          - user
+          - upload
     UserRef:
       description: Referência curta a um usuário do eclume.
       type: object
@@ -6372,6 +7412,8 @@ components:
         sha256: e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
         title: Alinhamento do programa de lideranças
         recorded_at: '2026-09-18T14:00:05Z'
+        recorded_at_source: capture
+        kind: meeting
         duration_ms: 166000
         language: pt-BR
         source: desktop
@@ -6379,6 +7421,13 @@ components:
           meeting_app: teams
           device_name: NB-MARIANA
           client_version: eclume-desktop/0.3.0
+        markers:
+        - client_id: 01928f3a-1c00-7a00-8000-000000000c01
+          at_ms: 42000
+          note: Decisão sobre as turmas
+        - client_id: 01928f3a-1c00-7a00-8000-000000000c02
+          at_ms: 131500
+          note: null
     UploadCreated:
       summary: Upload em 3 partes, URLs das partes emitidas
       value:
@@ -6487,6 +7536,7 @@ components:
         title: Alinhamento do programa de lideranças
         source: desktop
         recorded_at: '2026-09-18T14:00:05Z'
+        recorded_at_source: capture
         duration_ms: 166000
         language: pt-BR
         size_bytes: 19287595
@@ -6500,6 +7550,7 @@ components:
           device_name: NB-MARIANA
           client_version: eclume-desktop/0.3.0
         status: queued
+        kind: meeting
         tags: []
         collection_ids: []
         metadata: {}
@@ -6558,6 +7609,7 @@ components:
           error: null
           reason: null
         transcript_id: null
+        marker_count: 0
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
     RecordingTranscribed:
@@ -6567,6 +7619,7 @@ components:
         title: Alinhamento do programa de lideranças
         source: desktop
         recorded_at: '2026-09-18T14:00:05Z'
+        recorded_at_source: capture
         duration_ms: 166000
         language: pt-BR
         size_bytes: 19287595
@@ -6580,6 +7633,7 @@ components:
           device_name: NB-MARIANA
           client_version: eclume-desktop/0.3.0
         status: transcribed
+        kind: meeting
         tags:
         - programa-liderancas
         - cliente-metalurgica
@@ -6647,6 +7701,7 @@ components:
           error: null
           reason: null
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+        marker_count: 2
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T15:02:17Z'
     RecordingPage:
@@ -6656,8 +7711,10 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000402
           title: Entrevista inicial — gestor de produção
           status: processing
+          kind: meeting
           source: upload
           recorded_at: '2026-09-19T12:30:00Z'
+          recorded_at_source: upload
           duration_ms: 2712000
           language: null
           size_bytes: 11604992
@@ -6726,12 +7783,14 @@ components:
             error: null
             reason: null
           transcript_id: null
+          marker_count: 0
           created_at: '2026-09-19T13:41:07Z'
           updated_at: '2026-09-19T13:42:55Z'
         - id: 01928f3a-1c00-7a00-8000-000000000401
           title: Alinhamento do programa de lideranças
           source: desktop
           recorded_at: '2026-09-18T14:00:05Z'
+          recorded_at_source: capture
           duration_ms: 166000
           language: pt-BR
           size_bytes: 19287595
@@ -6745,6 +7804,7 @@ components:
             device_name: NB-MARIANA
             client_version: eclume-desktop/0.3.0
           status: transcribed
+          kind: meeting
           tags:
           - programa-liderancas
           - cliente-metalurgica
@@ -6809,6 +7869,7 @@ components:
             error: null
             reason: null
           transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          marker_count: 2
           created_at: '2026-09-18T14:09:31Z'
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
@@ -6871,7 +7932,7 @@ components:
     TranscriptThreeSpeakers:
       summary: Reunião com 3 locutores, um ligado a pessoa (com `include=words`)
       value:
-        schema_version: '1.0'
+        schema_version: '1.1'
         id: 01928f3a-1c00-7a00-8000-000000000501
         recording_id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
@@ -7299,6 +8360,8 @@ components:
         tags:
         - programa-liderancas
         - cliente-metalurgica
+        kind: meeting
+        recorded_at_source: capture
     TranscriptThreeSpeakersMarkdown:
       summary: Export `md` da reunião com 3 locutores
       value: "---\nid: \"01928f3a-1c00-7a00-8000-000000000501\"\ntitle: \"Alinhamento do programa de lideranças\"\
@@ -7361,6 +8424,7 @@ components:
             id: 01928f3a-1c00-7a00-8000-000000000901
             name: Reunião de equipe
           version: 1
+          origin: generated
           trigger: manual
           provider:
             id: 01928f3a-1c00-7a00-8000-000000000b01
@@ -7399,6 +8463,9 @@ components:
 
             '
           completed_at: '2026-09-18T15:03:48Z'
+          restored_from_id: null
+          chat_message_id: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
         next_cursor: null
     SummaryCreateRequest:
       summary: Gerar o resumo com um tipo de agenda
@@ -7414,6 +8481,7 @@ components:
           id: 01928f3a-1c00-7a00-8000-000000000901
           name: Reunião de equipe
         version: 1
+        origin: generated
         trigger: manual
         provider:
           id: 01928f3a-1c00-7a00-8000-000000000b01
@@ -7425,6 +8493,9 @@ components:
         status: queued
         content_md: null
         completed_at: null
+        restored_from_id: null
+        chat_message_id: null
+        created_by: 01928f3a-1c00-7a00-8000-000000000101
     SummaryDone:
       summary: Ata pronta
       value:
@@ -7435,6 +8506,7 @@ components:
           id: 01928f3a-1c00-7a00-8000-000000000901
           name: Reunião de equipe
         version: 1
+        origin: generated
         trigger: manual
         provider:
           id: 01928f3a-1c00-7a00-8000-000000000b01
@@ -7473,6 +8545,207 @@ components:
 
           '
         completed_at: '2026-09-18T15:03:48Z'
+        restored_from_id: null
+        chat_message_id: null
+        created_by: 01928f3a-1c00-7a00-8000-000000000101
+    SummaryState:
+      summary: Resumo editado à mão sobre a versão gerada
+      value:
+        current:
+          id: 01928f3a-1c00-7a00-8000-000000000a02
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          transcript_revision: 3
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+          version: 2
+          origin: manual
+          trigger: manual
+          provider: null
+          model: null
+          error: null
+          created_at: '2026-09-18T15:10:00Z'
+          status: done
+          content_md: '# Ata — Alinhamento do programa de lideranças
+
+
+            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+
+
+            ## Decisões
+
+
+            - Encontros de quatro horas, com tarefa prática entre um encontro e outro.
+
+            - Assessment com cada gestor e amostra da equipe antes do primeiro encontro, repetido no fim
+            do semestre.
+
+            - Relatório consolidado para a diretoria, sem exposição individual; devolutiva um a um para
+            cada gestor.
+
+            - Três turmas de 12 gestores cada; a primeira, em outubro, com as lideranças da produção.
+
+
+            ## Encaminhamentos
+
+
+            - [ ] Locutor 2 envia a lista da primeira turma até sexta.
+
+            - [ ] Mariana Couto agenda as entrevistas iniciais e envia o cronograma na semana seguinte.
+
+            '
+          completed_at: '2026-09-18T15:10:00Z'
+          restored_from_id: null
+          chat_message_id: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+        generated:
+          id: 01928f3a-1c00-7a00-8000-000000000a01
+          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          transcript_revision: 3
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+          version: 1
+          origin: generated
+          trigger: manual
+          provider:
+            id: 01928f3a-1c00-7a00-8000-000000000b01
+            name: Claude (servidor)
+            kind: claude-cli
+          model: claude-sonnet-4-5
+          error: null
+          created_at: '2026-09-18T15:03:00Z'
+          status: done
+          content_md: '# Ata — Alinhamento do programa de lideranças
+
+
+            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+
+
+            ## Decisões
+
+
+            - Encontros de quatro horas, com tarefa prática entre um encontro e outro.
+
+            - Assessment com cada gestor e amostra da equipe antes do primeiro encontro, repetido no fim
+            do semestre.
+
+            - Relatório consolidado para a diretoria, sem exposição individual; devolutiva um a um para
+            cada gestor.
+
+            - Três turmas de 12 gestores; a primeira, em outubro, com as lideranças da produção.
+
+
+            ## Encaminhamentos
+
+
+            - [ ] Locutor 2 envia a lista da primeira turma até sexta.
+
+            - [ ] Mariana Couto agenda as entrevistas iniciais e envia o cronograma na semana seguinte.
+
+            '
+          completed_at: '2026-09-18T15:03:48Z'
+          restored_from_id: null
+          chat_message_id: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+        pending: null
+        version_count: 2
+    SummaryEditRequest:
+      summary: Edição a partir da versão 1
+      value:
+        content_md: '# Ata — Alinhamento do programa de lideranças
+
+
+          **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+
+
+          ## Decisões
+
+
+          - Encontros de quatro horas, com tarefa prática entre um encontro e outro.
+
+          - Assessment com cada gestor e amostra da equipe antes do primeiro encontro, repetido no fim
+          do semestre.
+
+          - Relatório consolidado para a diretoria, sem exposição individual; devolutiva um a um para
+          cada gestor.
+
+          - Três turmas de 12 gestores cada; a primeira, em outubro, com as lideranças da produção.
+
+
+          ## Encaminhamentos
+
+
+          - [ ] Locutor 2 envia a lista da primeira turma até sexta.
+
+          - [ ] Mariana Couto agenda as entrevistas iniciais e envia o cronograma na semana seguinte.
+
+          '
+        base_version: 1
+    SummaryChatRequest:
+      summary: Pedir quem falou do orçamento
+      value:
+        message: Quem falou do orçamento? Acrescente isso nas decisões.
+    SummaryChatMessageDone:
+      summary: Resposta que leu um trecho e mudou o resumo
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000d02
+        recording_id: 01928f3a-1c00-7a00-8000-000000000401
+        role: assistant
+        content: Foi a Mariana Couto, aos 00:01:05. Acrescentei o orçamento nas decisões.
+        status: done
+        reply_to: 01928f3a-1c00-7a00-8000-000000000d01
+        base_summary_id: 01928f3a-1c00-7a00-8000-000000000a02
+        summary_id: 01928f3a-1c00-7a00-8000-000000000a03
+        reads:
+        - tool: search_transcript
+          query: orçamento
+          hits: 2
+        - tool: read_transcript
+          from_ms: 60000
+          to_ms: 90000
+          clipped: false
+        provider:
+          id: 01928f3a-1c00-7a00-8000-000000000b01
+          name: Claude (servidor)
+          kind: claude-cli
+        model: claude-sonnet-4-5
+        error: null
+        created_by: 01928f3a-1c00-7a00-8000-000000000101
+        created_at: '2026-09-18T15:12:00Z'
+        completed_at: '2026-09-18T15:12:21Z'
+    MarkerBatchRequest:
+      summary: Dois marcadores do celular
+      value:
+        markers:
+        - client_id: 01928f3a-1c00-7a00-8000-000000000c01
+          at_ms: 42000
+          note: Decisão sobre as turmas
+        - client_id: 01928f3a-1c00-7a00-8000-000000000c02
+          at_ms: 131500
+          note: null
+        device_name: iPhone 15 · Mariana
+    MarkerPage:
+      summary: Marcadores de uma reunião
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000c11
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          client_id: 01928f3a-1c00-7a00-8000-000000000c01
+          at_ms: 42000
+          note: Decisão sobre as turmas
+          device_name: NB-MARIANA
+          created_at: '2026-09-18T14:09:31Z'
+          updated_at: '2026-09-18T14:09:31Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000c12
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          client_id: 01928f3a-1c00-7a00-8000-000000000c02
+          at_ms: 131500
+          note: null
+          device_name: NB-MARIANA
+          created_at: '2026-09-18T14:09:31Z'
+          updated_at: '2026-09-18T14:09:31Z'
+        next_cursor: null
     DefaultAgendaTypePage:
       summary: Os tipos padrão da plataforma
       value:
@@ -7737,6 +9010,8 @@ components:
           notes: Diretora de Pessoas da Metalúrgica Serra Azul.
           transcript_count: 0
           last_seen_at: null
+          voice_sample_count: 0
+          speaking_time_ms: 0
           created_at: '2026-09-12T11:00:00Z'
           updated_at: '2026-09-18T15:02:17Z'
         - id: 01928f3a-1c00-7a00-8000-000000000301
@@ -7745,6 +9020,8 @@ components:
           notes: Consultora EK.
           transcript_count: 14
           last_seen_at: '2026-09-18T14:00:05Z'
+          voice_sample_count: 0
+          speaking_time_ms: 3120400
           created_at: '2026-09-12T11:00:00Z'
           updated_at: '2026-09-18T15:02:17Z'
         - id: 01928f3a-1c00-7a00-8000-000000000302
@@ -7753,6 +9030,8 @@ components:
           notes: Gerente de RH da Metalúrgica Serra Azul.
           transcript_count: 3
           last_seen_at: '2026-09-11T13:00:00Z'
+          voice_sample_count: 2
+          speaking_time_ms: 449350
           created_at: '2026-09-12T11:00:00Z'
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
@@ -7765,6 +9044,8 @@ components:
         notes: Gerente de RH da Metalúrgica Serra Azul.
         transcript_count: 3
         last_seen_at: '2026-09-11T13:00:00Z'
+        voice_sample_count: 2
+        speaking_time_ms: 449350
         created_at: '2026-09-12T11:00:00Z'
         updated_at: '2026-09-18T15:02:17Z'
     PersonCreateRequest:
@@ -8129,19 +9410,25 @@ components:
         sample_count: 2
         samples:
         - transcript_id: 01928f3a-1c00-7a00-8000-000000000501
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
           recording_title: Alinhamento do programa de lideranças
           speaker_id: S2
           model: pyannote/wespeaker-voxceleb-resnet34-LM
           talk_ms: 37050
+          excerpt:
+            start_ms: 61200
+            end_ms: 79850
           created_by:
             id: 01928f3a-1c00-7a00-8000-000000000101
             name: Mariana Couto
           created_at: '2026-09-18T15:02:17Z'
         - transcript_id: 01928f3a-1c00-7a00-8000-000000000502
+          recording_id: null
           recording_title: null
           speaker_id: S1
           model: pyannote/wespeaker-voxceleb-resnet34-LM
           talk_ms: 412300
+          excerpt: null
           created_by:
             id: 01928f3a-1c00-7a00-8000-000000000101
             name: Mariana Couto

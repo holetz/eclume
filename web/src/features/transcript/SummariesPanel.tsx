@@ -128,7 +128,7 @@ function SummaryItem({ summary }: { summary: Summary }) {
   const heading = (
     <span className={styles.head}>
       <span className={styles.name}>
-        {summary.agenda_type.name} <span className="text-muted">· v{summary.version}</span>
+        {summary.agenda_type?.name ?? 'Resumo'} <span className="text-muted">· v{summary.version}</span>
       </span>
       <span className={`badge badge-${status.tone}`}>{status.label}</span>
     </span>
@@ -146,7 +146,7 @@ function SummaryItem({ summary }: { summary: Summary }) {
         heading
       )}
       <span className={styles.detail}>
-        {formatDateTime(summary.created_at)} · {summary.provider.name}
+        {formatDateTime(summary.created_at)} · {summary.provider?.name ?? 'Edição manual'}
       </span>
       {summary.status === 'failed' && summary.error && <span className={styles.error}>{summary.error.message}</span>}
     </li>

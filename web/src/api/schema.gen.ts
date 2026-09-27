@@ -296,7 +296,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar as gravações do usuário */
+        /**
+         * Listar as gravações do usuário
+         * @description A biblioteca: por intervalo de `recorded_at` (semana, mês) e com filtros. Os filtros são
+         *     repetíveis: valores repetidos do mesmo filtro combinam por OU, e filtros diferentes, por E
+         *     (`?tag=a&tag=b&kind=note` = nota com a tag `a` ou `b`).
+         */
         get: operations["listRecordings"];
         put?: never;
         post?: never;
@@ -365,6 +370,146 @@ export interface paths {
          * @description A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização.
          */
         post: operations["retranscribeRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Estado do resumo da gravação
+         * @description A versão atual (a de maior `version` concluída), a gerada de referência (a gerada mais
+         *     recente concluída, para comparar e voltar) e a geração em andamento. Sem transcrição, 409
+         *     `transcript_missing`.
+         */
+        get: operations["getRecordingSummary"];
+        /**
+         * Editar o resumo à mão
+         * @description Grava o Markdown como uma versão `manual`, que vira a atual. `base_version` é a versão que
+         *     a pessoa abriu (0 sem resumo concluído); se outra versão entrou nesse meio-tempo, 409
+         *     `summary_changed` e nada é sobrescrito.
+         */
+        put: operations["editRecordingSummary"];
+        post?: never;
+        /**
+         * Excluir o resumo inteiro
+         * @description Apaga todas as versões e o chat de ajuste da gravação.
+         */
+        delete: operations["deleteRecordingSummary"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/summary/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Voltar à versão gerada
+         * @description Cria uma versão `manual` com o conteúdo da gerada de referência e `restored_from_id`
+         *     apontando para ela: nada se perde. Sem versão gerada, 409 `summary_missing`.
+         */
+        post: operations["revertRecordingSummary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/summary/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        /** Mensagens do chat de ajuste */
+        get: operations["listSummaryChat"];
+        put?: never;
+        /**
+         * Pedir um ajuste do resumo ao agente
+         * @description Grava o pedido e a resposta do agente em `queued`; o cliente consulta
+         *     `GET /api/v1/summary-chat-messages/{message_id}` da resposta até `done` ou `failed`. O
+         *     agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
+         *     leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
+         *     pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
+         *     `transcript_missing`.
+         */
+        post: operations["sendSummaryChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/markers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        /** Marcadores da gravação */
+        get: operations["listMarkers"];
+        put?: never;
+        /**
+         * Enviar marcadores em lote
+         * @description Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica. Sem
+         *     `device_name`, vale o do dispositivo da credencial, se houver.
+         */
+        post: operations["upsertMarkers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recordings/{recording_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Exportar a gravação
+         * @description - `txt`: título, data (horário de Brasília), duração, participantes e uma linha
+         *       `[HH:MM:SS] Nome: texto` por segmento.
+         *     - `srt`: uma legenda por segmento, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`.
+         *     - `md`: `# Título`, uma linha com a data e o tipo de agenda, e o resumo atual. Sem resumo,
+         *       409 `summary_missing`.
+         *     - `docx`: título, data, duração e participantes, o resumo (títulos e listas do Markdown
+         *       viram estilos do Word) e a transcrição; sem resumo, só a transcrição.
+         *
+         *     Exige `transcripts:read` num PAT, e também `summaries:read` para `md` e `docx`. Sem
+         *     transcrição, 409 `transcript_missing`.
+         */
+        get: operations["exportRecording"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -669,6 +814,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/summary-chat-messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma mensagem do chat de ajuste
+         * @description O cliente consulta a resposta do agente até `done` ou `failed`.
+         */
+        get: operations["getSummaryChatMessage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/markers/{marker_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                marker_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir um marcador */
+        delete: operations["deleteMarker"];
+        options?: never;
+        head?: never;
+        /** Editar a nota de um marcador */
+        patch: operations["updateMarker"];
+        trace?: never;
+    };
     "/api/v1/agenda-types": {
         parameters: {
             query?: never;
@@ -921,6 +1108,31 @@ export interface paths {
          * @description Apaga todas as amostras e as sugestões pendentes da pessoa.
          */
         delete: operations["deleteVoiceprint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonId"];
+                transcript_id: components["parameters"]["TranscriptId"];
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remover uma amostra da impressão de voz
+         * @description Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões que a
+         *     impressão já fez não mudam.
+         */
+        delete: operations["deleteVoiceSample"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1301,8 +1513,10 @@ export interface components {
              * @description Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
              *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
              *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
-             *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`.
-             *     Códigos novos entram de forma aditiva.
+             *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
+             *     desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
+             *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
+             *     aberto). Códigos novos entram de forma aditiva.
              */
             code: string;
             /** @description Com `insufficient_scope`, os escopos que faltaram. */
@@ -1492,8 +1706,29 @@ export interface components {
             sha256: string;
             /** @description Sem valor, deriva do nome do arquivo. */
             title?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Início da gravação. Sem valor, vale a hora do envio (`recorded_at_source` `upload`).
+             */
             recorded_at?: string;
+            /**
+             * @description De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
+             *     `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
+             *     `recorded_at`, `upload`.
+             */
+            recorded_at_source?: components["schemas"]["RecordedAtSource"];
+            kind?: components["schemas"]["RecordingKind"];
+            /**
+             * Format: uuid
+             * @description Tipo de agenda escolhido ao parar a gravação no celular: vira o tipo escolhido pelo
+             *     usuário (origem `edited`) e dispensa a detecção.
+             */
+            agenda_type_id?: string;
+            /**
+             * @description Marcadores feitos durante a gravação, com o `device_name` da captura. Idempotentes por
+             *     `client_id`: num upload deduplicado, entram na gravação existente.
+             */
+            markers?: components["schemas"]["MarkerInput"][];
             duration_ms?: number;
             /** @description Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção. */
             language?: string;
@@ -1598,14 +1833,31 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
         };
+        /**
+         * @description `meeting` (reunião, o padrão) ou `note` (nota por voz).
+         * @enum {string}
+         */
+        RecordingKind: "meeting" | "note";
+        /**
+         * @description Origem de `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (lida do
+         *     arquivo e confirmada na importação), `user` (digitada ou corrigida) ou `upload` (sem data;
+         *     vale a hora do envio).
+         * @enum {string}
+         */
+        RecordedAtSource: "capture" | "file_metadata" | "user" | "upload";
         Recording: {
             /** Format: uuid */
             id: string;
             title: string;
             status: components["schemas"]["RecordingStatus"];
+            kind: components["schemas"]["RecordingKind"];
             source: components["schemas"]["Source"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Início da gravação; o fim é `recorded_at + duration_ms`.
+             */
             recorded_at: string;
+            recorded_at_source: components["schemas"]["RecordedAtSource"];
             /** @description `null` até o áudio ser lido. */
             duration_ms: number | null;
             /** @description Idioma pedido ou detectado. */
@@ -1641,6 +1893,8 @@ export interface components {
              * @description Transcrição, depois do primeiro job concluído.
              */
             transcript_id: string | null;
+            /** @description Marcadores da gravação. */
+            marker_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1669,8 +1923,12 @@ export interface components {
         };
         RecordingPatch: {
             title?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Corrigir a data passa `recorded_at_source` a `user`.
+             */
             recorded_at?: string;
+            kind?: components["schemas"]["RecordingKind"];
             language?: string;
             /** @description Substitui a lista inteira. */
             tags?: string[];
@@ -1713,6 +1971,8 @@ export interface components {
             owner: components["schemas"]["UserRef"];
             speakers: components["schemas"]["Speaker"][];
             tags?: string[];
+            kind?: components["schemas"]["RecordingKind"];
+            recorded_at_source?: components["schemas"]["RecordedAtSource"];
         };
         TranscriptPage: {
             items: components["schemas"]["TranscriptSummary"][];
@@ -1738,12 +1998,25 @@ export interface components {
         VoiceSample: {
             /** Format: uuid */
             transcript_id: string;
+            /**
+             * Format: uuid
+             * @description Gravação da amostra, ou `null` se ela não existe mais.
+             */
+            recording_id: string | null;
             /** @description Título da gravação, ou `null` se ela não existe mais. */
             recording_title: string | null;
             speaker_id: string;
             /** @description Modelo de embedding da amostra. */
             model: string;
             talk_ms: number;
+            /**
+             * @description A fala mais longa do locutor, para ouvir a amostra no áudio da gravação
+             *     (`GET /api/v1/recordings/{recording_id}/audio`); `null` sem gravação ou sem fala.
+             */
+            excerpt: {
+                start_ms: number;
+                end_ms: number;
+            } | null;
             created_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             created_at: string;
@@ -1770,6 +2043,10 @@ export interface components {
              * @description `recorded_at` da transcrição mais recente em que a pessoa fala.
              */
             last_seen_at: string | null;
+            /** @description Amostras da impressão de voz da pessoa. */
+            voice_sample_count: number;
+            /** @description Soma das falas dos locutores ligados à pessoa, em todas as transcrições. */
+            speaking_time_ms: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2127,6 +2404,13 @@ export interface components {
             name: string;
             kind: components["schemas"]["AgentProviderKind"];
         };
+        /**
+         * @description Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
+         *     (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+         * @enum {string}
+         */
+        SummaryOrigin: "generated" | "manual" | "chat";
+        /** @description Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`. */
         Summary: {
             /** Format: uuid */
             id: string;
@@ -2135,28 +2419,49 @@ export interface components {
             /** @description Revisão da transcrição que o resumo leu. */
             transcript_revision: number;
             /**
-             * @description Instantâneo do tipo de agenda cujas instruções o resumo seguiu: o resumo continua
-             *     quando o tipo é renomeado ou excluído.
+             * @description Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual` ou
+             *     `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
+             *     excluído. `null` numa edição sem versão anterior.
              */
             agenda_type: {
                 /** Format: uuid */
                 id: string;
                 name: string;
-            };
-            /** @description Versão do resumo deste tipo de agenda para esta transcrição, a partir de 1. */
+            } | null;
+            /**
+             * @description Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à gerada
+             *     ou ajuste por chat sobe a versão.
+             */
             version: number;
+            origin: components["schemas"]["SummaryOrigin"];
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
             /** @enum {string} */
             trigger: "manual" | "automatic";
-            provider: components["schemas"]["AgentProviderRef"];
-            model: string;
+            /** @description O agente que escreveu a versão; `null` numa versão `manual`. */
+            provider: components["schemas"]["AgentProviderRef"] | null;
+            model: string | null;
             /** @description Resumo em Markdown, com `status: done`. */
             content_md: string | null;
             error: {
                 code: string;
                 message: string;
             } | null;
+            /**
+             * Format: uuid
+             * @description Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+             */
+            restored_from_id: string | null;
+            /**
+             * Format: uuid
+             * @description Numa versão `chat`, a resposta do agente que a produziu.
+             */
+            chat_message_id: string | null;
+            /**
+             * Format: uuid
+             * @description Id do usuário que pediu a geração, editou ou pediu o ajuste.
+             */
+            created_by: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2176,6 +2481,136 @@ export interface components {
         };
         SummaryPage: {
             items: components["schemas"]["Summary"][];
+            next_cursor: components["schemas"]["NextCursor"];
+        };
+        /** @description O resumo da gravação como a tela o mostra. */
+        SummaryState: {
+            /** @description A versão atual (maior `version` concluída). */
+            current: components["schemas"]["Summary"] | null;
+            /** @description A gerada de referência (a `generated` concluída mais recente), para comparar e voltar. */
+            generated: components["schemas"]["Summary"] | null;
+            /** @description A geração em `queued` ou `running`, se houver. */
+            pending: components["schemas"]["Summary"] | null;
+            /** @description Versões guardadas, de todas as origens. */
+            version_count: number;
+        };
+        SummaryEdit: {
+            content_md: string;
+            /** @description A versão que a pessoa abriu para editar; 0 sem resumo concluído. */
+            base_version: number;
+        };
+        SummaryChatRequest: {
+            message: string;
+        };
+        /**
+         * @description Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
+         *     `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+         */
+        ChatRead: {
+            /** @enum {string} */
+            tool: "read_transcript" | "search_transcript";
+            from_ms?: number;
+            to_ms?: number;
+            clipped?: boolean;
+            query?: string;
+            hits?: number;
+        };
+        SummaryChatMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            recording_id: string;
+            /** @enum {string} */
+            role: "user" | "assistant";
+            /** @description O pedido, ou a resposta do agente (`null` até `done`). */
+            content: string | null;
+            /**
+             * @description A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "done" | "failed";
+            /**
+             * Format: uuid
+             * @description Na resposta do agente, o pedido que ela responde.
+             */
+            reply_to: string | null;
+            /**
+             * Format: uuid
+             * @description A versão atual quando o pedido chegou.
+             */
+            base_summary_id: string | null;
+            /**
+             * Format: uuid
+             * @description A versão `chat` que a resposta criou, se mudou o resumo.
+             */
+            summary_id: string | null;
+            /** @description As consultas do agente à transcrição, em ordem. */
+            reads: components["schemas"]["ChatRead"][];
+            provider: components["schemas"]["AgentProviderRef"] | null;
+            model: string | null;
+            /**
+             * @description Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), ou com
+             *     `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
+             *     versão nova.
+             */
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /**
+             * Format: uuid
+             * @description Id do usuário que fez o pedido.
+             */
+            created_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
+        SummaryChatExchange: {
+            message: components["schemas"]["SummaryChatMessage"];
+            reply: components["schemas"]["SummaryChatMessage"];
+        };
+        SummaryChatPage: {
+            items: components["schemas"]["SummaryChatMessage"][];
+            next_cursor: components["schemas"]["NextCursor"];
+        };
+        MarkerInput: {
+            /**
+             * Format: uuid
+             * @description Id gerado pelo app; reenviar o mesmo não duplica.
+             */
+            client_id: string;
+            /** @description Instante desde o início da gravação. */
+            at_ms: number;
+            note?: string | null;
+        };
+        MarkerBatch: {
+            markers: components["schemas"]["MarkerInput"][];
+            /** @description Quem marcou ("iPhone 15 · Jane"). */
+            device_name?: string | null;
+        };
+        MarkerPatch: {
+            note: string | null;
+        };
+        Marker: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            recording_id: string;
+            /** Format: uuid */
+            client_id: string;
+            /** @description Instante desde o início; pode passar da duração, que só se conhece depois. */
+            at_ms: number;
+            note: string | null;
+            device_name: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MarkerPage: {
+            items: components["schemas"]["Marker"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
         AsrSettings: {
@@ -2508,7 +2943,7 @@ export interface components {
         Transcript: {
             /**
              * @description Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva.
-             * @example 1.0
+             * @example 1.1
              */
             schema_version: string;
             /**
@@ -2556,6 +2991,16 @@ export interface components {
             segments: components["schemas"]["Segment"][];
             /** @description Tags da gravação. */
             tags?: string[];
+            /**
+             * @description Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema 1.1.
+             * @enum {string}
+             */
+            kind?: "meeting" | "note";
+            /**
+             * @description De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload` (hora do envio). Desde o schema 1.1.
+             * @enum {string}
+             */
+            recorded_at_source?: "capture" | "file_metadata" | "user" | "upload";
         };
         /** @description Referência curta a um usuário do eclume. */
         UserRef: {
@@ -2656,7 +3101,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento). */
+        /** @description O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento, resumo mudado desde a versão aberta, chat com pedido em aberto). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -3155,12 +3600,24 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 /** @description Só itens com `updated_at >= since` (inclusivo). */
                 since?: components["parameters"]["Since"];
-                /** @description Filtra por estado. */
-                status?: components["schemas"]["RecordingStatus"];
-                /** @description Só gravações com esta tag. */
-                tag?: components["parameters"]["TagFilter"];
-                /** @description Só gravações desta coleção. */
-                collection?: components["parameters"]["CollectionFilter"];
+                /** @description `recorded_at >= from`. */
+                from?: string;
+                /** @description `recorded_at < to`. */
+                to?: string;
+                /** @description `created_desc` (padrão, a mais recente enviada primeiro), `recorded_asc` ou `recorded_desc` (pelo início da gravação). O cursor vale só para a mesma ordenação. */
+                sort?: "created_desc" | "recorded_asc" | "recorded_desc";
+                /** @description Natureza da gravação; repetível. */
+                kind?: components["schemas"]["RecordingKind"][];
+                /** @description Estado da gravação; repetível. */
+                status?: components["schemas"]["RecordingStatus"][];
+                /** @description Tag; repetível. */
+                tag?: string[];
+                /** @description Coleção; repetível. */
+                collection?: string[];
+                /** @description Pessoa ligada a um locutor da transcrição; repetível. */
+                person?: string[];
+                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Num campo de lista, basta o valor ser um dos itens. */
+                field?: string[];
             };
             header?: never;
             path?: never;
@@ -3168,7 +3625,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Gravações, da mais recente para a mais antiga. */
+            /** @description Gravações, na ordem de `sort`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3320,6 +3777,279 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getRecordingSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado do resumo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    editRecordingSummary: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryEdit"];
+            };
+        };
+        responses: {
+            /** @description A versão nova. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Summary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    deleteRecordingSummary: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluído. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    revertRecordingSummary: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A versão nova. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Summary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listSummaryChat: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mensagens, em ordem cronológica. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryChatPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    sendSummaryChat: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Pedido e resposta na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryChatExchange"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listMarkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marcadores em ordem de `at_ms` (página única). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    upsertMarkers: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkerBatch"];
+            };
+        };
+        responses: {
+            /** @description Todos os marcadores da gravação, em ordem de `at_ms`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    exportRecording: {
+        parameters: {
+            query: {
+                /** @description Formato do export. Formatos novos entram de forma aditiva. */
+                format: "txt" | "srt" | "md" | "docx";
+            };
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo exportado, com o nome em slug do título. */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "application/x-subrip": string;
+                    "text/markdown": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listRecordingFields: {
@@ -3774,6 +4504,90 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getSummaryChatMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mensagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryChatMessage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMarker: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                marker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluído. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMarker: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                marker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkerPatch"];
+            };
+        };
+        responses: {
+            /** @description Marcador atualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Marker"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listAgendaTypes: {
@@ -4358,6 +5172,34 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteVoiceSample: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                person_id: components["parameters"]["PersonId"];
+                transcript_id: components["parameters"]["TranscriptId"];
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removida. */
             204: {
                 headers: {
                     [name: string]: unknown;

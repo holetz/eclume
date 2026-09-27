@@ -5,6 +5,8 @@
   "sha256": "e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5",
   "title": "Alinhamento do programa de lideranças",
   "recorded_at": "2026-09-18T14:00:05Z",
+  "recorded_at_source": "capture",
+  "kind": "meeting",
   "duration_ms": 166000,
   "language": "pt-BR",
   "source": "desktop",
@@ -12,5 +14,17 @@
     "meeting_app": "teams",
     "device_name": "NB-MARIANA",
     "client_version": "eclume-desktop/0.3.0"
-  }
+  },
+  "markers": [
+    {
+      "client_id": "01928f3a-1c00-7a00-8000-000000000c01",
+      "at_ms": 42000,
+      "note": "Decisão sobre as turmas"
+    },
+    {
+      "client_id": "01928f3a-1c00-7a00-8000-000000000c02",
+      "at_ms": 131500,
+      "note": null
+    }
+  ]
 }
