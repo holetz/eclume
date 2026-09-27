@@ -1,12 +1,10 @@
 .voice {
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6);
+  gap: var(--space-4);
 }
 
-.body {
-  display: grid;
-  gap: var(--space-3);
+.voice p {
+  margin: 0;
 }
 
 .detail {
@@ -14,33 +12,10 @@
   color: var(--color-text-muted);
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.form {
-  display: grid;
-  gap: var(--space-3);
-  max-width: 44rem;
-}
-
-.samples summary {
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 560;
-}
-
-.samples ul {
+/* A `.list` do DS logo abaixo das abas: sem a borda de cima, como no quadro Person. */
+.samples {
   list-style: none;
-  margin: var(--space-2) 0 0;
+  margin: 0;
   padding: 0;
-  display: grid;
-  gap: var(--space-2);
-}
-
-.samples li {
-  display: grid;
-  font-size: 14px;
+  border-top: 0;
 }

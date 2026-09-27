@@ -1,34 +1,64 @@
 import type { Schemas } from '../../api/client'
 
 export type Scope = Schemas['Scope']
+export type DevicePlatform = Schemas['DevicePlatform']
+
+/** A chave de todas as listas de tokens: invalidá-la atualiza Tokens de acesso e os aparelhos. */
+export const TOKENS_KEY = ['tokens'] as const
+
+/** Os grupos de escopo de holetz/eclume#35: a escolha principal em Tokens de acesso e em Conexão MCP. */
+export const SCOPE_GROUPS: readonly { id: string; label: string; short: string; scopes: readonly Scope[] }[] = [
+  { id: 'ler', label: 'Buscar e ler gravações', short: 'ler', scopes: ['recordings:read', 'transcripts:read'] },
+  { id: 'resumos', label: 'Ler e editar resumos', short: 'resumos', scopes: ['summaries:read', 'summaries:write'] },
+  { id: 'campos', label: 'Editar campos e tags', short: 'campos', scopes: ['recordings:write'] },
+  { id: 'excluir', label: 'Excluir gravações', short: 'excluir', scopes: ['recordings:delete'] },
+]
 
 export const SCOPES: readonly { scope: Scope; label: string; description: string }[] = [
-  { scope: 'recordings:read', label: 'Ler gravações', description: 'Listar gravações, ver o estado e ouvir o áudio.' },
-  { scope: 'recordings:write', label: 'Enviar gravações', description: 'Subir áudio e editar gravações.' },
+  { scope: 'recordings:read', label: 'Ler gravações', description: 'Listar e buscar gravações, ver o estado e ouvir o áudio.' },
+  { scope: 'recordings:write', label: 'Enviar e editar gravações', description: 'Subir áudio e editar título, campos e tags.' },
   { scope: 'recordings:delete', label: 'Excluir gravações', description: 'Excluir gravações, o áudio e a transcrição.' },
   { scope: 'transcripts:read', label: 'Ler transcrições', description: 'Ler e exportar transcrições.' },
   { scope: 'transcripts:write', label: 'Editar transcrições', description: 'Renomear locutores e corrigir falas.' },
-  { scope: 'people:read', label: 'Ler pessoas', description: 'Consultar o diretório de pessoas.' },
+  { scope: 'people:read', label: 'Ler pessoas', description: 'Consultar as suas pessoas.' },
   { scope: 'people:write', label: 'Editar pessoas', description: 'Cadastrar e alterar pessoas.' },
-  { scope: 'summaries:read', label: 'Ler resumos', description: 'Ler resumos e templates.' },
-  { scope: 'summaries:write', label: 'Gerar resumos', description: 'Gerar resumos e editar templates.' },
+  { scope: 'summaries:read', label: 'Ler resumos', description: 'Ler resumos e as versões deles.' },
+  { scope: 'summaries:write', label: 'Editar resumos', description: 'Gerar e editar resumos.' },
 ]
 
-/** Combinações prontas para os clientes conhecidos. */
+/** Combinações prontas para os clientes conhecidos, em "Escopos individuais". */
 export const PRESETS: readonly { name: string; label: string; scopes: Scope[] }[] = [
-  { name: 'App desktop', label: 'App desktop', scopes: ['recordings:read', 'recordings:write'] },
   { name: 'lumea — importador', label: 'lumea', scopes: ['transcripts:read', 'people:read'] },
 ]
 
-export function scopeLabel(scope: string): string {
-  return SCOPES.find((s) => s.scope === scope)?.label ?? scope
+export function hasGroup(scopes: readonly Scope[], group: (typeof SCOPE_GROUPS)[number]): boolean {
+  return group.scopes.every((scope) => scopes.includes(scope))
+}
+
+/**
+ * O resumo curto da tabela ("ler, resumos, campos"): um nome por grupo completo e "+N" pelos escopos
+ * soltos. Sem nenhum grupo completo, lista os escopos como vieram.
+ */
+export function summarizeScopes(scopes: readonly Scope[]): string {
+  const groups = SCOPE_GROUPS.filter((group) => hasGroup(scopes, group))
+  if (groups.length === 0) return scopes.join(', ')
+  const covered = new Set(groups.flatMap((group) => group.scopes))
+  const loose = scopes.filter((scope) => !covered.has(scope)).length
+  return [...groups.map((group) => group.short), ...(loose > 0 ? [`+${loose}`] : [])].join(', ')
+}
+
+export const PLATFORM_LABELS: Record<DevicePlatform, string> = {
+  windows: 'Windows',
+  macos: 'macOS',
+  linux: 'Linux',
+  ios: 'iPhone',
+  android: 'Android',
 }
 
 export const EXPIRATIONS: readonly { value: string; label: string; days: number | null }[] = [
-  { value: 'never', label: 'Não expira', days: null },
   { value: '30', label: '30 dias', days: 30 },
   { value: '90', label: '90 dias', days: 90 },
-  { value: '365', label: '1 ano', days: 365 },
+  { value: 'never', label: 'Nunca', days: null },
 ]
 
 export function expiresAt(days: number | null, now: Date = new Date()): string | null {

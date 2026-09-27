@@ -1,23 +1,35 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useId, useRef, useState, type KeyboardEvent } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
+import { Dialog } from '../../app/Dialog'
+import { useHelpTopic } from '../../app/help'
+import { PageHead } from '../../app/PageHead'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDate, formatDateTime, formatDuration } from '../library/format'
 import { formatClock } from '../transcript/segments'
 import styles from './People.module.css'
 import { PersonForm, type PersonFields } from './PersonForm'
 import { PEOPLE_KEY, recordingAt, usePerson, usePersonSegments, usePersonTranscripts, type Person } from './queries'
+import { useVoiceprint, type Voiceprint } from './voice'
 import { VoiceSection } from './VoiceSection'
 
+const TABS = [
+  { key: 'gravacoes', label: 'Gravações' },
+  { key: 'falas', label: 'Falas' },
+  { key: 'amostras', label: 'Amostras de voz' },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+
 export function PersonPage() {
+  useHelpTopic('pessoa')
   const { id = '' } = useParams()
   const person = usePerson(id)
   usePageTitle(person.data?.name ?? 'Pessoa')
 
   return (
-    <section className={styles.page} aria-labelledby="pessoa-titulo">
+    <section className={styles.page}>
       <Link to="/pessoas" className={styles.back}>
         ← Pessoas
       </Link>
@@ -33,100 +45,183 @@ export function PersonPage() {
 }
 
 function PersonDetail({ person }: { person: Person }) {
+  const [dialog, setDialog] = useState<'editar' | 'excluir' | null>(null)
+  const voiceprint = useVoiceprint(person.id)
+
+  return (
+    <>
+      <PageHead
+        kicker="Pessoa"
+        title={person.name}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => setDialog('editar')}>
+            Editar
+          </button>
+        }
+      />
+      {(person.email || person.notes) && (
+        <div className={styles.identity}>
+          {person.email && <p className="mono text-muted">{person.email}</p>}
+          {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
+        </div>
+      )}
+      <PersonStats person={person} voiceprint={voiceprint.data} />
+      <PersonTabs person={person} />
+      {dialog === 'editar' && (
+        <EditDialog person={person} onClose={() => setDialog(null)} onDelete={() => setDialog('excluir')} />
+      )}
+      {dialog === 'excluir' && <DeleteDialog person={person} onClose={() => setDialog(null)} />}
+    </>
+  )
+}
+
+function PersonStats({ person, voiceprint }: { person: Person; voiceprint: Voiceprint | undefined }) {
+  let samplesSub = ''
+  if (voiceprint) {
+    if (!voiceprint.enabled) samplesSub = 'Desligada neste servidor'
+    else samplesSub = voiceprint.sample_count >= 1 ? 'Suficiente para sugerir' : 'Nenhuma ainda'
+  }
+  return (
+    <div className={`stats ${styles.stats}`}>
+      <div className="stat">
+        <span className="kicker">Gravações</span>
+        <span className="stat-value">{person.transcript_count}</span>
+      </div>
+      <div className="stat">
+        <span className="kicker">Amostras de voz</span>
+        <span className="stat-value">{voiceprint ? voiceprint.sample_count : '—'}</span>
+        {samplesSub && <span className="stat-sub">{samplesSub}</span>}
+      </div>
+      <div className="stat">
+        <span className="kicker">Última gravação</span>
+        <span className="stat-value">{person.last_seen_at ? formatDate(person.last_seen_at) : '—'}</span>
+      </div>
+    </div>
+  )
+}
+
+function PersonTabs({ person }: { person: Person }) {
+  const [params, setParams] = useSearchParams()
+  const current: TabKey = TABS.find((tab) => tab.key === params.get('aba'))?.key ?? 'gravacoes'
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({})
+  const baseId = useId()
+
+  function select(key: TabKey) {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (key === 'gravacoes') next.delete('aba')
+        else next.set('aba', key)
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  function onKeyDown(event: KeyboardEvent) {
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    if (!step) return
+    event.preventDefault()
+    const index = TABS.findIndex((tab) => tab.key === current)
+    const next = TABS[(index + step + TABS.length) % TABS.length].key
+    select(next)
+    tabRefs.current[next]?.focus()
+  }
+
+  return (
+    <div className={styles.tabsBlock}>
+      <div className="tabs" role="tablist" aria-label="Sobre a pessoa" onKeyDown={onKeyDown}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            ref={(element) => {
+              tabRefs.current[tab.key] = element
+            }}
+            type="button"
+            role="tab"
+            className="tab"
+            id={`${baseId}-${tab.key}`}
+            aria-selected={tab.key === current}
+            aria-controls={`${baseId}-${tab.key}-painel`}
+            tabIndex={tab.key === current ? 0 : -1}
+            onClick={() => select(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`${baseId}-${current}-painel`} aria-labelledby={`${baseId}-${current}`}>
+        {current === 'gravacoes' && <PersonTranscripts personId={person.id} />}
+        {current === 'falas' && <PersonSegments personId={person.id} />}
+        {current === 'amostras' && <VoiceSection person={person} />}
+      </div>
+    </div>
+  )
+}
+
+function EditDialog({ person, onClose, onDelete }: { person: Person; onClose: () => void; onDelete: () => void }) {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const [editing, setEditing] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const path = { params: { path: { person_id: person.id } } }
   const save = useMutation({
-    mutationFn: (fields: PersonFields) => unwrap(api.PATCH('/api/v1/people/{person_id}', { ...path, body: fields })),
+    mutationFn: (fields: PersonFields) =>
+      unwrap(api.PATCH('/api/v1/people/{person_id}', { params: { path: { person_id: person.id } }, body: fields })),
     onSuccess: (updated) => {
       queryClient.setQueryData([...PEOPLE_KEY, person.id], updated)
       queryClient.invalidateQueries({ queryKey: PEOPLE_KEY })
-      setEditing(false)
+      onClose()
     },
   })
+  return (
+    <Dialog title="Editar pessoa" onClose={onClose} plain>
+      <PersonForm
+        initial={person}
+        pending={save.isPending}
+        error={save.error}
+        onSubmit={(fields) => save.mutate(fields)}
+        onCancel={onClose}
+        danger={
+          <button type="button" className={`btn btn-ghost btn-danger ${styles.dangerAction}`} onClick={onDelete}>
+            Excluir pessoa
+          </button>
+        }
+      />
+    </Dialog>
+  )
+}
+
+function DeleteDialog({ person, onClose }: { person: Person; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const remove = useMutation({
-    mutationFn: () => unwrap(api.DELETE('/api/v1/people/{person_id}', path)),
+    mutationFn: () => unwrap(api.DELETE('/api/v1/people/{person_id}', { params: { path: { person_id: person.id } } })),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: [...PEOPLE_KEY, person.id] })
       queryClient.invalidateQueries({ queryKey: PEOPLE_KEY })
       navigate('/pessoas', { replace: true })
     },
   })
-
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <h1 id="pessoa-titulo">{person.name}</h1>
-          <p className={styles.meta}>
-            {person.email && <span>{person.email}</span>}
-            <span>
-              {person.transcript_count === 1 ? '1 transcrição' : `${person.transcript_count} transcrições`}
-            </span>
-            {person.last_seen_at && <span>Última: {formatDate(person.last_seen_at)}</span>}
-          </p>
-          {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
-        </div>
-        {!editing && (
-          <div className={styles.actions}>
-            <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>
-              Editar
-            </button>
-            {confirming ? (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={() => remove.mutate()}
-                  disabled={remove.isPending}
-                >
-                  Confirmar exclusão
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setConfirming(false)}>
-                  Manter
-                </button>
-              </>
-            ) : (
-              <button type="button" className="btn btn-danger" onClick={() => setConfirming(true)}>
-                Excluir
-              </button>
-            )}
-          </div>
-        )}
-      </header>
-      {confirming && !remove.isError && (
-        <p className="alert alert-warning" role="status">
-          Excluir desfaz os vínculos com os locutores e apaga a impressão de voz; as transcrições ficam.
-        </p>
-      )}
+    <Dialog
+      plain
+      title={`Excluir ${person.name}?`}
+      message="Excluir desfaz os vínculos com os locutores e apaga a impressão de voz. As transcrições ficam."
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Manter
+          </button>
+          <button type="button" className="btn btn-danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
+            Excluir pessoa
+          </button>
+        </>
+      }
+    >
       {remove.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(remove.error)}
         </p>
       )}
-      {editing && (
-        <div className="card">
-          <PersonForm
-            initial={person}
-            submitLabel="Salvar"
-            pending={save.isPending}
-            error={save.error}
-            onSubmit={(fields) => save.mutate(fields)}
-            onCancel={() => {
-              save.reset()
-              setEditing(false)
-            }}
-          />
-        </div>
-      )}
-      <VoiceSection person={person} />
-      <div className={styles.columns}>
-        <PersonTranscripts personId={person.id} />
-        <PersonSegments personId={person.id} />
-      </div>
-    </>
+    </Dialog>
   )
 }
 
@@ -134,28 +229,26 @@ function PersonTranscripts({ personId }: { personId: string }) {
   const transcripts = usePersonTranscripts(personId)
   const items = transcripts.data?.pages.flatMap((page) => page.items) ?? []
   return (
-    <section className={styles.section} aria-labelledby="pessoa-transcricoes">
-      <h2 id="pessoa-transcricoes">Transcrições</h2>
-      {transcripts.isPending && <p role="status">Carregando transcrições…</p>}
+    <div className={styles.section}>
+      {transcripts.isPending && <p role="status">Carregando gravações…</p>}
       {transcripts.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(transcripts.error)}
         </p>
       )}
       {transcripts.isSuccess && items.length === 0 && (
-        <p className={`card ${styles.empty}`}>Nenhuma transcrição visível para você com esta pessoa.</p>
+        <p className={styles.empty}>Nenhuma gravação com esta pessoa ainda.</p>
       )}
       {items.length > 0 && (
-        <ul className={styles.list} aria-label="Transcrições da pessoa">
+        <ul className={`list ${styles.plainList}`} aria-label="Gravações da pessoa">
           {items.map((transcript) => (
-            <li key={transcript.id} className={`card ${styles.row}`}>
-              <h3 className={styles.name}>
-                <Link to={`/gravacoes/${transcript.recording_id}`}>{transcript.title}</Link>
-              </h3>
-              <p className={styles.meta}>
-                <span>{formatDateTime(transcript.recorded_at)}</span>
-                <span className="tabular">{formatDuration(transcript.duration_ms)}</span>
-              </p>
+            <li key={transcript.id} className="list-row">
+              <Link className={`list-row-title ${styles.rowLink}`} to={`/gravacoes/${transcript.recording_id}`}>
+                {transcript.title}
+              </Link>
+              <span className="list-row-sub mono">
+                {formatDateTime(transcript.recorded_at)} · {formatDuration(transcript.duration_ms)}
+              </span>
             </li>
           ))}
         </ul>
@@ -167,10 +260,10 @@ function PersonTranscripts({ personId }: { personId: string }) {
           onClick={() => transcripts.fetchNextPage()}
           disabled={transcripts.isFetchingNextPage}
         >
-          Carregar mais transcrições
+          Carregar mais gravações
         </button>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -178,8 +271,7 @@ function PersonSegments({ personId }: { personId: string }) {
   const segments = usePersonSegments(personId)
   const items = segments.data?.pages.flatMap((page) => page.items) ?? []
   return (
-    <section className={styles.section} aria-labelledby="pessoa-falas">
-      <h2 id="pessoa-falas">Falas</h2>
+    <div className={styles.section}>
       {segments.isPending && <p role="status">Carregando falas…</p>}
       {segments.isError && (
         <p className="alert alert-error" role="alert">
@@ -187,25 +279,25 @@ function PersonSegments({ personId }: { personId: string }) {
         </p>
       )}
       {segments.isSuccess && items.length === 0 && (
-        <p className={`card ${styles.empty}`}>Nenhuma fala ligada a esta pessoa ainda.</p>
+        <p className={styles.empty}>Nenhuma fala ligada a esta pessoa ainda.</p>
       )}
       {items.length > 0 && (
-        <ol className={styles.list} aria-label="Falas da pessoa">
+        <ol className={`list ${styles.plainList}`} aria-label="Falas da pessoa">
           {items.map((hit) => {
             const clock = formatClock(hit.segment.start_ms)
             return (
-              <li key={`${hit.transcript.id}/${hit.segment.id}`} className={`card ${styles.quote}`}>
-                <p className={styles.quoteHead}>
-                  <span>{hit.transcript.title}</span>
-                  <span>{formatDate(hit.transcript.recorded_at)}</span>
+              <li key={`${hit.transcript.id}/${hit.segment.id}`} className="list-row">
+                <span className="list-row-title">{hit.transcript.title}</span>
+                <span className="list-row-sub mono">
+                  {formatDate(hit.transcript.recorded_at)} ·{' '}
                   <Link
                     to={recordingAt(hit.transcript.recording_id, hit.segment.start_ms)}
                     aria-label={`Ouvir em ${hit.transcript.title}, ${clock}`}
                   >
                     {clock}
                   </Link>
-                </p>
-                <p>{hit.segment.text}</p>
+                </span>
+                <p className={styles.quote}>{hit.segment.text}</p>
               </li>
             )
           })}
@@ -221,6 +313,6 @@ function PersonSegments({ personId }: { personId: string }) {
           Carregar mais falas
         </button>
       )}
-    </section>
+    </div>
   )
 }

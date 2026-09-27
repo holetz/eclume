@@ -281,22 +281,33 @@ test('busca com ficha de campo, gravação no segundo, pessoas, coleções e tok
   await expect(speakers.getByRole('link', { name: 'Rafael Lima' })).toBeVisible()
   await screenshot(page, '8-gravacao-no-segundo')
 
-  // Pessoas: diretório e página da pessoa com as falas dela.
+  // Pessoas: a tabela com o cadastro em linha e a página da pessoa, com as falas na aba delas.
   await nav.getByRole('link', { name: 'Pessoas' }).click()
-  await expect(page.getByRole('list', { name: 'Pessoas' }).getByRole('listitem')).toHaveCount(3)
-  await page.getByRole('link', { name: 'Rafael Lima' }).click()
+  const people = page.getByRole('table', { name: 'Pessoas' })
+  await expect(people.getByRole('link')).toHaveCount(3)
+  await expect(people.getByLabel('Nome da nova pessoa')).toBeVisible()
+  await screenshot(page, '9-pessoas')
+  await people.getByRole('link', { name: 'Rafael Lima' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Rafael Lima' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Falas' }).click()
+  await expect(page).toHaveURL(/\?aba=falas$/)
   await expect(page.getByRole('list', { name: 'Falas da pessoa' }).getByRole('listitem')).toHaveCount(3)
 
   await nav.getByRole('link', { name: 'Coleções' }).click()
-  await expect(page.getByRole('heading', { name: 'Metalúrgica Serra Azul' })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Coleções' }).getByText('Metalúrgica Serra Azul')).toBeVisible()
+  await screenshot(page, '11-colecoes')
 
-  // Token: o segredo aparece uma vez.
+  // Token: criado pelo diálogo com a combinação do lumea; o segredo aparece uma vez.
   await navTo(page, 'Tokens de acesso')
   await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
-  await page.getByRole('button', { name: 'lumea', exact: true }).click()
-  await page.getByRole('button', { name: 'Criar token' }).click()
-  await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
+  await expect(page.getByRole('table').getByText('Aparelho · Windows')).toBeVisible()
+  await page.getByRole('button', { name: 'Novo token' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Novo token' })
+  await dialog.getByText('Escopos individuais').click()
+  await dialog.getByRole('button', { name: 'lumea', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Criar token' }).click()
+  await expect(page.getByRole('region', { name: /criado/ })).toContainText(/eclp_[A-Za-z0-9]{32,}/)
+  await screenshot(page, '12-tokens')
 
   await navTo(page, 'App desktop')
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
@@ -320,14 +331,19 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await rejected
   await expect(suggestions).toHaveCount(0)
 
-  // Pessoa: as amostras da impressão, sem consentimento por pessoa; esquecer a voz pede confirmação.
+  // Pessoa: as amostras da impressão na aba delas, sem consentimento por pessoa; esquecer a voz pede confirmação.
   await nav.getByRole('link', { name: 'Pessoas' }).click()
-  await page.getByRole('link', { name: 'Rafael Lima' }).click()
-  const voice = page.getByRole('region', { name: 'Voz' })
-  await expect(voice.getByText(/2 amostras na impressão de voz/)).toBeVisible()
-  await expect(voice.getByText(/consentimento/i)).toHaveCount(0)
+  await page.getByRole('table', { name: 'Pessoas' }).getByRole('link', { name: 'Rafael Lima' }).click()
+  await page.getByRole('tab', { name: 'Amostras de voz' }).click()
+  await expect(page).toHaveURL(/\?aba=amostras$/)
+  const voice = page.getByRole('tabpanel')
+  await expect(voice.getByRole('list', { name: 'Amostras de voz' }).getByRole('listitem')).toHaveCount(2)
+  await expect(page.getByRole('main').getByText(/consentimento/i)).toHaveCount(0)
   await voice.getByRole('button', { name: 'Esquecer a voz' }).click()
-  await expect(voice.getByRole('button', { name: 'Confirmar: esquecer a voz' })).toBeVisible()
+  const forget = page.getByRole('dialog', { name: 'Esquecer a voz?' })
+  await expect(forget).toContainText('Os vínculos já confirmados ficam.')
   await screenshot(page, '16-pessoa-voz')
-  await voice.getByRole('button', { name: 'Manter' }).click()
+  await forget.getByRole('button', { name: 'Manter' }).click()
+  await expect(forget).toHaveCount(0)
+
 })

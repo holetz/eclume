@@ -7,17 +7,26 @@ interface PageHeadProps {
   kicker?: string
   /** Ações da página, à direita do título (botões, links). */
   actions?: ReactNode
+  /** Uma dica em linha (`HelpHint`) ao lado do título, fora do nome do `h1`. */
+  hint?: ReactNode
 }
 
 /** O `.page-head` do Design System: kicker opcional, `h1`, ações e, dentro do shell, o botão Ajuda. */
-export function PageHead({ title, kicker, actions }: PageHeadProps) {
+export function PageHead({ title, kicker, actions, hint }: PageHeadProps) {
   usePageTitle(title)
   const help = useHelp()
   return (
     <div className="page-head">
       <div>
         {kicker && <span className="kicker">{kicker}</span>}
-        <h1>{title}</h1>
+        {hint ? (
+          <div className="page-head-title">
+            <h1>{title}</h1>
+            {hint}
+          </div>
+        ) : (
+          <h1>{title}</h1>
+        )}
       </div>
       {(actions || help) && (
         <div className="page-head-actions">

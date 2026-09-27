@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { empty, json, mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { expiresAt } from './scopes'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,65 +16,101 @@ function mockTokensApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 }
 
 describe('tokens de acesso', () => {
-  it('lista os tokens com escopos, uso e validade', async () => {
+  it('lista os tokens com o resumo dos escopos, a validade, o uso e o aparelho marcado', async () => {
     mockTokensApi()
     renderApp('/tokens')
+    expect(await screen.findByRole('heading', { name: 'Tokens de acesso' })).toBeInTheDocument()
     const table = await screen.findByRole('table')
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByRole('rowheader')).toHaveTextContent('Desktop — notebook da Mariana')
-    expect(within(rows[0]).getByText('eclp_Qm9x…')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('Enviar gravações')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('Não expira')).toBeInTheDocument()
+    expect(rows[0]).toHaveTextContent('Desktop — notebook da Mariana')
+    expect(within(rows[0]).getByText('Aparelho · Windows')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('transcripts:read, people:read')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Nunca')).toBeInTheDocument()
+    expect(within(rows[1]).queryByText(/Aparelho/)).not.toBeInTheDocument()
   })
 
-  it('cria com escopos, mostra o segredo uma vez e permite copiar', async () => {
+  it('põe os revogados no fim e marca os expirados', async () => {
+    const page = fixtures.tokenPage()
+    page.items[0].revoked_at = '2026-09-20T10:00:00Z'
+    page.items[1].expires_at = '2026-01-01T00:00:00Z'
+    mockTokensApi({ 'GET /api/v1/tokens': () => page })
+    renderApp('/tokens')
+    const rows = within(await screen.findByRole('table')).getAllByRole('row').slice(1)
+    expect(rows[0]).toHaveTextContent('lumea — importador')
+    expect(within(rows[0]).getByText('Expirado')).toBeInTheDocument()
+    expect(rows[1]).toHaveTextContent(/Revogado em/)
+    expect(within(rows[1]).queryByRole('button', { name: /Revogar/ })).not.toBeInTheDocument()
+  })
+
+  it('cria pelo diálogo com grupos e validade, e mostra o segredo uma vez', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const http = mockTokensApi({ 'POST /api/v1/tokens': () => json(fixtures.tokenCreated(), 201) })
     renderApp('/tokens')
-    const create = await screen.findByRole('button', { name: 'Criar token' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Novo token' }))
+    const dialog = screen.getByRole('dialog', { name: 'Novo token' })
+    const create = within(dialog).getByRole('button', { name: 'Criar token' })
     expect(create).toBeDisabled()
-    await userEvent.click(screen.getByRole('button', { name: 'lumea' }))
-    expect(screen.getByLabelText('Nome')).toHaveValue('lumea — importador')
-    expect(screen.getByRole('checkbox', { name: /Ler transcrições/ })).toBeChecked()
-    await userEvent.selectOptions(screen.getByLabelText('Validade'), '90')
+    await userEvent.type(within(dialog).getByLabelText('Nome'), 'Script de backup')
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Buscar e ler gravações' }))
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Ler e editar resumos' }))
+    await userEvent.click(within(dialog).getByRole('radio', { name: '30 dias' }))
     await userEvent.click(create)
 
-    const panel = await screen.findByRole('region', { name: /Token “lumea — importador” criado/ })
-    expect(within(panel).getByLabelText('Token')).toHaveValue('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')
-    expect(within(panel).getByText(/não será mostrado de novo/)).toBeInTheDocument()
-    await userEvent.click(within(panel).getByRole('button', { name: 'Copiar' }))
+    const alert = await screen.findByRole('region', { name: /Token “lumea — importador” criado/ })
+    expect(within(alert).getByText('Ele só aparece uma vez.')).toBeInTheDocument()
+    expect(within(alert).getByText('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Novo token' })).not.toBeInTheDocument()
+    await userEvent.click(within(alert).getByRole('button', { name: 'Copiar' }))
     expect(writeText).toHaveBeenCalledWith('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')
-    expect(within(panel).getByRole('button', { name: 'Copiado' })).toBeInTheDocument()
 
     const body = await http.requests('POST /api/v1/tokens')[0].json()
-    expect(body.name).toBe('lumea — importador')
-    expect(body.scopes).toEqual(['transcripts:read', 'people:read'])
-    expect(new Date(body.expires_at).getTime()).toBeGreaterThan(Date.now() + 89 * 86_400_000)
+    expect(body.name).toBe('Script de backup')
+    expect(body.scopes).toEqual(['recordings:read', 'transcripts:read', 'summaries:read', 'summaries:write'])
+    const days = (new Date(body.expires_at).getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(29.9)
+    expect(days).toBeLessThan(30.1)
 
-    await userEvent.click(within(panel).getByRole('button', { name: 'Pronto, já guardei' }))
+    await userEvent.click(within(alert).getByRole('button', { name: 'Pronto, já guardei' }))
     expect(screen.queryByText('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')).not.toBeInTheDocument()
-    expect(screen.queryByDisplayValue('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Novo token' })).toBeInTheDocument()
   })
 
-  it('revoga só depois de confirmar', async () => {
+  it('usa a combinação do lumea nos escopos individuais', async () => {
+    const http = mockTokensApi({ 'POST /api/v1/tokens': () => json(fixtures.tokenCreated(), 201) })
+    renderApp('/tokens')
+    await userEvent.click(await screen.findByRole('button', { name: 'Novo token' }))
+    const dialog = screen.getByRole('dialog', { name: 'Novo token' })
+    await userEvent.click(within(dialog).getByText('Escopos individuais'))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'lumea' }))
+    expect(within(dialog).getByLabelText('Nome')).toHaveValue('lumea — importador')
+    expect(within(dialog).getByRole('checkbox', { name: /Ler pessoas/ })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Buscar e ler gravações' })).not.toBeChecked()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Criar token' }))
+    await screen.findByRole('region', { name: /criado/ })
+    const body = await http.requests('POST /api/v1/tokens')[0].json()
+    expect(body.scopes).toEqual(['transcripts:read', 'people:read'])
+    expect(new Date(body.expires_at).getTime()).toBeGreaterThan(Date.now() + 89 * 86_400_000)
+  })
+
+  it('revoga só depois de confirmar no diálogo', async () => {
     const http = mockTokensApi({ 'DELETE /api/v1/tokens/:id': () => empty(204) })
     renderApp('/tokens')
     await userEvent.click(await screen.findByRole('button', { name: 'Revogar lumea — importador' }))
+    const dialog = screen.getByRole('dialog', { name: 'Revogar lumea — importador?' })
+    expect(within(dialog).getByText('Quem usa este token perde o acesso.')).toBeInTheDocument()
     expect(http.requests('DELETE /api/v1/tokens/:id')).toHaveLength(0)
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar revogação' }))
-    expect(await screen.findByText(/Revogado em/)).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Revogar' }))
+    await vi.waitFor(() => expect(http.requests('DELETE /api/v1/tokens/:id')).toHaveLength(1))
     expect(new URL(http.requests('DELETE /api/v1/tokens/:id')[0].url).pathname).toBe(
       '/api/v1/tokens/01928f3a-1c00-7a00-8000-000000000701',
     )
-    expect(screen.queryByRole('button', { name: 'Revogar lumea — importador' })).not.toBeInTheDocument()
   })
 
-  it('calcula a validade', () => {
-    const now = new Date('2026-09-24T12:00:00Z')
-    expect(expiresAt(null, now)).toBeNull()
-    expect(expiresAt(30, now)).toBe('2026-10-24T12:00:00.000Z')
+  it('avisa que revogar um aparelho o desliga', async () => {
+    mockTokensApi()
+    renderApp('/tokens')
+    await userEvent.click(await screen.findByRole('button', { name: 'Revogar Desktop — notebook da Mariana' }))
+    expect(screen.getByText('O aparelho para de sincronizar até entrar de novo.')).toBeInTheDocument()
   })
 })

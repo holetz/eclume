@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
+import { useHelpTopic } from '../../app/help'
 import { usePageTitle } from '../../app/usePageTitle'
 import { ChatPanel } from './ChatPanel'
 import { FieldsPanel } from './FieldsPanel'
@@ -25,6 +26,7 @@ function useBackTo(): string {
 }
 
 export function RecordingPage() {
+  useHelpTopic('gravacao')
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()

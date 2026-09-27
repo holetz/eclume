@@ -1,0 +1,127 @@
+:where(.page) p {
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.page > :global(.page-head) {
+  margin-bottom: var(--space-2);
+}
+
+.lead {
+  max-width: 62ch;
+}
+
+/* O .split do DS vira uma coluna em telas estreitas, com o painel depois dos passos. */
+@media (max-width: 56rem) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+.stepBlock {
+  grid-column: 2;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.stepBlock :global(.code-block) span {
+  overflow-wrap: anywhere;
+}
+
+.panelTitle {
+  margin: 0;
+}
+
+.created {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.created :global(.code-block) span {
+  overflow-wrap: anywhere;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.pairing {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.expired {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* O QR fica preto sobre branco nos dois temas; a moldura é a do .qr-slot do DS. */
+.qr {
+  width: 200px;
+  background: #fff;
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.devices {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.devices h4 {
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mobileGrid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  max-width: 44rem;
+}
+
+@media (max-width: 36rem) {
+  .mobileGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.qrDone {
+  width: 200px;
+}
+
+.codeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pair {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pair h2 {
+  margin: 0;
+}

@@ -2,7 +2,7 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-27
 audience: both
@@ -228,6 +228,20 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
 uv run eclume-server discover --timeout 10
 ```
 
+**Prova do web** (`bash deploy/prova-web-prod.sh`, `web/e2e-prod/prova.spec.ts`, no Chrome da
+estação ou com `E2E_CHANNEL=msedge`): entra pela tela com a conta do smoke (a senha é lida no host),
+cria um campo temporário, testa a regra nas últimas gravações e o exclui; gera o código de vínculo
+em App desktop e confere que a contagem começa entre 9:55 e 10:00 e desce; lê o QR de App móvel no
+próprio navegador (SVG → `<canvas>` → `jsqr`) e confere o `pair_url` com o código da tela; confere o
+endereço MCP contra `GET /api/v1/server`, cria um token só de leitura e o revoga em Tokens de
+acesso; busca "token" na central e abre o artigo; e abre a gaveta de ajuda em Pessoas. Termina
+com `OK`, sem erro de página, e deixa os screenshots em `web/test-results/prod/`. Os códigos de
+vínculo gerados vencem sozinhos em 10 minutos.
+
+```bash
+bash deploy/prova-web-prod.sh
+```
+
 ### Primeiro deploy (2026-09-25)
 
 - **Tempo:** o deploy do zero levou ~6,5 min, quase tudo no build do worker GPU (7,98 GB). As
@@ -331,6 +345,23 @@ uv run eclume-server discover --timeout 10
   pelo `claude-cli`, a edição virou versão "Editado por você", o chat leu a transcrição (00:00:00 a
   00:00:30) e criou a versão "Ajustado pelo chat", o DOCX baixou, e a gravação da prova foi
   excluída.
+
+### Organizar, configurações e ajuda em produção (2026-09-27)
+
+- **Antes:** backup do dia (280 KB de banco, 18 objetos no bucket).
+- **Deploy:** de uma exportação com LF, só a imagem `web`; sem migration. Outro deploy paralelo,
+  de um branch sem holetz/eclume#35, trocou `server` e `web` no meio (o `/api/v1/server` voltou
+  404, contrato 2.2.0, e o `mdns` ficou reiniciando sem o `announce`); refeito com
+  `--services "server web"` a partir do branch com `main` mesclado, o descritor voltou com a
+  impressão digital `98e209f5…3d97792f` e o `mdns` saudável. Os scripts em `/srv/eclume/bin/`
+  ficaram sem CRLF. Deploys de branches diferentes se sobrescrevem: o web de produção é o do
+  último deploy, e o estado estável é o deploy de `main`.
+- **Prova** (`E2E_CHANNEL=msedge bash deploy/prova-web-prod.sh`, 21 s): campo temporário salvo,
+  testado pelo agente real nas 3 últimas gravações e excluído; o código de vínculo começou entre
+  9:55 e 10:00 e desceu (a primeira rodada mostrou 10:01, corrigido limitando a validade aos 10
+  minutos do código); o QR lido no navegador trouxe o `pair_url` com o código da tela; o endereço
+  MCP bateu com o descritor, e o token só de leitura foi criado e revogado; a busca "token" abriu
+  o artigo; a gaveta de Pessoas mostrou os artigos da página. `OK`.
 
 ## Conectar um assistente (MCP)
 

@@ -1,26 +1,27 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { openDialogs } from './dialogStack'
 
 interface DialogProps {
   title: string
   /** Pedido de fechamento (Esc, clique no fundo, botão Fechar); quem monta decide se desmonta. */
   onClose: () => void
+  /** O texto do diálogo (uma confirmação), no `.dialog-body`. */
+  message?: ReactNode
+  /** O conteúdo, no `.dialog-body` ou, com `plain`, depois da mensagem e sem o esmaecido dela. */
   children?: ReactNode
   /** Os botões do rodapé (`.dialog-actions`). */
   actions?: ReactNode
   size?: 'lg'
   /** Kicker sobre o título; com ele, o cabeçalho ganha o botão Fechar (`.dialog-head`). */
   kicker?: string
-  /** Conteúdo rico (tabela, zona de soltar) fora do `.dialog-body`, que atenua o texto. */
+  /** Conteúdo rico (formulário, tabela, zona de soltar) fora do `.dialog-body`, que atenua o texto. */
   plain?: boolean
 }
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-// Diálogos abertos, o de cima por último: só ele responde ao Esc.
-const openDialogs: HTMLElement[] = []
 
 function focusables(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)]
@@ -31,7 +32,7 @@ function focusables(root: HTMLElement): HTMLElement[] {
  * foco ao primeiro controle do corpo (ou ao Fechar); prende o Tab, fecha com Esc e com clique no
  * fundo, trava a rolagem da página e, ao desmontar, devolve o foco a quem abriu.
  */
-export function Dialog({ title, onClose, children, actions, size, kicker, plain = false }: DialogProps) {
+export function Dialog({ title, onClose, message, children, actions, size, kicker, plain = false }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -124,6 +125,7 @@ export function Dialog({ title, onClose, children, actions, size, kicker, plain 
             {title}
           </div>
         )}
+        {message && <div className="dialog-body">{message}</div>}
         {children && (
           <div ref={bodyRef} className={plain ? undefined : 'dialog-body'}>
             {children}

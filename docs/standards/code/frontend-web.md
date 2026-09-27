@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#39
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39
 maintainer: holetz
 ---
 
@@ -49,22 +49,25 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | Pasta | O que tem |
 |---|---|
 | `src/api/` | cliente gerado, `client.ts`, `problem.ts` |
-| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema, e as peças do DS `Dialog`, `ConfirmDialog`, `MenuButton` e `storage.ts` |
+| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema, e as peças do DS `Dialog`, `ConfirmDialog`, `MenuButton`, `CopyValue`, `HelpHint` e `storage.ts` |
 | `src/features/<área>/` | página, componentes, CSS Module e testes de cada área |
 | `src/upload/` | motor de upload multipart, sem React |
 | `src/styles/` | `global.css` (entrada), `fonts.css`, `eclume.css` (cópia fiel do DS) e `app.css` (produto): [web-design-system.md](web-design-system.md) |
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/gravacoes/:id`, `/pessoas`, `/pessoas/:id`,
-  `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/entrar`, `/admin/*`); `/importar`
-  redireciona para `/?importar=1` (o modal). Os parâmetros também são pt-BR:
+- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/parear`, `/gravacoes/:id`, `/pessoas`,
+  `/pessoas/:id`, `/busca`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
+  `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
+  nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
+  `/?importar=1` (o modal). Os parâmetros também são pt-BR:
   - biblioteca (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (qualquer dia do período),
     `tipo=reuniao|nota`, `situacao=pronta|processando|falhou`, `tag`, `pessoa`, `colecao`,
     `campo=<field_id>:<valor>` (todos repetíveis) e `importar=1`;
   - gravação: `t=<ms>`;
   - busca: `q`, `pessoa`, `periodo=7d|30d|ano`, `de`, `ate`, `tag`, `colecao` e `campo`
-    (repetível).
+    (repetível);
+  - pessoa: `aba=gravacoes|falas|amostras`; Campos e regras: `campo`; Tipos de agenda: `tipo`.
   A biblioteca mostra só as gravações do usuário: não há filtro Minhas/Compartilhadas.
 - **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
   biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
@@ -80,9 +83,8 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   Coleções, Campos e regras, Tipos de agenda); a recolhível **Configurações e ajuda** (um
   `<details class="nav-more">`) tem Minhas configurações (Conexão MCP, Tokens de acesso, App
   desktop, App móvel) e Ajuda (Central de ajuda). Ela abre sozinha quando a rota atual é dela e,
-  fora isso, guarda a escolha enquanto a página vive. Uma área nova de outra spec entra desligada,
-  com a rota do mapa de telas v6 (`/config/campos`, `/config/agendas`, `/config/mcp`, `/app-movel`,
-  `/ajuda`), e ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`;
+  fora isso, guarda a escolha enquanto a página vive. Uma área nova entra desligada, com a rota do
+  mapa de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`;
   cada grupo é um `role="group"` rotulado pelo título. Não há item "Painel admin": a conta de
   usuário não tem papel, e o painel se abre pelo endereço `/admin/entrar`, com conta própria.
 - **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
@@ -91,9 +93,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Gaveta de ajuda** (`help.ts`, `HelpProvider`, `HelpDrawer`): o `HelpProvider`, montado no
   `AppShell`, abre a `.help-drawer` com `?` (sem Ctrl, Meta ou Alt, fora de `input`, `textarea`,
   `select` e `contenteditable`) ou pelo botão Ajuda do `PageHead`, e fecha com Esc, devolvendo o
-  foco a quem abriu. A página declara o tópico com `useHelpTopic(chave)`; os tópicos moram em
-  `HELP_TOPICS` (o conteúdo chega com holetz/eclume#38). A gaveta mostra os links da página, os
-  atalhos e, quando `/ajuda` estiver ligada, o link para a central.
+  foco a quem abriu. A página declara a sua chave de página com `useHelpTopic(chave)`, e o corpo da
+  gaveta (carregado sob demanda) mostra a busca, os artigos daquela chave e os atalhos, com o link
+  para a central. Artigos, chaves, busca e dicas em linha:
+  [web-central-de-ajuda.md](web-central-de-ajuda.md).
 - **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
   `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
   vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
@@ -135,7 +138,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
     gravações e estado; as falhas da Saúde mostram etapa e código.
 
   As regras do server estão em [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar`, `/cadastro` e `/admin/entrar`. Criar conta (`SignupPage`) lê
+- **Rotas públicas:** `/entrar`, `/cadastro`, `/parear` e `/admin/entrar`. Criar conta (`SignupPage`) lê
   de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
   12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
   `notice_version` aceita; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
@@ -153,10 +156,14 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   resolve `./Pipeline` para `pipeline.ts`; o módulo puro ganha outro nome (`steps.ts`).
 - **Peças compartilhadas do DS** em `src/app/`: o `Dialog` (`.dialog-backdrop` num portal, foco no
   primeiro controle, Tab preso, Esc e clique no fundo fecham, rolagem travada, foco devolvido;
-  `kicker` põe o cabeçalho com Fechar e `plain` tira o conteúdo do `.dialog-body`), o
-  `ConfirmDialog` (Cancelar primeiro, confirmação em `btn-danger`, ocupado durante a mutação) e o
+  `kicker` põe o cabeçalho com Fechar; o texto de uma confirmação vai em `message`, no
+  `.dialog-body`, e formulário, tabela ou alerta vão em `children` com `plain`, fora do esmaecido;
+  com um diálogo aberto, a gaveta de ajuda não abre nem fecha por atalho), o
+  `ConfirmDialog` (Cancelar primeiro, confirmação em `btn-danger`, ocupado durante a mutação), o
   `MenuButton` (`.menu` com o teclado ARIA de menu: setas, Home/End, Enter/Espaço, Esc, clique
-  fora; o item focado leva `data-active`).
+  fora; o item focado leva `data-active`), o `CopyValue` (`.code-block` com Copiar e o aviso no
+  `role=status`; `size="lg"` para o código de vínculo) e o `HelpHint` (o `?` em linha com o
+  popover e o link para o artigo; Esc fecha só ele).
 
 ## Visual e acessibilidade
 
@@ -300,13 +307,59 @@ desce; abaixo de 56rem, os campos também):
   biblioteca e da busca): sem foco automático, lista só com texto e sem cadastro. Cada sugestão por
   voz pendente aparece como "Parece ser <pessoa> — NN%", com Aceitar e Recusar; nunca é aplicada
   sozinha.
-- **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a página da pessoa tem a seção
-  Voz (amostras e "Esquecer a voz"; não há consentimento por pessoa, que o aceite do aviso no
-  cadastro substitui), e o admin liga a identificação e ajusta o limiar em Locutores
+- **Pessoas** (`/pessoas`) é a `table.table` do DS com busca em `?q=` e o cadastro em linha na
+  primeira linha (nome e e-mail, Enter envia, e-mail repetido aparece na linha). A **pessoa**
+  (`/pessoas/:id`) tem Editar e Excluir em `Dialog`, três `.stat` (gravações, amostras de voz,
+  última gravação) e as abas Gravações, Falas e Amostras de voz, com a escolhida em `?aba=`.
+- **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a aba Amostras de voz lista as
+  amostras e tem "Esquecer a voz", com confirmação; não há consentimento por pessoa, que o aceite
+  do aviso no cadastro substitui. O admin liga a identificação e ajusta o limiar em Locutores
   (`/admin/locutores`).
+- **Campos e regras** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
+  do DS: lista à esquerda (seleção em `?campo=`/`?tipo=`, `novo` para o rascunho) e painel à
+  direita. Trocar de item com alterações pede "Descartar alterações?"; sair da rota só avisa pelo
+  `beforeunload`, porque o app usa `BrowserRouter` e o `useBlocker` exige data router. Título e
+  tags são embutidos (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora.
+- **Pré-visualização por consulta ao job** (`organize/usePreview.ts`): "Testar numa gravação"
+  (`POST /fields/preview`, sem `recording_ids`: as 3 últimas transcritas) e "Pré-visualizar numa
+  gravação" (`POST /agenda-types/preview`) devolvem 202 com o job, e a tela consulta
+  `GET /previews/{id}` a cada 1,5 s até `done` ou `failed`; 404 vira expirada, e um pedido novo
+  descarta o anterior. Nada é gravado, e a pré-visualização de tipo some quando o rascunho muda.
 - **Coleção convive com tag**: a coleção agrupa gravações; a tag marca assuntos. Ela aparece no
   painel de campos da gravação, no filtro da biblioteca (`colecao`) e numa ficha da busca, e
   `/colecoes` fica em Organizar, como decidido na holetz/eclume#38.
+
+## Minhas configurações
+
+- **Grupos de escopo** (`tokens/scopes.ts`) são a escolha principal de um token: Buscar e ler
+  gravações (`recordings:read`, `transcripts:read`), Ler e editar resumos (`summaries:*`), Editar
+  campos e tags (`recordings:write`) e Excluir gravações (`recordings:delete`). Os escopos soltos
+  ficam em "Escopos individuais" (com a combinação do lumea). A tabela mostra o resumo curto
+  (`ler, resumos, campos`, "+N" pelos soltos) e marca os tokens `kind: device` com "Aparelho ·
+  <plataforma>". Validade: 30 dias, 90 dias ou nunca. O segredo aparece uma vez, no
+  `CopyValue`.
+- **Conexão MCP** (`/config/mcp`) copia o `mcp_url` do descritor (`GET /server`, `staleTime:
+  Infinity`) e cria o token do assistente com o `TokenForm`: "Claude Desktop", os três primeiros
+  grupos, sem "Excluir gravações" e 90 dias; criado, mostra o segredo e o comando
+  `claude mcp add --transport http eclume <mcp_url> --header "Authorization: Bearer <segredo>"`.
+- **Código de vínculo** (`connect/pairing.ts`): cada página gera o seu (App desktop por botão, App
+  móvel ao abrir), porque um código novo anula o anterior. A contagem regressiva ancora em
+  `expires_at` menos o header `Date` da resposta, medida por `performance.now()`, e não depende do
+  relógio do computador. O estado é consultado a cada 3 s enquanto `pending` e a contagem não
+  zerou; `used` atualiza as listas de tokens e mostra "Pareado: <aparelho>". O leitor de tela só
+  ouve "Falta 1 minuto" e "Código vencido".
+- **QR gerado no navegador** (`connect/qr.ts`, `QrCode.tsx`): a matriz do pacote `qrcode`
+  (correção M, carregado só com o QR) vira um `<svg>` próprio, com um `<path>` por linha, zona de
+  silêncio de 4 módulos e preto sobre branco nos dois temas. O conteúdo é o `pair_url` do
+  contrato. `/parear` é a página pública onde cai quem lê o QR com a câmera comum: explica que o
+  código é do app e não chama a API.
+- **Instaladores** (`desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
+  (mesma origem, fora do `/api`), valida `versao` e `instaladores[]`
+  ([desktop-distribuicao.md](desktop-distribuicao.md)) e mostra o `recomendado` de cada sistema,
+  com o sistema atual primeiro; sem manifesto ou com ele inválido, os cartões dizem que os
+  instaladores ainda não foram publicados.
+- **Aparelhos vinculados** (`connect/DevicesList.tsx`) vêm de `GET /tokens?kind=device`, filtrados
+  pela plataforma da página; Desvincular revoga a credencial (`DELETE /tokens/{id}`).
 
 ## Upload: `src/upload/multipart.ts`
 
@@ -343,7 +396,11 @@ Depois de recarregar, o import recomeça pela conversão.
   `GET /recordings`), no mês e na lista, com o filtro conferido na requisição (o mock não filtra);
   o modal Importar com o `audio.m4a` de `npm run fixtures` (data dos metadados, conversão real e
   upload); a gravação (pipeline, marcadores, transcrição, edição, chat, exportar e excluir); e a
-  busca com a ficha de campo, a gravação no segundo do trecho, pessoas, coleções e PAT. O painel admin tem o seu `e2e/admin.spec.ts`: entra por `/admin/entrar`, percorre
+  busca com a ficha de campo, a gravação no segundo do trecho, pessoas, coleções e PAT; e
+  `e2e/organizar-config.spec.ts` percorre Campos, Tipos de agenda, Conexão MCP, Tokens, App
+  desktop, App móvel, a central de ajuda e a gaveta (o mock só tem o exemplo "usado" do estado do
+  código de vínculo e um `expires_at` fixo: o teste reescreve os dois quando precisa do código
+  pendente). O painel admin tem o seu `e2e/admin.spec.ts`: entra por `/admin/entrar`, percorre
   as sete telas, salva em cada uma e confere os redirecionamentos. O Prism não emite cookies nem
   guarda estado, então o teste põe os cookies de sessão na resposta do login (o de admin com
   `Path=/api/v1/admin`), responde o `PATCH /admin/settings` com o exemplo do `GET` (o mock gera
@@ -354,8 +411,8 @@ Depois de recarregar, o import recomeça pela conversão.
   eclume-mock-<spec> -f deploy/docker-compose.mock.yml up -d`, com `E2E_PORT` próprio); `E2E_SCREENSHOTS=1` salva telas claro e escuro em
   `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado
   (`msedge` na estação Windows, que não tem Chrome). O helper `navTo()`
-  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts` e
-  `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
+  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts`,
+  `e2e/visual-organizar.spec.ts` e `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
   ([web-design-system.md](web-design-system.md)); com `ECLUME_DS_DIR`, salvam também os quadros
   de `examples/*.html` para a comparação lado a lado.
 - A CI roda os unitários no job `web` e o E2E, junto dos testes de navegador da conversão, no
