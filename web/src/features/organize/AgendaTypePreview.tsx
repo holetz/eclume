@@ -15,8 +15,8 @@ const NO_PROVIDER = 'Nenhum agente está configurado para esta pré-visualizaç�
 
 function useTranscribedRecordings() {
   return useQuery({
-    queryKey: ['recordings', { status: 'transcribed', limit: RECENT }],
-    queryFn: () => unwrap(api.GET('/api/v1/recordings', { params: { query: { status: 'transcribed', limit: RECENT } } })),
+    queryKey: ['recordings', { status: ['transcribed'], sort: 'recorded_desc', limit: RECENT }],
+    queryFn: () => unwrap(api.GET('/api/v1/recordings', { params: { query: { status: ['transcribed'], sort: 'recorded_desc', limit: RECENT } } })),
   })
 }
 

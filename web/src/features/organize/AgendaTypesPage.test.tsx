@@ -210,7 +210,7 @@ describe('pré-visualizar numa gravação', () => {
     await previewOn(panel, /^Alinhamento do programa de lideranças · /)
 
     const recordings = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
-    expect(Object.fromEntries(recordings)).toEqual({ status: 'transcribed', limit: '20' })
+    expect(Object.fromEntries(recordings)).toEqual({ status: 'transcribed', sort: 'recorded_desc', limit: '20' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(within(panel).getByRole('status')).toHaveTextContent('Pré-visualizando na gravação…')
     const body = (await http.requests('POST /api/v1/agenda-types/preview')[0].json()) as Schemas['AgendaTypePreviewRequest']
