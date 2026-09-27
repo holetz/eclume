@@ -263,3 +263,35 @@
 .scroll {
   overflow-x: auto;
 }
+
+/* Forms da configuração da plataforma, nas larguras do DS (Transcrição 520 px, Locutores 560 px). */
+.narrowForm,
+.wideForm,
+.stack {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.narrowForm {
+  max-width: 520px;
+}
+
+.wideForm {
+  max-width: 560px;
+  gap: 32px;
+}
+
+/* O rótulo de um grupo (.seg), igual ao `label` de `.field`. */
+.label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}

@@ -2,9 +2,9 @@
 type Option = { value: string; label: string; hint?: string }
 
 export const ENGINES: readonly Option[] = [
-  { value: 'whisperx-local', label: 'WhisperX na GPU do servidor', hint: 'Padrão: ASR, alinhamento por palavra e diarização.' },
-  { value: 'openai-compatible', label: 'Servidor remoto OpenAI-compatível', hint: 'Ex.: speaches; exige o endereço.' },
-  { value: 'cpu', label: 'CPU (faster-whisper)', hint: 'Só para desenvolvimento: lenta e sem diarização.' },
+  { value: 'whisperx-local', label: 'WhisperX (GPU)', hint: 'Padrão: na GPU do servidor, com alinhamento por palavra e separação de locutores.' },
+  { value: 'openai-compatible', label: 'Remoto (OpenAI-compatível)', hint: 'Um servidor como o speaches; exige o endereço.' },
+  { value: 'cpu', label: 'CPU', hint: 'faster-whisper na CPU, só para desenvolvimento: lento e sem separação de locutores.' },
 ]
 
 export const MODELS = ['large-v3-turbo', 'large-v3', 'medium', 'small'] as const
@@ -15,12 +15,6 @@ export const COMPUTE_TYPES: readonly Option[] = [
   { value: 'int8', label: 'int8' },
   { value: 'int8_float32', label: 'int8_float32' },
   { value: 'float32', label: 'float32 (mais VRAM)' },
-]
-
-export const LANGUAGES: readonly Option[] = [
-  { value: 'pt', label: 'Português' },
-  { value: 'en', label: 'Inglês' },
-  { value: 'es', label: 'Espanhol' },
 ]
 
 export const PROVIDER_KINDS: readonly Option[] = [
@@ -71,6 +65,15 @@ export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
 export function labelOf(options: readonly Option[], value: string | null | undefined): string {
   if (value == null) return '—'
   return options.find((option) => option.value === value)?.label ?? value
+}
+
+const lastChange = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+
+/** "Última alteração por <admin> em <data>", abaixo dos forms da configuração da plataforma. */
+export function lastChangeText(settings: { updated_at: string; updated_by: { name: string } | null }): string {
+  return settings.updated_by
+    ? `Última alteração por ${settings.updated_by.name} em ${lastChange.format(new Date(settings.updated_at))}.`
+    : 'Configuração padrão, ainda não alterada.'
 }
 
 /** Número de um campo opcional: vazio vira `null`. */

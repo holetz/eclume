@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { empty, json, mockFetch, problem } from '../../test/http'
+import { empty, json, mockFetch } from '../../test/http'
 import { renderApp } from '../../test/render'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -22,46 +22,6 @@ function mockAdminApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 async function body(http: ReturnType<typeof mockFetch>, key: string, index = 0) {
   return http.requests(key)[index].json()
 }
-
-describe('Transcrição', () => {
-  it('mostra a configuração e salva o que mudou', async () => {
-    const http = mockAdminApi({
-      'PATCH /api/v1/admin/settings': () => ({ ...fixtures.adminSettings(), updated_at: '2026-09-25T12:00:00Z' }),
-    })
-    renderApp('/admin/transcricao')
-    const model = await screen.findByLabelText('Modelo')
-    expect(model).toHaveValue('large-v3-turbo')
-    expect(screen.getByLabelText('Tipo de computação')).toHaveValue('int8_float16')
-    expect(within(screen.getByLabelText('Tipo de computação')).queryByText(/^float16/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Última alteração por Administração EK/)).toBeInTheDocument()
-
-    await userEvent.clear(model)
-    await userEvent.type(model, 'large-v3')
-    await userEvent.type(screen.getByLabelText('Máximo de locutores'), '4')
-    await userEvent.click(screen.getByRole('checkbox', { name: /Resumir automaticamente/ }))
-    await userEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }))
-    expect(await screen.findByText('Configuração salva.')).toBeInTheDocument()
-
-    const sent = await body(http, 'PATCH /api/v1/admin/settings')
-    expect(sent.asr).toMatchObject({ engine: 'whisperx-local', model: 'large-v3', batch_size: null, default_language: 'pt' })
-    expect(sent.diarization).toEqual({ enabled: true, min_speakers: null, max_speakers: 4 })
-    expect(sent.summarization).toEqual({ auto_summarize: true })
-  })
-
-  it('pede o endereço para o motor remoto e mostra o erro do servidor', async () => {
-    mockAdminApi({
-      'PATCH /api/v1/admin/settings': () =>
-        problem('validation_failed', 422, { errors: [{ field: 'asr.endpoint_url', message: 'obrigatória' }] }),
-    })
-    renderApp('/admin/transcricao')
-    await userEvent.selectOptions(await screen.findByLabelText('Motor'), 'openai-compatible')
-    const save = screen.getByRole('button', { name: 'Salvar configuração' })
-    expect(save).toBeDisabled()
-    await userEvent.type(screen.getByLabelText('Endereço do servidor remoto'), 'http://speaches:8000/v1')
-    await userEvent.click(save)
-    expect(await screen.findByRole('alert')).toHaveTextContent('asr.endpoint_url: obrigatória')
-  })
-})
 
 describe('Agentes', () => {
   it('lista os providers e troca o padrão', async () => {

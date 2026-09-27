@@ -6,7 +6,7 @@ import { NotFound } from './NotFound'
 import { RequireAdmin } from './RequireAdmin'
 import { SecretsPage } from './SecretsPage'
 import { ADMIN_KICKER } from './sections'
-import { SettingsPage } from './SettingsPage'
+import { TranscriptionPage } from './TranscriptionPage'
 import { UsersPage } from './UsersPage'
 import { VoicePage } from './VoicePage'
 
@@ -28,7 +28,7 @@ export function AdminRoutes() {
         <Route index element={<Navigate to="usuarios" replace />} />
         <Route path="usuarios" element={<UsersPage />} />
         <Route path="audio" element={<Pending title="Pré-processamento de áudio" />} />
-        <Route path="transcricao" element={<SettingsPage />} />
+        <Route path="transcricao" element={<TranscriptionPage />} />
         <Route path="locutores" element={<VoicePage />} />
         <Route path="agentes" element={<AgentsPage />} />
         <Route path="tipos-de-agenda" element={<Pending title="Tipos de agenda padrão" />} />
