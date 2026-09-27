@@ -84,15 +84,23 @@ def _check_shape(kind: str, base_url: str | None) -> None:
         raise invalid_field("base_url", "o claude-cli não usa base_url")
 
 
-async def _claim(conn: AsyncConnection, provider_id: UUID, purposes: list[str]) -> None:
-    """Tira dos outros providers as finalidades que este passa a declarar: uma por provider."""
+async def _lock_purposes(conn: AsyncConnection) -> None:
+    """Serializa as escritas de `used_for` até o fim da transação (o mesmo lock do trigger da 013)."""
+    await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('agent_providers.used_for'))"))
+
+
+async def _claim(conn: AsyncConnection, provider_id: UUID | None, purposes: list[str]) -> None:
+    """Tira dos outros providers as finalidades que este passa a declarar: uma por provider.
+
+    Na criação (`provider_id` nulo) roda antes do insert: o trigger recusa a sobreposição.
+    """
     if purposes:
         await conn.execute(
             text(
                 "UPDATE agent_providers"
                 " SET used_for = ARRAY(SELECT unnest(used_for) EXCEPT SELECT unnest(CAST(:purposes AS text[]))),"
                 " updated_at = now()"
-                " WHERE id <> :id AND used_for && CAST(:purposes AS text[])"
+                " WHERE id IS DISTINCT FROM CAST(:id AS uuid) AND used_for && CAST(:purposes AS text[])"
             ),
             {"id": provider_id, "purposes": purposes},
         )
@@ -131,9 +139,11 @@ async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -
     _check_shape(body.kind, body.base_url)
     values = body.model_dump(exclude={"api_key"})
     async with system_tx(ctx.engine) as conn:
+        await _lock_purposes(conn)
         if values["used_for"] is None:
             values["used_for"] = await _unclaimed(conn) if body.enabled else []
         values["used_for"] = list(dict.fromkeys(values["used_for"]))
+        await _claim(conn, None, values["used_for"])
         row = (
             (
                 await conn.execute(
@@ -148,7 +158,6 @@ async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -
             .mappings()
             .one()
         )
-        await _claim(conn, row["id"], values["used_for"])
     return provider_json(row)
 
 
@@ -169,6 +178,7 @@ async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: 
     if "used_for" in values:
         values["used_for"] = list(dict.fromkeys(values["used_for"]))
     async with system_tx(ctx.engine) as conn:
+        await _lock_purposes(conn)
         current = await _get(conn, provider_id)
         merged = {**current, **values}
         _check_shape(merged["kind"], merged["base_url"])

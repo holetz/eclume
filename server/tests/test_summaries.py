@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
@@ -348,6 +349,10 @@ def test_cada_finalidade_tem_um_provider_so(team: dict[str, Any], services: Serv
     assert _used_for(services) == {"Claude (servidor)": ["chat", "fields"], "Ollama": ["agenda_detection", "summaries"]}
     assert admin.patch(f"{url}/{claude['id']}", json={"used_for": ["resumos"]}).status_code == 422
     assert admin.patch(f"{url}/{claude['id']}", json={"used_for": None}).status_code == 422
+    # O banco recusa a finalidade em dois providers, mesmo fora das rotas (escrita concorrente).
+    with pytest.raises(IntegrityError):
+        _sql(services, "UPDATE agent_providers SET used_for = '{summaries,chat}' WHERE name = 'Ollama'")
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields"], "Ollama": ["agenda_detection", "summaries"]}
 
     # O resumo sem `provider_id` usa o provider de `summaries`; desabilitado, não há nenhum.
     owner: Api = team["member"]

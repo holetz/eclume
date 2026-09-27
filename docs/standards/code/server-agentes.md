@@ -85,7 +85,9 @@ nunca devolve a chave, só `api_key_set`; `PATCH` com `api_key: null` apaga.
 - `base_url` é obrigatória para `ollama` e `openai-compatible` e proibida para `claude-cli`.
 - **Finalidade (`used_for`):** `summaries`, `fields`, `chat` e `agenda_detection`. Cada
   finalidade tem no máximo um provider: declará-la num provider a tira dos outros, na mesma
-  transação. `provider_for(conn, finalidade)` devolve o provider habilitado que a declara. Um
+  transação. O banco garante (migration `013`): um trigger serializa as escritas de `used_for`
+  num advisory lock, o mesmo que as rotas tomam, e recusa a sobreposição. `provider_for(conn,
+  finalidade)` devolve o provider habilitado que a declara (na ordem do cadastro). Um
   provider habilitado cadastrado sem `used_for` assume as finalidades que ninguém declara.
 - Excluir com resumo `queued`/`running` no provider, de qualquer usuário → 409; as finalidades
   dele ficam sem provider.

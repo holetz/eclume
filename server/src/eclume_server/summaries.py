@@ -47,9 +47,17 @@ PURPOSES = ("summaries", "fields", "chat", "agenda_detection")
 
 
 async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
-    """O provider habilitado que declara a finalidade (há no máximo um), sem a chave de API."""
+    """O provider habilitado que declara a finalidade (há no máximo um), sem a chave de API.
+
+    O banco garante um por finalidade (migration 013); a ordem é a do cadastro de todo modo.
+    """
     c = t.agent_providers.c
-    query = select(*PROVIDER_PUBLIC).where(c.enabled, literal(purpose) == any_(c.used_for))
+    query = (
+        select(*PROVIDER_PUBLIC)
+        .where(c.enabled, literal(purpose) == any_(c.used_for))
+        .order_by(c.created_at, c.id)
+        .limit(1)
+    )
     return (await conn.execute(query)).mappings().first()
 
 
