@@ -633,6 +633,10 @@ impl Queue {
             Some(rec) if matches!(rec.status, Status::Syncing | Status::Synced) => {
                 bail!("a gravação já foi para o servidor: edite os marcadores na web")
             }
+            // O upload retomado leva os marcadores de quando foi criado.
+            Some(rec) if rec.upload_id.is_some() => {
+                bail!("o envio desta gravação já começou: edite os marcadores na web")
+            }
             Some(_) => Ok(()),
         }
     }
@@ -1088,6 +1092,15 @@ mod tests {
         assert!(queue.add_marker("g", 9_900, None).is_err());
         assert!(queue.set_marker_note(&cedo.client_id, None).is_err());
         assert_eq!(queue.markers("g").unwrap().len(), 3);
+
+        // Falhou com o upload já criado: a retomada levaria os marcadores antigos.
+        queue
+            .set_upload_state("g", Some("up-1"), Some("ab12"))
+            .unwrap();
+        queue.mark_failed("g", "rede").unwrap();
+        assert!(queue.add_marker("g", 9_900, None).is_err());
+        queue.set_upload_state("g", None, None).unwrap();
+        queue.add_marker("g", 9_900, None).unwrap();
     }
 
     #[test]

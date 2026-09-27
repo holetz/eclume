@@ -47,6 +47,8 @@ export function montar(secao, app) {
   /** A pessoa já conferiu a impressão digital de um endereço sem ela (TOFU). */
   let confiou = false;
   let ocupado = false;
+  /** A escolha mais nova: a resposta de uma escolha anterior que chegar depois é descartada. */
+  let pedido = 0;
 
   function mostrarAviso(texto) {
     aviso.hidden = !texto;
@@ -107,6 +109,7 @@ export function montar(secao, app) {
   }
 
   async function escolher(servidor) {
+    const este = ++pedido;
     escolhido = servidor;
     preparado = null;
     confiou = false;
@@ -114,8 +117,11 @@ export function montar(secao, app) {
     desenharConfianca();
     mostrarAviso(null);
     try {
-      preparado = await app.invoke("prepare_server", { url: servidor.url, caSha256: servidor.ca_sha256 ?? null });
+      const pronto = await app.invoke("prepare_server", { url: servidor.url, caSha256: servidor.ca_sha256 ?? null });
+      if (este !== pedido) return;
+      preparado = pronto;
     } catch (falha) {
+      if (este !== pedido) return;
       mostrarAviso(String(falha));
     }
     desenharConfianca();
@@ -171,8 +177,14 @@ export function montar(secao, app) {
     }
     entrarCom("pair", { code: codigo });
   });
-  $("#bv-confiar", secao).addEventListener("click", () => {
-    confiou = true;
+  $("#bv-confiar", secao).addEventListener("click", async () => {
+    if (!preparado) return;
+    try {
+      await app.invoke("confirm_server", { url: preparado.url, caSha256: preparado.ca_sha256 ?? null });
+      confiou = true;
+    } catch (falha) {
+      mostrarAviso(String(falha));
+    }
     desenharConfianca();
   });
   $("#bv-usar-endereco", secao).addEventListener("click", () => {

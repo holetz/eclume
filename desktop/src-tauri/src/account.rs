@@ -43,9 +43,10 @@ impl Net for RealNet {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustedBy {
-    /// A CA conferiu com a impressão digital esperada (instalador, mDNS ou QR).
+    /// A CA conferiu com a impressão digital que veio com o instalador.
     Fingerprint,
-    /// Endereço digitado sem impressão digital: a pessoa confere a que a tela mostra (TOFU).
+    /// Endereço digitado ou anunciado no mDNS (sem autenticação): a pessoa confere a impressão
+    /// digital que a tela mostra antes de entrar (TOFU).
     FirstUse,
     /// O certificado já é confiável pelo sistema (o servidor não publica CA própria).
     System,
@@ -63,6 +64,9 @@ pub struct PreparedServer {
     /// A CA baixada, ainda fora do lugar definitivo.
     #[serde(skip)]
     pub ca_path: Option<PathBuf>,
+    /// A pessoa conferiu a impressão digital (`FirstUse`) por [`confirm`].
+    #[serde(skip)]
+    pub confirmed: bool,
 }
 
 /// Um servidor para a primeira execução mostrar.
@@ -109,16 +113,38 @@ fn host_of(url: &str) -> String {
     host.to_string()
 }
 
+/// O endereço e a impressão digital são os que vieram com o instalador? Só eles dispensam a
+/// conferência: o anúncio do mDNS não é autenticado e qualquer máquina da rede pode forjá-lo.
+pub fn vouched_by_installer(
+    embedded: Option<crate::config::EmbeddedServer>,
+    url: &str,
+    ca_sha256: Option<&str>,
+) -> bool {
+    let (Some(server), Some(ca_sha256)) = (embedded, ca_sha256) else {
+        return false;
+    };
+    server.url.trim_end_matches('/') == url.trim().trim_end_matches('/')
+        && server
+            .ca_sha256
+            .is_some_and(|expected| expected.eq_ignore_ascii_case(ca_sha256.trim()))
+}
+
 /// Fixa a CA de `url` (conferindo `expected`, quando há) e lê o descritor já com verificação.
+/// Só a impressão digital `vouched` (a do instalador) dá `Fingerprint`; qualquer outra ainda é
+/// conferida na baixa da CA, mas a pessoa confirma antes de entrar (`FirstUse`).
 pub fn prepare(
     net: &dyn Net,
     config_dir: &Path,
     url: &str,
     expected: Option<&str>,
+    vouched: bool,
 ) -> Result<PreparedServer> {
     let url = url.trim().trim_end_matches('/');
     validate_web_url(url)?;
     if url.starts_with("http://") {
+        if !cfg!(debug_assertions) && !is_loopback(url) {
+            bail!("endereço sem https: use https:// (http:// só vale em localhost)");
+        }
         let info = server_info(net.verified(None)?, url)?;
         return Ok(prepared(info, url, None, TrustedBy::Unencrypted, None));
     }
@@ -127,7 +153,7 @@ pub fn prepare(
             let path = pin::save(&root, &config_dir.join(PENDING_DIR))?;
             let info = server_info(net.verified(Some(&path))?, url)?;
             pin::confirm(&info, &root.sha256)?;
-            let trusted_by = if expected.is_some() {
+            let trusted_by = if expected.is_some() && vouched {
                 TrustedBy::Fingerprint
             } else {
                 TrustedBy::FirstUse
@@ -166,7 +192,23 @@ fn prepared(
         ca_sha256,
         trusted_by,
         ca_path,
+        confirmed: false,
     }
+}
+
+/// `http://localhost` ou `http://127.0.0.1`, com ou sem porta.
+fn is_loopback(url: &str) -> bool {
+    matches!(host_of(url).as_str(), "localhost" | "127.0.0.1")
+}
+
+/// A pessoa conferiu a impressão digital do servidor que a tela mostra; recusa quando o servidor
+/// preparado já é outro (uma escolha mais nova terminou antes).
+pub fn confirm(server: &mut PreparedServer, url: &str, ca_sha256: Option<&str>) -> Result<()> {
+    if server.url != url.trim().trim_end_matches('/') || server.ca_sha256.as_deref() != ca_sha256 {
+        bail!("O servidor escolhido mudou; confira a impressão digital de novo");
+    }
+    server.confirmed = true;
+    Ok(())
 }
 
 /// Como a pessoa entra.
@@ -193,6 +235,9 @@ pub fn sign_in(
     login: Login<'_>,
     device_name: &str,
 ) -> Result<SignedIn> {
+    if server.trusted_by == TrustedBy::FirstUse && !server.confirmed {
+        bail!("Confira a impressão digital do servidor antes de entrar");
+    }
     let transport = net.verified(server.ca_path.as_deref())?;
     let devices = Devices::new(Arc::clone(&transport), &server.url)?;
     let (credential, email) = match login {
@@ -239,7 +284,8 @@ pub fn sign_in(
 
 /// A CA que o servidor serve hoje é outra que a fixada em `pinned`?
 pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
-    let pem = std::fs::read(pinned).with_context(|| format!("falha ao ler {}", pinned.display()))?;
+    let pem =
+        std::fs::read(pinned).with_context(|| format!("falha ao ler {}", pinned.display()))?;
     let pinned = pin::root_from_pem(&pem)?;
     let served = pin::fetch_root(&*net.insecure(), web_url, None)?;
     Ok(served.sha256 != pinned.sha256)
@@ -290,9 +336,13 @@ pub(crate) mod tests {
 
     impl Transport for Leg {
         fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
-            let (call, response) = self.net.steps.lock().unwrap().pop_front().unwrap_or_else(
-                || panic!("requisição a mais: {} {}", request.method, request.url),
-            );
+            let (call, response) = self
+                .net
+                .steps
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| panic!("requisição a mais: {} {}", request.method, request.url));
             let path = request.url.strip_prefix(URL).unwrap_or(&request.url);
             assert_eq!(format!("{} {} {path}", self.kind, request.method), call);
             response
@@ -381,11 +431,17 @@ pub(crate) mod tests {
         let net = Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", pem())
-                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256))))
-                .expect("verificado POST /api/v1/devices/login", body(201, credential())),
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                )
+                .expect(
+                    "verificado POST /api/v1/devices/login",
+                    body(201, credential()),
+                ),
         );
         let shared = Shared(Arc::clone(&net));
-        let server = prepare(&shared, &dir, &format!("{URL}/"), Some(CA_SHA256)).unwrap();
+        let server = prepare(&shared, &dir, &format!("{URL}/"), Some(CA_SHA256), true).unwrap();
         assert_eq!(server.trusted_by, TrustedBy::Fingerprint);
         assert_eq!(server.url, URL);
         assert_eq!(server.ca_sha256.as_deref(), Some(CA_SHA256));
@@ -421,8 +477,14 @@ pub(crate) mod tests {
         let net = Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", pem())
-                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256))))
-                .expect("verificado POST /api/v1/devices/pair", body(201, credential()))
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                )
+                .expect(
+                    "verificado POST /api/v1/devices/pair",
+                    body(201, credential()),
+                )
                 .expect(
                     "verificado GET /api/v1/me",
                     body(
@@ -433,20 +495,71 @@ pub(crate) mod tests {
                 ),
         );
         let shared = Shared(Arc::clone(&net));
-        let server = prepare(&shared, &dir, URL, None).unwrap();
+        let mut server = prepare(&shared, &dir, URL, None, false).unwrap();
         assert_eq!(server.trusted_by, TrustedBy::FirstUse);
+        let err = sign_in(&shared, &dir, &server, Login::Code("K7Q-4MX"), "PC").unwrap_err();
+        assert!(
+            err.to_string().contains("Confira a impressão digital"),
+            "{err:#}"
+        );
+        let other = confirm(&mut server.clone(), "https://outro:8443", Some(CA_SHA256));
+        assert!(other.is_err());
+        confirm(&mut server, URL, Some(CA_SHA256)).unwrap();
         let signed = sign_in(&shared, &dir, &server, Login::Code("K7Q-4MX"), "PC").unwrap();
         assert!(net.done());
         assert_eq!(signed.account.email, "ana@exemplo.com.br");
     }
 
     #[test]
+    fn impressao_digital_do_mdns_ainda_pede_a_conferencia() {
+        let dir = dir("mdns");
+        let net = Arc::new(
+            ScriptNet::default()
+                .expect("inseguro GET /downloads/eclume-root.crt", pem())
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                ),
+        );
+        let server = prepare(&Shared(net), &dir, URL, Some(CA_SHA256), false).unwrap();
+        assert_eq!(server.trusted_by, TrustedBy::FirstUse);
+        assert!(!server.confirmed);
+    }
+
+    #[test]
+    fn so_o_instalador_dispensa_a_conferencia() {
+        let embedded = || {
+            Some(crate::config::EmbeddedServer {
+                url: URL.to_string(),
+                ca_sha256: Some(CA_SHA256.to_string()),
+            })
+        };
+        let upper = CA_SHA256.to_uppercase();
+        assert!(vouched_by_installer(
+            embedded(),
+            &format!("{URL}/"),
+            Some(&upper)
+        ));
+        assert!(!vouched_by_installer(embedded(), URL, None));
+        assert!(!vouched_by_installer(
+            embedded(),
+            URL,
+            Some(&"a".repeat(64))
+        ));
+        assert!(!vouched_by_installer(
+            embedded(),
+            "https://outro:8443",
+            Some(CA_SHA256)
+        ));
+        assert!(!vouched_by_installer(None, URL, Some(CA_SHA256)));
+    }
+
+    #[test]
     fn impressao_digital_que_nao_confere_para_antes_de_entrar() {
         let dir = dir("diverge");
-        let net = Arc::new(
-            ScriptNet::default().expect("inseguro GET /downloads/eclume-root.crt", pem()),
-        );
-        let err = prepare(&Shared(net), &dir, URL, Some(&"0".repeat(64))).unwrap_err();
+        let net =
+            Arc::new(ScriptNet::default().expect("inseguro GET /downloads/eclume-root.crt", pem()));
+        let err = prepare(&Shared(net), &dir, URL, Some(&"0".repeat(64)), false).unwrap_err();
         assert!(format!("{err:#}").contains("não confere"), "{err:#}");
         assert!(!dir.join(pin::PINNED_FILE).exists());
     }
@@ -462,7 +575,7 @@ pub(crate) mod tests {
                     body(200, info(Some(&"a".repeat(64)))),
                 ),
         );
-        let err = prepare(&Shared(net), &dir, URL, None).unwrap_err();
+        let err = prepare(&Shared(net), &dir, URL, None, false).unwrap_err();
         assert_eq!(err.to_string(), pin::CA_CHANGED);
     }
 
@@ -471,11 +584,14 @@ pub(crate) mod tests {
         let dir = dir("sistema");
         let net = Arc::new(
             ScriptNet::default()
-                .expect("inseguro GET /downloads/eclume-root.crt", body(404, json!({})))
+                .expect(
+                    "inseguro GET /downloads/eclume-root.crt",
+                    body(404, json!({})),
+                )
                 .expect("verificado GET /api/v1/server", body(200, info(None))),
         );
         let shared = Shared(Arc::clone(&net));
-        let server = prepare(&shared, &dir, URL, None).unwrap();
+        let server = prepare(&shared, &dir, URL, None, false).unwrap();
         assert_eq!(server.trusted_by, TrustedBy::System);
         assert_eq!(server.ca_path, None);
         assert_eq!(*net.ca_paths.lock().unwrap(), vec![None]);
@@ -487,14 +603,17 @@ pub(crate) mod tests {
         let net = Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", pem())
-                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256))))
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                )
                 .expect(
                     "verificado POST /api/v1/devices/login",
                     body(401, json!({"code": "unauthorized"})),
                 ),
         );
         let shared = Shared(net);
-        let server = prepare(&shared, &dir, URL, Some(CA_SHA256)).unwrap();
+        let server = prepare(&shared, &dir, URL, Some(CA_SHA256), true).unwrap();
         let login = Login::Password {
             email: "ana@exemplo.com.br",
             password: "errada",
@@ -560,6 +679,9 @@ pub(crate) mod tests {
         assert_eq!(choices[0].name, "eclume.teste");
         assert_eq!(choices[1].origin, "network");
         assert_eq!(choices[1].name, "Escritório");
-        assert_eq!(require(None).unwrap_err().to_string(), "Escolha o servidor antes de entrar");
+        assert_eq!(
+            require(None).unwrap_err().to_string(),
+            "Escolha o servidor antes de entrar"
+        );
     }
 }

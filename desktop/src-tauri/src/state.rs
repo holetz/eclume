@@ -958,6 +958,16 @@ impl AppState {
             };
         }
         next.validate()?;
+        let moved = {
+            let current = &self.inner()?.config;
+            current.account.is_some()
+                && (next.web_url.trim_end_matches('/') != current.web_url.trim_end_matches('/')
+                    || next.ca_path != current.ca_path)
+        };
+        if moved && !input.clear_pat {
+            // A credencial do aparelho e a CA fixada valem para este servidor, não para outro.
+            bail!("Saia da conta antes de trocar o servidor ou a CA");
+        }
 
         if input.clear_pat {
             self.pat.clear()?;
@@ -993,9 +1003,19 @@ impl AppState {
         url: &str,
         ca_sha256: Option<&str>,
     ) -> Result<PreparedServer> {
-        let server = account::prepare(net, self.config_dir(), url, ca_sha256)?;
+        let vouched =
+            account::vouched_by_installer(crate::config::embedded_server(), url, ca_sha256);
+        let server = account::prepare(net, self.config_dir(), url, ca_sha256, vouched)?;
         self.inner()?.prepared = Some(server.clone());
         Ok(server)
+    }
+
+    /// A pessoa conferiu a impressão digital do servidor preparado (`first_use`).
+    pub fn confirm_server(&self, url: &str, ca_sha256: Option<&str>) -> Result<()> {
+        match self.inner()?.prepared.as_mut() {
+            Some(server) => account::confirm(server, url, ca_sha256),
+            None => bail!("Escolha o servidor antes de entrar"),
+        }
     }
 
     /// Entra no servidor escolhido, guarda a credencial e passa a sincronizar com ele.
@@ -1776,7 +1796,9 @@ mod tests {
 
     #[test]
     fn primeira_execucao_entrar_e_sair() {
-        use crate::account::tests::{body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL};
+        use crate::account::tests::{
+            body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL,
+        };
 
         let (state, dir) = state("conta");
         std::fs::create_dir_all(&dir).unwrap();
@@ -1792,12 +1814,20 @@ mod tests {
         let net = std::sync::Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", pem())
-                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256))))
-                .expect("verificado POST /api/v1/devices/login", body(201, credential())),
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                )
+                .expect(
+                    "verificado POST /api/v1/devices/login",
+                    body(201, credential()),
+                ),
         );
         let shared = Shared(std::sync::Arc::clone(&net));
         let server = state.prepare_server(&shared, URL, Some(CA_SHA256)).unwrap();
         assert_eq!(server.name, "eclume");
+        // Fora do instalador, a impressão digital é conferida pela pessoa antes de entrar.
+        state.confirm_server(URL, Some(CA_SHA256)).unwrap();
         state
             .sign_in(
                 &shared,
