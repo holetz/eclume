@@ -320,9 +320,10 @@ def test_resumo_automatico_pelo_tipo_da_gravacao(
     assert automatic["agenda_type"] == {"id": one_on_one["id"], "name": "1:1"}
     assert one_on_one["summary_instructions"] in agents.calls[-1][2]
 
-    # Sem tipo de agenda na gravação, não há resumo automático.
+    # Sem tipo escolhido, o resumo segue o tipo que a detecção escolheu.
     transcript_id = _transcribed(uploader, services, agents)
-    assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
+    (detected,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
+    assert detected["agenda_type"]["name"] == "Reunião de equipe"
 
 
 def test_cada_finalidade_tem_um_provider_so(team: dict[str, Any], services: Services):

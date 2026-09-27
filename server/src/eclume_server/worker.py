@@ -1,8 +1,8 @@
 """Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields` e o resumo
-automático), gera os resumos (`summarize`), descarta uploads vencidos e marca como falha recuperável
+`transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields`,
+`detect_agenda_type` e o resumo automático), gera os resumos (`summarize`), descarta uploads vencidos e marca como falha recuperável
 o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
 docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
 """
@@ -19,14 +19,16 @@ from arq.connections import RedisSettings
 from arq.worker import func
 from sqlalchemy import select, update
 
+from eclume_server.agenda_types import run_detect
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
-from eclume_server.fields import GONE, STALE, current_revision, run_fill_fields
-from eclume_server.queue import DEFAULT_QUEUE, progress_key, step_job_id, summarize_job_id
+from eclume_server.fields import run_fill_fields
+from eclume_server.pipeline import GONE, STALE, current_revision
+from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
-from eclume_server.summaries import auto_summarize, run_summary
+from eclume_server.summaries import run_summary, start_auto_summary
 from eclume_server.transcripts import RECORDING_GONE, fail, ingest
 from eclume_server.voice import platform_voice
 
@@ -84,17 +86,24 @@ async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revisi
 
 
 async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
-    """Preenche os campos automáticos da revisão e segue para o resumo automático."""
+    """Preenche os campos automáticos da revisão e segue para a detecção do tipo."""
     result = await run_fill_fields(ctx, UUID(recording_id), revision)
     if result not in {GONE, STALE}:
-        async with system_tx(ctx["engine"]) as conn:
-            summary_id = await auto_summarize(conn, UUID(recording_id))
-        if summary_id is not None:
-            await ctx["redis"].enqueue_job(
-                "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-            )
-            result += f"; resumo automático {summary_id} na fila"
+        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
+    return result
+
+
+async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Escolhe e aplica o tipo de agenda da revisão e abre o resumo automático pelo tipo."""
+    result = await run_detect(ctx, UUID(recording_id), revision)
+    if result not in {GONE, STALE}:
+        async with system_tx(ctx["engine"]) as conn:
+            summary_id = await start_auto_summary(conn, UUID(recording_id), revision)
+        if summary_id is not None:
+            await enqueue_summary(ctx["redis"], summary_id)
+            result += f"; resumo automático {summary_id} na fila"
+    log.info("detect_agenda_type %s (revisão %d): %s", recording_id, revision, result)
     return result
 
 
@@ -170,6 +179,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
             # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
             func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),

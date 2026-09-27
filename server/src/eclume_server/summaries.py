@@ -138,49 +138,31 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 # --- resumo automático ---------------------------------------------------------------------------
 
 
-async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | None:
-    """Cria o resumo automático da transcrição recém-ingerida.
+async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision: int) -> UUID | None:
+    """Abre o resumo automático da revisão, pelas instruções do tipo de agenda da gravação.
 
-    Roda com o papel de conexão, na transação do `ingest_transcript`. As instruções são as do tipo de
-    agenda da gravação e o provider, o que a plataforma declara para `summaries`; sem um dos dois,
-    não há resumo automático. Um resumo automático por revisão da transcrição.
+    Serve à cadeia do worker (papel de conexão) e à troca manual do tipo (sob a RLS do dono). Sem
+    tipo ou sem provider de `summaries`, a etapa `summary` sai pulada. Devolve o resumo a enfileirar.
     """
+    recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
     transcript = (
         (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
         .mappings()
         .first()
     )
-    if transcript is None:
+    agenda_type = None
+    if recording["agenda_type_id"] is not None:
+        agenda_type = (
+            (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == recording["agenda_type_id"])))
+            .mappings()
+            .first()
+        )
+    if transcript is None or agenda_type is None:
+        await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_agenda_type"})
         return None
     provider = await provider_for(conn, "summaries")
     if provider is None:
-        log.info("resumo automático de %s: nenhum provider habilitado para resumos", recording_id)
-        return None
-    agenda_type = (
-        (
-            await conn.execute(
-                select(t.agenda_types)
-                .join(t.recordings, t.recordings.c.agenda_type_id == t.agenda_types.c.id)
-                .where(t.recordings.c.id == recording_id)
-            )
-        )
-        .mappings()
-        .first()
-    )
-    if agenda_type is None:
-        log.info("resumo automático de %s: a gravação não tem tipo de agenda", recording_id)
-        return None
-    s = t.summaries.c
-    already = (
-        await conn.execute(
-            select(s.id).where(
-                s.transcript_id == transcript["id"],
-                s.transcript_revision == transcript["revision"],
-                s.trigger == "automatic",
-            )
-        )
-    ).first()
-    if already is not None:
+        await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_provider"})
         return None
     row = await create_summary(
         conn,
@@ -188,9 +170,25 @@ async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | No
         agenda_type=agenda_type,
         provider=provider,
         trigger="automatic",
-        created_by=transcript["owner_id"],
+        created_by=recording["owner_id"],
     )
+    await set_step(conn, recording, revision, "summary", "active", detail={"summary_id": str(row["id"])})
     return row["id"]
+
+
+async def _finish_step(conn: AsyncConnection, summary_id: UUID, state: str, error: tuple[str, str] | None) -> None:
+    """Fecha a etapa `summary` da revisão cujo resumo automático é este (se é)."""
+    ps = t.pipeline_steps.c
+    await conn.execute(
+        update(t.pipeline_steps)
+        .where(ps.step == "summary", ps.state == "active", ps.detail["summary_id"].astext == str(summary_id))
+        .values(
+            state=state,
+            finished_at=func.now(),
+            error_code=error[0] if error else None,
+            error_message=error[1] if error else None,
+        )
+    )
 
 
 # --- o job `summarize` ---------------------------------------------------------------------------
@@ -273,6 +271,8 @@ async def _fail(engine: AsyncEngine, summary_id: UUID, code: str, message: str, 
         attempts=attempts,
         completed_at=func.now(),
     )
+    async with system_tx(engine) as conn:
+        await _finish_step(conn, summary_id, "failed", (code, message))
     log.warning("resumo %s falhou: %s — %s", summary_id, code, message)
     return f"falhou: {code}"
 
@@ -442,6 +442,8 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
         error_message=None,
         completed_at=func.now(),
     )
+    async with system_tx(engine) as conn:
+        await _finish_step(conn, summary_id, "done", None)
     return "done"
 
 

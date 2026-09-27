@@ -75,6 +75,13 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
     }
 
 
+async def enqueue_summary(pool: ArqRedis, summary_id: UUID | str) -> None:
+    """Enfileira o `summarize` de um resumo na fila do worker CPU."""
+    await pool.enqueue_job(
+        "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
+    )
+
+
 def job_progress(raw: dict[str, str] | None) -> tuple[str | None, float] | None:
     """`(stage, progress de 0 a 1)` do hash de progresso, ou `None` se o worker ainda não começou."""
     if not raw:
@@ -117,9 +124,7 @@ class Queue:
 
     async def enqueue_summarize(self, summary_id: UUID) -> None:
         """Enfileira `summarize` no worker CPU; um job por resumo."""
-        await self.pool.enqueue_job(
-            "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-        )
+        await enqueue_summary(self.pool, summary_id)
 
     async def enqueue_purge_embedding_objects(self) -> None:
         """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""

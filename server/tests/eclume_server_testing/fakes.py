@@ -7,7 +7,8 @@ rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso
 dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
 toda gravação; `voices=` troca as vozes de uma rodada.
 
-`FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`):
+`FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`,
+`detect_agenda_type`):
 nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
 """
 
@@ -23,7 +24,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
-from eclume_server.agents.extraction import FIELDS_SYSTEM
+from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
 from eclume_server.worker import worker_settings
@@ -128,8 +129,8 @@ def run_gpu(
 
 
 def purpose_of(system: str) -> str:
-    """A finalidade da chamada, pelo prompt de sistema: `fields` ou `summaries`."""
-    return "fields" if system == FIELDS_SYSTEM else "summaries"
+    """A finalidade da chamada, pelo prompt de sistema: `fields`, `agenda_detection` ou `summaries`."""
+    return {FIELDS_SYSTEM: "fields", DETECT_SYSTEM: "agenda_detection"}.get(system, "summaries")
 
 
 @dataclass
@@ -137,7 +138,8 @@ class FakeAgents:
     """Fábrica de providers falsos, com respostas por finalidade e erros programados, em ordem.
 
     `replies[finalidade]` é a fila de respostas daquela finalidade; vazia, vale o padrão: Markdown
-    determinístico no resumo e `{}` (nada encontrado) nos campos. Os `errors` valem para qualquer
+    determinístico no resumo, `{}` (nada encontrado) nos campos e o primeiro tipo (`T1`) na detecção.
+    Os `errors` valem para qualquer
     chamada, antes das respostas.
     """
 
@@ -169,6 +171,8 @@ class _FakeAgent:
             text = queued.pop(0)
         elif purpose == "fields":
             text = "{}"
+        elif purpose == "agenda_detection":
+            text = '{"tipo": "T1", "confianca": 0.9, "motivo": "o primeiro tipo"}'
         else:
             text = f"# Resumo\n\n- gerado por {self.config.name}"
         return Completion(text=text, model=f"{self.config.model}-fake")

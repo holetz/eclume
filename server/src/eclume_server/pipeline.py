@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 STEPS = ("received", "preprocessing", "transcription", "fields", "agenda_type", "summary")
 FINISHED = ("done", "failed", "skipped")
+# Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
+GONE = "gravação apagada"
+STALE = "revisão antiga"
 # Etapa do worker GPU (hash de progresso, já no vocabulário de `Job.stage`) → etapa em andamento.
 _ACTIVE_BY_STAGE = {"preprocessing": "preprocessing"}
 
@@ -141,3 +144,9 @@ async def get_step(conn: AsyncConnection, recording_id: UUID, revision: int, ste
     ps = t.pipeline_steps.c
     query = select(t.pipeline_steps).where(ps.recording_id == recording_id, ps.revision == revision, ps.step == step)
     return (await conn.execute(query)).mappings().first()
+
+
+async def current_revision(conn: AsyncConnection, recording_id: UUID) -> int | None:
+    """A revisão do job de transcrição mais recente da gravação (a da cadeia em curso)."""
+    jobs = t.transcription_jobs.c
+    return (await conn.execute(select(func.max(jobs.revision)).where(jobs.recording_id == recording_id))).scalar()

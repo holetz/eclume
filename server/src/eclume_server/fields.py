@@ -19,7 +19,7 @@ from eclume_server.agents.extraction import MAX_KNOWN_TAGS, MAX_TEXT, FieldSpec,
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
-from eclume_server.pipeline import get_step, set_step
+from eclume_server.pipeline import GONE, STALE, current_revision, get_step, set_step
 from eclume_server.problems import invalid_field, not_found
 from eclume_server.summaries import (
     AgentStep,
@@ -41,9 +41,6 @@ Option = Annotated[str, Field(min_length=1, max_length=120)]
 # Marcadores do padrão de título que um campo não pode encobrir.
 RESERVED_KEYS = frozenset({"assunto", "data", "tipo"})
 MAX_KEY = 64
-# Desfechos do job que param a cadeia: a revisão não é mais a da gravação.
-GONE = "gravação apagada"
-STALE = "revisão antiga"
 log = logging.getLogger(__name__)
 
 
@@ -246,12 +243,6 @@ async def recording_values(conn: AsyncConnection, recording: Row) -> list[dict[s
 # --- preenchimento automático (job `fill_fields`) --------------------------------------------------
 
 LOCKED = ("edited", "accepted")
-
-
-async def current_revision(conn: AsyncConnection, recording_id: UUID) -> int | None:
-    """A revisão do job de transcrição mais recente da gravação (a da cadeia em curso)."""
-    jobs = t.transcription_jobs.c
-    return (await conn.execute(select(func.max(jobs.revision)).where(jobs.recording_id == recording_id))).scalar()
 
 
 async def eligible_fields(conn: AsyncConnection, recording_id: UUID, owner_id: UUID) -> list[Row]:
