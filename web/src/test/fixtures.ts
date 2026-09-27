@@ -8,10 +8,13 @@ import adminUserPage from '../../../contracts/fixtures/admin-user-page.json'
 import agendaTypePage from '../../../contracts/fixtures/agenda-type-page.json'
 import agentProviderPage from '../../../contracts/fixtures/agent-provider-page.json'
 import collectionPage from '../../../contracts/fixtures/collection-page.json'
+import fieldPage from '../../../contracts/fixtures/field-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
 import person from '../../../contracts/fixtures/person.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
+import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
+import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
 import recordingPage from '../../../contracts/fixtures/recording-page.json'
 import recordingQueued from '../../../contracts/fixtures/recording-queued.json'
 import recordingTranscribed from '../../../contracts/fixtures/recording-transcribed.json'
@@ -57,6 +60,9 @@ export const fixtures = {
   summaryQueued: fresh<Schemas['Summary']>(summaryQueued),
   summaryDone: fresh<Schemas['Summary']>(summaryDone),
   agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
+  fieldPage: fresh<Schemas['FieldPage']>(fieldPage),
+  previewFieldRule: fresh<Schemas['Preview']>(previewFieldRule),
+  previewAgendaType: fresh<Schemas['Preview']>(previewAgendaType),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),
   tokenCreated: fresh<Schemas['TokenCreated']>(tokenCreated),
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),
