@@ -116,3 +116,47 @@ svg.lucide {
     scroll-behavior: auto !important;
   }
 }
+
+/* O `.dialog` do DS num <dialog> nativo: sem a borda e as cores do navegador, e o scrim do
+   `.dialog-backdrop` no ::backdrop. */
+dialog.dialog {
+  border: 0;
+  color: var(--color-text);
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow: auto;
+}
+
+dialog.dialog:not([open]) {
+  display: none;
+}
+
+dialog.dialog::backdrop {
+  background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+}
+
+/* O código de vínculo, como no quadro Desktop app. */
+.code-block-lg {
+  max-width: 260px;
+  font-size: 22px;
+  letter-spacing: 0.2em;
+}
+
+/* A dica em linha: o popover abre abaixo do `?`. */
+.hint-anchor {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.hint-anchor > .popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 30;
+  max-width: calc(100vw - 2 * var(--space-4));
+  font-family: var(--font-body);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text);
+}
