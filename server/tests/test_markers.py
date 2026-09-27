@@ -77,9 +77,15 @@ def test_lote_idempotente_edicao_e_exclusao(as_user: Callable[[Account], Api], m
     marker_id = again[0]["id"]
     patched = owner.patch(f"/api/v1/markers/{marker_id}", json={"note": None})
     assert (patched.status_code, patched.json()["note"]) == (200, None)
+    # A nota editada na web sobrevive a um reenvio do app sem nota.
+    owner.patch(f"/api/v1/markers/{marker_id}", json={"note": "Editada na web"})
+    resent = owner.post(url, json={"markers": [first | {"note": None}]}).json()["items"]
+    assert resent[0]["note"] == "Editada na web"
+    owner.patch(f"/api/v1/markers/{marker_id}", json={"note": None})
     assert owner.patch(f"/api/v1/markers/{marker_id}", json={"note": "x" * 501}).status_code == 422
     assert owner.post(url, json={"markers": []}).status_code == 422
     assert owner.post(url, json={"markers": [_marker(-1)]}).status_code == 422
+    assert owner.post(url, json={"markers": [_marker(2**63)]}).status_code == 422
 
     reader = owner.pat("recordings:read")
     assert len(reader.get(url).json()["items"]) == 2
