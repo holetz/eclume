@@ -49,7 +49,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | Pasta | O que tem |
 |---|---|
 | `src/api/` | cliente gerado, `client.ts`, `problem.ts` |
-| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema, e as peças do DS `Dialog`, `ConfirmDialog`, `MenuButton` e `storage.ts` |
+| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema, e as peças do DS `Dialog`, `ConfirmDialog`, `MenuButton`, `CopyValue`, `HelpHint` e `storage.ts` |
 | `src/features/<área>/` | página, componentes, CSS Module e testes de cada área |
 | `src/upload/` | motor de upload multipart, sem React |
 | `src/styles/` | `global.css` (entrada), `fonts.css`, `eclume.css` (cópia fiel do DS) e `app.css` (produto): [web-design-system.md](web-design-system.md) |
@@ -156,10 +156,14 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   resolve `./Pipeline` para `pipeline.ts`; o módulo puro ganha outro nome (`steps.ts`).
 - **Peças compartilhadas do DS** em `src/app/`: o `Dialog` (`.dialog-backdrop` num portal, foco no
   primeiro controle, Tab preso, Esc e clique no fundo fecham, rolagem travada, foco devolvido;
-  `kicker` põe o cabeçalho com Fechar e `plain` tira o conteúdo do `.dialog-body`), o
-  `ConfirmDialog` (Cancelar primeiro, confirmação em `btn-danger`, ocupado durante a mutação) e o
+  `kicker` põe o cabeçalho com Fechar; o texto de uma confirmação vai em `message`, no
+  `.dialog-body`, e formulário, tabela ou alerta vão em `children` com `plain`, fora do esmaecido;
+  com um diálogo aberto, a gaveta de ajuda não abre nem fecha por atalho), o
+  `ConfirmDialog` (Cancelar primeiro, confirmação em `btn-danger`, ocupado durante a mutação), o
   `MenuButton` (`.menu` com o teclado ARIA de menu: setas, Home/End, Enter/Espaço, Esc, clique
-  fora; o item focado leva `data-active`).
+  fora; o item focado leva `data-active`), o `CopyValue` (`.code-block` com Copiar e o aviso no
+  `role=status`; `size="lg"` para o código de vínculo) e o `HelpHint` (o `?` em linha com o
+  popover e o link para o artigo; Esc fecha só ele).
 
 ## Visual e acessibilidade
 

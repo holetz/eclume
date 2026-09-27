@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { HelpPageKey } from '../features/help/pages'
+import { hasOpenDialog } from './dialogStack'
 import { HelpContext, isEditableTarget, type HelpContextValue } from './help'
 import { HelpDrawer } from './HelpDrawer'
 
@@ -22,6 +23,8 @@ export function HelpProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // Com um diálogo aberto, o Esc é dele e a gaveta não abre por baixo do modal.
+      if (hasOpenDialog()) return
       if (event.key === 'Escape' && open) {
         closeHelp()
       } else if (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget(event)) {

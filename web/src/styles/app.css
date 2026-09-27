@@ -65,7 +65,8 @@
   gap: var(--space-2);
 }
 
-/* Sem a busca (que chega com os artigos), a gaveta de ajuda tem três linhas: cabeçalho, corpo e rodapé. */
+/* Sem a busca (enquanto o Suspense da gaveta mostra o carregamento), a gaveta de ajuda tem três
+   linhas: cabeçalho, corpo e rodapé. */
 .help-drawer:not(:has(.help-search)) {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }

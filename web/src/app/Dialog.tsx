@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { openDialogs } from './dialogStack'
 
 interface DialogProps {
   title: string
@@ -21,9 +22,6 @@ interface DialogProps {
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-// Diálogos abertos, o de cima por último: só ele responde ao Esc.
-const openDialogs: HTMLElement[] = []
 
 function focusables(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)]

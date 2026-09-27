@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { articlesForPage } from '../features/help/catalog'
+import { Dialog } from './Dialog'
 import { useHelpTopic } from './help'
 import { HelpProvider } from './HelpProvider'
 import { PageHead } from './PageHead'
@@ -104,5 +105,25 @@ describe('gaveta de ajuda', () => {
   it('sem HelpProvider, o PageHead não tem botão Ajuda', () => {
     render(<PageHead title="Pessoas" />)
     expect(screen.queryByRole('button', { name: 'Ajuda' })).not.toBeInTheDocument()
+  })
+})
+
+describe('gaveta de ajuda com um diálogo aberto', () => {
+  it('o ? não abre a gaveta por baixo do modal, e o Esc fecha só o diálogo', async () => {
+    const user = userEvent.setup()
+    let closed = 0
+    render(
+      <MemoryRouter>
+        <HelpProvider>
+          <Dialog title="Novo token" onClose={() => closed++}>
+            <button type="button">Criar</button>
+          </Dialog>
+        </HelpProvider>
+      </MemoryRouter>,
+    )
+    await user.keyboard('?')
+    expect(drawer()).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(closed).toBe(1)
   })
 })
