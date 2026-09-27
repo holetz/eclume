@@ -1,0 +1,22 @@
+[package]
+name = "eclume-mobile"
+description = "App móvel do eclume: grava com a tela bloqueada, marca instantes e sincroniza no Wi-Fi do servidor."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "eclume_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+eclume-mobile-core = { path = "../crates/core" }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }

@@ -1,0 +1,41 @@
+/* Ajustes de produto do app móvel sobre o DS (eclume.css é cópia fiel e não se edita). No
+   aparelho, a tela é o próprio `.phone-screen` do DS: a raiz ocupa a viewport, com os recortes de
+   borda a borda (Android 15+) vindos do plugin em --safe-top e --safe-bottom. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+.m-app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Alvos de toque de 44 px ou mais. */
+.m-app .btn,
+.m-app .m-back,
+.m-app .m-chip {
+  min-height: 44px;
+}
+

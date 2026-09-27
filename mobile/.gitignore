@@ -1,0 +1,7 @@
+node_modules
+dist
+target
+coverage
+*.log
+# Esquemas gerados pelo tauri-build a cada compilação
+src-tauri/gen/schemas/

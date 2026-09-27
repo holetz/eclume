@@ -104,13 +104,24 @@ for alvo in "${ALVOS[@]}"; do
   fi
 done
 
+# O crate `cmake` gera com Ninja ao compilar para o Android.
+if ! command -v ninja >/dev/null && [[ ! -x "$HOME/.local/bin/ninja" ]]; then
+  "$HOME/.local/bin/uv" tool install ninja
+  feito=1
+fi
+
 conteudo_env=$(cat <<EOF
 # Gerado por mobile/scripts/android-sdk.sh — ambiente do build Android do eclume.
 export JAVA_HOME="$JDK"
 export ANDROID_HOME="$SDK"
 export ANDROID_SDK_ROOT="$SDK"
 export NDK_HOME="$SDK/ndk/28.2.13676358"
-export PATH="\$JAVA_HOME/bin:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator:\$ANDROID_HOME/build-tools/36.0.0:\$HOME/.cargo/bin:\$PATH"
+# O cmake (libopus embutida) procura o NDK por estas duas.
+export ANDROID_NDK_HOME="$SDK/ndk/28.2.13676358"
+export ANDROID_NDK_ROOT="$SDK/ndk/28.2.13676358"
+# Sem cache incremental: no host de build, ele só ocupa disco (o limite do deploy é 90 %).
+export CARGO_INCREMENTAL=0
+export PATH="\$HOME/.local/bin:\$JAVA_HOME/bin:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator:\$ANDROID_HOME/build-tools/36.0.0:\$HOME/.cargo/bin:\$PATH"
 EOF
 )
 if [[ ! -f "$ENV_FILE" ]] || [[ "$(cat "$ENV_FILE")" != "$conteudo_env" ]]; then
