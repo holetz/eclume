@@ -121,9 +121,18 @@ async function limpar() {
 
 async function abrirApp(device) {
   adb('shell', 'monkey', '-p', PACOTE, '-c', 'android.intent.category.LAUNCHER', '1')
-  const webview = await device.webView({ pkg: PACOTE }, { timeout: 60_000 })
-  const pagina = await webview.page()
-  await pagina.waitForSelector('.m-app', { timeout: 60_000 })
+  // Logo depois de um `am force-stop`, o driver ainda pode entregar o WebView do processo morto:
+  // uma página que fecha na mão pede outra.
+  const pagina = await ate(
+    'o WebView do app',
+    async () => {
+      const webview = await device.webView({ pkg: PACOTE }, { timeout: 60_000 })
+      const candidata = await webview.page()
+      await candidata.waitForSelector('.m-app', { timeout: 20_000 })
+      return candidata
+    },
+    120,
+  )
   PAGINA = pagina
   return pagina
 }
@@ -152,6 +161,8 @@ async function principal() {
   const [device] = await android.devices()
   if (!device) throw new Error('nenhum aparelho no adb')
 
+  // O AVD guarda o Wi‑Fi desligado de uma prova que caiu no meio: a prova parte dele ligado.
+  adb('shell', 'svc', 'wifi', 'enable')
   let pagina = await abrirApp(device)
   passo('app aberto; primeira execução')
 
@@ -197,8 +208,14 @@ async function principal() {
   if (h * 3600 + m * 60 + s < 60) throw new Error(`tempo de áudio curto demais: ${audio}`)
   passo(`tempo de áudio ${audio}, com a tela bloqueada contada`)
 
-  // Fora da rede: nada sobe; parar e dar título.
+  // Fora da rede: nada sobe; parar e dar título. O app lê o Wi‑Fi a cada 5 s, e o emulador
+  // segue alcançando o servidor pelos dados móveis: parar antes de ele notar subiria já.
   adb('shell', 'svc', 'wifi', 'disable')
+  await ate(
+    'o app notar o Wi‑Fi desligado',
+    async () => (await pagina.evaluate(() => window.__TAURI_INTERNALS__.invoke('estado'))).rede.estado === 'away',
+    30,
+  )
   await pagina.getByText('Pausar').waitFor()
   await pagina.getByRole('button', { name: 'Parar' }).click()
   await pagina.getByLabel('Título (opcional)').fill(TITULO)
@@ -229,15 +246,20 @@ async function principal() {
   }
   passo(`no servidor: ${noServidor.id}, source mobile, 2 marcadores (${marcadores.json.items[0].device_name})`)
 
-  // Queda do processo no meio de uma gravação: fica salva como interrompida.
+  // Queda do processo no meio de uma gravação: fica salva como interrompida e, na rede do
+  // eclume, sobe logo depois da reabertura.
+  const locais = () => pagina.evaluate(() => window.__TAURI_INTERNALS__.invoke('gravacoes'))
+  const anteriores = new Set((await locais()).map((g) => g.id))
   await pagina.getByRole('button', { name: /Gravar/ }).click()
   await pagina.getByText('Gravando', { exact: true }).waitFor({ timeout: 30_000 })
   await esperar(5000)
   adb('shell', 'am', 'force-stop', PACOTE)
   passo('processo derrubado gravando (am force-stop)')
   pagina = await abrirApp(device)
-  await pagina.getByText('Interrompida').first().waitFor({ timeout: 30_000 })
-  passo('reaberto: a gravação ficou salva como Interrompida')
+  const recuperada = await ate('a gravação recuperada', async () =>
+    (await locais()).find((g) => !anteriores.has(g.id) && ['interrompida', 'sincronizada'].includes(g.selo)),
+  )
+  passo(`reaberto: a gravação ficou salva (${recuperada.selo})`)
 }
 
 let codigo = 0
