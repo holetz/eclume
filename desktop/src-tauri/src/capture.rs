@@ -1,12 +1,21 @@
 //! Abre as fontes reais de áudio (mic e sistema) para uma gravação.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use eclume_audio_capture::{AudioSource, MicSource, SystemSource};
 
 /// As fontes abertas e as que faltaram (com o motivo).
 pub struct OpenedSources {
     pub sources: Vec<Box<dyn AudioSource>>,
     pub missing: Vec<String>,
+}
+
+/// Abre só o microfone, para a nota por voz: o áudio do sistema traria música e notificações.
+pub fn open_mic() -> Result<OpenedSources> {
+    let mic = MicSource::open().context("falha ao abrir o microfone")?;
+    Ok(OpenedSources {
+        sources: vec![Box::new(mic)],
+        missing: Vec::new(),
+    })
 }
 
 /// Abre o mic e o áudio do sistema. Grava com o que abrir: uma fonte que falha vira aviso, e só

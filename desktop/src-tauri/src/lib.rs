@@ -21,7 +21,7 @@ use anyhow::Context;
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::state::AppState;
+use crate::state::{AppState, Busy, NoteToggle, Reaped};
 
 /// Nome exibido na janela e na bandeja do sistema.
 pub const APP_NAME: &str = "eclume";
@@ -50,6 +50,21 @@ pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> 
     app.opener()
         .open_url(&url, None::<&str>)
         .with_context(|| format!("falha ao abrir {url}"))
+}
+
+/// "Nova nota", da janela, da bandeja ou do atalho: começa uma nota ou para a nota em curso. O
+/// resultado sai por notificação, porque o atalho não abre a janela.
+pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
+    let result = app.state::<AppState>().toggle_note(capture::open_mic);
+    match &result {
+        Ok(NoteToggle::Started) => {}
+        Ok(NoteToggle::Stopped(recording)) => notify::note_saved(recording.duration_ms),
+        Err(err) if err.is::<Busy>() => notify::busy(),
+        Err(err) => notify::info("Não deu para gravar a nota", &format!("{err:#}")),
+    }
+    sync::nudge(app);
+    refresh_ui(app);
+    result.map(|_| ())
 }
 
 /// Arquivo de log, no diretório de logs do app.
@@ -96,16 +111,22 @@ impl Write for Tee {
     }
 }
 
-/// Fecha, a cada segundo, a gravação cujas fontes caíram sozinhas.
+/// Fecha, a cada segundo, a gravação que terminou sozinha: fontes que caíram ou a nota que parou
+/// no silêncio (a nota sem voz é descartada).
 fn spawn_reaper(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
         match app.state::<AppState>().reap_finished() {
-            Ok(true) => {
+            Ok(Some(reaped)) => {
+                match reaped {
+                    Reaped::NoteSaved(recording) => notify::note_saved(recording.duration_ms),
+                    Reaped::NoteDiscarded => notify::note_discarded(),
+                    Reaped::SourcesEnded(_) => {}
+                }
                 sync::nudge(&app);
                 refresh_ui(&app);
             }
-            Ok(false) => {}
+            Ok(None) => {}
             Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
         }
     });
@@ -145,6 +166,8 @@ pub fn run() {
             commands::status,
             commands::recordings,
             commands::toggle_recording,
+            commands::new_note,
+            commands::note_meter,
             commands::open_web,
             commands::settings,
             commands::save_settings,

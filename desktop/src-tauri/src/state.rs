@@ -4,11 +4,12 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use eclume_detect::{Action, AppKey, AutoRecorder, Policy, Recording};
-use eclume_recorder::session::{self, ActiveRecording, RecorderConfig};
-use eclume_recorder::{MeetingEvent, Queue, QueueCounts, QueuedRecording};
+use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
+use eclume_recorder::{Kind, MeetingEvent, Queue, QueueCounts, QueuedRecording, METER_BARS};
 use eclume_sync::{PatSource, PatStore, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +37,47 @@ impl AppStatus {
             Self::Syncing => "Sincronizando",
         }
     }
+}
+
+/// Pedido de gravar com outra gravação em andamento.
+#[derive(Debug)]
+pub struct Busy;
+
+impl std::fmt::Display for Busy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Já há uma gravação em andamento")
+    }
+}
+
+impl std::error::Error for Busy {}
+
+/// O que "Nova nota" fez.
+#[derive(Debug)]
+pub enum NoteToggle {
+    Started,
+    /// Parou a nota em curso, que foi para a fila.
+    Stopped(Box<QueuedRecording>),
+}
+
+/// Uma gravação que terminou sozinha e foi fechada pelo reaper.
+#[derive(Debug)]
+pub enum Reaped {
+    /// As fontes de áudio caíram.
+    SourcesEnded(QueuedRecording),
+    /// A nota parou no silêncio e foi para a fila.
+    NoteSaved(QueuedRecording),
+    /// A nota não teve voz: saiu da fila e do disco.
+    NoteDiscarded,
+}
+
+/// O medidor da nota em curso, para a janela.
+#[derive(Clone, Debug, Serialize)]
+pub struct NoteMeter {
+    pub position_ms: i64,
+    /// Os últimos níveis, de 0 a 1, do mais antigo ao mais novo.
+    pub levels: [f32; METER_BARS],
+    /// Quanto falta de silêncio para parar, enquanto a pessoa está calada.
+    pub stops_in_ms: Option<u64>,
 }
 
 /// Quem iniciou a gravação em curso.
@@ -83,6 +125,10 @@ pub struct StatusView {
     pub status: AppStatus,
     pub recording_id: Option<String>,
     pub recording_started_at: Option<i64>,
+    /// Reunião ou nota, na gravação em curso.
+    pub recording_kind: Option<Kind>,
+    /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
+    pub note_silence_s: Option<u32>,
     /// A gravação em curso foi iniciada pela detecção.
     pub recording_auto: bool,
     /// App da reunião da gravação em curso.
@@ -267,6 +313,8 @@ impl AppState {
             status,
             recording_id: inner.active.as_ref().map(|a| a.id().to_string()),
             recording_started_at: inner.active.as_ref().map(ActiveRecording::started_at),
+            recording_kind: inner.active.as_ref().map(ActiveRecording::kind),
+            note_silence_s: inner.config.note_silence_s,
             recording_auto: origin.is_some_and(|o| o.auto),
             recording_app: origin.and_then(|o| o.app).map(MeetingView::from),
             meeting: inner.auto.meeting().map(MeetingView::from),
@@ -294,10 +342,62 @@ impl AppState {
         origin: Origin,
         open: impl FnOnce() -> Result<OpenedSources>,
     ) -> Result<()> {
+        self.start(origin, StartOptions::MEETING, open)
+    }
+
+    /// "Nova nota": começa uma nota (só o microfone, parada pelo silêncio configurado) ou para a
+    /// nota em curso. Com outra gravação em andamento, é [`Busy`].
+    pub fn toggle_note(
+        &self,
+        open_mic: impl FnOnce() -> Result<OpenedSources>,
+    ) -> Result<NoteToggle> {
+        let silence = {
+            let inner = self.inner()?;
+            match &inner.active {
+                Some(active) if active.kind() == Kind::Note => None,
+                Some(_) => return Err(Busy.into()),
+                None if inner.starting => return Err(Busy.into()),
+                None => Some(inner.config.note_silence_s),
+            }
+        };
+        let Some(silence) = silence else {
+            return self
+                .stop_recording()
+                .map(|r| NoteToggle::Stopped(Box::new(r)));
+        };
+        let options = StartOptions::note(silence.map(|s| Duration::from_secs(u64::from(s))));
+        self.start(Origin::MANUAL, options, open_mic)?;
+        self.inner()?.auto.on_manual_start();
+        Ok(NoteToggle::Started)
+    }
+
+    /// O medidor da nota em curso; `None` sem nota.
+    pub fn note_meter(&self) -> Result<Option<NoteMeter>> {
+        let inner = self.inner()?;
+        Ok(inner
+            .active
+            .as_ref()
+            .filter(|active| active.kind() == Kind::Note)
+            .map(|active| {
+                let progress = active.progress();
+                NoteMeter {
+                    position_ms: progress.position_ms(),
+                    levels: progress.meter(),
+                    stops_in_ms: progress.stops_in_ms(),
+                }
+            }))
+    }
+
+    fn start(
+        &self,
+        origin: Origin,
+        options: StartOptions,
+        open: impl FnOnce() -> Result<OpenedSources>,
+    ) -> Result<()> {
         {
             let mut inner = self.inner()?;
             if inner.active.is_some() || inner.starting {
-                bail!("já há uma gravação em andamento");
+                return Err(Busy.into());
             }
             inner.starting = true;
         }
@@ -314,7 +414,7 @@ impl AppState {
             }
         };
         let queue = self.lock_queue()?;
-        let active = session::start(&self.recorder, &queue, opened.sources)?;
+        let active = session::start(&self.recorder, &queue, opened.sources, options)?;
         if let Some(app) = origin.app {
             queue.set_meeting_app(active.id(), app.meeting_app())?;
         }
@@ -350,18 +450,32 @@ impl AppState {
         }
     }
 
-    /// Fecha a gravação que terminou sozinha (todas as fontes caíram). Devolve se fechou alguma.
-    pub fn reap_finished(&self) -> Result<bool> {
-        let finished = self
-            .inner()?
-            .active
-            .as_ref()
-            .is_some_and(ActiveRecording::is_finished);
-        if finished {
-            self.stop_recording()?;
-            self.inner()?.notice = Some("a gravação parou: as fontes de áudio caíram".into());
-        }
-        Ok(finished)
+    /// Fecha a gravação que terminou sozinha: fontes que caíram, ou a nota que parou no
+    /// silêncio. A nota sem voz sai da fila e do disco.
+    pub fn reap_finished(&self) -> Result<Option<Reaped>> {
+        let reason = {
+            let inner = self.inner()?;
+            match inner.active.as_ref() {
+                Some(active) if active.is_finished() => active.progress().stop_reason(),
+                _ => return Ok(None),
+            }
+        };
+        let recording = self.stop_recording()?;
+        Ok(Some(match reason {
+            Some(StopReason::Silence) => Reaped::NoteSaved(recording),
+            Some(StopReason::NoSpeech) => {
+                self.lock_queue()?.discard(&recording.id)?;
+                if let Err(err) = std::fs::remove_file(&recording.path) {
+                    log::warn!("falha ao apagar {}: {err}", recording.path.display());
+                }
+                log::info!("nota {} descartada: sem voz", recording.id);
+                Reaped::NoteDiscarded
+            }
+            _ => {
+                self.inner()?.notice = Some("a gravação parou: as fontes de áudio caíram".into());
+                Reaped::SourcesEnded(recording)
+            }
+        }))
     }
 
     /// Um evento do detector, pela máquina de gravação automática; o chamador executa a ação.
@@ -483,7 +597,8 @@ impl AppState {
 mod tests {
     use std::time::Duration;
 
-    use eclume_recorder::source::SineSource;
+    use anyhow::bail;
+    use eclume_recorder::source::{ScriptedSource, SineSource};
     use eclume_recorder::Status;
 
     use super::*;
@@ -566,15 +681,113 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// Espera o reaper fechar a gravação que terminou sozinha.
+    fn reap(state: &AppState) -> Reaped {
+        for _ in 0..4_000 {
+            if let Some(reaped) = state.reap_finished().unwrap() {
+                return reaped;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("a gravação não terminou sozinha");
+    }
+
+    /// Um microfone sintético: fala por `speech_ms` e depois silêncio, até `total_ms`.
+    fn mic(speech_ms: u64, total_ms: u64) -> Result<OpenedSources> {
+        let chunks = (0..total_ms / 10).map(move |i| {
+            let t = i * 10;
+            Some(
+                (0..160u64)
+                    .map(|n| {
+                        if t < speech_ms && t % 300 < 200 {
+                            0.3 * (2.0 * std::f32::consts::PI * 220.0 * (t * 16 + n) as f32
+                                / 16_000.0)
+                                .sin()
+                        } else {
+                            0.0
+                        }
+                    })
+                    .collect(),
+            )
+        });
+        Ok(OpenedSources {
+            sources: vec![Box::new(ScriptedSource::new(16_000, chunks))],
+            missing: Vec::new(),
+        })
+    }
+
     #[test]
     fn estado_fecha_gravacao_cujas_fontes_acabaram() {
         let (state, dir) = state("colhe");
         state.start_recording(|| sine_sources(0)).unwrap();
-        while !state.reap_finished().unwrap() {
-            std::thread::sleep(Duration::from_millis(5));
-        }
+        assert!(matches!(reap(&state), Reaped::SourcesEnded(_)));
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
         assert_eq!(state.view().unwrap().counts.pending, 1);
+        assert!(state.reap_finished().unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nota_para_no_silencio_e_vai_para_a_fila_como_nota() {
+        let (state, dir) = state("nota");
+        state.inner().unwrap().config = Config {
+            note_silence_s: Some(2),
+            ..Config::default()
+        };
+        assert!(matches!(
+            state.toggle_note(|| mic(1_000, 60_000)).unwrap(),
+            NoteToggle::Started
+        ));
+        let view = state.view().unwrap();
+        assert_eq!(view.recording_kind, Some(Kind::Note));
+        assert_eq!(view.note_silence_s, Some(2));
+        assert!(state.note_meter().unwrap().is_some());
+
+        let Reaped::NoteSaved(recording) = reap(&state) else {
+            panic!("a nota devia parar no silêncio");
+        };
+        assert_eq!(recording.kind, Kind::Note);
+        assert!(recording.path.exists());
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        assert!(state.note_meter().unwrap().is_none());
+        assert_eq!(state.recordings(10).unwrap()[0].kind, Kind::Note);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nota_sem_voz_e_descartada_da_fila_e_do_disco() {
+        let (state, dir) = state("nota-muda");
+        state.toggle_note(|| mic(0, 60_000)).unwrap();
+        let path = state.recorder.dir.clone();
+        assert!(matches!(reap(&state), Reaped::NoteDiscarded));
+        assert!(state.recordings(10).unwrap().is_empty());
+        assert_eq!(std::fs::read_dir(path).unwrap().count(), 0);
+        assert_eq!(state.view().unwrap().notice, None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nova_nota_de_novo_para_a_nota_e_nunca_descarta() {
+        let (state, dir) = state("nota-manual");
+        state.toggle_note(|| mic(0, 600_000)).unwrap();
+        let NoteToggle::Stopped(recording) = state.toggle_note(|| mic(0, 1)).unwrap() else {
+            panic!("a segunda Nova nota devia parar a primeira");
+        };
+        assert_eq!(recording.kind, Kind::Note);
+        assert_eq!(state.recordings(10).unwrap().len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nova_nota_durante_uma_reuniao_e_ocupado() {
+        let (state, dir) = state("nota-ocupado");
+        state.start_recording(|| sine_sources(60)).unwrap();
+        let err = state.toggle_note(|| mic(0, 1)).unwrap_err();
+        assert!(err.is::<Busy>());
+        assert_eq!(err.to_string(), "Já há uma gravação em andamento");
+        assert_eq!(state.view().unwrap().recording_kind, Some(Kind::Meeting));
+        assert!(state.note_meter().unwrap().is_none());
+        state.stop_recording().unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 

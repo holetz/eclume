@@ -21,6 +21,43 @@ pub fn info(title: &str, body: &str) {
     }
 }
 
+/// A nota foi para a fila.
+pub fn note_saved(duration_ms: Option<i64>) {
+    info(
+        "Nota salva",
+        &format!(
+            "{} · processando no servidor",
+            short_duration(duration_ms.unwrap_or(0))
+        ),
+    );
+}
+
+/// A nota não teve voz e foi descartada.
+pub fn note_discarded() {
+    info("Nota descartada", "não ouvimos voz");
+}
+
+/// "Nova nota" com outra gravação em andamento.
+pub fn busy() {
+    info(
+        "Já há uma gravação em andamento",
+        "Pare a gravação atual para gravar uma nota.",
+    );
+}
+
+/// "42 s", "3 min" ou "1 h 05 min".
+pub fn short_duration(ms: i64) -> String {
+    let seconds = (ms.max(0) + 500) / 1000;
+    if seconds < 60 {
+        return format!("{} s", seconds.max(1));
+    }
+    let minutes = (seconds + 30) / 60;
+    if minutes < 60 {
+        return format!("{minutes} min");
+    }
+    format!("{} h {:02} min", minutes / 60, minutes % 60)
+}
+
 /// Pergunta se grava a reunião detectada.
 pub fn ask(app: &AppHandle, key: AppKey) {
     let title = format!("Reunião no {} detectada", key.label());
@@ -108,4 +145,19 @@ fn ask_native(app: AppHandle, title: String, body: String) {
 #[cfg(not(any(unix, target_os = "windows")))]
 fn ask_native(_app: AppHandle, title: String, body: String) {
     info(&title, &body);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::short_duration;
+
+    #[test]
+    fn duracao_curta_da_notificacao() {
+        assert_eq!(short_duration(0), "1 s");
+        assert_eq!(short_duration(42_300), "42 s");
+        assert_eq!(short_duration(59_400), "59 s");
+        assert_eq!(short_duration(3 * 60_000 + 10_000), "3 min");
+        assert_eq!(short_duration(54 * 60_000), "54 min");
+        assert_eq!(short_duration(65 * 60_000), "1 h 05 min");
+    }
 }

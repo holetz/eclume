@@ -3,7 +3,7 @@
 use eclume_recorder::QueuedRecording;
 use tauri::{AppHandle, State};
 
-use crate::state::{AppState, SettingsInput, SettingsView, StatusView};
+use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -31,6 +31,18 @@ pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandRe
     crate::sync::nudge(&app);
     crate::refresh_ui(&app);
     to_js(result.and_then(|()| state.view()))
+}
+
+/// "Nova nota": começa uma nota ou para a nota em curso.
+#[tauri::command(async)]
+pub fn new_note(app: AppHandle) -> CommandResult<()> {
+    to_js(crate::toggle_note(&app))
+}
+
+/// O medidor da nota em curso (`null` sem nota), que a janela consulta a cada 100 ms.
+#[tauri::command]
+pub fn note_meter(state: State<'_, AppState>) -> CommandResult<Option<NoteMeter>> {
+    to_js(state.note_meter())
 }
 
 #[tauri::command]

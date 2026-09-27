@@ -263,6 +263,8 @@ mod tests {
             status,
             recording_id: None,
             recording_started_at: None,
+            recording_kind: None,
+            note_silence_s: Some(4),
             recording_auto: false,
             recording_app: None,
             meeting: None,

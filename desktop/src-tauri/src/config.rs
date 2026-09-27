@@ -17,6 +17,10 @@ pub const API_URL_ENV: &str = "ECLUME_API_URL";
 pub const DEFAULT_RETENTION_DAYS: u32 = 7;
 /// Teto da retenção configurável (10 anos).
 pub const MAX_RETENTION_DAYS: u32 = 3650;
+/// As paradas por silêncio que a nota oferece, em segundos (além de "Nunca").
+pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
+/// A parada por silêncio padrão da nota, em segundos.
+pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -36,6 +40,9 @@ pub struct Config {
     /// `null` guarda para sempre.
     #[serde(default = "default_retention_days")]
     pub retention_days: Option<u32>,
+    /// Silêncio que encerra uma nota por voz, em segundos; `null` é "Nunca".
+    #[serde(default = "default_note_silence")]
+    pub note_silence_s: Option<u32>,
 }
 
 fn default_web_url() -> String {
@@ -46,6 +53,10 @@ fn default_retention_days() -> Option<u32> {
     Some(DEFAULT_RETENTION_DAYS)
 }
 
+fn default_note_silence() -> Option<u32> {
+    Some(DEFAULT_NOTE_SILENCE_S)
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -54,6 +65,7 @@ impl Default for Config {
             ca_path: None,
             detection: DetectionConfig::default(),
             retention_days: default_retention_days(),
+            note_silence_s: default_note_silence(),
         }
     }
 }
@@ -109,6 +121,11 @@ impl Config {
             .is_some_and(|days| days > MAX_RETENTION_DAYS)
         {
             bail!("retenção acima de {MAX_RETENTION_DAYS} dias");
+        }
+        if let Some(seconds) = self.note_silence_s {
+            if !NOTE_SILENCE_CHOICES.contains(&seconds) {
+                bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
+            }
         }
         Ok(())
     }
@@ -194,8 +211,11 @@ mod tests {
         assert_eq!(config.api_url, None);
         assert!(config.detection.enabled);
         assert_eq!(config.retention_days, Some(DEFAULT_RETENTION_DAYS));
-        let keep: Config = serde_json::from_str(r#"{"retention_days": null}"#).unwrap();
+        assert_eq!(config.note_silence_s, Some(DEFAULT_NOTE_SILENCE_S));
+        let keep: Config =
+            serde_json::from_str(r#"{"retention_days": null, "note_silence_s": null}"#).unwrap();
         assert_eq!(keep.retention_days, None);
+        assert_eq!(keep.note_silence_s, None);
     }
 
     #[test]
@@ -224,6 +244,10 @@ mod tests {
         config.retention_days = Some(MAX_RETENTION_DAYS + 1);
         assert!(config.validate().is_err());
         config.retention_days = Some(0);
+        config.note_silence_s = Some(3);
+        assert!(config.validate().is_err());
+        config.note_silence_s = None;
+        config.validate().unwrap();
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
         assert!(format!("{err:#}").contains("CA extra"), "{err:#}");

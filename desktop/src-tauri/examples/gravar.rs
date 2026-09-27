@@ -33,7 +33,12 @@ fn main() -> Result<()> {
         eprintln!("aviso: gravando sem {reason}");
     }
     let fontes = opened.sources.len();
-    let active = session::start(&RecorderConfig::new(&dir), &queue, opened.sources)?;
+    let active = session::start(
+        &RecorderConfig::new(&dir),
+        &queue,
+        opened.sources,
+        session::StartOptions::MEETING,
+    )?;
     eprintln!("gravando {fontes} fonte(s) por {seconds} s...");
     std::thread::sleep(Duration::from_secs(seconds));
     let rec = active.stop(&queue)?;
