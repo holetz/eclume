@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { mockTranscriptApi, RECORDING_ID } from '../../test/transcriptApi'
+import { mockTranscriptApi, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
 import { renderApp } from '../../test/render'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -11,6 +11,7 @@ const RAFAEL = { id: '01928f3a-1c00-7a00-8000-000000000302', name: 'Rafael Lima'
 
 async function openPanel() {
   renderApp(`/gravacoes/${RECORDING_ID}`)
+  await openTranscript()
   return screen.findByRole('region', { name: 'Locutores' })
 }
 

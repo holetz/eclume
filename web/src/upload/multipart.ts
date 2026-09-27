@@ -13,8 +13,13 @@ export interface UploadFile {
   sha256: string
   filename: string
   contentType: string
+  /** Sem título, o servidor usa o nome do arquivo e o preenchimento automático pode trocá-lo. */
   title?: string
   durationMs?: number
+  /** Início da gravação (ISO 8601). */
+  recordedAt?: string
+  recordedAtSource?: Schemas['RecordedAtSource']
+  kind?: Schemas['RecordingKind']
 }
 
 export interface UploadProgress {
@@ -117,6 +122,9 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
           source: 'upload',
           ...(file.title ? { title: file.title } : {}),
           ...(file.durationMs != null ? { duration_ms: Math.round(file.durationMs) } : {}),
+          ...(file.recordedAt ? { recorded_at: file.recordedAt } : {}),
+          ...(file.recordedAtSource ? { recorded_at_source: file.recordedAtSource } : {}),
+          ...(file.kind ? { kind: file.kind } : {}),
         },
         signal,
       }),

@@ -12,8 +12,8 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Pede confirmação antes de uma ação destrutiva, no `Dialog` do DS. "Cancelar" vem primeiro, e o
- * `showModal()` põe o foco nele; o Esc também cancela.
+ * Pede confirmação antes de uma ação destrutiva, no `Dialog` do DS. "Cancelar" vem primeiro e recebe
+ * o foco; o Esc e o clique no fundo também cancelam. Com `busy`, a mutação corre e a confirmação espera.
  */
 export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCancel, busy = false }: ConfirmDialogProps) {
   return (
@@ -25,7 +25,7 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCanc
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
             Cancelar
           </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy} aria-busy={busy}>
             {confirmLabel}
           </button>
         </>

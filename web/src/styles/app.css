@@ -116,3 +116,33 @@ svg.lucide {
     scroll-behavior: auto !important;
   }
 }
+
+/* O diálogo fica acima da barra lateral aberta em tela estreita e rola quando não cabe. */
+.dialog-backdrop {
+  z-index: 50;
+}
+
+.dialog {
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+}
+
+/* O `.menu` do DS aberto por um botão, ancorado abaixo dele. */
+.menu-button {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu-button > .menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+}
+
+/* Telas de largura total (a biblioteca com o painel de filtros, a gravação com o chat): o .main do
+   shell cede a largura e o respiro, e a tela cuida dos seus. */
+.main:has(> .bleed) {
+  max-width: none;
+  padding: 0;
+}

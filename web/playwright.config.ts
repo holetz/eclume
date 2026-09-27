@@ -13,6 +13,8 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     locale: 'pt-BR',
+    // As fixtures do mock são horários de Brasília: a biblioteca posiciona pela hora local.
+    timezoneId: 'America/Sao_Paulo',
     trace: 'retain-on-failure',
   },
   // E2E_CHANNEL=chrome usa o Google Chrome instalado (CI); sem ele, o Chromium do Playwright.
