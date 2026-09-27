@@ -65,14 +65,14 @@ services:
   worker-cpu:
     <<: *server-image
     command: ["arq", "eclume_server.worker.WorkerSettings"]
-    environment: *server-env
+    environment:
+      <<: *server-env
+      # O resumo real do E2E sai do `claude -p`, com o token de longa duração da produção.
+      CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
-    volumes:
-      # O resumo real do E2E sai do `claude -p` do host, com o mesmo login da produção.
-      - ${ECLUME_CLAUDE_CREDENTIALS:-/dev/null}:/home/app/.claude/.credentials.json
 
   worker:
     image: eclume-worker-gpu:prod

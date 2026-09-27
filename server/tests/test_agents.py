@@ -113,6 +113,14 @@ def test_claude_cli_sem_credencial_nem_chama_a_cli(fake_claude: FakeClaude, tmp_
     assert not record.exists()
 
 
+def test_claude_cli_aceita_o_token_de_longa_duracao_sem_arquivo(fake_claude: FakeClaude, tmp_path: Path):
+    provider, record = fake_claude()
+    provider.env["HOME"] = str(tmp_path / "vazio")
+    provider.env["CLAUDE_CODE_OAUTH_TOKEN"] = "sk-ant-oat01-teste"
+    assert run(provider.complete("s", "p")).text == "# Ata\n\n- decidido"
+    assert record.exists()
+
+
 def test_claude_cli_classifica_as_falhas(fake_claude: FakeClaude):
     auth, _ = fake_claude("auth")
     error = error_of(auth.complete("s", "p"))

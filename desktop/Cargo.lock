@@ -1325,7 +1325,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "eclume-audio-capture"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "cidre",
@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "eclume-audio-capture",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-detect"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "cidre",
@@ -1379,7 +1379,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-recorder"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "eclume-audio-capture",
@@ -1393,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-sync"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",

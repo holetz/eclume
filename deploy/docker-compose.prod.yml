@@ -89,15 +89,15 @@ services:
   worker-cpu:
     <<: [*restart, *server-image]
     command: ["arq", "eclume_server.worker.WorkerSettings"]
-    environment: *server-env
+    environment:
+      <<: *server-env
+      # Token de longa duração do `claude setup-token` (provider claude-cli). Não se renova, então
+      # nada disputa a sessão OAuth do host. Vazio = claude-cli falha com provider_not_configured.
+      CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
-    volumes:
-      # Login do Claude Code do host, GRAVÁVEL: o OAuth renova o token no próprio arquivo.
-      # Sem login, aponte para /dev/null e o provider claude-cli falha com provider_not_configured.
-      - ${ECLUME_CLAUDE_CREDENTIALS:-/dev/null}:/home/app/.claude/.credentials.json
 
   # Fila eclume:gpu (imagem da holetz/eclume#8, ~8 GB). max_jobs=1 vem do WorkerSettings.
   worker-gpu:

@@ -4,10 +4,10 @@ title: Detecção de reuniões e sync no app desktop
 description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, e sobe cada gravação por PAT pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, o protocolo, o PAT, a CA extra e a retenção.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, pat, tls, tauri]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#13
+source: holetz/eclume#13, holetz/eclume#28
 maintainer: holetz
 ---
 
@@ -33,7 +33,9 @@ SignalSource::snapshot() ─▶ classify() ─▶ Debouncer ─▶ MeetingEvent 
 | Windows | `HKCU\…\CapabilityAccessManager\ConsentStore\microphone`, apps empacotados e `NonPackaged`, com `LastUsedTimeStop = 0` | `EnumWindows`, só quando um navegador usa o mic |
 | macOS | processos Core Audio com entrada ativa (14+); antes disso, `DeviceIsRunningSomewhere` do dispositivo padrão, sem dono, mais a lista de processos | não lê (exige Gravação de Tela) |
 
-O próprio eclume sai da lista pelo pid e pelo nome, senão a gravação se detectaria.
+O próprio eclume sai da lista pelo pid e pelo nome do executável, senão a gravação se detectaria. O
+nome vem só do último componente do id (no Windows, o id é o caminho inteiro): um app numa pasta com
+"eclume" no caminho segue visível para a detecção.
 `cargo run -p eclume-detect --example sinais -- 10` imprime os retratos e a classificação para
 diagnóstico de campo.
 

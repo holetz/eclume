@@ -4,10 +4,10 @@ title: Runbook do host GPU
 description: Como preparar o servidor 192.168.15.199 (Ubuntu 24.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context.
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
-timestamp: 2026-09-24
+timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#1
+source: holetz/eclume#1, holetz/eclume#28
 maintainer: holetz
 ---
 
@@ -38,7 +38,8 @@ Portas:
 | Builds | uv e Rust stable em `~/.local/bin` e `~/.cargo/bin`, com as deps de build do Tauri instaladas |
 | eclume em produção | projeto `eclume` na 8443 desde 2026-09-25 (holetz/eclume#14), dados em `/srv/eclume`, backup no cron do `holetz` às 03:30; runbook em [deploy-producao.md](deploy-producao.md) |
 
-**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões):
+**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões). Uma estação
+Windows se prepara por [estacao-windows.md](estacao-windows.md):
 
 - Imagens: `docker --context gpu-host compose ... build`, direto no daemon do host, sem registry.
 - Cargo, npm e uv: `remote-run <dir> '<comando>'` (`~/.local/bin/remote-run` na máquina de dev).
@@ -132,11 +133,12 @@ Os agentes de sumarização podem usar o Claude Code do próprio servidor.
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
-claude   # faça o login uma vez; a credencial fica em ~/.claude/.credentials.json
+claude setup-token   # token de longa duração (1 ano) para o eclume
 ```
 
-Os workers montam `~/.claude/.credentials.json`, no mesmo padrão do `LUMEA_CLAUDE_CREDENTIALS` do
-lumea.
+O worker CPU do eclume recebe o token por `ECLUME_CLAUDE_OAUTH_TOKEN`
+([deploy-producao.md](deploy-producao.md#segredos)), sem montar a sessão do host: o bind mount de
+`~/.claude/.credentials.json` diverge quando o `claude` do host renova o OAuth.
 
 ## 8. Token do Hugging Face (diarização)
 

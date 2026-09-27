@@ -12,6 +12,9 @@ mod sync;
 mod tray;
 mod updater;
 
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -49,6 +52,50 @@ pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> 
         .with_context(|| format!("falha ao abrir {url}"))
 }
 
+/// Arquivo de log, no diretório de logs do app.
+const LOG_FILE: &str = "eclume.log";
+/// Acima disso, o log vira `eclume.log.1` ao abrir o app.
+const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Liga o log (`info`, ou o que `RUST_LOG` pedir) no stderr e em `<dir>/eclume.log`: no Windows o
+/// release não tem console, e sem o arquivo nenhuma falha ficaria registrada.
+fn init_logging(dir: &Path) {
+    let builder =
+        &mut env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    match open_log(dir, LOG_MAX_BYTES) {
+        Ok(file) => {
+            builder.target(env_logger::Target::Pipe(Box::new(Tee(file))));
+        }
+        Err(err) => eprintln!("log só no stderr: falha ao abrir {}: {err}", dir.display()),
+    }
+    let _ = builder.try_init();
+}
+
+/// Abre o log para acréscimo, girando para `.1` o que passou de `max_bytes`.
+fn open_log(dir: &Path, max_bytes: u64) -> io::Result<File> {
+    fs::create_dir_all(dir)?;
+    let path = dir.join(LOG_FILE);
+    if fs::metadata(&path).is_ok_and(|meta| meta.len() > max_bytes) {
+        fs::rename(&path, dir.join(format!("{LOG_FILE}.1")))?;
+    }
+    OpenOptions::new().create(true).append(true).open(path)
+}
+
+/// Escreve no arquivo e, quando houver, no stderr.
+struct Tee(File);
+
+impl Write for Tee {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let _ = io::stderr().write_all(buf);
+        self.0.write_all(buf)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
 /// Fecha, a cada segundo, a gravação cujas fontes caíram sozinhas.
 fn spawn_reaper(app: AppHandle) {
     std::thread::spawn(move || loop {
@@ -66,12 +113,11 @@ fn spawn_reaper(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            init_logging(&app.path().app_log_dir()?);
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
@@ -111,10 +157,28 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::APP_NAME;
+    use super::{open_log, APP_NAME, LOG_FILE};
 
     #[test]
     fn nome_do_app() {
         assert_eq!(APP_NAME, "eclume");
+    }
+
+    #[test]
+    fn log_acrescenta_e_gira_o_que_passou_do_limite() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("eclume-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        writeln!(open_log(&dir, 16).unwrap(), "primeira linha").unwrap();
+        writeln!(open_log(&dir, 64).unwrap(), "segunda").unwrap();
+        let atual = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
+        assert_eq!(atual, "primeira linha\nsegunda\n");
+
+        open_log(&dir, 16).unwrap();
+        let girado = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
+        assert_eq!(girado, "primeira linha\nsegunda\n");
+        assert_eq!(std::fs::read_to_string(dir.join(LOG_FILE)).unwrap(), "");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

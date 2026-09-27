@@ -7,7 +7,7 @@ tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28
 maintainer: holetz
 ---
 
@@ -117,7 +117,7 @@ host.
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
-| `ECLUME_CLAUDE_CREDENTIALS` | `~/.claude/.credentials.json` do host, montado **gravável** no worker CPU |
+| `ECLUME_CLAUDE_OAUTH_TOKEN` | token de longa duração do Claude (`claude setup-token` no host, 1 ano), entregue ao worker CPU como `CLAUDE_CODE_OAUTH_TOKEN`; vazio, o `deploy.sh` avisa e o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
 ### Admin e provider
 
@@ -127,7 +127,12 @@ ao `eclume-server admin bootstrap --password-stdin` por um pipe e nunca é grava
 Com alguma organização no banco, o script não faz nada.
 
 O provider padrão da organização é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
-roda o `claude -p` do host com o login montado. O smoke o cadastra se faltar.
+roda o `claude -p` no worker CPU com o token de longa duração. O smoke o cadastra se faltar.
+
+**Token do Claude.** No host, `claude setup-token` abre a autorização no navegador e imprime o
+token (`sk-ant-oat01-…`). Grave-o em `ECLUME_CLAUDE_OAUTH_TOKEN` no `deploy/.env.prod` e rode o
+deploy. Ele vale 1 ano e não se renova: anote a data de criação aqui e gere outro antes de vencer
+(o sintoma é o resumo falhando com `provider_auth` na Saúde do admin).
 
 ## Validar
 

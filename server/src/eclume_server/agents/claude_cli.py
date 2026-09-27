@@ -1,8 +1,8 @@
 """Provider `claude-cli`: o `claude -p` do servidor, sem nenhuma ferramenta.
 
-Segue o padrão do `agent_launcher.py` do lumea: subprocess, credencial montada (o OAuth de uma
-sessão logada do Claude Code em `$HOME/.claude/.credentials.json`, ou `ANTHROPIC_API_KEY`) checada
-antes de rodar, e a causa de uma falha lida do JSON que a própria CLI devolve. O agente não tem
+Segue o padrão do `agent_launcher.py` do lumea: subprocess, credencial (`ANTHROPIC_API_KEY`, o
+token de longa duração do `claude setup-token` em `CLAUDE_CODE_OAUTH_TOKEN`, ou o OAuth de uma sessão
+logada do Claude Code em `$HOME/.claude/.credentials.json`) checada antes de rodar, e a causa de uma falha lida do JSON que a própria CLI devolve. O agente não tem
 ferramentas nem configurações do usuário ou do projeto: só texto de entrada e de saída.
 """
 
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 API_KEY_ENV = "ANTHROPIC_API_KEY"
+OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # noqa: S105 — nome da variável, não o segredo
 OAUTH_CREDENTIALS = Path(".claude") / ".credentials.json"
 _AUTH_MARKERS = ("authentication_failed", "not logged in", "please run /login", "invalid api key", "401", "oauth")
 _RATE_MARKERS = ("rate limit", "rate_limit", "429", "overloaded", "529", "usage limit")
@@ -69,12 +70,11 @@ def claude_command(claude_bin: str, config: ProviderConfig, system: str) -> list
 
 
 def missing_credentials(env: Mapping[str, str]) -> bool:
-    """Nem `ANTHROPIC_API_KEY` nem o OAuth não vazio do Claude Code sob o `HOME` do processo.
+    """Sem `ANTHROPIC_API_KEY`, sem `CLAUDE_CODE_OAUTH_TOKEN` e sem o OAuth do Claude Code no `HOME`.
 
-    Um arquivo vazio conta como ausente: o deploy monta `/dev/null` no lugar quando o operador
-    não configurou a credencial.
+    Um arquivo vazio conta como ausente, como o `/dev/null` que um deploy antigo montava no lugar.
     """
-    if env.get(API_KEY_ENV, "").strip():
+    if env.get(API_KEY_ENV, "").strip() or env.get(OAUTH_TOKEN_ENV, "").strip():
         return False
     home = env.get("HOME") or str(Path.home())
     try:
@@ -141,8 +141,8 @@ class ClaudeCliProvider:
         if missing_credentials(self.env):
             raise ProviderError(
                 PROVIDER_NOT_CONFIGURED,
-                "O claude -p do servidor não tem credencial: monte o ~/.claude/.credentials.json de uma "
-                "sessão logada do Claude Code no worker, ou defina ANTHROPIC_API_KEY.",
+                "O claude -p do servidor não tem credencial: defina CLAUDE_CODE_OAUTH_TOKEN (claude "
+                "setup-token) ou ANTHROPIC_API_KEY no worker.",
             )
         cmd = claude_command(self.claude_bin, self.config, system)
         # Diretório vazio: nenhum CLAUDE.md nem configuração de projeto entra no agente.

@@ -22,8 +22,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-export ECLUME_CLAUDE_CREDENTIALS="${ECLUME_CLAUDE_CREDENTIALS:-$HOME/.claude/.credentials.json}"
-[[ -s "$ECLUME_CLAUDE_CREDENTIALS" ]] || { echo "Sem login do Claude em $ECLUME_CLAUDE_CREDENTIALS: o resumo falharia." >&2; exit 2; }
+# O token de longa duração do Claude vem do env de produção guardado no host (holetz/eclume#28).
+if [[ -z "${ECLUME_CLAUDE_OAUTH_TOKEN:-}" && -r /srv/eclume/secrets/env.prod ]]; then
+  ECLUME_CLAUDE_OAUTH_TOKEN="$(sed -n 's/^ECLUME_CLAUDE_OAUTH_TOKEN=//p' /srv/eclume/secrets/env.prod | tail -1)"
+fi
+export ECLUME_CLAUDE_OAUTH_TOKEN
+[[ -n "${ECLUME_CLAUDE_OAUTH_TOKEN:-}" ]] || { echo "Sem ECLUME_CLAUDE_OAUTH_TOKEN (claude setup-token): o resumo falharia." >&2; exit 2; }
 COMPOSE=(docker compose -p eclume-e2e -f deploy/docker-compose.e2e.yml)
 # Fora de web/test-results: o Playwright limpa aquela pasta ao começar.
 WORK="$(mktemp -d)"

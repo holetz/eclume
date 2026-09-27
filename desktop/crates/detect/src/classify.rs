@@ -161,9 +161,17 @@ const IN_MEETING_PROCESSES: [(AppKey, &[&str]); 2] = [
 /// Nome do próprio app: a gravação do eclume usa o mic e não pode se detectar.
 const SELF_NAME: &str = "eclume";
 
-/// O próprio eclume, pelo nome ou pelo pid.
+/// O próprio eclume, pelo pid ou pelo executável — nunca pela pasta: no Windows o id é o caminho
+/// inteiro, e um app qualquer em `C:\Projetos\eclume\` não é o eclume.
 pub fn is_self(client: &AudioClient, own_pid: u32) -> bool {
-    client.pid == Some(own_pid) || client.haystack().contains(SELF_NAME)
+    client.pid == Some(own_pid) || names_self(client)
+}
+
+fn names_self(client: &AudioClient) -> bool {
+    [&client.id, &client.name].into_iter().any(|value| {
+        let file = value.rsplit(['/', '\\']).next().unwrap_or(value);
+        file.to_lowercase().contains(SELF_NAME)
+    })
 }
 
 fn native_app(haystack: &str) -> Option<AppKey> {
@@ -203,8 +211,8 @@ pub fn classify(snapshot: &Snapshot) -> Option<AppKey> {
     let users: Vec<String> = snapshot
         .mic_users
         .iter()
+        .filter(|client| !names_self(client))
         .map(AudioClient::haystack)
-        .filter(|h| !h.contains(SELF_NAME))
         .collect();
 
     if let Some(key) = users.iter().find_map(|h| native_app(h)) {
@@ -305,6 +313,22 @@ mod tests {
         assert!(!is_self(&client, 7));
         assert!(is_self(
             &AudioClient::new("/opt/eclume/eclume-desktop", ""),
+            7
+        ));
+    }
+
+    #[test]
+    fn app_numa_pasta_do_eclume_nao_e_o_proprio_app() {
+        let caminho = r"C:\Projetos\eclume\x\gravador.exe";
+        assert!(!is_self(&AudioClient::new(caminho, "gravador"), 7));
+        assert_eq!(
+            classify(&mic(&[(caminho, "gravador")])),
+            Some(AppKey::Outro)
+        );
+        let instalado = r"C:\Users\u\AppData\Local\eclume\eclume-desktop.exe";
+        assert!(is_self(&AudioClient::new(instalado, "eclume-desktop"), 7));
+        assert!(is_self(
+            &AudioClient::new("io.github.holetz.eclume", ""),
             7
         ));
     }
