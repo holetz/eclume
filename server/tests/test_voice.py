@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from eclume_server.voice import DEFAULT_THRESHOLD
 from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
-from eclume_server_testing.fakes import DEFAULT_VOICES, run_cpu, run_gpu, transcribed, voice
+from eclume_server_testing.fakes import DEFAULT_VOICES, contract_transcript, run_cpu, run_gpu, transcribed, voice
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -213,6 +213,40 @@ def test_esquecer_a_voz_apaga_amostras_e_sugestoes(ek: Conta):
     assert ek.speakers(second)["S2"]["suggestions"] == []
     # A pessoa fica; só a voz dela sai.
     assert ek.owner.get(f"/api/v1/people/{rafael['id']}").status_code == 200
+
+
+def test_remover_uma_amostra_e_ouvir_o_trecho(new_account: Callable[[], Conta]):
+    ek, other = new_account(), new_account()
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    first, second = ek.transcript(), ek.transcript()
+    ek.link(first, "S2", rafael["id"])
+    ek.link(second, "S2", rafael["id"])
+    assert ek.owner.get(f"/api/v1/people/{rafael['id']}").json()["voice_sample_count"] == 2
+
+    # Cada amostra diz a gravação e a fala mais longa do locutor, para ouvi-la no áudio.
+    longest = max(
+        (s for s in contract_transcript()["segments"] if s["speaker_id"] == "S2"),
+        key=lambda s: s["end_ms"] - s["start_ms"],
+    )
+    samples = ek.owner.get(f"/api/v1/people/{rafael['id']}/voiceprint").json()["samples"]
+    by_transcript = {sample["transcript_id"]: sample for sample in samples}
+    first_recording = ek.owner.get(f"/api/v1/transcripts/{first}").json()["recording_id"]
+    assert by_transcript[first]["recording_id"] == first_recording
+    assert by_transcript[first]["excerpt"] == {"start_ms": longest["start_ms"], "end_ms": longest["end_ms"]}
+
+    url = f"/api/v1/people/{rafael['id']}/voice-samples/{first}/S2"
+    # Dado biométrico: só a sessão remove, e a amostra de uma conta não existe para outra.
+    assert ek.owner.pat("people:write").delete(url).status_code == 403
+    assert other.owner.delete(url).status_code == 404
+    assert ek.owner.delete(url).status_code == 204
+    assert ek.owner.delete(url).status_code == 404
+    assert ek.samples(rafael["id"]) == 1
+    remaining = ek.owner.get(f"/api/v1/people/{rafael['id']}/voiceprint").json()["samples"]
+    assert [sample["transcript_id"] for sample in remaining] == [second]
+    # O locutor segue ligado: só a amostra saiu da impressão.
+    assert ek.speakers(first)["S2"]["person"]["id"] == rafael["id"]
+    assert ek.owner.get(f"/api/v1/people/{rafael['id']}").json()["voice_sample_count"] == 1
 
 
 def test_outra_conta_nunca_e_comparada(new_account: Callable[[], Conta], services: Services):

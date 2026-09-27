@@ -1,0 +1,36 @@
+import type { ReactNode } from 'react'
+import { Dialog } from './Dialog'
+
+interface ConfirmDialogProps {
+  title: string
+  children?: ReactNode
+  /** O rótulo da ação destrutiva (`btn btn-danger`). */
+  confirmLabel: string
+  onConfirm: () => void
+  onCancel: () => void
+  busy?: boolean
+}
+
+/**
+ * Pede confirmação antes de uma ação destrutiva, no `Dialog` do DS. "Cancelar" vem primeiro, e o
+ * `showModal()` põe o foco nele; o Esc também cancela.
+ */
+export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCancel, busy = false }: ConfirmDialogProps) {
+  return (
+    <Dialog
+      title={title}
+      onClose={onCancel}
+      message={children}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {confirmLabel}
+          </button>
+        </>
+      }
+    />
+  )
+}

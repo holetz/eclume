@@ -19,6 +19,8 @@ PROVIDER_UNAVAILABLE = "provider_unavailable"
 PROVIDER_BAD_OUTPUT = "provider_bad_output"
 # Adiamento do Ollama enquanto a fila da GPU tem trabalho; não gasta tentativa.
 GPU_BUSY = "gpu_busy"
+# O chat de ajuste passou do limite de consultas à transcrição sem responder; definitivo.
+CHAT_TOOL_LIMIT = "chat_tool_limit"
 
 _RETRYABLE = {PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_UNAVAILABLE, PROVIDER_BAD_OUTPUT, GPU_BUSY}
 

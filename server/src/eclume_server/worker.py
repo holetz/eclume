@@ -2,8 +2,10 @@
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
 `transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields`,
-`detect_agenda_type` e o resumo automático), gera os resumos (`summarize`), descarta uploads vencidos e marca como falha recuperável
-o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
+`detect_agenda_type` e o resumo automático), gera os resumos (`summarize`), responde o chat de ajuste
+do resumo (`summary_chat`), descarta uploads vencidos e marca como falha recuperável
+o job de transcrição que o worker GPU abandonou e a resposta do chat que nenhum job vai terminar
+(`reap_stalled_jobs`). Contrato em
 docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
 """
 
@@ -30,6 +32,7 @@ from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, st
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
+from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
 from eclume_server.transcripts import fail, ingest
 from eclume_server.voice import platform_voice
 
@@ -184,6 +187,13 @@ async def summarize(ctx: dict[str, Any], summary_id: str) -> str:
     return result
 
 
+async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
+    """Responde um pedido do chat de ajuste do resumo (docs/standards/code/server-agentes.md)."""
+    result = await run_summary_chat(ctx, UUID(message_id))
+    log.info("summary_chat %s: %s", message_id, result)
+    return result
+
+
 async def expire_uploads(ctx: dict[str, Any]) -> int:
     """Aborta os uploads em andamento que passaram do prazo."""
     now = datetime.now(UTC)
@@ -206,9 +216,9 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
 
 
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
-    """Marca como falha recuperável os jobs de transcrição que ninguém mais vai terminar."""
+    """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
-    return len(reaped)
+    return len(reaped) + await reap_stalled_chats(ctx["engine"])
 
 
 def worker_settings(settings: Settings) -> dict[str, Any]:
@@ -225,6 +235,9 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
             func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
             func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
+            # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
+            # nova tentativa só (contada em `summary_chat_messages.attempts`).
+            func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),

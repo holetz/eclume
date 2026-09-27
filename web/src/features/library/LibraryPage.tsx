@@ -26,8 +26,8 @@ export function LibraryPage() {
           params: {
             query: {
               limit: 25,
-              ...(collection ? { collection } : {}),
-              ...(tag ? { tag } : {}),
+              ...(collection ? { collection: [collection] } : {}),
+              ...(tag ? { tag: [tag] } : {}),
               ...(pageParam ? { cursor: pageParam } : {}),
             },
           },

@@ -73,7 +73,7 @@ def test_upload_transcreve_e_o_lumea_le_por_pat(  # noqa: PLR0915 — o fluxo in
 
     full = lumea.get(f"/api/v1/transcripts/{transcript_id}").json()
     source = contract_transcript()
-    assert full["schema_version"] == "1.0"
+    assert full["schema_version"] == "1.1"
     assert full["recording_id"] == recording["id"]
     assert full["title"] == "Alinhamento do programa de lideranças"
     assert full["recorded_at"] == "2026-09-18T14:00:05Z"

@@ -30,6 +30,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
 - [aviso de consentimento](standards/code/server-nucleo.md) — Texto versionado que a pessoa aceita no cadastro ("Sou responsável por pedir o consentimento das pessoas que gravo"), no lugar do consentimento de voz por pessoa; versão nova pede novo aceite no login.
 - [campo](standards/code/processamento-automatico.md) — Dado de uma gravação que o usuário define (texto, lista ou escolha), com uma regra de preenchimento; título e tags são os campos embutidos de toda conta.
+- [chat de ajuste](standards/code/server-agentes.md#chat-de-ajuste) — Conversa em que o usuário pede uma mudança no resumo e o agente de chat responde, lendo a transcrição só quando o pedido depende do que foi dito; uma resposta que muda o resumo vira versão `chat`.
 - [coleção](standards/code/server-nucleo.md) — Agrupamento de gravações de um usuário (por cliente, projeto ou programa); uma gravação pode estar em várias.
 - [configuração da plataforma](standards/code/server-admin.md) — A linha única de `platform_settings` que o admin edita (transcrição, locutores, voz, pré-processamento) e que vale para todas as contas.
 - [conta de admin](standards/code/server-admin.md) — Conta da tabela `admins`, separada das contas de usuário, com login e sessão próprios (`/admin/auth/login`) que só alcançam `/admin/*`; criada pelo CLI `eclume-server admin create`.
@@ -48,23 +49,28 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
 - [impressão de voz](standards/code/identificacao-por-voz.md) — Conjunto de amostras de uma pessoa (embeddings de locutores confirmados como ela, do mesmo modelo da diarização), comparado por centroide para sugeri-la em transcrições novas; dado biométrico sensível pela LGPD, só com a identificação ligada na plataforma e só entre as pessoas do dono.
 - **lumea** — Plataforma de desenvolvimento humano e organizacional da EK, que importa transcrições do eclume por PAT.
+- [marcador](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Instante de uma gravação (`at_ms`), com nota opcional e o dispositivo que marcou, enviado pelos apps de forma idempotente por `client_id`.
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
 - [mock server](../contracts/README.md) — Prism servindo o bundle do contrato v1 com as fixtures (`deploy/docker-compose.mock.yml`, `127.0.0.1:4010`), contra o qual o lumea, o desktop e o web desenvolvem sem o backend.
+- [nota por voz](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Gravação de `kind: note` (uma pessoa ditando uma ideia ou lembrete), que passa pelo mesmo pipeline da reunião (`kind: meeting`).
 - **OKF** — Open Knowledge Format: o formato do bundle `docs/`, com homes fixas e frontmatter por doc.
+- [origem da data](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — De onde veio o início da gravação (`recorded_at_source`): `capture` (relógio do app), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (digitada) ou `upload` (hora do envio).
 - [origem do valor](standards/code/processamento-automatico.md) — De onde veio o valor de um campo: `auto` (o agente), `edited` (o usuário escreveu) ou `accepted` (o usuário aceitou o automático); os dois últimos o automático não sobrescreve.
 - [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
+- [painel de administração](standards/code/frontend-web.md) — App à parte dentro do web (`/admin/entrar`, `/admin/*`), com login, sessão e moldura próprios, onde a conta de admin configura a plataforma sem ver conteúdo de usuário.
 - **PAT** — Personal Access Token: token pessoal com escopo, guardado como hash, usado pelo lumea e pelo desktop para acessar a API.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `contracts/`, `deploy/`.
 - [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.
 - [regra de preenchimento](standards/code/processamento-automatico.md) — O "como identificar" de um campo: a instrução que o agente segue para preenchê-lo a partir da transcrição.
 - [RLS](standards/code/server-nucleo.md) — Row-Level Security do Postgres: as políticas por dono (`app.user_id`) que isolam os dados do eclume sob o papel `eclume_app`.
-- [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel admin, só de escrita: a API nunca o devolve.
+- [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel de administração, só de escrita: a API nunca o devolve; o token do Hugging Face fica em Locutores, e a chave da Anthropic, em Agentes.
 - **spec** — Unidade de trabalho do ciclo Quenching, guardada como issue do GitHub e conduzida por `develop` → `execute` → `conclude`.
 - [sugestão por voz](standards/code/identificacao-por-voz.md) — Pessoa proposta para um locutor sem pessoa quando a voz passa do limiar da plataforma; nunca liga sozinha, só vira vínculo quando alguém aceita.
 - [tipo de agenda](standards/code/processamento-automatico.md) — Categoria de gravação do usuário (reunião de equipe, 1:1…) com como identificar, padrão de título, tags padrão e as instruções do resumo; o agente detecta o tipo depois da transcrição.
 - [tipo de agenda padrão](standards/code/server-admin.md) — Tipo de agenda mantido pelo admin na plataforma e copiado para cada conta nova no cadastro.
 - [WhisperX](project/referencias.md) — Biblioteca de ASR (faster-whisper em lote, alinhamento por palavra, diarização pyannote) usada como motor no worker GPU.
 - [updater](standards/code/desktop-distribuicao.md) — Atualização automática do app desktop pelo plugin do Tauri: lê `latest.json` em `/downloads/` do servidor eclume e só instala o pacote assinado com a chave minisign do eclume.
+- [versão do resumo](standards/code/server-agentes.md#versões-e-edição) — Cada estado do resumo de uma transcrição, numerado por transcrição e com origem `generated` (agente), `manual` (edição à mão ou volta à gerada) ou `chat`; a atual é a de maior número concluída.
 - **worker CPU** — O processo arq do pacote `server` (`eclume_server.worker`, fila `eclume:default`) que ingere as transcrições do worker GPU e descarta uploads vencidos.
 - **worker GPU** — O processo arq do pilar `worker-gpu/` que roda ASR, alinhamento, diarização e embeddings num único processo CUDA.

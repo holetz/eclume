@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { empty, json, mockFetch, problem } from '../test/http'
-import { CSRF_HEADER, createApiClient, isAdminUrl, onUnauthorized, readCookie } from './client'
+import { CSRF_HEADER, createApiClient, isAdminUrl, onAdminUnauthorized, onUnauthorized, readCookie } from './client'
 import { ApiError, errorMessage, unwrap } from './problem'
 
 const me = { user: { id: 'u' } }
@@ -62,6 +62,21 @@ describe('cliente da API', () => {
     const off = onUnauthorized(listener)
     await createApiClient().GET('/api/v1/admin/me')
     expect(listener).not.toHaveBeenCalled()
+    off()
+  })
+
+  it('o 401 do painel avisa só a guarda do admin, fora do login do admin', async () => {
+    mockFetch({
+      'GET /api/v1/admin/users': () => problem('unauthorized', 401),
+      'POST /api/v1/admin/auth/login': () => problem('unauthorized', 401),
+    })
+    const listener = vi.fn()
+    const off = onAdminUnauthorized(listener)
+    const api = createApiClient()
+    await api.POST('/api/v1/admin/auth/login', { body: { email: 'a@b.c', password: 'x' } })
+    expect(listener).not.toHaveBeenCalled()
+    await api.GET('/api/v1/admin/users')
+    expect(listener).toHaveBeenCalledTimes(1)
     off()
   })
 

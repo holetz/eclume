@@ -23,6 +23,7 @@ _stats = (
     select(
         func.count(distinct(t.speakers.c.transcript_id)).label("transcript_count"),
         func.max(t.recordings.c.recorded_at).label("last_seen_at"),
+        func.coalesce(func.sum(t.speakers.c.talk_ms), 0).label("speaking_time_ms"),
     )
     .select_from(
         t.speakers.join(t.transcripts, t.transcripts.c.id == t.speakers.c.transcript_id).join(
@@ -34,9 +35,22 @@ _stats = (
 )
 
 
+_samples = (
+    select(func.count().label("voice_sample_count"))
+    .where(t.voice_samples.c.person_id == t.people.c.id)
+    .lateral("samples")
+)
+
+
 def person_select() -> Select:
-    """Pessoas do usuário com as estatísticas de transcrição."""
-    return select(t.people, _stats.c.transcript_count, _stats.c.last_seen_at).select_from(t.people.join(_stats, true()))
+    """Pessoas do usuário com as estatísticas de transcrição e o total de amostras de voz."""
+    return select(
+        t.people,
+        _stats.c.transcript_count,
+        _stats.c.last_seen_at,
+        _stats.c.speaking_time_ms,
+        _samples.c.voice_sample_count,
+    ).select_from(t.people.join(_stats, true()).join(_samples, true()))
 
 
 def person_json(row: Row) -> dict[str, Any]:
@@ -48,6 +62,8 @@ def person_json(row: Row) -> dict[str, Any]:
         "notes": row["notes"],
         "transcript_count": row["transcript_count"],
         "last_seen_at": iso(row["last_seen_at"]),
+        "voice_sample_count": row["voice_sample_count"],
+        "speaking_time_ms": int(row["speaking_time_ms"]),
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
     }

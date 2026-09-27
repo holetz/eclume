@@ -1,14 +1,15 @@
 // Sessão da conta de admin, separada da sessão do usuário: cookie próprio (só /api/v1/admin) e
-// guarda por `GET /api/v1/admin/me`. Nenhuma credencial de usuário alcança o painel.
+// guarda por `GET /api/v1/admin/me`. O painel nunca lê a sessão do usuário (`useMe`).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { api, type Schemas } from '../../api/client'
-import { ApiError, type Problem } from '../../api/problem'
+import { ApiError, unwrap, type Problem } from '../../api/problem'
 
 export type AdminAccount = Schemas['AdminAccount']
 
 export const ADMIN_ME_KEY = ['admin', 'me'] as const
 export const ADMIN_LOGIN_PATH = '/admin/entrar'
+export const ADMIN_HOME_PATH = '/admin/usuarios'
 
 /** Conta de admin da sessão, ou `null` sem sessão de admin (401). */
 async function fetchAdminMe(): Promise<AdminAccount | null> {
@@ -19,7 +20,20 @@ async function fetchAdminMe(): Promise<AdminAccount | null> {
 }
 
 export function useAdminMe() {
-  return useQuery({ queryKey: ADMIN_ME_KEY, queryFn: fetchAdminMe, staleTime: 60_000 })
+  return useQuery({ queryKey: ADMIN_ME_KEY, queryFn: fetchAdminMe, retry: false, staleTime: 5 * 60_000 })
+}
+
+/** Volta dentro do painel depois do login; qualquer outra coisa cai em Usuários. */
+export function adminReturnPath(value: string | null): string {
+  return value && value.startsWith('/admin/') && !value.startsWith(ADMIN_LOGIN_PATH) ? value : ADMIN_HOME_PATH
+}
+
+export function useAdminLogin() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['LoginRequest']) => unwrap(api.POST('/api/v1/admin/auth/login', { body })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ADMIN_ME_KEY }),
+  })
 }
 
 export function useAdminLogout() {

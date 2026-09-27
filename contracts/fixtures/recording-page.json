@@ -4,8 +4,10 @@
       "id": "01928f3a-1c00-7a00-8000-000000000402",
       "title": "Entrevista inicial — gestor de produção",
       "status": "processing",
+      "kind": "meeting",
       "source": "upload",
       "recorded_at": "2026-09-19T12:30:00Z",
+      "recorded_at_source": "upload",
       "duration_ms": 2712000,
       "language": null,
       "size_bytes": 11604992,
@@ -90,6 +92,7 @@
         }
       ],
       "transcript_id": null,
+      "marker_count": 0,
       "created_at": "2026-09-19T13:41:07Z",
       "updated_at": "2026-09-19T13:42:55Z"
     },
@@ -98,6 +101,7 @@
       "title": "Alinhamento do programa de lideranças",
       "source": "desktop",
       "recorded_at": "2026-09-18T14:00:05Z",
+      "recorded_at_source": "capture",
       "duration_ms": 166000,
       "language": "pt-BR",
       "size_bytes": 19287595,
@@ -113,6 +117,7 @@
         "client_version": "eclume-desktop/0.3.0"
       },
       "status": "transcribed",
+      "kind": "meeting",
       "tags": [
         "programa-liderancas",
         "cliente-metalurgica"
@@ -194,6 +199,7 @@
         }
       ],
       "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "marker_count": 2,
       "created_at": "2026-09-18T14:09:31Z",
       "updated_at": "2026-09-18T15:02:17Z"
     }

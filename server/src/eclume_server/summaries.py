@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from arq import Retry
-from sqlalchemy import any_, func, insert, literal, select, text, update
+from sqlalchemy import any_, delete, func, insert, literal, select, text, update
 
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents.base import GPU_BUSY, PROVIDER_NOT_CONFIGURED, PROVIDER_TIMEOUT
@@ -22,6 +22,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.pipeline import set_step
+from eclume_server.problems import conflict, not_found
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
@@ -64,23 +65,41 @@ async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
 # --- formas JSON ------------------------------------------------------------------------------------
 
 
+def _id(value: UUID | None) -> str | None:
+    return str(value) if value is not None else None
+
+
+def provider_ref(row: Row) -> dict[str, Any] | None:
+    """Schema `AgentProviderRef` do instantâneo `provider_*` da linha; `None` sem provider."""
+    if row["provider_id"] is None:
+        return None
+    return {"id": str(row["provider_id"]), "name": row["provider_name"], "kind": row["provider_kind"]}
+
+
 def summary_json(row: Row) -> dict[str, Any]:
     """Schema `Summary`, com tipo de agenda e provider em instantâneo."""
     error = None
     if row["error_code"]:
         error = {"code": row["error_code"], "message": row["error_message"] or ""}
+    agenda_type = None
+    if row["agenda_type_id"] is not None:
+        agenda_type = {"id": str(row["agenda_type_id"]), "name": row["agenda_type_name"]}
     return {
         "id": str(row["id"]),
         "transcript_id": str(row["transcript_id"]),
         "transcript_revision": row["transcript_revision"],
-        "agenda_type": {"id": str(row["agenda_type_id"]), "name": row["agenda_type_name"]},
+        "agenda_type": agenda_type,
         "version": row["version"],
+        "origin": row["origin"],
         "status": row["status"],
         "trigger": row["trigger"],
-        "provider": {"id": str(row["provider_id"]), "name": row["provider_name"], "kind": row["provider_kind"]},
+        "provider": provider_ref(row),
         "model": row["model"],
         "content_md": row["content_md"] if row["status"] == "done" else None,
         "error": error,
+        "restored_from_id": _id(row["restored_from_id"]),
+        "chat_message_id": _id(row["chat_message_id"]),
+        "created_by": _id(row["created_by"]),
         "created_at": iso(row["created_at"]),
         "completed_at": iso(row["completed_at"]),
     }
@@ -89,12 +108,19 @@ def summary_json(row: Row) -> dict[str, Any]:
 # --- criação -----------------------------------------------------------------------------------------
 
 
-async def _lock_pair(conn: AsyncConnection, transcript_id: UUID, agenda_type_id: UUID) -> None:
-    """Serializa, até o fim da transação, as gerações do par (transcrição, tipo de agenda)."""
+async def lock_versions(conn: AsyncConnection, transcript_id: UUID) -> None:
+    """Serializa, até o fim da transação, as versões novas do resumo da transcrição."""
     await conn.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
-        {"pair": f"summary:{transcript_id}:{agenda_type_id}"},
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"summary:{transcript_id}"},
     )
+
+
+async def next_version(conn: AsyncConnection, transcript_id: UUID) -> int:
+    """A próxima `version` do resumo da transcrição (sob `lock_versions`)."""
+    s = t.summaries.c
+    query = select(func.coalesce(func.max(s.version), 0) + 1).where(s.transcript_id == transcript_id)
+    return (await conn.execute(query)).scalar_one()
 
 
 async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, tipo, provider e gatilho
@@ -106,20 +132,13 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
     trigger: str,
     created_by: UUID,
 ) -> Row:
-    """Insere um resumo `queued` com a próxima `version` do par (transcrição, tipo de agenda).
+    """Insere um resumo `queued` com a próxima `version` da transcrição.
 
     Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão). As instruções do
-    tipo entram como instantâneo. O lock do par serializa gerações simultâneas do mesmo tipo.
+    tipo entram como instantâneo. O lock da transcrição serializa as versões novas.
     """
-    s = t.summaries.c
-    await _lock_pair(conn, transcript["id"], agenda_type["id"])
-    version = (
-        await conn.execute(
-            select(func.coalesce(func.max(s.version), 0) + 1).where(
-                s.transcript_id == transcript["id"], s.agenda_type_id == agenda_type["id"]
-            )
-        )
-    ).scalar_one()
+    await lock_versions(conn, transcript["id"])
+    version = await next_version(conn, transcript["id"])
     return (
         (
             await conn.execute(
@@ -146,6 +165,136 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
         .mappings()
         .one()
     )
+
+
+# --- versões da gravação (edição, volta à gerada, estado) -------------------------------------------
+
+SUMMARY_CHANGED = "summary_changed"
+SUMMARY_MISSING = "summary_missing"
+TRANSCRIPT_MISSING = "transcript_missing"
+
+
+async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row:
+    """A transcrição da gravação do usuário: 404 sem a gravação, 409 `transcript_missing` sem transcrição."""
+    visible = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id))).first()
+    if visible is None:
+        raise not_found("Gravação inexistente ou sem acesso.")
+    transcript = (
+        (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
+        .mappings()
+        .first()
+    )
+    if transcript is None:
+        raise conflict("A gravação ainda não tem transcrição.", code=TRANSCRIPT_MISSING)
+    return transcript
+
+
+def _latest(transcript_id: UUID, *conditions: Any) -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+    s = t.summaries.c
+    return select(t.summaries).where(s.transcript_id == transcript_id, *conditions).order_by(s.version.desc()).limit(1)
+
+
+async def current_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
+    """A versão atual: a de maior `version` concluída."""
+    return (await conn.execute(_latest(transcript_id, t.summaries.c.status == "done"))).mappings().first()
+
+
+async def generated_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
+    """A gerada de referência: a `generated` concluída mais recente."""
+    s = t.summaries.c
+    return (await conn.execute(_latest(transcript_id, s.status == "done", s.origin == "generated"))).mappings().first()
+
+
+async def summary_state(conn: AsyncConnection, transcript_id: UUID) -> dict[str, Any]:
+    """Schema `SummaryState`: a atual, a gerada de referência, a geração em aberto e o total."""
+    s = t.summaries.c
+    pending = (await conn.execute(_latest(transcript_id, s.status.in_(["queued", "running"])))).mappings().first()
+    count = (await conn.execute(select(func.count()).where(s.transcript_id == transcript_id))).scalar_one()
+    current, generated = await current_version(conn, transcript_id), await generated_version(conn, transcript_id)
+    return {
+        "current": summary_json(current) if current else None,
+        "generated": summary_json(generated) if generated else None,
+        "pending": summary_json(pending) if pending else None,
+        "version_count": count,
+    }
+
+
+async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do conteúdo e de quem a fez
+    conn: AsyncConnection,
+    *,
+    transcript: Row,
+    content_md: str,
+    origin: str,
+    base: Row | None,
+    created_by: UUID,
+    restored_from_id: UUID | None = None,
+    agent: tuple[Row, str] | None = None,
+    chat_message_id: UUID | None = None,
+) -> Row:
+    """Insere uma versão já concluída (`manual` ou `chat`), sob o `lock_versions` de quem chama.
+
+    O tipo de agenda é o da versão de que ela partiu (`base`); `agent` é o par (provider, modelo)
+    de uma versão `chat`.
+    """
+    provider, model = agent if agent is not None else (None, None)
+    values: dict[str, Any] = {
+        "owner_id": transcript["owner_id"],
+        "transcript_id": transcript["id"],
+        "transcript_revision": transcript["revision"],
+        "agenda_type_id": base["agenda_type_id"] if base else None,
+        "agenda_type_name": base["agenda_type_name"] if base else None,
+        "version": await next_version(conn, transcript["id"]),
+        "origin": origin,
+        "status": "done",
+        "trigger": "manual",
+        "provider_id": provider["id"] if provider else None,
+        "provider_name": provider["name"] if provider else None,
+        "provider_kind": provider["kind"] if provider else None,
+        "model": model,
+        "content_md": content_md,
+        "restored_from_id": restored_from_id,
+        "chat_message_id": chat_message_id,
+        "created_by": created_by,
+        "completed_at": func.now(),
+    }
+    return (await conn.execute(insert(t.summaries).values(**values).returning(t.summaries))).mappings().one()
+
+
+async def edit_summary(
+    conn: AsyncConnection, transcript: Row, content_md: str, base_version: int, created_by: UUID
+) -> Row:
+    """A edição à mão: versão `manual` sobre a atual; outra versão no meio → 409 `summary_changed`."""
+    await lock_versions(conn, transcript["id"])
+    current = await current_version(conn, transcript["id"])
+    if base_version != (current["version"] if current else 0):
+        raise conflict("O resumo mudou desde a versão aberta; abra a atual e edite de novo.", code=SUMMARY_CHANGED)
+    return await add_version(
+        conn, transcript=transcript, content_md=content_md, origin="manual", base=current, created_by=created_by
+    )
+
+
+async def revert_summary(conn: AsyncConnection, transcript: Row, created_by: UUID) -> Row:
+    """Voltar à gerada: versão `manual` com o conteúdo da gerada de referência."""
+    await lock_versions(conn, transcript["id"])
+    generated = await generated_version(conn, transcript["id"])
+    if generated is None:
+        raise conflict("Não há versão gerada para voltar.", code=SUMMARY_MISSING)
+    return await add_version(
+        conn,
+        transcript=transcript,
+        content_md=generated["content_md"],
+        origin="manual",
+        base=generated,
+        created_by=created_by,
+        restored_from_id=generated["id"],
+    )
+
+
+async def delete_all(conn: AsyncConnection, transcript: Row) -> None:
+    """Apaga todas as versões e o chat de ajuste da gravação."""
+    chat = t.summary_chat_messages.c
+    await conn.execute(delete(t.summary_chat_messages).where(chat.recording_id == transcript["recording_id"]))
+    await conn.execute(delete(t.summaries).where(t.summaries.c.transcript_id == transcript["id"]))
 
 
 # --- resumo automático ---------------------------------------------------------------------------
@@ -175,7 +324,7 @@ async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision
     if transcript is None or agenda_type is None:
         await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_agenda_type"})
         return None
-    await _lock_pair(conn, transcript["id"], agenda_type["id"])
+    await lock_versions(conn, transcript["id"])
     s = t.summaries.c
     existing = await conn.execute(
         select(s.id).where(
@@ -465,18 +614,26 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     except Exception:
         log.exception("resumo %s: falha inesperada", summary_id)
         return await _fail(engine, summary_id, INTERNAL_ERROR, "Falha inesperada ao gerar o resumo.", attempts)
-    await _update_open(
-        engine,
-        summary_id,
-        status="done",
-        content_md=completion.text,
-        model=completion.model,
-        attempts=attempts,
-        error_code=None,
-        error_message=None,
-        completed_at=func.now(),
-    )
     async with system_tx(engine) as conn:
+        await lock_versions(conn, summary["transcript_id"])
+        values: dict[str, Any] = {
+            "status": "done",
+            "content_md": completion.text,
+            "model": completion.model,
+            "attempts": attempts,
+            "error_code": None,
+            "error_message": None,
+            "completed_at": func.now(),
+        }
+        # Uma edição ou um ajuste que chegou durante a geração pegou um número acima: a geração
+        # pedida toma o próximo ao terminar, para virar a atual.
+        following = await next_version(conn, summary["transcript_id"])
+        if following > summary["version"] + 1:
+            values["version"] = following
+        s = t.summaries.c
+        await conn.execute(
+            update(t.summaries).where(s.id == summary_id, s.status.in_(["queued", "running"])).values(**values)
+        )
         await _finish_step(conn, summary_id, "done", None)
     return "done"
 

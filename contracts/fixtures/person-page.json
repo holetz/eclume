@@ -7,6 +7,8 @@
       "notes": "Diretora de Pessoas da Metalúrgica Serra Azul.",
       "transcript_count": 0,
       "last_seen_at": null,
+      "voice_sample_count": 0,
+      "speaking_time_ms": 0,
       "created_at": "2026-09-12T11:00:00Z",
       "updated_at": "2026-09-18T15:02:17Z"
     },
@@ -17,6 +19,8 @@
       "notes": "Consultora EK.",
       "transcript_count": 14,
       "last_seen_at": "2026-09-18T14:00:05Z",
+      "voice_sample_count": 0,
+      "speaking_time_ms": 3120400,
       "created_at": "2026-09-12T11:00:00Z",
       "updated_at": "2026-09-18T15:02:17Z"
     },
@@ -27,6 +31,8 @@
       "notes": "Gerente de RH da Metalúrgica Serra Azul.",
       "transcript_count": 3,
       "last_seen_at": "2026-09-11T13:00:00Z",
+      "voice_sample_count": 2,
+      "speaking_time_ms": 449350,
       "created_at": "2026-09-12T11:00:00Z",
       "updated_at": "2026-09-18T15:02:17Z"
     }

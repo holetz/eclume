@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF, PAT com escopos, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash), organiza (pessoas, coleções e edição da transcrição, tudo do dono), busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF, PAT com escopos, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -191,6 +191,62 @@ nas duas.
   `orgs/{org}/users/{dono}/…`, sem mover o objeto.
 - `GET /recordings/{id}/audio` redireciona (302) para `/media/recordings/{id}/audio?expires=&sig=`,
   servido pela API com `Range` a partir do MinIO — fora de `/api/v1`, opaco para o cliente.
+
+## Gravação: data, natureza e marcadores
+
+- **`recorded_at` é o início da gravação**, e o fim do evento no calendário é
+  `recorded_at + duration_ms`. Não há `started_at`: o desktop já mandava o início da captura em
+  `recorded_at`, obrigatório em `Recording`, `Transcript` e `SearchHit`, e renomear quebraria três
+  clientes sem ganho.
+- **`recorded_at_source`** diz de onde veio a data: `capture` (relógio do app que gravou),
+  `file_metadata` (lida do arquivo no navegador, antes da conversão para Opus, e confirmada na
+  importação), `user` (digitada ou corrigida) ou `upload` (sem data; vale a hora do envio). Sem ela
+  no upload, o servidor decide: com `recorded_at` e `source: desktop`, `capture`; com `recorded_at`
+  e outra origem, `user`; sem `recorded_at`, `upload` (outra origem sem data → 422). Corrigir
+  `recorded_at` no `PATCH` passa a origem a `user`. A migration 014 marcou `capture` nas
+  gravações do desktop e `upload` no resto: o import web de antes não mandava data.
+- **`kind`**: `meeting` (padrão) ou `note` (nota por voz), no upload e no `PATCH`. A nota passa
+  pelo mesmo pipeline da reunião (detecção de tipo e resumo incluídos); a
+  [processamento-automatico.md](processamento-automatico.md) não distingue as duas.
+- **Tipo escolhido no upload** (`agenda_type_id`, a folha "Agenda type" ao parar a gravação no
+  celular): vira o tipo do usuário, origem `edited`, com o padrão de título e as tags padrão
+  aplicados já no `complete`; a detecção o respeita (`set_by_user`). Tipo inexistente → 422.
+- **Marcadores** (`markers`): um instante `at_ms` com nota opcional (até 500 caracteres) e o
+  `device_name` de quem marcou, ligados à gravação por FK composta com o dono. Idempotentes por
+  `UNIQUE (recording_id, client_id)`: o `client_id` é gerado pelo app, e reenviar o mesmo marcador
+  só atualiza a nota (`ON CONFLICT DO UPDATE`; no mesmo lote, o último vale); um reenvio sem nota
+  mantém a que já existe, editada na web. Chegam de dois
+  jeitos: no `UploadCreate.markers` (até 1 000, gravados no `complete` com o `device_name` da
+  captura e, num upload deduplicado — na criação ou no `complete` —, mesclados na gravação
+  existente, porque o app pode ter caído depois de subir o áudio), ou depois em
+  `POST /recordings/{id}/markers` (lote, `device_name` do corpo). `PATCH /markers/{id}` troca a
+  nota e `DELETE` exclui; `GET` lista em ordem de `at_ms` numa página só. `at_ms` além da duração
+  é aceito: a duração só se conhece depois da transcrição. `Recording.marker_count` é uma
+  subconsulta lateral de `recording_select`. Escopos `recordings:read`/`recordings:write`.
+
+## Biblioteca
+
+- `GET /recordings` é a biblioteca da semana, do mês e da lista: `from` (inclusivo) e `to`
+  (exclusivo) sobre `recorded_at`, com o índice `recordings_owner_recorded_idx (owner_id,
+  recorded_at, id)`, e `sort` `created_desc` (padrão), `recorded_asc` ou `recorded_desc`. O cursor
+  é a posição `(chave do sort, id)`: vale só para o `sort` que o gerou. A semana e o mês pedem
+  `limit=200` e seguem o cursor.
+- **Filtros repetíveis:** OU entre os valores do mesmo filtro, E entre filtros diferentes.
+  `kind`, `status` (`processing` é o `queued` com o worker reportando progresso, refinado depois
+  da consulta), `tag` (`tags && :tags`), `collection` (`collection_ids && :ids`), `person`
+  (`EXISTS` num locutor da transcrição ligado a uma das pessoas) e `field=<field_id>:<valor>`. No
+  `field`, cada campo é um filtro: valores do mesmo campo por OU, campos diferentes por E; texto
+  e escolha comparam o valor, lista aceita um dos itens (`value @> [valor]`), e título e tags, que
+  são embutidos, comparam `recordings.title` e `recordings.tags`. Um campo que a conta não tem não
+  encontra nada; `field` sem `:` → 422.
+
+## Exclusão
+
+- `DELETE /recordings/{id}` apaga a linha da gravação e deixa o resto às FKs em cascata:
+  transcrição, segmentos, locutores, embeddings, amostras de voz, versões do resumo, chat de
+  ajuste, marcadores, valores de campo e etapas do pipeline. Depois do commit, o áudio e os
+  artefatos saem do bucket. Um job ainda na fila (`summarize`, `summary_chat`, as etapas por
+  agente, `ingest_transcript`) encontra a linha apagada e termina sem efeito.
 
 ## Pessoas, coleções e edição da transcrição
 

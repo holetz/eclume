@@ -2,12 +2,12 @@
 type: standard
 title: Identificação de pessoas pela voz
 description: Como o eclume sugere quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão que nunca liga sozinha, retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
-resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/VoicePage.tsx, web/src/features/transcript/SpeakersPanel.tsx
+resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32
+source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -91,9 +91,16 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 - **Esquecer a voz de uma pessoa** (`DELETE /people/{id}/voiceprint`) apaga as amostras e as
   sugestões pendentes dela, com um `DELETE` comum sob a RLS do dono (`voice.forget`): toda amostra
   da pessoa está nas gravações do próprio dono. **Excluir a pessoa** leva tudo em cascata.
+- **Tirar uma amostra isolada** (`DELETE /people/{id}/voice-samples/{transcript_id}/{speaker_id}`)
+  apaga só aquela amostra, sob a RLS do dono (`voice.forget_sample`); 404 se ela não existe ou é de
+  outra conta. **O locutor segue ligado à pessoa**: a amostra sai da impressão, não o vínculo. Só uma
+  retranscrição que restaure o vínculo a recria.
 - **Só sessão:** as rotas de voz recusam PAT (403 `session_required`). Um PAT vazado não lê nem
   apaga biometria. `GET /people/{id}/voiceprint` devolve `enabled` (a plataforma), a contagem e as
   amostras, sem os vetores.
+  Cada amostra traz a `recording_id` e o `excerpt` (`start_ms`/`end_ms` da fala mais longa daquele
+  locutor), para ouvir a amostra no áudio da gravação; `excerpt` é null se a gravação ou os
+  segmentos não existirem mais.
 - **Os embeddings por gravação** (`speaker_embeddings`) existem para todo locutor enquanto a voz
   estiver ligada, mas nunca saem pela API nem são comparados com pessoas de outra conta.
 - **Purga ao desligar.** A transição `enabled: true → false` apaga, na mesma transação do
@@ -131,4 +138,7 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   com Aceitar e Recusar.
 - **Pessoa** (`VoiceSection`): se a identificação por voz está ligada, as amostras e "Esquecer a
   voz".
-- **Admin** (`/admin/voz`): liga-desliga e limiar em %.
+  O schema `Person` traz `voice_sample_count` (amostras da impressão) e `speaking_time_ms` (soma do
+  `talk_ms` dos locutores ligados à pessoa, sob a RLS do dono), calculados em
+  `people.person_select`.
+- **Admin** (`/admin/locutores`, seção Identificação): liga-desliga (depende da separação e pede confirmação ao desligar) e limiar de 0,50 a 0,99.

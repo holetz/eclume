@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel admin fica fora da sessão do usuário, com login e sessão próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca, gravação, pessoas, busca, coleções, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca, gravação, pessoas, busca, coleções, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#39
 maintainer: holetz
 ---
 
@@ -77,8 +77,8 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   fora isso, guarda a escolha enquanto a página vive. Uma área nova de outra spec entra desligada,
   com a rota do mapa de telas v6 (`/config/campos`, `/config/agendas`, `/config/mcp`, `/app-movel`,
   `/ajuda`), e ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`;
-  cada grupo é um `role="group"` rotulado pelo título. O painel admin não está nela: a conta de
-  usuário não tem papel, e o painel tem conta e login próprios.
+  cada grupo é um `role="group"` rotulado pelo título. Não há item "Painel admin": a conta de
+  usuário não tem papel, e o painel se abre pelo endereço `/admin/entrar`, com conta própria.
 - **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
   shell, o botão Ajuda); ele também dá o título da aba. Rota desconhecida mostra
   `NotFoundPage` dentro do shell, com o link de volta à biblioteca.
@@ -92,15 +92,43 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
   vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
   devolveu.
-- **Administração** (`/admin/*`, `src/features/admin/`), **fora de `RequireSession` e do shell do
-  usuário**: `AdminRoutes` monta as seções (Transcrição, Identificação por voz, Agentes, Usuários,
-  Segredos, Saúde) dentro de `AdminLayout`, cuja guarda é `useAdminMe()` (`GET /admin/me`, chave
-  `['admin', 'me']`): sem sessão de admin, volta a `/admin/entrar?volta=<rota>`. O layout mostra o
-  e-mail da conta de admin e "Sair" (`POST /admin/auth/logout`). `/admin/entrar` é um formulário
-  de e-mail e senha para `POST /admin/auth/login`, com o estilo do login do usuário. A lista de
-  seções mora em `sections.ts`. Usuários lista as contas com a contagem de gravações e só
-  desativa e reativa; Segredos só têm campo de escrita e nunca mostram o valor; a Saúde relê a
-  cada 10 s (`refetchInterval`). As regras do server estão em [server-admin.md](server-admin.md).
+- **Administração** (`/admin/*`, `src/features/admin/`) é um **app à parte dentro do web**, fora
+  de `RequireSession` e do `AppShell`; `/admin/entrar` e `/admin/*` carregam sob demanda o chunk
+  do painel, e nada dele entra no bundle inicial do usuário.
+  - **Sessão própria.** `adminSession.ts` tem `useAdminMe()` (`GET /admin/me`, chave
+    `['admin', 'me']`, 401 → `null`), `useAdminLogin()` e `useAdminLogout()` (que limpa todo o
+    prefixo `['admin']`). A guarda é o `RequireAdmin`: sem sessão de admin, vai para
+    `/admin/entrar?volta=<rota>`; `volta` só vale dentro de `/admin/`. Um 401 em
+    `/api/v1/admin/` no meio do uso chega pelo `onAdminUnauthorized` do `client.ts` e devolve ao
+    login. O painel nunca lê `useMe`, e o app do usuário nunca lê a chave do admin. Esconder link
+    não é controle de acesso: a fronteira é o cookie de caminho `/api/v1/admin`.
+  - **Entrar como admin** (`/admin/entrar`) usa o `AuthLayout` na variante `admin` (`.auth-admin`
+    do DS, campo da marca em tinta), sem cadastro nem "esqueci a senha": conta e senha de admin
+    ficam no CLI (`eclume-server admin create` e `admin set-password`).
+  - **Moldura** `AdminShell`, sobre o `ShellFrame` que também serve ao `AppShell` (barra lateral
+    fixa e menu compacto abaixo de 56rem): marca, selo "Admin", o grupo "Plataforma" e, no
+    rodapé, o nome e o e-mail do admin com "Sair". A barra vem de `ADMIN_SECTIONS`
+    (`sections.ts`), na ordem Usuários (`/admin/usuarios`), Pré-processamento de áudio
+    (`/admin/audio`), Transcrição (`/admin/transcricao`), Locutores (`/admin/locutores`), Agentes
+    (`/admin/agentes`), Tipos de agenda padrão (`/admin/tipos-de-agenda`) e Saúde
+    (`/admin/saude`). `/admin` vai para Usuários; as rotas antigas redirecionam com `replace`:
+    `/admin/voz` e `/admin/segredos` → Locutores, `/admin/templates` → Tipos de agenda padrão. Rota
+    desconhecida mostra "Página não encontrada" dentro do painel.
+  - **Salvar da configuração** fica desabilitado sem mudança, e cada tela manda só os seus blocos
+    no `PATCH /admin/settings` (merge por bloco), para uma tela não sobrescrever a outra.
+  - **Segredos só de escrita**, no `SecretField` (guardado, Substituir, Apagar com confirmação; a
+    tela nunca mostra parte do valor), cada um junto do que o usa: o token do Hugging Face em
+    Locutores, a chave compartilhada da Anthropic e o token de cada provider em Agentes. Não há
+    tela Segredos.
+  - **Desligar a identificação por voz pede confirmação** (`ConfirmDialog`) antes do `PATCH`,
+    porque o server apaga as impressões de voz da plataforma nesse momento.
+  - **A Saúde relê a cada 15 s** (`HEALTH_REFRESH_MS`, alinhado ao heartbeat do worker), só com a
+    aba visível (`refetchIntervalInBackground: false`), e mantém os últimos dados num erro.
+  - **Nenhuma tela do painel mostra conteúdo de usuário**: nem título de gravação, nem nome de
+    arquivo, nem link para `/gravacoes`. Usuários mostra nome, e-mail, cadastro, contagem de
+    gravações e estado; as falhas da Saúde mostram etapa e código.
+
+  As regras do server estão em [server-admin.md](server-admin.md).
 - **Rotas públicas:** `/entrar`, `/cadastro` e `/admin/entrar`. Criar conta (`SignupPage`) lê
   de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
   12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
@@ -146,8 +174,8 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   <pessoa> — NN%", com Aceitar (liga com um clique) e Recusar; nunca é aplicada sozinha.
 - **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a página da pessoa tem a seção
   Voz (amostras e "Esquecer a voz"; não há consentimento por pessoa, que o aceite do aviso no
-  cadastro substitui), e o admin tem a seção Identificação por voz (`/admin/voz`), com o
-  liga-desliga da plataforma e o limiar.
+  cadastro substitui), e o admin liga a identificação e ajusta o limiar em Locutores
+  (`/admin/locutores`).
 - **Templates de resumo** são todos do usuário: o painel de resumos lista os dele, sem grupos por
   escopo.
 - **Organização da gravação** (tags, coleções, tipo de reunião, cliente, projeto) é um painel da
@@ -185,14 +213,18 @@ Depois de recarregar, o import recomeça pela conversão.
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
   para o mock, e um cenário percorre login, biblioteca, transcrição, import com conversão real e
   PAT, outro percorre busca, gravação aberta no segundo do trecho, vínculo de locutor, pessoas
-  e coleções, e um terceiro o painel admin, que entra por `/admin/entrar` com a sessão de admin. O
-  Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na resposta do
-  login (o de admin com `Path=/api/v1/admin`), pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
+  e coleções. O painel admin tem o seu `e2e/admin.spec.ts`: entra por `/admin/entrar`, percorre
+  as sete telas, salva em cada uma e confere os redirecionamentos. O Prism não emite cookies nem
+  guarda estado, então o teste põe os cookies de sessão na resposta do login (o de admin com
+  `Path=/api/v1/admin`), responde o `PATCH /admin/settings` com o exemplo do `GET` (o mock gera
+  valores sem sentido, que estragariam o cache), pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em
   `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado. O helper `navTo()`
-  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts` é a
-  verificação visual contra o DS ([web-design-system.md](web-design-system.md)).
+  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts` e
+  `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
+  ([web-design-system.md](web-design-system.md)); com `ECLUME_DS_DIR`, salvam também os quadros
+  de `examples/*.html` para a comparação lado a lado.
 - A CI roda os unitários no job `web` e o E2E, junto dos testes de navegador da conversão, no
   job `web-browser`.
 - **E2E contra o backend real** (`npm run test:e2e:real`, `playwright.real.config.ts`,

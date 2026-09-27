@@ -5,10 +5,15 @@
   "samples": [
     {
       "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
       "recording_title": "Alinhamento do programa de lideranças",
       "speaker_id": "S2",
       "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
       "talk_ms": 37050,
+      "excerpt": {
+        "start_ms": 61200,
+        "end_ms": 79850
+      },
       "created_by": {
         "id": "01928f3a-1c00-7a00-8000-000000000101",
         "name": "Mariana Couto"
@@ -17,10 +22,12 @@
     },
     {
       "transcript_id": "01928f3a-1c00-7a00-8000-000000000502",
+      "recording_id": null,
       "recording_title": null,
       "speaker_id": "S1",
       "model": "pyannote/wespeaker-voxceleb-resnet34-LM",
       "talk_ms": 412300,
+      "excerpt": null,
       "created_by": {
         "id": "01928f3a-1c00-7a00-8000-000000000101",
         "name": "Mariana Couto"

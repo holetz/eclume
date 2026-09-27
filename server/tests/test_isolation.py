@@ -40,6 +40,8 @@ CONTENT_TABLES = (
     "segments",
     "speaker_embeddings",
     "summaries",
+    "summary_chat_messages",
+    "markers",
     "voice_samples",
     "speaker_suggestions",
 )
@@ -115,8 +117,8 @@ def scenario(
     person = apis["alice"].post("/api/v1/people", json={"name": "Rafael Lima"}).json()
     apis["alice"].post("/api/v1/collections", json={"name": "Cliente X"})
     _seed_voice(services, recording["transcript_id"], person["id"])
-    # Um upload em andamento e um resumo, para toda tabela de conteúdo ter linha da Alice (o título
-    # do upload já é um valor de campo).
+    # Um upload em andamento, um resumo, um pedido de ajuste e um marcador, para toda tabela de
+    # conteúdo ter linha da Alice (o título do upload já é um valor de campo).
     apis["alice"].post(
         "/api/v1/uploads",
         json={"filename": "b.ogg", "content_type": "audio/ogg", "size_bytes": 10, "sha256": "0" * 64},
@@ -131,6 +133,20 @@ def scenario(
                 " gen_random_uuid(), 'p', 'claude-cli', 'm' FROM transcripts WHERE id = :t"
             ),
             {"t": recording["transcript_id"]},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO summary_chat_messages (owner_id, recording_id, transcript_id, role, content, status)"
+                " SELECT owner_id, recording_id, id, 'user', 'Encurte', 'done' FROM transcripts WHERE id = :t"
+            ),
+            {"t": recording["transcript_id"]},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO markers (owner_id, recording_id, client_id, at_ms)"
+                " SELECT owner_id, id, gen_random_uuid(), 1000 FROM recordings WHERE id = :r"
+            ),
+            {"r": recording["id"]},
         )
 
     run(services.sql(summary))
@@ -181,6 +197,8 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
         "DELETE FROM recordings WHERE id = :r",
         "UPDATE people SET name = 'invadido' WHERE owner_id = :o",
         "DELETE FROM voice_samples WHERE owner_id = :o",
+        "DELETE FROM markers WHERE owner_id = :o",
+        "DELETE FROM summary_chat_messages WHERE owner_id = :o",
         "UPDATE users SET name = 'invadido' WHERE id = :o",
     ):
         assert _as_app(services, bob.user_id, sql, r=rid, o=alice.user_id) == 0, sql
@@ -210,6 +228,14 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
             " 'claude-cli', 'm')"
         ),
         "UPDATE segments SET owner_id = :o WHERE transcript_id = :t",
+        (
+            "INSERT INTO summary_chat_messages (owner_id, recording_id, transcript_id, role, content, status)"
+            " SELECT :o, recording_id, id, 'user', 'x', 'done' FROM transcripts WHERE id = :t"
+        ),
+        (
+            "INSERT INTO markers (owner_id, recording_id, client_id, at_ms)"
+            " SELECT :o, recording_id, gen_random_uuid(), 0 FROM transcripts WHERE id = :t"
+        ),
         (
             "UPDATE recordings SET agenda_type_id = (SELECT id FROM agenda_types WHERE owner_id = :o LIMIT 1)"
             " WHERE id = (SELECT recording_id FROM transcripts WHERE id = :t)"
