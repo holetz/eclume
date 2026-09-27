@@ -9,6 +9,7 @@ members = [
     "crates/recorder",
     "crates/detect",
     "crates/sync",
+    "crates/import",
 ]
 
 [workspace.package]

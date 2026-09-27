@@ -1,0 +1,16 @@
+[package]
+name = "eclume-import"
+description = "Importação de arquivos no app desktop do eclume: duração, data de gravação e conversão para Opus."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+# Rust puro (MPL-2.0, sem modificação). As features padrão trazem FLAC, MKV/WebM, Ogg, PCM,
+# Vorbis e WAV; somam-se AAC, ALAC, MP3 e o contêiner MP4/MOV/M4A.
+symphonia = { version = "0.5", features = ["aac", "alac", "mp3", "isomp4"] }
