@@ -16,7 +16,7 @@ async function csrf(request: APIRequestContext, name: string): Promise<Record<st
   return { 'X-CSRF-Token': cookies.find((c) => c.name === name)?.value ?? '' }
 }
 
-/** Pela sessão de admin: o provider `claude-cli` e o resumo automático da plataforma. */
+/** Pela sessão de admin: o provider `claude-cli`, que assume todas as finalidades (resumo, campos e tipo). */
 async function preparePlatform(request: APIRequestContext) {
   const login = await request.post('/api/v1/admin/auth/login', {
     data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
@@ -28,14 +28,9 @@ async function preparePlatform(request: APIRequestContext) {
     data: { name: 'Claude (servidor)', kind: 'claude-cli', model: 'sonnet' },
   })
   expect(provider.status(), await provider.text()).toBe(201)
-  const settings = await request.patch('/api/v1/admin/settings', {
-    headers,
-    data: { summarization: { default_provider_id: (await provider.json()).id, auto_summarize: true } },
-  })
-  expect(settings.status(), await settings.text()).toBe(200)
 }
 
-/** Cadastro aberto com o aceite do aviso em vigor; a conta nasce com os templates padrão. */
+/** Cadastro aberto com o aceite do aviso em vigor; a conta nasce com os tipos de agenda padrão. */
 async function signup(request: APIRequestContext) {
   const info = await request.get('/api/v1/auth/signup')
   expect(info.status()).toBe(200)
@@ -88,7 +83,7 @@ test('cadastro, login, import com conversão, transcrição e resumo contra o ba
   await expect(falas.getByRole('listitem').first()).toBeVisible({ timeout: 6 * 60_000 })
   expect(await falas.getByRole('listitem').count()).toBeGreaterThan(0)
 
-  // Resumo automático, gerado pelo `claude -p` do host depois da ingestão.
+  // Resumo automático pelo tipo de agenda detectado, gerado pelo `claude -p` do host depois da ingestão.
   const resumos = page.getByRole('list', { name: 'Resumos gerados' })
   await expect(resumos.getByText('Pronto')).toBeVisible({ timeout: 3 * 60_000 })
 })
