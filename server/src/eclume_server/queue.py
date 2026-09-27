@@ -19,6 +19,7 @@ DEFAULT_QUEUE = "eclume:default"
 # Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
 GPU_HEALTH_KEY = "eclume:gpu:health"
 DEFAULT_LANGUAGE = "pt"
+AUTO_LANGUAGE = "auto"
 
 # Etapas do worker GPU → `Job.stage` do contrato v1.
 _STAGES = {
@@ -52,8 +53,8 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
     diarization = platform["diarization"]
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
-        # O ASR recebe o idioma sem região (`pt-BR` → `pt`).
-        "language": chosen.split("-", 1)[0],
+        # O ASR recebe o idioma sem região (`pt-BR` → `pt`); `auto` vira `null`, e a engine detecta.
+        "language": None if chosen == AUTO_LANGUAGE else chosen.split("-", 1)[0],
         "min_speakers": diarization.get("min_speakers"),
         "max_speakers": diarization.get("max_speakers"),
         "engine": asr["engine"],

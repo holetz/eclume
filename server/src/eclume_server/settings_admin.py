@@ -57,7 +57,8 @@ class AsrPatch(_Block):
     model: str | None = Field(default=None, min_length=1)
     compute_type: Literal[COMPUTE_TYPES] | None = None  # type: ignore[valid-type]
     batch_size: int | None = Field(default=None, ge=1)
-    default_language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+    # `auto`: a engine detecta o idioma de cada gravação.
+    default_language: str | None = Field(default=None, pattern=r"^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$")
     fallback_model: str | None = Field(default=None, min_length=1)
     endpoint_url: BaseUrl = None
 
@@ -182,6 +183,9 @@ def validate_merged(merged: dict[str, dict[str, Any]]) -> None:
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
         raise invalid_field("asr.endpoint_url", "obrigatória com a engine openai-compatible")
     low, high = diarization.get("min_speakers"), diarization.get("max_speakers")
+    if merged["voice_identification"].get("enabled") and not diarization.get("enabled"):
+        # A impressão de voz é por locutor: sem a separação, não há o que comparar.
+        raise invalid_field("voice_identification.enabled", "exige a separação de locutores ligada")
     if low is not None and high is not None and low > high:
         raise invalid_field("diarization.min_speakers", "não pode passar de max_speakers")
 

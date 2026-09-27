@@ -4291,6 +4291,9 @@ components:
           type: [integer, "null"]
           minimum: 1
         default_language:
+          description: |
+            Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
+            idioma de cada gravação e o alinhador segue o detectado.
           type: [string, "null"]
         fallback_model:
           description: Modelo usado depois de um OOM.
@@ -4389,7 +4392,8 @@ components:
       properties:
         enabled:
           description: >-
-            Liga a identificação por voz na plataforma. Desligado, nenhuma impressão é comparada nem
+            Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em
+            `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem
             criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
           type: boolean
         suggestion_threshold:
@@ -4438,7 +4442,9 @@ components:
               type: [integer, "null"]
               minimum: 1
             default_language:
+              description: Código do idioma ou `auto`.
               type: [string, "null"]
+              pattern: "^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$"
             fallback_model:
               type: [string, "null"]
             endpoint_url:

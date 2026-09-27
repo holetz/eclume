@@ -137,3 +137,28 @@ def test_proximo_transcribe_sai_com_a_configuracao_nova(
     ((_, _, options),) = run_gpu(services.settings)
     assert options["model"] == "medium"
     run_cpu(services.settings)
+
+
+def test_idioma_automatico_vai_nulo_ao_transcribe(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    assert admin.patch(URL, json={"asr": {"default_language": "auto"}}).json()["asr"]["default_language"] == "auto"
+    member = as_user(make_user())
+    upload_file(member, audio_bytes(1500), title="Idioma a detectar")
+    ((_, _, options),) = run_gpu(services.settings)
+    assert options["language"] is None
+    # O idioma da gravação, quando dito, vence o automático.
+    upload_file(member, audio_bytes(1600), title="Em inglês", language="en")
+    ((_, _, options),) = run_gpu(services.settings)
+    assert options["language"] == "en"
+    run_cpu(services.settings)
+
+
+def test_identificacao_por_voz_exige_a_separacao(admin: Api):
+    refused = admin.patch(URL, json={"voice_identification": {"enabled": True}, "diarization": {"enabled": False}})
+    assert refused.status_code == 422
+    assert refused.json()["errors"][0]["field"] == "voice_identification.enabled"
+    assert admin.patch(URL, json={"voice_identification": {"enabled": True}}).status_code == 200
+    assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 422
+    assert admin.patch(URL, json={"voice_identification": {"enabled": False}}).status_code == 200
+    assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 200

@@ -100,7 +100,8 @@ class CpuEngine:
             engine=self.name,
             model=model_name,
             compute_type=compute_type,
-            language=options.language,
+            # Sem idioma pedido, o faster-whisper detecta.
+            language=options.language or info.language,
             duration_s=duration,
             segments=segments,
             warnings=warnings,

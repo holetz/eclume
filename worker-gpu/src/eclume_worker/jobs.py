@@ -227,10 +227,9 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
     redis = ctx["redis"]
     store: ArtifactStore = ctx["store"]
     registry: EngineRegistry = ctx["engines"]
-    language = options.get("language") or "pt"
-    engine_options = dataclasses.replace(
-        EngineOptions.from_mapping(options), language=language.split("-", 1)[0].lower()
-    )
+    engine_options = EngineOptions.from_mapping(options)
+    if engine_options.language:
+        engine_options = dataclasses.replace(engine_options, language=engine_options.language.split("-", 1)[0].lower())
     engine_name = registry.resolve_name(options)
     if options.get("engine") and engine_name != options["engine"]:
         # Modelo, compute type e lote do admin são da engine que ele escolheu; a engine forçada pelo
@@ -278,7 +277,8 @@ async def _run(ctx: dict[str, Any], recording_id: str, audio_key: str, options: 
         recording_id=recording_id,
         revision=parse_revision(ctx.get("job_id")),
         content_hash=content_hash,
-        language=language,
+        # O pedido (com a região), ou o que a engine detectou.
+        language=options.get("language") or result.language,
         now=datetime.now(UTC),
     )
     await reporter.report("upload")

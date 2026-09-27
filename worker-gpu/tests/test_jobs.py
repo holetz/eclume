@@ -75,7 +75,8 @@ class FakeEngine:
             engine=self.name,
             model="large-v3-turbo",
             compute_type="int8_float16",
-            language=options.language,
+            # Sem idioma pedido, a engine devolve o detectado.
+            language=options.language or "en",
             duration_s=10.0,
             segments=[
                 Segment(0.0, 2.0, "Olá.", "SPEAKER_00", [Word("Olá.", 0.0, 1.0, 0.9)], 0.9),
@@ -323,3 +324,14 @@ def test_opcoes_do_admin_chegam_a_engine(tmp_path: Path):
     rodar(ctx, {"batch_size": 2, "fallback_model": "small", "diarization_model": "pyannote/x"})
     [(_, options, _)] = factory.created[0].calls
     assert (options.batch_size, options.fallback_model, options.diarization_model) == (2, "small", "pyannote/x")
+
+
+def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
+    factory = Factory()
+    ctx = contexto(tmp_path, factory=factory)
+    rodar(ctx, {"language": None, "diarize": False, "embeddings": False})
+    [engine] = factory.created
+    [(_, options, _)] = engine.calls
+    assert options.language is None
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    assert transcript["language"] == "en"
