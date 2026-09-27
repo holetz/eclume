@@ -1,20 +1,21 @@
 ---
 type: standard
-title: Agentes de sumarização — providers, templates e resumos
-description: Como o server gera resumos de transcrições — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, templates pessoais e padrões da organização, resumos versionados no job summarize do worker CPU com erros tipados e retentativas, map-reduce para transcrições longas e o resumo automático após a ingestão.
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql
-tags: [code, server, agentes, resumos, templates, llm, claude]
-timestamp: 2026-09-25
+title: Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
+description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat).
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py
+tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude]
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34
 maintainer: holetz
 ---
 
-# Agentes de sumarização — providers, templates e resumos
+# Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
 
-O server transforma uma transcrição num resumo Markdown seguindo um template, com um agente que a
-organização escolhe. As rotas seguem o [contrato v1](../api/contrato-v1.md); a persistência e o
+O server transforma uma transcrição num resumo Markdown seguindo as instruções de um tipo de agenda
+do usuário, com um agente que o admin cadastra na plataforma. Os mesmos providers preenchem os
+campos e detectam o tipo, no [processamento automático](processamento-automatico.md). As rotas seguem o [contrato v1](../api/contrato-v1.md); a persistência e o
 isolamento seguem o [núcleo do server](server-nucleo.md); o job roda na fila `eclume:default` do
 [contrato de jobs](../api/jobs-transcricao.md).
 
@@ -58,9 +59,13 @@ e `temperature` (só enviada quando definida); sem elas valem os padrões por ti
 
 | Retentáveis (até 3 tentativas, espera de 30 s e 120 s) | Definitivos |
 |---|---|
-| `provider_timeout`, `provider_rate_limited`, `provider_unavailable` | `provider_auth`, `provider_bad_request`, `provider_refused`, `provider_not_configured`, `context_too_long` |
+| `provider_timeout`, `provider_rate_limited`, `provider_unavailable`, `provider_bad_output` | `provider_auth`, `provider_bad_request`, `provider_refused`, `provider_not_configured`, `context_too_long` |
 
 `gpu_busy` adia sem contar tentativa; `internal_error` é uma exceção inesperada, registrada no log.
+`provider_bad_output` é a resposta fora do formato pedido (o JSON dos campos, da detecção e do
+chat). As regras de retentativa são uma só (`summaries.next_try`), para o resumo e para as etapas
+por agente; o chat tem as próprias (abaixo). `chat_tool_limit` (definitivo) é o chat que passou do
+limite de consultas à transcrição.
 
 ## Chaves de API
 
@@ -72,44 +77,117 @@ nunca devolve a chave, só `api_key_set`; `PATCH` com `api_key: null` apaga.
 
 ## Rotas de provider e a fronteira com o painel admin
 
-`/admin/agent-providers` (só sessão de `admin`) é desta peça, porque o job não roda sem provider;
-`/admin/settings`, `/admin/secrets` e o painel são da holetz/eclume#12, que reutiliza `crypto`.
+`/admin/agent-providers` (só a sessão de admin) é desta peça, porque o job não roda sem provider;
+`/admin/settings`, `/admin/secrets` e o painel estão em [server-admin.md](server-admin.md).
 
+- **Providers são da plataforma:** `agent_providers` não tem dono nem RLS. As rotas de admin
+  escrevem com o papel de conexão; `eclume_app` só lê as colunas sem segredo (`GRANT SELECT`
+  coluna a coluna, sem `api_key_encrypted`), e o resumo resolve o provider sob a RLS do usuário
+  com `summaries.PROVIDER_PUBLIC`. Quem abre a chave é o worker, com o papel de conexão.
 - `base_url` é obrigatória para `ollama` e `openai-compatible` e proibida para `claude-cli`.
-- O primeiro provider habilitado de uma organização sem `default_provider_id` vira o padrão;
-  excluir o padrão deixa a organização sem padrão.
-- Excluir com resumo `queued`/`running` no provider → 409.
-- `org_settings` é lido por todos da organização e escrito só por `admin` (política
-  `org_settings_admin_update`).
+- **Finalidade (`used_for`):** `summaries`, `fields`, `chat` e `agenda_detection`. Cada
+  finalidade tem no máximo um provider: declará-la num provider a tira dos outros, na mesma
+  transação. O banco garante (migration `013`): um trigger serializa as escritas de `used_for`
+  num advisory lock, o mesmo que as rotas tomam, e recusa a sobreposição. `provider_for(conn,
+  finalidade)` devolve o provider habilitado que a declara (na ordem do cadastro). Um
+  provider habilitado cadastrado sem `used_for` assume as finalidades que ninguém declara.
+- Excluir com resumo `queued`/`running` no provider, de qualquer usuário → 409; as finalidades
+  dele ficam sem provider.
+- Não há provider padrão nem bloco `summarization`: a migration `011` deu as quatro finalidades
+  ao antigo padrão (ou ao único habilitado).
 
-## Templates
+## Tipos de agenda
 
-`summary_templates` com `owner_id` nulo é padrão da organização (`scope: organization`).
-
-- Criar com `scope: organization`, editar ou excluir um padrão da organização exige `admin` **com
-  sessão**; PAT, mesmo de admin, recebe 403 `forbidden`. Template pessoal de outro usuário é 404.
-- **Padrão da organização** = `org_settings.summarization.default_template_id`, fonte única; o
-  `is_default` de um template da organização é calculado dele e, marcado, grava ali.
-- **Padrão pessoal** = `is_default` guardado no template do usuário, no máximo um (índice único
-  parcial); marcar um desmarca o anterior.
-- Toda organização nasce com **Ata de reunião** (padrão), **Resumo executivo** e **Decisões e
-  ações**, pela função SQL `eclume_seed_summary_templates(org)` da migration `002_agentes`, que
-  `create_org` também chama: os textos têm uma fonte só.
+Os resumos seguem as `summary_instructions` de um tipo de agenda do usuário
+(`agenda_types`, política de dono); os templates de resumo saíram na migration `009`, que converteu
+cada um no tipo do dono, com o mesmo id. Os tipos, os tipos padrão do admin e a detecção estão no
+[processamento automático](processamento-automatico.md).
 
 ## Resumos
 
-- `summaries` guarda instantâneos: `template_name`, `instructions`, `provider_name`,
-  `provider_kind` e `model`. Editar ou excluir o template ou o provider não mexe nos resumos.
-- `version` = maior versão do par (transcrição, template) + 1, sob `pg_advisory_xact_lock` do par.
-- Visibilidade herda a transcrição (RLS por `EXISTS` em `transcripts`); **gerar e excluir é só do
-  dono da gravação** — quem vê por compartilhamento lê e recebe 403 ao escrever.
-- `POST /transcripts/{id}/summaries` usa `provider_id` ou o `default_provider_id`; ausente,
-  inexistente ou desabilitado → 422. Responde 202 `queued` e enfileira
-  `summarize(summary_id)` em `eclume:default` com `_job_id = "summarize:{summary_id}"`.
-- **Automático:** `ingest_transcript` chama `auto_summarize` na mesma transação da ingestão. Com
-  `summarization.auto_summarize` ligado e provider padrão habilitado, gera o template padrão
-  pessoal do dono, senão o da organização, com `trigger: automatic`; no máximo um por revisão da
-  transcrição.
+- `summaries` guarda instantâneos: `agenda_type_id` e `agenda_type_name` (sem FK), `instructions`,
+  `provider_name`, `provider_kind` e `model`. Editar ou excluir o tipo ou o provider não mexe nos
+  resumos.
+- `version` = maior versão **da transcrição** + 1, sob `pg_advisory_xact_lock('summary:{transcript_id}')`
+  (`summaries.lock_versions`), com `UNIQUE (transcript_id, version)`. Trocar o tipo de agenda
+  continua o histórico. A migration 014 renumerou as versões antigas (eram por par transcrição e
+  tipo) na ordem de `created_at`.
+- `summaries` tem `owner_id` (o dono da transcrição) e a política de dono: só o dono lê, gera e
+  exclui; outra conta recebe 404.
+- `POST /transcripts/{id}/summaries` usa `agenda_type_id` ou o tipo da gravação (nenhum → 422) e
+  `provider_id` ou o provider de `summaries` (ausente, inexistente ou desabilitado → 422). Responde
+  202 `queued` e enfileira `summarize(summary_id)` em `eclume:default` com
+  `_job_id = "summarize:{summary_id}"`.
+- **Automático:** é a última etapa do pipeline (`summaries.start_auto_summary`), depois da detecção
+  do tipo: as instruções do tipo da gravação, o provider de `summaries` e `trigger: automatic`. O
+  `summarize` fecha a etapa `summary`.
+
+## Versões e edição
+
+- Toda mudança no resumo é uma **versão** com `origin`: `generated` (o agente, pelas instruções do
+  tipo; o `summarize`), `manual` (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo chat).
+  `manual` e `chat` nascem `done`, com `trigger: manual` e o tipo de agenda da versão de que
+  partiram; o `provider_*` fica nulo na `manual` e é o do chat na `chat` (`CHECK (origin <>
+  'generated' OR provider_id IS NOT NULL)`). `created_by` é quem gerou, editou ou pediu.
+- **Versão atual:** a de maior `version` com `status: done`; uma geração em `queued`/`running` não
+  a troca até terminar. **Gerada de referência:** a `generated` concluída mais recente.
+  `GET /recordings/{id}/summary` devolve `{current, generated, pending, version_count}`; o
+  "comparar com a gerada" é do cliente, com as duas versões.
+- **Edição à mão** (`PUT /recordings/{id}/summary`, `summaries:write`) com concorrência otimista:
+  o corpo leva `base_version`, a versão que a pessoa abriu (0 sem resumo concluído). Sob o lock da
+  transcrição, se a atual não é mais essa → 409 `summary_changed` e nada é sobrescrito.
+- **Voltar à gerada** (`POST .../summary/revert`) cria uma versão `manual` com o conteúdo da
+  gerada de referência e `restored_from_id` apontando para ela; sem gerada, 409
+  `summary_missing`. Nada se perde: voltar também é versão.
+- `DELETE /recordings/{id}/summary` apaga todas as versões e o chat; `DELETE /summaries/{id}`
+  segue apagando uma versão. As rotas da gravação resolvem a transcrição dela; sem transcrição,
+  409 `transcript_missing`.
+
+## Chat de ajuste
+
+O pedido ("encurte", "quem falou do orçamento?") vira uma resposta do agente marcado para `chat`,
+que trabalha sobre o resumo atual e **só lê a transcrição quando o pedido depende do que foi
+dito**.
+
+- **Protocolo** (`agents/chat.py`, puro): o agente fala por texto, pela `Provider.complete` que os
+  quatro providers já têm (sem tool-use nativo), e cada resposta é **um objeto JSON** com uma de
+  três ações: `{"action": "read_transcript", "from": "HH:MM:SS", "to": "HH:MM:SS"}`,
+  `{"action": "search_transcript", "query": "termos"}` ou
+  `{"action": "reply", "message": "…", "summary_md": "documento inteiro" | null}`.
+- **O prompt** leva o cabeçalho da gravação (`Título/Data/Participantes`, a duração e os
+  marcadores com nota), o resumo atual em `<resumo>`, as últimas 10 mensagens e o pedido. O texto
+  inteiro da transcrição **nunca** vai no prompt.
+- **O laço:** enquanto a ação é uma ferramenta, o server a executa e anexa o resultado em
+  `<ferramenta nome=…>…</ferramenta>`. `read_transcript` devolve as linhas `[HH:MM:SS] Locutor:
+  texto` que cruzam o trecho (aceita `HH:MM:SS` ou `MM:SS`), no máximo 15 min por leitura e o que
+  couber no `input_budget` do provider; acima disso corta e avisa `(cortado em HH:MM:SS)`.
+  `search_transcript` é o full-text `eclume_pt` da busca (`websearch_to_tsquery`), restrito à
+  transcrição da mensagem, com até 8 trechos em ordem de tempo, ou "nenhum trecho". Cada consulta
+  fica em `reads` (`{tool, from_ms, to_ms, clipped}` ou `{tool, query, hits}`).
+- **Limites:** `MAX_TOOL_CALLS = 4`; depois delas o prompt pede a resposta, e outra ferramenta é
+  `chat_tool_limit`. O parser pega o último objeto JSON da saída (tolera a cerca de código `json`
+  e texto em volta); uma saída inválida recebe **um** pedido de correção, e a segunda é
+  `provider_bad_output`.
+- **Segurança:** transcrição, resumo e resultados vão delimitados e declarados como dado no
+  sistema. O único efeito possível é uma versão nova de texto, e o `claude-cli` segue com
+  `--tools ""`: a transcrição nunca vira ação.
+- **Rotas** (`summaries:read`/`summaries:write`): `POST /recordings/{id}/summary/chat {message}`
+  grava, numa transação, o pedido (`user`, `done`) e a resposta (`assistant`, `queued`, com
+  `base_summary_id` = a atual) e responde 202 com as duas; com uma resposta em aberto na gravação,
+  409 `chat_busy` (índice único parcial). `GET .../summary/chat` lista em ordem cronológica e
+  `GET /summary-chat-messages/{id}` é a consulta do cliente até `done`/`failed`, como o resumo.
+- **O job `summary_chat(message_id)`** (worker CPU, `_job_id = "summary_chat:{id}"`) resolve o
+  provider de `chat` com a mesma `provider_config` do resumo (sem provider →
+  `provider_not_configured`), roda o laço com teto total de 5 min e, com `summary_md`, cria a
+  versão `chat` (`chat_message_id` = a resposta) sob o lock da transcrição **se a atual ainda for a
+  de base**; se mudou, a resposta fica `done` com `error.code = summary_changed` e sem versão. Falha
+  passageira (`provider_timeout`, `provider_rate_limited`, `provider_unavailable`) tem **uma** nova
+  tentativa após 10 s; `gpu_busy` falha na hora ("A GPU está transcrevendo; tente em instantes"),
+  porque um chat não espera horas. Mensagem apagada (resumo ou gravação excluídos) → o job termina
+  sem chamar o agente.
+- **Por que job e não resposta síncrona:** o `claude` e a credencial dele vivem no worker CPU, o
+  Ollama depende da fila da GPU que só o worker consulta, e uma chamada leva de segundos a
+  minutos; o ciclo 202 + consulta já existe no cliente para o resumo.
 
 ## O job `summarize`
 
@@ -126,9 +204,9 @@ delimitado em `<transcricao>` e declarado como dado, não instrução. Tokens s�
 `len(texto) / 3`; a entrada pode ocupar 75% de `context_window − max_tokens`, descontados o
 sistema e as instruções.
 
-- Cabe → uma chamada com as instruções do template.
+- Cabe → uma chamada com as instruções do tipo de agenda.
 - Não cabe → **map-reduce**: seções cortadas nas fronteiras de segmento viram notas detalhadas
-  (com o intervalo de tempo), e as notas passam pelas instruções do template; notas que ainda não
+  (com o intervalo de tempo), e as notas passam pelas instruções do tipo; notas que ainda não
   cabem são condensadas em até 4 níveis. Janela pequena demais para as instruções →
   `context_too_long`.
 
@@ -147,7 +225,11 @@ inode antigo, e o container passa a renovar com um refresh token já rotacionado
   `httpx2.MockTransport` no SDK da Anthropic e um executável `claude` falso.
 - O job e as rotas rodam com o worker CPU real e `FakeAgents`
   (`eclume_server_testing/fakes.py`), que o `run_cpu` injeta sempre: nenhum teste chama um LLM.
-- O teste real, marcado `slow`, roda o `claude -p` do host sobre a transcrição de fixture:
+  A finalidade de cada chamada sai do prompt de sistema; `replies["chat"]` é o roteiro do chat,
+  uma resposta por chamada (consultas e a resposta final).
+- O protocolo do chat é provado sem banco (`test_chat_protocol.py`), com um provider roteirizado.
+- O teste real, marcado `slow`, roda o `claude -p` do host sobre a transcrição de fixture: o
+  resumo, um pedido que exige a transcrição (ao menos uma consulta) e um pedido de forma (nenhuma):
 
 ```bash
 remote-run . 'ECLUME_TEST_CLAUDE=1 PATH=$HOME/.local/bin:$PATH uv run pytest server/tests/test_agents_real.py -m slow -s'

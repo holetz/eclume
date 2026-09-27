@@ -64,7 +64,7 @@ export function TranscriptView({ recordingId, transcript, startMs = null }: Tran
       </div>
 
       {segments.length === 0 ? (
-        <p className="muted">A transcrição não tem falas.</p>
+        <p className="text-muted">A transcrição não tem falas.</p>
       ) : (
         <ol ref={listRef} className={styles.segments} aria-label="Falas">
           {segments.map((segment, index) => {

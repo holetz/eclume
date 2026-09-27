@@ -1,4 +1,4 @@
-"""Busca full-text sobre os segmentos das transcrições visíveis."""
+"""Busca full-text sobre os segmentos das transcrições do usuário."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ async def search_segments(
         raise invalid_field("q", "informe q ou person")
     offset = _offset(cursor)
     filters = SearchFilters(q, person, date_from, date_to, tag, collection)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         items = await search(conn, filters, offset, limit)
     next_cursor = encode_position(offset + limit) if len(items) > limit else None
     return {"items": items[:limit], "next_cursor": next_cursor}

@@ -1,0 +1,18 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000e01",
+  "kind": "field_rule",
+  "status": "done",
+  "items": [
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000201",
+      "recording_title": "Revisão do contrato",
+      "value": "Serra Azul"
+    },
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000202",
+      "recording_title": "Planejamento interno",
+      "value": null
+    }
+  ],
+  "error": null
+}

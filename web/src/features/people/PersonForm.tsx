@@ -49,7 +49,7 @@ export function PersonForm({ initial, submitLabel, pending, error, onSubmit, onC
       </div>
       <div className="field">
         <label htmlFor={`${id}-notas`}>Notas</label>
-        <textarea id={`${id}-notas`} className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <textarea id={`${id}-notas`} className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
       {error != null && (
         <p className="alert alert-error" role="alert">
@@ -61,7 +61,7 @@ export function PersonForm({ initial, submitLabel, pending, error, onSubmit, onC
           {submitLabel}
         </button>
         {onCancel && (
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
             Cancelar
           </button>
         )}

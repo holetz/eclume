@@ -2,7 +2,12 @@
   "asr": {
     "model": "large-v3"
   },
-  "summarization": {
-    "auto_summarize": true
+  "preprocessing": {
+    "denoise": {
+      "strength": 0.4
+    },
+    "trim_silence": {
+      "enabled": false
+    }
   }
 }

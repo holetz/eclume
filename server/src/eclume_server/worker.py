@@ -1,32 +1,42 @@
 """Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, gera os resumos (`summarize`), descarta uploads vencidos e marca como
-falha recuperável o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
-docs/standards/api/jobs-transcricao.md.
+`transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields`,
+`detect_agenda_type` e o resumo automático), gera os resumos (`summarize`), responde o chat de ajuste
+do resumo (`summary_chat`), descarta uploads vencidos e marca como falha recuperável
+o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
+docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from arq import cron
+from arq import Retry, cron
 from arq.connections import RedisSettings
 from arq.worker import func
 from sqlalchemy import select, update
 
+from eclume_server.agenda_types import run_detect
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
-from eclume_server.queue import DEFAULT_QUEUE, progress_key, summarize_job_id
+from eclume_server.fields import run_fill_fields
+from eclume_server.pipeline import GONE, STALE, current_revision, set_step
+from eclume_server.previews import run_preview
+from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
-from eclume_server.summaries import auto_summarize, run_summary
-from eclume_server.transcripts import RECORDING_GONE, fail, ingest
-from eclume_server.voice import org_voice
+from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
+from eclume_server.summary_chat import CHAT_TIMEOUT_S, run_summary_chat
+from eclume_server.transcripts import fail, ingest
+from eclume_server.voice import platform_voice
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
@@ -55,7 +65,7 @@ async def ingest_transcript(
 ) -> str:
     """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`."""
     async with system_tx(ctx["engine"]) as conn:
-        result = await ingest(
+        outcome = await ingest(
             conn,
             ctx["storage"],
             UUID(recording_id),
@@ -63,42 +73,109 @@ async def ingest_transcript(
             embeddings_key=embeddings_key,
             engine_info=engine_info,
         )
-        # Na mesma transação: a transcrição e o seu resumo automático nascem juntos ou não nascem.
-        summary_id = await auto_summarize(conn, UUID(recording_id))
+        revision = await current_revision(conn, UUID(recording_id))
     await ctx["redis"].delete(progress_key(recording_id))
-    if result == RECORDING_GONE:
+    if outcome.gone:
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
-    if summary_id is not None:
-        await ctx["redis"].enqueue_job(
-            "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-        )
-        result += f"; resumo automático {summary_id} na fila"
-    log.info("ingest_transcript %s: %s", recording_id, result)
+    elif outcome.persisted:
+        # A cadeia por agente começa pelos campos, só quando esta ingestão gravou a transcrição.
+        await _enqueue_step(ctx, "fill_fields", recording_id, revision)
+    log.info("ingest_transcript %s: %s", recording_id, outcome.message)
+    return outcome.message
+
+
+async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:
+    await ctx["redis"].enqueue_job(
+        job, recording_id, revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=DEFAULT_QUEUE
+    )
+
+
+async def _run_step(
+    ctx: dict[str, Any],
+    step: str,
+    recording_id: str,
+    revision: int,
+    run: Callable[[dict[str, Any], UUID, int], Awaitable[str]],
+) -> str:
+    """Roda a etapa por agente; uma falha inesperada fora da chamada ao agente deixa a etapa `failed`.
+
+    O `Retry` (falha passageira do agente) volta à fila como sempre; o resto vira `internal_error`,
+    e quem chamou segue a cadeia.
+    """
+    try:
+        return await run(ctx, UUID(recording_id), revision)
+    except Retry:
+        raise
+    except Exception as exc:
+        log.exception("etapa %s de %s (revisão %d): falha inesperada", step, recording_id, revision)
+        async with system_tx(ctx["engine"]) as conn:
+            recording = (
+                (
+                    await conn.execute(
+                        select(t.recordings.c.id, t.recordings.c.owner_id).where(
+                            t.recordings.c.id == UUID(recording_id)
+                        )
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if recording is None:
+                return GONE
+            if await current_revision(conn, recording["id"]) != revision:
+                return STALE
+            await set_step(conn, recording, revision, step, "failed", error=(INTERNAL_ERROR, type(exc).__name__))
+        return f"falhou: {INTERNAL_ERROR}"
+
+
+async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Preenche os campos automáticos da revisão e segue para a detecção do tipo."""
+    result = await _run_step(ctx, "fields", recording_id, revision, run_fill_fields)
+    if result not in {GONE, STALE}:
+        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
+    log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
     return result
 
 
-async def transcription_failed(ctx: dict[str, Any], recording_id: str, error_code: str, message: str) -> str:
-    """Marca o job e a gravação como falhos."""
+async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Escolhe e aplica o tipo de agenda da revisão e abre o resumo automático pelo tipo."""
+    result = await _run_step(ctx, "agenda_type", recording_id, revision, run_detect)
+    if result not in {GONE, STALE}:
+        async with system_tx(ctx["engine"]) as conn:
+            summary_id = await start_auto_summary(conn, UUID(recording_id), revision)
+        if summary_id is not None:
+            await enqueue_summary(ctx["redis"], summary_id)
+            result += f"; resumo automático {summary_id} na fila"
+    log.info("detect_agenda_type %s (revisão %d): %s", recording_id, revision, result)
+    return result
+
+
+async def transcription_failed(
+    ctx: dict[str, Any], recording_id: str, error_code: str, message: str, stage: str | None = None
+) -> str:
+    """Marca o job e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou."""
     async with system_tx(ctx["engine"]) as conn:
-        result = await fail(conn, UUID(recording_id), error_code, message)
+        result = await fail(conn, UUID(recording_id), error_code, message, stage)
     await ctx["redis"].delete(progress_key(recording_id))
     log.info("transcription_failed %s: %s", recording_id, result)
     return result
 
 
-async def purge_embedding_objects(ctx: dict[str, Any], org_id: str) -> int:
-    """Apaga do bucket os `speaker_embeddings.json` das gravações da organização (opt-in desligado).
+async def purge_embedding_objects(ctx: dict[str, Any], org_id: str | None = None) -> int:
+    """Apaga do bucket os `speaker_embeddings.json` de todas as gravações (voz desligada na plataforma).
 
-    Nada é apagado se o opt-in tiver sido religado nesse meio-tempo: os arquivos novos já valem.
+    Nada é apagado se a identificação por voz tiver sido religada nesse meio-tempo: os arquivos
+    novos já valem. `org_id` é ignorado: um job da versão com organização pode estar na fila.
     """
+    del org_id
     async with system_tx(ctx["engine"]) as conn:
-        if (await org_voice(conn, UUID(org_id)))["enabled"]:
+        if (await platform_voice(conn))["enabled"]:
             return 0
-        ids = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.org_id == UUID(org_id)))).scalars()
+        ids = (await conn.execute(select(t.recordings.c.id))).scalars()
         keys = [embeddings_object_key(recording_id) for recording_id in ids]
     await ctx["storage"].delete_keys(keys)
-    log.info("purge_embedding_objects %s: %d gravações", org_id, len(keys))
+    log.info("purge_embedding_objects: %d gravações", len(keys))
     return len(keys)
 
 
@@ -106,6 +183,13 @@ async def summarize(ctx: dict[str, Any], summary_id: str) -> str:
     """Gera um resumo (docs/standards/code/server-agentes.md)."""
     result = await run_summary(ctx, UUID(summary_id))
     log.info("summarize %s: %s", summary_id, result)
+    return result
+
+
+async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
+    """Responde um pedido do chat de ajuste do resumo (docs/standards/code/server-agentes.md)."""
+    result = await run_summary_chat(ctx, UUID(message_id))
+    log.info("summary_chat %s: %s", message_id, result)
     return result
 
 
@@ -146,6 +230,13 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
             # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
             func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
+            func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
+            # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
+            # nova tentativa só (contada em `summary_chat_messages.attempts`).
+            func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
@@ -153,6 +244,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
         ],
         "queue_name": DEFAULT_QUEUE,
+        # A chave de health-check do arq (`eclume:default:health-check`) é a sonda da Saúde.
+        "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
         "on_shutdown": shutdown,
@@ -169,6 +262,7 @@ class WorkerSettings:
     functions = _FROM_ENV["functions"]
     cron_jobs = _FROM_ENV["cron_jobs"]
     queue_name = _FROM_ENV["queue_name"]
+    health_check_interval = _FROM_ENV["health_check_interval"]
     redis_settings = _FROM_ENV["redis_settings"]
     on_startup = _FROM_ENV["on_startup"]
     on_shutdown = _FROM_ENV["on_shutdown"]

@@ -8,40 +8,26 @@ import { formatDateTime, formatDuration, isActive, sourceLabel } from './format'
 import styles from './LibraryPage.module.css'
 import { JobProgress, StatusBadge } from './RecordingStatus'
 
-type Owner = 'me' | 'shared' | 'all'
-
-const OWNERS: { value: Owner; label: string }[] = [
-  { value: 'me', label: 'Minhas' },
-  { value: 'shared', label: 'Compartilhadas comigo' },
-  { value: 'all', label: 'Todas' },
-]
-
 const POLL_MS = 3000
-
-function parseOwner(value: string | null): Owner {
-  return value === 'shared' || value === 'all' ? value : 'me'
-}
 
 export function LibraryPage() {
   usePageTitle('Biblioteca')
-  const [params, setParams] = useSearchParams()
-  const owner = parseOwner(params.get('de'))
+  const [params] = useSearchParams()
   const collection = params.get('colecao')
   const tag = params.get('tag')
   const collections = useCollections(collection !== null)
   const collectionName = collections.data?.items.find((c) => c.id === collection)?.name
 
   const recordings = useInfiniteQuery({
-    queryKey: ['recordings', { owner, collection, tag }],
+    queryKey: ['recordings', { collection, tag }],
     queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/v1/recordings', {
           params: {
             query: {
-              owner,
               limit: 25,
-              ...(collection ? { collection } : {}),
-              ...(tag ? { tag } : {}),
+              ...(collection ? { collection: [collection] } : {}),
+              ...(tag ? { tag: [tag] } : {}),
               ...(pageParam ? { cursor: pageParam } : {}),
             },
           },
@@ -61,39 +47,18 @@ export function LibraryPage() {
       <header className={styles.header}>
         <div>
           <h1 id="biblioteca-titulo">Biblioteca</h1>
-          <p className="muted">Suas gravações e as compartilhadas com você.</p>
+          <p className="text-muted">Suas gravações.</p>
         </div>
         <Link to="/importar" className="btn btn-primary">
           Importar arquivo
         </Link>
       </header>
 
-      <fieldset className={styles.filter}>
-        <legend className="visually-hidden">Mostrar</legend>
-        {OWNERS.map((option) => (
-          <label key={option.value} className={styles.filterOption}>
-            <input
-              type="radio"
-              name="owner"
-              value={option.value}
-              checked={owner === option.value}
-              onChange={() => {
-                const next = new URLSearchParams(params)
-                if (option.value === 'me') next.delete('de')
-                else next.set('de', option.value)
-                setParams(next, { replace: true })
-              }}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
-      </fieldset>
-
       {(collection || tag) && (
         <p className={styles.active}>
           {collection && <span>Coleção: {collectionName ?? 'carregando…'}</span>}
           {tag && <span>Tag: {tag}</span>}
-          <Link to={owner === 'me' ? '/' : `/?de=${owner}`}>Limpar filtro</Link>
+          <Link to="/">Limpar filtro</Link>
         </p>
       )}
 
@@ -101,12 +66,12 @@ export function LibraryPage() {
       {recordings.isError && (
         <div className="alert alert-error" role="alert">
           {errorMessage(recordings.error)}{' '}
-          <button type="button" className="btn btn-sm" onClick={() => recordings.refetch()}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => recordings.refetch()}>
             Tentar de novo
           </button>
         </div>
       )}
-      {recordings.isSuccess && items.length === 0 && <EmptyLibrary owner={owner} />}
+      {recordings.isSuccess && items.length === 0 && <EmptyLibrary />}
 
       {items.length > 0 && (
         <ul className={styles.list} aria-label="Gravações">
@@ -119,7 +84,7 @@ export function LibraryPage() {
       {recordings.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => recordings.fetchNextPage()}
           disabled={recordings.isFetchingNextPage}
         >
@@ -141,7 +106,6 @@ function RecordingRow({ recording }: { recording: Schemas['Recording'] }) {
           <span>{formatDateTime(recording.recorded_at)}</span>
           <span className="tabular">{formatDuration(recording.duration_ms)}</span>
           <span>{sourceLabel(recording.source)}</span>
-          {recording.visibility === 'shared' && <span>Compartilhada</span>}
         </p>
         <JobProgress recording={recording} />
       </div>
@@ -150,14 +114,11 @@ function RecordingRow({ recording }: { recording: Schemas['Recording'] }) {
   )
 }
 
-function EmptyLibrary({ owner }: { owner: Owner }) {
-  if (owner === 'shared') {
-    return <p className={`card ${styles.empty}`}>Ninguém compartilhou gravações com você ainda.</p>
-  }
+function EmptyLibrary() {
   return (
     <div className={`card ${styles.empty}`}>
       <h2>Nenhuma gravação ainda</h2>
-      <p className="muted">
+      <p className="text-muted">
         Importe um arquivo de áudio ou vídeo, ou instale o <Link to="/app-desktop">app desktop</Link> para gravar
         reuniões automaticamente.
       </p>

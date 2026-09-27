@@ -19,10 +19,13 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from eclume_server.agenda_types import apply_type
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.fields import mark_edited
+from eclume_server.markers import MAX_BATCH, MarkerInput, upsert_markers
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized, validation_failed
 from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
@@ -39,6 +42,8 @@ PartNumber = Annotated[int, Path(ge=1, le=10000)]
 MAX_PARTS = 10_000
 FIRST_PART_URLS = 100
 LANGUAGE = r"^[a-z]{2,3}(-[A-Z]{2})?$"
+Kind = Literal["meeting", "note"]
+RecordedAtSource = Literal["capture", "file_metadata", "user", "upload"]
 
 
 class Capture(BaseModel):
@@ -58,6 +63,10 @@ class UploadCreate(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     title: str | None = Field(default=None, min_length=1)
     recorded_at: datetime | None = None
+    recorded_at_source: RecordedAtSource | None = None
+    kind: Kind | None = None
+    agenda_type_id: UUID | None = None
+    markers: list[MarkerInput] = Field(default_factory=list, max_length=MAX_BATCH)
     duration_ms: int | None = Field(default=None, ge=0)
     language: str | None = Field(default=None, pattern=LANGUAGE)
     source: Literal["desktop", "upload", "api"] | None = None
@@ -177,11 +186,12 @@ async def create_upload(
     part_count = math.ceil(body.size_bytes / part_size)
     if part_count > MAX_PARTS:
         raise invalid_field("size_bytes", f"arquivo maior que {MAX_PARTS} partes de {part_size} bytes")
+    if body.recorded_at is None and body.recorded_at_source not in {None, "upload"}:
+        raise invalid_field("recorded_at_source", "sem recorded_at, a data é a do envio (upload)")
     now = _now()
     expires_at = now + timedelta(days=ctx.settings.upload_ttl_days)
     request_fields = body.model_dump(mode="json", exclude={"filename", "content_type", "size_bytes", "sha256"})
     base = {
-        "org_id": principal.org_id,
         "owner_id": principal.user_id,
         "filename": body.filename,
         "content_type": body.content_type,
@@ -192,8 +202,10 @@ async def create_upload(
         "expires_at": expires_at,
     }
     try:
-        async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+        async with user_tx(ctx.engine, principal.user_id) as conn:
             await check_collections(conn, body.collection_ids)
+            if body.agenda_type_id is not None and await _agenda_type(conn, body.agenda_type_id) is None:
+                raise invalid_field("agenda_type_id", "tipo de agenda inexistente ou sem acesso")
             duplicate = (
                 await conn.execute(
                     select(t.recordings.c.id).where(
@@ -221,6 +233,8 @@ async def create_upload(
                     .mappings()
                     .one()
                 )
+                # O app pode ter caído depois de subir o áudio: os marcadores entram na gravação existente.
+                await _add_markers(conn, duplicate, request_fields, principal)
                 response.status_code = 200
                 return upload_json(row, [], [])
 
@@ -248,7 +262,7 @@ async def create_upload(
                 )
 
             recording_id = uuid4()
-            key = audio_key(principal.org_id, principal.user_id, recording_id)
+            key = audio_key(principal.user_id, recording_id)
             s3_upload_id = await ctx.storage.create_multipart(key, body.content_type)
             row = (
                 (
@@ -277,7 +291,7 @@ async def create_upload(
 @router.get("/uploads/{upload_id}")
 async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Estado do upload, com as partes já confirmadas pelo armazenamento."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     return upload_json(row, await _received(ctx, row), [])
 
@@ -285,7 +299,7 @@ async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, 
 @router.delete("/uploads/{upload_id}", status_code=204)
 async def abort_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Aborta um upload em andamento e descarta as partes; nos demais estados, nada muda."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] == "in_progress":
             await ctx.storage.abort_multipart(row["audio_key"], row["s3_upload_id"])
@@ -300,7 +314,7 @@ async def create_part_urls(
     """URLs novas para as partes pedidas (inclusive para trocar URLs expiradas)."""
     if len(set(body.part_numbers)) != len(body.part_numbers):
         raise invalid_field("part_numbers", "números repetidos")
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     _require_open(row)
     beyond = [n for n in body.part_numbers if n > row["part_count"]]
@@ -347,7 +361,7 @@ async def put_part(
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição."""
     enqueue: tuple[str, dict[str, Any]] | None = None
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] in {"completed", "deduplicated"}:
             recording_id = row["recording_id"]
@@ -358,7 +372,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
         recording = await get_visible(conn, recording_id)
     if enqueue is not None:
         await enqueue_transcription(ctx, recording_id, 1, *enqueue)
-    return (await render(ctx, [recording]))[0]
+    return (await render(ctx, principal.user_id, [recording]))[0]
 
 
 async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
@@ -375,6 +389,33 @@ async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
     ]
     if errors:
         raise validation_failed(errors)
+
+
+async def _agenda_type(conn: AsyncConnection, agenda_type_id: UUID) -> Row | None:
+    return (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
+
+
+async def _add_markers(
+    conn: AsyncConnection, recording_id: UUID, requested: dict[str, Any], principal: Principal
+) -> None:
+    """Os marcadores pedidos no upload, com o dispositivo da captura."""
+    await upsert_markers(
+        conn,
+        owner_id=principal.user_id,
+        recording_id=recording_id,
+        markers=requested.get("markers") or [],
+        device_name=(requested.get("capture") or {}).get("device_name"),
+        created_by=principal.user_id,
+    )
+
+
+def recorded_at_source(requested: dict[str, Any], source: str) -> str:
+    """A origem pedida, ou a regra: o relógio do desktop, a data informada, ou a hora do envio."""
+    if requested.get("recorded_at_source"):
+        return requested["recorded_at_source"]
+    if not requested.get("recorded_at"):
+        return "upload"
+    return "capture" if source == "desktop" else "user"
 
 
 async def _finish(
@@ -396,14 +437,16 @@ async def _finish(
     existing = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
     now = _now()
     capture = requested.get("capture")
+    source = requested.get("source") or ("api" if principal.method == "pat" else "upload")
     values = {
         "id": recording_id,
-        "org_id": principal.org_id,
         "owner_id": principal.user_id,
         "title": requested.get("title") or PurePath(row["filename"]).stem or row["filename"],
         "status": "queued" if matches else "failed",
-        "source": requested.get("source") or ("api" if principal.method == "pat" else "upload"),
+        "kind": requested.get("kind") or "meeting",
+        "source": source,
         "recorded_at": datetime.fromisoformat(requested["recorded_at"]) if requested.get("recorded_at") else now,
+        "recorded_at_source": recorded_at_source(requested, source),
         "duration_ms": requested.get("duration_ms"),
         "language": requested.get("language"),
         "size_bytes": row["size_bytes"],
@@ -431,9 +474,23 @@ async def _finish(
             .where(t.uploads.c.id == row["id"])
             .values(status="deduplicated", recording_id=duplicate, completed_at=now)
         )
+        await _add_markers(conn, duplicate, requested, principal)
         return duplicate, None
     await conn.execute(insert(t.recordings).values(**values))
-    recording = {"id": recording_id, "org_id": principal.org_id, "language": values["language"]}
+    await _add_markers(conn, recording_id, requested, principal)
+    # Título e tags pedidos no upload são do usuário; sem título (o nome do arquivo), o automático o troca.
+    await mark_edited(
+        conn, recording_id, principal.user_id, {key: requested[key] for key in ("title", "tags") if requested.get(key)}
+    )
+    # O tipo escolhido ao parar a gravação é do usuário (origem `edited`): dispensa a detecção.
+    # Depois dos valores do usuário: o padrão de título não troca um título que ele escreveu.
+    agenda_type = (
+        await _agenda_type(conn, UUID(requested["agenda_type_id"])) if requested.get("agenda_type_id") else None
+    )
+    if agenda_type is not None:
+        inserted = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
+        await apply_type(conn, inserted, agenda_type, "edited")
+    recording = {"id": recording_id, "owner_id": principal.user_id, "language": values["language"]}
     error = None if matches else ("hash_mismatch", "O SHA-256 do arquivo recebido difere do declarado no upload.")
     options = await insert_job(conn, recording, 1, error=error)
     await conn.execute(

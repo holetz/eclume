@@ -5,6 +5,7 @@ O boto3 é síncrono; as corrotinas daqui rodam as chamadas numa thread.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -26,9 +27,13 @@ _CHUNK = 1024 * 1024
 _DELETE_BATCH = 1000
 
 
-def audio_key(org_id: UUID, owner_id: UUID, recording_id: UUID) -> str:
-    """Chave do áudio: a gravação vive sob o dono (`orgs/{org}/users/{id}/...`)."""
-    return f"orgs/{org_id}/users/{owner_id}/recordings/{recording_id}/audio"
+def audio_key(owner_id: UUID, recording_id: UUID) -> str:
+    """Chave do áudio: a gravação vive sob o dono (`users/{id}/...`).
+
+    Gravações da época da organização guardam a chave antiga (`orgs/{org}/users/...`) em
+    `recordings.audio_key`, que é sempre a fonte: o objeto não muda de lugar.
+    """
+    return f"users/{owner_id}/recordings/{recording_id}/audio"
 
 
 def embeddings_object_key(recording_id: UUID | str) -> str:
@@ -74,6 +79,10 @@ class Storage:
             region_name=settings.s3_region,
             config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
+
+    async def head_bucket(self) -> None:
+        """O bucket responde (a sonda da saúde); falha com a exceção do boto3."""
+        await asyncio.to_thread(self._s3.head_bucket, Bucket=self.bucket)
 
     async def create_multipart(self, key: str, content_type: str) -> str:
         """Abre um multipart upload e devolve o `UploadId`."""

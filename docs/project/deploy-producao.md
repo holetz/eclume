@@ -1,13 +1,13 @@
 ---
 type: project
 title: Deploy de produção no host GPU
-description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, bootstrap do admin, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
+description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#39
 maintainer: holetz
 ---
 
@@ -78,7 +78,7 @@ Da máquina de desenvolvimento, com o contexto `gpu-host` do [runbook do host](h
 bash deploy/deploy.sh --gerar-env              # uma vez: deploy/.env.prod com segredos aleatórios
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
-bash deploy/bootstrap-admin.sh                 # uma vez: organização EK e o admin
+bash deploy/bootstrap-admin.sh                 # uma vez: a conta de admin do painel
 ```
 
 O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do endpoint
@@ -117,16 +117,34 @@ host.
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
+| `ECLUME_SIGNUP_OPEN` | `true` (padrão): qualquer pessoa na LAN cria conta por `POST /api/v1/auth/signup`, com o aceite do aviso. `false` fecha o cadastro sem deploy de código: mude o env e recrie o server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
 | `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker CPU como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
-### Admin e provider
+### Admin, contas e provider
 
-O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a organização **EK** e o admin `admin@example.com`. A
-senha é gerada no host e fica **só** em `/srv/eclume/secrets/admin-password` (600). Ela chega
-ao `eclume-server admin bootstrap --password-stdin` por um pipe e nunca é gravada na estação.
-Com alguma organização no banco, o script não faz nada.
+Não há organização: cada conta de usuário é isolada pela RLS do dono, e o painel é da
+**plataforma**. O **painel de administração** fica em
+**`https://192.168.15.199:8443/admin/entrar`**: não há link para ele no app do usuário. A **conta de admin** (`admins`) é separada das contas de usuário, com login e
+sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
+([server-admin.md](../standards/code/server-admin.md)).
 
-O provider padrão da organização é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
+- **Contas de usuário** nascem pelo cadastro aberto (`POST /api/v1/auth/signup`; a tela Criar
+  conta do web chega com a holetz/eclume#36), com o aceite do aviso de consentimento. Não há convite nem CLI de usuário; o admin só ativa ou desativa contas em
+  Admin → Usuários. `ECLUME_SIGNUP_OPEN=false` fecha o cadastro.
+- **Conta de admin.** O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a
+  conta de admin `admin@example.com` por `eclume-server admin create`. A senha é
+  gerada no host e fica **só** em `/srv/eclume/secrets/admin-password` (600). Ela chega ao CLI
+  por um pipe (`--password-stdin`) e nunca é gravada na estação. Com alguma conta de admin no
+  banco, o script não faz nada.
+- **Migração da organização (008, holetz/eclume#32).** Os usuários antigos viraram contas
+  independentes, com gravações, pessoas, coleções e templates do dono. Cada admin antigo ganhou
+  uma conta de admin com o **mesmo e-mail e o mesmo hash**: a senha de `admin-password` entra nas
+  duas até alguém trocar uma delas.
+- **Trocar a senha do admin** (encerra as sessões dele):
+  `ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | "${P[@]}" run --rm -T migrate eclume-server admin set-password --email admin@example.com --password-stdin`
+  (grave a nova senha no arquivo antes; `P` como em Operação). A senha da conta de usuário se troca pelo app.
+
+O provider padrão da plataforma é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
 roda o `claude -p` no worker CPU com o token de longa duração. O smoke o cadastra se faltar.
 
 **Token do Claude.** Num computador com o Claude Code logado na assinatura, `claude setup-token`
@@ -149,10 +167,39 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt
 ```
 
-O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA e `/downloads/latest.json`,
-faz login, garante o provider e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
-multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e imprime `OK`. Um
-áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já existe.
+O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA, `/downloads/latest.json`
+e o cadastro aberto com o aviso, entra pela sessão de admin (garante o provider) e pela de
+usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
+quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
+multipart. Depois espera a transcrição com 2 locutores e um resumo `done`. Sobre essa gravação,
+prova a gravação centrada no resumo (holetz/eclume#34): edita o resumo à mão (versão `manual`),
+pede ao chat "Diga quem fala primeiro na reunião e acrescente isso no início do resumo" e espera a
+resposta `done` com `reads` não vazio e uma versão `chat` (o tempo do chat sai no log), volta à
+gerada, grava 2 marcadores, acha a gravação na biblioteca do dia dela com `kind=meeting` e baixa
+os quatro formatos de exportação conferindo o `Content-Type` e a assinatura `PK` do DOCX. No fim,
+imprime `OK`. Um áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já
+existe; cada rodada acrescenta versões e marcadores à mesma gravação.
+
+**Processamento automático** (`--pipeline`): retranscreve uma gravação e espera as seis etapas do
+pipeline `done` (recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo), com a
+duração de cada uma, os campos automáticos, o tipo detectado e o resumo automático. Uma etapa
+`failed` ou `skipped` falha o smoke. Sem `--recording`, a gravação é a do áudio de fixture:
+
+```bash
+ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
+  | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt --pipeline --recording <id de uma gravação real>
+```
+
+**Painel de administração no navegador** (`npm --prefix web run test:e2e:prod`, só leitura, no
+Chrome da estação): entra com a conta de admin, percorre as sete telas com os dados reais, espera a
+segunda leitura da Saúde em até 17 s, confere `/admin/voz` → Locutores, que a sessão de admin dá
+401 em `GET /api/v1/me` e que o logout fecha a sessão. Os screenshots ficam em
+`web/test-results/prod/`. O padrão é o Google Chrome; numa estação sem ele, `E2E_CHANNEL=msedge`
+usa o Edge.
+
+```bash
+ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com   ECLUME_ADMIN_PASSWORD="$(ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password)"   npm --prefix web run test:e2e:prod
+```
 
 ### Primeiro deploy (2026-09-25)
 
@@ -166,6 +213,57 @@ multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e i
   com contagens idênticas às da produção. A retenção de 7 e os hardlinks entre instantâneos foram
   conferidos.
 - **Rede:** um container do lumea alcança `https://192.168.15.199:8443` pelo IP do host.
+
+### Conta por usuário em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 organização, 1
+  usuário, 7 gravações, 7 transcrições, 10 resumos, 17 objetos).
+- **Deploy:** a 008 aplicou sem erro; usuários, gravações, transcrições e resumos ficaram com as
+  mesmas contagens, `organizations` sumiu e o admin antigo ganhou a conta de admin com o mesmo
+  e-mail. O disco foi de 87% a 89%.
+- **Smoke:** cadastro aberto (aviso v1), sessão de admin e sessão de usuário com a senha de
+  `admin-password`, transcrição deduplicada e resumo novo pelo `claude-cli` passaram. A conta
+  migrada fica com `notice_required` até aceitar o aviso (`POST /api/v1/me/notice`).
+
+### Processamento automático em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 11 resumos, 17 objetos).
+- **Deploy:** as migrations 009 a 012 aplicaram sem erro. Os 3 templates viraram tipos de agenda
+  do dono (mesmo id) e ganharam os 4 tipos padrão; o provider `Claude (servidor)` herdou as
+  quatro finalidades; as 7 gravações ganharam o histórico do pipeline (recebido e transcrição
+  feitos, o resto `before_pipeline`). A imagem do worker GPU traz o `cb.rnnn` do RNNoise. O disco
+  foi de 86% a 84% (a poda levou as imagens antigas).
+- **Smoke `--pipeline`:** numa gravação real de 32 s, as seis etapas feitas em 30 s:
+  pré-processamento 1,1 s (RNNoise, loudness, sem silêncio a cortar), transcrição 9,9 s, campos
+  3,1 s, tipo 4,6 s e resumo 7,5 s. O agente deu o título e as tags, a detecção escolheu
+  "Reunião de equipe" (padrão de título e tags padrão aplicados) e o resumo automático saiu pelas
+  instruções do tipo, pelo `claude-cli`. Numa gravação sem fala, a cadeia também fechou: nenhum
+  campo preenchido e o resumo dizendo que não havia fala.
+
+### Painel de administração em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 15 resumos, 18 objetos).
+- **Deploy:** nenhuma migration (schema em dia); os scripts em `/srv/eclume/bin/` ficaram com LF.
+- **Navegador:** o `test:e2e:prod` passou em 18 s no Edge da estação (sem Chrome instalado):
+  as sete telas com os dados reais, as cinco etapas e a API saudável na Saúde, a segunda leitura
+  em 15 s, `/admin/voz` → Locutores, 401 em `GET /api/v1/me` com a sessão de admin e o logout. O
+  MCP aparece "Ausente" até a holetz/eclume#35.
+
+### Gravação centrada no resumo em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 15 resumos, 18 objetos).
+- **Deploy:** feito de uma exportação com LF (`git -c core.autocrlf=false archive`), só as imagens
+  `server` e `web` (o worker GPU não mudou). A 014 aplicou sem erro: as versões dos resumos
+  renumeradas por transcrição, as gravações do desktop com `recorded_at_source: capture`, e as
+  tabelas do chat e dos marcadores. Os scripts em `/srv/eclume/bin/` ficaram sem CRLF. A imagem
+  do server foi de 507 MB para 522 MB com o `python-docx` (e o `lxml`); o disco ficou em 84%.
+- **Smoke:** a edição à mão virou versão `manual`; o chat leu a transcrição (`read_transcript`
+  de 00:00:00 a 00:00:30) e criou a versão `chat` em 14 s pelo `claude-cli`; voltar à gerada, os
+  2 marcadores, a biblioteca do dia com `kind=meeting` e os quatro formatos (TXT 848 B, SRT
+  1 022 B, MD 1 118 B, DOCX 37 kB) passaram.
 
 ## CA raiz nos clientes
 
@@ -212,8 +310,8 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-
 ```
 
 - **`--teste [<data>]`** restaura o dump num banco `eclume_restore_teste` e o instantâneo num
-  bucket `eclume-restore-teste`. Depois compara as contagens (organizações, usuários, gravações,
-  transcrições, resumos e objetos) com a produção e apaga os dois.
+  bucket `eclume-restore-teste`. Depois compara as contagens (usuários, gravações, transcrições,
+  resumos e objetos) com a produção e apaga os dois.
 - **`--aplicar <data> --confirmo`** para server e workers e recria o banco `eclume` a partir do
   dump. Depois espelha o instantâneo de volta no bucket, sem apagar objetos que não estão no
   backup, e sobe os serviços.
@@ -228,7 +326,7 @@ P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml
 "${P[@]}" ps --all
 "${P[@]}" logs -f --tail 100 worker-gpu
 "${P[@]}" exec postgres psql -U eclume eclume
-"${P[@]}" run --rm migrate eclume-server admin create-user --org-id <org> --email <e-mail> --name "<nome>" --password-stdin
+"${P[@]}" run --rm -T migrate eclume-server admin create --email <e-mail> --name "<nome>" --password-stdin
 bash deploy/deploy.sh --context gpu-host --services "server web"   # só código do server e do web
 ```
 
@@ -243,7 +341,7 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
 - **E2E do web contra o backend real** num stack efêmero, sem tocar a produção:
   `remote-run . 'bash deploy/e2e-real.sh'` ([frontend-web.md](../standards/code/frontend-web.md)).
-- **Token do Hugging Face:** grave em Administração → Segredos (vence o arquivo) ou troque
+- **Token do Hugging Face:** grave em Administração → Locutores (vence o arquivo) ou troque
   `/srv/eclume/secrets/hf_token` (600). O worker relê a cada job, sem reiniciar
   ([worker-gpu.md](worker-gpu.md)).
 - **Instaladores do desktop:** `deploy/publicar-desktop.sh` grava em `/srv/eclume/downloads/`,

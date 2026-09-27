@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { formatDate, formatDateTime, formatDuration } from '../library/format'
 import { formatClock } from '../transcript/segments'
@@ -36,7 +35,6 @@ export function PersonPage() {
 function PersonDetail({ person }: { person: Person }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const me = useMe()
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const path = { params: { path: { person_id: person.id } } }
@@ -69,11 +67,11 @@ function PersonDetail({ person }: { person: Person }) {
             </span>
             {person.last_seen_at && <span>Última: {formatDate(person.last_seen_at)}</span>}
           </p>
-          {person.notes && <p className={`muted ${styles.notes}`}>{person.notes}</p>}
+          {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
         </div>
         {!editing && (
           <div className={styles.actions}>
-            <button type="button" className="btn" onClick={() => setEditing(true)}>
+            <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>
               Editar
             </button>
             {confirming ? (
@@ -86,7 +84,7 @@ function PersonDetail({ person }: { person: Person }) {
                 >
                   Confirmar exclusão
                 </button>
-                <button type="button" className="btn" onClick={() => setConfirming(false)}>
+                <button type="button" className="btn btn-secondary" onClick={() => setConfirming(false)}>
                   Manter
                 </button>
               </>
@@ -123,7 +121,7 @@ function PersonDetail({ person }: { person: Person }) {
           />
         </div>
       )}
-      <VoiceSection person={person} isAdmin={me.data?.user.role === 'admin'} />
+      <VoiceSection person={person} />
       <div className={styles.columns}>
         <PersonTranscripts personId={person.id} />
         <PersonSegments personId={person.id} />
@@ -165,7 +163,7 @@ function PersonTranscripts({ personId }: { personId: string }) {
       {transcripts.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => transcripts.fetchNextPage()}
           disabled={transcripts.isFetchingNextPage}
         >
@@ -216,7 +214,7 @@ function PersonSegments({ personId }: { personId: string }) {
       {segments.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => segments.fetchNextPage()}
           disabled={segments.isFetchingNextPage}
         >

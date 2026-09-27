@@ -1,13 +1,13 @@
 ---
 type: project
 title: Worker GPU na GTX 1660 SUPER
-description: Como o worker GPU do eclume (WhisperX large-v3-turbo, alinhamento wav2vec2 pt, diarização pyannote community-1) roda no host 192.168.15.199 — compute type, benchmark medido, imagem, cache de modelos, token do Hugging Face e operação.
+description: Como o worker GPU do eclume (WhisperX large-v3-turbo, alinhamento wav2vec2 pt, diarização pyannote community-1) roda no host 192.168.15.199 — compute type, benchmark medido, imagem, pré-processamento com o modelo do RNNoise, cache de modelos, token do Hugging Face e operação.
 resource: worker-gpu/**, engines/src/eclume_engines/**, deploy/docker-compose.gpu-test.yml
 tags: [worker-gpu, whisperx, gpu, benchmark, runbook]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#8, holetz/eclume#12, holetz/eclume#26
+source: holetz/eclume#8, holetz/eclume#12, holetz/eclume#26, holetz/eclume#33
 maintainer: holetz
 ---
 
@@ -124,6 +124,28 @@ docker --context gpu-host build -t eclume-worker-gpu:dev -f worker-gpu/Dockerfil
   por estar ao lado do Dockerfile. Só os manifestos do workspace e o código de `engines/` e
   `worker-gpu/` entram.
 - **Sem modelos na imagem.** Ela roda como uid 1000, o dono de `/srv/eclume`, com `HOME=/tmp`.
+
+## Pré-processamento
+
+Antes do ASR, o job trata o áudio com o `ffmpeg` da imagem (Debian bookworm, 5.1, com `arnndn`,
+`afftdn`, `loudnorm`, `silencedetect`, `atrim` e `pan`), pela configuração que o admin define em
+Pré-processamento e que chega em `options.preprocess`. A ordem e as regras estão no
+[contrato de jobs](../standards/api/jobs-transcricao.md#pré-processamento).
+
+- **Modelo do RNNoise:** o `cb.rnnn` (conjoined-burgers, de GregorR/rnnoise-models, treinado em
+  fala geral com ruído de ambiente) entra na imagem por `ADD --checksum`, em
+  `/opt/eclume/rnnoise/cb.rnnn`, com `ECLUME_RNNOISE_MODEL` apontando para ele. Sem o arquivo (dev
+  fora da imagem), a redução de ruído usa `afftdn` e avisa `rnnoise_model_missing`.
+- **Conferir a imagem:**
+
+  ```bash
+  docker --context gpu-host run --rm --entrypoint sh eclume-worker-gpu:dev \
+    -c 'test -s "$ECLUME_RNNOISE_MODEL" && ffmpeg -hide_banner -filters | grep -E "arnndn|loudnorm|silencedetect"'
+  ```
+
+- O áudio tratado fica só em `ECLUME_WORK_DIR` e sai com o job; o bucket guarda o original.
+- Os testes (`worker-gpu/tests/test_preprocess.py`) usam áudios sintéticos do `lavfi` e rodam onde
+  há `ffmpeg` (o host, `remote-run`); sem ele, pulam.
 
 ## Modelos e token
 

@@ -19,11 +19,11 @@ describe('resumos', () => {
     const panel = await openPanel()
     const list = await within(panel).findByRole('list', { name: 'Resumos gerados' })
     expect(within(list).getByText('Pronto')).toBeInTheDocument()
-    await userEvent.click(within(list).getByText('Ata de reunião'))
+    await userEvent.click(within(list).getByText('Reunião de equipe'))
     expect(await within(list).findByRole('heading', { name: /Ata — Alinhamento/ })).toBeInTheDocument()
   })
 
-  it('gera com o template padrão, mostra na fila e atualiza até ficar pronto', async () => {
+  it('gera com o primeiro tipo de agenda, mostra na fila e atualiza até ficar pronto', async () => {
     let polls = 0
     const http = mockTranscriptApi({
       'GET /api/v1/transcripts/:id/summaries': () => {
@@ -37,27 +37,27 @@ describe('resumos', () => {
     })
     const panel = await openPanel()
     expect(await within(panel).findByText('Nenhum resumo gerado ainda.')).toBeInTheDocument()
-    const select = within(panel).getByLabelText('Template') as HTMLSelectElement
+    const select = within(panel).getByLabelText('Tipo de agenda') as HTMLSelectElement
     await waitFor(() => expect(select.value).toBe('01928f3a-1c00-7a00-8000-000000000901'))
     await userEvent.click(within(panel).getByRole('button', { name: 'Gerar resumo' }))
 
     expect(await within(panel).findByText('Na fila')).toBeInTheDocument()
     expect(await within(panel).findByText('Pronto', {}, { timeout: 8000 })).toBeInTheDocument()
     const body = await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()
-    expect(body).toEqual({ template_id: '01928f3a-1c00-7a00-8000-000000000901' })
+    expect(body).toEqual({ agenda_type_id: '01928f3a-1c00-7a00-8000-000000000901' })
   }, 15_000)
 
-  it('gera com outro template escolhido', async () => {
+  it('gera com outro tipo de agenda escolhido', async () => {
     const http = mockTranscriptApi({
       'POST /api/v1/transcripts/:id/summaries': () => json(fixtures.summaryQueued(), 202),
     })
     const panel = await openPanel()
-    const select = within(panel).getByLabelText('Template')
-    await within(panel).findByRole('option', { name: 'Resumo executivo' })
-    await userEvent.selectOptions(select, 'Resumo executivo')
+    const select = within(panel).getByLabelText('Tipo de agenda')
+    await within(panel).findByRole('option', { name: '1:1' })
+    await userEvent.selectOptions(select, '1:1')
     await userEvent.click(within(panel).getByRole('button', { name: 'Gerar resumo' }))
     await waitFor(() => expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(1))
     const body = await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()
-    expect(body).toEqual({ template_id: '01928f3a-1c00-7a00-8000-000000000902' })
+    expect(body).toEqual({ agenda_type_id: '01928f3a-1c00-7a00-8000-000000000902' })
   })
 })

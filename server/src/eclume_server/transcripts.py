@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -12,19 +13,19 @@ from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
-from eclume_server.problems import forbidden, not_found
+from eclume_server.pipeline import FAILED_STEP, record_gpu_steps, set_step
+from eclume_server.problems import not_found
 from eclume_server.serialize import Row, user_ref
-from eclume_server.voice import capture_links, load_suggestions, org_voice, restore_links, suggest
+from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-    from eclume_server.auth import Principal
     from eclume_server.storage import Storage
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 _SPEAKER_ID = re.compile(r"^S[0-9]+$")
 log = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     conn: AsyncConnection,
     storage: Storage,
     transcript_id: UUID,
-    org: UUID,
+    owner_id: UUID,
     embeddings_key: str | None,
     mapping: dict[str, str],
     *,
@@ -109,27 +110,42 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 ) -> tuple[str | None, dict[str, list[float]]]:
     """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
 
-    O opt-in vale no momento da ingestão: um job enfileirado antes do desligamento não guarda o
-    vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
+    A identificação por voz vale no momento da ingestão: um job enfileirado antes do desligamento
+    não guarda o vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
     """
     if not embeddings_key:
         return None, {}
-    if not keep or not (await org_voice(conn, org))["enabled"]:
+    if not keep or not (await platform_voice(conn))["enabled"]:
         await storage.delete_keys([embeddings_key])
         return None, {}
     model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
     for sid, vector in vectors.items():
         await conn.execute(
             text(
-                "INSERT INTO speaker_embeddings (transcript_id, org_id, speaker_id, model, embedding)"
-                " VALUES (:transcript, :org, :speaker, :model, CAST(:vector AS vector))"
+                "INSERT INTO speaker_embeddings (transcript_id, owner_id, speaker_id, model, embedding)"
+                " VALUES (:transcript, :owner, :speaker, :model, CAST(:vector AS vector))"
             ),
-            {"transcript": transcript_id, "org": org, "speaker": sid, "model": model, "vector": json.dumps(vector)},
+            {
+                "transcript": transcript_id,
+                "owner": owner_id,
+                "speaker": sid,
+                "model": model,
+                "vector": json.dumps(vector),
+            },
         )
     return model, vectors
 
 
-RECORDING_GONE = "gravação inexistente"
+@dataclass(frozen=True)
+class Ingested:
+    """O desfecho da ingestão: a linha do log e se a transcrição foi gravada agora.
+
+    Só o que foi gravado segue para a cadeia por agente; `gone` diz que a gravação foi excluída.
+    """
+
+    message: str
+    persisted: bool = False
+    gone: bool = False
 
 
 async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
@@ -140,10 +156,11 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     transcript_key: str,
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
-) -> str:
+) -> Ingested:
     """Persiste a transcrição do job em aberto; idempotente por `(recording_id, revision)`.
 
-    Roda com o papel de sistema (worker CPU). Devolve o que aconteceu, para o log.
+    Roda com o papel de conexão (worker CPU). Job já concluído ou falho (pelo reaper, por exemplo)
+    não é gravado de novo.
     """
     recording = (
         (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
@@ -151,7 +168,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if recording is None:
-        return RECORDING_GONE
+        return Ingested("gravação inexistente", gone=True)
     job = (
         (
             await conn.execute(
@@ -166,7 +183,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if job is None or job["state"] not in {"queued", "running"}:
-        return "sem job em aberto (já ingerido?)"
+        return Ingested("sem job em aberto (já ingerido ou falho)")
 
     raw = await storage.read_json(transcript_key)
     speakers, segments, mapping = normalize_raw(raw)
@@ -194,7 +211,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         transcript_id = (
             await conn.execute(
                 insert(t.transcripts)
-                .values(org_id=recording["org_id"], recording_id=recording_id, revision=job["revision"], **values)
+                .values(owner_id=recording["owner_id"], recording_id=recording_id, revision=job["revision"], **values)
                 .returning(t.transcripts.c.id)
             )
         ).scalar_one()
@@ -209,33 +226,34 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             await conn.execute(delete(table).where(table.c.transcript_id == transcript_id))
         await conn.execute(text("DELETE FROM speaker_embeddings WHERE transcript_id = :id"), {"id": transcript_id})
 
-    org = recording["org_id"]
+    owner = recording["owner_id"]
     if speakers:
         await conn.execute(
             insert(t.speakers),
-            [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(speakers)],
+            [{"transcript_id": transcript_id, "owner_id": owner, "position": i, **s} for i, s in enumerate(speakers)],
         )
     if segments:
         await conn.execute(
             insert(t.segments),
-            [{"transcript_id": transcript_id, "org_id": org, "position": i, **s} for i, s in enumerate(segments)],
+            [{"transcript_id": transcript_id, "owner_id": owner, "position": i, **s} for i, s in enumerate(segments)],
         )
     model, vectors = await _store_embeddings(
-        conn, storage, transcript_id, org, embeddings_key, mapping, keep=bool(options.get("embeddings"))
+        conn, storage, transcript_id, owner, embeddings_key, mapping, keep=bool(options.get("embeddings"))
     )
     # Retranscrever não desfaz o que alguém confirmou: os vínculos voltam pela sobreposição de fala.
     if old_links:
-        await restore_links(conn, org, transcript_id, old_links, segments)
+        await restore_links(conn, transcript_id, old_links, segments)
     if vectors:
         dims = {len(vector) for vector in vectors.values()}
         if len(dims) == 1:
-            await suggest(conn, org, transcript_id, model, dims.pop())
+            await suggest(conn, owner, transcript_id, model, dims.pop())
 
     await conn.execute(
         update(t.transcription_jobs)
         .where(t.transcription_jobs.c.id == job["id"])
         .values(state="succeeded", finished_at=now, attempts=job["attempts"] + 1, engine_info=engine_info)
     )
+    await record_gpu_steps(conn, job, engine_info, now)
     await conn.execute(
         update(t.recordings)
         .where(t.recordings.c.id == recording_id)
@@ -246,11 +264,17 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             updated_at=now,
         )
     )
-    return f"transcrição {transcript_id} gravada (revisão do job {job['revision']})"
+    return Ingested(f"transcrição {transcript_id} gravada (revisão do job {job['revision']})", persisted=True)
 
 
-async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, message: str) -> str:
-    """Marca como falho o job em aberto e a gravação; job já concluído não muda."""
+async def fail(
+    conn: AsyncConnection, recording_id: UUID, error_code: str, message: str, stage: str | None = None
+) -> str:
+    """Marca como falho o job em aberto e a gravação; job já concluído não muda.
+
+    `stage` é a etapa do progresso do worker GPU em que a falha aconteceu: no download ou no
+    pré-processamento, falha o pré-processamento; nas demais (ou sem ela), a transcrição.
+    """
     now = datetime.now(UTC)
     job = (
         (
@@ -281,6 +305,16 @@ async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, messa
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording_id).values(status="failed", updated_at=now)
     )
+    await set_step(
+        conn,
+        {"id": recording_id, "owner_id": job["owner_id"]},
+        job["revision"],
+        FAILED_STEP.get(stage or "", "transcription"),
+        "failed",
+        error=(error_code or "engine_error", message or ""),
+        started_at=job["started_at"] or job["queued_at"],
+        finished_at=now,
+    )
     return f"job {job['id']} falhou: {error_code}"
 
 
@@ -288,7 +322,7 @@ async def fail(conn: AsyncConnection, recording_id: UUID, error_code: str, messa
 
 
 def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
-    """Transcrições visíveis (sob a RLS) com os campos que vêm da gravação e do dono."""
+    """Transcrições do usuário (sob a RLS) com os campos que vêm da gravação e do dono."""
     r = t.recordings.c
     return select(
         t.transcripts,
@@ -297,6 +331,8 @@ def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
         r.source,
         r.content_hash,
         r.tags,
+        r.kind,
+        r.recorded_at_source,
         r.owner_id,
         t.users.c.name.label("owner_name"),
     ).select_from(
@@ -343,7 +379,7 @@ async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> di
 
 
 async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: bool) -> dict[str, Any]:
-    """Transcrição visível completa (schema v1), ou 404."""
+    """Transcrição do usuário completa (schema v1), ou 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
@@ -393,6 +429,8 @@ def summary_json(row: Row, speakers: list[Row]) -> dict[str, Any]:
         "owner": user_ref(row["owner_id"], row["owner_name"]),
         "speakers": [speaker_json(s) for s in speakers],
         "tags": list(row["tags"]),
+        "kind": row["kind"],
+        "recorded_at_source": row["recorded_at_source"],
     }
 
 
@@ -408,13 +446,11 @@ def transcript_json(row: Row, speakers: list[Row], segments: list[Row], *, words
 # --- edição -----------------------------------------------------------------------------------
 
 
-async def editable_transcript(conn: AsyncConnection, transcript_id: UUID, principal: Principal) -> Row:
-    """Transcrição visível e do usuário; 404 se invisível, 403 se só compartilhada com ele."""
+async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
+    """Transcrição do usuário (sob a RLS, só o dono a vê), ou 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
-    if row["owner_id"] != principal.user_id:
-        raise forbidden("Só o dono da gravação pode editar a transcrição.")
     return row
 
 

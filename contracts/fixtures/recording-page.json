@@ -4,8 +4,10 @@
       "id": "01928f3a-1c00-7a00-8000-000000000402",
       "title": "Entrevista inicial — gestor de produção",
       "status": "processing",
+      "kind": "meeting",
       "source": "upload",
       "recorded_at": "2026-09-19T12:30:00Z",
+      "recorded_at_source": "upload",
       "duration_ms": 2712000,
       "language": null,
       "size_bytes": 11604992,
@@ -15,13 +17,13 @@
         "id": "01928f3a-1c00-7a00-8000-000000000101",
         "name": "Mariana Couto"
       },
-      "visibility": "private",
       "tags": [],
       "collection_ids": [
         "01928f3a-1c00-7a00-8000-000000000801"
       ],
       "metadata": {},
       "capture": null,
+      "agenda_type": null,
       "job": {
         "id": "01928f3a-1c00-7a00-8000-000000000e02",
         "state": "running",
@@ -33,7 +35,64 @@
         "started_at": "2026-09-19T13:41:09Z",
         "finished_at": null
       },
+      "pipeline": [
+        {
+          "step": "received",
+          "state": "done",
+          "started_at": "2026-09-18T15:00:00Z",
+          "finished_at": "2026-09-18T15:00:00Z",
+          "duration_ms": 0,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "preprocessing",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "transcription",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "agenda_type",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "summary",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        }
+      ],
       "transcript_id": null,
+      "marker_count": 0,
       "created_at": "2026-09-19T13:41:07Z",
       "updated_at": "2026-09-19T13:42:55Z"
     },
@@ -42,6 +101,7 @@
       "title": "Alinhamento do programa de lideranças",
       "source": "desktop",
       "recorded_at": "2026-09-18T14:00:05Z",
+      "recorded_at_source": "capture",
       "duration_ms": 166000,
       "language": "pt-BR",
       "size_bytes": 19287595,
@@ -57,7 +117,7 @@
         "client_version": "eclume-desktop/0.3.0"
       },
       "status": "transcribed",
-      "visibility": "shared",
+      "kind": "meeting",
       "tags": [
         "programa-liderancas",
         "cliente-metalurgica"
@@ -70,6 +130,7 @@
         "cliente": "Metalúrgica Serra Azul",
         "projeto": "Programa de lideranças 2026"
       },
+      "agenda_type": null,
       "job": {
         "id": "01928f3a-1c00-7a00-8000-000000000e01",
         "state": "succeeded",
@@ -81,7 +142,64 @@
         "started_at": "2026-09-18T14:09:33Z",
         "finished_at": "2026-09-18T14:09:41Z"
       },
+      "pipeline": [
+        {
+          "step": "received",
+          "state": "done",
+          "started_at": "2026-09-18T15:00:00Z",
+          "finished_at": "2026-09-18T15:00:00Z",
+          "duration_ms": 0,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "preprocessing",
+          "state": "done",
+          "started_at": "2026-09-18T15:00:04Z",
+          "finished_at": "2026-09-18T15:00:12Z",
+          "duration_ms": 8000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "transcription",
+          "state": "done",
+          "started_at": "2026-09-18T15:00:12Z",
+          "finished_at": "2026-09-18T15:01:30Z",
+          "duration_ms": 78000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-18T15:01:31Z",
+          "finished_at": "2026-09-18T15:01:40Z",
+          "duration_ms": 9000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "agenda_type",
+          "state": "done",
+          "started_at": "2026-09-18T15:01:40Z",
+          "finished_at": "2026-09-18T15:01:44Z",
+          "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "summary",
+          "state": "done",
+          "started_at": "2026-09-18T15:01:44Z",
+          "finished_at": "2026-09-18T15:02:10Z",
+          "duration_ms": 26000,
+          "error": null,
+          "reason": null
+        }
+      ],
       "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
+      "marker_count": 2,
       "created_at": "2026-09-18T14:09:31Z",
       "updated_at": "2026-09-18T15:02:17Z"
     }

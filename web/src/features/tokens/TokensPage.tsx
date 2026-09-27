@@ -28,7 +28,7 @@ export function TokensPage() {
     <section className={styles.page} aria-labelledby="tokens-titulo">
       <header className={styles.header}>
         <h1 id="tokens-titulo">Tokens de acesso</h1>
-        <p className="muted">
+        <p className="text-muted">
           Um token pessoal (PAT) dá acesso à API em seu nome, limitado aos escopos escolhidos. Use no app desktop e na
           integração com o lumea. Trate-o como uma senha.
         </p>
@@ -48,7 +48,7 @@ export function TokensPage() {
             {errorMessage(tokens.error)}
           </p>
         )}
-        {tokens.isSuccess && items.length === 0 && <p className="muted">Você ainda não criou nenhum token.</p>}
+        {tokens.isSuccess && items.length === 0 && <p className="text-muted">Você ainda não criou nenhum token.</p>}
         {items.length > 0 && (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -72,7 +72,7 @@ export function TokensPage() {
           </div>
         )}
         {tokens.hasNextPage && (
-          <button type="button" className="btn" onClick={() => tokens.fetchNextPage()} disabled={tokens.isFetchingNextPage}>
+          <button type="button" className="btn btn-secondary" onClick={() => tokens.fetchNextPage()} disabled={tokens.isFetchingNextPage}>
             Carregar mais
           </button>
         )}
@@ -137,17 +137,17 @@ function CreateTokenForm({ onCreated }: { onCreated: (created: Schemas['TokenCre
           onChange={(event) => setName(event.target.value)}
           placeholder="Ex.: App desktop — notebook"
         />
-        <span className="hint">Para reconhecer onde o token está em uso.</span>
+        <span className="field-hint">Para reconhecer onde o token está em uso.</span>
       </div>
       <fieldset className={styles.scopes}>
         <legend>Escopos</legend>
         <div className={styles.presets}>
-          <span className="hint">Combinações prontas:</span>
+          <span className="field-hint">Combinações prontas:</span>
           {PRESETS.map((preset) => (
             <button
               key={preset.name}
               type="button"
-              className="btn btn-sm"
+              className="btn btn-secondary btn-sm"
               onClick={() => {
                 setScopes(preset.scopes)
                 if (!name.trim()) setName(preset.name)
@@ -164,7 +164,7 @@ function CreateTokenForm({ onCreated }: { onCreated: (created: Schemas['TokenCre
               <span>
                 <span className={styles.scopeLabel}>{label}</span>
                 <span className={styles.scopeCode}>{scope}</span>
-                <span className="hint">{description}</span>
+                <span className="field-hint">{description}</span>
               </span>
             </label>
           ))}
@@ -172,7 +172,7 @@ function CreateTokenForm({ onCreated }: { onCreated: (created: Schemas['TokenCre
       </fieldset>
       <div className={`field ${styles.expiration}`}>
         <label htmlFor={expirationId}>Validade</label>
-        <select id={expirationId} className="select" value={expiration} onChange={(e) => setExpiration(e.target.value)}>
+        <select id={expirationId} className="input" value={expiration} onChange={(e) => setExpiration(e.target.value)}>
           {EXPIRATIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -237,7 +237,7 @@ function SecretPanel({ created, onDone }: { created: Schemas['TokenCreated']; on
         {copied ? 'Token copiado para a área de transferência.' : ''}
       </p>
       <div>
-        <button type="button" className="btn" onClick={onDone}>
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
           Pronto, já guardei
         </button>
       </div>
@@ -303,7 +303,7 @@ function TokenRow({ token }: { token: Token }) {
               <button type="button" className="btn btn-danger btn-sm" onClick={() => revoke.mutate()} disabled={revoke.isPending}>
                 Confirmar revogação
               </button>
-              <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
                 Manter
               </button>
               {revoke.isError && (

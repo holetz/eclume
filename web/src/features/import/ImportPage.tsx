@@ -16,7 +16,7 @@ export function ImportPage() {
     <section className={styles.page} aria-labelledby="importar-titulo">
       <header className={styles.header}>
         <h1 id="importar-titulo">Importar arquivo</h1>
-        <p className="muted">
+        <p className="text-muted">
           O áudio é convertido aqui no navegador para Opus, cerca de 15 MB por hora, e só então enviado. Um vídeo de
           vários GB vira um arquivo pequeno, e só o som sai do seu computador.
         </p>
@@ -52,7 +52,7 @@ export function ImportPage() {
             <button type="button" className="btn btn-primary" onClick={resume}>
               {state.resumable ? 'Retomar o envio' : 'Tentar de novo'}
             </button>
-            <button type="button" className="btn" onClick={cancel}>
+            <button type="button" className="btn btn-secondary" onClick={cancel}>
               Cancelar
             </button>
           </div>
@@ -69,7 +69,7 @@ export function ImportPage() {
             <Link to={`/gravacoes/${state.recordingId}`} className="btn btn-primary">
               {state.deduplicated ? 'Abrir a gravação' : 'Acompanhar a gravação'}
             </Link>
-            <button type="button" className="btn" onClick={reset}>
+            <button type="button" className="btn btn-secondary" onClick={reset}>
               Importar outro arquivo
             </button>
           </div>
@@ -103,7 +103,7 @@ function DropZone({ onFile, disabled }: { onFile: (file: File) => void; disabled
       onDrop={onDrop}
     >
       <p className={styles.dropTitle}>Arraste um arquivo de áudio ou vídeo para cá</p>
-      <p className="muted">MP3, M4A, WAV, OGG, MP4, MOV, WebM, MKV e outros.</p>
+      <p className="text-muted">MP3, M4A, WAV, OGG, MP4, MOV, WebM, MKV e outros.</p>
       <label htmlFor={inputId} className="btn btn-primary">
         Escolher arquivo
       </label>
@@ -126,7 +126,7 @@ function FileSummary({ file }: { file: File }) {
   return (
     <div className={styles.file}>
       <span className={styles.fileName}>{file.name}</span>
-      <span className="muted">{formatBytes(file.size)}</span>
+      <span className="text-muted">{formatBytes(file.size)}</span>
     </div>
   )
 }
@@ -155,7 +155,7 @@ function SelectedFile({
       }}
     >
       <FileSummary file={state.file} />
-      <p className="muted" aria-live="polite">
+      <p className="text-muted" aria-live="polite">
         {probing
           ? 'Lendo o arquivo…'
           : probe?.durationSec != null
@@ -173,7 +173,7 @@ function SelectedFile({
         <button type="submit" className="btn btn-primary" disabled={disabled || probing}>
           Converter e enviar
         </button>
-        <button type="button" className="btn" onClick={onChange}>
+        <button type="button" className="btn btn-secondary" onClick={onChange}>
           Trocar arquivo
         </button>
       </div>
@@ -239,7 +239,7 @@ function Progress({
       </p>
       <div className={styles.actions}>
         {state.step === 'uploading' && (
-          <button type="button" className="btn" onClick={onPause}>
+          <button type="button" className="btn btn-secondary" onClick={onPause}>
             Pausar
           </button>
         )}

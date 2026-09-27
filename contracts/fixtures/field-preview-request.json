@@ -1,0 +1,15 @@
+{
+  "field": {
+    "name": "Cliente",
+    "kind": "choice",
+    "options": [
+      "Serra Azul",
+      "Vale Verde"
+    ],
+    "instructions": "A empresa cliente de que a conversa trata; nenhuma, se for interna.",
+    "auto_fill": true
+  },
+  "recording_ids": [
+    "01928f3a-1c00-7a00-8000-000000000201"
+  ]
+}

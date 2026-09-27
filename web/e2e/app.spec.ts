@@ -1,5 +1,5 @@
 // Fluxo principal contra o Prism. O mock não emite cookies nem guarda estado, então o teste:
-// - põe os cookies de sessão na resposta do login, como o servidor real faria;
+// - põe os cookies de sessão na resposta do login e do cadastro, como o servidor real faria;
 // - pede o upload novo com `Prefer: code=201` (o mock responde 200/deduplicado por padrão);
 // - encaminha o PUT de parte (URL absoluta em 127.0.0.1:4010, outra origem) com a credencial que
 //   o mock exige e os headers CORS que o armazenamento real devolve.
@@ -42,7 +42,7 @@ async function screenshot(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ page, baseURL }) => {
-  await page.route('**/api/v1/auth/login', async (route) => {
+  await page.route(/\/api\/v1\/auth\/(login|signup)$/, async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
       await page.context().addCookies([
@@ -73,6 +73,13 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
+/** Clica num item da navegação principal, abrindo "Configurações e ajuda" quando ele está recolhido. */
+async function navTo(page: Page, name: string) {
+  const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name })
+  if (!(await link.isVisible())) await page.getByText('Configurações e ajuda').click()
+  await link.click()
+}
+
 async function login(page: Page, shot?: string) {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
@@ -82,11 +89,28 @@ async function login(page: Page, shot?: string) {
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
 
+test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }) => {
+  await page.goto('/entrar')
+  await page.getByRole('link', { name: 'Criar conta' }).click()
+  await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
+  await page.getByLabel('Nome').fill('Paulo Andrade')
+  await page.getByLabel('E-mail').fill('paulo.andrade@example.com')
+  await page.getByLabel('Senha').fill('senha-bem-longa-2026')
+  const submit = page.getByRole('button', { name: 'Criar conta' })
+  await expect(submit).toBeDisabled()
+  await page.getByText('Sou responsável por pedir o consentimento das pessoas que gravo.').click()
+  await submit.click()
+  await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
+})
+
 test('login, biblioteca, transcrição, import e token contra o mock', async ({ page }) => {
   await login(page, '1-login')
 
-  // Biblioteca: as duas gravações da fixture, uma em processamento.
+  // Biblioteca: as duas gravações da fixture, uma em processamento; sem filtro de compartilhadas.
   const library = page.getByRole('list', { name: 'Gravações' })
+  await expect(page.getByRole('radio', { name: /Compartilhadas/ })).toHaveCount(0)
+  // A conta de usuário não tem papel: o painel admin não está no menu.
+  await expect(page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Painel admin' })).toHaveCount(0)
   await expect(library.getByRole('listitem')).toHaveCount(2)
   await expect(library.getByText('Transcrevendo')).toBeVisible()
   await expect(library.getByText('Separando locutores')).toBeVisible()
@@ -98,7 +122,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await expect(falas.getByRole('listitem')).toHaveCount(12)
   await falas.getByRole('button', { name: /Ouvir a partir de 00:39/ }).click()
   await expect(falas.getByRole('listitem').nth(3)).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByRole('list', { name: 'Resumos gerados' }).getByText('Ata de reunião')).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Resumos gerados' }).getByText('Reunião de equipe')).toBeVisible()
 
   // Renomear: o mock devolve o locutor 2 ligado a Rafael Lima.
   const speakers = page.getByRole('region', { name: 'Locutores' })
@@ -109,7 +133,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await screenshot(page, '3-transcricao')
 
   // Import: conversão real no navegador e upload create → PUT → complete.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Importar arquivo' }).click()
+  await navTo(page, 'Importar arquivo')
   await page.getByLabel('Escolher arquivo').setInputFiles({ name: 'reuniao.wav', mimeType: 'audio/wav', buffer: wav(3) })
   await expect(page.getByText(/Duração 3 s/)).toBeVisible()
   await expect(page.getByLabel('Título da gravação')).toHaveValue('reuniao')
@@ -125,53 +149,16 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   )
 
   // Token: o segredo aparece uma vez.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Tokens de acesso' }).click()
+  await navTo(page, 'Tokens de acesso')
   await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
   await page.getByRole('button', { name: 'lumea', exact: true }).click()
   await page.getByRole('button', { name: 'Criar token' }).click()
   await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
   await screenshot(page, '5-tokens')
 
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'App desktop' }).click()
+  await navTo(page, 'App desktop')
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
-})
-
-test('painel admin contra o mock', async ({ page }) => {
-  await login(page)
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Painel admin' }).click()
-  const tabs = page.getByRole('navigation', { name: 'Seções da administração' })
-
-  // Transcrição: a configuração do exemplo, salva de volta.
-  await expect(page.getByRole('heading', { name: 'Transcrição' })).toBeVisible()
-  await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('large-v3-turbo')
-  await page.getByRole('button', { name: 'Salvar configuração' }).click()
-  await expect(page.getByText('Configuração salva.')).toBeVisible()
-  await screenshot(page, '12-admin-transcricao')
-
-  // Saúde: GPU e jobs do exemplo.
-  await tabs.getByRole('link', { name: 'Saúde' }).click()
-  await expect(page.getByText('NVIDIA GeForce GTX 1660 SUPER')).toBeVisible()
-  await expect(page.getByRole('row', { name: /Reunião de alinhamento — cliente Aurora/ })).toBeVisible()
-  await screenshot(page, '13-admin-saude')
-
-  // Segredos: só escrita.
-  await tabs.getByRole('link', { name: 'Segredos' }).click()
-  const hf = page.getByRole('form', { name: 'Token do Hugging Face' })
-  await expect(hf.getByText('Definido')).toBeVisible()
-  await hf.getByLabel('Novo valor').fill('hf_e2e_token')
-  await hf.getByRole('button', { name: 'Salvar' }).click()
-  await expect(hf.getByText('Token do Hugging Face salvo.')).toBeVisible()
-  await expect(hf.getByLabel('Novo valor')).toHaveValue('')
-
-  // Usuários: a lista do exemplo e o convite com link mostrado uma vez.
-  await tabs.getByRole('link', { name: 'Usuários e convites' }).click()
-  await expect(page.getByRole('row', { name: /Paulo Andrade/ })).toBeVisible()
-  const invite = page.getByRole('form', { name: 'Novo convite' })
-  await invite.getByLabel('E-mail').fill('beatriz.nunes@example.com')
-  await invite.getByRole('button', { name: 'Criar convite' }).click()
-  await expect(page.getByLabel('Link do convite')).toHaveValue(/\/convite\//)
-  await screenshot(page, '14-admin-usuarios')
 })
 
 test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {
@@ -236,23 +223,15 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await rejected
   await expect(suggestions).toHaveCount(0)
 
-  // Pessoa: consentimento registrado, amostras da impressão.
+  // Pessoa: as amostras da impressão, sem consentimento por pessoa; esquecer a voz pede confirmação.
   await nav.getByRole('link', { name: 'Pessoas' }).click()
   await page.getByRole('link', { name: 'Rafael Lima' }).click()
   const voice = page.getByRole('region', { name: 'Voz' })
-  await expect(voice.getByText('Consentimento registrado', { exact: true })).toBeVisible()
   await expect(voice.getByText(/2 amostras na impressão de voz/)).toBeVisible()
-  await voice.getByRole('button', { name: 'Revogar consentimento' }).click()
-  await expect(voice.getByRole('button', { name: 'Confirmar revogação' })).toBeVisible()
+  await expect(voice.getByText(/consentimento/i)).toHaveCount(0)
+  await voice.getByRole('button', { name: 'Esquecer a voz' }).click()
+  await expect(voice.getByRole('button', { name: 'Confirmar: esquecer a voz' })).toBeVisible()
   await screenshot(page, '16-pessoa-voz')
   await voice.getByRole('button', { name: 'Manter' }).click()
 
-  // Admin: opt-in, termo e trilha.
-  await nav.getByRole('link', { name: 'Painel admin' }).click()
-  await page.getByRole('navigation', { name: 'Seções da administração' }).getByRole('link', { name: 'Identificação por voz' }).click()
-  await expect(page.getByRole('checkbox', { name: /Ligar a identificação por voz/ })).toBeChecked()
-  await expect(page.getByRole('table', { name: 'Eventos de voz mais recentes' }).getByRole('row')).toHaveCount(4)
-  await page.getByRole('button', { name: 'Salvar' }).click()
-  await expect(page.getByText('Configuração de voz salva.')).toBeVisible()
-  await screenshot(page, '17-admin-voz')
 })

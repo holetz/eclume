@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -17,6 +15,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
+from eclume_server.exports import slug
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.people import get_person
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
@@ -74,7 +73,7 @@ async def list_transcripts(
     person: UUID | None = None,
     recording_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Transcrições visíveis, em ordem crescente de `(updated_at, id)`; `since` é inclusivo."""
+    """Transcrições do usuário, em ordem crescente de `(updated_at, id)`; `since` é inclusivo."""
     c = t.transcripts.c
     query = transcript_select().order_by(c.updated_at, c.id).limit(limit + 1)
     if since is not None:
@@ -85,7 +84,7 @@ async def list_transcripts(
         query = query.where(exists().where(t.speakers.c.transcript_id == c.id, t.speakers.c.person_id == person))
     if cursor:
         query = query.where(tuple_(c.updated_at, c.id) > decode_cursor(cursor))
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         rows = list((await conn.execute(query)).mappings().all())
         speakers = await load_speakers(conn, [row["id"] for row in rows[:limit]])
     items = [summary_json(row, speakers.get(row["id"], [])) for row in rows]
@@ -97,14 +96,8 @@ async def get_transcript(
     transcript_id: UUID, principal: Reader, ctx: Ctx, include: Literal["words"] | None = None
 ) -> dict[str, Any]:
     """Transcrição completa; `include=words` traz as palavras com tempo."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         return await load_transcript(conn, transcript_id, words=include == "words")
-
-
-def _filename(title: str) -> str:
-    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
-    return f"{slug or 'transcricao'}.md"
 
 
 @router.get("/transcripts/{transcript_id}/export")
@@ -115,13 +108,13 @@ async def export_transcript(
     ctx: Ctx,
 ) -> Response:
     """Exporta a transcrição (`md`: frontmatter YAML e uma linha por segmento)."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
+    async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await load_transcript(conn, transcript_id, words=False)
     del export_format  # só `md` existe na v1; formatos novos entram de forma aditiva
     return Response(
         render_markdown(transcript),
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{_filename(transcript["title"])}"'},
+        headers={"Content-Disposition": f'attachment; filename="{slug(transcript["title"])}.md"'},
     )
 
 
@@ -151,8 +144,8 @@ async def update_speaker(
 ) -> dict[str, Any]:
     """Renomeia o locutor e/ou o liga a uma pessoa (`null` desfaz); ligar sem `label` usa o nome dela."""
     values = _patch_values(body)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        await editable_transcript(conn, transcript_id, principal)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await editable_transcript(conn, transcript_id)
         where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
         current = (await conn.execute(select(t.speakers.c.person_id).where(*where))).first()
         if current is None:
@@ -187,8 +180,8 @@ async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Edi
         raise invalid_field("source_speaker_ids", "ids repetidos")
     if body.target_speaker_id in sources:
         raise invalid_field("source_speaker_ids", "o destino não pode estar entre as origens")
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        await editable_transcript(conn, transcript_id, principal)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await editable_transcript(conn, transcript_id)
         existing = await _speaker_ids(conn, transcript_id)
         if body.target_speaker_id not in existing:
             raise invalid_field("target_speaker_id", "locutor inexistente")
@@ -216,8 +209,8 @@ async def update_segment(
     """Corrige o texto (descarta as `words`) e/ou troca o locutor do segmento."""
     values = _patch_values(body)
     where = (t.segments.c.transcript_id == transcript_id, t.segments.c.segment_id == segment_id)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        await editable_transcript(conn, transcript_id, principal)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await editable_transcript(conn, transcript_id)
         current = (await conn.execute(select(t.segments.c.speaker_id).where(*where))).scalar()
         if current is None:
             raise not_found("Segmento inexistente nesta transcrição.")

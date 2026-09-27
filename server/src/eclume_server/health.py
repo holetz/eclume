@@ -1,34 +1,72 @@
-"""Saúde para o painel admin: filas arq, heartbeat do worker GPU, jobs em andamento e falhas.
+"""Saúde para o painel admin: filas, worker GPU, jobs, etapas do pipeline, serviços e falhas.
 
-Regras em docs/standards/code/server-admin.md. As filas e a GPU são da instância (um worker serve
-todas as organizações) e saem só como números; jobs e falhas são da organização do admin.
+Regras em docs/standards/code/server-admin.md. As filas, a GPU, os jobs, as etapas e as falhas são
+da plataforma; nada do conteúdo dos usuários sai daqui (o título da gravação, nunca): só números e
+códigos de erro.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Boolean, Column, MetaData, Table, Text, func, select
 
+from eclume_server import __version__
 from eclume_server.db import tables as t
-from eclume_server.db.session import system_tx, user_tx
+from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress
 from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
-    from eclume_server.auth import Principal
+    from collections.abc import Awaitable, Callable
+
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
     from eclume_server.context import AppContext
 
 log = logging.getLogger(__name__)
+# O catálogo do Postgres, só as colunas que a sonda lê.
+t_pg_class = Table(
+    "pg_class", MetaData(), Column("relname", Text), Column("relkind", Text), Column("relforcerowsecurity", Boolean)
+)
 
 FAILURE_WINDOW = timedelta(hours=24)
 MAX_FAILURES = 20
-# Título mostrado no lugar do de uma gravação que o admin não enxerga (privada de outro usuário).
-PRIVATE_TITLE = "Gravação privada"
+# As etapas que rodam (o recebido é instantâneo), na ordem do pipeline.
+HEALTH_STEPS = ("preprocessing", "transcription", "fields", "agenda_type", "summary")
+# Etapas cuja falha é do job de transcrição, que o admin retenta.
+JOB_STEPS = ("preprocessing", "transcription")
+PROBE_TIMEOUT_S = 2.0
+STORAGE_SLOW_S = 1.0
+# Chave de health-check do arq do worker CPU (`health_check_interval` no `worker_settings`).
+CPU_HEALTH_KEY = f"{DEFAULT_QUEUE}:health-check"
+# Tabelas do usuário: a RLS forçada em todas é o "RLS ativa" do Postgres.
+USER_TABLES = (
+    "recordings",
+    "uploads",
+    "collections",
+    "agenda_types",
+    "fields",
+    "field_values",
+    "pipeline_steps",
+    "people",
+    "transcription_jobs",
+    "transcripts",
+    "speakers",
+    "segments",
+    "speaker_embeddings",
+    "summaries",
+    "voice_samples",
+    "speaker_suggestions",
+)
+# O admin não vê conteúdo de usuário: no lugar do título da gravação, um rótulo fixo.
+RECORDING_TITLE = "Gravação de usuário"
 
 
 def _int(value: str | None) -> int | None:
@@ -84,7 +122,123 @@ def models_json(beat: dict[str, str] | None) -> list[dict[str, Any]]:
     ]
 
 
-async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
+async def steps_json(conn: AsyncConnection, since: datetime) -> list[dict[str, Any]]:
+    """`steps`: execuções, mediana (ms) e falhas de cada etapa nas últimas 24 h, só números."""
+    ps = t.pipeline_steps.c
+    finished = ps.state.in_(["done", "failed"])
+    rows = (
+        await conn.execute(
+            select(
+                ps.step,
+                func.count().filter(finished),
+                func.percentile_cont(0.5).within_group(ps.duration_ms).filter(ps.state == "done"),
+                func.count().filter(ps.state == "failed"),
+            )
+            .where(ps.finished_at >= since, ps.step != "received")
+            .group_by(ps.step)
+        )
+    ).all()
+    found = {step: (runs, median, failures) for step, runs, median, failures in rows}
+    items = []
+    for step in HEALTH_STEPS:
+        runs, median, failures = found.get(step, (0, None, 0))
+        items.append(
+            {"step": step, "runs": runs, "median_ms": None if median is None else round(median), "failures": failures}
+        )
+    return items
+
+
+async def failures_json(conn: AsyncConnection, since: datetime) -> list[dict[str, Any]]:
+    """`recent_failures`: as etapas que falharam nas últimas 24 h; o job só nas da transcrição."""
+    ps, jobs = t.pipeline_steps.c, t.transcription_jobs.c
+    rows = (
+        await conn.execute(
+            select(ps.recording_id, ps.step, ps.error_code, ps.error_message, ps.finished_at, jobs.id.label("job_id"))
+            .outerjoin(
+                t.transcription_jobs,
+                (jobs.recording_id == ps.recording_id) & (jobs.revision == ps.revision) & ps.step.in_(JOB_STEPS),
+            )
+            .where(ps.state == "failed", ps.finished_at >= since)
+            .order_by(ps.finished_at.desc())
+            .limit(MAX_FAILURES)
+        )
+    ).all()
+    return [
+        {
+            "job_id": str(row.job_id) if row.job_id else None,
+            "recording_id": str(row.recording_id),
+            "step": row.step,
+            "stage": None,
+            "code": row.error_code or "internal_error",
+            "message": row.error_message or "",
+            "failed_at": iso(row.finished_at),
+            "retryable": row.job_id is not None and is_retryable(row.error_code),
+        }
+        for row in rows
+    ]
+
+
+async def _probe(name: str, check: Callable[[], Awaitable[str | None]], slow_s: float | None = None) -> dict[str, Any]:
+    """Roda a sonda com teto de 2 s: `healthy`, `degraded` (lenta) ou `down`."""
+    started = time.monotonic()
+    try:
+        async with asyncio.timeout(PROBE_TIMEOUT_S):
+            detail = await check()
+    except Exception as exc:  # noqa: BLE001 — qualquer falha da sonda é o serviço fora
+        status, detail = "down", "sem resposta em 2 s" if isinstance(exc, TimeoutError) else type(exc).__name__
+    else:
+        status = "healthy"
+    latency = round((time.monotonic() - started) * 1000)
+    if status == "healthy" and slow_s is not None and latency > slow_s * 1000:
+        status, detail = "degraded", f"lento: {latency} ms"
+    return {"name": name, "status": status, "detail": detail, "latency_ms": latency}
+
+
+async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[dict[str, Any]]:
+    """`services`: uma sonda por serviço, em paralelo."""
+
+    async def postgres() -> str:
+        async with system_tx(ctx.engine) as conn:
+            forced = (
+                await conn.execute(
+                    select(func.bool_and(t_pg_class.c.relforcerowsecurity)).where(
+                        t_pg_class.c.relname.in_(USER_TABLES), t_pg_class.c.relkind == "r"
+                    )
+                )
+            ).scalar()
+        return "RLS ativa" if forced else "RLS desligada em alguma tabela do usuário"
+
+    async def redis() -> None:
+        await ctx.queue.pool.ping()
+
+    async def storage() -> None:
+        await ctx.storage.head_bucket()
+
+    async def gpu_worker() -> str:
+        if beat is None:
+            raise LookupError
+        return beat.get("engine") or ""
+
+    async def cpu_worker() -> None:
+        if not await ctx.queue.pool.exists(CPU_HEALTH_KEY):
+            raise LookupError
+
+    async def api() -> str:
+        return __version__
+
+    probes = await asyncio.gather(
+        _probe("api", api),
+        _probe("postgres", postgres),
+        _probe("redis", redis),
+        _probe("storage", storage, slow_s=STORAGE_SLOW_S),
+        _probe("gpu_worker", gpu_worker),
+        _probe("cpu_worker", cpu_worker),
+    )
+    # O servidor MCP chega com a holetz/eclume#35.
+    return [*probes, {"name": "mcp", "status": "absent", "detail": None, "latency_ms": None}]
+
+
+async def admin_health(ctx: AppContext) -> dict[str, Any]:
     """Schema `AdminHealth`."""
     now = datetime.now(UTC)
     beat = await ctx.queue.gpu_health()
@@ -93,40 +247,22 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
         queued, running = await ctx.queue.depth(name)
         queues.append({"name": name, "queued": queued, "running": running})
 
-    jobs, recordings = t.transcription_jobs, t.recordings
-    # Com o papel de sistema: o admin vê os jobs de toda a organização, inclusive de gravações privadas.
+    jobs = t.transcription_jobs
+    # Com o papel de conexão: os jobs são de todos os usuários.
     async with system_tx(ctx.engine) as conn:
         open_jobs = (
-            (
-                await conn.execute(
-                    select(jobs, recordings.c.title)
-                    .join(recordings, recordings.c.id == jobs.c.recording_id)
-                    .where(jobs.c.org_id == principal.org_id, jobs.c.state.in_(["queued", "running"]))
-                    .order_by(jobs.c.queued_at)
-                )
-            )
+            (await conn.execute(select(jobs).where(jobs.c.state.in_(["queued", "running"])).order_by(jobs.c.queued_at)))
             .mappings()
             .all()
         )
         failed_filter = (
-            jobs.c.org_id == principal.org_id,
             jobs.c.state == "failed",
             jobs.c.finished_at >= now - FAILURE_WINDOW,
         )
         failed_count = (await conn.execute(select(func.count()).select_from(jobs).where(*failed_filter))).scalar_one()
-        failures = (
-            (
-                await conn.execute(
-                    select(jobs).where(*failed_filter).order_by(jobs.c.finished_at.desc()).limit(MAX_FAILURES)
-                )
-            )
-            .mappings()
-            .all()
-        )
-    # O título só aparece para quem enxerga a gravação.
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        ids = [row["recording_id"] for row in open_jobs]
-        visible = set((await conn.execute(select(recordings.c.id).where(recordings.c.id.in_(ids)))).scalars())
+        steps = await steps_json(conn, now - FAILURE_WINDOW)
+        failures = await failures_json(conn, now - FAILURE_WINDOW)
+    services = await services_json(ctx, beat)
     progress = await ctx.queue.raw_progress([row["recording_id"] for row in open_jobs])
 
     running_jobs = []
@@ -137,7 +273,7 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
             {
                 "job_id": str(row["id"]),
                 "recording_id": str(row["recording_id"]),
-                "recording_title": row["title"] if row["recording_id"] in visible else PRIVATE_TITLE,
+                "recording_title": RECORDING_TITLE,
                 "state": "running" if raw else "queued",
                 "stage": stage,
                 "progress": fraction,
@@ -151,18 +287,9 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
         "queue": {"queued": gpu_queue["queued"], "running": gpu_queue["running"], "failed_last_24h": failed_count},
         "gpu": gpu_json(beat),
         "models_loaded": models_json(beat),
-        "recent_failures": [
-            {
-                "job_id": str(row["id"]),
-                "recording_id": str(row["recording_id"]),
-                "stage": None,
-                "code": row["error_code"] or "internal_error",
-                "message": row["error_message"] or "",
-                "failed_at": iso(row["finished_at"]),
-                "retryable": is_retryable(row["error_code"]),
-            }
-            for row in failures
-        ],
+        "recent_failures": failures,
+        "steps": steps,
+        "services": services,
         "checked_at": iso(now),
         "worker": worker_json(beat),
         "queues": queues,

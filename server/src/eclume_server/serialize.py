@@ -17,10 +17,11 @@ def user_json(row: Row) -> dict[str, Any]:
         "id": str(row["id"]),
         "email": row["email"],
         "name": row["name"],
-        "role": row["role"],
         "active": row["active"],
         "created_at": iso(row["created_at"]),
         "last_login_at": iso(row["last_login_at"]),
+        "notice_version": row["notice_version"],
+        "notice_accepted_at": iso(row["notice_accepted_at"]),
     }
 
 

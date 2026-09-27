@@ -1,149 +1,119 @@
-import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
-import { formatDateTime, stageLabel } from '../library/format'
+import { formatDateTime } from '../library/format'
+import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
+import { formatDuration, labelOf, SERVICE_STATUS, SERVICES, STEP_ORDER, STEPS } from './labels'
 import { HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
-import { sectionTitle } from './sections'
 
 type Health = Schemas['AdminHealth']
+type Failure = Health['recent_failures'][number]
 
-const MODEL_KINDS: Record<string, string> = {
-  asr: 'ASR',
-  alignment: 'Alinhamento',
-  diarization: 'Diarização',
-  embeddings: 'Impressão de voz',
-  summarization: 'Sumarização',
-}
+const clock = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const gigabytes = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
+const gb = (mb: number) => gigabytes.format(mb / 1024)
 
-const QUEUE_LABELS: Record<string, string> = {
-  'eclume:gpu': 'Transcrição (GPU)',
-  'eclume:default': 'Ingestão e resumos (CPU)',
-}
-
-/** Saúde do serviço, relida a cada 10 s. */
+/**
+ * Saúde da plataforma, relida a cada 15 s só com a aba visível. Sem conteúdo de usuário: nem
+ * título nem arquivo de gravação aparecem aqui.
+ */
 export function HealthPage() {
-  usePageTitle(sectionTitle('saude'))
   const health = useAdminHealth()
+  const data = health.data
   return (
-    <section className={styles.page} aria-labelledby="saude-titulo">
-      <div className={styles.intro}>
-        <h2 id="saude-titulo">Saúde</h2>
-        <p className="muted">
-          Filas, worker GPU e jobs da organização. Atualiza sozinha a cada {HEALTH_REFRESH_MS / 1000} segundos.
-        </p>
-        {health.data && <p className={styles.meta}>Verificado às {formatDateTime(health.data.checked_at)}.</p>}
-      </div>
+    <>
+      <AdminPageHead
+        title="Saúde"
+        actions={
+          data && (
+            <span className={`text-muted tabular ${styles.note}`} aria-live="polite">
+              Atualizado às {clock.format(new Date(data.checked_at))} · a cada {HEALTH_REFRESH_MS / 1000} s
+            </span>
+          )
+        }
+      />
       {health.isPending && <p role="status">Consultando a saúde do serviço…</p>}
+      {/* Um erro de leitura mantém os últimos dados na tela. */}
       {health.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(health.error)}
         </p>
       )}
-      {health.data && <HealthView health={health.data} />}
-    </section>
+      {data && <HealthView health={data} />}
+    </>
   )
 }
 
 function HealthView({ health }: { health: Health }) {
-  const worker = health.worker
-  const gpu = health.gpu
-  const queues = health.queues ?? [{ name: 'eclume:gpu', queued: health.queue.queued, running: health.queue.running }]
-  const jobs = health.running_jobs ?? []
+  const { worker, gpu, queue } = health
+  const asr = health.models_loaded.find((model) => model.kind === 'asr')
+  const steps = STEP_ORDER.map(
+    (step) => health.steps.find((item) => item.step === step) ?? { step, runs: 0, median_ms: null, failures: 0 },
+  )
+  const failures = steps.reduce((total, step) => total + step.failures, 0)
+  const latest = health.recent_failures[0]
+
   return (
     <>
-      <div className={styles.cards}>
-        <article className={`card ${styles.card}`} aria-labelledby="saude-worker">
-          <h3 id="saude-worker">Worker GPU</h3>
-          {worker === undefined ? (
-            <p className="muted">O servidor não informa o estado do worker.</p>
-          ) : worker === null ? (
-            <p>
-              <span className="badge badge-danger">Sem sinal</span>{' '}
-              <span className="muted">Nenhum heartbeat nos últimos 45 segundos: o worker pode estar parado.</span>
-            </p>
-          ) : (
-            <dl className={styles.facts}>
-              <dt>Estado</dt>
-              <dd>
-                <span className="badge badge-success">No ar</span>{' '}
-                {worker.busy ? <span className="badge badge-progress">Transcrevendo</span> : <span className="badge badge-neutral">Ocioso</span>}
-              </dd>
-              <dt>Último sinal</dt>
-              <dd>{formatDateTime(worker.last_seen_at)}</dd>
-              <dt>Motor</dt>
-              <dd>{worker.engine ?? '—'}</dd>
-              <dt>Dispositivo</dt>
-              <dd>{worker.device ?? '—'}</dd>
-              <dt>Versão</dt>
-              <dd>{worker.version ?? '—'}</dd>
-            </dl>
-          )}
-        </article>
-
-        <article className={`card ${styles.card}`} aria-labelledby="saude-gpu">
-          <h3 id="saude-gpu">GPU</h3>
-          {gpu ? (
-            <>
-              <p>{gpu.name}</p>
-              <label className={styles.meta} htmlFor="saude-vram">
-                VRAM: {gpu.vram_used_mb.toLocaleString('pt-BR')} de {gpu.vram_total_mb.toLocaleString('pt-BR')} MiB
-              </label>
-              <meter
-                id="saude-vram"
-                className={styles.meter}
-                min={0}
-                max={gpu.vram_total_mb || 1}
-                high={(gpu.vram_total_mb || 1) * 0.85}
-                value={gpu.vram_used_mb}
-              />
-              <p className={styles.meta}>Utilização: {Math.round(gpu.utilization_pct)}%</p>
-            </>
-          ) : (
-            <p className="muted">Sem leitura da GPU (worker parado ou rodando em CPU).</p>
-          )}
-          <h4>Modelos carregados</h4>
-          {health.models_loaded.length === 0 ? (
-            <p className="muted">Nenhum: os modelos saem da GPU depois de alguns minutos sem job.</p>
-          ) : (
-            <ul className={styles.list}>
-              {health.models_loaded.map((model) => (
-                <li key={`${model.kind}-${model.name}`}>
-                  <span className={styles.strong}>{MODEL_KINDS[model.kind] ?? model.kind}</span>
-                  <span className={styles.mono}>{model.name}</span>
-                  <span className={styles.meta}>
-                    {' '}
-                    desde {formatDateTime(model.loaded_at)}
-                    {model.vram_mb != null && ` · ${model.vram_mb.toLocaleString('pt-BR')} MiB`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
+      <div className={`stats ${styles.healthStats}`}>
+        <Stat
+          kicker="Worker GPU"
+          value={worker ? (worker.busy ? 'Transcrevendo' : 'Ocioso') : 'Sem sinal'}
+          danger={!worker}
+          sub={gpu ? `${gpu.name} · ${gb(gpu.vram_total_mb)} GB` : 'Sem leitura da GPU'}
+        />
+        <Stat
+          kicker="Modelo residente"
+          value={asr?.name ?? 'Nenhum'}
+          sub={
+            asr && gpu
+              ? `${gb(gpu.vram_used_mb)} / ${gb(gpu.vram_total_mb)} GB de VRAM`
+              : 'Sai da GPU depois de alguns minutos sem job'
+          }
+        />
+        <Stat
+          kicker="Fila"
+          value={String(queue.queued + queue.running)}
+          sub={`${queue.running} rodando · ${queue.queued} esperando`}
+        />
+        <Stat
+          kicker="Falhas · 24 h"
+          value={String(failures)}
+          sub={latest ? `${labelOf(STEPS, latest.step)} · ${latest.code}` : 'Nenhuma falha'}
+        />
       </div>
 
-      <section className={styles.section} aria-labelledby="saude-filas">
-        <h3 id="saude-filas">Filas</h3>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+      <section aria-labelledby="saude-etapas">
+        <h4 id="saude-etapas" className={styles.healthTitle}>
+          Etapas do processamento · últimas 24 h
+        </h4>
+        <div className={styles.scroll}>
+          <table className="table">
             <thead>
               <tr>
-                <th scope="col">Fila</th>
-                <th scope="col">Na fila</th>
-                <th scope="col">Rodando</th>
+                <th scope="col">Etapa</th>
+                <th scope="col">Execuções</th>
+                <th scope="col">Mediana</th>
+                <th scope="col">Falhas</th>
               </tr>
             </thead>
             <tbody>
-              {queues.map((queue) => (
-                <tr key={queue.name}>
-                  <th scope="row">
-                    <span className={styles.strong}>{QUEUE_LABELS[queue.name] ?? queue.name}</span>
-                    <span className={styles.mono}>{queue.name}</span>
+              {steps.map((step) => (
+                <tr key={step.step}>
+                  <th scope="row" className={styles.rowHead}>
+                    <strong>{labelOf(STEPS, step.step)}</strong>
                   </th>
-                  <td className="tabular">{queue.queued}</td>
-                  <td className="tabular">{queue.running}</td>
+                  <td className="tabular">{step.runs}</td>
+                  <td className="tabular mono">{step.median_ms == null ? '—' : formatDuration(step.median_ms)}</td>
+                  <td>
+                    {step.failures === 0 ? (
+                      <span className="text-muted">0</span>
+                    ) : (
+                      <span className="badge badge-danger">
+                        {step.failures} {step.failures === 1 ? 'falha' : 'falhas'}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -151,92 +121,107 @@ function HealthView({ health }: { health: Health }) {
         </div>
       </section>
 
-      <section className={styles.section} aria-labelledby="saude-jobs">
-        <h3 id="saude-jobs">Transcrições em andamento</h3>
-        {jobs.length === 0 ? (
-          <p className="muted">Nenhuma transcrição da organização na fila ou rodando.</p>
-        ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">Gravação</th>
-                  <th scope="col">Etapa</th>
-                  <th scope="col">Progresso</th>
-                  <th scope="col">Último avanço</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map((job) => (
-                  <tr key={job.job_id}>
-                    <th scope="row">{job.recording_title}</th>
-                    <td>{job.state === 'queued' ? 'Na fila' : (stageLabel(job.stage ?? '') ?? 'Rodando')}</td>
-                    <td className="tabular">{job.progress == null ? '—' : `${Math.round(job.progress * 100)}%`}</td>
-                    <td>{job.updated_at ? formatDateTime(job.updated_at) : '—'}</td>
+      <section aria-labelledby="saude-servicos">
+        <h4 id="saude-servicos" className={styles.healthTitle}>
+          Serviços
+        </h4>
+        <div className={styles.scroll}>
+          <table className="table" aria-labelledby="saude-servicos">
+            <tbody>
+              {health.services.map((service) => {
+                const status = SERVICE_STATUS[service.status] ?? { label: service.status, badge: 'badge' }
+                const detail = [service.detail, service.latency_ms != null && `${service.latency_ms} ms`]
+                  .filter(Boolean)
+                  .join(' · ')
+                return (
+                  <tr key={service.name}>
+                    <th scope="row" className={styles.rowHead}>
+                      <strong>{labelOf(SERVICES, service.name)}</strong>
+                    </th>
+                    <td>
+                      <span className={status.badge}>{status.label}</span>
+                    </td>
+                    <td className="text-muted">{detail}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <section className={styles.section} aria-labelledby="saude-falhas">
-        <h3 id="saude-falhas">Falhas nas últimas 24 horas: {health.queue.failed_last_24h}</h3>
-        {health.recent_failures.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
+      {health.recent_failures.length > 0 && (
+        <section aria-labelledby="saude-falhas">
+          <h4 id="saude-falhas" className={styles.healthTitle}>
+            Falhas recentes
+          </h4>
+          <div className={styles.scroll}>
+            <table className="table">
               <thead>
                 <tr>
                   <th scope="col">Quando</th>
+                  <th scope="col">Etapa</th>
                   <th scope="col">Código</th>
                   <th scope="col">Mensagem</th>
                   <th scope="col">
-                    <span className="visually-hidden">Gravação</span>
+                    <span className="visually-hidden">Ações</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {health.recent_failures.map((failure) => (
-                  <tr key={failure.job_id}>
-                    <td>{formatDateTime(failure.failed_at)}</td>
-                    <td className={styles.mono}>{failure.code}</td>
-                    <td>{failure.message}</td>
-                    <td className={styles.actionsCell}>
-                      <RetryJobButton jobId={failure.job_id} retryable={failure.retryable === true} />{' '}
-                      <Link to={`/gravacoes/${failure.recording_id}`}>Abrir gravação</Link>
-                    </td>
-                  </tr>
+                  <FailureRow key={`${failure.recording_id}-${failure.step ?? ''}-${failure.failed_at}`} failure={failure} />
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </>
   )
 }
 
-/** Retentar um job da lista de falhas; a falha passageira vem destacada. */
-function RetryJobButton({ jobId, retryable }: { jobId: string; retryable: boolean }) {
-  const retry = useRetryJob()
-  if (retry.isSuccess) return <span className="muted">Na fila de novo.</span>
+function Stat({ kicker, value, sub, danger }: { kicker: string; value: string; sub: string; danger?: boolean }) {
   return (
-    <>
-      <button
-        type="button"
-        className={retryable ? 'btn btn-primary' : 'btn'}
-        disabled={retry.isPending}
-        title={retryable ? 'Falha passageira: tentar de novo costuma resolver.' : undefined}
-        onClick={() => retry.mutate(jobId)}
-      >
-        {retry.isPending ? 'Enfileirando…' : 'Tentar de novo'}
-      </button>
-      {retry.isError && (
-        <span className="alert alert-error" role="alert">
-          {errorMessage(retry.error)}
-        </span>
-      )}
-    </>
+    <div className="stat">
+      <span className="kicker">{kicker}</span>
+      <span className={danger ? `stat-value ${styles.danger}` : 'stat-value'}>{value}</span>
+      <span className="stat-sub">{sub}</span>
+    </div>
+  )
+}
+
+/** Uma falha, sem link para a gravação: a sessão de admin não abre /gravacoes. */
+function FailureRow({ failure }: { failure: Failure }) {
+  const retry = useRetryJob()
+  return (
+    <tr>
+      <td className="tabular">{formatDateTime(failure.failed_at)}</td>
+      <td>{labelOf(STEPS, failure.step)}</td>
+      <td className="mono">{failure.code}</td>
+      <td>{failure.message}</td>
+      <td className={styles.actionsCell}>
+        {/* Só a transcrição tem job para retentar (holetz/eclume#33). */}
+        {failure.job_id &&
+          (retry.isSuccess ? (
+            <span className="text-muted">Na fila de novo.</span>
+          ) : (
+            <button
+              type="button"
+              className={failure.retryable ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+              disabled={retry.isPending}
+              title={failure.retryable ? 'Falha passageira: tentar de novo costuma resolver.' : undefined}
+              onClick={() => retry.mutate(failure.job_id!)}
+            >
+              {retry.isPending ? 'Enfileirando…' : 'Tentar de novo'}
+            </button>
+          ))}
+        {retry.isError && (
+          <span className={styles.error} role="alert">
+            {errorMessage(retry.error)}
+          </span>
+        )}
+      </td>
+    </tr>
   )
 }

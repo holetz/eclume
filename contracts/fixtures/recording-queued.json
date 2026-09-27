@@ -3,6 +3,7 @@
   "title": "Alinhamento do programa de lideranças",
   "source": "desktop",
   "recorded_at": "2026-09-18T14:00:05Z",
+  "recorded_at_source": "capture",
   "duration_ms": 166000,
   "language": "pt-BR",
   "size_bytes": 19287595,
@@ -18,10 +19,11 @@
     "client_version": "eclume-desktop/0.3.0"
   },
   "status": "queued",
-  "visibility": "private",
+  "kind": "meeting",
   "tags": [],
   "collection_ids": [],
   "metadata": {},
+  "agenda_type": null,
   "job": {
     "id": "01928f3a-1c00-7a00-8000-000000000e01",
     "state": "queued",
@@ -33,7 +35,64 @@
     "started_at": null,
     "finished_at": null
   },
+  "pipeline": [
+    {
+      "step": "received",
+      "state": "done",
+      "started_at": "2026-09-18T15:00:00Z",
+      "finished_at": "2026-09-18T15:00:00Z",
+      "duration_ms": 0,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "preprocessing",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "transcription",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "fields",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "agenda_type",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "summary",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    }
+  ],
   "transcript_id": null,
+  "marker_count": 0,
   "created_at": "2026-09-18T14:09:31Z",
   "updated_at": "2026-09-18T14:09:31Z"
 }

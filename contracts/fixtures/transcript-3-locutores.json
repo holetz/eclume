@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "01928f3a-1c00-7a00-8000-000000000501",
   "recording_id": "01928f3a-1c00-7a00-8000-000000000401",
   "title": "Alinhamento do programa de lideranças",
@@ -610,5 +610,7 @@
   "tags": [
     "programa-liderancas",
     "cliente-metalurgica"
-  ]
+  ],
+  "kind": "meeting",
+  "recorded_at_source": "capture"
 }

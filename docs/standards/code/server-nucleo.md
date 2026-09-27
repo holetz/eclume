@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por organização e dono sob o papel eclume_app), autentica (sessão com CSRF, PAT com escopos), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash), organiza (pessoas da organização, coleções do usuário, edição da transcrição pelo dono), busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF, PAT com escopos, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -17,8 +17,9 @@ O pacote `eclume_server` (`server/`) implementa o [contrato v1](../api/contrato-
 FastAPI, SQLAlchemy 2 async (asyncpg), arq/Redis e boto3 contra o MinIO. As consultas são SQL
 Core explícito: o isolamento mora nas políticas do banco, e o SQL que as exercita precisa ser
 legível. O acordo com o worker GPU está em [jobs-transcricao.md](../api/jobs-transcricao.md); os
-resumos, templates e providers de agente, em [server-agentes.md](server-agentes.md); o painel
-admin (configuração, segredos, convites e saúde), em [server-admin.md](server-admin.md).
+resumos e providers de agente, em [server-agentes.md](server-agentes.md); tipos de agenda, campos e
+etapas do processamento, em [processamento-automatico.md](processamento-automatico.md); o painel
+admin (conta de admin, configuração, segredos, usuários e saúde), em [server-admin.md](server-admin.md).
 
 ## Configuração
 
@@ -34,6 +35,8 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_SECRET_KEY` | inseguro, de dev | assina as URLs de parte e de áudio |
 | `ECLUME_PUBLIC_URL` | a da requisição | base absoluta das URLs devolvidas ao cliente |
 | `ECLUME_COOKIE_SECURE` | `true` | `false` só em dev por HTTP puro |
+| `ECLUME_SESSION_TTL_DAYS`, `ECLUME_ADMIN_SESSION_TTL_HOURS` | `14`, `12` | validade da sessão de usuário e da sessão de admin |
+| `ECLUME_SIGNUP_OPEN` | `true` | cadastro aberto; `false` fecha o `POST /auth/signup` (403 `signup_closed`) sem deploy de código |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
 
@@ -55,7 +58,7 @@ Três papéis, cada um com um motivo:
 
 | Papel | Atributos | Quem usa | Para quê |
 |---|---|---|---|
-| migrador (o superusuário `eclume` da imagem) | superusuário, dono de todo objeto | só o one-shot `migrate` (e `admin bootstrap`, o backup) | DDL, extensões, papéis, `GRANT` |
+| migrador (o superusuário `eclume` da imagem) | superusuário, dono de todo objeto | só o one-shot `migrate` (e `admin create`, o backup) | DDL, extensões, papéis, `GRANT` |
 | `eclume_server` | `LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE`, dono de nada, membro de `eclume_app` | server e worker CPU | `SELECT/INSERT/UPDATE/DELETE` em toda tabela, `USAGE` nas sequências, `EXECUTE` nas funções; só leitura em `schema_migrations` |
 | `eclume_app` | `NOLOGIN NOBYPASSRLS` | toda transação de requisição, por `SET LOCAL ROLE` | as políticas de RLS |
 
@@ -64,69 +67,105 @@ Três papéis, cada um com um motivo:
   acessíveis. A senha não mora em SQL: `eclume-server migrate` com `ECLUME_RUNTIME_DB_PASSWORD`
   liga o `LOGIN` e fixa a senha (`ALTER ROLE ... PASSWORD` montado por `format(%L)`).
 - O `BYPASSRLS` de `eclume_server` é deliberado: as operações de sistema (resolver credencial,
-  ingestão, resumos, saúde, expiração de upload, mídia assinada) atravessam organizações por
+  ingestão, resumos, painel admin, expiração de upload, mídia assinada) atravessam contas por
   desenho. O que o papel perde é o poder de dono — DDL, `ALTER`, `DROP`, papéis — e o de
   superusuário. Tirar também o `BYPASSRLS` exigiria cada `system_tx` como função `SECURITY
   DEFINER`.
 - `migrate` só cria `schema_migrations` quando falta (`to_regclass`): com o schema em dia, o
-  `admin bootstrap` roda também sob `eclume_server`, que não tem `CREATE` no schema.
+  `admin create` roda também sob `eclume_server`, que não tem `CREATE` no schema. Para os testes,
+  `migrate(engine, until="NNN_nome")` para numa versão, e o teste da migration seguinte semeia o
+  banco no formato da anterior.
 - A suíte do server aplica as migrations como superusuário e roda inteira como `eclume_server`
   (`harness.provision`); um teste confere os atributos do papel, que ele não é dono de nada e que
   `CREATE TABLE` e escrita em `schema_migrations` são negados.
 
 ## Isolamento por RLS
 
-- Toda tabela de domínio tem `org_id`; as de conteúdo são do dono (`owner_id`) ou herdam a
-  gravação. As políticas leem `eclume_org()` e `eclume_user()` — `current_setting('app.org_id')`
-  e `app.user_id` — e toda tabela tem `ENABLE` + `FORCE ROW LEVEL SECURITY`.
-- **Toda transação de requisição** roda `SET LOCAL ROLE eclume_app` (papel `NOLOGIN`, sem
-  `BYPASSRLS`) e fixa os dois settings com `set_config(..., true)` — `db.session.user_tx`. Sem
-  contexto, `eclume_app` não enxerga nada.
-- **Operações de sistema** — lookup de credencial, bootstrap, worker CPU — rodam com o papel de
+- **Cada conta é dona do que é dela.** Toda tabela de conteúdo tem `owner_id` (FK para `users`,
+  `ON DELETE CASCADE`): `recordings`, `uploads`, `collections`, `agenda_types`, `fields`,
+  `field_values`, `pipeline_steps`, `people`, `transcription_jobs`, `transcripts`, `speakers`, `segments`, `speaker_embeddings`, `summaries`,
+  `voice_samples` e `speaker_suggestions`. Nas derivadas, o `owner_id` é desnormalizado da
+  gravação na escrita (a ingestão e a criação de job e resumo o copiam).
+- **O único contexto é `app.user_id`** (`eclume_user()`). Toda política é uma igualdade
+  `LEAKPROOF` sobre a própria linha: `<tabela>_own` com `USING` e `WITH CHECK`
+  `owner_id = eclume_user()`; `users_self` com `id = eclume_user()`; `api_tokens_own` com
+  `user_id = eclume_user()`. Nenhuma política consulta outra tabela, então não há regra
+  anti-recursão a manter. O que cada tabela permite fica nos `GRANT`s de `eclume_app`.
+- **Toda transação de requisição de usuário** roda `SET LOCAL ROLE eclume_app` (papel `NOLOGIN`,
+  sem `BYPASSRLS`) e fixa `app.user_id` com `set_config(..., true)` —
+  `db.session.user_tx(engine, user_id)`. Sem contexto, `eclume_app` não enxerga nada.
+- **Tabelas da plataforma ficam fora da RLS** e fora do alcance de escrita de `eclume_app`:
+  `platform_settings` (uma linha; `eclume_app` só lê, para o liga-desliga da voz e o resumo),
+  `platform_secrets`, `admins`, `admin_sessions` e `sessions` (sem `GRANT` nenhum), e
+  `agent_providers` (sem RLS; `eclume_app` lê só as colunas sem segredo, com `GRANT SELECT` coluna
+  a coluna, e a chave cifrada fica para o papel de conexão).
+- **Operações de sistema** — lookup de credencial, painel admin, worker CPU — rodam com o papel de
   conexão (`system_tx`), que precisa de `BYPASSRLS` (`eclume_server`), porque o `FORCE` submete até
-  o dono às políticas. `sessions` não tem `GRANT` para `eclume_app`.
-- **Visibilidade de gravação:** dono, ou compartilhamento com a organização, ou com um grupo de
-  que o usuário é membro. Escrita é só do dono. Transcrição, locutores, segmentos, embeddings e
-  jobs herdam a visibilidade por `EXISTS` em `recordings`.
-- **Regra anti-recursão:** as políticas de `recording_shares` e `group_members` filtram só por
-  organização e nunca consultam `recordings`; `recordings` consulta as duas. Uma política nova
-  que feche esse ciclo quebra com "infinite recursion detected in policy".
-- **`users`** é lida pela organização inteira e escrita só por admin, na própria RLS
-  (`users_read` e `users_admin_update`); `invitations` e `org_secrets` são só de admin em todos os
-  comandos. As regras do painel estão em [server-admin.md](server-admin.md).
-- A API responde **404** para o que a política esconde; quem vê por compartilhamento e tenta
-  escrever recebe **403**.
+  o dono às políticas.
+- A API responde **404** para o que não é do usuário: não há leitor que não seja o dono, então
+  não há 403 de "vê mas não escreve".
+- **Vínculo com pessoa só na mesma conta:** `people` tem `UNIQUE (id, owner_id)`, e as FKs de
+  `speakers`, `voice_samples` e `speaker_suggestions` são por `(person_id, owner_id)`.
 - **Operador não `LEAKPROOF` não chega ao índice sob a RLS.** O planner aplica antes as quals da
   política e só leva a um índice a qual do usuário que for `LEAKPROOF`: igualdade de `uuid` e
   `text` serve, `@@` (tsvector) e `@>`/`ANY` de array não. Quando o índice importa, uma função
   `SECURITY DEFINER` (com `SET search_path = public, pg_temp`) usa o índice restrita a
-  `eclume_org()` e devolve **só chaves**; a consulta de `eclume_app` junta essas chaves à tabela, e
+  `eclume_user()` e devolve **só chaves**; a consulta de `eclume_app` junta essas chaves à tabela, e
   a política continua decidindo o que o usuário vê. É o caso de `eclume_segment_matches`.
-- **Efeito que atravessa a visibilidade** (renomear uma pessoa muda o nome em transcrições que
-  quem editou não vê) mora num gatilho `SECURITY DEFINER`, nunca num `system_tx` dentro da rota.
+- **Efeito colateral no banco** que a própria linha não carrega (renomear uma pessoa sobe o
+  `updated_at` das transcrições em que ela fala) mora num gatilho, nunca num `system_tx` dentro da
+  rota.
 
 ## Autenticação
 
-- **Senha** com argon2id. **Sessão:** token aleatório no cookie `eclume_session` (HttpOnly,
-  Secure, SameSite=Lax, 14 dias) e `eclume_csrf` legível; o banco guarda o SHA-256 do token e o
-  CSRF. Método mutável com sessão exige `X-CSRF-Token` igual ao CSRF da sessão.
+Duas contas distintas, com credenciais que não se cruzam: a **conta de usuário** (`users`), com
+sessão e PAT, e a **conta de admin** (`admins`), com sessão própria. O mesmo e-mail pode existir
+nas duas.
+
+- **Senha** com argon2id nas duas contas. **Sessão de usuário:** token aleatório no cookie
+  `eclume_session` (HttpOnly, Secure, SameSite=Lax, 14 dias) e `eclume_csrf` legível; o banco
+  guarda o SHA-256 do token e o CSRF (`sessions`). Método mutável com sessão exige `X-CSRF-Token`
+  igual ao CSRF da sessão.
 - **PAT** `eclp_` + 40 caracteres base62, guardado como SHA-256 (segredo de alta entropia
   dispensa hash lento); `prefix` = os 9 primeiros caracteres. Um `Authorization: Bearer` presente
   nunca cai para o cookie.
+- **Sessão de admin:** `POST /admin/auth/login` abre `eclume_admin_session` (HttpOnly, Secure,
+  SameSite=Strict, `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`) e `eclume_admin_csrf`
+  legível (`Path=/`), guardados em `admin_sessions`. `auth.require_admin` é a dependência de toda
+  rota de admin: aceita **só** esse cookie, e `Authorization` presente, cookie de usuário ou nada
+  dão 401. Fora de `/admin/*`, o cookie de admin é ignorado (`auth.requires` nem o lê). O
+  `Principal` do usuário não tem papel: nenhuma credencial de usuário tem poder de admin.
 - **Status de erro, alinhados ao que cada operação declara:**
-  - sem credencial, credencial inválida, CSRF ausente ou errado → **401** `unauthorized`: a
-    sessão sem double-submit está incompleta, e o web responde a 401 com um login novo, que
-    recupera o cookie;
-  - PAT numa rota só de sessão (PATs, grupos, admin, voz, logout) → **403** `session_required`
-    (contrato 1.4.0): a credencial é válida, só não é a aceita ali;
+  - sem credencial, credencial inválida, CSRF ausente ou errado, ou credencial de usuário em
+    `/admin/*` → **401** `unauthorized`: a sessão sem double-submit está incompleta, e o web
+    responde a 401 com um login novo, que recupera o cookie;
+  - PAT numa rota só de sessão (PATs, voz, logout) → **403** `session_required` (contrato 1.4.0):
+    a credencial é válida, só não é a aceita ali;
   - escopo faltando → **403** `insufficient_scope` com `required_scopes`;
-  - papel `admin` faltando ou escrita de não dono → **403** `forbidden`;
   - requisição fora do contrato (parâmetro, corpo ou regra de negócio) → **422**
     `validation_failed` com `errors[]`, em qualquer operação, como o mock;
   - operação do contrato ainda sem implementação → **501** `not_implemented`, com a spec dona no
     `detail` (`routes/not_implemented.py`). A lista sai quando a spec implementa a rota.
-- Desativar um usuário apaga as sessões e revoga os PATs dele; a organização nunca fica sem admin
-  ativo (422).
+- Desativar um usuário (`PATCH /admin/users/{id}`) apaga as sessões e revoga os PATs dele.
+
+## Cadastro e aviso
+
+- **Cadastro aberto**, sem convite e sem confirmação de e-mail: `POST /auth/signup` (público) com
+  nome, e-mail, senha (12+) e `notice_version`. A conta nasce com o aceite do aviso em vigor
+  ("Sou responsável por pedir o consentimento das pessoas que gravo"), os tipos de agenda padrão
+  marcados para contas novas e os campos embutidos, título e tags (`accounts.create_user`, que
+  chama `eclume_seed_user_defaults`), e a sessão aberta,
+  com os cookies do login. `GET /auth/signup` diz se o cadastro está aberto e devolve o aviso.
+- **Erros:** cadastro fechado (`ECLUME_SIGNUP_OPEN=false`) → 403 `signup_closed`; e-mail já
+  cadastrado (sem distinção de caixa, inclusive na corrida, pelo índice único) → 409 `email_taken`;
+  aviso ausente ou fora da versão em vigor, senha curta, e-mail ou nome inválidos → 422.
+- **O aviso tem versão** (`accounts.NOTICE_VERSION`, `NOTICE_TEXT`). `users.notice_version` e
+  `notice_accepted_at` são os dois nulos (conta migrada, ainda sem aceite) ou os dois preenchidos
+  (`CHECK`). `GET /me` devolve `notice_required` quando a conta não aceitou a versão em vigor, e
+  `POST /me/notice` (só sessão) registra o aceite. Um texto novo do aviso é uma versão nova: as
+  contas voltam a ver `notice_required`.
+- **O aceite pendente não bloqueia a API:** o desktop e o lumea usam PAT de contas migradas. Quem
+  pede o aceite é o web.
 
 ## Upload e áudio
 
@@ -146,38 +185,94 @@ Três papéis, cada um com um motivo:
   gravação e job. Hash divergente → gravação `failed` com `job.error.code = hash_mismatch`, e a
   gravação guarda o hash **real**, deixando o declarado livre para um novo upload. `complete`
   repetido devolve a mesma gravação.
-- **Chaves:** áudio em `orgs/{org}/users/{dono}/recordings/{gravação}/audio`; artefatos do worker
-  em `recordings/{gravação}/…`, como o contrato de jobs fixa.
+- **Chaves:** áudio em `users/{dono}/recordings/{gravação}/audio`; artefatos do worker em
+  `recordings/{gravação}/…`, como o contrato de jobs fixa. `recordings.audio_key` guarda a chave
+  inteira e é sempre a fonte: as gravações de antes da conta por usuário seguem em
+  `orgs/{org}/users/{dono}/…`, sem mover o objeto.
 - `GET /recordings/{id}/audio` redireciona (302) para `/media/recordings/{id}/audio?expires=&sig=`,
   servido pela API com `Range` a partir do MinIO — fora de `/api/v1`, opaco para o cliente.
 
+## Gravação: data, natureza e marcadores
+
+- **`recorded_at` é o início da gravação**, e o fim do evento no calendário é
+  `recorded_at + duration_ms`. Não há `started_at`: o desktop já mandava o início da captura em
+  `recorded_at`, obrigatório em `Recording`, `Transcript` e `SearchHit`, e renomear quebraria três
+  clientes sem ganho.
+- **`recorded_at_source`** diz de onde veio a data: `capture` (relógio do app que gravou),
+  `file_metadata` (lida do arquivo no navegador, antes da conversão para Opus, e confirmada na
+  importação), `user` (digitada ou corrigida) ou `upload` (sem data; vale a hora do envio). Sem ela
+  no upload, o servidor decide: com `recorded_at` e `source: desktop`, `capture`; com `recorded_at`
+  e outra origem, `user`; sem `recorded_at`, `upload` (outra origem sem data → 422). Corrigir
+  `recorded_at` no `PATCH` passa a origem a `user`. A migration 014 marcou `capture` nas
+  gravações do desktop e `upload` no resto: o import web de antes não mandava data.
+- **`kind`**: `meeting` (padrão) ou `note` (nota por voz), no upload e no `PATCH`. A nota passa
+  pelo mesmo pipeline da reunião (detecção de tipo e resumo incluídos); a
+  [processamento-automatico.md](processamento-automatico.md) não distingue as duas.
+- **Tipo escolhido no upload** (`agenda_type_id`, a folha "Agenda type" ao parar a gravação no
+  celular): vira o tipo do usuário, origem `edited`, com o padrão de título e as tags padrão
+  aplicados já no `complete`; a detecção o respeita (`set_by_user`). Tipo inexistente → 422.
+- **Marcadores** (`markers`): um instante `at_ms` com nota opcional (até 500 caracteres) e o
+  `device_name` de quem marcou, ligados à gravação por FK composta com o dono. Idempotentes por
+  `UNIQUE (recording_id, client_id)`: o `client_id` é gerado pelo app, e reenviar o mesmo marcador
+  só atualiza a nota (`ON CONFLICT DO UPDATE`; no mesmo lote, o último vale). Chegam de dois
+  jeitos: no `UploadCreate.markers` (até 1 000, gravados no `complete` com o `device_name` da
+  captura e, num upload deduplicado — na criação ou no `complete` —, mesclados na gravação
+  existente, porque o app pode ter caído depois de subir o áudio), ou depois em
+  `POST /recordings/{id}/markers` (lote, `device_name` do corpo). `PATCH /markers/{id}` troca a
+  nota e `DELETE` exclui; `GET` lista em ordem de `at_ms` numa página só. `at_ms` além da duração
+  é aceito: a duração só se conhece depois da transcrição. `Recording.marker_count` é uma
+  subconsulta lateral de `recording_select`. Escopos `recordings:read`/`recordings:write`.
+
+## Biblioteca
+
+- `GET /recordings` é a biblioteca da semana, do mês e da lista: `from` (inclusivo) e `to`
+  (exclusivo) sobre `recorded_at`, com o índice `recordings_owner_recorded_idx (owner_id,
+  recorded_at, id)`, e `sort` `created_desc` (padrão), `recorded_asc` ou `recorded_desc`. O cursor
+  é a posição `(chave do sort, id)`: vale só para o `sort` que o gerou. A semana e o mês pedem
+  `limit=200` e seguem o cursor.
+- **Filtros repetíveis:** OU entre os valores do mesmo filtro, E entre filtros diferentes.
+  `kind`, `status` (`processing` é o `queued` com o worker reportando progresso, refinado depois
+  da consulta), `tag` (`tags && :tags`), `collection` (`collection_ids && :ids`), `person`
+  (`EXISTS` num locutor da transcrição ligado a uma das pessoas) e `field=<field_id>:<valor>`. No
+  `field`, cada campo é um filtro: valores do mesmo campo por OU, campos diferentes por E; texto
+  e escolha comparam o valor, lista aceita um dos itens (`value @> [valor]`), e título e tags, que
+  são embutidos, comparam `recordings.title` e `recordings.tags`. Um campo que a conta não tem não
+  encontra nada; `field` sem `:` → 422.
+
+## Exclusão
+
+- `DELETE /recordings/{id}` apaga a linha da gravação e deixa o resto às FKs em cascata:
+  transcrição, segmentos, locutores, embeddings, amostras de voz, versões do resumo, chat de
+  ajuste, marcadores, valores de campo e etapas do pipeline. Depois do commit, o áudio e os
+  artefatos saem do bucket. Um job ainda na fila (`summarize`, `summary_chat`, as etapas por
+  agente, `ingest_transcript`) encontra a linha apagada e termina sem efeito.
+
 ## Pessoas, coleções e edição da transcrição
 
-- **Pessoas são da organização** (`people`, política `org_id = eclume_org()`): todo membro lê e
-  escreve, com `people:read`/`people:write` no PAT. E-mail único por organização
-  (`lower(email)`): 409 na criação, 422 em `email` no `PATCH` (que não declara 409).
-  `sort_name = lower(eclume_unaccent(name))` ordena o diretório e atende `q` por prefixo do nome,
-  de qualquer palavra do nome ou do e-mail; cursor `(sort_name, id)`. `eclume_unaccent` é o
-  `unaccent` com dicionário fixo, `IMMUTABLE`, para caber em coluna gerada.
-- **Locutor ↔ pessoa** por FK composta `speakers (person_id, org_id) → people (id, org_id)` com
-  `ON DELETE SET NULL (person_id)`: vínculo entre organizações é impossível no banco, e excluir a
-  pessoa só desliga os locutores (o `label` fica). `transcript_count` e `last_seen_at` contam só
-  transcrições visíveis a quem pergunta. Renomear ou excluir a pessoa sobe o `updated_at` (não a
+- **Pessoas são do usuário** (`people`, política de dono), com `people:read`/`people:write` no
+  PAT. E-mail único entre as pessoas do usuário (`(owner_id, lower(email))`): 409 na criação, 422
+  em `email` no `PATCH` (que não declara 409). `sort_name = lower(eclume_unaccent(name))` ordena o
+  diretório e atende `q` por prefixo do nome, de qualquer palavra do nome ou do e-mail; cursor
+  `(sort_name, id)`. `eclume_unaccent` é o `unaccent` com dicionário fixo, `IMMUTABLE`, para caber
+  em coluna gerada.
+- **Locutor ↔ pessoa** por FK composta `speakers (person_id, owner_id) → people (id, owner_id)` com
+  `ON DELETE SET NULL (person_id)`: vínculo com pessoa de outra conta é impossível no banco, e
+  excluir a pessoa só desliga os locutores (o `label` fica). `transcript_count` e `last_seen_at`
+  contam as transcrições do usuário. Renomear ou excluir a pessoa sobe o `updated_at` (não a
   `revision`) de toda transcrição em que ela fala, pelo gatilho `eclume_touch_person_transcripts`.
-- **`voice_consent`** nasce `none` e muda só por `PUT /people/{id}/voice-consent`, com o termo
-  versionado da organização. Amostras, comparação, sugestões, exclusão, exportação e auditoria da
-  voz estão em [identificacao-por-voz.md](identificacao-por-voz.md).
+- **Voz:** a pessoa não guarda consentimento; o aceite do aviso no cadastro o substitui. Amostras,
+  comparação, sugestões e o esquecimento da voz estão em
+  [identificacao-por-voz.md](identificacao-por-voz.md).
 - **Edição da transcrição** — `PATCH` de locutor (`label`, `person_id`), `POST .../speakers/merge`
-  e `PATCH` de segmento — é só do dono da gravação, com `transcripts:write`; quem vê por
-  compartilhamento recebe 403. Toda edição sobe `revision` e `updated_at`. Ligar sem `label` usa o
-  nome da pessoa; pessoa inexistente ou de outra organização → 422 em `person_id`. A mesclagem
-  apaga os locutores de origem e as impressões de voz deles e recalcula `talk_ms`; corrigir o
-  texto descarta `words` e reindexa o `tsv` (coluna gerada).
+  e `PATCH` de segmento — com `transcripts:write`. Toda edição sobe `revision` e `updated_at`.
+  Ligar sem `label` usa o nome da pessoa; pessoa inexistente ou de outra conta → 422 em
+  `person_id`. A mesclagem apaga os locutores de origem e as impressões de voz deles e recalcula
+  `talk_ms`; corrigir o texto descarta `words` e reindexa o `tsv` (coluna gerada).
 - **Coleções são do usuário** (`collections`, política de dono). `recordings.collection_ids`
   segue array: a API só aceita ids de coleções do próprio usuário (422 em `collection_ids`, no
   `PATCH /recordings` e no `POST /uploads`, que as aplica no `complete`), deduplica, e excluir a
   coleção a tira das gravações (`array_remove`) subindo o `updated_at` delas. `recording_count`
-  conta gravações visíveis. `GET /tags` agrega `unnest(tags)` das gravações visíveis.
+  conta as gravações do usuário. `GET /tags` agrega `unnest(tags)` das gravações do usuário.
 
 ## Busca full-text
 
@@ -205,9 +300,15 @@ Três papéis, cada um com um motivo:
 - **Conformidade:** um hook de resposta no `TestClient` valida toda resposta de `/api/v1` contra
   `contracts/openapi-v1.bundled.yaml` com os objetos fechados (`strictify`): status declarado,
   headers obrigatórios e corpo. Um teste confere que implementadas + pendentes = o contrato.
-- **Isolamento** é provado pela API e por SQL direto sob `eclume_app` (`test_isolation.py`); a
-  busca tem o próprio: nunca devolve segmento de gravação inacessível, antes e depois de
-  compartilhar e de desfazer o compartilhamento (`test_search.py`).
+- **Isolamento** é provado pela API e por SQL direto sob `eclume_app` entre duas contas, em toda
+  tabela de conteúdo (`test_isolation.py`); a busca tem o próprio: nunca devolve segmento de outra
+  conta, nem pela função do GIN (`test_search.py`).
+- **A plataforma é uma só no banco da sessão de testes.** O teste que muda configuração,
+  segredos ou providers usa a fixture `platform` (a `admin` já a usa), que devolve a plataforma
+  aos padrões da migration antes e depois. `make_user()` cria a conta com os tipos de agenda e os campos semeados;
+  `admin` abre a sessão de uma conta de admin nova.
+- **A migration que transforma dados** tem teste sobre o formato anterior: `test_migration_008.py`
+  aplica até a 007, semeia o banco como a 007 o guardava e confere o que a 008 preserva e remove.
 - `eclume_server_testing.fakes.transcribed(api, settings, **campos)` sobe um áudio e roda os dois
   workers: devolve a gravação já com a transcrição de 3 locutores da fixture do contrato.
 - Rodando em paralelo com outra suíte no mesmo host, suba o compose com projeto e portas próprios
@@ -220,7 +321,7 @@ Três papéis, cada um com um motivo:
 docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
 ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
-uv run eclume-server admin bootstrap --org "EK Consultoria" --email admin@exemplo.com.br --name "Admin" --password-stdin
+uv run eclume-server admin create --email admin@exemplo.com.br --name "Admin" --password-stdin
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
 ```

@@ -1,4 +1,4 @@
-"""Pessoas: diretório da organização, isolamento, escopos e o filtro `person=` do lumea."""
+"""Pessoas: diretório do usuário, isolamento, escopos e o filtro `person=` do lumea."""
 
 from __future__ import annotations
 
@@ -8,12 +8,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from eclume_server_testing.fakes import transcribed
+from eclume_server_testing.fakes import contract_transcript, transcribed
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -38,14 +37,9 @@ def test_cadastro_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user
     )
     assert created.status_code == 201, created.text
     person = created.json()
-    assert person["voice_consent"] == {
-        "status": "none",
-        "updated_at": None,
-        "term_version": None,
-        "recorded_by": None,
-        "sample_count": 0,
-    }
+    assert "voice_consent" not in person
     assert (person["transcript_count"], person["last_seen_at"]) == (0, None)
+    assert (person["voice_sample_count"], person["speaking_time_ms"]) == (0, 0)
     assert api.get(f"/api/v1/people/{person['id']}").json() == person
 
     duplicate = api.post("/api/v1/people", json={"name": "Outro", "email": "rafael.lima@example.com"})
@@ -97,24 +91,23 @@ def test_lista_alfabetica_sem_acento_com_prefixo(as_user: Callable[[Account], Ap
     assert api.get("/api/v1/people", params={"cursor": "lixo"}).status_code == 422
 
 
-def test_pessoas_nao_atravessam_organizacoes(
+def test_pessoas_nao_atravessam_contas(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
     services: Services,
 ):
     alice = as_user(make_user())
-    dave = as_user(make_user(org_id=make_org()))
+    dave = as_user(make_user())
     person = alice.post("/api/v1/people", json={"name": "Rafael", "email": "rafael@exemplo.com.br"}).json()
     assert dave.get(f"/api/v1/people/{person['id']}").status_code == 404
     assert dave.patch(f"/api/v1/people/{person['id']}", json={"name": "x"}).status_code == 404
     assert dave.delete(f"/api/v1/people/{person['id']}").status_code == 404
     assert dave.get(f"/api/v1/people/{person['id']}/transcripts").status_code == 404
     assert dave.get("/api/v1/people").json()["items"] == []
-    # O mesmo e-mail em outra organização é outra pessoa.
+    # O mesmo e-mail em outra conta é outra pessoa.
     assert dave.post("/api/v1/people", json={"name": "Rafael", "email": "rafael@exemplo.com.br"}).status_code == 201
 
-    # Nem por SQL um locutor liga a pessoa de outra organização: a FK é composta com `org_id`.
+    # Nem por SQL um locutor liga a pessoa de outra conta: a FK é composta com `owner_id`.
     recording = transcribed(dave, services.settings)
     with pytest.raises(IntegrityError, match="speakers_person_fk"):
         link(services, recording["transcript_id"], "S1", person["id"])
@@ -136,11 +129,10 @@ def test_escopos_do_pat(as_user: Callable[[Account], Api], make_user: Callable[.
     assert writer.get("/api/v1/people").status_code == 403
 
 
-def test_transcricoes_da_pessoa_contam_so_o_visivel(
+def test_transcricoes_da_pessoa(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     alice = as_user(make_user())
-    bob = as_user(make_user())
     person = alice.post("/api/v1/people", json={"name": "Rafael Lima"}).json()
     old = transcribed(alice, services.settings, title="Antiga", recorded_at="2026-09-01T10:00:00Z")
     new = transcribed(alice, services.settings, title="Nova", recorded_at="2026-09-18T14:00:00Z")
@@ -150,6 +142,10 @@ def test_transcricoes_da_pessoa_contam_so_o_visivel(
 
     seen = alice.get(f"/api/v1/people/{person['id']}").json()
     assert (seen["transcript_count"], seen["last_seen_at"]) == (2, "2026-09-18T14:00:00Z")
+    talk = {speaker["id"]: speaker["talk_ms"] for speaker in contract_transcript()["speakers"]}
+    # O tempo de fala soma os locutores ligados, em todas as transcrições.
+    assert seen["speaking_time_ms"] == talk["S2"] + talk["S1"]
+    assert seen["voice_sample_count"] == 0
     listed = alice.get(f"/api/v1/people/{person['id']}/transcripts").json()
     assert [t["title"] for t in listed["items"]] == ["Nova", "Antiga"]
     speaker = next(s for s in listed["items"][0]["speakers"] if s["id"] == "S1")
@@ -159,12 +155,6 @@ def test_transcricoes_da_pessoa_contam_so_o_visivel(
         f"/api/v1/people/{person['id']}/transcripts", params={"limit": 1, "cursor": first["next_cursor"]}
     ).json()
     assert [t["title"] for t in first["items"] + second["items"]] == ["Nova", "Antiga"]
-
-    # Bob é da mesma organização: vê a pessoa, mas não as gravações privadas de Alice.
-    assert bob.get(f"/api/v1/people/{person['id']}").json()["transcript_count"] == 0
-    assert bob.get(f"/api/v1/people/{person['id']}/transcripts").json()["items"] == []
-    alice.post(f"/api/v1/recordings/{new['id']}/shares", json={"target_type": "organization"})
-    assert bob.get(f"/api/v1/people/{person['id']}").json()["transcript_count"] == 1
 
     # O filtro `person=` que o importador do lumea usa, por PAT.
     lumea = alice.pat("transcripts:read")
@@ -179,15 +169,14 @@ def test_renomear_ou_excluir_a_pessoa_toca_as_transcricoes(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     alice = as_user(make_user())
-    bob = as_user(make_user())
     person = alice.post("/api/v1/people", json={"name": "Rafael"}).json()
     recording = transcribed(alice, services.settings)
     tid = recording["transcript_id"]
     link(services, tid, "S2", person["id"])
     before = alice.get(f"/api/v1/transcripts/{tid}").json()
 
-    # Bob renomeia a pessoa sem ver a gravação de Alice; o `?since=` de Alice enxerga a mudança.
-    assert bob.patch(f"/api/v1/people/{person['id']}", json={"name": "Rafael Lima"}).status_code == 200
+    # Renomear a pessoa muda o nome na transcrição: o `?since=` enxerga a mudança.
+    assert alice.patch(f"/api/v1/people/{person['id']}", json={"name": "Rafael Lima"}).status_code == 200
     renamed = alice.get(f"/api/v1/transcripts/{tid}").json()
     assert renamed["updated_at"] > before["updated_at"]
     assert renamed["revision"] == before["revision"]
@@ -195,7 +184,7 @@ def test_renomear_ou_excluir_a_pessoa_toca_as_transcricoes(
     since = alice.get("/api/v1/transcripts", params={"since": renamed["updated_at"]}).json()
     assert [t["id"] for t in since["items"]] == [tid]
 
-    assert bob.delete(f"/api/v1/people/{person['id']}").status_code == 204
+    assert alice.delete(f"/api/v1/people/{person['id']}").status_code == 204
     unlinked = alice.get(f"/api/v1/transcripts/{tid}").json()
     speaker = next(s for s in unlinked["speakers"] if s["id"] == "S2")
     assert (speaker["person"], speaker["label"]) == (None, "Locutor 2")

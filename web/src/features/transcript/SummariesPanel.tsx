@@ -26,12 +26,12 @@ function isPending(summary: Summary) {
 export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
   const queryClient = useQueryClient()
   const titleId = useId()
-  const templateId = useId()
+  const typeId = useId()
   const [chosen, setChosen] = useState<string | null>(null)
 
-  const templates = useQuery({
-    queryKey: ['summary-templates'],
-    queryFn: () => unwrap(api.GET('/api/v1/summary-templates', { params: { query: { limit: 100 } } })),
+  const types = useQuery({
+    queryKey: ['agenda-types'],
+    queryFn: () => unwrap(api.GET('/api/v1/agenda-types', { params: { query: { limit: 100 } } })),
     staleTime: 60_000,
   })
   const summaries = useQuery({
@@ -45,11 +45,11 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
     refetchInterval: (query) => (query.state.data?.items.some(isPending) ? POLL_MS : false),
   })
   const generate = useMutation({
-    mutationFn: (template: string) =>
+    mutationFn: (agendaType: string) =>
       unwrap(
         api.POST('/api/v1/transcripts/{transcript_id}/summaries', {
           params: { path: { transcript_id: transcriptId } },
-          body: { template_id: template },
+          body: { agenda_type_id: agendaType },
         }),
       ),
     onSuccess: (created) => {
@@ -59,16 +59,16 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
     },
   })
 
-  const templateItems = templates.data?.items ?? []
-  const selected = chosen ?? templateItems.find((t) => t.is_default)?.id ?? templateItems[0]?.id ?? ''
+  const typeItems = types.data?.items ?? []
+  const selected = chosen ?? typeItems[0]?.id ?? ''
 
   return (
     <section className={`card ${styles.panel}`} aria-labelledby={titleId}>
       <h2 id={titleId}>Resumos</h2>
 
-      {templates.isError ? (
+      {types.isError ? (
         <p className="alert alert-error" role="alert">
-          {errorMessage(templates.error)}
+          {errorMessage(types.error)}
         </p>
       ) : (
         <form
@@ -79,26 +79,19 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
           }}
         >
           <div className="field">
-            <label htmlFor={templateId}>Template</label>
+            <label htmlFor={typeId}>Tipo de agenda</label>
             <select
-              id={templateId}
-              className="select"
+              id={typeId}
+              className="input"
               value={selected}
               onChange={(event) => setChosen(event.target.value)}
-              disabled={templateItems.length === 0}
+              disabled={typeItems.length === 0}
             >
-              {(['user', 'organization'] as const).map((scope) => {
-                const group = templateItems.filter((t) => t.scope === scope)
-                return group.length === 0 ? null : (
-                  <optgroup key={scope} label={scope === 'user' ? 'Seus templates' : 'Da organização'}>
-                    {group.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )
-              })}
+              {typeItems.map((agendaType) => (
+                <option key={agendaType.id} value={agendaType.id}>
+                  {agendaType.name}
+                </option>
+              ))}
             </select>
           </div>
           <button type="submit" className="btn btn-primary btn-sm" disabled={!selected || generate.isPending}>
@@ -118,7 +111,7 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
           {errorMessage(summaries.error)}
         </p>
       )}
-      {summaries.data?.items.length === 0 && <p className="muted">Nenhum resumo gerado ainda.</p>}
+      {summaries.data?.items.length === 0 && <p className="text-muted">Nenhum resumo gerado ainda.</p>}
       {summaries.data && summaries.data.items.length > 0 && (
         <ul className={styles.list} aria-label="Resumos gerados">
           {summaries.data.items.map((summary) => (
@@ -135,7 +128,7 @@ function SummaryItem({ summary }: { summary: Summary }) {
   const heading = (
     <span className={styles.head}>
       <span className={styles.name}>
-        {summary.template.name} <span className="muted">· v{summary.version}</span>
+        {summary.agenda_type?.name ?? 'Resumo'} <span className="text-muted">· v{summary.version}</span>
       </span>
       <span className={`badge badge-${status.tone}`}>{status.label}</span>
     </span>
@@ -153,7 +146,7 @@ function SummaryItem({ summary }: { summary: Summary }) {
         heading
       )}
       <span className={styles.detail}>
-        {formatDateTime(summary.created_at)} · {summary.provider.name}
+        {formatDateTime(summary.created_at)} · {summary.provider?.name ?? 'Edição manual'}
       </span>
       {summary.status === 'failed' && summary.error && <span className={styles.error}>{summary.error.message}</span>}
     </li>

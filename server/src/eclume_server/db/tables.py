@@ -36,26 +36,18 @@ def _ts(name: str, **kwargs: object) -> Column:
     return Column(name, DateTime(timezone=True), **kwargs)
 
 
-organizations = Table(
-    "organizations",
-    metadata,
-    _pk(),
-    Column("name", Text),
-    _ts("created_at"),
-)
-
 users = Table(
     "users",
     metadata,
     _pk(),
-    _uuid("org_id"),
     Column("email", Text),
     Column("name", Text),
     Column("password_hash", Text),
-    Column("role", Text),
     Column("active", Boolean),
     _ts("created_at"),
     _ts("last_login_at"),
+    Column("notice_version", Text),
+    _ts("notice_accepted_at"),
 )
 
 sessions = Table(
@@ -73,7 +65,6 @@ api_tokens = Table(
     "api_tokens",
     metadata,
     _pk(),
-    _uuid("org_id"),
     _uuid("user_id"),
     Column("name", Text),
     Column("token_hash", Text),
@@ -85,32 +76,14 @@ api_tokens = Table(
     _ts("revoked_at"),
 )
 
-groups = Table(
-    "groups",
+platform_settings = Table(
+    "platform_settings",
     metadata,
-    _pk(),
-    _uuid("org_id"),
-    Column("name", Text),
-    Column("description", Text),
-    _ts("created_at"),
-)
-
-group_members = Table(
-    "group_members",
-    metadata,
-    _uuid("group_id", primary_key=True),
-    _uuid("user_id", primary_key=True),
-    _uuid("org_id"),
-)
-
-org_settings = Table(
-    "org_settings",
-    metadata,
-    _uuid("org_id", primary_key=True),
+    Column("id", Boolean, primary_key=True, server_default=FetchedValue()),
     Column("asr", JSONB),
     Column("diarization", JSONB),
-    Column("summarization", JSONB),
     Column("voice_identification", JSONB),
+    Column("preprocessing", JSONB),
     _ts("updated_at"),
     _uuid("updated_by"),
 )
@@ -119,7 +92,6 @@ recordings = Table(
     "recordings",
     metadata,
     _uuid("id", primary_key=True),
-    _uuid("org_id"),
     _uuid("owner_id"),
     Column("title", Text),
     Column("status", Text),
@@ -135,27 +107,19 @@ recordings = Table(
     Column("collection_ids", ARRAY(UUID(as_uuid=True))),
     Column("metadata", JSONB),
     Column("capture", JSONB),
+    _uuid("agenda_type_id"),
+    Column("agenda_type_origin", Text),
+    Column("subject", Text),
+    Column("kind", Text, server_default=FetchedValue()),
+    Column("recorded_at_source", Text, server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
-)
-
-recording_shares = Table(
-    "recording_shares",
-    metadata,
-    _pk(),
-    _uuid("org_id"),
-    _uuid("recording_id"),
-    Column("target_type", Text),
-    _uuid("group_id"),
-    _uuid("created_by"),
-    _ts("created_at"),
 )
 
 uploads = Table(
     "uploads",
     metadata,
     _pk(),
-    _uuid("org_id"),
     _uuid("owner_id"),
     Column("status", Text),
     Column("filename", Text),
@@ -178,7 +142,7 @@ transcription_jobs = Table(
     "transcription_jobs",
     metadata,
     _pk(),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     _uuid("recording_id"),
     Column("revision", Integer),
     Column("state", Text),
@@ -196,7 +160,7 @@ transcripts = Table(
     "transcripts",
     metadata,
     _pk(),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     _uuid("recording_id"),
     Column("revision", Integer),
     Column("language", Text),
@@ -210,7 +174,7 @@ speakers = Table(
     "speakers",
     metadata,
     _uuid("transcript_id", primary_key=True),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     Column("speaker_id", Text, primary_key=True),
     Column("position", Integer),
     Column("label", Text),
@@ -222,7 +186,7 @@ segments = Table(
     "segments",
     metadata,
     _uuid("transcript_id", primary_key=True),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     Column("segment_id", Text, primary_key=True),
     Column("position", Integer),
     Column("speaker_id", Text),
@@ -239,7 +203,6 @@ agent_providers = Table(
     "agent_providers",
     metadata,
     _pk(),
-    _uuid("org_id"),
     Column("name", Text),
     Column("kind", Text),
     Column("base_url", Text),
@@ -247,35 +210,108 @@ agent_providers = Table(
     Column("api_key_encrypted", Text),
     Column("enabled", Boolean),
     Column("options", JSONB),
+    Column("used_for", ARRAY(Text), server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
 )
 
-summary_templates = Table(
-    "summary_templates",
+# --- tipos de agenda (009_tipos_de_agenda) ------------------------------------------------------
+
+
+def _agenda_type_columns() -> list[Column]:
+    return [
+        Column("name", Text),
+        Column("position", Integer, server_default=FetchedValue()),
+        Column("title_pattern", Text),
+        Column("identify", Text, server_default=FetchedValue()),
+        Column("default_tags", ARRAY(Text), server_default=FetchedValue()),
+        Column("summary_instructions", Text),
+        _ts("created_at", server_default=FetchedValue()),
+        _ts("updated_at", server_default=FetchedValue()),
+    ]
+
+
+agenda_types = Table(
+    "agenda_types",
     metadata,
     _pk(),
-    _uuid("org_id"),
     _uuid("owner_id"),
+    *_agenda_type_columns(),
+    _uuid("from_default_id"),
+)
+
+default_agenda_types = Table(
+    "default_agenda_types",
+    metadata,
+    _pk(),
+    *_agenda_type_columns(),
+    Column("include_for_new_users", Boolean, server_default=FetchedValue()),
+)
+
+# --- etapas do pipeline (012_etapas_do_pipeline) ---------------------------------------------------
+
+pipeline_steps = Table(
+    "pipeline_steps",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    Column("revision", Integer),
+    Column("step", Text),
+    Column("state", Text),
+    _ts("started_at"),
+    _ts("finished_at"),
+    Column("duration_ms", Integer, server_default=FetchedValue()),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("detail", JSONB, server_default=FetchedValue()),
+)
+
+# --- campos e valores (010_campos_e_valores) ----------------------------------------------------
+
+fields = Table(
+    "fields",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("key", Text),
     Column("name", Text),
-    Column("description", Text),
-    Column("instructions", Text),
-    Column("is_default", Boolean),
-    _ts("created_at"),
-    _ts("updated_at"),
+    Column("kind", Text),
+    Column("builtin", Text),
+    Column("options", ARRAY(Text), server_default=FetchedValue()),
+    Column("instructions", Text, server_default=FetchedValue()),
+    Column("auto_fill", Boolean, server_default=FetchedValue()),
+    Column("position", Integer, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+field_values = Table(
+    "field_values",
+    metadata,
+    _uuid("recording_id", primary_key=True),
+    _uuid("field_id", primary_key=True),
+    _uuid("owner_id"),
+    Column("value", JSONB(none_as_null=False)),
+    Column("origin", Text),
+    Column("transcript_revision", Integer),
+    Column("provider_name", Text),
+    Column("model", Text),
+    _ts("updated_at", server_default=FetchedValue()),
 )
 
 summaries = Table(
     "summaries",
     metadata,
     _pk(),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     _uuid("transcript_id"),
     Column("transcript_revision", Integer),
-    _uuid("template_id"),
-    Column("template_name", Text),
+    _uuid("agenda_type_id"),
+    Column("agenda_type_name", Text),
     Column("instructions", Text),
     Column("version", Integer),
+    Column("origin", Text, server_default=FetchedValue()),
     Column("status", Text),
     Column("trigger", Text),
     _uuid("provider_id"),
@@ -286,10 +322,56 @@ summaries = Table(
     Column("error_code", Text),
     Column("error_message", Text),
     Column("attempts", Integer),
+    _uuid("restored_from_id"),
+    _uuid("chat_message_id"),
     _uuid("created_by"),
     _ts("created_at"),
     _ts("started_at"),
     _ts("completed_at"),
+)
+
+# --- gravação centrada no resumo (014_gravacao_resumo) --------------------------------------------
+
+summary_chat_messages = Table(
+    "summary_chat_messages",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    _uuid("transcript_id"),
+    Column("role", Text),
+    Column("content", Text),
+    Column("status", Text),
+    _uuid("reply_to"),
+    _uuid("base_summary_id"),
+    _uuid("summary_id"),
+    Column("reads", JSONB, server_default=FetchedValue()),
+    _uuid("provider_id"),
+    Column("provider_name", Text),
+    Column("provider_kind", Text),
+    Column("model", Text),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("attempts", Integer, server_default=FetchedValue()),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("started_at"),
+    _ts("completed_at"),
+)
+
+markers = Table(
+    "markers",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    _uuid("client_id"),
+    Column("at_ms", BigInteger),
+    Column("note", Text),
+    Column("device_name", Text),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
 )
 
 # --- pessoas, coleções e impressões de voz (003_pessoas_e_busca) ---------------------------------
@@ -299,7 +381,7 @@ speaker_embeddings = Table(
     "speaker_embeddings",
     metadata,
     _uuid("transcript_id", primary_key=True),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     Column("speaker_id", Text, primary_key=True),
     Column("model", Text),
     _ts("created_at"),
@@ -309,14 +391,10 @@ people = Table(
     "people",
     metadata,
     _pk(),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     Column("name", Text),
     Column("email", Text),
     Column("notes", Text),
-    Column("voice_consent_status", Text, server_default=FetchedValue()),
-    _ts("voice_consent_updated_at"),
-    Column("voice_consent_term_version", Text),
-    _uuid("voice_consent_by"),
     Column("sort_name", Text, server_default=FetchedValue()),
     _uuid("created_by"),
     _ts("created_at", server_default=FetchedValue()),
@@ -327,7 +405,6 @@ collections = Table(
     "collections",
     metadata,
     _pk(),
-    _uuid("org_id"),
     _uuid("owner_id"),
     Column("name", Text),
     Column("description", Text),
@@ -335,26 +412,9 @@ collections = Table(
     _ts("updated_at", server_default=FetchedValue()),
 )
 
-invitations = Table(
-    "invitations",
+platform_secrets = Table(
+    "platform_secrets",
     metadata,
-    _pk(),
-    _uuid("org_id"),
-    Column("email", Text),
-    Column("role", Text),
-    Column("group_ids", ARRAY(UUID(as_uuid=True))),
-    Column("token_hash", Text),
-    _ts("expires_at"),
-    _ts("accepted_at"),
-    _uuid("accepted_user_id"),
-    _uuid("created_by"),
-    _ts("created_at"),
-)
-
-org_secrets = Table(
-    "org_secrets",
-    metadata,
-    _uuid("org_id", primary_key=True),
     Column("name", Text, primary_key=True),
     Column("value_encrypted", Text),
     _ts("updated_at"),
@@ -363,27 +423,13 @@ org_secrets = Table(
 
 # --- identificação por voz (005_identificacao_por_voz) -------------------------------------------
 
-voice_consents = Table(
-    "voice_consents",
-    metadata,
-    _pk(),
-    _uuid("org_id"),
-    _uuid("person_id"),
-    Column("status", Text),
-    Column("term_version", Text),
-    Column("term_text", Text),
-    Column("notes", Text),
-    _uuid("recorded_by"),
-    _ts("recorded_at", server_default=FetchedValue()),
-)
-
 # `embedding` (pgvector) fica de fora, como em `speaker_embeddings`: lido e gravado por SQL explícito.
 voice_samples = Table(
     "voice_samples",
     metadata,
     _uuid("transcript_id", primary_key=True),
     Column("speaker_id", Text, primary_key=True),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     _uuid("person_id"),
     Column("model", Text),
     Column("talk_ms", BigInteger),
@@ -397,7 +443,7 @@ speaker_suggestions = Table(
     _uuid("transcript_id", primary_key=True),
     Column("speaker_id", Text, primary_key=True),
     _uuid("person_id", primary_key=True),
-    _uuid("org_id"),
+    _uuid("owner_id"),
     Column("score", Float),
     Column("status", Text, server_default=FetchedValue()),
     _uuid("decided_by"),
@@ -405,18 +451,27 @@ speaker_suggestions = Table(
     _ts("created_at", server_default=FetchedValue()),
 )
 
-voice_audit = Table(
-    "voice_audit",
+# --- contas de admin (008_conta_por_usuario) ---------------------------------------------------
+
+admins = Table(
+    "admins",
     metadata,
     _pk(),
-    _uuid("org_id"),
-    _uuid("person_id"),
-    Column("person_name", Text),
-    _uuid("actor_id"),
-    Column("event", Text),
-    _uuid("transcript_id"),
-    Column("speaker_id", Text),
-    Column("score", Float),
-    Column("details", JSONB, server_default=FetchedValue()),
+    Column("email", Text),
+    Column("name", Text),
+    Column("password_hash", Text),
+    Column("active", Boolean, server_default=FetchedValue()),
     _ts("created_at", server_default=FetchedValue()),
+    _ts("last_login_at"),
+)
+
+admin_sessions = Table(
+    "admin_sessions",
+    metadata,
+    _pk(),
+    Column("token_hash", Text),
+    Column("csrf_token", Text),
+    _uuid("admin_id"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("expires_at"),
 )

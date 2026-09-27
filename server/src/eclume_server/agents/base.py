@@ -15,10 +15,14 @@ CONTEXT_TOO_LONG = "context_too_long"
 PROVIDER_TIMEOUT = "provider_timeout"
 PROVIDER_RATE_LIMITED = "provider_rate_limited"
 PROVIDER_UNAVAILABLE = "provider_unavailable"
+# A resposta não veio no formato pedido (JSON da extração); outra tentativa costuma acertar.
+PROVIDER_BAD_OUTPUT = "provider_bad_output"
 # Adiamento do Ollama enquanto a fila da GPU tem trabalho; não gasta tentativa.
 GPU_BUSY = "gpu_busy"
+# O chat de ajuste passou do limite de consultas à transcrição sem responder; definitivo.
+CHAT_TOOL_LIMIT = "chat_tool_limit"
 
-_RETRYABLE = {PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_UNAVAILABLE, GPU_BUSY}
+_RETRYABLE = {PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_UNAVAILABLE, PROVIDER_BAD_OUTPUT, GPU_BUSY}
 
 # Janela de contexto e saída máxima (tokens) quando `options` não diz.
 DEFAULT_CONTEXT_WINDOW = {"claude-cli": 200_000, "anthropic": 200_000, "openai-compatible": 32_000, "ollama": 8_192}

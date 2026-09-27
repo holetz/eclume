@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import redis
+from sqlalchemy import text
 
 from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.fakes import run_cpu, transcribed
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,6 +40,76 @@ def test_listar_obter_e_filtrar(as_user: Callable[[Account], Api], make_user: Ca
     assert [r["id"] for r in since["items"]] == [second["id"]]
 
 
+def _ids(api: Api, **params: object) -> list[str]:
+    response = api.get("/api/v1/recordings", params=params)
+    assert response.status_code == 200, response.text
+    return [r["id"] for r in response.json()["items"]]
+
+
+def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+
+    def recording(when: str, **fields: object) -> str:
+        return upload_file(api, audio_bytes(100), recorded_at=when, **fields)["id"]
+
+    a = recording("2026-09-01T10:00:00Z", tags=["x"])
+    b = recording("2026-09-03T10:00:00Z", tags=["y"], kind="note")
+    c = recording("2026-09-10T10:00:00Z", tags=["x", "z"])
+
+    # A semana: `from` inclusivo, `to` exclusivo, pelo início da gravação.
+    week = {"from": "2026-09-01T10:00:00Z", "to": "2026-09-10T10:00:00Z", "sort": "recorded_asc"}
+    assert _ids(api, **week) == [a, b]
+    assert _ids(api, sort="recorded_desc") == [c, b, a]
+    # Paginando pela data de gravação, nada se perde nem se repete.
+    seen, cursor = [], None
+    while True:
+        page = api.get(
+            "/api/v1/recordings", params={"sort": "recorded_asc", "limit": 1} | ({"cursor": cursor} if cursor else {})
+        ).json()
+        seen += [r["id"] for r in page["items"]]
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == [a, b, c]
+
+    # OU dentro do mesmo filtro, E entre filtros.
+    assert set(_ids(api, tag=["x", "y"])) == {a, b, c}
+    assert _ids(api, tag="x", kind="meeting", sort="recorded_asc") == [a, c]
+    assert _ids(api, tag="y", kind="meeting") == []
+    assert _ids(api, kind="note") == [b]
+    assert set(_ids(api, kind=["note", "meeting"])) == {a, b, c}
+    assert set(_ids(api, status=["queued", "failed"])) == {a, b, c}
+
+    # Campos do usuário: o valor do campo próprio e os embutidos (título e tags).
+    field = api.post("/api/v1/fields", json={"name": "Cliente", "kind": "text"}).json()
+    team = api.post("/api/v1/fields", json={"name": "Equipes", "kind": "list"}).json()
+    assert api.put(f"/api/v1/recordings/{a}/fields/{field['id']}", json={"value": "Serra Azul"}).status_code == 200
+    assert api.put(f"/api/v1/recordings/{b}/fields/{field['id']}", json={"value": "Outro"}).status_code == 200
+    assert api.put(f"/api/v1/recordings/{c}/fields/{team['id']}", json={"value": ["rh", "ti"]}).status_code == 200
+    assert _ids(api, field=f"{field['id']}:Serra Azul") == [a]
+    assert set(_ids(api, field=[f"{field['id']}:Serra Azul", f"{field['id']}:Outro"])) == {a, b}
+    assert _ids(api, field=[f"{field['id']}:Serra Azul", f"{team['id']}:ti"]) == []
+    assert _ids(api, field=f"{team['id']}:ti") == [c]
+    tags_field = next(f for f in api.get("/api/v1/fields").json()["items"] if f["builtin"] == "tags")
+    assert set(_ids(api, field=f"{tags_field['id']}:z")) == {c}
+    assert api.get("/api/v1/recordings", params={"field": "sem-dois-pontos"}).status_code == 422
+
+
+def test_biblioteca_por_pessoa(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    with_rafael = transcribed(api, services.settings)
+    without = transcribed(api, services.settings)
+    rafael = api.post("/api/v1/people", json={"name": "Rafael Lima"}).json()
+    linked = api.patch(
+        f"/api/v1/transcripts/{with_rafael['transcript_id']}/speakers/S2", json={"person_id": rafael["id"]}
+    )
+    assert linked.status_code == 200, linked.text
+    assert _ids(api, person=rafael["id"]) == [with_rafael["id"]]
+    assert without["id"] in _ids(api)
+
+
 def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner = as_user(make_user())
     recording = upload_file(owner, audio_bytes(100))
@@ -52,6 +126,17 @@ def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user
         "pt-BR",
     )
     assert body["updated_at"] > recording["updated_at"]
+    # Corrigir a data a torna informada pela pessoa; a natureza muda à mão.
+    assert recording["recorded_at_source"] == "upload"
+    redated = owner.patch(
+        f"/api/v1/recordings/{recording['id']}", json={"recorded_at": "2026-09-01T10:00:00Z", "kind": "note"}
+    ).json()
+    assert (redated["recorded_at"], redated["recorded_at_source"], redated["kind"]) == (
+        "2026-09-01T10:00:00Z",
+        "user",
+        "note",
+    )
+    assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={"kind": None}).status_code == 422
     assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={}).status_code == 422
     assert owner.patch(f"/api/v1/recordings/{recording['id']}", json={"title": None}).status_code == 422
     assert (
@@ -66,12 +151,71 @@ def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Calla
     account = make_user()
     api = as_user(account)
     recording = upload_file(api, audio_bytes(100))
-    key = f"orgs/{account.org_id}/users/{account.user_id}/recordings/{recording['id']}/audio"
+    key = f"users/{account.user_id}/recordings/{recording['id']}/audio"
     s3 = services.s3()
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
     assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
     assert api.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
+
+
+def _count(services: Services, sql: str, **params: Any) -> int:  # noqa: ANN401
+    async def go(conn: Any) -> int:  # noqa: ANN401
+        return (await conn.execute(text(sql), params)).scalar_one()
+
+    return run(services.sql(go))
+
+
+def test_excluir_leva_resumo_chat_marcadores_e_audio(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    api = as_user(account)
+    recording = transcribed(api, services.settings, markers=[{"client_id": str(uuid4()), "at_ms": 1000}])
+    rid, tid = recording["id"], recording["transcript_id"]
+    admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
+    types = api.get("/api/v1/agenda-types").json()["items"]
+    done = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
+    assert done.status_code == 202, done.text
+    run_cpu(services.settings)
+    # Um resumo ainda na fila quando a gravação sai, e um pedido de ajuste já feito.
+    queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
+    assert queued.status_code == 202, queued.text
+
+    async def chat(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text(
+                "INSERT INTO summary_chat_messages (owner_id, recording_id, transcript_id, role, content, status)"
+                " VALUES (:o, :r, :t, 'user', 'Encurte', 'done')"
+            ),
+            {"o": account.user_id, "r": rid, "t": tid},
+        )
+
+    run(services.sql(chat))
+    counts = {
+        "summaries": "SELECT count(*) FROM summaries WHERE transcript_id = :t",
+        "chat": "SELECT count(*) FROM summary_chat_messages WHERE recording_id = :r",
+        "markers": "SELECT count(*) FROM markers WHERE recording_id = :r",
+    }
+    assert {name: _count(services, sql, t=tid, r=rid) for name, sql in counts.items()} == {
+        "summaries": 2,
+        "chat": 1,
+        "markers": 1,
+    }
+    key = f"users/{account.user_id}/recordings/{rid}/audio"
+    s3 = services.s3()
+    assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
+
+    assert api.delete(f"/api/v1/recordings/{rid}").status_code == 204
+    assert {name: _count(services, sql, t=tid, r=rid) for name, sql in counts.items()} == {
+        "summaries": 0,
+        "chat": 0,
+        "markers": 0,
+    }
+    assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
+    # O resumo que estava na fila encontra a gravação apagada e não faz nada.
+    agents = run_cpu(services.settings)
+    assert agents.calls == []
 
 
 def test_audio_redireciona_para_url_assinada_com_range(
@@ -142,52 +286,3 @@ def test_retranscrever_so_sem_job_em_andamento(
     assert again.json()["job"]["state"] == "queued"
     assert again.json()["language"] == "en"
     assert redis.Redis.from_url(services.settings.redis_url).zscore("eclume:gpu", f"transcribe:{recording['id']}:2")
-
-
-def test_compartilhar_com_grupo_e_organizacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    admin = as_user(make_user(role="admin"))
-    owner_account = make_user(name="Mariana Couto")
-    owner = as_user(owner_account)
-    member_account = make_user()
-    member = as_user(member_account)
-    outsider = as_user(make_user())
-
-    group = admin.post("/api/v1/groups", json={"name": "Consultores"}).json()
-    admin.put(f"/api/v1/groups/{group['id']}/members/{member_account.user_id}")
-    recording = upload_file(owner, audio_bytes(100))
-    url = f"/api/v1/recordings/{recording['id']}"
-
-    assert owner.get(f"{url}/shares").json() == {"items": [], "next_cursor": None}
-    assert member.get(url).status_code == 404
-
-    share = owner.post(f"{url}/shares", json={"target_type": "group", "target_id": group["id"]})
-    assert share.status_code == 201
-    assert share.json()["target"] == {"type": "group", "id": group["id"], "name": "Consultores"}
-    assert share.json()["created_by"]["name"] == "Mariana Couto"
-    assert owner.post(f"{url}/shares", json={"target_type": "group", "target_id": group["id"]}).status_code == 409
-    assert owner.post(f"{url}/shares", json={"target_type": "group"}).status_code == 422
-
-    seen = member.get(url)
-    assert seen.status_code == 200
-    assert seen.json()["visibility"] == "shared"
-    assert [r["id"] for r in member.get("/api/v1/recordings", params={"owner": "shared"}).json()["items"]] == [
-        recording["id"]
-    ]
-    assert member.get("/api/v1/recordings").json()["items"] == []
-    assert len(member.get(f"{url}/shares").json()["items"]) == 1
-    assert outsider.get(url).status_code == 404
-
-    assert member.patch(url, json={"title": "x"}).status_code == 403
-    assert member.delete(url).status_code == 403
-    assert member.post(f"{url}/shares", json={"target_type": "organization"}).status_code == 403
-    assert member.post(f"{url}/retranscribe").status_code == 403
-
-    org_share = owner.post(f"{url}/shares", json={"target_type": "organization"}).json()
-    assert org_share["target"]["type"] == "organization"
-    assert outsider.get(url).status_code == 200
-
-    assert owner.delete(f"{url}/shares/{org_share['id']}").status_code == 204
-    assert outsider.get(url).status_code == 404
-    assert admin.delete(f"/api/v1/groups/{group['id']}").status_code == 204
-    assert member.get(url).status_code == 404
-    assert owner.get(url).json()["visibility"] == "private"

@@ -1,20 +1,26 @@
-// Seções da área Administração, na ordem da subnavegação. Os caminhos são relativos a /admin.
+import { useEffect } from 'react'
+
+// Seções do painel, na ordem da barra lateral "Plataforma". Os caminhos são relativos a /admin.
 export interface AdminSection {
   path: string
   label: string
 }
 
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
+  { path: 'usuarios', label: 'Usuários' },
+  { path: 'audio', label: 'Pré-processamento de áudio' },
   { path: 'transcricao', label: 'Transcrição' },
-  { path: 'voz', label: 'Identificação por voz' },
+  { path: 'locutores', label: 'Locutores' },
   { path: 'agentes', label: 'Agentes' },
-  { path: 'templates', label: 'Templates padrão' },
-  { path: 'usuarios', label: 'Usuários e convites' },
-  { path: 'segredos', label: 'Segredos' },
+  { path: 'tipos-de-agenda', label: 'Tipos de agenda padrão' },
   { path: 'saude', label: 'Saúde' },
 ]
 
-export function sectionTitle(path: string): string {
-  const label = ADMIN_SECTIONS.find((section) => section.path === path)?.label ?? 'Administração'
-  return `${label} — Administração`
+export const ADMIN_KICKER = 'Painel de administração'
+
+/** Põe o título da aba do painel: "<título> — Admin eclume". */
+export function useAdminTitle(title: string): void {
+  useEffect(() => {
+    document.title = `${title} — Admin eclume`
+  }, [title])
 }

@@ -12,6 +12,7 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
     "fixtures": "bash scripts/media-fixtures.sh",
     "preview": "vite preview",
     "gen:api": "openapi-typescript ../contracts/openapi-v1.bundled.yaml -o src/api/schema.gen.ts"
@@ -19,7 +20,10 @@
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
+    "@fontsource/archivo": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@tanstack/react-query": "^5.103.2",
+    "lucide-react": "^1.48.0",
     "mediabunny": "^1.59.1",
     "openapi-fetch": "^0.17.0",
     "react": "^19.3.0",

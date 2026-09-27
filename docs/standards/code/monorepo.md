@@ -58,7 +58,7 @@ que pulem nunca).
 docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
 ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
-uv run eclume-server admin bootstrap --org "<organização>" --email <e-mail> --name "<nome>" --password-stdin
+uv run eclume-server admin create --email <e-mail> --name "<nome>" --password-stdin
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
 ```

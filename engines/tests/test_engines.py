@@ -49,6 +49,8 @@ def test_opcoes_a_partir_do_dict_do_job():
 def test_opcoes_vazias_usam_os_padroes():
     assert EngineOptions.from_mapping(None) == EngineOptions()
     assert EngineOptions.from_mapping({}).language == "pt"
+    # `language: null` é o idioma automático: a engine detecta.
+    assert EngineOptions.from_mapping({"language": None}).language is None
 
 
 def test_fabrica_recusa_engine_desconhecida():

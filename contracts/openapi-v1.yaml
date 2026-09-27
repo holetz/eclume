@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.4.0
+  version: 2.2.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -13,8 +13,11 @@ info:
     - Listagens paginam por cursor opaco: `?cursor=&limit=`, resposta `{items, next_cursor}`;
       `next_cursor: null` é a última página.
     - Erros em `application/problem+json` (RFC 9457) com o campo estável `code`.
+    - Cada usuário tem a própria conta, isolada; não há organização. O painel admin usa uma
+      conta e uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.
     - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores
-      de enum novos em respostas. Mudança incompatível vira `/api/v2`.
+      de enum novos em respostas. A 2.0.0 é a única quebra sob `/api/v1` (fim da organização);
+      a próxima mudança incompatível vira `/api/v2`.
   license:
     name: MIT
     identifier: MIT
@@ -29,31 +32,41 @@ tags:
   - name: meta
     description: Saúde e versão do contrato.
   - name: auth
-    description: Sessão do navegador, usuário corrente e convites.
+    description: Sessão do navegador, cadastro com o aviso de consentimento e usuário corrente.
   - name: tokens
     description: PATs pessoais. Só com sessão.
   - name: uploads
     description: Upload resumível em partes (multipart S3) com deduplicação por hash.
   - name: recordings
-    description: Gravações, estado do job e compartilhamento.
+    description: Gravações e estado do job.
   - name: transcripts
     description: Transcrições, export e edição de locutores e segmentos.
   - name: people
-    description: Diretório de pessoas da organização.
+    description: Diretório de pessoas do usuário.
   - name: voice
     description: >-
-      Identificação por voz (LGPD): consentimento, impressão de voz, recusa de sugestão e
-      auditoria. Só sessão: um PAT nunca lê nem apaga dado biométrico.
+      Identificação por voz (LGPD): impressão de voz e recusa de sugestão. Só sessão: um PAT
+      nunca lê nem apaga dado biométrico.
   - name: search
     description: Busca full-text sobre segmentos.
   - name: organize
     description: Coleções e tags.
-  - name: groups
-    description: Grupos da organização.
+  - name: agenda-types
+    description: >-
+      Tipos de agenda do usuário: como reconhecer a gravação, o título e as tags que ela ganha e
+      as instruções do resumo.
+  - name: fields
+    description: >-
+      Campos do usuário (título e tags embutidos, mais os próprios) e as regras com que o agente
+      os preenche.
+  - name: previews
+    description: Resultado de testar a regra de um campo ou um tipo de agenda em rascunho.
   - name: summaries
-    description: Templates por usuário e resumos gerados por agente.
+    description: Resumos gerados por agente com as instruções de um tipo de agenda.
   - name: admin
-    description: Configuração em runtime, usuários e saúde. Só sessão de `admin`.
+    description: >-
+      Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
+      admin (`adminSessionCookie`); nenhuma credencial de usuário alcança estas rotas.
 
 paths:
   /api/v1/health:
@@ -120,25 +133,43 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/auth/invitations/{invitation_token}/accept:
+  /api/v1/auth/signup:
+    get:
+      tags: [auth]
+      operationId: getSignupInfo
+      summary: Estado do cadastro e o aviso em vigor
+      description: Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova aceita.
+      security: []
+      responses:
+        "200":
+          description: Cadastro.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupInfo"
+              examples:
+                aberto:
+                  $ref: "#/components/examples/SignupInfo"
     post:
       tags: [auth]
-      operationId: acceptInvitation
-      summary: Aceitar um convite e criar a conta
+      operationId: signup
+      summary: Criar uma conta e abrir a sessão
+      description: |
+        Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
+        (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
+        tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
+        Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
+        cadastrado, 409 `email_taken`.
       security: []
-      parameters:
-        - name: invitation_token
-          in: path
-          required: true
-          description: Token do link de convite.
-          schema:
-            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InvitationAccept"
+              $ref: "#/components/schemas/SignupRequest"
+            examples:
+              conta:
+                $ref: "#/components/examples/SignupRequest"
       responses:
         "204":
           description: Conta criada e sessão aberta.
@@ -147,8 +178,10 @@ paths:
               description: "`eclume_session` e `eclume_csrf`."
               schema:
                 type: string
-        "404":
-          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -173,6 +206,35 @@ paths:
                   $ref: "#/components/examples/MeViaPat"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/me/notice:
+    post:
+      tags: [auth]
+      operationId: acceptNotice
+      summary: Aceitar o aviso de consentimento em vigor
+      description: >-
+        Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em
+        `GET /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoticeAccept"
+            examples:
+              aceite:
+                $ref: "#/components/examples/NoticeAcceptRequest"
+      responses:
+        "204":
+          description: Aceite registrado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/tokens:
     get:
@@ -488,7 +550,11 @@ paths:
     get:
       tags: [recordings]
       operationId: listRecordings
-      summary: Listar gravações visíveis ao usuário
+      summary: Listar as gravações do usuário
+      description: |
+        A biblioteca: por intervalo de `recorded_at` (semana, mês) e com filtros. Os filtros são
+        repetíveis: valores repetidos do mesmo filtro combinam por OU, e filtros diferentes, por E
+        (`?tag=a&tag=b&kind=note` = nota com a tag `a` ou `b`).
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
@@ -496,23 +562,78 @@ paths:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Since"
-        - name: status
+        - name: from
           in: query
-          description: Filtra por estado.
-          schema:
-            $ref: "#/components/schemas/RecordingStatus"
-        - name: owner
-          in: query
-          description: "`me` (padrão): as minhas; `shared`: compartilhadas comigo; `all`: ambas."
+          description: "`recorded_at >= from`."
           schema:
             type: string
-            enum: [me, shared, all]
-            default: me
-        - $ref: "#/components/parameters/TagFilter"
-        - $ref: "#/components/parameters/CollectionFilter"
+            format: date-time
+        - name: to
+          in: query
+          description: "`recorded_at < to`."
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          description: >-
+            `created_desc` (padrão, a mais recente enviada primeiro), `recorded_asc` ou
+            `recorded_desc` (pelo início da gravação). O cursor vale só para a mesma ordenação.
+          schema:
+            type: string
+            enum: [created_desc, recorded_asc, recorded_desc]
+            default: created_desc
+        - name: kind
+          in: query
+          description: Natureza da gravação; repetível.
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/RecordingKind"
+        - name: status
+          in: query
+          description: Estado da gravação; repetível.
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/RecordingStatus"
+        - name: tag
+          in: query
+          description: Tag; repetível.
+          schema:
+            type: array
+            items:
+              type: string
+        - name: collection
+          in: query
+          description: Coleção; repetível.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+        - name: person
+          in: query
+          description: Pessoa ligada a um locutor da transcrição; repetível.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+        - name: field
+          in: query
+          description: >-
+            Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro:
+            valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista,
+            basta o valor ser um dos itens; título e tags valem como os embutidos.
+          schema:
+            type: array
+            items:
+              type: string
+              pattern: "^[0-9a-fA-F-]{36}:.+$"
       responses:
         "200":
-          description: Gravações, da mais recente para a mais antiga.
+          description: Gravações, na ordem de `sort`.
           content:
             application/json:
               schema:
@@ -665,26 +786,221 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/v1/recordings/{recording_id}/shares:
+  /api/v1/recordings/{recording_id}/summary:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [summaries]
+      operationId: getRecordingSummary
+      summary: Estado do resumo da gravação
+      description: |
+        A versão atual (a de maior `version` concluída), a gerada de referência (a gerada mais
+        recente concluída, para comparar e voltar) e a geração em andamento. Sem transcrição, 409
+        `transcript_missing`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: Estado do resumo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryState"
+              examples:
+                editado:
+                  $ref: "#/components/examples/SummaryState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    put:
+      tags: [summaries]
+      operationId: editRecordingSummary
+      summary: Editar o resumo à mão
+      description: |
+        Grava o Markdown como uma versão `manual`, que vira a atual. `base_version` é a versão que
+        a pessoa abriu (0 sem resumo concluído); se outra versão entrou nesse meio-tempo, 409
+        `summary_changed` e nada é sobrescrito.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryEdit"
+            examples:
+              editar:
+                $ref: "#/components/examples/SummaryEditRequest"
+      responses:
+        "200":
+          description: A versão nova.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [summaries]
+      operationId: deleteRecordingSummary
+      summary: Excluir o resumo inteiro
+      description: Apaga todas as versões e o chat de ajuste da gravação.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/summary/revert:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [summaries]
+      operationId: revertRecordingSummary
+      summary: Voltar à versão gerada
+      description: |
+        Cria uma versão `manual` com o conteúdo da gerada de referência e `restored_from_id`
+        apontando para ela: nada se perde. Sem versão gerada, 409 `summary_missing`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "201":
+          description: A versão nova.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/summary/chat:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [summaries]
+      operationId: listSummaryChat
+      summary: Mensagens do chat de ajuste
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Mensagens, em ordem cronológica.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryChatPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags: [summaries]
+      operationId: sendSummaryChat
+      summary: Pedir um ajuste do resumo ao agente
+      description: |
+        Grava o pedido e a resposta do agente em `queued`; o cliente consulta
+        `GET /api/v1/summary-chat-messages/{message_id}` da resposta até `done` ou `failed`. O
+        agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
+        leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
+        pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
+        `transcript_missing`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryChatRequest"
+            examples:
+              encurtar:
+                $ref: "#/components/examples/SummaryChatRequest"
+      responses:
+        "202":
+          description: Pedido e resposta na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryChatExchange"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recordings/{recording_id}/markers:
     parameters:
       - $ref: "#/components/parameters/RecordingId"
     get:
       tags: [recordings]
-      operationId: listShares
-      summary: Compartilhamentos da gravação
+      operationId: listMarkers
+      summary: Marcadores da gravação
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
       responses:
         "200":
-          description: Compartilhamentos. Vazio = gravação privada.
+          description: Marcadores em ordem de `at_ms` (página única).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SharePage"
+                $ref: "#/components/schemas/MarkerPage"
               examples:
-                comGrupo:
-                  $ref: "#/components/examples/SharePage"
+                marcadores:
+                  $ref: "#/components/examples/MarkerPage"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -693,9 +1009,11 @@ paths:
           $ref: "#/components/responses/NotFound"
     post:
       tags: [recordings]
-      operationId: createShare
-      summary: Compartilhar com um grupo ou com a organização
-      description: Só o dono compartilha. O compartilhamento dá leitura da gravação, da transcrição e dos resumos.
+      operationId: upsertMarkers
+      summary: Enviar marcadores em lote
+      description: |
+        Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica. Sem
+        `device_name`, vale o do dispositivo da credencial, se houver.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -706,17 +1024,206 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ShareCreate"
+              $ref: "#/components/schemas/MarkerBatch"
             examples:
-              grupo:
-                $ref: "#/components/examples/ShareCreateRequest"
+              doCelular:
+                $ref: "#/components/examples/MarkerBatchRequest"
       responses:
-        "201":
-          description: Compartilhado.
+        "200":
+          description: Todos os marcadores da gravação, em ordem de `at_ms`.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Share"
+                $ref: "#/components/schemas/MarkerPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recordings/{recording_id}/export:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [recordings]
+      operationId: exportRecording
+      summary: Exportar a gravação
+      description: |
+        - `txt`: título, data (horário de Brasília), duração, participantes e uma linha
+          `[HH:MM:SS] Nome: texto` por segmento.
+        - `srt`: uma legenda por segmento, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`.
+        - `md`: `# Título`, uma linha com a data e o tipo de agenda, e o resumo atual. Sem resumo,
+          409 `summary_missing`.
+        - `docx`: título, data, duração e participantes, o resumo (títulos e listas do Markdown
+          viram estilos do Word) e a transcrição; sem resumo, só a transcrição.
+
+        Exige `transcripts:read` num PAT, e também `summaries:read` para `md` e `docx`. Sem
+        transcrição, 409 `transcript_missing`.
+      security:
+        - sessionCookie: []
+        - pat: ["transcripts:read"]
+      parameters:
+        - name: format
+          in: query
+          required: true
+          description: Formato do export. Formatos novos entram de forma aditiva.
+          schema:
+            type: string
+            enum: [txt, srt, md, docx]
+      responses:
+        "200":
+          description: Arquivo exportado, com o nome em slug do título.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ['attachment; filename="alinhamento-do-programa-de-liderancas.docx"']
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/x-subrip:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                contentMediaType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recordings/{recording_id}/fields:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    get:
+      tags: [fields]
+      operationId: listRecordingFields
+      summary: Campos da gravação
+      description: |
+        Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin` nulos.
+        Título e tags vêm de `Recording.title`/`tags`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingFieldValues"
+              examples:
+                valores:
+                  $ref: "#/components/examples/RecordingFieldValues"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/recordings/{recording_id}/fields/accept:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [fields]
+      operationId: acceptRecordingFields
+      summary: Aceitar todos os valores automáticos
+      description: |
+        Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não sobrescreve.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingFieldValues"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/recordings/{recording_id}/fields/{field_id}:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      - $ref: "#/components/parameters/FieldId"
+    put:
+      tags: [fields]
+      operationId: putRecordingField
+      summary: Escrever o valor de um campo
+      description: |
+        Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da escolha,
+        até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldValuePut"
+      responses:
+        "200":
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingFieldValues"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recordings/{recording_id}/fields/{field_id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      - $ref: "#/components/parameters/FieldId"
+    post:
+      tags: [fields]
+      operationId: acceptRecordingField
+      summary: Aceitar o valor automático de um campo
+      description: |
+        `auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingFieldValues"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -726,36 +1233,13 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/v1/recordings/{recording_id}/shares/{share_id}:
-    parameters:
-      - $ref: "#/components/parameters/RecordingId"
-      - $ref: "#/components/parameters/ShareId"
-    delete:
-      tags: [recordings]
-      operationId: deleteShare
-      summary: Desfazer um compartilhamento
-      security:
-        - sessionCookie: []
-        - pat: ["recordings:write"]
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Desfeito.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
   /api/v1/transcripts:
     get:
       tags: [transcripts]
       operationId: listTranscripts
       summary: Listar transcrições (incremental)
       description: |
-        Transcrições concluídas visíveis ao usuário, em ordem crescente de `(updated_at, id)`.
+        Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
         `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
         viu e deduplica por `id` + `revision`.
       security:
@@ -1069,11 +1553,11 @@ paths:
     post:
       tags: [summaries]
       operationId: createSummary
-      summary: Gerar um resumo com um template
+      summary: Gerar um resumo com um tipo de agenda
       description: |
-        Cada geração é uma nova `version` do resumo daquele template. Só o dono da gravação gera
-        resumos; quem vê a transcrição por compartilhamento lê os resumos dela. Sem `provider_id`
-        e sem provider padrão habilitado na organização, responde 422.
+        Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
+        resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
+        `provider_id` e sem provider padrão habilitado na plataforma, também 422.
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -1152,99 +1636,54 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/summary-templates:
-    get:
-      tags: [summaries]
-      operationId: listSummaryTemplates
-      summary: Templates do usuário e padrões da organização
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:read"]
-      parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: Templates.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplatePage"
-              examples:
-                templates:
-                  $ref: "#/components/examples/SummaryTemplatePage"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-    post:
-      tags: [summaries]
-      operationId: createSummaryTemplate
-      summary: Criar um template pessoal ou da organização
-      description: "`scope: organization` cria um padrão da organização e exige `admin` com sessão."
-      security:
-        - sessionCookie: []
-        - pat: ["summaries:write"]
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SummaryTemplateCreate"
-            examples:
-              resumoExecutivo:
-                $ref: "#/components/examples/SummaryTemplateCreateRequest"
-              padraoDaOrganizacao:
-                $ref: "#/components/examples/SummaryTemplateCreateOrgRequest"
-      responses:
-        "201":
-          description: Template criado.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SummaryTemplate"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-
-  /api/v1/summary-templates/{template_id}:
+  /api/v1/summary-chat-messages/{message_id}:
     parameters:
-      - $ref: "#/components/parameters/TemplateId"
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     get:
       tags: [summaries]
-      operationId: getSummaryTemplate
-      summary: Um template
+      operationId: getSummaryChatMessage
+      summary: Uma mensagem do chat de ajuste
+      description: O cliente consulta a resposta do agente até `done` ou `failed`.
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
       responses:
         "200":
-          description: Template.
+          description: Mensagem.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SummaryTemplate"
+                $ref: "#/components/schemas/SummaryChatMessage"
+              examples:
+                pronta:
+                  $ref: "#/components/examples/SummaryChatMessageDone"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/markers/{marker_id}:
+    parameters:
+      - name: marker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     patch:
-      tags: [summaries]
-      operationId: updateSummaryTemplate
-      summary: Editar um template
-      description: "Templates de `scope: organization` só são editados por `admin`, com sessão."
+      tags: [recordings]
+      operationId: updateMarker
+      summary: Editar a nota de um marcador
       security:
         - sessionCookie: []
-        - pat: ["summaries:write"]
+        - pat: ["recordings:write"]
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -1252,14 +1691,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SummaryTemplatePatch"
+              $ref: "#/components/schemas/MarkerPatch"
       responses:
         "200":
-          description: Template atualizado.
+          description: Marcador atualizado.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SummaryTemplate"
+                $ref: "#/components/schemas/Marker"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1269,10 +1708,186 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationFailed"
     delete:
-      tags: [summaries]
-      operationId: deleteSummaryTemplate
-      summary: Excluir um template
-      description: "Templates de `scope: organization` só são excluídos por `admin`, com sessão."
+      tags: [recordings]
+      operationId: deleteMarker
+      summary: Excluir um marcador
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agenda-types:
+    get:
+      tags: [agenda-types]
+      operationId: listAgendaTypes
+      summary: Tipos de agenda do usuário
+      description: Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Tipos de agenda.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgendaTypePage"
+              examples:
+                padrao:
+                  $ref: "#/components/examples/AgendaTypePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags: [agenda-types]
+      operationId: createAgendaType
+      summary: Criar um tipo de agenda
+      description: Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário é 409.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgendaTypeCreate"
+            examples:
+              mentoria:
+                $ref: "#/components/examples/AgendaTypeCreateRequest"
+      responses:
+        "201":
+          description: Tipo criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgendaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/agenda-types/preview:
+    post:
+      tags: [agenda-types]
+      operationId: previewAgendaType
+      summary: Pré-visualizar um tipo de agenda numa gravação
+      description: |
+        Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
+        o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgendaTypePreviewRequest"
+            examples:
+              pedido:
+                $ref: "#/components/examples/AgendaTypePreviewRequest"
+      responses:
+        "202":
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/agenda-types/{agenda_type_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgendaTypeId"
+    get:
+      tags: [agenda-types]
+      operationId: getAgendaType
+      summary: Um tipo de agenda
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: Tipo de agenda.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgendaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [agenda-types]
+      operationId: updateAgendaType
+      summary: Editar um tipo de agenda
+      description: |
+        Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções do
+        momento. Nome repetido é 422 em `name`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgendaTypePatch"
+      responses:
+        "200":
+          description: Tipo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgendaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [agenda-types]
+      operationId: deleteAgendaType
+      summary: Excluir um tipo de agenda
+      description: As gravações que o usavam ficam sem tipo; os resumos ficam.
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -1280,7 +1895,211 @@ paths:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "204":
-          description: Excluído. Resumos já gerados ficam.
+          description: Excluído.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/fields:
+    get:
+      tags: [fields]
+      operationId: listFields
+      summary: Campos do usuário
+      description: |
+        Título e tags vêm embutidos em toda conta; os demais são do usuário.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Campos, na ordem da lista.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldPage"
+              examples:
+                campos:
+                  $ref: "#/components/examples/FieldPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags: [fields]
+      operationId: createField
+      summary: Criar um campo
+      description: |
+        A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros tipos não têm.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldCreate"
+      responses:
+        "201":
+          description: Campo criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/fields/preview:
+    post:
+      tags: [fields]
+      operationId: previewField
+      summary: Testar a regra de um campo
+      description: |
+        Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
+        mais recentes) com o provider de `fields`, sem gravar nada.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldPreviewRequest"
+            examples:
+              pedido:
+                $ref: "#/components/examples/FieldPreviewRequest"
+      responses:
+        "202":
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/fields/{field_id}:
+    parameters:
+      - $ref: "#/components/parameters/FieldId"
+    get:
+      tags: [fields]
+      operationId: getField
+      summary: Um campo
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Campo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [fields]
+      operationId: updateField
+      summary: Editar um campo
+      description: |
+        Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind` (422).
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldPatch"
+      responses:
+        "200":
+          description: Campo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Field"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [fields]
+      operationId: deleteField
+      summary: Excluir um campo
+      description: |
+        Os embutidos não saem: 409 `builtin_field`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído, com os valores dele.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/previews/{preview_id}:
+    parameters:
+      - $ref: "#/components/parameters/PreviewId"
+    get:
+      tags: [previews]
+      operationId: getPreview
+      summary: Uma pré-visualização
+      description: |
+        Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: O estado e, pronta, os resultados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+              examples:
+                campo:
+                  $ref: "#/components/examples/PreviewFieldRule"
+                tipo:
+                  $ref: "#/components/examples/PreviewAgendaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1292,7 +2111,7 @@ paths:
     get:
       tags: [people]
       operationId: listPeople
-      summary: Diretório de pessoas da organização
+      summary: Diretório de pessoas do usuário
       security:
         - sessionCookie: []
         - pat: ["people:read"]
@@ -1456,45 +2275,6 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/people/{person_id}/voice-consent:
-    parameters:
-      - $ref: "#/components/parameters/PersonId"
-    put:
-      tags: [voice]
-      operationId: setVoiceConsent
-      summary: Registrar ou revogar o consentimento de voz
-      description: |
-        Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
-        quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
-        histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
-        as sugestões pendentes da pessoa.
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VoiceConsentPut"
-            examples:
-              registrar:
-                $ref: "#/components/examples/VoiceConsentPutRequest"
-      responses:
-        "200":
-          description: Pessoa com o consentimento novo.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Person"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-
   /api/v1/people/{person_id}/voiceprint:
     parameters:
       - $ref: "#/components/parameters/PersonId"
@@ -1523,7 +2303,7 @@ paths:
       tags: [voice]
       operationId: deleteVoiceprint
       summary: Excluir a impressão de voz
-      description: Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+      description: Apaga todas as amostras e as sugestões pendentes da pessoa.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
@@ -1536,31 +2316,28 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/people/{person_id}/voiceprint/export:
+  /api/v1/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}:
     parameters:
       - $ref: "#/components/parameters/PersonId"
-    get:
+      - $ref: "#/components/parameters/TranscriptId"
+      - name: speaker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^S[0-9]+$"
+    delete:
       tags: [voice]
-      operationId: exportVoiceprint
-      summary: Exportar os dados de voz da pessoa
+      operationId: deleteVoiceSample
+      summary: Remover uma amostra da impressão de voz
       description: |
-        Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha de
-        auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
+        Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões que a
+        impressão já fez não mudam.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
       responses:
-        "200":
-          description: Exportação.
-          headers:
-            Content-Disposition:
-              description: "`attachment; filename=\"voz-<pessoa>.json\"`."
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VoiceprintExport"
-              examples:
-                exportacao:
-                  $ref: "#/components/examples/VoiceprintExport"
+        "204":
+          description: Removida.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1574,7 +2351,7 @@ paths:
       operationId: search
       summary: Busca full-text sobre segmentos
       description: |
-        Busca em português (`tsvector` pt) nos segmentos das transcrições visíveis ao usuário.
+        Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
         Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
       security:
         - sessionCookie: []
@@ -1730,7 +2507,7 @@ paths:
     get:
       tags: [organize]
       operationId: listTags
-      summary: Tags em uso nas gravações visíveis
+      summary: Tags em uso nas gravações do usuário
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
@@ -1749,161 +2526,83 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /api/v1/groups:
-    get:
-      tags: [groups]
-      operationId: listGroups
-      summary: Grupos da organização
-      description: Todo membro lista os grupos (para compartilhar); só `admin` cria e edita.
-      parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: Grupos.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GroupPage"
-              examples:
-                grupos:
-                  $ref: "#/components/examples/GroupPage"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+  /api/v1/admin/auth/login:
     post:
-      tags: [groups]
-      operationId: createGroup
-      summary: Criar um grupo (admin)
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
+      tags: [admin]
+      operationId: adminLogin
+      summary: Abrir a sessão de admin
+      description: |
+        Conta de admin, separada das contas de usuário (o mesmo e-mail pode existir nas duas).
+        Define os cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+        `Path=/api/v1/admin`) e `eclume_admin_csrf` (legível pelo JavaScript). Toda requisição
+        mutável em `/api/v1/admin/*` ecoa `eclume_admin_csrf` no header `X-CSRF-Token`.
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GroupCreate"
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              credenciais:
+                $ref: "#/components/examples/LoginRequest"
       responses:
-        "201":
-          description: Grupo criado.
-          content:
-            application/json:
+        "204":
+          description: Sessão de admin aberta.
+          headers:
+            Set-Cookie:
+              description: "`eclume_admin_session` e `eclume_admin_csrf`."
               schema:
-                $ref: "#/components/schemas/Group"
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/auth/logout:
+    post:
+      tags: [admin]
+      operationId: adminLogout
+      security:
+        - adminSessionCookie: []
+      summary: Encerrar a sessão de admin
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Sessão encerrada e cookies removidos.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
 
-  /api/v1/groups/{group_id}:
-    parameters:
-      - $ref: "#/components/parameters/GroupId"
+  /api/v1/admin/me:
     get:
-      tags: [groups]
-      operationId: getGroup
-      summary: Um grupo e os seus membros
+      tags: [admin]
+      operationId: getAdminMe
+      security:
+        - adminSessionCookie: []
+      summary: Conta de admin corrente
       responses:
         "200":
-          description: Grupo.
+          description: Conta de admin.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Group"
+                $ref: "#/components/schemas/AdminAccount"
+              examples:
+                admin:
+                  $ref: "#/components/examples/AdminMe"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    patch:
-      tags: [groups]
-      operationId: updateGroup
-      summary: Editar um grupo (admin)
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GroupPatch"
-      responses:
-        "200":
-          description: Grupo atualizado.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Group"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-    delete:
-      tags: [groups]
-      operationId: deleteGroup
-      summary: Excluir um grupo (admin)
-      description: Compartilhamentos com o grupo são desfeitos.
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Excluído.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/v1/groups/{group_id}/members/{user_id}:
-    parameters:
-      - $ref: "#/components/parameters/GroupId"
-      - $ref: "#/components/parameters/UserId"
-    put:
-      tags: [groups]
-      operationId: addGroupMember
-      summary: Pôr um usuário no grupo (admin)
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Membro do grupo (idempotente).
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      tags: [groups]
-      operationId: removeGroupMember
-      summary: Tirar um usuário do grupo (admin)
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Fora do grupo.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
 
   /api/v1/admin/settings:
     get:
       tags: [admin]
       operationId: getAdminSettings
-      summary: Configuração em runtime da organização
+      security:
+        - adminSessionCookie: []
+      summary: Configuração em runtime da plataforma
       responses:
         "200":
           description: Configuração.
@@ -1921,8 +2620,13 @@ paths:
     patch:
       tags: [admin]
       operationId: updateAdminSettings
+      security:
+        - adminSessionCookie: []
       summary: Alterar a configuração
-      description: Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs.
+      description: >-
+        Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs. Desligar
+        `voice_identification.enabled` apaga as impressões de voz e as sugestões pendentes de toda
+        a plataforma.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -1948,57 +2652,12 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
-  /api/v1/admin/voice-audit:
-    get:
-      tags: [admin, voice]
-      operationId: listVoiceAudit
-      summary: Trilha de auditoria da identificação por voz
-      description: Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações, do mais novo ao mais antigo.
-      parameters:
-        - $ref: "#/components/parameters/PersonFilter"
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: Eventos.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VoiceAuditPage"
-              examples:
-                trilha:
-                  $ref: "#/components/examples/VoiceAuditPage"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-
-  /api/v1/admin/voiceprints:
-    delete:
-      tags: [admin, voice]
-      operationId: purgeVoiceprints
-      summary: Apagar todas as impressões de voz da organização
-      description: Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria ficam.
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "200":
-          description: O que foi apagado.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VoicePurgeResult"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
   /api/v1/admin/agent-providers:
     get:
       tags: [admin]
       operationId: listAgentProviders
+      security:
+        - adminSessionCookie: []
       summary: Providers de agente de sumarização
       responses:
         "200":
@@ -2017,6 +2676,8 @@ paths:
     post:
       tags: [admin]
       operationId: createAgentProvider
+      security:
+        - adminSessionCookie: []
       summary: Cadastrar um provider
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -2049,6 +2710,8 @@ paths:
     patch:
       tags: [admin]
       operationId: updateAgentProvider
+      security:
+        - adminSessionCookie: []
       summary: Editar um provider
       description: "`api_key: null` apaga a chave guardada; ausente, mantém."
       parameters:
@@ -2077,6 +2740,8 @@ paths:
     delete:
       tags: [admin]
       operationId: deleteAgentProvider
+      security:
+        - adminSessionCookie: []
       summary: Remover um provider
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -2092,11 +2757,118 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/admin/default-agenda-types:
+    get:
+      tags: [admin]
+      operationId: listDefaultAgendaTypes
+      security:
+        - adminSessionCookie: []
+      summary: Tipos de agenda padrão da plataforma
+      description: Os marcados com `include_for_new_users` são copiados para cada conta criada depois.
+      responses:
+        "200":
+          description: Tipos padrão, na ordem da lista.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefaultAgendaTypePage"
+              examples:
+                padrao:
+                  $ref: "#/components/examples/DefaultAgendaTypePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags: [admin]
+      operationId: createDefaultAgendaType
+      security:
+        - adminSessionCookie: []
+      summary: Criar um tipo de agenda padrão
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DefaultAgendaTypeCreate"
+      responses:
+        "201":
+          description: Tipo padrão criado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefaultAgendaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/admin/default-agenda-types/{agenda_type_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgendaTypeId"
+    patch:
+      tags: [admin]
+      operationId: updateDefaultAgendaType
+      security:
+        - adminSessionCookie: []
+      summary: Editar um tipo de agenda padrão
+      description: Vale para as contas criadas depois; as cópias que as contas já têm ficam como estão.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DefaultAgendaTypePatch"
+      responses:
+        "200":
+          description: Tipo padrão atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefaultAgendaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [admin]
+      operationId: deleteDefaultAgendaType
+      security:
+        - adminSessionCookie: []
+      summary: Excluir um tipo de agenda padrão
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluído. As cópias das contas ficam.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/admin/secrets:
     get:
       tags: [admin]
       operationId: listSecrets
-      summary: Segredos da organização (sem valor)
+      security:
+        - adminSessionCookie: []
+      summary: Segredos da plataforma (sem valor)
       responses:
         "200":
           description: Nomes e estado; o valor nunca volta.
@@ -2124,6 +2896,8 @@ paths:
     put:
       tags: [admin]
       operationId: putSecret
+      security:
+        - adminSessionCookie: []
       summary: Gravar um segredo (cifrado)
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -2145,6 +2919,8 @@ paths:
     delete:
       tags: [admin]
       operationId: deleteSecret
+      security:
+        - adminSessionCookie: []
       summary: Apagar um segredo
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -2162,7 +2938,10 @@ paths:
     get:
       tags: [admin]
       operationId: listUsers
-      summary: Usuários da organização
+      security:
+        - adminSessionCookie: []
+      summary: Contas de usuário
+      description: Dados da conta e a contagem de gravações; nunca o conteúdo do usuário.
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
@@ -2172,10 +2951,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserPage"
+                $ref: "#/components/schemas/AdminUserPage"
               examples:
                 usuarios:
-                  $ref: "#/components/examples/UserPage"
+                  $ref: "#/components/examples/AdminUserPage"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2187,7 +2966,9 @@ paths:
     patch:
       tags: [admin]
       operationId: updateUser
-      summary: Mudar papel ou desativar um usuário
+      security:
+        - adminSessionCookie: []
+      summary: Desativar ou reativar um usuário
       description: Desativar encerra as sessões e revoga os PATs do usuário.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -2203,7 +2984,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/AdminUser"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2212,93 +2993,18 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
-
-  /api/v1/admin/invitations:
-    get:
-      tags: [admin]
-      operationId: listInvitations
-      summary: Convites pendentes e aceitos
-      parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          description: Convites.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InvitationPage"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-    post:
-      tags: [admin]
-      operationId: createInvitation
-      summary: Convidar um usuário
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/InvitationCreate"
-            examples:
-              consultor:
-                $ref: "#/components/examples/InvitationCreateRequest"
-      responses:
-        "201":
-          description: Convite criado. `accept_url` volta só nesta resposta.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-              examples:
-                consultor:
-                  $ref: "#/components/examples/Invitation"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/ValidationFailed"
-
-  /api/v1/admin/invitations/{invitation_id}:
-    parameters:
-      - name: invitation_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    delete:
-      tags: [admin]
-      operationId: revokeInvitation
-      summary: Revogar um convite pendente
-      parameters:
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "204":
-          description: Revogado.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
 
   /api/v1/admin/jobs/{job_id}/retry:
     post:
       tags: [admin]
       operationId: retryTranscriptionJob
+      security:
+        - adminSessionCookie: []
       summary: Retentar um job de transcrição que falhou
       description: >-
-        Cria o job da revisão seguinte da gravação, com a configuração atual da organização, e o
-        enfileira. Vale para qualquer gravação da organização, inclusive privada, mas só para o job
-        mais recente da gravação e em estado `failed`.
+        Cria o job da revisão seguinte da gravação, com a configuração atual da plataforma, e o
+        enfileira. Vale para a gravação de qualquer usuário, mas só para o job mais recente da
+        gravação e em estado `failed`.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
         - name: job_id
@@ -2327,6 +3033,8 @@ paths:
     get:
       tags: [admin]
       operationId: getAdminHealth
+      security:
+        - adminSessionCookie: []
       summary: Saúde da fila, da GPU e dos modelos
       responses:
         "200":
@@ -2350,10 +3058,19 @@ components:
       in: cookie
       name: eclume_session
       description: |
-        Sessão do navegador, aberta por `POST /api/v1/auth/login`. Tem todas as permissões do
-        usuário. Métodos mutáveis exigem `X-CSRF-Token` igual ao cookie `eclume_csrf`
-        (double-submit). Gestão de PATs, escrita de grupos e `/api/v1/admin/*` aceitam **só**
-        sessão; `/api/v1/admin/*` exige ainda o papel `admin`.
+        Sessão do navegador, aberta por `POST /api/v1/auth/login` ou pelo cadastro. Tem todas as
+        permissões do usuário sobre a própria conta. Métodos mutáveis exigem `X-CSRF-Token` igual
+        ao cookie `eclume_csrf` (double-submit). Gestão de PATs, o aceite do aviso e as rotas de
+        voz aceitam **só** sessão. Não alcança `/api/v1/admin/*`.
+    adminSessionCookie:
+      type: apiKey
+      in: cookie
+      name: eclume_admin_session
+      description: |
+        Sessão da conta de admin, aberta por `POST /api/v1/admin/auth/login` (HttpOnly, Secure,
+        SameSite=Strict, `Path=/api/v1/admin`, 12 h). É a única credencial aceita em
+        `/api/v1/admin/*`, e é ignorada em qualquer outra rota. Métodos mutáveis exigem
+        `X-CSRF-Token` igual ao cookie `eclume_admin_csrf` (double-submit).
     pat:
       type: http
       scheme: bearer
@@ -2369,7 +3086,9 @@ components:
       name: X-CSRF-Token
       in: header
       required: false
-      description: Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT.
+      description: >-
+        Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em
+        `/api/v1/admin/*`. Ignorado com PAT.
       schema:
         type: string
     Cursor:
@@ -2435,13 +3154,6 @@ components:
       schema:
         type: string
         format: uuid
-    ShareId:
-      name: share_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
     TranscriptId:
       name: transcript_id
       in: path
@@ -2456,8 +3168,22 @@ components:
       schema:
         type: string
         format: uuid
-    TemplateId:
-      name: template_id
+    AgendaTypeId:
+      name: agenda_type_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FieldId:
+      name: field_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PreviewId:
+      name: preview_id
       in: path
       required: true
       schema:
@@ -2472,13 +3198,6 @@ components:
         format: uuid
     CollectionId:
       name: collection_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    GroupId:
-      name: group_id
       in: path
       required: true
       schema:
@@ -2516,8 +3235,8 @@ components:
               $ref: "#/components/examples/ProblemUnauthorized"
     Forbidden:
       description: >-
-        Credencial válida sem permissão (escopo, papel ou dono), ou PAT numa operação que aceita só
-        sessão (`code: session_required`).
+        Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão
+        (`code: session_required`), ou cadastro fechado (`code: signup_closed`).
       content:
         application/problem+json:
           schema:
@@ -2526,7 +3245,7 @@ components:
             semEscopo:
               $ref: "#/components/examples/ProblemInsufficientScope"
     NotFound:
-      description: Não existe ou não é visível ao usuário (o eclume não distingue os dois).
+      description: Não existe ou não é do usuário (o eclume não distingue os dois).
       content:
         application/problem+json:
           schema:
@@ -2544,7 +3263,17 @@ components:
             invalido:
               $ref: "#/components/examples/ProblemValidation"
     Conflict:
-      description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento).
+      description: >-
+        O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento,
+        resumo mudado desde a versão aberta, chat com pedido em aberto).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: >-
+        Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações em
+        andamento por conta; tente de novo quando algum terminar.
       content:
         application/problem+json:
           schema:
@@ -2571,8 +3300,11 @@ components:
           description: |
             Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
             `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-            `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão).
-            Códigos novos entram de forma aditiva.
+            `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
+            desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
+            desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
+            `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
+            aberto). Códigos novos entram de forma aditiva.
           type: string
         required_scopes:
           description: Com `insufficient_scope`, os escopos que faltaram.
@@ -2629,43 +3361,60 @@ components:
         password:
           type: string
           minLength: 1
+          maxLength: 1024
           writeOnly: true
 
-    InvitationAccept:
+    Notice:
+      description: Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das pessoas que gravo").
       type: object
-      required: [name, password]
+      required: [version, text]
+      properties:
+        version:
+          type: string
+        text:
+          type: string
+
+    SignupInfo:
+      type: object
+      required: [open, notice]
+      properties:
+        open:
+          description: "`false` com `ECLUME_SIGNUP_OPEN=false`: o cadastro responde 403 `signup_closed`."
+          type: boolean
+        notice:
+          $ref: "#/components/schemas/Notice"
+
+    SignupRequest:
+      type: object
+      required: [name, email, password, notice_version]
       properties:
         name:
           type: string
           minLength: 1
+        email:
+          type: string
+          format: email
         password:
           type: string
           minLength: 12
+          maxLength: 1024
           writeOnly: true
+        notice_version:
+          description: Versão do aviso aceito; tem de ser a em vigor.
+          type: string
+          minLength: 1
 
-    Organization:
+    NoticeAccept:
       type: object
-      required: [id, name]
+      required: [notice_version]
       properties:
-        id:
+        notice_version:
           type: string
-          format: uuid
-        name:
-          type: string
-
-    GroupRef:
-      type: object
-      required: [id, name]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
+          minLength: 1
 
     User:
       type: object
-      required: [id, email, name, role, active, created_at, last_login_at]
+      required: [id, email, name, active, created_at, last_login_at, notice_version, notice_accepted_at]
       properties:
         id:
           type: string
@@ -2675,9 +3424,6 @@ components:
           format: email
         name:
           type: string
-        role:
-          type: string
-          enum: [admin, member]
         active:
           type: boolean
         created_at:
@@ -2686,43 +3432,101 @@ components:
         last_login_at:
           type: [string, "null"]
           format: date-time
+        notice_version:
+          description: Versão do aviso aceito, ou `null` numa conta que ainda não aceitou.
+          type: [string, "null"]
+        notice_accepted_at:
+          type: [string, "null"]
+          format: date-time
+
+    AdminUser:
+      description: Conta de usuário vista pelo admin (o `User` mais a contagem de gravações).
+      type: object
+      required: [id, email, name, active, created_at, last_login_at, notice_version, notice_accepted_at, recording_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: [string, "null"]
+          format: date-time
+        notice_version:
+          type: [string, "null"]
+        notice_accepted_at:
+          type: [string, "null"]
+          format: date-time
+        recording_count:
+          type: integer
+          minimum: 0
 
     UserPatch:
       type: object
-      minProperties: 1
+      required: [active]
       properties:
-        name:
-          type: string
-          minLength: 1
-        role:
-          type: string
-          enum: [admin, member]
         active:
+          description: "`false` desativa a conta, encerra as sessões e revoga os PATs."
           type: boolean
 
-    UserPage:
+    AdminUserPage:
       type: object
       required: [items, next_cursor]
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/User"
+            $ref: "#/components/schemas/AdminUser"
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
 
+    AdminAccount:
+      description: Conta de admin, separada das contas de usuário.
+      type: object
+      required: [id, email, name, created_at, last_login_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: [string, "null"]
+          format: date-time
+
+    AdminRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
     Me:
       type: object
-      required: [user, organization, groups, auth]
+      required: [user, auth, notice_required]
       properties:
         user:
           $ref: "#/components/schemas/User"
-        organization:
-          $ref: "#/components/schemas/Organization"
-        groups:
-          type: array
-          items:
-            $ref: "#/components/schemas/GroupRef"
+        notice_required:
+          description: A conta ainda não aceitou o aviso em vigor (`POST /api/v1/me/notice`).
+          type: boolean
         auth:
           type: object
           required: [method, scopes, token_id]
@@ -2863,13 +3667,36 @@ components:
           type: string
           minLength: 1
         recorded_at:
+          description: Início da gravação. Sem valor, vale a hora do envio (`recorded_at_source` `upload`).
           type: string
           format: date-time
+        recorded_at_source:
+          description: |
+            De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
+            `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
+            `recorded_at`, `upload`.
+          $ref: "#/components/schemas/RecordedAtSource"
+        kind:
+          $ref: "#/components/schemas/RecordingKind"
+        agenda_type_id:
+          description: |
+            Tipo de agenda escolhido ao parar a gravação no celular: vira o tipo escolhido pelo
+            usuário (origem `edited`) e dispensa a detecção.
+          type: string
+          format: uuid
+        markers:
+          description: |
+            Marcadores feitos durante a gravação, com o `device_name` da captura. Idempotentes por
+            `client_id`: num upload deduplicado, entram na gravação existente.
+          type: array
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/MarkerInput"
         duration_ms:
           type: integer
           minimum: 0
         language:
-          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da organização ou a detecção.
+          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção.
           type: string
           pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
         source:
@@ -3037,9 +3864,11 @@ components:
           type: string
           enum: [queued, running, succeeded, failed, cancelled]
         stage:
-          description: Etapa em curso, ou `null` fora de execução.
+          description: |
+            Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do áudio
+            antes do ASR (holetz/eclume#33).
           type: [string, "null"]
-          enum: [asr, alignment, diarization, embeddings, finalizing, null]
+          enum: [preprocessing, asr, alignment, diarization, embeddings, finalizing, null]
         progress:
           type: number
           minimum: 0
@@ -3078,9 +3907,22 @@ components:
           type: [string, "null"]
           format: date-time
 
+    RecordingKind:
+      description: "`meeting` (reunião, o padrão) ou `note` (nota por voz)."
+      type: string
+      enum: [meeting, note]
+
+    RecordedAtSource:
+      description: |
+        Origem de `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (lida do
+        arquivo e confirmada na importação), `user` (digitada ou corrigida) ou `upload` (sem data;
+        vale a hora do envio).
+      type: string
+      enum: [capture, file_metadata, user, upload]
+
     Recording:
       type: object
-      required: [id, title, status, source, recorded_at, duration_ms, language, size_bytes, content_type, content_hash, owner, visibility, tags, collection_ids, metadata, capture, job, transcript_id, created_at, updated_at]
+      required: [id, title, status, kind, source, recorded_at, recorded_at_source, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, metadata, capture, agenda_type, job, pipeline, transcript_id, marker_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3089,11 +3931,16 @@ components:
           type: string
         status:
           $ref: "#/components/schemas/RecordingStatus"
+        kind:
+          $ref: "#/components/schemas/RecordingKind"
         source:
           $ref: "#/components/schemas/Source"
         recorded_at:
+          description: Início da gravação; o fim é `recorded_at + duration_ms`.
           type: string
           format: date-time
+        recorded_at_source:
+          $ref: "#/components/schemas/RecordedAtSource"
         duration_ms:
           description: "`null` até o áudio ser lido."
           type: [integer, "null"]
@@ -3111,10 +3958,6 @@ components:
           pattern: "^sha256:[0-9a-f]{64}$"
         owner:
           $ref: "./transcript.schema.json#/$defs/UserRef"
-        visibility:
-          description: "`private` sem compartilhamento; `shared` com pelo menos um."
-          type: string
-          enum: [private, shared]
         tags:
           type: array
           items:
@@ -3130,20 +3973,87 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Capture"
             - type: "null"
+        agenda_type:
+          description: |
+            Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
+            (`edited`), que a detecção nunca troca.
+          oneOf:
+            - type: object
+              required: [id, name, origin]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                origin:
+                  type: string
+                  enum: [auto, edited]
+            - type: "null"
         job:
           oneOf:
             - $ref: "#/components/schemas/Job"
             - type: "null"
+        pipeline:
+          description: |
+            As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+            `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
+            sai `active`.
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PipelineStep"
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type: [string, "null"]
           format: uuid
+        marker_count:
+          description: Marcadores da gravação.
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    PipelineStep:
+      type: object
+      required: [step, state, started_at, finished_at, duration_ms, error, reason]
+      properties:
+        step:
+          type: string
+          enum: [received, preprocessing, transcription, fields, agenda_type, summary]
+        state:
+          type: string
+          enum: [pending, active, done, failed, skipped]
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+        duration_ms:
+          type: [integer, "null"]
+          minimum: 0
+        error:
+          description: Com `state` `failed`.
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        reason:
+          description: |
+            Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+          type: [string, "null"]
 
     RecordingPatch:
       type: object
@@ -3153,8 +4063,11 @@ components:
           type: string
           minLength: 1
         recorded_at:
+          description: Corrigir a data passa `recorded_at_source` a `user`.
           type: string
           format: date-time
+        kind:
+          $ref: "#/components/schemas/RecordingKind"
         language:
           type: string
           pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
@@ -3173,6 +4086,12 @@ components:
         metadata:
           description: Substitui o objeto inteiro.
           $ref: "#/components/schemas/RecordingMetadata"
+        agenda_type_id:
+          description: |
+            Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
+            `null` tira o tipo e devolve a escolha à detecção.
+          type: [string, "null"]
+          format: uuid
 
     RecordingPage:
       type: object
@@ -3191,57 +4110,6 @@ components:
         language:
           type: string
           pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
-
-    Share:
-      type: object
-      required: [id, target, permission, created_by, created_at]
-      properties:
-        id:
-          type: string
-          format: uuid
-        target:
-          type: object
-          required: [type, id, name]
-          properties:
-            type:
-              type: string
-              enum: [group, organization]
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
-        permission:
-          type: string
-          enum: [read]
-        created_by:
-          $ref: "./transcript.schema.json#/$defs/UserRef"
-        created_at:
-          type: string
-          format: date-time
-
-    ShareCreate:
-      type: object
-      required: [target_type]
-      properties:
-        target_type:
-          type: string
-          enum: [group, organization]
-        target_id:
-          description: Id do grupo; ignorado para `organization`.
-          type: string
-          format: uuid
-
-    SharePage:
-      type: object
-      required: [items, next_cursor]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Share"
-        next_cursor:
-          $ref: "#/components/schemas/NextCursor"
 
     TranscriptSummary:
       description: Resumo de listagem de uma transcrição (sem segmentos).
@@ -3288,6 +4156,10 @@ components:
           type: array
           items:
             type: string
+        kind:
+          $ref: "#/components/schemas/RecordingKind"
+        recorded_at_source:
+          $ref: "#/components/schemas/RecordedAtSource"
 
     TranscriptPage:
       type: object
@@ -3337,74 +4209,20 @@ components:
           type: string
           pattern: "^S[0-9]+$"
 
-    VoiceConsent:
-      description: Consentimento LGPD da pessoa para a impressão de voz. Sem `granted`, nada é comparado.
-      type: object
-      required: [status, updated_at]
-      properties:
-        status:
-          type: string
-          enum: [none, granted, revoked]
-        updated_at:
-          type: [string, "null"]
-          format: date-time
-        term_version:
-          description: Versão do termo de consentimento vigente quando o estado foi registrado.
-          type: [string, "null"]
-        recorded_by:
-          description: Quem registrou o estado atual.
-          oneOf:
-            - $ref: "./transcript.schema.json#/$defs/UserRef"
-            - type: "null"
-        sample_count:
-          description: Amostras (locutores confirmados) na impressão de voz da pessoa.
-          type: integer
-          minimum: 0
-
-    VoiceConsentPut:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [granted, revoked]
-        notes:
-          description: Como o consentimento foi colhido (documento assinado, e-mail, ata).
-          type: [string, "null"]
-          maxLength: 2000
-
-    VoiceConsentRecord:
-      description: Um registro do histórico de consentimento, com o termo exato em vigor.
-      type: object
-      required: [status, term_version, term_text, notes, recorded_by, recorded_at]
-      properties:
-        status:
-          type: string
-          enum: [granted, revoked]
-        term_version:
-          type: string
-        term_text:
-          type: string
-        notes:
-          type: [string, "null"]
-        recorded_by:
-          oneOf:
-            - $ref: "./transcript.schema.json#/$defs/UserRef"
-            - type: "null"
-        recorded_at:
-          type: string
-          format: date-time
-
     VoiceSample:
       description: Uma amostra da impressão de voz — um locutor confirmado como a pessoa.
       type: object
-      required: [transcript_id, recording_title, speaker_id, model, talk_ms, created_by, created_at]
+      required: [transcript_id, recording_id, recording_title, speaker_id, model, talk_ms, excerpt, created_by, created_at]
       properties:
         transcript_id:
           type: string
           format: uuid
+        recording_id:
+          description: Gravação da amostra, ou `null` se ela não existe mais.
+          type: [string, "null"]
+          format: uuid
         recording_title:
-          description: Título da gravação, ou `null` se quem pergunta não a vê.
+          description: Título da gravação, ou `null` se ela não existe mais.
           type: [string, "null"]
         speaker_id:
           type: string
@@ -3415,6 +4233,21 @@ components:
         talk_ms:
           type: integer
           minimum: 0
+        excerpt:
+          description: |
+            A fala mais longa do locutor, para ouvir a amostra no áudio da gravação
+            (`GET /api/v1/recordings/{recording_id}/audio`); `null` sem gravação ou sem fala.
+          oneOf:
+            - type: object
+              required: [start_ms, end_ms]
+              properties:
+                start_ms:
+                  type: integer
+                  minimum: 0
+                end_ms:
+                  type: integer
+                  minimum: 0
+            - type: "null"
         created_by:
           oneOf:
             - $ref: "./transcript.schema.json#/$defs/UserRef"
@@ -3422,57 +4255,17 @@ components:
         created_at:
           type: string
           format: date-time
-
-    VoiceSampleExport:
-      description: Amostra com o vetor, só na exportação.
-      type: object
-      required: [transcript_id, recording_title, speaker_id, model, talk_ms, created_by, created_at, embedding]
-      properties:
-        transcript_id:
-          type: string
-          format: uuid
-        recording_title:
-          type: [string, "null"]
-        speaker_id:
-          type: string
-        model:
-          type: string
-        talk_ms:
-          type: integer
-          minimum: 0
-        created_by:
-          oneOf:
-            - $ref: "./transcript.schema.json#/$defs/UserRef"
-            - type: "null"
-        created_at:
-          type: string
-          format: date-time
-        embedding:
-          type: array
-          items:
-            type: number
 
     Voiceprint:
       type: object
-      required: [person_id, consent, opt_in, term, sample_count, samples]
+      required: [person_id, enabled, sample_count, samples]
       properties:
         person_id:
           type: string
           format: uuid
-        opt_in:
-          description: Opt-in de identificação por voz da organização. Desligado, nada é comparado nem vira amostra.
+        enabled:
+          description: Identificação por voz ligada na plataforma. Desligada, nada é comparado nem vira amostra.
           type: boolean
-        term:
-          description: Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir.
-          type: object
-          required: [version, text]
-          properties:
-            version:
-              type: string
-            text:
-              type: string
-        consent:
-          $ref: "#/components/schemas/VoiceConsent"
         sample_count:
           type: integer
           minimum: 0
@@ -3481,115 +4274,9 @@ components:
           items:
             $ref: "#/components/schemas/VoiceSample"
 
-    VoiceAuditEvent:
-      type: object
-      required: [id, event, person, actor, transcript_id, speaker_id, score, details, created_at]
-      properties:
-        id:
-          type: string
-          format: uuid
-        event:
-          description: Tipo do evento; o cliente mostra cru um valor que não conhece.
-          type: string
-          enum:
-            - comparison
-            - suggested
-            - accepted
-            - rejected
-            - sample_added
-            - sample_removed
-            - link_restored
-            - link_dropped
-            - consent_granted
-            - consent_revoked
-            - voiceprint_deleted
-            - exported
-            - org_opt_in_changed
-            - org_purged
-            - embeddings_purged
-        person:
-          oneOf:
-            - $ref: "./transcript.schema.json#/$defs/PersonRef"
-            - type: "null"
-        actor:
-          description: Quem agiu; `null` numa ação do sistema (a comparação da ingestão).
-          oneOf:
-            - $ref: "./transcript.schema.json#/$defs/UserRef"
-            - type: "null"
-        transcript_id:
-          type: [string, "null"]
-          format: uuid
-        speaker_id:
-          type: [string, "null"]
-        score:
-          type: [number, "null"]
-          minimum: 0
-          maximum: 1
-        details:
-          description: Dados do evento (contagens, limiar, modelo); nunca vetores.
-          type: object
-        created_at:
-          type: string
-          format: date-time
-
-    VoiceAuditPage:
-      type: object
-      required: [items, next_cursor]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/VoiceAuditEvent"
-        next_cursor:
-          $ref: "#/components/schemas/NextCursor"
-
-    VoiceprintExport:
-      type: object
-      required: [exported_at, exported_by, person, consents, samples, audit]
-      properties:
-        exported_at:
-          type: string
-          format: date-time
-        exported_by:
-          $ref: "./transcript.schema.json#/$defs/UserRef"
-        person:
-          type: object
-          required: [id, name, email]
-          properties:
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
-            email:
-              type: [string, "null"]
-        consents:
-          type: array
-          items:
-            $ref: "#/components/schemas/VoiceConsentRecord"
-        samples:
-          type: array
-          items:
-            $ref: "#/components/schemas/VoiceSampleExport"
-        audit:
-          type: array
-          items:
-            $ref: "#/components/schemas/VoiceAuditEvent"
-
-    VoicePurgeResult:
-      type: object
-      required: [deleted_samples, deleted_suggestions]
-      properties:
-        deleted_samples:
-          type: integer
-          minimum: 0
-        deleted_suggestions:
-          type: integer
-          minimum: 0
-
     Person:
       type: object
-      required: [id, name, email, notes, voice_consent, transcript_count, last_seen_at, created_at, updated_at]
+      required: [id, name, email, notes, transcript_count, last_seen_at, voice_sample_count, speaking_time_ms, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3601,16 +4288,22 @@ components:
           format: email
         notes:
           type: [string, "null"]
-        voice_consent:
-          $ref: "#/components/schemas/VoiceConsent"
         transcript_count:
-          description: Transcrições visíveis ao usuário em que a pessoa fala.
+          description: Transcrições do usuário em que a pessoa fala.
           type: integer
           minimum: 0
         last_seen_at:
           description: "`recorded_at` da transcrição mais recente em que a pessoa fala."
           type: [string, "null"]
           format: date-time
+        voice_sample_count:
+          description: Amostras da impressão de voz da pessoa.
+          type: integer
+          minimum: 0
+        speaking_time_ms:
+          description: Soma das falas dos locutores ligados à pessoa, em todas as transcrições.
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
@@ -3763,137 +4456,615 @@ components:
                 type: integer
                 minimum: 0
 
-    Group:
+    AgendaType:
       type: object
-      required: [id, name, description, member_count, created_at]
+      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        description:
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
-        member_count:
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+        position:
+          description: Ordem na lista do usuário.
           type: integer
           minimum: 0
-        members:
-          description: Presente em `GET /api/v1/groups/{group_id}`.
-          type: array
-          items:
-            $ref: "./transcript.schema.json#/$defs/UserRef"
-        created_at:
-          type: string
-          format: date-time
 
-    GroupCreate:
+    AgendaTypeDraft:
+      description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
       type: object
-      required: [name]
+      additionalProperties: false
+      required: [name, summary_instructions]
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
 
-    GroupPatch:
+    AgendaTypeCreate:
       type: object
+      additionalProperties: false
+      required: [name, summary_instructions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
+          type: [string, "null"]
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+
+    AgendaTypePatch:
+      type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
+        position:
+          type: integer
+          minimum: 0
 
-    GroupPage:
+    AgendaTypePage:
       type: object
       required: [items, next_cursor]
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Group"
+            $ref: "#/components/schemas/AgendaType"
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
 
-    SummaryTemplate:
+    DefaultAgendaType:
       type: object
-      required: [id, name, description, instructions, scope, is_default, created_at, updated_at]
+      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position, include_for_new_users]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        description:
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
-        instructions:
-          description: Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor.
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
-        scope:
-          description: "`user`: pessoal; `organization`: padrão definido pelo admin, só leitura para os demais."
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
-          enum: [user, organization]
-        is_default:
-          description: Template usado no resumo automático do usuário.
+          minLength: 1
+        position:
+          description: Ordem na lista do usuário.
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Copiado para cada conta criada depois.
           type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
 
-    SummaryTemplateCreate:
+    DefaultAgendaTypeCreate:
       type: object
-      required: [name, instructions]
+      additionalProperties: false
+      required: [name, summary_instructions]
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
-        instructions:
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
-        is_default:
-          description: "Pessoal: o template do resumo automático do usuário. Da organização: o padrão da organização."
+          maxLength: 4000
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Sem valor, `true`.
           type: boolean
-        scope:
-          description: "Padrão `user`. `organization` exige `admin` com sessão."
-          type: string
-          enum: [user, organization]
 
-    SummaryTemplatePatch:
+    DefaultAgendaTypePatch:
       type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: |
+            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+            título automático fica como está.
           type: [string, "null"]
-        instructions:
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
-        is_default:
+          maxLength: 4000
+        position:
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Copiado para cada conta criada depois.
           type: boolean
 
-    SummaryTemplatePage:
+    DefaultAgendaTypePage:
       type: object
       required: [items, next_cursor]
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/SummaryTemplate"
+            $ref: "#/components/schemas/DefaultAgendaType"
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
+
+    FieldKind:
+      description: "`text` e `choice` guardam uma string; `list`, um array de strings."
+      type: string
+      enum: [text, list, choice]
+
+    Field:
+      type: object
+      required: [id, key, name, kind, builtin, options, instructions, auto_fill, position]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          description: Slug do nome, único na conta; o marcador `{key}` do padrão de título.
+          type: string
+          pattern: "^[a-z0-9_]{1,64}$"
+        builtin:
+          description: Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+          type: [string, "null"]
+          enum: [title, tags, null]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+
+    FieldDraft:
+      description: O conteúdo de um campo, salvo ou em rascunho.
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+
+    FieldCreate:
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+
+    FieldPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: "#/components/schemas/FieldKind"
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+
+    FieldPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Field"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    FieldValue:
+      description: "`text`/`choice` → string; `list` → array de strings; `null` = sem valor."
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+        - type: "null"
+
+    FieldValueOrigin:
+      description: |
+        `auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou o
+        automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+      type: string
+      enum: [auto, edited, accepted]
+
+    RecordingFieldValue:
+      type: object
+      required: [field, value, origin, updated_at]
+      properties:
+        field:
+          $ref: "#/components/schemas/Field"
+        value:
+          $ref: "#/components/schemas/FieldValue"
+        origin:
+          oneOf:
+            - $ref: "#/components/schemas/FieldValueOrigin"
+            - type: "null"
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    RecordingFieldValues:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecordingFieldValue"
+
+    FieldValuePut:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          description: |
+            `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
+            nas tags); `null` limpa (menos o título).
+          oneOf:
+            - type: string
+              maxLength: 300
+            - type: array
+              maxItems: 50
+              items:
+                type: string
+                maxLength: 300
+            - type: "null"
+
+    FieldPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [field]
+      properties:
+        field:
+          $ref: "#/components/schemas/FieldDraft"
+        recording_ids:
+          description: Gravações transcritas do usuário; sem elas, as 3 mais recentes.
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uuid
+
+    AgendaTypePreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [agenda_type, recording_id]
+      properties:
+        agenda_type:
+          $ref: "#/components/schemas/AgendaTypeDraft"
+        recording_id:
+          description: Uma gravação transcrita do usuário.
+          type: string
+          format: uuid
+
+    FieldPreviewItem:
+      type: object
+      required: [recording_id, recording_title, value]
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        value:
+          $ref: "#/components/schemas/FieldValue"
+
+    AgendaTypePreviewItem:
+      type: object
+      required: [recording_id, recording_title, detected, detected_type_name, confidence, title, tags, summary_md]
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        detected:
+          description: A detecção escolheu o rascunho.
+          type: boolean
+        detected_type_name:
+          description: O tipo que a detecção escolheu (o rascunho ou um dos salvos).
+          type: string
+        confidence:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        title:
+          description: O título que o rascunho aplicaria.
+          type: string
+        tags:
+          description: As tags da gravação com as tags padrão do rascunho.
+          type: array
+          items:
+            type: string
+        summary_md:
+          description: O resumo com as instruções do rascunho.
+          type: string
+
+    Preview:
+      type: object
+      required: [id, kind, status, items, error]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [field_rule, agenda_type]
+        status:
+          type: string
+          enum: [queued, running, done, failed]
+        items:
+          description: "Com `status: done`: um item por gravação testada."
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/FieldPreviewItem"
+              - $ref: "#/components/schemas/AgendaTypePreviewItem"
+        error:
+          description: "Com `status: failed`; `no_provider` quando a finalidade não tem provider."
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
 
     AgentProviderKind:
       type: string
       enum: [ollama, openai-compatible, anthropic, claude-cli]
+
+    AgentPurpose:
+      description: |
+        Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
+        `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
+        finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+      type: string
+      enum: [summaries, fields, chat, agenda_detection]
 
     AgentProviderRef:
       type: object
@@ -3907,9 +5078,18 @@ components:
         kind:
           $ref: "#/components/schemas/AgentProviderKind"
 
+    SummaryOrigin:
+      description: |
+        Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
+        (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+      type: string
+      enum: [generated, manual, chat]
+
     Summary:
+      description: |
+        Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
       type: object
-      required: [id, transcript_id, transcript_revision, template, version, status, trigger, provider, model, content_md, error, created_at, completed_at]
+      required: [id, transcript_id, transcript_revision, agenda_type, version, origin, status, trigger, provider, model, content_md, error, restored_from_id, chat_message_id, created_by, created_at, completed_at]
       properties:
         id:
           type: string
@@ -3921,19 +5101,29 @@ components:
           description: Revisão da transcrição que o resumo leu.
           type: integer
           minimum: 1
-        template:
-          type: object
-          required: [id, name]
-          properties:
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
+        agenda_type:
+          description: |
+            Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual` ou
+            `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
+            excluído. `null` numa edição sem versão anterior.
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+            - type: "null"
         version:
-          description: Versão do resumo deste template para esta transcrição, a partir de 1.
+          description: |
+            Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à gerada
+            ou ajuste por chat sobe a versão.
           type: integer
           minimum: 1
+        origin:
+          $ref: "#/components/schemas/SummaryOrigin"
         status:
           type: string
           enum: [queued, running, done, failed]
@@ -3941,9 +5131,12 @@ components:
           type: string
           enum: [manual, automatic]
         provider:
-          $ref: "#/components/schemas/AgentProviderRef"
+          description: O agente que escreveu a versão; `null` numa versão `manual`.
+          oneOf:
+            - $ref: "#/components/schemas/AgentProviderRef"
+            - type: "null"
         model:
-          type: string
+          type: [string, "null"]
         content_md:
           description: "Resumo em Markdown, com `status: done`."
           type: [string, "null"]
@@ -3957,6 +5150,18 @@ components:
                 message:
                   type: string
             - type: "null"
+        restored_from_id:
+          description: Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+          type: [string, "null"]
+          format: uuid
+        chat_message_id:
+          description: Numa versão `chat`, a resposta do agente que a produziu.
+          type: [string, "null"]
+          format: uuid
+        created_by:
+          description: Id do usuário que pediu a geração, editou ou pediu o ajuste.
+          type: [string, "null"]
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -3966,13 +5171,13 @@ components:
 
     SummaryCreate:
       type: object
-      required: [template_id]
       properties:
-        template_id:
+        agenda_type_id:
+          description: Sem valor, o tipo de agenda da gravação.
           type: string
           format: uuid
         provider_id:
-          description: Sem valor, o provider padrão da organização.
+          description: Sem valor, o provider padrão da plataforma.
           type: string
           format: uuid
 
@@ -3984,6 +5189,243 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Summary"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    SummaryState:
+      description: O resumo da gravação como a tela o mostra.
+      type: object
+      required: [current, generated, pending, version_count]
+      properties:
+        current:
+          description: A versão atual (maior `version` concluída).
+          oneOf:
+            - $ref: "#/components/schemas/Summary"
+            - type: "null"
+        generated:
+          description: A gerada de referência (a `generated` concluída mais recente), para comparar e voltar.
+          oneOf:
+            - $ref: "#/components/schemas/Summary"
+            - type: "null"
+        pending:
+          description: A geração em `queued` ou `running`, se houver.
+          oneOf:
+            - $ref: "#/components/schemas/Summary"
+            - type: "null"
+        version_count:
+          description: Versões guardadas, de todas as origens.
+          type: integer
+          minimum: 0
+
+    SummaryEdit:
+      type: object
+      required: [content_md, base_version]
+      properties:
+        content_md:
+          type: string
+          minLength: 1
+          maxLength: 200000
+        base_version:
+          description: A versão que a pessoa abriu para editar; 0 sem resumo concluído.
+          type: integer
+          minimum: 0
+
+    SummaryChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    ChatRead:
+      description: |
+        Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
+        `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+      type: object
+      required: [tool]
+      properties:
+        tool:
+          type: string
+          enum: [read_transcript, search_transcript]
+        from_ms:
+          type: integer
+          minimum: 0
+        to_ms:
+          type: integer
+          minimum: 0
+        clipped:
+          type: boolean
+        query:
+          type: string
+        hits:
+          type: integer
+          minimum: 0
+
+    SummaryChatMessage:
+      type: object
+      required: [id, recording_id, role, content, status, reply_to, base_summary_id, summary_id, reads, provider, model, error, created_by, created_at, completed_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        recording_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          description: O pedido, ou a resposta do agente (`null` até `done`).
+          type: [string, "null"]
+        status:
+          description: A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+          type: string
+          enum: [queued, running, done, failed]
+        reply_to:
+          description: Na resposta do agente, o pedido que ela responde.
+          type: [string, "null"]
+          format: uuid
+        base_summary_id:
+          description: A versão atual quando o pedido chegou.
+          type: [string, "null"]
+          format: uuid
+        summary_id:
+          description: A versão `chat` que a resposta criou, se mudou o resumo.
+          type: [string, "null"]
+          format: uuid
+        reads:
+          description: As consultas do agente à transcrição, em ordem.
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatRead"
+        provider:
+          oneOf:
+            - $ref: "#/components/schemas/AgentProviderRef"
+            - type: "null"
+        model:
+          type: [string, "null"]
+        error:
+          description: |
+            Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), ou com
+            `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
+            versão nova.
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        created_by:
+          description: Id do usuário que fez o pedido.
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, "null"]
+          format: date-time
+
+    SummaryChatExchange:
+      type: object
+      required: [message, reply]
+      properties:
+        message:
+          $ref: "#/components/schemas/SummaryChatMessage"
+        reply:
+          $ref: "#/components/schemas/SummaryChatMessage"
+
+    SummaryChatPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SummaryChatMessage"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+
+    MarkerInput:
+      type: object
+      required: [client_id, at_ms]
+      properties:
+        client_id:
+          description: Id gerado pelo app; reenviar o mesmo não duplica.
+          type: string
+          format: uuid
+        at_ms:
+          description: Instante desde o início da gravação.
+          type: integer
+          minimum: 0
+        note:
+          type: [string, "null"]
+          maxLength: 500
+
+    MarkerBatch:
+      type: object
+      required: [markers]
+      properties:
+        markers:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/MarkerInput"
+        device_name:
+          description: Quem marcou ("iPhone 15 · Jane").
+          type: [string, "null"]
+          maxLength: 200
+
+    MarkerPatch:
+      type: object
+      required: [note]
+      properties:
+        note:
+          type: [string, "null"]
+          maxLength: 500
+
+    Marker:
+      type: object
+      required: [id, recording_id, client_id, at_ms, note, device_name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        recording_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+          format: uuid
+        at_ms:
+          description: Instante desde o início; pode passar da duração, que só se conhece depois.
+          type: integer
+          minimum: 0
+        note:
+          type: [string, "null"]
+        device_name:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MarkerPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Marker"
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
 
@@ -4003,6 +5445,9 @@ components:
           type: [integer, "null"]
           minimum: 1
         default_language:
+          description: |
+            Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
+            idioma de cada gravação e o alinhador segue o detectado.
           type: [string, "null"]
         fallback_model:
           description: Modelo usado depois de um OOM.
@@ -4027,57 +5472,109 @@ components:
           type: [integer, "null"]
           minimum: 1
 
-    SummarizationSettings:
+    PreprocessingSettings:
+      description: |
+        Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar canais,
+        reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
+        para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
+        original.
       type: object
-      required: [default_provider_id, auto_summarize, default_template_id]
+      required: [denoise, loudnorm, trim_silence, split_channels]
       properties:
-        default_provider_id:
-          type: [string, "null"]
-          format: uuid
-        auto_summarize:
-          description: Gera o resumo do template padrão de cada usuário ao fim da transcrição.
-          type: boolean
-        default_template_id:
-          type: [string, "null"]
-          format: uuid
+        denoise:
+          type: object
+          required: [enabled, method, strength]
+          properties:
+            enabled:
+              type: boolean
+            method:
+              description: "`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg)."
+              type: string
+              enum: [rnnoise, afftdn]
+            strength:
+              description: Quanto do sinal tratado entra na mistura.
+              type: number
+              minimum: 0
+              maximum: 1
+        loudnorm:
+          type: object
+          required: [enabled, target_lufs, true_peak_db, lra]
+          properties:
+            enabled:
+              type: boolean
+            target_lufs:
+              description: Loudness integrado alvo (EBU R128).
+              type: number
+              minimum: -30
+              maximum: -10
+            true_peak_db:
+              type: number
+              minimum: -9
+              maximum: 0
+            lra:
+              description: Faixa de loudness.
+              type: number
+              minimum: 1
+              maximum: 20
+        trim_silence:
+          type: object
+          required: [enabled, min_silence_s, threshold_db]
+          properties:
+            enabled:
+              type: boolean
+            min_silence_s:
+              description: Silêncio mínimo, no início ou no fim, para cortar.
+              type: number
+              minimum: 1
+              maximum: 30
+            threshold_db:
+              description: Abaixo deste nível, é silêncio.
+              type: number
+              minimum: -80
+              maximum: -20
+        split_channels:
+          description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+          type: object
+          required: [enabled]
+          properties:
+            enabled:
+              type: boolean
 
     VoiceIdentificationSettings:
       type: object
       required: [enabled, suggestion_threshold]
       properties:
         enabled:
-          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada.
+          description: >-
+            Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em
+            `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem
+            criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
           type: boolean
         suggestion_threshold:
           description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
           type: number
           minimum: 0
           maximum: 1
-        consent_term_version:
-          description: Versão do termo de consentimento; sobe sozinha a cada texto novo.
-          type: string
-        consent_term_text:
-          description: Texto do termo que a pessoa aceita ao consentir.
-          type: string
 
     AdminSettings:
       type: object
-      required: [asr, diarization, summarization, voice_identification, updated_at, updated_by]
+      required: [asr, diarization, voice_identification, preprocessing, updated_at, updated_by]
       properties:
         asr:
           $ref: "#/components/schemas/AsrSettings"
         diarization:
           $ref: "#/components/schemas/DiarizationSettings"
-        summarization:
-          $ref: "#/components/schemas/SummarizationSettings"
         voice_identification:
           $ref: "#/components/schemas/VoiceIdentificationSettings"
+        preprocessing:
+          $ref: "#/components/schemas/PreprocessingSettings"
         updated_at:
           type: string
           format: date-time
         updated_by:
+          description: Conta de admin que mudou por último.
           oneOf:
-            - $ref: "./transcript.schema.json#/$defs/UserRef"
+            - $ref: "#/components/schemas/AdminRef"
             - type: "null"
 
     AdminSettingsPatch:
@@ -4099,7 +5596,9 @@ components:
               type: [integer, "null"]
               minimum: 1
             default_language:
+              description: Código do idioma ou `auto`.
               type: [string, "null"]
+              pattern: "^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$"
             fallback_model:
               type: [string, "null"]
             endpoint_url:
@@ -4118,17 +5617,6 @@ components:
             max_speakers:
               type: [integer, "null"]
               minimum: 1
-        summarization:
-          type: object
-          properties:
-            default_provider_id:
-              type: [string, "null"]
-              format: uuid
-            auto_summarize:
-              type: boolean
-            default_template_id:
-              type: [string, "null"]
-              format: uuid
         voice_identification:
           type: object
           properties:
@@ -4138,15 +5626,73 @@ components:
               type: number
               minimum: 0
               maximum: 1
-            consent_term_text:
-              description: Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo que aceitaram.
-              type: string
-              minLength: 1
-              maxLength: 20000
+        preprocessing:
+          description: Cada etapa é mesclada campo a campo.
+          type: object
+          additionalProperties: false
+          properties:
+            denoise:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                method:
+                  description: "`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg)."
+                  type: string
+                  enum: [rnnoise, afftdn]
+                strength:
+                  description: Quanto do sinal tratado entra na mistura.
+                  type: number
+                  minimum: 0
+                  maximum: 1
+            loudnorm:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                target_lufs:
+                  description: Loudness integrado alvo (EBU R128).
+                  type: number
+                  minimum: -30
+                  maximum: -10
+                true_peak_db:
+                  type: number
+                  minimum: -9
+                  maximum: 0
+                lra:
+                  description: Faixa de loudness.
+                  type: number
+                  minimum: 1
+                  maximum: 20
+            trim_silence:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                min_silence_s:
+                  description: Silêncio mínimo, no início ou no fim, para cortar.
+                  type: number
+                  minimum: 1
+                  maximum: 30
+                threshold_db:
+                  description: Abaixo deste nível, é silêncio.
+                  type: number
+                  minimum: -80
+                  maximum: -20
+            split_channels:
+              description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
 
     AgentProvider:
       type: object
-      required: [id, name, kind, base_url, model, api_key_set, enabled, options, created_at, updated_at]
+      required: [id, name, kind, base_url, model, api_key_set, enabled, options, used_for, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4170,6 +5716,11 @@ components:
           type: object
           additionalProperties:
             type: [string, number, boolean]
+        used_for:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/AgentPurpose"
         created_at:
           type: string
           format: date-time
@@ -4202,6 +5753,11 @@ components:
           type: object
           additionalProperties:
             type: [string, number, boolean]
+        used_for:
+          description: Sem valor, um provider habilitado assume as finalidades que nenhum outro declara.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentPurpose"
 
     AgentProviderPatch:
       type: object
@@ -4225,6 +5781,11 @@ components:
           type: object
           additionalProperties:
             type: [string, number, boolean]
+        used_for:
+          description: Substitui a lista; as finalidades declaradas saem dos outros providers.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentPurpose"
 
     AgentProviderPage:
       type: object
@@ -4264,78 +5825,6 @@ components:
           minLength: 1
           writeOnly: true
 
-    Invitation:
-      type: object
-      required: [id, email, role, group_ids, expires_at, accepted_at, created_by]
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum: [admin, member]
-        group_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        expires_at:
-          type: string
-          format: date-time
-        accepted_at:
-          type: [string, "null"]
-          format: date-time
-        created_by:
-          $ref: "./transcript.schema.json#/$defs/UserRef"
-        accept_url:
-          description: Link de aceite, só na resposta da criação.
-          type: string
-          format: uri
-        status:
-          description: "`pending` enquanto válido e não aceito; `expired` depois de `expires_at`."
-          type: string
-          enum: [pending, accepted, expired]
-        created_at:
-          type: string
-          format: date-time
-
-    InvitationCreate:
-      type: object
-      required: [email]
-      properties:
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum: [admin, member]
-          default: member
-        group_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        expires_in_days:
-          description: Validade do link em dias; padrão 7.
-          type: integer
-          minimum: 1
-          maximum: 30
-          default: 7
-
-    InvitationPage:
-      type: object
-      required: [items, next_cursor]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Invitation"
-        next_cursor:
-          $ref: "#/components/schemas/NextCursor"
-
     AdminJobRetried:
       description: O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`.
       type: object
@@ -4358,7 +5847,7 @@ components:
           format: date-time
     AdminHealth:
       type: object
-      required: [queue, gpu, models_loaded, recent_failures, checked_at]
+      required: [queue, gpu, models_loaded, recent_failures, checked_at, steps, services]
       properties:
         queue:
           type: object
@@ -4410,14 +5899,22 @@ components:
                 type: [integer, "null"]
                 minimum: 0
         recent_failures:
+          description: |
+            As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
+            sem o conteúdo das gravações.
           type: array
           items:
             type: object
             required: [job_id, recording_id, stage, code, message, failed_at]
             properties:
               job_id:
-                type: string
+                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                type: [string, "null"]
                 format: uuid
+              step:
+                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                type: string
+                enum: [received, preprocessing, transcription, fields, agenda_type, summary]
               recording_id:
                 type: string
                 format: uuid
@@ -4436,6 +5933,47 @@ components:
         checked_at:
           type: string
           format: date-time
+        steps:
+          description: |
+            Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
+            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+          type: array
+          items:
+            type: object
+            required: [step, runs, median_ms, failures]
+            properties:
+              step:
+                type: string
+                enum: [preprocessing, transcription, fields, agenda_type, summary]
+              runs:
+                type: integer
+                minimum: 0
+              median_ms:
+                type: [integer, "null"]
+                minimum: 0
+              failures:
+                type: integer
+                minimum: 0
+        services:
+          description: |
+            Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
+            `down` ou `absent` (ainda não existe na plataforma).
+          type: array
+          items:
+            type: object
+            required: [name, status, detail, latency_ms]
+            properties:
+              name:
+                type: string
+                enum: [api, postgres, redis, storage, gpu_worker, cpu_worker, mcp]
+              status:
+                type: string
+                enum: [healthy, degraded, down, absent]
+              detail:
+                type: [string, "null"]
+              latency_ms:
+                type: [integer, "null"]
+                minimum: 0
         worker:
           description: >-
             Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
@@ -4475,7 +6013,7 @@ components:
                 type: integer
                 minimum: 0
         running_jobs:
-          description: Jobs de transcrição da organização ainda não concluídos, com o progresso.
+          description: Jobs de transcrição da plataforma ainda não concluídos, com o progresso.
           type: array
           items:
             type: object
@@ -4519,6 +6057,18 @@ components:
     MeViaPat:
       summary: Consultora autenticada pelo PAT do lumea
       externalValue: ./fixtures/me-via-pat.json
+    SignupInfo:
+      summary: Cadastro aberto com o aviso v1
+      externalValue: ./fixtures/signup-info.json
+    SignupRequest:
+      summary: Nova conta aceitando o aviso
+      externalValue: ./fixtures/signup-request.json
+    NoticeAcceptRequest:
+      summary: Aceite do aviso v1
+      externalValue: ./fixtures/notice-accept-request.json
+    AdminMe:
+      summary: Conta de admin
+      externalValue: ./fixtures/admin-me.json
     TokenPage:
       summary: PAT do lumea e PAT do desktop
       externalValue: ./fixtures/token-page.json
@@ -4553,7 +6103,7 @@ components:
       summary: Gravação criada, job na fila
       externalValue: ./fixtures/recording-queued.json
     RecordingTranscribed:
-      summary: Gravação transcrita e compartilhada com um grupo
+      summary: Gravação transcrita
       externalValue: ./fixtures/recording-transcribed.json
     RecordingPage:
       summary: Uma gravação transcrita e uma em processamento
@@ -4561,12 +6111,6 @@ components:
     RecordingPatchRequest:
       summary: Tags, coleção e metadados
       externalValue: ./fixtures/recording-patch-request.json
-    SharePage:
-      summary: Compartilhada com o grupo Consultores
-      externalValue: ./fixtures/share-page.json
-    ShareCreateRequest:
-      summary: Compartilhar com um grupo
-      externalValue: ./fixtures/share-create-request.json
     TranscriptPage:
       summary: Listagem incremental com uma transcrição
       externalValue: ./fixtures/transcript-page.json
@@ -4592,7 +6136,7 @@ components:
       summary: Ata pronta
       externalValue: ./fixtures/summary-page.json
     SummaryCreateRequest:
-      summary: Gerar a ata com o template padrão
+      summary: Gerar o resumo com um tipo de agenda
       externalValue: ./fixtures/summary-create-request.json
     SummaryQueued:
       summary: Resumo na fila
@@ -4600,20 +6144,56 @@ components:
     SummaryDone:
       summary: Ata pronta
       externalValue: ./fixtures/summary-done.json
-    SummaryTemplatePage:
-      summary: Padrão da organização e template pessoal
-      externalValue: ./fixtures/summary-template-page.json
-    SummaryTemplateCreateRequest:
-      summary: Template de resumo executivo
-      externalValue: ./fixtures/summary-template-create-request.json
-    SummaryTemplateCreateOrgRequest:
-      summary: Padrão da organização (admin)
-      externalValue: ./fixtures/summary-template-create-org-request.json
+    SummaryState:
+      summary: Resumo editado à mão sobre a versão gerada
+      externalValue: ./fixtures/summary-state.json
+    SummaryEditRequest:
+      summary: Edição a partir da versão 1
+      externalValue: ./fixtures/summary-edit-request.json
+    SummaryChatRequest:
+      summary: Pedir quem falou do orçamento
+      externalValue: ./fixtures/summary-chat-request.json
+    SummaryChatMessageDone:
+      summary: Resposta que leu um trecho e mudou o resumo
+      externalValue: ./fixtures/summary-chat-message-done.json
+    MarkerBatchRequest:
+      summary: Dois marcadores do celular
+      externalValue: ./fixtures/marker-batch-request.json
+    MarkerPage:
+      summary: Marcadores de uma reunião
+      externalValue: ./fixtures/marker-page.json
+    DefaultAgendaTypePage:
+      summary: Os tipos padrão da plataforma
+      externalValue: ./fixtures/default-agenda-type-page.json
+    AgendaTypePage:
+      summary: Os tipos padrão de uma conta nova
+      externalValue: ./fixtures/agenda-type-page.json
+    AgendaTypeCreateRequest:
+      summary: Tipo de agenda para mentorias
+      externalValue: ./fixtures/agenda-type-create-request.json
+    FieldPage:
+      summary: Os embutidos e um campo de escolha
+      externalValue: ./fixtures/field-page.json
+    RecordingFieldValues:
+      summary: Título aceito, tags automáticas e um campo sem valor
+      externalValue: ./fixtures/recording-field-values.json
+    FieldPreviewRequest:
+      summary: Testar a regra do campo Cliente
+      externalValue: ./fixtures/field-preview-request.json
+    AgendaTypePreviewRequest:
+      summary: Pré-visualizar o tipo Mentoria numa gravação
+      externalValue: ./fixtures/agenda-type-preview-request.json
+    PreviewFieldRule:
+      summary: A regra em duas gravações
+      externalValue: ./fixtures/preview-field-rule.json
+    PreviewAgendaType:
+      summary: O tipo em rascunho numa gravação
+      externalValue: ./fixtures/preview-agenda-type.json
     PersonPage:
       summary: Diretório com três pessoas
       externalValue: ./fixtures/person-page.json
     Person:
-      summary: Pessoa com consentimento de voz
+      summary: Pessoa ligada a locutores
       externalValue: ./fixtures/person.json
     PersonCreateRequest:
       summary: Cadastrar Juliana Prado
@@ -4627,9 +6207,6 @@ components:
     TagList:
       summary: Tags em uso
       externalValue: ./fixtures/tag-list.json
-    GroupPage:
-      summary: Consultores e Diretoria
-      externalValue: ./fixtures/group-page.json
     AdminSettings:
       summary: WhisperX na GTX 1660 Super
       externalValue: ./fixtures/admin-settings.json
@@ -4645,33 +6222,18 @@ components:
     SecretList:
       summary: Token do Hugging Face gravado
       externalValue: ./fixtures/secret-list.json
-    UserPage:
-      summary: Admin e consultor
-      externalValue: ./fixtures/user-page.json
-    InvitationCreateRequest:
-      summary: Convidar um consultor
-      externalValue: ./fixtures/invitation-create-request.json
-    Invitation:
-      summary: Convite criado
-      externalValue: ./fixtures/invitation.json
+    AdminUserPage:
+      summary: Duas contas de usuário
+      externalValue: ./fixtures/admin-user-page.json
     AdminHealth:
       summary: Um job rodando na GPU
       externalValue: ./fixtures/admin-health.json
     SpeakerSuggestionRejected:
       summary: Locutor 2 sem a sugestão recusada
       externalValue: ./fixtures/speaker-suggestion-rejected.json
-    VoiceConsentPutRequest:
-      summary: Consentimento colhido por escrito
-      externalValue: ./fixtures/voice-consent-put-request.json
     Voiceprint:
       summary: Impressão com duas amostras
       externalValue: ./fixtures/voiceprint.json
-    VoiceprintExport:
-      summary: Exportação LGPD de uma pessoa
-      externalValue: ./fixtures/voiceprint-export.json
-    VoiceAuditPage:
-      summary: Sugestão, aceite e consentimento
-      externalValue: ./fixtures/voice-audit-page.json
     ProblemUnauthorized:
       summary: Sem credencial
       externalValue: ./fixtures/problem-unauthorized.json

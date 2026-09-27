@@ -2,13 +2,14 @@
 
 Serviço de transcrição institucional e auto-hospedado. Grava reuniões, transcreve na GPU do
 servidor, separa e reconhece os locutores, organiza as transcrições por pessoa e as resume com o
-agente que a organização escolher.
+agente que o admin da plataforma configurar. Cada usuário tem o próprio espaço, sem organização.
 
 > Estado: em definição. O plano de construção é o épico em `holetz/eclume#1`.
 
 ## Peças
 
-- **server/**: API FastAPI multiusuário com organizações, PATs, gravações, pessoas e busca.
+- **server/**: API FastAPI com contas de usuário isoladas (cadastro aberto), conta de admin separada, PATs,
+  gravações, pessoas e busca.
 - **worker-gpu/**: WhisperX (ASR, alinhamento, diarização e embeddings de locutor) em CUDA.
 - **web/**: interface do usuário e painel de administração, com conversão local de áudio e vídeo
   antes do upload.

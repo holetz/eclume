@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -16,18 +18,20 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 URL = "/api/v1/admin/settings"
+PREPROCESSING = {
+    "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6},
+    "loudnorm": {"enabled": True, "target_lufs": -16, "true_peak_db": -1.5, "lra": 11},
+    "trim_silence": {"enabled": True, "min_silence_s": 3, "threshold_db": -50},
+    "split_channels": {"enabled": False},
+}
 
 
-@pytest.fixture
-def admin(as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> Api:
-    return as_user(make_user(role="admin", name="Mariana Couto"))
-
-
-def test_so_admin_com_sessao(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    member = as_user(make_user())
-    assert member.get(URL).status_code == 403
-    assert member.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 403
+def test_so_a_sessao_de_admin(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    user = as_user(make_user())
+    assert user.get(URL).status_code == 401
+    assert user.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 401
+    assert user.pat("recordings:read").get(URL).status_code == 401
+    assert admin.get(URL).status_code == 200
 
 
 def test_leitura_e_merge_por_bloco(admin: Api):
@@ -36,15 +40,16 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     body = initial.json()
     assert body["asr"]["model"] == "large-v3-turbo"
     assert body["updated_by"] is None
-    default_template = body["summarization"]["default_template_id"]
-    assert default_template is not None
+    assert "summarization" not in body
+    assert body["preprocessing"] == PREPROCESSING
+    assert body["voice_identification"] == {"enabled": False, "suggestion_threshold": 0.55}
 
     patched = admin.patch(
         URL,
         json={
             "asr": {"model": "large-v3", "compute_type": "int8", "batch_size": 2},
             "diarization": {"min_speakers": 2, "max_speakers": 4},
-            "summarization": {"auto_summarize": True},
+            "preprocessing": {"denoise": {"method": "afftdn"}, "split_channels": {"enabled": True}},
         },
     )
     assert patched.status_code == 200, patched.text
@@ -52,9 +57,15 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     assert result["asr"] == {**body["asr"], "model": "large-v3", "compute_type": "int8", "batch_size": 2}
     assert result["diarization"]["min_speakers"] == 2
     assert result["diarization"]["enabled"] is True
-    # O merge é por campo: o template padrão gravado pela #9 continua lá.
-    assert result["summarization"] == {**body["summarization"], "auto_summarize": True}
-    assert result["updated_by"]["name"] == "Mariana Couto"
+    # O pré-processamento é mesclado por etapa: o resto de cada etapa fica.
+    assert result["preprocessing"] == {
+        **PREPROCESSING,
+        "denoise": {**PREPROCESSING["denoise"], "method": "afftdn"},
+        "split_channels": {"enabled": True},
+    }
+    # Quem mudou é a conta de admin, não um usuário.
+    me = admin.get("/api/v1/admin/me").json()
+    assert result["updated_by"] == {"id": me["id"], "name": me["name"]}
     assert admin.get(URL).json() == result
 
     cleared = admin.patch(URL, json={"asr": {"batch_size": None}, "diarization": {"min_speakers": None}})
@@ -77,9 +88,20 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"diarization": {"model": "pyannote/speaker-diarization-3.1"}}, None),
         ({"diarization": {"min_speakers": 5, "max_speakers": 2}}, "diarization.min_speakers"),
         ({"diarization": {"enabled": None}}, "diarization.enabled"),
-        ({"summarization": {"default_provider_id": "01928f3a-1c00-7a00-8000-000000000b01"}}, None),
-        ({"summarization": {"default_template_id": "01928f3a-1c00-7a00-8000-000000000901"}}, None),
+        # O resumo automático segue o tipo de agenda e o provider de `summaries`: o bloco saiu.
+        ({"summarization": {"auto_summarize": True}}, None),
+        ({"preprocessing": {"denoise": {"method": "spleeter"}}}, None),
+        ({"preprocessing": {"denoise": {"strength": 1.2}}}, None),
+        ({"preprocessing": {"loudnorm": {"target_lufs": -5}}}, None),
+        ({"preprocessing": {"loudnorm": {"true_peak_db": 1}}}, None),
+        ({"preprocessing": {"loudnorm": {"lra": 30}}}, None),
+        ({"preprocessing": {"trim_silence": {"min_silence_s": 0.5}}}, None),
+        ({"preprocessing": {"trim_silence": {"threshold_db": -10}}}, None),
+        ({"preprocessing": {"resample": {"enabled": False}}}, None),
+        ({"preprocessing": {"denoise": None}}, "preprocessing.denoise"),
+        ({"preprocessing": {"denoise": {"enabled": None}}}, "preprocessing.denoise.enabled"),
         ({"voice_identification": {"suggestion_threshold": 1.5}}, None),
+        ({"voice_identification": {"consent_term_text": "Autorizo."}}, None),
     ],
 )
 def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
@@ -88,34 +110,6 @@ def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
     assert response.json()["code"] == "validation_failed"
     if field is not None:
         assert field in {e["field"] for e in response.json()["errors"]}
-
-
-def test_referencias_de_provider_e_template(admin: Api):
-    provider = admin.post(
-        "/api/v1/admin/agent-providers",
-        json={
-            "name": "DeepSeek",
-            "kind": "openai-compatible",
-            "model": "deepseek-chat",
-            "base_url": "https://api.deepseek.com/v1",
-        },
-    ).json()
-    personal = admin.post("/api/v1/summary-templates", json={"name": "Meu", "instructions": "Resuma."}).json()
-    organization = admin.post(
-        "/api/v1/summary-templates", json={"name": "Da org", "instructions": "Resuma.", "scope": "organization"}
-    ).json()
-
-    assert admin.patch(URL, json={"summarization": {"default_template_id": personal["id"]}}).status_code == 422
-    ok = admin.patch(
-        URL, json={"summarization": {"default_template_id": organization["id"], "default_provider_id": provider["id"]}}
-    )
-    assert ok.status_code == 200
-    templates = admin.get("/api/v1/summary-templates").json()["items"]
-    assert next(t for t in templates if t["id"] == organization["id"])["is_default"] is True
-
-    admin.patch(f"/api/v1/admin/agent-providers/{provider['id']}", json={"enabled": False})
-    assert admin.patch(URL, json={"summarization": {"default_provider_id": provider["id"]}}).status_code == 422
-    assert admin.patch(URL, json={"summarization": {"default_provider_id": None}}).status_code == 200
 
 
 def test_proximo_transcribe_sai_com_a_configuracao_nova(
@@ -145,3 +139,46 @@ def test_proximo_transcribe_sai_com_a_configuracao_nova(
     ((_, _, options),) = run_gpu(services.settings)
     assert options["model"] == "medium"
     run_cpu(services.settings)
+
+
+def test_idioma_automatico_vai_nulo_ao_transcribe(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    assert admin.patch(URL, json={"asr": {"default_language": "auto"}}).json()["asr"]["default_language"] == "auto"
+    member = as_user(make_user())
+    upload_file(member, audio_bytes(1500), title="Idioma a detectar")
+    ((_, _, options),) = run_gpu(services.settings)
+    assert options["language"] is None
+    # O idioma da gravação, quando dito, vence o automático.
+    upload_file(member, audio_bytes(1600), title="Em inglês", language="en")
+    ((_, _, options),) = run_gpu(services.settings)
+    assert options["language"] == "en"
+    run_cpu(services.settings)
+
+
+def test_identificacao_por_voz_exige_a_separacao(admin: Api):
+    refused = admin.patch(URL, json={"voice_identification": {"enabled": True}, "diarization": {"enabled": False}})
+    assert refused.status_code == 422
+    assert refused.json()["errors"][0]["field"] == "voice_identification.enabled"
+    assert admin.patch(URL, json={"voice_identification": {"enabled": True}}).status_code == 200
+    assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 422
+    assert admin.patch(URL, json={"voice_identification": {"enabled": False}}).status_code == 200
+    assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 200
+
+
+def test_estado_antigo_sem_separacao_nao_trava_outro_bloco(admin: Api, services: Services):
+    # Um estado de antes da regra: voz ligada com a separação desligada.
+    async def legacy(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text(
+                "UPDATE platform_settings SET"
+                " voice_identification = voice_identification || '{\"enabled\": true}',"
+                " diarization = diarization || '{\"enabled\": false}'"
+            )
+        )
+
+    run(services.sql(legacy))
+    assert admin.patch(URL, json={"asr": {"batch_size": 8}}).status_code == 200
+    assert admin.patch(URL, json={"preprocessing": {"denoise": {"strength": 0.4}}}).status_code == 200
+    # Tocar a separação ainda exige a regra.
+    assert admin.patch(URL, json={"diarization": {"min_speakers": 2}}).status_code == 422

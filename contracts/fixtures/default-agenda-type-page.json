@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000c01",
+      "name": "Reunião de equipe",
+      "title_pattern": "Reunião de equipe · {assunto}",
+      "identify": "Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa com cliente nem 1:1.",
+      "default_tags": [
+        "interno",
+        "planejamento"
+      ],
+      "summary_instructions": "## Resumo\nDe duas a quatro frases sobre o que a reunião tratou.\n\n## Decisões\nUm item por decisão, com quem é o responsável.\n\n## Próximos passos\nUm item por tarefa: responsável, o quê e quando.",
+      "position": 1,
+      "include_for_new_users": true
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000c02",
+      "name": "1:1",
+      "title_pattern": null,
+      "identify": "Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.",
+      "default_tags": [],
+      "summary_instructions": "## Pontos tratados\nUm item por assunto, em uma ou duas frases.\n\n## Combinados\nUm item por acompanhamento combinado: quem, o quê e até quando.",
+      "position": 2,
+      "include_for_new_users": true
+    }
+  ],
+  "next_cursor": null
+}

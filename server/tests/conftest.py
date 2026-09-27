@@ -7,19 +7,27 @@ passe por "passou".
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select, update
 
 from eclume_server.app import create_app
-from eclume_server_testing.api import Account, Api, login, new_org, new_user
+from eclume_server.db import tables as t
+from eclume_server_testing.api import Account, Api, admin_login, login, new_admin, new_user
 from eclume_server_testing.conformance import CONFORMANCE
-from eclume_server_testing.harness import REQUIRE_SERVICES, Services, provision, teardown, unreachable_services
+from eclume_server_testing.harness import REQUIRE_SERVICES, Services, provision, run, teardown, unreachable_services
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-    from uuid import UUID
+
+_BLOCKS = (
+    t.platform_settings.c.asr,
+    t.platform_settings.c.diarization,
+    t.platform_settings.c.preprocessing,
+    t.platform_settings.c.voice_identification,
+)
 
 
 @pytest.fixture(scope="session")
@@ -57,25 +65,47 @@ def _conformance() -> Iterator[None]:
 
 
 @pytest.fixture
-def org(services: Services) -> UUID:
-    """Organização nova para o teste."""
-    return new_org(services)
+def make_user(services: Services) -> Callable[..., Account]:
+    """Fábrica de contas de usuário."""
 
-
-@pytest.fixture
-def make_org(services: Services) -> Callable[[], UUID]:
-    """Fábrica de organizações adicionais (para testes entre organizações)."""
-    return lambda: new_org(services, "Outra organização")
-
-
-@pytest.fixture
-def make_user(services: Services, org: UUID) -> Callable[..., Account]:
-    """Fábrica de usuários (por padrão na organização do teste)."""
-
-    def make(*, role: str = "member", org_id: UUID | None = None, name: str | None = None) -> Account:
-        return new_user(services, org_id or org, role=role, name=name)
+    def make(*, name: str | None = None, notice_version: str | None = None) -> Account:
+        return new_user(services, name=name, notice_version=notice_version)
 
     return make
+
+
+@pytest.fixture(scope="session")
+def _platform_defaults(services: Services) -> dict[str, Any]:
+    """A configuração da plataforma como a migration a deixou."""
+
+    async def read(conn: Any) -> dict[str, Any]:  # noqa: ANN401
+        return dict((await conn.execute(select(*_BLOCKS))).mappings().one())
+
+    return run(services.sql(read))
+
+
+@pytest.fixture
+def platform(services: Services, _platform_defaults: dict[str, Any]) -> Iterator[None]:
+    """Plataforma (configuração, segredos e providers) nos padrões da migration, antes e depois.
+
+    A plataforma é uma só no banco da sessão: o teste que a muda não vaza para os outros.
+    """
+
+    async def reset(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(update(t.platform_settings).values(**_platform_defaults, updated_by=None))
+        await conn.execute(delete(t.platform_secrets))
+        await conn.execute(delete(t.agent_providers))
+
+    run(services.sql(reset))
+    yield
+    run(services.sql(reset))
+
+
+@pytest.fixture
+def admin(services: Services, client: TestClient, platform: None) -> Api:
+    """Sessão de admin de uma conta de admin nova, com a plataforma nos padrões."""
+    del platform
+    return admin_login(client, new_admin(services).email)
 
 
 @pytest.fixture

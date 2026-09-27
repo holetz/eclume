@@ -36,7 +36,7 @@ export function SearchPage() {
     <section className={styles.page} aria-labelledby="busca-titulo">
       <header>
         <h1 id="busca-titulo">Busca</h1>
-        <p className="muted">
+        <p className="text-muted">
           Procure o que foi dito nas transcrições que você pode ver. Use aspas para frase exata e - para excluir um
           termo.
         </p>
@@ -48,7 +48,7 @@ export function SearchPage() {
         onSubmit={(next) => setParams(paramsFromFilters(next))}
       />
 
-      {!searchable && <p className="muted">Digite um termo ou escolha uma pessoa para buscar.</p>}
+      {!searchable && <p className="text-muted">Digite um termo ou escolha uma pessoa para buscar.</p>}
       {searchable && results.isPending && <p role="status">Buscando…</p>}
       {results.isError && (
         <p className="alert alert-error" role="alert">
@@ -73,7 +73,7 @@ export function SearchPage() {
       {results.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => results.fetchNextPage()}
           disabled={results.isFetchingNextPage}
         >
@@ -123,7 +123,7 @@ function SearchForm({ initial, onSubmit }: { initial: SearchFilters; onSubmit: (
           <label htmlFor={`${id}-pessoa`}>Pessoa</label>
           <select
             id={`${id}-pessoa`}
-            className="select"
+            className="input"
             value={filters.person}
             onChange={(e) => set('person', e.target.value)}
           >
@@ -145,7 +145,7 @@ function SearchForm({ initial, onSubmit }: { initial: SearchFilters; onSubmit: (
         </div>
         <div className="field">
           <label htmlFor={`${id}-tag`}>Tag</label>
-          <select id={`${id}-tag`} className="select" value={filters.tag} onChange={(e) => set('tag', e.target.value)}>
+          <select id={`${id}-tag`} className="input" value={filters.tag} onChange={(e) => set('tag', e.target.value)}>
             <option value="">Qualquer tag</option>
             {tags.data?.items.map((tag) => (
               <option key={tag.name} value={tag.name}>
@@ -158,7 +158,7 @@ function SearchForm({ initial, onSubmit }: { initial: SearchFilters; onSubmit: (
           <label htmlFor={`${id}-colecao`}>Coleção</label>
           <select
             id={`${id}-colecao`}
-            className="select"
+            className="input"
             value={filters.collection}
             onChange={(e) => set('collection', e.target.value)}
           >

@@ -11,9 +11,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
 PAT_PREFIX = "eclp_"
-INVITATION_PREFIX = "ecli_"
 _PAT_BODY_LENGTH = 40
-_INVITATION_BODY_LENGTH = 32
 _PAT_VISIBLE = len(PAT_PREFIX) + 4
 _ALPHABET = string.ascii_letters + string.digits
 _hasher = PasswordHasher()
@@ -48,11 +46,6 @@ def new_pat() -> tuple[str, str]:
     """Novo PAT: (segredo `eclp_...`, prefixo visível)."""
     secret = PAT_PREFIX + "".join(secrets.choice(_ALPHABET) for _ in range(_PAT_BODY_LENGTH))
     return secret, secret[:_PAT_VISIBLE]
-
-
-def new_invitation_token() -> str:
-    """Token do link de convite (`ecli_` + 32 base62, ~190 bits); o banco guarda o SHA-256."""
-    return INVITATION_PREFIX + "".join(secrets.choice(_ALPHABET) for _ in range(_INVITATION_BODY_LENGTH))
 
 
 def new_session_token() -> str:

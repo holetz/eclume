@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de API v1
-description: As convenções da API v1 do eclume — autenticação por sessão e PAT com escopos, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva.
+description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -23,17 +23,28 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 
 - **Prefixo e formatos.** Tudo sob `/api/v1`. Datas em RFC 3339 UTC, durações em milissegundos
   inteiros (`*_ms`), ids em UUID; locutores têm id `S<n>` único na transcrição.
-- **Autenticação.** Dois esquemas. Sessão por cookie `eclume_session` (HttpOnly, Secure,
-  SameSite=Lax) com CSRF por double-submit (`X-CSRF-Token` = cookie `eclume_csrf`) em método
-  mutável. PAT pessoal em `Authorization: Bearer eclp_<segredo>`, guardado só como hash e
-  mostrado uma vez.
+- **Conta por usuário.** Não há organização: cada conta vê e muda só o que é dela. A conta nasce
+  no cadastro aberto (`POST /auth/signup`), com o aceite do aviso em vigor; uma conta sem o
+  aceite vigente recebe `notice_required: true` em `GET /me` e aceita por `POST /me/notice`.
+- **Autenticação.** Três esquemas.
+  - **Sessão de usuário** (`sessionCookie`): cookie `eclume_session` (HttpOnly, Secure,
+    SameSite=Lax) com CSRF por double-submit (`X-CSRF-Token` = cookie `eclume_csrf`) em método
+    mutável.
+  - **PAT** (`pat`) pessoal em `Authorization: Bearer eclp_<segredo>`, guardado só como hash e
+    mostrado uma vez.
+  - **Sessão de admin** (`adminSessionCookie`): conta de admin separada das contas de usuário,
+    aberta por `POST /admin/auth/login`. Cookie `eclume_admin_session` (HttpOnly, Secure,
+    SameSite=Strict, `Path=/api/v1/admin`) e CSRF por `X-CSRF-Token` = cookie `eclume_admin_csrf`.
+- **Fronteira do admin.** `/api/v1/admin/*` (menos o login) declara só `adminSessionCookie`:
+  sessão de usuário, PAT ou nada ali dão **401** `unauthorized`. A sessão de admin é ignorada em
+  qualquer outra rota. O admin vê só a plataforma (configuração, segredos, agentes, contas,
+  saúde); nenhuma rota de admin devolve conteúdo de usuário.
 - **Escopos do PAT:** `recordings:read`, `recordings:write`, `transcripts:read`,
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
   implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Sessão tem todas as
   permissões do usuário.
-- **Só sessão:** gestão de PATs, escrita de grupos, `/api/v1/admin/*` (que exige ainda o papel
-  `admin`) e as rotas de voz (tag `voice`: consentimento, impressão, exportação e recusa de
-  sugestão). Um PAT vazado não cria outro PAT, não mexe na organização e não lê nem apaga dado
+- **Só sessão de usuário:** gestão de PATs, o aceite do aviso e as rotas de voz (tag `voice`:
+  impressão e recusa de sugestão). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
   credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
 - **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha
@@ -43,7 +54,21 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
-  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`.
+  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Um cursor vale
+  só para a ordenação (`sort`) que o gerou.
+- **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
+  valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota
+  com a tag `a` ou `b`. Intervalo de tempo é `from` (inclusivo) e `to` (exclusivo) sobre
+  `recorded_at`, como na busca.
+- **Exportação** por `GET /recordings/{id}/export?format=`: `txt` (`text/plain`, cabeçalho e uma
+  linha `[HH:MM:SS] Nome: texto` por segmento), `srt` (`application/x-subrip`, uma legenda por
+  segmento), `md` (`text/markdown`, título, data e o resumo atual; sem resumo, 409
+  `summary_missing`) e `docx` (Word, com o resumo e a transcrição). O nome do arquivo vem em
+  `Content-Disposition`, em slug do título. `GET /transcripts/{id}/export?format=md` segue como o
+  export da transcrição com frontmatter, que o lumea lê.
+- **Concorrência otimista.** Uma escrita sobre um estado que o cliente leu leva a versão lida
+  (`base_version` na edição do resumo); se o estado mudou, a resposta é 409 com um `code` próprio
+  (`summary_changed`) e nada é sobrescrito.
 - **Upload** resumível em partes (multipart S3 orquestrado pela API): `POST /uploads` com o
   `sha256` do arquivo → partes por `PUT` em URLs opacas que expiram → `POST /uploads/{id}/complete`.
   Mesmo hash de uma gravação do usuário responde 200 `deduplicated` sem transferir nada. Retomar é
@@ -71,6 +96,17 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `contracts` junto com o smoke do mock.
 - **Quebra** vira `/api/v2` num `openapi-v2.yaml` próprio; a v1 segue servida na transição,
   anunciando o fim com `Deprecation` e `Sunset`.
+- **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
+  removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
+  e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes
+  do redesign (holetz/eclume#33 a #41) ainda quebram rotas que só o web do próprio repositório usa
+  (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações; a 2.2.0 torna
+anuláveis `agenda_type`, `provider` e `model` do `Summary`, que passa a ter versões editadas à
+mão, e troca os filtros de `GET /recordings` por listas repetíveis, compatíveis com um valor só). Os dois clientes de
+  fora do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, que seguem
+  compatíveis; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a linha 2.x evolui no
+  mesmo prefixo até o redesign terminar, e os contract tests exigem a 2.x. Depois dele a 2.x
+  congela, e a **próxima** quebra vai para `/api/v2`, sem outra exceção.
 
 ## Por quê
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { empty, json, mockFetch, problem } from '../test/http'
-import { CSRF_HEADER, createApiClient, onUnauthorized, readCookie } from './client'
+import { CSRF_HEADER, createApiClient, isAdminUrl, onAdminUnauthorized, onUnauthorized, readCookie } from './client'
 import { ApiError, errorMessage, unwrap } from './problem'
 
 const me = { user: { id: 'u' } }
@@ -39,6 +39,45 @@ describe('cliente da API', () => {
     expect(http.requests('GET /api/v1/me')[0].headers.get(CSRF_HEADER)).toBeNull()
     expect(http.requests('DELETE /api/v1/tokens/:id')[0].headers.get(CSRF_HEADER)).toBe('tok+1')
     expect(http.calls[0].credentials).toBe('same-origin')
+  })
+
+  it('no painel admin ecoa o CSRF da sessão de admin', async () => {
+    document.cookie = 'eclume_admin_csrf=adm; path=/'
+    const http = mockFetch({
+      'PATCH /api/v1/admin/settings': () => ({}),
+      'POST /api/v1/admin/auth/logout': () => empty(),
+    })
+    const api = createApiClient()
+    await api.PATCH('/api/v1/admin/settings', { body: { asr: { model: 'large-v3' } } })
+    await api.POST('/api/v1/admin/auth/logout')
+    expect(http.requests('PATCH /api/v1/admin/settings')[0].headers.get(CSRF_HEADER)).toBe('adm')
+    expect(http.requests('POST /api/v1/admin/auth/logout')[0].headers.get(CSRF_HEADER)).toBe('adm')
+    expect(isAdminUrl('http://x/api/v1/admin/me')).toBe(true)
+    expect(isAdminUrl('http://x/api/v1/me')).toBe(false)
+  })
+
+  it('o 401 do painel admin não derruba a sessão do usuário', async () => {
+    mockFetch({ 'GET /api/v1/admin/me': () => problem('unauthorized', 401) })
+    const listener = vi.fn()
+    const off = onUnauthorized(listener)
+    await createApiClient().GET('/api/v1/admin/me')
+    expect(listener).not.toHaveBeenCalled()
+    off()
+  })
+
+  it('o 401 do painel avisa só a guarda do admin, fora do login do admin', async () => {
+    mockFetch({
+      'GET /api/v1/admin/users': () => problem('unauthorized', 401),
+      'POST /api/v1/admin/auth/login': () => problem('unauthorized', 401),
+    })
+    const listener = vi.fn()
+    const off = onAdminUnauthorized(listener)
+    const api = createApiClient()
+    await api.POST('/api/v1/admin/auth/login', { body: { email: 'a@b.c', password: 'x' } })
+    expect(listener).not.toHaveBeenCalled()
+    await api.GET('/api/v1/admin/users')
+    expect(listener).toHaveBeenCalledTimes(1)
+    off()
   })
 
   it('avisa o 401 fora do login', async () => {

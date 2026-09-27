@@ -1,50 +1,39 @@
-.layout {
-  display: grid;
-  gap: var(--space-5);
-}
-
-.header {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.header p {
-  max-width: 64ch;
-}
-
-.tabs ul {
-  list-style: none;
+/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
+   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
+:where(.page) h2 {
+  font-size: 20px;
   margin: 0;
-  padding: 0;
+}
+
+:where(.page) h3 {
+  font-size: 17px;
+  margin: 0;
+}
+
+:where(.page) p {
+  margin: 0;
+}
+
+/* A marca com o selo Admin, no topo da barra lateral (templates/admin do DS). */
+.brand {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  border-bottom: 1px solid var(--color-border);
+  align-items: center;
+  gap: 10px;
 }
 
-.tab {
-  display: block;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: 560;
-  text-decoration: none;
+.account {
+  display: grid;
+  min-width: 0;
 }
 
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab[aria-current='page'] {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
+.account > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .intro {
@@ -59,7 +48,7 @@
 .form {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-5);
+  padding: var(--space-6);
   max-width: 44rem;
 }
 
@@ -97,10 +86,10 @@
 }
 
 /* A dica global (`.field .hint`) só vale dentro de `.field`; aqui ela acompanha o checkbox e o card. */
-.check :global(.hint),
-.card > :global(.hint),
-.form > :global(.hint) {
-  font-size: var(--text-xs);
+.check :global(.field-hint),
+.card > :global(.field-hint),
+.form > :global(.field-hint) {
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
@@ -112,21 +101,20 @@
 }
 
 .meta {
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
 .tableWrap {
   overflow-x: auto;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .table th,
@@ -134,16 +122,16 @@
   padding: var(--space-3) var(--space-4);
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .table thead th {
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
-  background: var(--color-surface-2);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 
 .table tbody tr:last-child th,
@@ -166,7 +154,7 @@
 
 .mono {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 12px;
 }
 
 .actionsCell {
@@ -203,11 +191,11 @@
   display: grid;
   gap: var(--space-2);
   align-content: start;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
 }
 
 .card h3 {
-  font-size: var(--text-md);
+  font-size: 15px;
 }
 
 .facts {
@@ -215,7 +203,7 @@
   grid-template-columns: max-content 1fr;
   gap: var(--space-1) var(--space-3);
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .facts dt {
@@ -238,7 +226,7 @@
 
 .secretValue {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .list {
@@ -251,8 +239,250 @@
 
 .instructions {
   white-space: pre-wrap;
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
   max-height: 8rem;
   overflow: auto;
+}
+
+/* Usuários: a busca na largura do DS e o contador à direita da barra. */
+.search {
+  max-width: 320px;
+}
+
+.count {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.small {
+  font-size: 12px;
+}
+
+/* Abaixo de 56rem, a tabela rola dentro do contêiner, e a página não rola na horizontal. */
+.scroll {
+  overflow-x: auto;
+}
+
+/* Forms da configuração da plataforma, nas larguras do DS (Transcrição 520 px, Locutores 560 px). */
+.narrowForm,
+.wideForm,
+.stack {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.narrowForm {
+  max-width: 520px;
+}
+
+.wideForm {
+  max-width: 560px;
+  gap: 32px;
+}
+
+/* O `.seg` ocupa só a largura das opções, como no DS, mesmo dentro de uma grade. */
+.label + :global(.seg) {
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* O rótulo de um grupo (.seg), igual ao `label` de `.field`. */
+.label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+/* Locutores: as duas seções do DS, a segunda com o divisor em cima. */
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 16px;
+}
+
+.divided {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+/* Pré-processamento: a lista do DS sem a coluna da alça (a ordem é fixa) e o painel de ajustes
+   aberto logo abaixo da etapa. */
+.audioForm {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.lede {
+  max-width: 62ch;
+  margin: 0;
+}
+
+/* O respiro do DS entre a introdução e a lista; no form do áudio, o `gap` da grade já o dá. */
+.lede + * {
+  margin-top: var(--space-4);
+}
+
+.audioForm > .lede + * {
+  margin-top: 0;
+}
+
+.orderList li {
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+}
+
+.orderList li.stepPanel {
+  display: block;
+  padding-top: 0;
+}
+
+.fields3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-4);
+}
+
+/* Agentes: o painel de edição abaixo da lista e a chave compartilhada depois dele. */
+.providerPanel {
+  max-width: 560px;
+  margin-top: var(--space-6);
+}
+
+.checks {
+  display: grid;
+  gap: 8px;
+}
+
+.sharedKey {
+  max-width: 560px;
+  margin-top: 32px;
+}
+
+/* Tipos de agenda padrão: a linha clicável com o fundo do DS quando aberta, o painel em duas
+   colunas no topo e a quebra do `.split` numa coluna abaixo de 56rem. */
+.typeRow {
+  cursor: pointer;
+}
+
+.typeRow[aria-current='true'] {
+  background: var(--color-surface);
+  box-shadow:
+    -12px 0 0 var(--color-surface),
+    12px 0 0 var(--color-surface);
+}
+
+.rowButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.typePanel h4 {
+  margin: 0;
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.twoCols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.monoInput {
+  font-size: 13px;
+}
+
+.identify {
+  min-height: 80px;
+}
+
+/* `textarea.input` do DS fixa 90px; o seletor precisa pesar mais que ele. */
+textarea.instructionsInput {
+  min-height: 196px;
+  font-size: 13px;
+}
+
+.tagRemove {
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tagInput {
+  width: 10rem;
+}
+
+@media (max-width: 56rem) {
+  .split,
+  .twoCols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A linha de ações dos exemplos do DS (o `.row` de examples/*.html, fora do styles.css). */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Saúde: os títulos das tabelas com o espaço do DS e o worker sem sinal em vermelho. */
+.healthTitle {
+  margin: 32px 0 12px;
+}
+
+.danger {
+  color: var(--color-danger);
+}
+
+/* O cabeçalho de linha das tabelas da Saúde tem a cara de célula do DS (`td` com `<strong>`),
+   não a de cabeçalho de coluna em caixa alta. */
+:global(.table) th.rowHead {
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
+  border-bottom-width: 1px;
+}
+
+/* Na tela estreita, o valor do indicador ("Transcrevendo", o nome do modelo) quebra na coluna. */
+@media (max-width: 56rem) {
+  .healthStats :global(.stat-value) {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
 }
