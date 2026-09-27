@@ -12,8 +12,10 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, 
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
 const AdminLoginPage = named(() => import('../features/admin/AdminLoginPage'), 'AdminLoginPage')
+const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
+const HelpCenterPage = named(() => import('../features/help/HelpCenterPage'), 'HelpCenterPage')
 const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
 const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
 const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
@@ -48,6 +50,8 @@ export function AppRoutes() {
         <Route path="/colecoes" element={page(CollectionsPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
+        <Route path="/ajuda" element={page(HelpCenterPage)} />
+        <Route path="/ajuda/:slug" element={page(ArticlePage)} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

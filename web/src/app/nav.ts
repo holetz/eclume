@@ -27,7 +27,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', section: 'more', enabled: false },
-  { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'more', enabled: false },
+  { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'more', enabled: true },
 ]
 
 export interface NavGroupEntry {

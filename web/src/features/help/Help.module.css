@@ -1,0 +1,100 @@
+:where(.page, .article) p {
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.page > :global(.page-head) {
+  margin-bottom: 0;
+}
+
+.search {
+  max-width: 720px;
+}
+
+.sectionTitle {
+  font-size: 22px;
+  margin: 0;
+}
+
+.questions {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 760px;
+}
+
+.topicList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.back {
+  justify-self: start;
+  font-size: 13px;
+  margin-bottom: var(--space-2);
+}
+
+.plainList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rowLink {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--color-accent-ink);
+  text-decoration: underline;
+}
+
+.resultTopic {
+  font-weight: 600;
+}
+
+.empty {
+  color: var(--color-text-muted);
+}
+
+.footer {
+  font-size: 14px;
+}
+
+/* O artigo, como no quadro Article: trilha, título sem o traço do page-head no lugar das ações. */
+.article {
+  display: grid;
+}
+
+.articleHead {
+  display: block;
+}
+
+.articleMain {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.related {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.articleMain :global(.alert) {
+  margin: var(--space-4) 0;
+}
+
+@media (max-width: 56rem) {
+  .article :global(.help-article) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .article :global(.toc) {
+    display: none;
+  }
+}

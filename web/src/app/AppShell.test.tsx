@@ -33,15 +33,14 @@ describe('navegação', () => {
   it('agrupa em Gravações e Organizar, e o resto em Configurações e ajuda', () => {
     const { main, more } = navGroups()
     expect(titles(main)).toEqual(['Gravações', 'Organizar'])
-    expect(titles(more)).toEqual(['Minhas configurações'])
+    expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções'])
-    expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop'])
+    expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop', 'Central de ajuda'])
   })
 
   it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
     const { main, more } = navGroups()
     expect(labels([...main, ...more])).not.toContain('Campos e regras')
-    expect(labels([...main, ...more])).not.toContain('Central de ajuda')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
@@ -62,6 +61,7 @@ describe('navegação', () => {
   it('reconhece as rotas da seção recolhível', () => {
     expect(isInMoreSection('/tokens')).toBe(true)
     expect(isInMoreSection('/app-desktop')).toBe(true)
+    expect(isInMoreSection('/ajuda/criar-token')).toBe(true)
     expect(isInMoreSection('/pessoas')).toBe(false)
     expect(isInMoreSection('/')).toBe(false)
   })
@@ -78,7 +78,7 @@ describe('AppShell', () => {
       .getAllByRole('group')
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
-    expect(titles).toEqual(['Gravações', 'Organizar', 'Minhas configurações'])
+    expect(titles).toEqual(['Gravações', 'Organizar', 'Minhas configurações', 'Ajuda'])
     expect(within(nav).getByText('Configurações e ajuda').tagName).toBe('SUMMARY')
     expect(within(nav).queryByRole('link', { name: 'Campos e regras' })).not.toBeInTheDocument()
   })
