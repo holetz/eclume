@@ -22,6 +22,8 @@ x-server-env: &server-env
   ECLUME_SECRET_KEY: eclume-e2e-secret-key
   ECLUME_PUBLIC_URL: https://127.0.0.1:18443
   ECLUME_COOKIE_SECURE: "true"
+  # A suíte entra e cria contas muitas vezes por minuto do mesmo IP.
+  ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE: "10000"
 
 x-server-image: &server-image
   image: eclume-server:e2e

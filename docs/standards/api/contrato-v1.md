@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de API v1
-description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
+description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35
 maintainer: holetz
 ---
 
@@ -21,17 +21,25 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 
 ## Convenções
 
-- **Prefixo e formatos.** Tudo sob `/api/v1`. Datas em RFC 3339 UTC, durações em milissegundos
+- **Prefixo e formatos.** Tudo sob `/api/v1`, menos o servidor MCP em `/mcp` (JSON-RPC do Model
+  Context Protocol, fora do OpenAPI; ver
+  [server-mcp-e-dispositivos.md](../code/server-mcp-e-dispositivos.md)). Datas em RFC 3339 UTC, durações em milissegundos
   inteiros (`*_ms`), ids em UUID; locutores têm id `S<n>` único na transcrição.
 - **Conta por usuário.** Não há organização: cada conta vê e muda só o que é dela. A conta nasce
   no cadastro aberto (`POST /auth/signup`), com o aceite do aviso em vigor; uma conta sem o
   aceite vigente recebe `notice_required: true` em `GET /me` e aceita por `POST /me/notice`.
+  Desde a 2.3.0, a **sessão** dessa conta recebe **403** `notice_required` em toda rota de
+  usuário, menos `GET /me`, `POST /me/notice` e `/auth/*`; o PAT não é barrado (o desktop e o
+  lumea de contas migradas seguem funcionando, e quem pede o aceite é o web).
 - **Autenticação.** Três esquemas.
   - **Sessão de usuário** (`sessionCookie`): cookie `eclume_session` (HttpOnly, Secure,
     SameSite=Lax) com CSRF por double-submit (`X-CSRF-Token` = cookie `eclume_csrf`) em método
     mutável.
-  - **PAT** (`pat`) pessoal em `Authorization: Bearer eclp_<segredo>`, guardado só como hash e
-    mostrado uma vez.
+  - **PAT** (`pat`) em `Authorization: Bearer eclp_<segredo>`, guardado só como hash e mostrado
+    uma vez. `Token.kind` distingue o PAT **pessoal** (`personal`, criado em `POST /tokens`) da
+    **credencial de dispositivo** (`device`, com `platform`), que só nasce de
+    `POST /devices/login` (e-mail e senha) ou `POST /devices/pair` (código de pareamento) e
+    responde como qualquer PAT; `GET /tokens?kind=` separa as duas listas.
   - **Sessão de admin** (`adminSessionCookie`): conta de admin separada das contas de usuário,
     aberta por `POST /admin/auth/login`. Cookie `eclume_admin_session` (HttpOnly, Secure,
     SameSite=Strict, `Path=/api/v1/admin`) e CSRF por `X-CSRF-Token` = cookie `eclume_admin_csrf`.
@@ -39,11 +47,17 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   sessão de usuário, PAT ou nada ali dão **401** `unauthorized`. A sessão de admin é ignorada em
   qualquer outra rota. O admin vê só a plataforma (configuração, segredos, agentes, contas,
   saúde); nenhuma rota de admin devolve conteúdo de usuário.
-- **Escopos do PAT:** `recordings:read`, `recordings:write`, `transcripts:read`,
+- **Escopos do PAT:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, a
+  exclusão de gravação), `transcripts:read`,
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
   implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Sessão tem todas as
   permissões do usuário.
-- **Só sessão de usuário:** gestão de PATs, o aceite do aviso e as rotas de voz (tag `voice`:
+- **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
+  endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
+  `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
+  de admin e `/devices/*`) têm limite de tentativas por IP: estourado, **429** `rate_limited` com
+  `Retry-After`. Código de pareamento inválido, vencido ou usado é **401** `invalid_pairing_code`.
+- **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
   impressão e recusa de sugestão). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
   credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
@@ -102,7 +116,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   do redesign (holetz/eclume#33 a #41) ainda quebram rotas que só o web do próprio repositório usa
   (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações; a 2.2.0 torna
 anuláveis `agenda_type`, `provider` e `model` do `Summary`, que passa a ter versões editadas à
-mão, e troca os filtros de `GET /recordings` por listas repetíveis, compatíveis com um valor só). Os dois clientes de
+mão, e troca os filtros de `GET /recordings` por listas repetíveis, compatíveis com um valor só;
+a 2.3.0 exige `recordings:delete` no `DELETE /recordings/{id}`, com a migração concedendo o escopo
+a todo token que tinha `recordings:write`, e barra a sessão sem o aceite do aviso). Os dois clientes de
   fora do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, que seguem
   compatíveis; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a linha 2.x evolui no
   mesmo prefixo até o redesign terminar, e os contract tests exigem a 2.x. Depois dele a 2.x

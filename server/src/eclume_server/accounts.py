@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from eclume_server.db import tables as t
-from eclume_server.security import hash_password
+from eclume_server.security import hash_password, needs_rehash, verify_password
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -81,6 +81,22 @@ async def create_user(
     # Os padrões vêm de `default_agenda_types` (migration 009), mantidos pelo admin.
     await conn.execute(text("SELECT eclume_seed_user_defaults(:user)"), {"user": user_id})
     return user_id
+
+
+async def password_login(conn: AsyncConnection, email: str, password: str) -> UUID | None:
+    """Confere e-mail e senha de uma conta ativa e registra o login; `None` quando não confere.
+
+    E-mail inexistente gasta o mesmo tempo de argon2 que uma senha errada.
+    """
+    query = select(t.users).where(func.lower(t.users.c.email) == email.lower())
+    user = (await conn.execute(query)).mappings().first()
+    if not verify_password(user["password_hash"] if user else None, password) or not user or not user["active"]:
+        return None
+    values: dict[str, Any] = {"last_login_at": datetime.now(UTC)}
+    if needs_rehash(user["password_hash"]):
+        values["password_hash"] = hash_password(password)
+    await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
+    return user["id"]
 
 
 async def create_admin(conn: AsyncConnection, *, email: str, name: str, password: str) -> UUID:

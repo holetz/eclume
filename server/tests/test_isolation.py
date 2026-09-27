@@ -254,7 +254,7 @@ def test_filho_so_tem_o_dono_do_pai(scenario: dict[str, Any], services: Services
 
 
 def test_sem_contexto_de_rls_nada_e_visivel(scenario: dict[str, Any], services: Services):
-    for table in (*CONTENT_TABLES, "users", "api_tokens"):
+    for table in (*CONTENT_TABLES, "users", "api_tokens", "pairing_codes"):
         assert _as_app(services, None, f"SELECT count(*) FROM {table}")[0][0] == 0, table  # noqa: S608
     del scenario
 

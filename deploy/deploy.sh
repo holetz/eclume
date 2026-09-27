@@ -118,7 +118,7 @@ pct="$(disk_pct)"
 echo "Daemon: contexto $CONTEXT · SSH: $SSH · dados: $DATA_DIR · URL: $PUBLIC_URL" >&2
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%)" >&2
 echo "Construir: ${BUILD[*]:-nada (--sem-build)}" >&2
-echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-gpu web caddy → publish-ca" >&2
+echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-gpu web caddy → publish-ca → mdns" >&2
 for image in eclume-server:prod eclume-web:prod eclume-worker-gpu:prod; do
   if docker image inspect "$image" >/dev/null 2>&1; then echo "  imagem $image: presente" >&2
   else echo "  imagem $image: ausente" >&2; fi
@@ -182,6 +182,8 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 [[ "${published:-0}" -eq 1 ]] || echo "Aviso: a CA do Caddy não foi publicada em $DATA_DIR/downloads." >&2
+# O anúncio mDNS (rede do host) nasce com a CA já publicada no TXT; recriado para valer o código novo.
+"${COMPOSE[@]}" up -d --no-build --force-recreate --wait --wait-timeout 60 mdns
 
 # Imagens do eclume que o build deixou sem tag (as versões anteriores). Nada de outros projetos.
 docker image prune -f --filter label=org.eclume.image >/dev/null
@@ -191,9 +193,15 @@ ca="$(mktemp)"
 host "cat '$DATA_DIR/downloads/eclume-root.crt'" > "$ca"
 # O curl do Git Bash (Schannel) exige checar revogação, e a CA interna do Caddy não publica CRL.
 revoke=(); curl -V | grep -q Schannel && revoke=(--ssl-no-revoke)
-if curl -fsS "${revoke[@]}" --cacert "$ca" "$PUBLIC_URL/api/v1/health" >/dev/null; then
-  echo "Deploy concluído: $PUBLIC_URL (health ok, disco $(disk_pct)%)." >&2
-else
+if ! curl -fsS "${revoke[@]}" --cacert "$ca" "$PUBLIC_URL/api/v1/health" >/dev/null; then
   echo "Deploy subiu, mas $PUBLIC_URL/api/v1/health falhou pela CA publicada." >&2
   exit 1
 fi
+# O descritor tem de trazer a impressão digital da CA publicada (a que o mDNS e o QR anunciam).
+fingerprint="$(openssl x509 -in "$ca" -outform DER | openssl dgst -sha256 -r | cut -d' ' -f1)"
+descriptor="$(curl -fsS "${revoke[@]}" --cacert "$ca" "$PUBLIC_URL/api/v1/server" || true)"
+if [[ "$descriptor" != *"\"ca_sha256\":\"$fingerprint\""* ]]; then
+  echo "Deploy subiu, mas $PUBLIC_URL/api/v1/server não traz a impressão digital $fingerprint." >&2
+  exit 1
+fi
+echo "Deploy concluído: $PUBLIC_URL (health e descritor ok, CA $fingerprint, disco $(disk_pct)%)." >&2

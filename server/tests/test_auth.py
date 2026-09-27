@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
+from eclume_server.db.migrate import migrate
 from eclume_server_testing.api import PASSWORD, Api
 from eclume_server_testing.conformance import bundle
-from eclume_server_testing.harness import run
+from eclume_server_testing.harness import DATABASE_URL, run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -28,7 +32,7 @@ def test_health_sem_credencial(client: TestClient):
 
 
 def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):
-    user = make_user()
+    user = make_user(notice_version=None)
     client.cookies.clear()
     response = client.post("/api/v1/auth/login", json={"email": user.email.upper(), "password": PASSWORD})
     assert response.status_code == 204
@@ -46,11 +50,11 @@ def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_u
     me = api.get("/api/v1/me").json()
     assert me["user"]["email"] == user.email
     assert me["user"]["last_login_at"] is not None
-    # Conta sem o aceite do aviso em vigor (a das fábricas, como a migrada).
+    # Conta sem o aceite do aviso em vigor, como a migrada.
     assert me["notice_required"] is True
     assert me["user"]["notice_version"] is None
     assert me["auth"] == {"method": "session", "scopes": me["auth"]["scopes"], "token_id": None}
-    assert len(me["auth"]["scopes"]) == 8
+    assert len(me["auth"]["scopes"]) == 9
 
 
 def test_login_errado_e_sem_credencial_sao_401(client: TestClient, make_user: Callable[..., Account]):
@@ -191,3 +195,70 @@ def test_paginacao_dos_pats(as_user: Callable[[Account], Api], make_user: Callab
     assert seen == list(reversed(ids))
     assert session.get("/api/v1/tokens", params={"cursor": "lixo"}).status_code == 422
     assert session.get("/api/v1/tokens", params={"limit": 0}).status_code == 422
+
+
+def test_tokens_tem_tipo_e_a_lista_filtra_por_tipo(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    session = as_user(account)
+    created = session.post("/api/v1/tokens", json={"name": "lumea", "scopes": ["transcripts:read"]}).json()["token"]
+    assert (created["kind"], created["platform"]) == ("personal", None)
+
+    async def device(conn):  # noqa: ANN001, ANN202
+        await conn.execute(
+            text(
+                "INSERT INTO api_tokens (user_id, name, token_hash, prefix, scopes, kind, platform)"
+                " VALUES (:u, 'iPhone', :h, 'eclp_abcd', ARRAY['recordings:read'], 'device', 'ios')"
+            ),
+            {"u": account.user_id, "h": secrets.token_hex(32)},
+        )
+
+    run(services.sql(device))
+    devices = session.get("/api/v1/tokens", params={"kind": "device"}).json()["items"]
+    assert [(d["name"], d["kind"], d["platform"]) for d in devices] == [("iPhone", "device", "ios")]
+    personal = session.get("/api/v1/tokens", params={"kind": "personal"}).json()["items"]
+    assert [d["id"] for d in personal] == [created["id"]]
+    assert len(session.get("/api/v1/tokens").json()["items"]) == 2
+    assert session.get("/api/v1/tokens", params={"kind": "outro"}).status_code == 422
+
+
+def test_migration_015_concede_a_exclusao_a_quem_tinha_recordings_write(services: Services):
+    del services  # só pela checagem dos serviços de teste
+    database = f"eclume_mig015_{secrets.token_hex(4)}"
+    target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
+    user, writer, reader = uuid4(), uuid4(), uuid4()
+    seed = f"""
+INSERT INTO users (id, email, name, password_hash) VALUES ('{user}', 'u@exemplo.com.br', 'U', 'h');
+INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES
+    ('{writer}', '{user}', 'desktop', 'h1', 'eclp_a', ARRAY['recordings:read', 'recordings:write']),
+    ('{reader}', '{user}', 'lumea', 'h2', 'eclp_b', ARRAY['transcripts:read']);
+"""  # noqa: S608
+
+    async def admin(statement: str) -> None:
+        engine = create_async_engine(DATABASE_URL, isolation_level="AUTOCOMMIT")
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text(statement))
+        finally:
+            await engine.dispose()
+
+    async def check() -> list[tuple[str, list[str], str]]:
+        await admin(f'CREATE DATABASE "{database}"')
+        engine = create_async_engine(target)
+        try:
+            await migrate(engine, until="014_gravacao_resumo")
+            async with engine.connect() as conn:
+                await (await conn.get_raw_connection()).driver_connection.execute(seed)
+            assert await migrate(engine, until="015_dispositivos_e_mcp") == ["015_dispositivos_e_mcp"]
+            async with engine.connect() as conn:
+                rows = await conn.execute(text("SELECT name, scopes, kind FROM api_tokens ORDER BY name"))
+                return [tuple(row) for row in rows]
+        finally:
+            await engine.dispose()
+            await admin(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
+
+    assert run(check()) == [
+        ("desktop", ["recordings:read", "recordings:write", "recordings:delete"], "personal"),
+        ("lumea", ["transcripts:read"], "personal"),
+    ]

@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server.app import create_app
 from eclume_server.db import tables as t
 from eclume_server_testing.api import Account, Api, admin_login, login, new_admin, new_user
@@ -68,7 +69,7 @@ def _conformance() -> Iterator[None]:
 def make_user(services: Services) -> Callable[..., Account]:
     """Fábrica de contas de usuário."""
 
-    def make(*, name: str | None = None, notice_version: str | None = None) -> Account:
+    def make(*, name: str | None = None, notice_version: str | None = NOTICE_VERSION) -> Account:
         return new_user(services, name=name, notice_version=notice_version)
 
     return make

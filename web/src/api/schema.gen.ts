@@ -135,12 +135,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar os PATs do usuário */
+        /**
+         * Listar os tokens do usuário
+         * @description PATs pessoais e credenciais de dispositivo. `?kind=device` é a lista de "App móvel" e "App desktop"; `?kind=personal`, a de "Tokens de acesso".
+         */
         get: operations["listTokens"];
         put?: never;
         /**
          * Criar um PAT
-         * @description O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash.
+         * @description O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash. Cria sempre `kind: personal`: a credencial de dispositivo só nasce de `POST /devices/login` ou `POST /devices/pair`.
          */
         post: operations["createToken"];
         delete?: never;
@@ -161,8 +164,124 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revogar um PAT */
+        /**
+         * Revogar um token
+         * @description Vale para PAT e credencial de dispositivo ("Desvincular" desliga o aparelho).
+         */
         delete: operations["revokeToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descritor público do servidor
+         * @description Nome, endereço, endereço MCP, impressão digital da CA raiz e versões. É a fonte do anúncio
+         *     mDNS, do link do QR, do pareamento e do endereço embutido no instalador: o app confirma
+         *     aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
+         */
+        get: operations["getServerInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Entrar num aparelho com e-mail e senha
+         * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
+         *     `kind: device` com `recordings:read` e `recordings:write`, sem validade e revogável em
+         *     `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
+         *     conta inativa, 401 com a mesma mensagem do login; tentativas demais do mesmo IP, 429
+         *     `rate_limited` com `Retry-After`.
+         */
+        post: operations["deviceLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/pairing-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gerar um código de pareamento
+         * @description Código de 6 caracteres (`K7Q-4MX`), válido por 10 minutos e de uso único, que o app troca
+         *     por uma credencial de dispositivo em `POST /api/v1/devices/pair`. `pair_url` é o conteúdo
+         *     do QR que o celular lê. Um código novo vence os anteriores ainda não usados. Só sessão.
+         */
+        post: operations["createPairingCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/pairing-codes/{pairing_code_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pairing_code_id: components["parameters"]["PairingCodeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Estado de um código de pareamento
+         * @description A web consulta para trocar o QR por "Pareado" e mostrar o aparelho (`token_id`). Só sessão.
+         */
+        get: operations["getPairingCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trocar um código de pareamento por uma credencial de dispositivo
+         * @description O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
+         *     dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
+         *     vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP, 429
+         *     `rate_limited` com `Retry-After`.
+         */
+        post: operations["pairDevice"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -324,7 +443,10 @@ export interface paths {
         get: operations["getRecording"];
         put?: never;
         post?: never;
-        /** Excluir a gravação, o áudio e a transcrição */
+        /**
+         * Excluir a gravação, o áudio e a transcrição
+         * @description Com PAT, exige `recordings:delete` desde a 2.3.0 (antes, `recordings:write`); a migração concedeu `recordings:delete` a todo token que tinha `recordings:write`.
+         */
         delete: operations["deleteRecording"];
         options?: never;
         head?: never;
@@ -1519,7 +1641,9 @@ export interface components {
              *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
              *     desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
              *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
-             *     aberto). Códigos novos entram de forma aditiva.
+             *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
+             *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
+             *     vigor). Códigos novos entram de forma aditiva.
              */
             code: string;
             /** @description Com `insufficient_scope`, os escopos que faltaram. */
@@ -1532,10 +1656,10 @@ export interface components {
             }[];
         };
         /**
-         * @description Escopo de PAT.
+         * @description Escopo de PAT. `recordings:delete` (2.3.0) exclui gravações. A tela "Conexão MCP" agrupa os escopos em "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) e "Excluir gravações" (`recordings:delete`).
          * @enum {string}
          */
-        Scope: "recordings:read" | "recordings:write" | "transcripts:read" | "transcripts:write" | "people:read" | "people:write" | "summaries:read" | "summaries:write";
+        Scope: "recordings:read" | "recordings:write" | "recordings:delete" | "transcripts:read" | "transcripts:write" | "people:read" | "people:write" | "summaries:read" | "summaries:write";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
@@ -1649,7 +1773,11 @@ export interface components {
         Token: {
             /** Format: uuid */
             id: string;
+            /** @description Com `kind: device`, o nome do aparelho. */
             name: string;
+            kind: components["schemas"]["TokenKind"];
+            /** @description Com `kind: device`, a plataforma do aparelho; `null` num PAT pessoal. */
+            platform: components["schemas"]["DevicePlatform"] | null;
             scopes: components["schemas"]["Scope"][];
             /** @description Começo do segredo, para reconhecer o token (`eclp_7Hq2`). */
             prefix: string;
@@ -1661,6 +1789,78 @@ export interface components {
             expires_at: string | null;
             /** Format: date-time */
             revoked_at: string | null;
+        };
+        /**
+         * @description `personal`, o PAT criado em "Tokens de acesso" ou "Conexão MCP"; `device`, a credencial de um aparelho, emitida pelo login ou pelo pareamento.
+         * @enum {string}
+         */
+        TokenKind: "personal" | "device";
+        /** @enum {string} */
+        DevicePlatform: "windows" | "macos" | "linux" | "ios" | "android";
+        ServerInfo: {
+            /** @description Nome do servidor (`ECLUME_SERVER_NAME`), também a instância no mDNS. */
+            name: string;
+            /**
+             * Format: uri
+             * @description Endereço público (`ECLUME_PUBLIC_URL`).
+             */
+            url: string;
+            /**
+             * Format: uri
+             * @description Endereço do servidor MCP, que o assistente recebe.
+             */
+            mcp_url: string;
+            /** @description SHA-256, em hex minúsculo, do DER do certificado raiz servido em `/downloads/eclume-root.crt`; `null` enquanto a raiz não foi publicada. */
+            ca_sha256: string | null;
+            /** @description Versão do servidor. */
+            version: string;
+            /** @description Versão deste contrato que o servidor implementa. */
+            contract_version: string;
+        };
+        DeviceLogin: {
+            /** Format: email */
+            email: string;
+            password: string;
+            /** @description Nome do aparelho, que vira o nome do token ("iPhone da Mariana"). */
+            device_name: string;
+            platform: components["schemas"]["DevicePlatform"];
+        };
+        DevicePair: {
+            /** @description O código de pareamento (`K7Q-4MX` ou `k7q4mx`). */
+            code: string;
+            device_name: string;
+            platform: components["schemas"]["DevicePlatform"];
+        };
+        DeviceCredential: {
+            token: components["schemas"]["Token"];
+            /** @description O token completo, que o app guarda. Não é mostrado de novo. */
+            secret: string;
+            server: components["schemas"]["ServerInfo"];
+        };
+        PairingCode: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description `expired` vale também para o código vencido por um código mais novo.
+             * @enum {string}
+             */
+            status: "pending" | "used" | "expired";
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: uuid
+             * @description Com `used`, a credencial de dispositivo que o código emitiu.
+             */
+            token_id: string | null;
+            /** @description Só na criação. 6 caracteres de `23456789ABCDEFGHJKMNPQRSTVWXYZ`. */
+            code?: string;
+            /** @description Só na criação. O código como a tela mostra (`K7Q-4MX`). */
+            display?: string;
+            /**
+             * Format: uri
+             * @description Só na criação. Conteúdo do QR: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (sem `ca` enquanto a raiz não foi publicada).
+             */
+            pair_url?: string;
         };
         TokenCreate: {
             name: string;
@@ -3081,7 +3281,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), ou cadastro fechado (`code: signup_closed`). */
+        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -3117,9 +3317,11 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações em andamento por conta; tente de novo quando algum terminar. */
+        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`), com `Retry-After`. */
         TooManyRequests: {
             headers: {
+                /** @description Segundos até a janela de tentativas reabrir. */
+                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {
@@ -3142,6 +3344,7 @@ export interface components {
         TagFilter: string;
         /** @description Só gravações desta coleção. */
         CollectionFilter: string;
+        PairingCodeId: string;
         TokenId: string;
         UploadId: string;
         RecordingId: string;
@@ -3205,6 +3408,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     logout: {
@@ -3275,6 +3479,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getMe: {
@@ -3333,6 +3538,8 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */
                 limit?: components["parameters"]["Limit"];
+                /** @description Só os tokens deste tipo. */
+                kind?: components["schemas"]["TokenKind"];
             };
             header?: never;
             path?: never;
@@ -3340,7 +3547,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description PATs, inclusive revogados, do mais novo para o mais antigo. */
+            /** @description Tokens, inclusive revogados, do mais novo para o mais antigo. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3407,6 +3614,130 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getServerInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Descritor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerInfo"];
+                };
+            };
+        };
+    };
+    deviceLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceLogin"];
+            };
+        };
+        responses: {
+            /** @description Credencial de dispositivo emitida. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCredential"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createPairingCode: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Código gerado; `code`, `display` e `pair_url` só voltam aqui. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingCode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getPairingCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pairing_code_id: components["parameters"]["PairingCodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado do código, sem o código. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingCode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    pairDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePair"];
+            };
+        };
+        responses: {
+            /** @description Credencial de dispositivo emitida. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCredential"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     createUpload: {
@@ -5420,6 +5751,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     adminLogout: {

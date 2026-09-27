@@ -2,12 +2,12 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#39
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39
 maintainer: holetz
 ---
 
@@ -33,7 +33,8 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 |---|---|---|
 | `caddy` | `caddy:2.11` | TLS interno na 8443, a **única porta publicada** |
 | `web` | `eclume-web:prod` (`deploy/web.Dockerfile`) | SPA estática, servida por um Caddy mínimo com fallback para o `index.html` |
-| `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`), com healthcheck em `/api/v1/health` |
+| `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
+| `mdns` | `eclume-server:prod` | `eclume-server announce`: anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
 | `worker-cpu` | `eclume-server:prod` | `arq eclume_server.worker.WorkerSettings`: ingestão, resumos, expiração de uploads |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1` ([worker-gpu.md](worker-gpu.md)) |
 | `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
@@ -45,10 +46,13 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 
 - **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO,
   server e web não têm `ports:`. Para depurar, use `compose exec`.
-- **Rotas do Caddy.** `/api/*` e `/media/*` vão ao server sem cortar o prefixo. `/downloads/*` é a
+- **Rotas do Caddy.** `/api/*`, `/media/*` e `/mcp` (rota exata) vão ao server sem cortar o prefixo. `/downloads/*` é a
   pasta dos instaladores ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)),
   com `Cache-Control: no-cache` nos manifestos e arquivos ocultos escondidos. O resto vai ao SPA.
-  Nenhuma rota do SPA pode começar com `/api`, `/media` ou `/downloads`.
+  Nenhuma rota do SPA pode começar com `/api`, `/media`, `/mcp` ou `/downloads`.
+- **O `mdns` é recriado depois do `publish-ca`**, e a conferência do deploy exige que
+  `/api/v1/server` traga a impressão digital da CA publicada. O multicast (5353/udp na rede do
+  host) depende da regra do ufw do [host-setup.md](host-setup.md#6-firewall).
 - **O Caddyfile é um `configs.content` inline.** Com o daemon remoto, um `file:` viraria bind
   mount de um caminho da estação.
 - **As imagens do server e do web ficam em `deploy/`,** com `<Dockerfile>.dockerignore` ao lado
@@ -201,6 +205,18 @@ usa o Edge.
 ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com   ECLUME_ADMIN_PASSWORD="$(ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password)"   npm --prefix web run test:e2e:prod
 ```
 
+**MCP e pareamento** (`deploy/smoke_mcp.py`, com o SDK `mcp`, então por `uv run`): confere que o
+descritor traz a impressão digital da CA dada, cria um PAT de leitura de 1 hora, e o cliente MCP
+real lista as 9 ferramentas, busca e lê uma gravação e tem a exclusão recusada por falta de
+`recordings:delete`; depois gera um código de pareamento, troca-o por uma credencial de
+dispositivo e confere o estado `used`. Revoga o que criou. A descoberta se prova da estação:
+
+```bash
+ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
+  | uv run python deploy/smoke_mcp.py --ca /tmp/eclume-root.crt
+uv run eclume-server discover --timeout 10
+```
+
 ### Primeiro deploy (2026-09-25)
 
 - **Tempo:** o deploy do zero levou ~6,5 min, quase tudo no build do worker GPU (7,98 GB). As
@@ -264,6 +280,37 @@ ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com
   de 00:00:00 a 00:00:30) e criou a versão `chat` em 14 s pelo `claude-cli`; voltar à gerada, os
   2 marcadores, a biblioteca do dia com `kind=meeting` e os quatro formatos (TXT 848 B, SRT
   1 022 B, MD 1 118 B, DOCX 37 kB) passaram.
+
+### MCP e pareamento em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 19 resumos, 18 objetos).
+- **Deploy:** de uma exportação com LF, só as imagens `server` e `web`. A 015 aplicou sem erro
+  (tipo e plataforma dos tokens, `recordings:delete` para quem tinha `recordings:write`,
+  `pairing_codes`). O `mdns` subiu na rede do host anunciando `192.168.15.199:8443`, e a
+  conferência achou a impressão digital da CA no descritor. A imagem do server foi a 533 MB com o
+  `mcp` e o `zeroconf`; o disco ficou em 84%.
+- **Smoke:** o SDK `mcp` inicializou, listou as 9 ferramentas, buscou 5 gravações, leu uma
+  (campos e etapas) e a transcrição dela (38 646 caracteres) e teve a exclusão recusada por falta
+  de `recordings:delete`; o código `AED-YA3` virou a credencial de dispositivo da conta, e os dois
+  tokens do smoke foram revogados. Da estação Windows, `eclume-server discover --timeout 10` achou
+  o servidor com a impressão digital `98e209f5…3d97792f`, **sem** a regra 5353/udp no ufw: o
+  `before.rules` padrão do Ubuntu já aceita o mDNS multicast.
+- **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
+  digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
+
+## Conectar um assistente (MCP)
+
+1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo
+   que o assistente precisa ([grupos](../standards/code/server-mcp-e-dispositivos.md#grupos-da-tela-conexão-mcp))
+   e a validade; o segredo `eclp_…` aparece uma vez.
+2. No cliente MCP, cadastre um servidor HTTP streamable em `https://192.168.15.199:8443/mcp`
+   com o header `Authorization: Bearer eclp_…`. Exemplo do Claude Code:
+   `claude mcp add --transport http eclume https://192.168.15.199:8443/mcp --header "Authorization: Bearer eclp_…"`.
+3. O cliente precisa confiar na CA interna (a seção abaixo); o Claude Code e outros clientes
+   em Node aceitam `NODE_EXTRA_CA_CERTS=/caminho/eclume-root.crt`.
+4. Revogar o token na web desliga o assistente. A Saúde do admin mostra quantos assistentes
+   usaram o MCP nas últimas 24 h.
 
 ## CA raiz nos clientes
 

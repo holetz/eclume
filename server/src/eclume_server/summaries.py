@@ -22,7 +22,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.pipeline import set_step
-from eclume_server.problems import conflict, not_found
+from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
@@ -189,6 +189,39 @@ async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row
     return transcript
 
 
+async def summary_provider(conn: AsyncConnection, provider_id: UUID | None) -> Row:
+    """O provider pedido, ou o de resumos da plataforma; ausente ou desabilitado → 422."""
+    field = "provider_id"
+    if provider_id is None:
+        provider = await provider_for(conn, "summaries")
+        if provider is None:
+            raise invalid_field(field, "a plataforma não tem provider de resumos; informe provider_id")
+        return provider
+    row = (await conn.execute(select(*PROVIDER_PUBLIC).where(t.agent_providers.c.id == provider_id))).mappings().first()
+    if row is None:
+        raise invalid_field(field, "provider inexistente")
+    if not row["enabled"]:
+        raise invalid_field(field, "provider desabilitado")
+    return row
+
+
+async def summary_agenda_type(conn: AsyncConnection, transcript: Row, agenda_type_id: UUID | None) -> Row:
+    """O tipo pedido, ou o da gravação; nenhum → 422."""
+    field = "agenda_type_id"
+    if agenda_type_id is None:
+        agenda_type_id = (
+            await conn.execute(
+                select(t.recordings.c.agenda_type_id).where(t.recordings.c.id == transcript["recording_id"])
+            )
+        ).scalar()
+        if agenda_type_id is None:
+            raise invalid_field(field, "a gravação não tem tipo de agenda; informe agenda_type_id")
+    row = (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
+    if row is None:
+        raise invalid_field(field, "tipo de agenda inexistente ou sem acesso")
+    return row
+
+
 def _latest(transcript_id: UUID, *conditions: Any) -> Any:  # noqa: ANN401 — Select do SQLAlchemy
     s = t.summaries.c
     return select(t.summaries).where(s.transcript_id == transcript_id, *conditions).order_by(s.version.desc()).limit(1)
@@ -268,6 +301,15 @@ async def edit_summary(
     current = await current_version(conn, transcript["id"])
     if base_version != (current["version"] if current else 0):
         raise conflict("O resumo mudou desde a versão aberta; abra a atual e edite de novo.", code=SUMMARY_CHANGED)
+    return await add_version(
+        conn, transcript=transcript, content_md=content_md, origin="manual", base=current, created_by=created_by
+    )
+
+
+async def edit_current(conn: AsyncConnection, transcript: Row, content_md: str, created_by: UUID) -> Row:
+    """Edição sobre a versão atual, sem `base_version` (o servidor MCP): versão `manual`."""
+    await lock_versions(conn, transcript["id"])
+    current = await current_version(conn, transcript["id"])
     return await add_version(
         conn, transcript=transcript, content_md=content_md, origin="manual", base=current, created_by=created_by
     )

@@ -1,0 +1,102 @@
+"""Ligação de aparelhos: login por e-mail e senha ou código de pareamento, que emitem a credencial."""
+
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field, field_validator
+
+from eclume_server.accounts import password_login
+from eclume_server.auth import Principal, requires
+from eclume_server.context import AppContext, get_ctx
+from eclume_server.db import tables as t
+from eclume_server.db.session import system_tx, user_tx
+from eclume_server.devices import (
+    create_pairing_code,
+    issue_credential,
+    link_token,
+    pairing_code_json,
+    redeem_pairing_code,
+)
+from eclume_server.problems import ApiProblemError, not_found, unauthorized
+from eclume_server.ratelimit import attempts
+from eclume_server.routes.auth import WRONG_PASSWORD, check_email
+from eclume_server.server_info import server_info
+
+router = APIRouter()
+Ctx = Annotated[AppContext, Depends(get_ctx)]
+SessionUser = Annotated[Principal, Depends(requires(session_only=True))]
+Platform = Literal["windows", "macos", "linux", "ios", "android"]
+
+
+class DeviceLogin(BaseModel):
+    """Schema `DeviceLogin`."""
+
+    email: str
+    password: str = Field(min_length=1, max_length=1024)
+    device_name: str = Field(min_length=1, max_length=100)
+    platform: Platform
+
+    _email = field_validator("email")(check_email)
+
+
+class DevicePair(BaseModel):
+    """Schema `DevicePair`."""
+
+    code: str = Field(min_length=1, max_length=32)
+    device_name: str = Field(min_length=1, max_length=100)
+    platform: Platform
+
+
+@router.post("/devices/login", status_code=201)
+async def device_login(
+    body: DeviceLogin, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("devices_login"))]
+) -> dict[str, Any]:
+    """Confere a senha como o login do navegador e emite o token de dispositivo."""
+    async with system_tx(ctx.engine) as conn:
+        user_id = await password_login(conn, body.email, body.password)
+        if user_id is None:
+            raise unauthorized(WRONG_PASSWORD)
+        server = server_info(ctx.settings, str(request.base_url))
+        return await issue_credential(conn, user_id, body.device_name, body.platform, server)
+
+
+@router.post("/devices/pairing-codes", status_code=201)
+async def new_pairing_code(principal: SessionUser, request: Request, ctx: Ctx) -> dict[str, Any]:
+    """Código de 6 caracteres por 10 minutos, com o link do QR; vence os anteriores pendentes."""
+    server = server_info(ctx.settings, str(request.base_url))
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await create_pairing_code(conn, principal.user_id, ctx.settings.secret_key, server)
+
+
+@router.get("/devices/pairing-codes/{pairing_code_id}")
+async def get_pairing_code(pairing_code_id: UUID, principal: SessionUser, ctx: Ctx) -> dict[str, Any]:
+    """Estado do código (`pending`, `used`, `expired`) e a credencial que ele emitiu."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        query = t.pairing_codes.select().where(t.pairing_codes.c.id == pairing_code_id)
+        row = (await conn.execute(query)).mappings().first()
+    if row is None:
+        raise not_found("Código de pareamento inexistente ou sem acesso.")
+    return pairing_code_json(row)
+
+
+@router.post("/devices/pair", status_code=201)
+async def pair_device(
+    body: DevicePair, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("devices_pair"))]
+) -> dict[str, Any]:
+    """Troca o código (uso único) pela credencial de dispositivo do dono dele."""
+    async with system_tx(ctx.engine) as conn:
+        code = await redeem_pairing_code(conn, body.code, ctx.settings.secret_key)
+        if code is None:
+            raise ApiProblemError(
+                401,
+                "invalid_pairing_code",
+                "Código de pareamento inválido, vencido ou já usado.",
+                headers={"WWW-Authenticate": 'Bearer realm="eclume"'},
+            )
+        server = server_info(ctx.settings, str(request.base_url))
+        credential = await issue_credential(conn, code["user_id"], body.device_name, body.platform, server)
+        await link_token(conn, code["id"], credential["token"]["id"])
+    return credential

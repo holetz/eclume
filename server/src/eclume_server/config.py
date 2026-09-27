@@ -30,11 +30,18 @@ class Settings(BaseSettings):
     secret_key: str = "eclume-dev-insecure-secret"  # noqa: S105 — padrão de dev
     # Base absoluta das URLs devolvidas ao cliente (URL de parte). Sem valor, a da requisição.
     public_url: str | None = None
+    # Nome do servidor no descritor (`GET /api/v1/server`) e a instância anunciada no mDNS.
+    server_name: str = "eclume"
+    # PEM da CA raiz que os apps fixam (em produção, a publicada em /downloads/eclume-root.crt).
+    ca_file: str | None = None
     # `false` só para dev em HTTP puro: o cookie Secure não volta por HTTP.
     cookie_secure: bool = True
     session_ttl_days: int = 14
     # A sessão de admin é mais curta: o painel muda a plataforma inteira.
     admin_session_ttl_hours: int = 12
+    # Tentativas por minuto e por IP nas rotas que conferem credencial (login, cadastro, login de
+    # admin, `/devices/*`); a mais recebe 429 `rate_limited`.
+    credential_attempts_per_minute: int = 10
     # Cadastro aberto (`POST /auth/signup`); `false` o fecha sem deploy de código.
     signup_open: bool = True
 
