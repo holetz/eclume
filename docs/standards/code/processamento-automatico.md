@@ -2,7 +2,7 @@
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
 description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, tags padrão, instruções de resumo) e os tipos padrão do admin, os jobs fill_fields e detect_agenda_type com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql
+resource: server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
 timestamp: 2026-09-27
 audience: both
@@ -76,7 +76,8 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
   marcados `include_for_new_users` são copiados para cada conta nova por
   `eclume_seed_user_defaults(user)`, que `accounts.create_user` chama no cadastro e que também cria
   os campos embutidos. Mudar um padrão não mexe nas cópias que as contas já têm.
-- **Padrão de título:** marcadores `{assunto}` (o título automático), `{data}` (`dd/mm/aaaa` de
+- **Padrão de título:** marcadores `{assunto}` (o título automático; sem ele, o título de antes do
+  primeiro padrão, guardado em `recordings.subject`, para reaplicar sem aninhar), `{data}` (`dd/mm/aaaa` de
   `recorded_at`), `{tipo}` e `{<key do campo>}`. O padrão é cortado nos separadores (` · `, ` - `,
   ` | `, travessões); uma parte que fica vazia sai junto com o separador dela.
 - **Aplicar o tipo** (`agenda_types.apply_type`): grava `agenda_type_id` e a origem (`auto` ou
@@ -84,12 +85,14 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
   padrão às automáticas (as do usuário ficam como estão).
 - **Trocar o tipo à mão** (`PATCH /recordings/{id}` com `agenda_type_id`): origem `edited`, título
   e tags reaplicados e, na gravação transcrita, um resumo automático novo com a etapa `summary`
-  refeita. `null` tira o tipo e devolve a escolha à detecção.
+  refeita — se ainda não há o automático da mesma revisão por esse tipo. `null` tira o tipo e
+  devolve a escolha à detecção.
 
 ## Os jobs por agente
 
 O worker CPU encadeia `ingest_transcript → fill_fields → detect_agenda_type → summarize`, com
-`_job_id = "{job}:{recording_id}:{revision}"`. Cada job resolve o provider pela finalidade
+`_job_id = "{job}:{recording_id}:{revision}"`. Só a ingestão que gravou a transcrição abre a cadeia:
+job já falho (pelo reaper) ou ingestão repetida não enfileiram o `fill_fields`. Cada job resolve o provider pela finalidade
 (`provider_for`) e chama o agente por `summaries.call_agent_step`, que aplica as retentativas do
 `summarize` (3 tentativas, 30 s e 120 s; `gpu_busy` adia sem gastar tentativa) e conta as
 tentativas em `detail.attempts` da etapa. A falha definitiva deixa a etapa `failed`, e a cadeia
@@ -127,7 +130,8 @@ segue.
 
 `summaries.start_auto_summary` abre o resumo `trigger: automatic` com as instruções do tipo da
 gravação e o provider `summaries`, e marca a etapa `summary` `active` com o `summary_id`. Sem tipo
-→ `skipped` (`no_agenda_type`); sem provider → `no_provider`. O `summarize` fecha a etapa.
+→ `skipped` (`no_agenda_type`); sem provider → `no_provider`. Já existindo o automático da mesma
+revisão e do mesmo tipo, nada é criado. O `summarize` fecha a etapa.
 
 ## Retranscrição
 
