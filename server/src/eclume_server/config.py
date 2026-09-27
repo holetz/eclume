@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # `false` só para dev em HTTP puro: o cookie Secure não volta por HTTP.
     cookie_secure: bool = True
     session_ttl_days: int = 14
+    # A sessão de admin é mais curta: o painel muda a plataforma inteira.
+    admin_session_ttl_hours: int = 12
 
     # Cifra das chaves de API dos providers (base64 de 32 bytes). Sem valor, derivada de
     # `secret_key` por HKDF: trocar `secret_key` sem esta variável invalida as chaves guardadas.

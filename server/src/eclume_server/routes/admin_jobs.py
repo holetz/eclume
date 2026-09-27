@@ -1,7 +1,7 @@
-"""Retentativa de jobs de transcrição pelo admin (`/admin/jobs/{job_id}/retry`). Só sessão de `admin`.
+"""Retentativa de jobs de transcrição pelo admin (`/admin/jobs/{job_id}/retry`). Só a sessão de admin.
 
-Regras em docs/standards/code/server-admin.md: vale para qualquer gravação da organização,
-inclusive privada, mas só para o job mais recente da gravação e em estado `failed`.
+Regras em docs/standards/code/server-admin.md: vale para a gravação de qualquer usuário, mas só para
+o job mais recente da gravação e em estado `failed`. A resposta não traz conteúdo da gravação.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from eclume_server.auth import Principal, requires
+from eclume_server.auth import require_admin
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
@@ -20,22 +20,17 @@ from eclume_server.pagination import iso
 from eclume_server.problems import conflict, not_found
 from eclume_server.recordings import enqueue_transcription, recording_select, start_next_revision
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 Ctx = Annotated[AppContext, Depends(get_ctx)]
-Admin = Annotated[Principal, Depends(requires(session_only=True, admin=True))]
 
 
 @router.post("/jobs/{job_id}/retry", status_code=202)
-async def retry_job(job_id: UUID, principal: Admin, ctx: Ctx) -> dict[str, Any]:
+async def retry_job(job_id: UUID, ctx: Ctx) -> dict[str, Any]:
     """Cria e enfileira o job da revisão seguinte da gravação do job que falhou."""
     jobs = t.transcription_jobs
-    # Papel de sistema: o admin retenta também a gravação privada de outro membro da organização.
+    # Papel de conexão: a gravação é de um usuário, não do admin.
     async with system_tx(ctx.engine) as conn:
-        recording_id = (
-            await conn.execute(
-                select(jobs.c.recording_id).where(jobs.c.id == job_id, jobs.c.org_id == principal.org_id)
-            )
-        ).scalar()
+        recording_id = (await conn.execute(select(jobs.c.recording_id).where(jobs.c.id == job_id))).scalar()
         if recording_id is None:
             raise not_found("Job inexistente.")
         row = (

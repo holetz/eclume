@@ -16,8 +16,12 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-# Vazia desde a holetz/eclume#15: todas as operações do contrato v1 estão implementadas.
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
+# O cadastro aberto e o aceite do aviso chegam na task 2.3 da holetz/eclume#32.
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
+    ("GET", "/api/v1/auth/signup", "holetz/eclume#32"),
+    ("POST", "/api/v1/auth/signup", "holetz/eclume#32"),
+    ("POST", "/api/v1/me/notice", "holetz/eclume#32"),
+)
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:

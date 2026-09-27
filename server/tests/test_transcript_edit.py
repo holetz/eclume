@@ -12,7 +12,6 @@ from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -37,7 +36,6 @@ def owned(as_user: Callable[[Account], Api], make_user: Callable[..., Account], 
 def test_renomear_e_ligar_a_pessoa(
     owned: dict[str, Any],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
     as_user: Callable[[Account], Api],
 ):
     api, base = owned["api"], owned["base"]
@@ -67,7 +65,7 @@ def test_renomear_e_ligar_a_pessoa(
     assert api.patch(f"{base}/speakers/X1", json={"label": "x"}).status_code == 422
     missing = api.patch(f"{base}/speakers/S2", json={"person_id": "01928f3a-1c00-7a00-8000-000000000999"})
     assert (missing.status_code, missing.json()["errors"][0]["field"]) == (422, "person_id")
-    foreign = as_user(make_user(org_id=make_org())).post("/api/v1/people", json={"name": "De fora"}).json()
+    foreign = as_user(make_user()).post("/api/v1/people", json={"name": "De fora"}).json()
     assert api.patch(f"{base}/speakers/S2", json={"person_id": foreign["id"]}).status_code == 422
 
 
@@ -75,20 +73,16 @@ def test_so_o_dono_edita(
     owned: dict[str, Any],
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
 ):
-    api, base, recording = owned["api"], owned["base"], owned["recording"]
-    colleague = as_user(make_user())
-    outsider = as_user(make_user(org_id=make_org()))
-    api.post(f"/api/v1/recordings/{recording['id']}/shares", json={"target_type": "organization"})
-    assert colleague.get(base).status_code == 200
+    api, base = owned["api"], owned["base"]
+    outsider = as_user(make_user())
+    assert outsider.get(base).status_code == 404
     edits = (
         ("PATCH", f"{base}/speakers/S1", {"label": "x"}),
         ("POST", f"{base}/speakers/merge", {"source_speaker_ids": ["S3"], "target_speaker_id": "S2"}),
         ("PATCH", f"{base}/segments/seg-0001", {"text": "x"}),
     )
     for method, url, body in edits:
-        assert colleague.request(method, url, json=body).status_code == 403, url
         assert outsider.request(method, url, json=body).status_code == 404, url
     reader = api.pat("transcripts:read")
     denied = reader.patch(f"{base}/speakers/S1", json={"label": "x"})
@@ -102,8 +96,8 @@ def test_mesclar_locutores(owned: dict[str, Any], services: Services):
     for speaker in ("S2", "S3"):
         _sql(
             services,
-            "INSERT INTO speaker_embeddings (transcript_id, org_id, speaker_id, model, embedding)"
-            " SELECT id, org_id, :s, 'modelo', '[1,0,0]' FROM transcripts WHERE id = :t",
+            "INSERT INTO speaker_embeddings (transcript_id, owner_id, speaker_id, model, embedding)"
+            " SELECT id, owner_id, :s, 'modelo', '[1,0,0]' FROM transcripts WHERE id = :t",
             s=speaker,
             t=tid,
         )

@@ -1,4 +1,4 @@
-"""`/admin/health`: filas, heartbeat do worker GPU, jobs em andamento e falhas da organização."""
+"""`/admin/health`: filas, heartbeat do worker GPU, jobs em andamento e falhas da plataforma."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from eclume_server_testing.fakes import run_cpu, run_gpu
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -45,16 +44,6 @@ def cache(services: Services) -> Iterator[redis.Redis]:
     client.close()
 
 
-@pytest.fixture
-def admin_account(make_user: Callable[..., Account]) -> Account:
-    return make_user(role="admin")
-
-
-@pytest.fixture
-def admin(as_user: Callable[[Account], Api], admin_account: Account) -> Api:
-    return as_user(admin_account)
-
-
 def test_sem_worker_e_sem_jobs(
     admin: Api, cache: redis.Redis, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
@@ -69,8 +58,9 @@ def test_sem_worker_e_sem_jobs(
         {"name": "eclume:gpu", "queued": 0, "running": 0},
         {"name": "eclume:default", "queued": 0, "running": 0},
     ]
-    assert as_user(make_user()).get(URL).status_code == 403
-    assert admin.pat("recordings:read").get(URL).status_code == 403
+    user = as_user(make_user())
+    assert user.get(URL).status_code == 401
+    assert user.pat("recordings:read").get(URL).status_code == 401
 
 
 def test_heartbeat_fila_e_progresso(
@@ -81,9 +71,9 @@ def test_heartbeat_fila_e_progresso(
     services: Services,
 ):
     cache.hset(GPU_HEALTH_KEY, mapping=BEAT)
-    member = as_user(make_user())
-    own = upload_file(admin, audio_bytes(1200), title="Reunião do admin")
-    private = upload_file(member, audio_bytes(1300), title="Entrevista sigilosa")
+    alice, bob = as_user(make_user()), as_user(make_user())
+    own = upload_file(alice, audio_bytes(1200), title="Reunião da Alice")
+    private = upload_file(bob, audio_bytes(1300), title="Entrevista sigilosa")
     # O primeiro job está rodando no worker: arq marca `in-progress` e o worker grava o progresso.
     running_job = transcribe_job_id(own["id"], 1)
     cache.set(f"arq:in-progress:{running_job}", b"1")
@@ -122,12 +112,12 @@ def test_heartbeat_fila_e_progresso(
     assert jobs[own["id"]]["state"] == "running"
     assert jobs[own["id"]]["stage"] == "diarization"
     assert jobs[own["id"]]["progress"] == pytest.approx(0.78)
-    assert jobs[own["id"]]["recording_title"] == "Reunião do admin"
     assert jobs[own["id"]]["updated_at"] == "2026-09-25T12:00:01Z"
-    # A gravação privada do membro aparece na saúde, mas sem o título.
     assert jobs[private["id"]]["state"] == "queued"
     assert jobs[private["id"]]["progress"] is None
-    assert jobs[private["id"]]["recording_title"] == "Gravação privada"
+    # O admin vê os jobs de todos, mas nunca o conteúdo: nenhum título de gravação.
+    assert {job["recording_title"] for job in jobs.values()} == {"Gravação de usuário"}
+    assert "Entrevista sigilosa" not in admin.get(URL).text
 
     cache.delete(f"arq:in-progress:{running_job}")
     run_gpu(services.settings)
@@ -135,15 +125,13 @@ def test_heartbeat_fila_e_progresso(
     assert admin.get(URL).json()["running_jobs"] == []
 
 
-def test_falhas_recentes_so_da_organizacao(
+def test_falhas_recentes_da_plataforma(
     admin: Api,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
     services: Services,
 ):
-    stranger = as_user(make_user(role="admin", org_id=make_org()))
-    recording = upload_file(admin, audio_bytes(1100), title="Vai falhar")
+    recording = upload_file(as_user(make_user()), audio_bytes(1100), title="Vai falhar")
     run_gpu(services.settings, fail=True)
     run_cpu(services.settings)
 
@@ -153,15 +141,13 @@ def test_falhas_recentes_so_da_organizacao(
     assert failure["recording_id"] == recording["id"]
     assert failure["code"] == "gpu_oom"
     assert failure["message"] == "CUDA out of memory"
-    assert stranger.get(URL).json()["recent_failures"] == []
     assert failure["retryable"] is True
 
 
-def test_admin_retenta_o_job_que_falhou_inclusive_de_gravacao_privada(
+def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
     admin: Api,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
-    make_org: Callable[[], UUID],
     services: Services,
 ):
     member = as_user(make_user())
@@ -171,9 +157,8 @@ def test_admin_retenta_o_job_que_falhou_inclusive_de_gravacao_privada(
     failed_job = member.get(f"/api/v1/recordings/{recording['id']}").json()["job"]
     retry = f"/api/v1/admin/jobs/{failed_job['id']}/retry"
 
-    assert member.post(retry).status_code == 403
-    assert admin.pat("recordings:write").post(retry).status_code == 403
-    assert as_user(make_user(role="admin", org_id=make_org())).post(retry).status_code == 404
+    assert member.post(retry).status_code == 401
+    assert member.pat("recordings:write").post(retry).status_code == 401
     assert admin.post(f"/api/v1/admin/jobs/{uuid.uuid4()}/retry").status_code == 404
 
     response = admin.post(retry)

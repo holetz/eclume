@@ -1,8 +1,8 @@
-"""Busca full-text sobre os segmentos visíveis, em português sem acento (config `eclume_pt`).
+"""Busca full-text sobre os segmentos do usuário, em português sem acento (config `eclume_pt`).
 
 Tudo roda sob a RLS. O GIN de `segments.tsv` entra pela função `eclume_segment_matches`, que só
-devolve as chaves candidatas da organização; a política de `segments` decide o que o usuário vê
-(migration 003).
+devolve as chaves candidatas do usuário da transação; a política de `segments` confirma (migrations
+003 e 008).
 """
 
 from __future__ import annotations

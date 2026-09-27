@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import pytest
 from sqlalchemy import text
 
 from eclume_server.crypto import decrypt
@@ -15,7 +14,6 @@ from eclume_worker.secrets import open_secret
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from uuid import UUID
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -24,11 +22,9 @@ URL = "/api/v1/admin/secrets"
 HF = "hf_abcdefghijklmnopqrstuvwxyz0123456789"
 
 
-def _stored(services: Services, org_id: UUID) -> dict[str, str]:
+def _stored(services: Services) -> dict[str, str]:
     async def go(conn: Any) -> Any:  # noqa: ANN401
-        rows = await conn.execute(
-            text("SELECT name, value_encrypted FROM org_secrets WHERE org_id = :org"), {"org": str(org_id)}
-        )
+        rows = await conn.execute(text("SELECT name, value_encrypted FROM platform_secrets"))
         return dict(rows.all())
 
     return run(services.sql(go))
@@ -44,19 +40,8 @@ def _jobs_options(services: Services, recording_id: str) -> list[dict[str, Any]]
     return run(services.sql(go))
 
 
-@pytest.fixture
-def admin_account(make_user: Callable[..., Account]) -> Account:
-    return make_user(role="admin")
-
-
-@pytest.fixture
-def admin(as_user: Callable[[Account], Api], admin_account: Account) -> Api:
-    return as_user(admin_account)
-
-
 def test_segredo_so_entra_e_nunca_volta(
     admin: Api,
-    admin_account: Account,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
@@ -73,22 +58,22 @@ def test_segredo_so_entra_e_nunca_volta(
     assert hf["is_set"] is True
     assert hf["updated_at"] is not None
 
-    stored = _stored(services, admin_account.org_id)["hf_token"]
+    stored = _stored(services)["hf_token"]
     assert stored.startswith("v1:")
     assert HF not in stored
     assert decrypt(services.settings, stored) == HF
 
     assert admin.put(f"{URL}/hf_token", json={"value": "hf_novo"}).status_code == 204
-    assert decrypt(services.settings, _stored(services, admin_account.org_id)["hf_token"]) == "hf_novo"
+    assert decrypt(services.settings, _stored(services)["hf_token"]) == "hf_novo"
 
     assert admin.put(f"{URL}/openai_api_key", json={"value": "x"}).status_code == 422
     assert admin.put(f"{URL}/hf_token", json={"value": ""}).status_code == 422
     assert admin.put(f"{URL}/hf_token", json={"value": "   "}).status_code == 422
 
-    member = as_user(make_user())
-    assert member.get(URL).status_code == 403
-    assert member.put(f"{URL}/hf_token", json={"value": "x"}).status_code == 403
-    assert admin.pat("recordings:write").put(f"{URL}/hf_token", json={"value": "x"}).status_code == 403
+    user = as_user(make_user())
+    assert user.get(URL).status_code == 401
+    assert user.put(f"{URL}/hf_token", json={"value": "x"}).status_code == 401
+    assert user.pat("recordings:write").put(f"{URL}/hf_token", json={"value": "x"}).status_code == 401
 
     assert admin.delete(f"{URL}/hf_token").status_code == 204
     assert admin.delete(f"{URL}/hf_token").status_code == 404
@@ -116,32 +101,35 @@ def test_token_do_hf_vai_cifrado_so_no_payload_do_job(
     assert all("hf_token_encrypted" not in opts for opts in _jobs_options(services, recording["id"]))
 
 
-def test_provider_anthropic_sem_chave_usa_o_segredo_da_organizacao(admin: Api, services: Services):
+def test_provider_anthropic_sem_chave_usa_o_segredo_da_plataforma(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
     provider = admin.post(
         "/api/v1/admin/agent-providers", json={"name": "Anthropic", "kind": "anthropic", "model": "claude-sonnet-5"}
     )
     assert provider.status_code == 201, provider.text
     assert provider.json()["api_key_set"] is False
     provider_id = provider.json()["id"]
-    recording = upload_file(admin, audio_bytes(1700), title="Resumo pela chave da organização")
+    user = as_user(make_user())
+    recording = upload_file(user, audio_bytes(1700), title="Resumo pela chave da plataforma")
     run_gpu(services.settings)
     run_cpu(services.settings)
-    transcript_id = admin.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
-    template_id = next(t["id"] for t in admin.get("/api/v1/summary-templates").json()["items"] if t["is_default"])
+    transcript_id = user.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    template_id = next(t["id"] for t in user.get("/api/v1/summary-templates").json()["items"] if t["is_default"])
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
 
     # Sem chave nenhuma, o provider recebe `api_key` nula (e o real recusa com provider_not_configured).
-    admin.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key is None
 
-    admin.put(f"{URL}/anthropic_api_key", json={"value": "sk-ant-da-organizacao"})
-    admin.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    admin.put(f"{URL}/anthropic_api_key", json={"value": "sk-ant-da-plataforma"})
+    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
-    assert config.api_key == "sk-ant-da-organizacao"
+    assert config.api_key == "sk-ant-da-plataforma"
 
-    # A chave própria do provider tem precedência sobre a da organização.
+    # A chave própria do provider tem precedência sobre a da plataforma.
     admin.patch(f"/api/v1/admin/agent-providers/{provider_id}", json={"api_key": "sk-ant-do-provider"})
-    admin.post(url, json={"template_id": template_id, "provider_id": provider_id})
+    user.post(url, json={"template_id": template_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key == "sk-ant-do-provider"

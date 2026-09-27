@@ -33,12 +33,12 @@ def test_implementadas_mais_pendentes_sao_o_contrato_inteiro(client: TestClient)
 
 
 def test_rotas_pendentes_respondem_501(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    admin = as_user(make_user(role="admin"))
+    api = as_user(make_user())
     for method, path, owner in NOT_IMPLEMENTED:
         url = re.sub(r"\{speaker_id\}", "S1", path)
         url = re.sub(r"\{secret_name\}", "hf_token", url)
         url = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), url)
-        response = admin.request(method, url, json={} if method in {"POST", "PUT", "PATCH"} else None)
+        response = api.request(method, url, json={} if method in {"POST", "PUT", "PATCH"} else None)
         assert response.status_code == 501, (method, path)
         body = response.json()
         assert body["code"] == "not_implemented"

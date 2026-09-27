@@ -41,7 +41,10 @@ def test_migrations_aplicadas_forcam_rls_e_sao_idempotentes(services: Services):
 
     versions, forced, role = run(services.sql(check))
     assert versions == [path.stem for path in migration_files()]
-    assert {"recordings", "recording_shares", "transcripts", "segments", "uploads", "api_tokens"} <= set(forced)
+    # Toda tabela de conteúdo e de conta de usuário está sob RLS forçada; as da plataforma, não.
+    content = {"recordings", "transcripts", "segments", "uploads", "api_tokens", "people", "summaries", "users"}
+    assert content <= set(forced)
+    assert not {"platform_settings", "platform_secrets", "agent_providers", "admins", "sessions"} & set(forced)
     assert role == (False, False)
 
     async def again() -> list[str]:

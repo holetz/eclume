@@ -1,7 +1,7 @@
 """Saúde para o painel admin: filas arq, heartbeat do worker GPU, jobs em andamento e falhas.
 
-Regras em docs/standards/code/server-admin.md. As filas e a GPU são da instância (um worker serve
-todas as organizações) e saem só como números; jobs e falhas são da organização do admin.
+Regras em docs/standards/code/server-admin.md. As filas, a GPU, os jobs e as falhas são da
+plataforma; nada do conteúdo dos usuários sai daqui (o título da gravação, nunca).
 """
 
 from __future__ import annotations
@@ -14,21 +14,20 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 
 from eclume_server.db import tables as t
-from eclume_server.db.session import system_tx, user_tx
+from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress
 from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
-    from eclume_server.auth import Principal
     from eclume_server.context import AppContext
 
 log = logging.getLogger(__name__)
 
 FAILURE_WINDOW = timedelta(hours=24)
 MAX_FAILURES = 20
-# Título mostrado no lugar do de uma gravação que o admin não enxerga (privada de outro usuário).
-PRIVATE_TITLE = "Gravação privada"
+# O admin não vê conteúdo de usuário: no lugar do título da gravação, um rótulo fixo.
+RECORDING_TITLE = "Gravação de usuário"
 
 
 def _int(value: str | None) -> int | None:
@@ -84,7 +83,7 @@ def models_json(beat: dict[str, str] | None) -> list[dict[str, Any]]:
     ]
 
 
-async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
+async def admin_health(ctx: AppContext) -> dict[str, Any]:
     """Schema `AdminHealth`."""
     now = datetime.now(UTC)
     beat = await ctx.queue.gpu_health()
@@ -93,23 +92,15 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
         queued, running = await ctx.queue.depth(name)
         queues.append({"name": name, "queued": queued, "running": running})
 
-    jobs, recordings = t.transcription_jobs, t.recordings
-    # Com o papel de sistema: o admin vê os jobs de toda a organização, inclusive de gravações privadas.
+    jobs = t.transcription_jobs
+    # Com o papel de conexão: os jobs são de todos os usuários.
     async with system_tx(ctx.engine) as conn:
         open_jobs = (
-            (
-                await conn.execute(
-                    select(jobs, recordings.c.title)
-                    .join(recordings, recordings.c.id == jobs.c.recording_id)
-                    .where(jobs.c.org_id == principal.org_id, jobs.c.state.in_(["queued", "running"]))
-                    .order_by(jobs.c.queued_at)
-                )
-            )
+            (await conn.execute(select(jobs).where(jobs.c.state.in_(["queued", "running"])).order_by(jobs.c.queued_at)))
             .mappings()
             .all()
         )
         failed_filter = (
-            jobs.c.org_id == principal.org_id,
             jobs.c.state == "failed",
             jobs.c.finished_at >= now - FAILURE_WINDOW,
         )
@@ -123,10 +114,6 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
             .mappings()
             .all()
         )
-    # O título só aparece para quem enxerga a gravação.
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        ids = [row["recording_id"] for row in open_jobs]
-        visible = set((await conn.execute(select(recordings.c.id).where(recordings.c.id.in_(ids)))).scalars())
     progress = await ctx.queue.raw_progress([row["recording_id"] for row in open_jobs])
 
     running_jobs = []
@@ -137,7 +124,7 @@ async def admin_health(ctx: AppContext, principal: Principal) -> dict[str, Any]:
             {
                 "job_id": str(row["id"]),
                 "recording_id": str(row["recording_id"]),
-                "recording_title": row["title"] if row["recording_id"] in visible else PRIVATE_TITLE,
+                "recording_title": RECORDING_TITLE,
                 "state": "running" if raw else "queued",
                 "stage": stage,
                 "progress": fraction,

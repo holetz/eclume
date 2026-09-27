@@ -1,4 +1,8 @@
-"""Credenciais: sessão por cookie (com CSRF) e PAT com escopos."""
+"""Credenciais: sessão de usuário por cookie (com CSRF), PAT com escopos e a sessão de admin.
+
+A conta de admin é separada das contas de usuário: a sessão de admin (`eclume_admin_session`) é a
+única credencial aceita em `/api/v1/admin/*`, e nenhuma credencial de usuário alcança o painel.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ from sqlalchemy import select, update
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, insufficient_scope, session_required, unauthorized
+from eclume_server.problems import insufficient_scope, session_required, unauthorized
 from eclume_server.security import PAT_PREFIX, sha256_hex
 
 if TYPE_CHECKING:
@@ -21,6 +25,10 @@ if TYPE_CHECKING:
 
 SESSION_COOKIE = "eclume_session"
 CSRF_COOKIE = "eclume_csrf"
+ADMIN_SESSION_COOKIE = "eclume_admin_session"
+ADMIN_CSRF_COOKIE = "eclume_admin_csrf"
+# O cookie da sessão de admin só viaja para o painel.
+ADMIN_COOKIE_PATH = "/api/v1/admin"
 CSRF_HEADER = "X-CSRF-Token"
 ALL_SCOPES = (
     "recordings:read",
@@ -40,23 +48,24 @@ class Principal:
     """Quem faz a requisição e com que credencial."""
 
     user_id: UUID
-    org_id: UUID
-    role: str
     method: str  # session | pat
     scopes: tuple[str, ...]
     token_id: UUID | None = None
     session_id: UUID | None = None
 
-    @property
-    def is_admin(self) -> bool:
-        """Papel `admin` na organização."""
-        return self.role == "admin"
+
+@dataclass(frozen=True)
+class AdminPrincipal:
+    """A conta de admin da requisição, pela sessão de admin."""
+
+    admin_id: UUID
+    session_id: UUID
 
 
 async def _from_pat(ctx: AppContext, secret: str) -> Principal:
     now = datetime.now(UTC)
     query = (
-        select(t.api_tokens, t.users.c.role, t.users.c.active)
+        select(t.api_tokens, t.users.c.active)
         .join(t.users, t.users.c.id == t.api_tokens.c.user_id)
         .where(t.api_tokens.c.token_hash == sha256_hex(secret))
     )
@@ -71,14 +80,18 @@ async def _from_pat(ctx: AppContext, secret: str) -> Principal:
             raise unauthorized("PAT inválido, expirado ou revogado.")
         await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(last_used_at=now))
     scopes = tuple(scope for scope in ALL_SCOPES if scope in row["scopes"])
-    return Principal(row["user_id"], row["org_id"], row["role"], "pat", scopes, token_id=row["id"])
+    return Principal(row["user_id"], "pat", scopes, token_id=row["id"])
+
+
+def _check_csrf(request: Request, expected: str, cookie: str) -> None:
+    if request.method in _MUTATING and request.headers.get(CSRF_HEADER) != expected:
+        # Sem o double-submit a sessão não é uma credencial completa: 401, que toda operação declara.
+        raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {cookie}.")
 
 
 async def _from_session(ctx: AppContext, token: str, request: Request) -> Principal:
     query = (
-        select(
-            t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"), t.users.c.org_id, t.users.c.role
-        )
+        select(t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"))
         .join(t.users, t.users.c.id == t.sessions.c.user_id)
         .where(
             t.sessions.c.token_hash == sha256_hex(token),
@@ -90,14 +103,15 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
         row = (await conn.execute(query)).mappings().first()
     if row is None:
         raise unauthorized("Sessão inválida ou expirada.")
-    if request.method in _MUTATING and request.headers.get(CSRF_HEADER) != row["csrf_token"]:
-        # Sem o double-submit a sessão não é uma credencial completa: 401, que toda operação declara.
-        raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {CSRF_COOKIE}.")
-    return Principal(row["user_id"], row["org_id"], row["role"], "session", ALL_SCOPES, session_id=row["id"])
+    _check_csrf(request, row["csrf_token"], CSRF_COOKIE)
+    return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"])
 
 
 async def authenticate(request: Request, ctx: AppContext) -> Principal:
-    """Resolve a credencial da requisição; um Bearer presente nunca cai para o cookie."""
+    """Resolve a credencial de usuário; um Bearer presente nunca cai para o cookie.
+
+    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado.
+    """
     authorization = request.headers.get("Authorization")
     if authorization is not None:
         scheme, _, secret = authorization.partition(" ")
@@ -111,10 +125,8 @@ async def authenticate(request: Request, ctx: AppContext) -> Principal:
     raise unauthorized()
 
 
-def requires(
-    *scopes: str, session_only: bool = False, admin: bool = False
-) -> Callable[[Request, AppContext], Awaitable[Principal]]:
-    """Dependência que exige credencial, os escopos do PAT, sessão e/ou papel `admin`."""
+def requires(*scopes: str, session_only: bool = False) -> Callable[[Request, AppContext], Awaitable[Principal]]:
+    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão."""
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
         principal = await authenticate(request, ctx)
@@ -125,8 +137,33 @@ def requires(
             missing = [scope for scope in scopes if scope not in principal.scopes]
             if missing:
                 raise insufficient_scope(missing)
-        if admin and not principal.is_admin:
-            raise forbidden("Esta operação exige o papel admin.")
         return principal
 
     return dependency
+
+
+async def require_admin(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> AdminPrincipal:
+    """Dependência das rotas de admin: só a sessão de admin; PAT ou sessão de usuário são 401."""
+    if request.headers.get("Authorization") is not None:
+        raise unauthorized("O painel admin aceita só a sessão de admin.")
+    token = request.cookies.get(ADMIN_SESSION_COOKIE)
+    if not token:
+        raise unauthorized("Entre com a conta de admin.")
+    query = (
+        select(t.admin_sessions.c.id, t.admin_sessions.c.csrf_token, t.admins.c.id.label("admin_id"))
+        .join(t.admins, t.admins.c.id == t.admin_sessions.c.admin_id)
+        .where(
+            t.admin_sessions.c.token_hash == sha256_hex(token),
+            t.admin_sessions.c.expires_at > datetime.now(UTC),
+            t.admins.c.active,
+        )
+    )
+    async with system_tx(ctx.engine) as conn:
+        row = (await conn.execute(query)).mappings().first()
+    if row is None:
+        raise unauthorized("Sessão de admin inválida ou expirada.")
+    _check_csrf(request, row["csrf_token"], ADMIN_CSRF_COOKIE)
+    return AdminPrincipal(row["admin_id"], row["id"])
+
+
+Admin = Annotated[AdminPrincipal, Depends(require_admin)]

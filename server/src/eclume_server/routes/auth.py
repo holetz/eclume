@@ -10,13 +10,13 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
-from eclume_server import __version__, invitations
-from eclume_server.accounts import MIN_PASSWORD
+from eclume_server import __version__
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, invalid_field, unauthorized
+from eclume_server.problems import forbidden, unauthorized
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 from eclume_server.serialize import user_json
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "1.4.0"
+CONTRACT_VERSION = "2.0.0"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -90,25 +90,6 @@ async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, n
     return response
 
 
-class InvitationAccept(BaseModel):
-    """Schema `InvitationAccept`."""
-
-    name: str = Field(min_length=1)
-    password: str = Field(min_length=MIN_PASSWORD)
-
-
-@router.post("/auth/invitations/{invitation_token}/accept", status_code=204)
-async def accept_invitation(invitation_token: str, body: InvitationAccept, ctx: Ctx) -> Response:
-    """Cria a conta do convite e abre a sessão, como o login."""
-    if not body.name.strip():
-        raise invalid_field("name", "não pode ser vazio")
-    now = datetime.now(UTC)
-    async with system_tx(ctx.engine) as conn:
-        user_id = await invitations.accept(conn, invitation_token, name=body.name, password=body.password)
-        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
-        return await _open_session(conn, ctx, user_id, now)
-
-
 @router.post("/auth/logout", status_code=204)
 async def logout(principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx) -> Response:
     """Encerra a sessão corrente e remove os cookies."""
@@ -125,30 +106,12 @@ async def logout(principal: Annotated[Principal, Depends(requires(session_only=T
 
 @router.get("/me")
 async def me(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
-    """Usuário, organização, grupos e credencial correntes."""
+    """Conta e credencial correntes, e se falta aceitar o aviso em vigor."""
     async with system_tx(ctx.engine) as conn:
         user = (await conn.execute(select(t.users).where(t.users.c.id == principal.user_id))).mappings().one()
-        org = (
-            (await conn.execute(select(t.organizations).where(t.organizations.c.id == principal.org_id)))
-            .mappings()
-            .one()
-        )
-        groups = (
-            (
-                await conn.execute(
-                    select(t.groups.c.id, t.groups.c.name)
-                    .join(t.group_members, t.group_members.c.group_id == t.groups.c.id)
-                    .where(t.group_members.c.user_id == principal.user_id)
-                    .order_by(t.groups.c.name)
-                )
-            )
-            .mappings()
-            .all()
-        )
     return {
         "user": user_json(user),
-        "organization": {"id": str(org["id"]), "name": org["name"]},
-        "groups": [{"id": str(g["id"]), "name": g["name"]} for g in groups],
+        "notice_required": user["notice_version"] != NOTICE_VERSION,
         "auth": {
             "method": principal.method,
             "scopes": list(principal.scopes),

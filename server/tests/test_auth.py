@@ -28,7 +28,7 @@ def test_health_sem_credencial(client: TestClient):
 
 
 def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):
-    user = make_user(role="admin")
+    user = make_user()
     client.cookies.clear()
     response = client.post("/api/v1/auth/login", json={"email": user.email.upper(), "password": PASSWORD})
     assert response.status_code == 204
@@ -45,9 +45,10 @@ def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_u
     )
     me = api.get("/api/v1/me").json()
     assert me["user"]["email"] == user.email
-    assert me["user"]["role"] == "admin"
     assert me["user"]["last_login_at"] is not None
-    assert me["organization"]["id"] == str(user.org_id)
+    # Conta sem o aceite do aviso em vigor (a das fábricas, como a migrada).
+    assert me["notice_required"] is True
+    assert me["user"]["notice_version"] is None
     assert me["auth"] == {"method": "session", "scopes": me["auth"]["scopes"], "token_id": None}
     assert len(me["auth"]["scopes"]) == 8
 
@@ -126,15 +127,16 @@ def test_pat_invalido_nunca_cai_para_o_cookie(as_user: Callable[[Account], Api],
     assert response.status_code == 401
 
 
-def test_pat_nao_gere_pats_nem_grupos(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    pat = as_user(make_user(role="admin")).pat("recordings:read", "recordings:write")
-    for method, url in (("GET", "/api/v1/tokens"), ("GET", "/api/v1/groups"), ("GET", "/api/v1/admin/users")):
-        response = pat.request(method, url)
-        assert response.status_code == 403, url
-        assert response.json()["code"] == "session_required"
-        assert "só sessão" in response.json()["detail"]
+def test_pat_nao_gere_pats_nem_alcanca_o_painel(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    pat = as_user(make_user()).pat("recordings:read", "recordings:write")
+    response = pat.get("/api/v1/tokens")
+    assert response.status_code == 403
+    assert response.json()["code"] == "session_required"
+    assert "só sessão" in response.json()["detail"]
     created = pat.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]})
     assert created.status_code == 403
+    # O painel admin não é do usuário: nenhuma credencial dele passa por lá.
+    assert pat.get("/api/v1/admin/users").status_code == 401
 
 
 def test_pat_expirado_e_401(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):

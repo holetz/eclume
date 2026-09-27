@@ -26,7 +26,7 @@ from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import auto_summarize, run_summary
 from eclume_server.transcripts import RECORDING_GONE, fail, ingest
-from eclume_server.voice import org_voice
+from eclume_server.voice import platform_voice
 
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
@@ -87,18 +87,20 @@ async def transcription_failed(ctx: dict[str, Any], recording_id: str, error_cod
     return result
 
 
-async def purge_embedding_objects(ctx: dict[str, Any], org_id: str) -> int:
-    """Apaga do bucket os `speaker_embeddings.json` das gravações da organização (opt-in desligado).
+async def purge_embedding_objects(ctx: dict[str, Any], org_id: str | None = None) -> int:
+    """Apaga do bucket os `speaker_embeddings.json` de todas as gravações (voz desligada na plataforma).
 
-    Nada é apagado se o opt-in tiver sido religado nesse meio-tempo: os arquivos novos já valem.
+    Nada é apagado se a identificação por voz tiver sido religada nesse meio-tempo: os arquivos
+    novos já valem. `org_id` é ignorado: um job da versão com organização pode estar na fila.
     """
+    del org_id
     async with system_tx(ctx["engine"]) as conn:
-        if (await org_voice(conn, UUID(org_id)))["enabled"]:
+        if (await platform_voice(conn))["enabled"]:
             return 0
-        ids = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.org_id == UUID(org_id)))).scalars()
+        ids = (await conn.execute(select(t.recordings.c.id))).scalars()
         keys = [embeddings_object_key(recording_id) for recording_id in ids]
     await ctx["storage"].delete_keys(keys)
-    log.info("purge_embedding_objects %s: %d gravações", org_id, len(keys))
+    log.info("purge_embedding_objects: %d gravações", len(keys))
     return len(keys)
 
 

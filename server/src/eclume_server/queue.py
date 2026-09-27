@@ -46,10 +46,10 @@ def progress_key(recording_id: UUID | str) -> str:
     return f"eclume:progress:{recording_id}"
 
 
-def transcribe_options(org_settings: Any, language: str | None) -> dict[str, Any]:  # noqa: ANN401 — linha de org_settings
-    """`options` do `transcribe`, da configuração da organização; o worker não lê o banco."""
-    asr = org_settings["asr"]
-    diarization = org_settings["diarization"]
+def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
+    """`options` do `transcribe`, da configuração da plataforma; o worker não lê o banco."""
+    asr = platform["asr"]
+    diarization = platform["diarization"]
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
         # O ASR recebe o idioma sem região (`pt-BR` → `pt`).
@@ -64,8 +64,8 @@ def transcribe_options(org_settings: Any, language: str | None) -> dict[str, Any
         "endpoint_url": asr.get("endpoint_url"),
         "diarize": bool(diarization.get("enabled")),
         "diarization_model": diarization.get("model"),
-        # Impressão de voz só com o opt-in da organização (LGPD).
-        "embeddings": bool(org_settings["voice_identification"].get("enabled")),
+        # Impressão de voz só com a identificação por voz ligada na plataforma (LGPD).
+        "embeddings": bool(platform["voice_identification"].get("enabled")),
     }
 
 
@@ -115,9 +115,9 @@ class Queue:
             "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
         )
 
-    async def enqueue_purge_embedding_objects(self, org_id: UUID) -> None:
-        """Enfileira a remoção dos `speaker_embeddings.json` da organização no worker CPU."""
-        await self.pool.enqueue_job("purge_embedding_objects", str(org_id), _queue_name=DEFAULT_QUEUE)
+    async def enqueue_purge_embedding_objects(self) -> None:
+        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""
+        await self.pool.enqueue_job("purge_embedding_objects", _queue_name=DEFAULT_QUEUE)
 
     async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
         """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""

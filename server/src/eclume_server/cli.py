@@ -1,4 +1,4 @@
-"""CLI `eclume-server`: migrations e bootstrap da primeira organização e do admin."""
+"""CLI `eclume-server`: migrations e contas de admin do painel."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import argparse
 import asyncio
 import getpass
 import sys
-from uuid import UUID
 
-from eclume_server.accounts import AccountError, create_org, create_user
+from eclume_server.accounts import AccountError, create_admin, set_admin_password
 from eclume_server.config import get_settings
 from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate
 from eclume_server.db.session import make_engine, system_tx
@@ -34,28 +33,25 @@ async def _migrate() -> None:
         print(f"papel {RUNTIME_ROLE} com LOGIN")  # noqa: T201
 
 
-async def _bootstrap(args: argparse.Namespace, password: str) -> None:
+async def _create_admin(args: argparse.Namespace, password: str) -> None:
     engine = make_engine(get_settings().database_url)
     try:
         await migrate(engine)
         async with system_tx(engine) as conn:
-            org_id = await create_org(conn, args.org)
-            user_id = await create_user(conn, org_id, email=args.email, name=args.name, password=password, role="admin")
+            admin_id = await create_admin(conn, email=args.email, name=args.name, password=password)
     finally:
         await engine.dispose()
-    print(f"organização {org_id}\nadmin {user_id}")  # noqa: T201
+    print(f"admin {admin_id}")  # noqa: T201
 
 
-async def _create_user(args: argparse.Namespace, password: str) -> None:
+async def _set_admin_password(args: argparse.Namespace, password: str) -> None:
     engine = make_engine(get_settings().database_url)
     try:
         async with system_tx(engine) as conn:
-            user_id = await create_user(
-                conn, args.org_id, email=args.email, name=args.name, password=password, role=args.role
-            )
+            admin_id = await set_admin_password(conn, email=args.email, password=password)
     finally:
         await engine.dispose()
-    print(f"usuário {user_id}")  # noqa: T201
+    print(f"senha do admin {admin_id} trocada; sessões encerradas")  # noqa: T201
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,15 +62,13 @@ def build_parser() -> argparse.ArgumentParser:
         "migrate", help="aplica as migrations pendentes (e liga o papel eclume_server com ECLUME_RUNTIME_DB_PASSWORD)"
     )
 
-    admin = commands.add_parser("admin", help="organizações e usuários").add_subparsers(dest="admin", required=True)
-    bootstrap = admin.add_parser("bootstrap", help="cria a primeira organização e o seu admin (aplica as migrations)")
-    bootstrap.add_argument("--org", required=True, help="nome da organização")
-    create = admin.add_parser("create-user", help="cria um usuário numa organização existente")
-    create.add_argument("--org-id", required=True, type=UUID)
-    create.add_argument("--role", choices=["admin", "member"], default="member")
-    for sub in (bootstrap, create):
-        sub.add_argument("--email", required=True)
-        sub.add_argument("--name", required=True)
+    admin = commands.add_parser("admin", help="contas de admin do painel").add_subparsers(dest="admin", required=True)
+    create = admin.add_parser("create", help="cria uma conta de admin (aplica as migrations)")
+    create.add_argument("--email", required=True)
+    create.add_argument("--name", required=True)
+    password = admin.add_parser("set-password", help="troca a senha de um admin e encerra as sessões dele")
+    password.add_argument("--email", required=True)
+    for sub in (create, password):
         sub.add_argument("--password-stdin", action="store_true", help="lê a senha da primeira linha do stdin")
     return parser
 
@@ -85,10 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "migrate":
             asyncio.run(_migrate())
-        elif args.admin == "bootstrap":
-            asyncio.run(_bootstrap(args, _password(args.password_stdin)))
+        elif args.admin == "create":
+            asyncio.run(_create_admin(args, _password(args.password_stdin)))
         else:
-            asyncio.run(_create_user(args, _password(args.password_stdin)))
+            asyncio.run(_set_admin_password(args, _password(args.password_stdin)))
     except AccountError as exc:
         print(f"erro: {exc}", file=sys.stderr)  # noqa: T201
         return 2

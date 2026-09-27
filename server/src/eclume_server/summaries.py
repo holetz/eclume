@@ -1,4 +1,4 @@
-"""Resumos: configuração da organização, templates, criação versionada e o job `summarize`.
+"""Resumos: configuração da plataforma, templates, criação versionada e o job `summarize`.
 
 Contrato e decisões em docs/standards/code/server-agentes.md.
 """
@@ -37,40 +37,39 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# --- configuração da organização (bloco `summarization` de `org_settings`) ------------------------
+# --- configuração da plataforma (bloco `summarization` de `platform_settings`) ------------------------
+
+# Colunas de `agent_providers` que `eclume_app` lê: a chave de API fica só para o papel de conexão.
+PROVIDER_PUBLIC = [column for column in t.agent_providers.c if column.name != "api_key_encrypted"]
 
 
-async def get_summarization(conn: AsyncConnection, org_id: UUID) -> dict[str, Any]:
-    """Bloco `summarization`: `default_provider_id`, `auto_summarize`, `default_template_id`."""
-    value = (
-        await conn.execute(select(t.org_settings.c.summarization).where(t.org_settings.c.org_id == org_id))
-    ).scalar()
+async def get_summarization(conn: AsyncConnection) -> dict[str, Any]:
+    """Bloco `summarization`: `default_provider_id` e `auto_summarize` (legível sob a RLS)."""
+    value = (await conn.execute(select(t.platform_settings.c.summarization))).scalar()
     return dict(value or {})
 
 
-async def set_summarization(conn: AsyncConnection, org_id: UUID, user_id: UUID | None, **changes: Any) -> None:  # noqa: ANN401
-    """Muda campos do bloco `summarization` (sob a RLS, só admin consegue)."""
-    current = await get_summarization(conn, org_id)
+async def set_summarization(conn: AsyncConnection, admin_id: UUID | None, **changes: Any) -> None:  # noqa: ANN401
+    """Muda campos do bloco `summarization` (papel de conexão, pelas rotas de admin)."""
+    current = await get_summarization(conn)
     await conn.execute(
-        update(t.org_settings)
-        .where(t.org_settings.c.org_id == org_id)
-        .values(summarization={**current, **changes}, updated_at=func.now(), updated_by=user_id)
+        update(t.platform_settings).values(
+            summarization={**current, **changes}, updated_at=func.now(), updated_by=admin_id
+        )
     )
 
 
 # --- formas JSON ------------------------------------------------------------------------------------
 
 
-def template_json(row: Row, org_default_id: str | None) -> dict[str, Any]:
-    """Schema `SummaryTemplate`; o `is_default` da organização vem de `default_template_id`."""
-    organization = row["owner_id"] is None
+def template_json(row: Row) -> dict[str, Any]:
+    """Schema `SummaryTemplate`."""
     return {
         "id": str(row["id"]),
         "name": row["name"],
         "description": row["description"],
         "instructions": row["instructions"],
-        "scope": "organization" if organization else "user",
-        "is_default": str(row["id"]) == org_default_id if organization else row["is_default"],
+        "is_default": row["is_default"],
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
     }
@@ -112,7 +111,7 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 ) -> Row:
     """Insere um resumo `queued` com a próxima `version` do par (transcrição, template).
 
-    Serve à API (sob a RLS, que exige o dono da gravação) e ao resumo automático (papel de sistema).
+    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão).
     O lock do par serializa gerações simultâneas do mesmo template.
     """
     s = t.summaries.c
@@ -132,7 +131,7 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
             await conn.execute(
                 insert(t.summaries)
                 .values(
-                    org_id=transcript["org_id"],
+                    owner_id=transcript["owner_id"],
                     transcript_id=transcript["id"],
                     transcript_revision=transcript["revision"],
                     template_id=template["id"],
@@ -159,36 +158,27 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 
 
 async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | None:
-    """Cria o resumo automático da transcrição recém-ingerida, se a organização e o dono pedem.
+    """Cria o resumo automático da transcrição recém-ingerida, se a plataforma pede.
 
-    Roda com o papel de sistema, na transação do `ingest_transcript` (por isso filtra a organização
-    à mão). O template é o padrão pessoal do dono, senão o padrão da organização; o provider é o
-    padrão da organização. Um resumo automático por revisão da transcrição.
+    Roda com o papel de conexão, na transação do `ingest_transcript`. O template é o padrão do dono
+    (`is_default`); sem ele, não há resumo automático. O provider é o padrão da plataforma. Um resumo
+    automático por revisão da transcrição.
     """
     transcript = (
-        (
-            await conn.execute(
-                select(t.transcripts, t.recordings.c.owner_id)
-                .join(t.recordings, t.recordings.c.id == t.transcripts.c.recording_id)
-                .where(t.transcripts.c.recording_id == recording_id)
-            )
-        )
+        (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
         .mappings()
         .first()
     )
     if transcript is None:
         return None
-    org_id = transcript["org_id"]
-    settings = await get_summarization(conn, org_id)
+    settings = await get_summarization(conn)
     if not settings.get("auto_summarize") or not settings.get("default_provider_id"):
         return None
     provider = (
         (
             await conn.execute(
                 select(t.agent_providers).where(
-                    t.agent_providers.c.id == settings["default_provider_id"],
-                    t.agent_providers.c.org_id == org_id,
-                    t.agent_providers.c.enabled,
+                    t.agent_providers.c.id == settings["default_provider_id"], t.agent_providers.c.enabled
                 )
             )
         )
@@ -196,35 +186,20 @@ async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | No
         .first()
     )
     if provider is None:
-        log.warning("resumo automático sem provider padrão habilitado na organização %s", org_id)
+        log.warning("resumo automático sem provider padrão habilitado na plataforma")
         return None
     templates = t.summary_templates.c
     template = (
         (
             await conn.execute(
-                select(t.summary_templates).where(
-                    templates.org_id == org_id, templates.owner_id == transcript["owner_id"], templates.is_default
-                )
+                select(t.summary_templates).where(templates.owner_id == transcript["owner_id"], templates.is_default)
             )
         )
         .mappings()
         .first()
     )
-    if template is None and settings.get("default_template_id"):
-        template = (
-            (
-                await conn.execute(
-                    select(t.summary_templates).where(
-                        templates.org_id == org_id,
-                        templates.owner_id.is_(None),
-                        templates.id == settings["default_template_id"],
-                    )
-                )
-            )
-            .mappings()
-            .first()
-        )
     if template is None:
+        log.info("resumo automático de %s: o dono %s não tem template padrão", recording_id, transcript["owner_id"])
         return None
     s = t.summaries.c
     already = (
@@ -260,9 +235,9 @@ JOB_TIMEOUT_S = 25 * 60
 INTERNAL_ERROR = "internal_error"
 
 
-def provider_config(settings: Settings, row: Row, org_key_encrypted: str | None = None) -> ProviderConfig:
-    """Configuração do provider com a chave decifrada; sem chave própria, vale a da organização."""
-    encrypted = row["api_key_encrypted"] or org_key_encrypted
+def provider_config(settings: Settings, row: Row, platform_key_encrypted: str | None = None) -> ProviderConfig:
+    """Configuração do provider com a chave decifrada; sem chave própria, vale a da plataforma."""
+    encrypted = row["api_key_encrypted"] or platform_key_encrypted
     api_key = decrypt(settings, encrypted) if encrypted else None
     return ProviderConfig(
         kind=row["kind"],
@@ -362,10 +337,10 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             .mappings()
             .first()
         )
-        # O provider `anthropic` sem chave própria usa o segredo `anthropic_api_key` da organização.
-        org_key = None
+        # O provider `anthropic` sem chave própria usa o segredo `anthropic_api_key` da plataforma.
+        platform_key = None
         if provider_row is not None and provider_row["kind"] == "anthropic" and not provider_row["api_key_encrypted"]:
-            org_key = await secret_encrypted(conn, summary["org_id"], ANTHROPIC_API_KEY)
+            platform_key = await secret_encrypted(conn, ANTHROPIC_API_KEY)
         transcript = await _transcript_text(conn, summary["transcript_id"])
         await conn.execute(
             update(t.summaries)
@@ -378,7 +353,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             engine, summary_id, PROVIDER_NOT_CONFIGURED, "O provider foi removido ou desabilitado.", attempts
         )
     try:
-        config = provider_config(ctx["settings"], provider_row, org_key)
+        config = provider_config(ctx["settings"], provider_row, platform_key)
     except SecretDecryptError:
         message = "A chave de API do provider não abre com a chave de cifra atual; cadastre-a de novo."
         return await _fail(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)

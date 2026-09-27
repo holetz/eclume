@@ -1,83 +1,64 @@
-"""Configuração em runtime da organização (`/admin/settings`). Só sessão de `admin`."""
+"""Configuração em runtime da plataforma (`/admin/settings`). Só a sessão de admin."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, update
 
-from eclume_server.auth import Principal, requires
+from eclume_server.auth import Admin
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
-from eclume_server.db.session import user_tx
+from eclume_server.db.session import system_tx
 from eclume_server.settings_admin import BLOCKS, AdminSettingsPatch, changes_of, settings_json, validate_merged
-from eclume_server.voice import audit, purge_embeddings, voice_settings
+from eclume_server.voice import purge_embeddings, voice_settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
+    from eclume_server.serialize import Row
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
-Admin = Annotated[Principal, Depends(requires(session_only=True, admin=True))]
 
 
-async def _read(conn: Any, principal: Principal, *, lock: bool = False) -> Any:  # noqa: ANN401 — conexão e linha do SQLAlchemy
-    query = (
-        select(t.org_settings, t.users.c.name.label("updated_by_name"))
-        .outerjoin(t.users, t.users.c.id == t.org_settings.c.updated_by)
-        .where(t.org_settings.c.org_id == principal.org_id)
+async def _read(conn: AsyncConnection, *, lock: bool = False) -> Row:
+    query = select(t.platform_settings, t.admins.c.name.label("updated_by_name")).outerjoin(
+        t.admins, t.admins.c.id == t.platform_settings.c.updated_by
     )
     if lock:
-        query = query.with_for_update(of=t.org_settings)
+        query = query.with_for_update(of=t.platform_settings)
     return (await conn.execute(query)).mappings().one()
 
 
-async def _audit_voice(conn: Any, principal: Principal, before: dict[str, Any], after: dict[str, Any]) -> None:  # noqa: ANN401
-    """Termo novo sobe a versão; toda mudança no bloco de voz (o opt-in LGPD) vai para a auditoria."""
-    if after["consent_term_text"] != before["consent_term_text"]:
-        after["consent_term_version"] = str(int(before["consent_term_version"]) + 1)
-    changed = sorted(key for key in after if after[key] != before.get(key))
-    if changed:
-        details = {key: after[key] for key in ("enabled", "suggestion_threshold", "consent_term_version")}
-        await audit(
-            conn,
-            principal.org_id,
-            "org_opt_in_changed",
-            actor_id=principal.user_id,
-            details={"changed": changed, **details},
-        )
-
-
 @router.get("/settings")
-async def get_admin_settings(principal: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Configuração atual da organização."""
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        row = await _read(conn, principal)
+async def get_admin_settings(_: Admin, ctx: Ctx) -> dict[str, Any]:
+    """Configuração atual da plataforma."""
+    async with system_tx(ctx.engine) as conn:
+        row = await _read(conn)
     return settings_json(row, row["updated_by_name"])
 
 
 @router.patch("/settings")
-async def update_admin_settings(body: AdminSettingsPatch, principal: Admin, ctx: Ctx) -> dict[str, Any]:
+async def update_admin_settings(body: AdminSettingsPatch, admin: Admin, ctx: Ctx) -> dict[str, Any]:
     """Mescla os campos enviados; a configuração resultante vale para os próximos jobs."""
     changes = changes_of(body)
-    async with user_tx(ctx.engine, principal.org_id, principal.user_id) as conn:
-        current = await _read(conn, principal, lock=True)
+    async with system_tx(ctx.engine) as conn:
+        current = await _read(conn, lock=True)
         merged = {block: {**current[block], **changes.get(block, {})} for block in BLOCKS}
         voice_before = voice_settings(current["voice_identification"])
         merged["voice_identification"] = voice_settings(merged["voice_identification"])
         await validate_merged(conn, merged)
-        await _audit_voice(conn, principal, voice_before, merged["voice_identification"])
         turned_off = voice_before["enabled"] and not merged["voice_identification"]["enabled"]
         if turned_off:
-            # LGPD: sem opt-in, nenhuma impressão de voz por gravação fica guardada.
-            embeddings, suggestions = await purge_embeddings(conn)
-            details = {"deleted_embeddings": embeddings, "deleted_suggestions": suggestions}
-            await audit(conn, principal.org_id, "embeddings_purged", actor_id=principal.user_id, details=details)
+            # LGPD: desligada, nenhuma impressão de voz por gravação fica guardada na plataforma.
+            await purge_embeddings(conn)
         await conn.execute(
-            update(t.org_settings)
-            .where(t.org_settings.c.org_id == principal.org_id)
-            .values(**merged, updated_at=func.now(), updated_by=principal.user_id)
+            update(t.platform_settings).values(**merged, updated_at=func.now(), updated_by=admin.admin_id)
         )
-        row = await _read(conn, principal)
+        row = await _read(conn)
     if turned_off:
         # Os `speaker_embeddings.json` do bucket saem no worker CPU, depois do commit.
-        await ctx.queue.enqueue_purge_embedding_objects(principal.org_id)
+        await ctx.queue.enqueue_purge_embedding_objects()
     return settings_json(row, row["updated_by_name"])
