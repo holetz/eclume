@@ -10,7 +10,8 @@ export const USERS_KEY = ['admin', 'users'] as const
 export const HEALTH_KEY = ['admin', 'health'] as const
 export const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
 
-export const HEALTH_REFRESH_MS = 10_000
+// Alinhado ao heartbeat de 15 s do worker GPU.
+export const HEALTH_REFRESH_MS = 15_000
 
 export function useAdminSettings() {
   return useQuery({ queryKey: SETTINGS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/settings')) })
@@ -102,6 +103,7 @@ export function useAdminHealth() {
     queryKey: HEALTH_KEY,
     queryFn: () => unwrap(api.GET('/api/v1/admin/health')),
     refetchInterval: HEALTH_REFRESH_MS,
+    refetchIntervalInBackground: false,
     staleTime: 0,
   })
 }

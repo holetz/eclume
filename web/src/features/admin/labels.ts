@@ -162,3 +162,38 @@ export function summaryOf(instructions: string): string {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text
 }
 
+/** Etapas do pipeline (holetz/eclume#33), na ordem em que rodam. */
+export const STEPS: readonly Option[] = [
+  { value: 'received', label: 'Recebido' },
+  { value: 'preprocessing', label: 'Pré-processamento' },
+  { value: 'transcription', label: 'Transcrição' },
+  { value: 'fields', label: 'Preenchimento de campos' },
+  { value: 'agenda_type', label: 'Tipo de agenda' },
+  { value: 'summary', label: 'Resumo' },
+]
+
+/** As linhas da tabela de etapas da Saúde, sempre estas e nesta ordem. */
+export const STEP_ORDER = ['preprocessing', 'transcription', 'fields', 'agenda_type', 'summary'] as const
+
+export const SERVICES: readonly Option[] = [
+  { value: 'api', label: 'Servidor da API' },
+  { value: 'postgres', label: 'Postgres + pgvector' },
+  { value: 'redis', label: 'Redis' },
+  { value: 'storage', label: 'Armazenamento (MinIO)' },
+  { value: 'gpu_worker', label: 'Worker GPU' },
+  { value: 'cpu_worker', label: 'Worker CPU' },
+  { value: 'mcp', label: 'Servidor MCP' },
+]
+
+export const SERVICE_STATUS: Record<string, { label: string; badge: string }> = {
+  healthy: { label: 'Saudável', badge: 'badge badge-success' },
+  degraded: { label: 'Degradado', badge: 'badge badge-warning' },
+  down: { label: 'Fora', badge: 'badge badge-danger' },
+  absent: { label: 'Ausente', badge: 'badge' },
+}
+
+/** "m:ss" de uma duração em milissegundos. */
+export function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}

@@ -435,3 +435,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Saúde: os títulos das tabelas com o espaço do DS e o worker sem sinal em vermelho. */
+.healthTitle {
+  margin: 32px 0 12px;
+}
+
+.danger {
+  color: var(--color-danger);
+}
