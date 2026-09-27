@@ -82,8 +82,8 @@ platform_settings = Table(
     Column("id", Boolean, primary_key=True, server_default=FetchedValue()),
     Column("asr", JSONB),
     Column("diarization", JSONB),
-    Column("summarization", JSONB),
     Column("voice_identification", JSONB),
+    Column("preprocessing", JSONB),
     _ts("updated_at"),
     _uuid("updated_by"),
 )
@@ -107,6 +107,9 @@ recordings = Table(
     Column("collection_ids", ARRAY(UUID(as_uuid=True))),
     Column("metadata", JSONB),
     Column("capture", JSONB),
+    _uuid("agenda_type_id"),
+    Column("agenda_type_origin", Text),
+    Column("subject", Text),
     _ts("created_at"),
     _ts("updated_at"),
 )
@@ -205,21 +208,94 @@ agent_providers = Table(
     Column("api_key_encrypted", Text),
     Column("enabled", Boolean),
     Column("options", JSONB),
+    Column("used_for", ARRAY(Text), server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
 )
 
-summary_templates = Table(
-    "summary_templates",
+# --- tipos de agenda (009_tipos_de_agenda) ------------------------------------------------------
+
+
+def _agenda_type_columns() -> list[Column]:
+    return [
+        Column("name", Text),
+        Column("position", Integer, server_default=FetchedValue()),
+        Column("title_pattern", Text),
+        Column("identify", Text, server_default=FetchedValue()),
+        Column("default_tags", ARRAY(Text), server_default=FetchedValue()),
+        Column("summary_instructions", Text),
+        _ts("created_at", server_default=FetchedValue()),
+        _ts("updated_at", server_default=FetchedValue()),
+    ]
+
+
+agenda_types = Table(
+    "agenda_types",
     metadata,
     _pk(),
     _uuid("owner_id"),
+    *_agenda_type_columns(),
+    _uuid("from_default_id"),
+)
+
+default_agenda_types = Table(
+    "default_agenda_types",
+    metadata,
+    _pk(),
+    *_agenda_type_columns(),
+    Column("include_for_new_users", Boolean, server_default=FetchedValue()),
+)
+
+# --- etapas do pipeline (012_etapas_do_pipeline) ---------------------------------------------------
+
+pipeline_steps = Table(
+    "pipeline_steps",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    Column("revision", Integer),
+    Column("step", Text),
+    Column("state", Text),
+    _ts("started_at"),
+    _ts("finished_at"),
+    Column("duration_ms", Integer, server_default=FetchedValue()),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("detail", JSONB, server_default=FetchedValue()),
+)
+
+# --- campos e valores (010_campos_e_valores) ----------------------------------------------------
+
+fields = Table(
+    "fields",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("key", Text),
     Column("name", Text),
-    Column("description", Text),
-    Column("instructions", Text),
-    Column("is_default", Boolean),
-    _ts("created_at"),
-    _ts("updated_at"),
+    Column("kind", Text),
+    Column("builtin", Text),
+    Column("options", ARRAY(Text), server_default=FetchedValue()),
+    Column("instructions", Text, server_default=FetchedValue()),
+    Column("auto_fill", Boolean, server_default=FetchedValue()),
+    Column("position", Integer, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+field_values = Table(
+    "field_values",
+    metadata,
+    _uuid("recording_id", primary_key=True),
+    _uuid("field_id", primary_key=True),
+    _uuid("owner_id"),
+    Column("value", JSONB(none_as_null=False)),
+    Column("origin", Text),
+    Column("transcript_revision", Integer),
+    Column("provider_name", Text),
+    Column("model", Text),
+    _ts("updated_at", server_default=FetchedValue()),
 )
 
 summaries = Table(
@@ -229,8 +305,8 @@ summaries = Table(
     _uuid("owner_id"),
     _uuid("transcript_id"),
     Column("transcript_revision", Integer),
-    _uuid("template_id"),
-    Column("template_name", Text),
+    _uuid("agenda_type_id"),
+    Column("agenda_type_name", Text),
     Column("instructions", Text),
     Column("version", Integer),
     Column("status", Text),

@@ -17,6 +17,14 @@ export const COMPUTE_TYPES: readonly Option[] = [
   { value: 'float32', label: 'float32 (mais VRAM)' },
 ]
 
+/** Para que um provider serve (`used_for`); cada finalidade tem um provider só. */
+export const PURPOSES: readonly Option[] = [
+  { value: 'summaries', label: 'Resumos' },
+  { value: 'fields', label: 'Campos' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'agenda_detection', label: 'Detecção do tipo' },
+]
+
 export const PROVIDER_KINDS: readonly Option[] = [
   { value: 'claude-cli', label: 'Claude Code do servidor', hint: 'Roda o claude -p no servidor, autenticado pelo token do Claude; sem endereço.' },
   { value: 'anthropic', label: 'API da Anthropic', hint: 'Sem chave própria, usa o segredo anthropic_api_key.' },

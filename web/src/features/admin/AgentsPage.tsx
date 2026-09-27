@@ -3,14 +3,14 @@ import { useId, useState, type FormEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import styles from './Admin.module.css'
-import { labelOf, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret } from './labels'
-import { PROVIDERS_KEY, SETTINGS_KEY, useAdminSettings, useProviders, useUpdateSettings } from './queries'
+import { labelOf, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret, PURPOSES } from './labels'
+import { PROVIDERS_KEY, SETTINGS_KEY, useProviders } from './queries'
 import { useAdminTitle } from './sections'
 
 type Provider = Schemas['AgentProvider']
 type ProviderKind = Schemas['AgentProviderKind']
 
-/** Providers de agente de sumarização da plataforma e o provider padrão. */
+/** Providers de agente da plataforma e para que cada um serve (resumos, campos, chat, detecção). */
 export function AgentsPage() {
   useAdminTitle('Agentes')
   const providers = useProviders()
@@ -25,7 +25,6 @@ export function AgentsPage() {
           Onde os resumos são gerados. Chaves e tokens ficam cifrados no servidor e nunca voltam para a tela.
         </p>
       </div>
-      <DefaultProvider providers={items} />
       <section className={styles.section} aria-labelledby="providers-lista">
         <div className={styles.actions}>
           <h3 id="providers-lista">Providers cadastrados</h3>
@@ -60,6 +59,7 @@ export function AgentsPage() {
                   <th scope="col">Tipo</th>
                   <th scope="col">Modelo</th>
                   <th scope="col">Chave</th>
+                  <th scope="col">Usado para</th>
                   <th scope="col">Estado</th>
                   <th scope="col">
                     <span className="visually-hidden">Ações</span>
@@ -76,45 +76,6 @@ export function AgentsPage() {
         )}
       </section>
     </section>
-  )
-}
-
-function DefaultProvider({ providers }: { providers: Provider[] }) {
-  const settings = useAdminSettings()
-  const update = useUpdateSettings()
-  const selectId = useId()
-  const current = settings.data?.summarization.default_provider_id ?? ''
-  const enabled = providers.filter((provider) => provider.enabled)
-
-  return (
-    <div className={`card ${styles.form}`}>
-      <div className="field">
-        <label htmlFor={selectId}>Provider padrão</label>
-        <select
-          id={selectId}
-          className="input"
-          value={current}
-          disabled={!settings.data || update.isPending}
-          onChange={(e) => update.mutate({ summarization: { default_provider_id: e.target.value || null } })}
-        >
-          <option value="">Nenhum (resumos só com provider escolhido)</option>
-          {enabled.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.name}
-            </option>
-          ))}
-        </select>
-        <span className="field-hint">Usado no resumo automático e quando o usuário não escolhe outro.</span>
-      </div>
-      {update.isError && (
-        <p className="alert alert-error" role="alert">
-          {errorMessage(update.error)}
-        </p>
-      )}
-      <span role="status" className={styles.meta}>
-        {update.isSuccess ? 'Provider padrão salvo.' : ''}
-      </span>
-    </div>
   )
 }
 
@@ -292,6 +253,7 @@ function ProviderRow({ provider, onEdit }: { provider: Provider; onEdit: () => v
       <td>{labelOf(PROVIDER_KINDS, provider.kind)}</td>
       <td className={styles.mono}>{provider.model}</td>
       <td>{provider.api_key_set ? providerSecret(provider.kind).stored : providerSecret(provider.kind).missing}</td>
+      <td>{provider.used_for.length > 0 ? provider.used_for.map((purpose) => labelOf(PURPOSES, purpose)).join(', ') : '—'}</td>
       <td>
         {provider.enabled ? (
           <span className="badge badge-success">Habilitado</span>

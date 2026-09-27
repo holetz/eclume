@@ -63,10 +63,12 @@ class OpenAICompatibleEngine:
         model = options.model or self.default_model
         data = {
             "model": model,
-            "language": options.language,
             "response_format": "verbose_json",
             "timestamp_granularities[]": ["word", "segment"],
         }
+        if options.language:
+            # Sem idioma, o servidor detecta e o devolve no `verbose_json`.
+            data["language"] = options.language
         try:
             with audio_path.open("rb") as fh:
                 response = self._client.post(
@@ -83,7 +85,7 @@ class OpenAICompatibleEngine:
             engine=self.name,
             model=model,
             compute_type="remote",
-            language=options.language,
+            language=options.language or body.get("language") or "pt",
             duration_s=float(body.get("duration") or 0.0),
             segments=_segments(body),
             warnings=[WARN_NO_DIARIZATION] if options.diarize else [],

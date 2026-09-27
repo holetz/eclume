@@ -1,7 +1,7 @@
 ---
 type: standard
 title: Contrato de API v1
-description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a 2.0.0 como exceção única.
+description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-09-27
@@ -82,13 +82,15 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `contracts` junto com o smoke do mock.
 - **Quebra** vira `/api/v2` num `openapi-v2.yaml` próprio; a v1 segue servida na transição,
   anunciando o fim com `Deprecation` e `Sunset`.
-- **Exceção única: a 2.0.0 sob `/api/v1`.** O fim da organização removeu grupos,
-  compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz, e tirou
-  `organization`, `groups`, `role`, `visibility` e `scope` das respostas. Os dois clientes de fora
-  do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, sem nenhum
-  campo que saiu; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a versão maior subiu
-  no mesmo prefixo, e os contract tests exigem a 2.x. A **próxima** quebra vai para `/api/v2`,
-  sem outra exceção.
+- **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
+  removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
+  e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes
+  do redesign (holetz/eclume#33 a #41) ainda quebram rotas que só o web do próprio repositório usa
+  (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações). Os dois clientes de
+  fora do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, que seguem
+  compatíveis; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a linha 2.x evolui no
+  mesmo prefixo até o redesign terminar, e os contract tests exigem a 2.x. Depois dele a 2.x
+  congela, e a **próxima** quebra vai para `/api/v2`, sem outra exceção.
 
 ## Por quê
 

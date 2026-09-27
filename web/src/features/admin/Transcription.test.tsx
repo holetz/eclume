@@ -104,4 +104,15 @@ describe('Transcrição', () => {
     expect(await screen.findByLabelText('Modelo')).toHaveValue('distil-large-v3')
     expect(screen.getByLabelText('Idioma')).toHaveValue('pt-BR')
   })
+
+  it('oferece a detecção automática do idioma', async () => {
+    const http = mockSettingsApi({ 'PATCH /api/v1/admin/settings': () => fixtures.adminSettings() })
+    renderApp('/admin/transcricao')
+    const language = await screen.findByLabelText('Idioma')
+    await userEvent.selectOptions(language, 'Detectar automaticamente')
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText('Configuração salva.')).toBeInTheDocument()
+    const sent = await http.requests('PATCH /api/v1/admin/settings')[0].json()
+    expect(sent.asr.default_language).toBe('auto')
+  })
 })

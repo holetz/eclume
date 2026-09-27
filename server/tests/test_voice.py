@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from eclume_server.voice import DEFAULT_THRESHOLD
-from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
 from eclume_server_testing.fakes import DEFAULT_VOICES, run_cpu, run_gpu, transcribed, voice
 from eclume_server_testing.harness import run
 
@@ -330,8 +330,8 @@ def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumo
     tid = ek.transcript()
     ek.link(tid, "S2", rafael["id"])
     ek.admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
-    templates = ek.owner.get("/api/v1/summary-templates").json()["items"]
-    summary = ek.owner.post(f"/api/v1/transcripts/{tid}/summaries", json={"template_id": templates[0]["id"]})
+    agenda_type_id = str(agenda_types(services, ek.owner_id)[0]["id"])
+    summary = ek.owner.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": agenda_type_id})
     assert summary.status_code == 202, summary.text
     run_cpu(services.settings)
     rid = _recording_of(services, tid)

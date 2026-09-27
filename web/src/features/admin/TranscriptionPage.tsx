@@ -12,6 +12,8 @@ type Settings = Schemas['AdminSettings']
 type Asr = Schemas['AsrSettings']
 
 const FORM_ID = 'admin-transcricao'
+/** Valor de `default_language` que pede a detecção do idioma por gravação (contrato 2.1.0). */
+const AUTO_LANGUAGE = 'auto'
 
 /** Motor, modelo e idioma da transcrição; a separação e a identificação ficam em Locutores. */
 export function TranscriptionPage() {
@@ -137,7 +139,10 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
         <div className="field">
           <label htmlFor={ids.language}>Idioma</label>
           <select id={ids.language} className="input" value={language} onChange={(e) => setLanguage(e.target.value)}>
-            {!languages.some((option) => option.value === language) && <option value={language}>{language}</option>}
+            {language !== AUTO_LANGUAGE && !languages.some((option) => option.value === language) && (
+              <option value={language}>{language}</option>
+            )}
+            <option value={AUTO_LANGUAGE}>Detectar automaticamente</option>
             <optgroup label={`Idiomas (${languages.length})`}>
               {languages.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -146,7 +151,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
               ))}
             </optgroup>
           </select>
-          <span className="field-hint">Os modelos Whisper aceitam um idioma por gravação.</span>
+          <span className="field-hint">Os modelos Whisper aceitam um idioma por gravação, ou a detecção automática.</span>
         </div>
         <details className={styles.advanced}>
           <summary>Avançado</summary>

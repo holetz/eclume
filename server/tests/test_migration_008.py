@@ -207,7 +207,7 @@ def migrated(services: Services) -> Iterator[dict[str, Any]]:
                         {"org": ORG_A},
                     )
                 ).scalar_one()
-            assert await migrate(engine) == ["008_conta_por_usuario"]
+            assert await migrate(engine, until="008_conta_por_usuario") == ["008_conta_por_usuario"]
             return before
         finally:
             await engine.dispose()

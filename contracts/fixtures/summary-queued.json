@@ -2,9 +2,9 @@
   "id": "01928f3a-1c00-7a00-8000-000000000a01",
   "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
   "transcript_revision": 3,
-  "template": {
+  "agenda_type": {
     "id": "01928f3a-1c00-7a00-8000-000000000901",
-    "name": "Ata de reunião"
+    "name": "Reunião de equipe"
   },
   "version": 1,
   "trigger": "manual",

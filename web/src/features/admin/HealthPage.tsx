@@ -197,12 +197,14 @@ function HealthView({ health }: { health: Health }) {
               </thead>
               <tbody>
                 {health.recent_failures.map((failure) => (
-                  <tr key={failure.job_id}>
+                  <tr key={`${failure.recording_id}-${failure.step ?? ''}-${failure.failed_at}`}>
                     <td>{formatDateTime(failure.failed_at)}</td>
                     <td className={styles.mono}>{failure.code}</td>
                     <td>{failure.message}</td>
                     <td className={styles.actionsCell}>
-                      <RetryJobButton jobId={failure.job_id} retryable={failure.retryable === true} />{' '}
+                      {failure.job_id && (
+                        <RetryJobButton jobId={failure.job_id} retryable={failure.retryable === true} />
+                      )}{' '}
                       <Link to={`/gravacoes/${failure.recording_id}`}>Abrir gravação</Link>
                     </td>
                   </tr>

@@ -7,7 +7,7 @@ tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33
 maintainer: holetz
 ---
 
@@ -173,6 +173,16 @@ quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo uplo
 multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e imprime `OK`. Um
 áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já existe.
 
+**Processamento automático** (`--pipeline`): retranscreve uma gravação e espera as seis etapas do
+pipeline `done` (recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo), com a
+duração de cada uma, os campos automáticos, o tipo detectado e o resumo automático. Uma etapa
+`failed` ou `skipped` falha o smoke. Sem `--recording`, a gravação é a do áudio de fixture:
+
+```bash
+ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
+  | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt --pipeline --recording <id de uma gravação real>
+```
+
 ### Primeiro deploy (2026-09-25)
 
 - **Tempo:** o deploy do zero levou ~6,5 min, quase tudo no build do worker GPU (7,98 GB). As
@@ -196,6 +206,22 @@ multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e i
 - **Smoke:** cadastro aberto (aviso v1), sessão de admin e sessão de usuário com a senha de
   `admin-password`, transcrição deduplicada e resumo novo pelo `claude-cli` passaram. A conta
   migrada fica com `notice_required` até aceitar o aviso (`POST /api/v1/me/notice`).
+
+### Processamento automático em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 11 resumos, 17 objetos).
+- **Deploy:** as migrations 009 a 012 aplicaram sem erro. Os 3 templates viraram tipos de agenda
+  do dono (mesmo id) e ganharam os 4 tipos padrão; o provider `Claude (servidor)` herdou as
+  quatro finalidades; as 7 gravações ganharam o histórico do pipeline (recebido e transcrição
+  feitos, o resto `before_pipeline`). A imagem do worker GPU traz o `cb.rnnn` do RNNoise. O disco
+  foi de 86% a 84% (a poda levou as imagens antigas).
+- **Smoke `--pipeline`:** numa gravação real de 32 s, as seis etapas feitas em 30 s:
+  pré-processamento 1,1 s (RNNoise, loudness, sem silêncio a cortar), transcrição 9,9 s, campos
+  3,1 s, tipo 4,6 s e resumo 7,5 s. O agente deu o título e as tags, a detecção escolheu
+  "Reunião de equipe" (padrão de título e tags padrão aplicados) e o resumo automático saiu pelas
+  instruções do tipo, pelo `claude-cli`. Numa gravação sem fala, a cadeia também fechou: nenhum
+  campo preenchido e o resumo dizendo que não havia fala.
 
 ## CA raiz nos clientes
 

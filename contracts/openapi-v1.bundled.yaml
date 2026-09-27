@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.0.0
+  version: 2.1.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -47,8 +47,16 @@ tags:
   description: Busca full-text sobre segmentos.
 - name: organize
   description: Coleções e tags.
+- name: agenda-types
+  description: 'Tipos de agenda do usuário: como reconhecer a gravação, o título e as tags que ela ganha
+    e as instruções do resumo.'
+- name: fields
+  description: Campos do usuário (título e tags embutidos, mais os próprios) e as regras com que o agente
+    os preenche.
+- name: previews
+  description: Resultado de testar a regra de um campo ou um tipo de agenda em rascunho.
 - name: summaries
-  description: Templates por usuário e resumos gerados por agente.
+  description: Resumos gerados por agente com as instruções de um tipo de agenda.
 - name: admin
   description: Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
     admin (`adminSessionCookie`); nenhuma credencial de usuário alcança estas rotas.
@@ -149,7 +157,7 @@ paths:
 
         (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
 
-        templates de resumo padrão, e a resposta define os cookies de sessão, como o login.
+        tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
 
         Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
 
@@ -750,6 +758,146 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/fields:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - fields
+      operationId: listRecordingFields
+      summary: Campos da gravação
+      description: 'Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin`
+        nulos.
+
+        Título e tags vêm de `Recording.title`/`tags`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+              examples:
+                valores:
+                  $ref: '#/components/examples/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/recordings/{recording_id}/fields/accept:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags:
+      - fields
+      operationId: acceptRecordingFields
+      summary: Aceitar todos os valores automáticos
+      description: 'Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não
+        sobrescreve.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/recordings/{recording_id}/fields/{field_id}:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    - $ref: '#/components/parameters/FieldId'
+    put:
+      tags:
+      - fields
+      operationId: putRecordingField
+      summary: Escrever o valor de um campo
+      description: 'Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da
+        escolha,
+
+        até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldValuePut'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/recordings/{recording_id}/fields/{field_id}/accept:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    - $ref: '#/components/parameters/FieldId'
+    post:
+      tags:
+      - fields
+      operationId: acceptRecordingField
+      summary: Aceitar o valor automático de um campo
+      description: '`auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/v1/transcripts:
     get:
       tags:
@@ -1096,11 +1244,13 @@ paths:
       tags:
       - summaries
       operationId: createSummary
-      summary: Gerar um resumo com um template
-      description: 'Cada geração é uma nova `version` do resumo daquele template. Sem `provider_id` e
-        sem
+      summary: Gerar um resumo com um tipo de agenda
+      description: 'Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções
+        de
 
-        provider padrão habilitado na plataforma, responde 422.
+        resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
+
+        `provider_id` e sem provider padrão habilitado na plataforma, também 422.
 
         '
       security:
@@ -1184,12 +1334,13 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/v1/summary-templates:
+  /api/v1/agenda-types:
     get:
       tags:
-      - summaries
-      operationId: listSummaryTemplates
-      summary: Templates do usuário
+      - agenda-types
+      operationId: listAgendaTypes
+      summary: Tipos de agenda do usuário
+      description: Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
       security:
       - sessionCookie: []
       - pat:
@@ -1199,14 +1350,14 @@ paths:
       - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Templates.
+          description: Tipos de agenda.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SummaryTemplatePage'
+                $ref: '#/components/schemas/AgendaTypePage'
               examples:
-                templates:
-                  $ref: '#/components/examples/SummaryTemplatePage'
+                padrao:
+                  $ref: '#/components/examples/AgendaTypePage'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1215,9 +1366,11 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
     post:
       tags:
-      - summaries
-      operationId: createSummaryTemplate
-      summary: Criar um template
+      - agenda-types
+      operationId: createAgendaType
+      summary: Criar um tipo de agenda
+      description: Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário
+        é 409.
       security:
       - sessionCookie: []
       - pat:
@@ -1229,42 +1382,86 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SummaryTemplateCreate'
+              $ref: '#/components/schemas/AgendaTypeCreate'
             examples:
-              resumoExecutivo:
-                $ref: '#/components/examples/SummaryTemplateCreateRequest'
+              mentoria:
+                $ref: '#/components/examples/AgendaTypeCreateRequest'
       responses:
         '201':
-          description: Template criado.
+          description: Tipo criado.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SummaryTemplate'
+                $ref: '#/components/schemas/AgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/agenda-types/preview:
+    post:
+      tags:
+      - agenda-types
+      operationId: previewAgendaType
+      summary: Pré-visualizar um tipo de agenda numa gravação
+      description: 'Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de
+        mesmo nome,
+
+        o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaTypePreviewRequest'
+            examples:
+              pedido:
+                $ref: '#/components/examples/AgendaTypePreviewRequest'
+      responses:
+        '202':
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
-  /api/v1/summary-templates/{template_id}:
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/agenda-types/{agenda_type_id}:
     parameters:
-    - $ref: '#/components/parameters/TemplateId'
+    - $ref: '#/components/parameters/AgendaTypeId'
     get:
       tags:
-      - summaries
-      operationId: getSummaryTemplate
-      summary: Um template
+      - agenda-types
+      operationId: getAgendaType
+      summary: Um tipo de agenda
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: Template.
+          description: Tipo de agenda.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SummaryTemplate'
+                $ref: '#/components/schemas/AgendaType'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1273,9 +1470,15 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       tags:
-      - summaries
-      operationId: updateSummaryTemplate
-      summary: Editar um template
+      - agenda-types
+      operationId: updateAgendaType
+      summary: Editar um tipo de agenda
+      description: 'Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções
+        do
+
+        momento. Nome repetido é 422 em `name`.
+
+        '
       security:
       - sessionCookie: []
       - pat:
@@ -1287,14 +1490,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SummaryTemplatePatch'
+              $ref: '#/components/schemas/AgendaTypePatch'
       responses:
         '200':
-          description: Template atualizado.
+          description: Tipo atualizado.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SummaryTemplate'
+                $ref: '#/components/schemas/AgendaType'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1305,9 +1508,10 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
     delete:
       tags:
-      - summaries
-      operationId: deleteSummaryTemplate
-      summary: Excluir um template
+      - agenda-types
+      operationId: deleteAgendaType
+      summary: Excluir um tipo de agenda
+      description: As gravações que o usavam ficam sem tipo; os resumos ficam.
       security:
       - sessionCookie: []
       - pat:
@@ -1316,7 +1520,231 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluído. Resumos já gerados ficam.
+          description: Excluído.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/fields:
+    get:
+      tags:
+      - fields
+      operationId: listFields
+      summary: Campos do usuário
+      description: 'Título e tags vêm embutidos em toda conta; os demais são do usuário.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Campos, na ordem da lista.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldPage'
+              examples:
+                campos:
+                  $ref: '#/components/examples/FieldPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags:
+      - fields
+      operationId: createField
+      summary: Criar um campo
+      description: 'A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros
+        tipos não têm.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldCreate'
+      responses:
+        '201':
+          description: Campo criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/fields/preview:
+    post:
+      tags:
+      - fields
+      operationId: previewField
+      summary: Testar a regra de um campo
+      description: 'Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas,
+        ou as 3
+
+        mais recentes) com o provider de `fields`, sem gravar nada.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldPreviewRequest'
+            examples:
+              pedido:
+                $ref: '#/components/examples/FieldPreviewRequest'
+      responses:
+        '202':
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/fields/{field_id}:
+    parameters:
+    - $ref: '#/components/parameters/FieldId'
+    get:
+      tags:
+      - fields
+      operationId: getField
+      summary: Um campo
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Campo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - fields
+      operationId: updateField
+      summary: Editar um campo
+      description: 'Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind`
+        (422).
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldPatch'
+      responses:
+        '200':
+          description: Campo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - fields
+      operationId: deleteField
+      summary: Excluir um campo
+      description: 'Os embutidos não saem: 409 `builtin_field`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluído, com os valores dele.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/previews/{preview_id}:
+    parameters:
+    - $ref: '#/components/parameters/PreviewId'
+    get:
+      tags:
+      - previews
+      operationId: getPreview
+      summary: Uma pré-visualização
+      description: 'Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: O estado e, pronta, os resultados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+              examples:
+                campo:
+                  $ref: '#/components/examples/PreviewFieldRule'
+                tipo:
+                  $ref: '#/components/examples/PreviewAgendaType'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1970,6 +2398,113 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/v1/admin/default-agenda-types:
+    get:
+      tags:
+      - admin
+      operationId: listDefaultAgendaTypes
+      security:
+      - adminSessionCookie: []
+      summary: Tipos de agenda padrão da plataforma
+      description: Os marcados com `include_for_new_users` são copiados para cada conta criada depois.
+      responses:
+        '200':
+          description: Tipos padrão, na ordem da lista.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultAgendaTypePage'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/DefaultAgendaTypePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags:
+      - admin
+      operationId: createDefaultAgendaType
+      security:
+      - adminSessionCookie: []
+      summary: Criar um tipo de agenda padrão
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefaultAgendaTypeCreate'
+      responses:
+        '201':
+          description: Tipo padrão criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultAgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/admin/default-agenda-types/{agenda_type_id}:
+    parameters:
+    - $ref: '#/components/parameters/AgendaTypeId'
+    patch:
+      tags:
+      - admin
+      operationId: updateDefaultAgendaType
+      security:
+      - adminSessionCookie: []
+      summary: Editar um tipo de agenda padrão
+      description: Vale para as contas criadas depois; as cópias que as contas já têm ficam como estão.
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefaultAgendaTypePatch'
+      responses:
+        '200':
+          description: Tipo padrão atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultAgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - admin
+      operationId: deleteDefaultAgendaType
+      security:
+      - adminSessionCookie: []
+      summary: Excluir um tipo de agenda padrão
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluído. As cópias das contas ficam.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/admin/secrets:
     get:
       tags:
@@ -2288,8 +2823,22 @@ components:
       schema:
         type: string
         format: uuid
-    TemplateId:
-      name: template_id
+    AgendaTypeId:
+      name: agenda_type_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FieldId:
+      name: field_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PreviewId:
+      name: preview_id
       in: path
       required: true
       schema:
@@ -2369,6 +2918,13 @@ components:
               $ref: '#/components/examples/ProblemValidation'
     Conflict:
       description: O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: 'Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações
+        em andamento por conta; tente de novo quando algum terminar.'
       content:
         application/problem+json:
           schema:
@@ -3076,11 +3632,17 @@ components:
           - failed
           - cancelled
         stage:
-          description: Etapa em curso, ou `null` fora de execução.
+          description: 'Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do
+            áudio
+
+            antes do ASR (holetz/eclume#33).
+
+            '
           type:
           - string
           - 'null'
           enum:
+          - preprocessing
           - asr
           - alignment
           - diarization
@@ -3146,7 +3708,9 @@ components:
       - collection_ids
       - metadata
       - capture
+      - agenda_type
       - job
+      - pipeline
       - transcript_id
       - created_at
       - updated_at
@@ -3199,10 +3763,48 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Capture'
           - type: 'null'
+        agenda_type:
+          description: 'Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
+
+            (`edited`), que a detecção nunca troca.
+
+            '
+          oneOf:
+          - type: object
+            required:
+            - id
+            - name
+            - origin
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              origin:
+                type: string
+                enum:
+                - auto
+                - edited
+          - type: 'null'
         job:
           oneOf:
           - $ref: '#/components/schemas/Job'
           - type: 'null'
+        pipeline:
+          description: 'As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou
+            sai
+
+            `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
+
+            sai `active`.
+
+            '
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/PipelineStep'
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type:
@@ -3215,6 +3817,71 @@ components:
         updated_at:
           type: string
           format: date-time
+    PipelineStep:
+      type: object
+      required:
+      - step
+      - state
+      - started_at
+      - finished_at
+      - duration_ms
+      - error
+      - reason
+      properties:
+        step:
+          type: string
+          enum:
+          - received
+          - preprocessing
+          - transcription
+          - fields
+          - agenda_type
+          - summary
+        state:
+          type: string
+          enum:
+          - pending
+          - active
+          - done
+          - failed
+          - skipped
+        started_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        finished_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        duration_ms:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        error:
+          description: Com `state` `failed`.
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
+        reason:
+          description: 'Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+
+            '
+          type:
+          - string
+          - 'null'
     RecordingPatch:
       type: object
       minProperties: 1
@@ -3243,6 +3910,16 @@ components:
         metadata:
           description: Substitui o objeto inteiro.
           $ref: '#/components/schemas/RecordingMetadata'
+        agenda_type_id:
+          description: 'Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
+
+            `null` tira o tipo e devolve a escolha à detecção.
+
+            '
+          type:
+          - string
+          - 'null'
+          format: uuid
     RecordingPage:
       type: object
       required:
@@ -3644,74 +4321,182 @@ components:
               count:
                 type: integer
                 minimum: 0
-    SummaryTemplate:
+    AgendaType:
       type: object
       required:
       - id
       - name
-      - description
-      - instructions
-      - is_default
-      - created_at
-      - updated_at
+      - title_pattern
+      - identify
+      - default_tags
+      - summary_instructions
+      - position
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        description:
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
           type:
           - string
           - 'null'
-        instructions:
-          description: Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor.
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
-        is_default:
-          description: Template usado no resumo automático do usuário.
-          type: boolean
-        created_at:
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    SummaryTemplateCreate:
+          minLength: 1
+        position:
+          description: Ordem na lista do usuário.
+          type: integer
+          minimum: 0
+    AgendaTypeDraft:
+      description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
       type: object
+      additionalProperties: false
       required:
       - name
-      - instructions
+      - summary_instructions
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
           type:
           - string
           - 'null'
-        instructions:
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
-        is_default:
-          description: O template do resumo automático do usuário.
-          type: boolean
-    SummaryTemplatePatch:
+          maxLength: 4000
+    AgendaTypeCreate:
       type: object
+      additionalProperties: false
+      required:
+      - name
+      - summary_instructions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+    AgendaTypePatch:
+      type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
           type: string
           minLength: 1
-        description:
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
           type:
           - string
           - 'null'
-        instructions:
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
-        is_default:
-          type: boolean
-    SummaryTemplatePage:
+          maxLength: 4000
+        position:
+          type: integer
+          minimum: 0
+    AgendaTypePage:
       type: object
       required:
       - items
@@ -3720,9 +4505,524 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/SummaryTemplate'
+            $ref: '#/components/schemas/AgendaType'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    DefaultAgendaType:
+      type: object
+      required:
+      - id
+      - name
+      - title_pattern
+      - identify
+      - default_tags
+      - summary_instructions
+      - position
+      - include_for_new_users
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+        position:
+          description: Ordem na lista do usuário.
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Copiado para cada conta criada depois.
+          type: boolean
+    DefaultAgendaTypeCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - summary_instructions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Sem valor, `true`.
+          type: boolean
+    DefaultAgendaTypePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+          maxLength: 4000
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+          maxLength: 4000
+        position:
+          type: integer
+          minimum: 0
+        include_for_new_users:
+          description: Copiado para cada conta criada depois.
+          type: boolean
+    DefaultAgendaTypePage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefaultAgendaType'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    FieldKind:
+      description: '`text` e `choice` guardam uma string; `list`, um array de strings.'
+      type: string
+      enum:
+      - text
+      - list
+      - choice
+    Field:
+      type: object
+      required:
+      - id
+      - key
+      - name
+      - kind
+      - builtin
+      - options
+      - instructions
+      - auto_fill
+      - position
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          description: Slug do nome, único na conta; o marcador `{key}` do padrão de título.
+          type: string
+          pattern: ^[a-z0-9_]{1,64}$
+        builtin:
+          description: Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+          type:
+          - string
+          - 'null'
+          enum:
+          - title
+          - tags
+          - null
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/FieldKind'
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+    FieldDraft:
+      description: O conteúdo de um campo, salvo ou em rascunho.
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - kind
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/FieldKind'
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+    FieldCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - kind
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/FieldKind'
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+    FieldPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/FieldKind'
+        options:
+          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        instructions:
+          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          type: string
+          maxLength: 4000
+        auto_fill:
+          description: Preencher automaticamente depois da transcrição.
+          type: boolean
+        position:
+          type: integer
+          minimum: 0
+    FieldPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    FieldValue:
+      description: '`text`/`choice` → string; `list` → array de strings; `null` = sem valor.'
+      oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+      - type: 'null'
+    FieldValueOrigin:
+      description: '`auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou
+        o
+
+        automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+
+        '
+      type: string
+      enum:
+      - auto
+      - edited
+      - accepted
+    RecordingFieldValue:
+      type: object
+      required:
+      - field
+      - value
+      - origin
+      - updated_at
+      properties:
+        field:
+          $ref: '#/components/schemas/Field'
+        value:
+          $ref: '#/components/schemas/FieldValue'
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/FieldValueOrigin'
+          - type: 'null'
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    RecordingFieldValues:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordingFieldValue'
+    FieldValuePut:
+      type: object
+      additionalProperties: false
+      required:
+      - value
+      properties:
+        value:
+          description: '`text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres
+            (64
+
+            nas tags); `null` limpa (menos o título).
+
+            '
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: array
+            maxItems: 50
+            items:
+              type: string
+              maxLength: 300
+          - type: 'null'
+    FieldPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - field
+      properties:
+        field:
+          $ref: '#/components/schemas/FieldDraft'
+        recording_ids:
+          description: Gravações transcritas do usuário; sem elas, as 3 mais recentes.
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uuid
+    AgendaTypePreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - agenda_type
+      - recording_id
+      properties:
+        agenda_type:
+          $ref: '#/components/schemas/AgendaTypeDraft'
+        recording_id:
+          description: Uma gravação transcrita do usuário.
+          type: string
+          format: uuid
+    FieldPreviewItem:
+      type: object
+      required:
+      - recording_id
+      - recording_title
+      - value
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        value:
+          $ref: '#/components/schemas/FieldValue'
+    AgendaTypePreviewItem:
+      type: object
+      required:
+      - recording_id
+      - recording_title
+      - detected
+      - detected_type_name
+      - confidence
+      - title
+      - tags
+      - summary_md
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        detected:
+          description: A detecção escolheu o rascunho.
+          type: boolean
+        detected_type_name:
+          description: O tipo que a detecção escolheu (o rascunho ou um dos salvos).
+          type: string
+        confidence:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        title:
+          description: O título que o rascunho aplicaria.
+          type: string
+        tags:
+          description: As tags da gravação com as tags padrão do rascunho.
+          type: array
+          items:
+            type: string
+        summary_md:
+          description: O resumo com as instruções do rascunho.
+          type: string
+    Preview:
+      type: object
+      required:
+      - id
+      - kind
+      - status
+      - items
+      - error
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - field_rule
+          - agenda_type
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - done
+          - failed
+        items:
+          description: 'Com `status: done`: um item por gravação testada.'
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/FieldPreviewItem'
+            - $ref: '#/components/schemas/AgendaTypePreviewItem'
+        error:
+          description: 'Com `status: failed`; `no_provider` quando a finalidade não tem provider.'
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
     AgentProviderKind:
       type: string
       enum:
@@ -3730,6 +5030,20 @@ components:
       - openai-compatible
       - anthropic
       - claude-cli
+    AgentPurpose:
+      description: 'Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
+
+        `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
+
+        finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+
+        '
+      type: string
+      enum:
+      - summaries
+      - fields
+      - chat
+      - agenda_detection
     AgentProviderRef:
       type: object
       required:
@@ -3750,7 +5064,7 @@ components:
       - id
       - transcript_id
       - transcript_revision
-      - template
+      - agenda_type
       - version
       - status
       - trigger
@@ -3771,7 +5085,12 @@ components:
           description: Revisão da transcrição que o resumo leu.
           type: integer
           minimum: 1
-        template:
+        agenda_type:
+          description: 'Instantâneo do tipo de agenda cujas instruções o resumo seguiu: o resumo continua
+
+            quando o tipo é renomeado ou excluído.
+
+            '
           type: object
           required:
           - id
@@ -3783,7 +5102,7 @@ components:
             name:
               type: string
         version:
-          description: Versão do resumo deste template para esta transcrição, a partir de 1.
+          description: Versão do resumo deste tipo de agenda para esta transcrição, a partir de 1.
           type: integer
           minimum: 1
         status:
@@ -3829,10 +5148,9 @@ components:
           format: date-time
     SummaryCreate:
       type: object
-      required:
-      - template_id
       properties:
-        template_id:
+        agenda_type_id:
+          description: Sem valor, o tipo de agenda da gravação.
           type: string
           format: uuid
         provider_id:
@@ -3879,6 +5197,12 @@ components:
           - 'null'
           minimum: 1
         default_language:
+          description: 'Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta
+            o
+
+            idioma de cada gravação e o alinhador segue o detectado.
+
+            '
           type:
           - string
           - 'null'
@@ -3915,20 +5239,95 @@ components:
           - integer
           - 'null'
           minimum: 1
-    SummarizationSettings:
+    PreprocessingSettings:
+      description: 'Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar
+        canais,
+
+        reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
+
+        para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
+
+        original.
+
+        '
       type: object
       required:
-      - default_provider_id
-      - auto_summarize
+      - denoise
+      - loudnorm
+      - trim_silence
+      - split_channels
       properties:
-        default_provider_id:
-          type:
-          - string
-          - 'null'
-          format: uuid
-        auto_summarize:
-          description: Gera o resumo do template padrão do dono ao fim da transcrição.
-          type: boolean
+        denoise:
+          type: object
+          required:
+          - enabled
+          - method
+          - strength
+          properties:
+            enabled:
+              type: boolean
+            method:
+              description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+              type: string
+              enum:
+              - rnnoise
+              - afftdn
+            strength:
+              description: Quanto do sinal tratado entra na mistura.
+              type: number
+              minimum: 0
+              maximum: 1
+        loudnorm:
+          type: object
+          required:
+          - enabled
+          - target_lufs
+          - true_peak_db
+          - lra
+          properties:
+            enabled:
+              type: boolean
+            target_lufs:
+              description: Loudness integrado alvo (EBU R128).
+              type: number
+              minimum: -30
+              maximum: -10
+            true_peak_db:
+              type: number
+              minimum: -9
+              maximum: 0
+            lra:
+              description: Faixa de loudness.
+              type: number
+              minimum: 1
+              maximum: 20
+        trim_silence:
+          type: object
+          required:
+          - enabled
+          - min_silence_s
+          - threshold_db
+          properties:
+            enabled:
+              type: boolean
+            min_silence_s:
+              description: Silêncio mínimo, no início ou no fim, para cortar.
+              type: number
+              minimum: 1
+              maximum: 30
+            threshold_db:
+              description: Abaixo deste nível, é silêncio.
+              type: number
+              minimum: -80
+              maximum: -20
+        split_channels:
+          description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+          type: object
+          required:
+          - enabled
+          properties:
+            enabled:
+              type: boolean
     VoiceIdentificationSettings:
       type: object
       required:
@@ -3936,8 +5335,9 @@ components:
       - suggestion_threshold
       properties:
         enabled:
-          description: Liga a identificação por voz na plataforma. Desligado, nenhuma impressão é comparada
-            nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
+          description: Liga a identificação por voz na plataforma; exige a separação de locutores ligada
+            (422 em `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem criada;
+            desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
           type: boolean
         suggestion_threshold:
           description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
@@ -3949,8 +5349,8 @@ components:
       required:
       - asr
       - diarization
-      - summarization
       - voice_identification
+      - preprocessing
       - updated_at
       - updated_by
       properties:
@@ -3958,10 +5358,10 @@ components:
           $ref: '#/components/schemas/AsrSettings'
         diarization:
           $ref: '#/components/schemas/DiarizationSettings'
-        summarization:
-          $ref: '#/components/schemas/SummarizationSettings'
         voice_identification:
           $ref: '#/components/schemas/VoiceIdentificationSettings'
+        preprocessing:
+          $ref: '#/components/schemas/PreprocessingSettings'
         updated_at:
           type: string
           format: date-time
@@ -3994,9 +5394,11 @@ components:
               - 'null'
               minimum: 1
             default_language:
+              description: Código do idioma ou `auto`.
               type:
               - string
               - 'null'
+              pattern: ^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$
             fallback_model:
               type:
               - string
@@ -4023,16 +5425,6 @@ components:
               - integer
               - 'null'
               minimum: 1
-        summarization:
-          type: object
-          properties:
-            default_provider_id:
-              type:
-              - string
-              - 'null'
-              format: uuid
-            auto_summarize:
-              type: boolean
         voice_identification:
           type: object
           properties:
@@ -4042,6 +5434,71 @@ components:
               type: number
               minimum: 0
               maximum: 1
+        preprocessing:
+          description: Cada etapa é mesclada campo a campo.
+          type: object
+          additionalProperties: false
+          properties:
+            denoise:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                method:
+                  description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+                  type: string
+                  enum:
+                  - rnnoise
+                  - afftdn
+                strength:
+                  description: Quanto do sinal tratado entra na mistura.
+                  type: number
+                  minimum: 0
+                  maximum: 1
+            loudnorm:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                target_lufs:
+                  description: Loudness integrado alvo (EBU R128).
+                  type: number
+                  minimum: -30
+                  maximum: -10
+                true_peak_db:
+                  type: number
+                  minimum: -9
+                  maximum: 0
+                lra:
+                  description: Faixa de loudness.
+                  type: number
+                  minimum: 1
+                  maximum: 20
+            trim_silence:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                min_silence_s:
+                  description: Silêncio mínimo, no início ou no fim, para cortar.
+                  type: number
+                  minimum: 1
+                  maximum: 30
+                threshold_db:
+                  description: Abaixo deste nível, é silêncio.
+                  type: number
+                  minimum: -80
+                  maximum: -20
+            split_channels:
+              description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
     AgentProvider:
       type: object
       required:
@@ -4053,6 +5510,7 @@ components:
       - api_key_set
       - enabled
       - options
+      - used_for
       - created_at
       - updated_at
       properties:
@@ -4083,6 +5541,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
         created_at:
           type: string
           format: date-time
@@ -4122,6 +5585,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          description: Sem valor, um provider habilitado assume as finalidades que nenhum outro declara.
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
     AgentProviderPatch:
       type: object
       minProperties: 1
@@ -4151,6 +5619,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          description: Substitui a lista; as finalidades declaradas saem dos outros providers.
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
     AgentProviderPage:
       type: object
       required:
@@ -4229,6 +5702,8 @@ components:
       - models_loaded
       - recent_failures
       - checked_at
+      - steps
+      - services
       properties:
         queue:
           type: object
@@ -4298,6 +5773,12 @@ components:
                 - 'null'
                 minimum: 0
         recent_failures:
+          description: 'As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais
+            antiga,
+
+            sem o conteúdo das gravações.
+
+            '
           type: array
           items:
             type: object
@@ -4310,8 +5791,21 @@ components:
             - failed_at
             properties:
               job_id:
-                type: string
+                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                type:
+                - string
+                - 'null'
                 format: uuid
+              step:
+                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                type: string
+                enum:
+                - received
+                - preprocessing
+                - transcription
+                - fields
+                - agenda_type
+                - summary
               recording_id:
                 type: string
                 format: uuid
@@ -4333,6 +5827,83 @@ components:
         checked_at:
           type: string
           format: date-time
+        steps:
+          description: 'Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas
+            (feitas ou
+
+            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+
+            '
+          type: array
+          items:
+            type: object
+            required:
+            - step
+            - runs
+            - median_ms
+            - failures
+            properties:
+              step:
+                type: string
+                enum:
+                - preprocessing
+                - transcription
+                - fields
+                - agenda_type
+                - summary
+              runs:
+                type: integer
+                minimum: 0
+              median_ms:
+                type:
+                - integer
+                - 'null'
+                minimum: 0
+              failures:
+                type: integer
+                minimum: 0
+        services:
+          description: 'Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded`
+            (lento),
+
+            `down` ou `absent` (ainda não existe na plataforma).
+
+            '
+          type: array
+          items:
+            type: object
+            required:
+            - name
+            - status
+            - detail
+            - latency_ms
+            properties:
+              name:
+                type: string
+                enum:
+                - api
+                - postgres
+                - redis
+                - storage
+                - gpu_worker
+                - cpu_worker
+                - mcp
+              status:
+                type: string
+                enum:
+                - healthy
+                - degraded
+                - down
+                - absent
+              detail:
+                type:
+                - string
+                - 'null'
+              latency_ms:
+                type:
+                - integer
+                - 'null'
+                minimum: 0
         worker:
           description: Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
             nenhum worker publicou nos últimos 45 s.
@@ -4932,6 +6503,7 @@ components:
         tags: []
         collection_ids: []
         metadata: {}
+        agenda_type: null
         job:
           id: 01928f3a-1c00-7a00-8000-000000000e01
           state: queued
@@ -4942,6 +6514,49 @@ components:
           queued_at: '2026-09-18T14:09:31Z'
           started_at: null
           finished_at: null
+        pipeline:
+        - step: received
+          state: done
+          started_at: '2026-09-18T15:00:00Z'
+          finished_at: '2026-09-18T15:00:00Z'
+          duration_ms: 0
+          error: null
+          reason: null
+        - step: preprocessing
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: transcription
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: fields
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: agenda_type
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: summary
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
         transcript_id: null
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
@@ -4974,6 +6589,10 @@ components:
           tipo_reuniao: alinhamento
           cliente: Metalúrgica Serra Azul
           projeto: Programa de lideranças 2026
+        agenda_type:
+          id: 01928f3a-1c00-7a00-8000-000000000901
+          name: Reunião de equipe
+          origin: auto
         job:
           id: 01928f3a-1c00-7a00-8000-000000000e01
           state: succeeded
@@ -4984,6 +6603,49 @@ components:
           queued_at: '2026-09-18T14:09:31Z'
           started_at: '2026-09-18T14:09:33Z'
           finished_at: '2026-09-18T14:09:41Z'
+        pipeline:
+        - step: received
+          state: done
+          started_at: '2026-09-18T15:00:00Z'
+          finished_at: '2026-09-18T15:00:00Z'
+          duration_ms: 0
+          error: null
+          reason: null
+        - step: preprocessing
+          state: done
+          started_at: '2026-09-18T15:00:04Z'
+          finished_at: '2026-09-18T15:00:12Z'
+          duration_ms: 8000
+          error: null
+          reason: null
+        - step: transcription
+          state: done
+          started_at: '2026-09-18T15:00:12Z'
+          finished_at: '2026-09-18T15:01:30Z'
+          duration_ms: 78000
+          error: null
+          reason: null
+        - step: fields
+          state: done
+          started_at: '2026-09-18T15:01:31Z'
+          finished_at: '2026-09-18T15:01:40Z'
+          duration_ms: 9000
+          error: null
+          reason: null
+        - step: agenda_type
+          state: done
+          started_at: '2026-09-18T15:01:40Z'
+          finished_at: '2026-09-18T15:01:44Z'
+          duration_ms: 4000
+          error: null
+          reason: null
+        - step: summary
+          state: done
+          started_at: '2026-09-18T15:01:44Z'
+          finished_at: '2026-09-18T15:02:10Z'
+          duration_ms: 26000
+          error: null
+          reason: null
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T15:02:17Z'
@@ -5009,6 +6671,7 @@ components:
           - 01928f3a-1c00-7a00-8000-000000000801
           metadata: {}
           capture: null
+          agenda_type: null
           job:
             id: 01928f3a-1c00-7a00-8000-000000000e02
             state: running
@@ -5019,6 +6682,49 @@ components:
             queued_at: '2026-09-19T13:41:07Z'
             started_at: '2026-09-19T13:41:09Z'
             finished_at: null
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-18T15:00:00Z'
+            finished_at: '2026-09-18T15:00:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: transcription
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: fields
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: agenda_type
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: summary
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
           transcript_id: null
           created_at: '2026-09-19T13:41:07Z'
           updated_at: '2026-09-19T13:42:55Z'
@@ -5048,6 +6754,7 @@ components:
             tipo_reuniao: alinhamento
             cliente: Metalúrgica Serra Azul
             projeto: Programa de lideranças 2026
+          agenda_type: null
           job:
             id: 01928f3a-1c00-7a00-8000-000000000e01
             state: succeeded
@@ -5058,6 +6765,49 @@ components:
             queued_at: '2026-09-18T14:09:31Z'
             started_at: '2026-09-18T14:09:33Z'
             finished_at: '2026-09-18T14:09:41Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-18T15:00:00Z'
+            finished_at: '2026-09-18T15:00:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-18T15:00:04Z'
+            finished_at: '2026-09-18T15:00:12Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-18T15:00:12Z'
+            finished_at: '2026-09-18T15:01:30Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-18T15:01:31Z'
+            finished_at: '2026-09-18T15:01:40Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-18T15:01:40Z'
+            finished_at: '2026-09-18T15:01:44Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-18T15:01:44Z'
+            finished_at: '2026-09-18T15:02:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
           transcript_id: 01928f3a-1c00-7a00-8000-000000000501
           created_at: '2026-09-18T14:09:31Z'
           updated_at: '2026-09-18T15:02:17Z'
@@ -5607,9 +7357,9 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000a01
           transcript_id: 01928f3a-1c00-7a00-8000-000000000501
           transcript_revision: 3
-          template:
+          agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
-            name: Ata de reunião
+            name: Reunião de equipe
           version: 1
           trigger: manual
           provider:
@@ -5651,18 +7401,18 @@ components:
           completed_at: '2026-09-18T15:03:48Z'
         next_cursor: null
     SummaryCreateRequest:
-      summary: Gerar a ata com o template padrão
+      summary: Gerar o resumo com um tipo de agenda
       value:
-        template_id: 01928f3a-1c00-7a00-8000-000000000901
+        agenda_type_id: 01928f3a-1c00-7a00-8000-000000000901
     SummaryQueued:
       summary: Resumo na fila
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
         transcript_revision: 3
-        template:
+        agenda_type:
           id: 01928f3a-1c00-7a00-8000-000000000901
-          name: Ata de reunião
+          name: Reunião de equipe
         version: 1
         trigger: manual
         provider:
@@ -5681,9 +7431,9 @@ components:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
         transcript_revision: 3
-        template:
+        agenda_type:
           id: 01928f3a-1c00-7a00-8000-000000000901
-          name: Ata de reunião
+          name: Reunião de equipe
         version: 1
         trigger: manual
         provider:
@@ -5723,33 +7473,260 @@ components:
 
           '
         completed_at: '2026-09-18T15:03:48Z'
-    SummaryTemplatePage:
-      summary: Ata de reunião (padrão) e resumo executivo
+    DefaultAgendaTypePage:
+      summary: Os tipos padrão da plataforma
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000c01
+          name: Reunião de equipe
+          title_pattern: Reunião de equipe · {assunto}
+          identify: Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa
+            com cliente nem 1:1.
+          default_tags:
+          - interno
+          - planejamento
+          summary_instructions: '## Resumo
+
+            De duas a quatro frases sobre o que a reunião tratou.
+
+
+            ## Decisões
+
+            Um item por decisão, com quem é o responsável.
+
+
+            ## Próximos passos
+
+            Um item por tarefa: responsável, o quê e quando.'
+          position: 1
+          include_for_new_users: true
+        - id: 01928f3a-1c00-7a00-8000-000000000c02
+          name: '1:1'
+          title_pattern: null
+          identify: Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.
+          default_tags: []
+          summary_instructions: '## Pontos tratados
+
+            Um item por assunto, em uma ou duas frases.
+
+
+            ## Combinados
+
+            Um item por acompanhamento combinado: quem, o quê e até quando.'
+          position: 2
+          include_for_new_users: true
+        next_cursor: null
+    AgendaTypePage:
+      summary: Os tipos padrão de uma conta nova
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000901
-          name: Ata de reunião
-          description: Decisões e encaminhamentos com responsável.
-          instructions: Escreva uma ata em português com as seções Decisões e Encaminhamentos. Cada encaminhamento
-            tem responsável e prazo, quando ditos. Não invente o que não foi dito.
-          is_default: true
-          created_at: '2026-09-10T12:05:00Z'
-          updated_at: '2026-09-10T12:05:00Z'
+          name: Reunião de equipe
+          title_pattern: Reunião de equipe · {assunto}
+          identify: Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa
+            com cliente nem 1:1.
+          default_tags:
+          - interno
+          - planejamento
+          summary_instructions: '## Resumo
+
+            De duas a quatro frases sobre o que a reunião tratou.
+
+
+            ## Decisões
+
+            Um item por decisão, com quem é o responsável.
+
+
+            ## Próximos passos
+
+            Um item por tarefa: responsável, o quê e quando.'
+          position: 1
         - id: 01928f3a-1c00-7a00-8000-000000000902
-          name: Resumo executivo
-          description: null
-          instructions: 'Resuma em até cinco tópicos o que importa para a diretoria do cliente: riscos,
-            decisões e próximos passos.'
-          is_default: false
-          created_at: '2026-09-15T09:30:00Z'
-          updated_at: '2026-09-15T09:30:00Z'
-        next_cursor: null
-    SummaryTemplateCreateRequest:
-      summary: Template de resumo executivo
+          name: '1:1'
+          title_pattern: null
+          identify: Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.
+          default_tags: []
+          summary_instructions: '## Pontos tratados
+
+            Um item por assunto, em uma ou duas frases.
+
+
+            ## Combinados
+
+            Um item por acompanhamento combinado: quem, o quê e até quando.'
+          position: 2
+        next_cursor: WyIyIiwgIjAxOTI4ZjNhLTFjMDAtN2EwMC04MDAwLTAwMDAwMDAwMDkwMiJd
+    AgendaTypeCreateRequest:
+      summary: Tipo de agenda para mentorias
       value:
-        name: Resumo executivo
-        instructions: 'Resuma em até cinco tópicos o que importa para a diretoria do cliente: riscos,
-          decisões e próximos passos.'
+        name: Mentoria
+        title_pattern: Mentoria · {assunto}
+        identify: Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.
+        default_tags:
+        - mentoria
+        summary_instructions: '## Temas
+
+          Um item por tema tratado.
+
+
+          ## Combinados
+
+          Um item por combinado, com prazo quando dito.'
+    FieldPage:
+      summary: Os embutidos e um campo de escolha
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000d01
+          key: titulo
+          name: Título
+          kind: text
+          builtin: title
+          options: []
+          instructions: Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data
+            nem nomes de pessoas.
+          auto_fill: true
+          position: 1
+        - id: 01928f3a-1c00-7a00-8000-000000000d02
+          key: tags
+          name: Tags
+          kind: list
+          builtin: tags
+          options: []
+          instructions: De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.
+          auto_fill: true
+          position: 2
+        - id: 01928f3a-1c00-7a00-8000-000000000d03
+          key: cliente
+          name: Cliente
+          kind: choice
+          builtin: null
+          options:
+          - Serra Azul
+          - Vale Verde
+          instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
+          auto_fill: true
+          position: 3
+        next_cursor: null
+    RecordingFieldValues:
+      summary: Título aceito, tags automáticas e um campo sem valor
+      value:
+        items:
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d01
+            key: titulo
+            name: Título
+            kind: text
+            builtin: title
+            options: []
+            instructions: Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data
+              nem nomes de pessoas.
+            auto_fill: true
+            position: 1
+          value: Revisão do contrato de manutenção
+          origin: accepted
+          updated_at: '2026-09-18T15:02:10Z'
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d02
+            key: tags
+            name: Tags
+            kind: list
+            builtin: tags
+            options: []
+            instructions: De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.
+            auto_fill: true
+            position: 2
+          value:
+          - contrato
+          - manutenção
+          origin: auto
+          updated_at: '2026-09-18T15:01:40Z'
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d03
+            key: cliente
+            name: Cliente
+            kind: choice
+            builtin: null
+            options:
+            - Serra Azul
+            - Vale Verde
+            instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
+            auto_fill: true
+            position: 3
+          value: null
+          origin: null
+          updated_at: null
+    FieldPreviewRequest:
+      summary: Testar a regra do campo Cliente
+      value:
+        field:
+          name: Cliente
+          kind: choice
+          options:
+          - Serra Azul
+          - Vale Verde
+          instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
+          auto_fill: true
+        recording_ids:
+        - 01928f3a-1c00-7a00-8000-000000000201
+    AgendaTypePreviewRequest:
+      summary: Pré-visualizar o tipo Mentoria numa gravação
+      value:
+        agenda_type:
+          name: Mentoria
+          title_pattern: Mentoria · {assunto}
+          identify: Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.
+          default_tags:
+          - mentoria
+          summary_instructions: '## Temas
+
+            Um item por tema tratado.
+
+
+            ## Combinados
+
+            Um item por combinado, com prazo quando dito.'
+        recording_id: 01928f3a-1c00-7a00-8000-000000000201
+    PreviewFieldRule:
+      summary: A regra em duas gravações
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000e01
+        kind: field_rule
+        status: done
+        items:
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000201
+          recording_title: Revisão do contrato
+          value: Serra Azul
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000202
+          recording_title: Planejamento interno
+          value: null
+        error: null
+    PreviewAgendaType:
+      summary: O tipo em rascunho numa gravação
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000e02
+        kind: agenda_type
+        status: done
+        items:
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000201
+          recording_title: Conversa com a Ana
+          detected: true
+          detected_type_name: Mentoria
+          confidence: 0.82
+          title: Mentoria · Próximos passos na carreira
+          tags:
+          - mentoria
+          summary_md: '## Temas
+
+
+            - Próximos passos na carreira.
+
+
+            ## Combinados
+
+
+            - Ana revisa o plano até sexta.'
+        error: null
     PersonPage:
       summary: Diretório com três pessoas
       value:
@@ -5905,12 +7882,25 @@ components:
           model: pyannote/speaker-diarization-community-1
           min_speakers: null
           max_speakers: null
-        summarization:
-          default_provider_id: 01928f3a-1c00-7a00-8000-000000000b01
-          auto_summarize: false
         voice_identification:
           enabled: true
           suggestion_threshold: 0.75
+        preprocessing:
+          denoise:
+            enabled: true
+            method: rnnoise
+            strength: 0.6
+          loudnorm:
+            enabled: true
+            target_lufs: -16
+            true_peak_db: -1.5
+            lra: 11
+          trim_silence:
+            enabled: true
+            min_silence_s: 3
+            threshold_db: -50
+          split_channels:
+            enabled: false
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
           id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -5920,8 +7910,11 @@ components:
       value:
         asr:
           model: large-v3
-        summarization:
-          auto_summarize: true
+        preprocessing:
+          denoise:
+            strength: 0.4
+          trim_silence:
+            enabled: false
     AgentProviderPage:
       summary: claude -p do servidor e DeepSeek
       value:
@@ -5937,6 +7930,10 @@ components:
             max_turns: 1
           created_at: '2026-09-10T12:04:00Z'
           updated_at: '2026-09-10T12:04:00Z'
+          used_for:
+          - summaries
+          - fields
+          - chat
         - id: 01928f3a-1c00-7a00-8000-000000000b02
           name: DeepSeek
           kind: openai-compatible
@@ -5949,6 +7946,8 @@ components:
             context_window: 64000
           created_at: '2026-09-14T18:22:00Z'
           updated_at: '2026-09-14T18:22:00Z'
+          used_for:
+          - agenda_detection
         next_cursor: null
     AgentProviderCreateRequest:
       summary: DeepSeek via API OpenAI-compatível
@@ -5961,6 +7960,8 @@ components:
         options:
           temperature: 0.2
           context_window: 64000
+        used_for:
+        - agenda_detection
     SecretList:
       summary: Token do Hugging Face gravado
       value:
@@ -6019,7 +8020,15 @@ components:
           kind: diarization
           loaded_at: '2026-09-19T13:42:30Z'
           vram_mb: 980
-        recent_failures: []
+        recent_failures:
+        - job_id: null
+          recording_id: 01928f3a-1c00-7a00-8000-000000000302
+          step: summary
+          stage: null
+          code: provider_unavailable
+          message: O provider não respondeu.
+          failed_at: '2026-09-19T11:20:00Z'
+          retryable: false
         checked_at: '2026-09-19T13:43:00Z'
         worker:
           online: true
@@ -6054,6 +8063,56 @@ components:
           queued_at: '2026-09-19T13:41:30Z'
           started_at: null
           updated_at: null
+        steps:
+        - step: preprocessing
+          runs: 14
+          median_ms: 6200
+          failures: 0
+        - step: transcription
+          runs: 14
+          median_ms: 92000
+          failures: 1
+        - step: fields
+          runs: 13
+          median_ms: 8400
+          failures: 0
+        - step: agenda_type
+          runs: 13
+          median_ms: 3100
+          failures: 0
+        - step: summary
+          runs: 12
+          median_ms: 24500
+          failures: 1
+        services:
+        - name: api
+          status: healthy
+          detail: 0.1.0
+          latency_ms: 0
+        - name: postgres
+          status: healthy
+          detail: RLS ativa
+          latency_ms: 4
+        - name: redis
+          status: healthy
+          detail: null
+          latency_ms: 1
+        - name: storage
+          status: healthy
+          detail: null
+          latency_ms: 18
+        - name: gpu_worker
+          status: healthy
+          detail: whisperx-local
+          latency_ms: 0
+        - name: cpu_worker
+          status: healthy
+          detail: null
+          latency_ms: 1
+        - name: mcp
+          status: absent
+          detail: null
+          latency_ms: null
     SpeakerSuggestionRejected:
       summary: Locutor 2 sem a sugestão recusada
       value:

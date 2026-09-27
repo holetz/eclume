@@ -1,4 +1,4 @@
-"""`/admin/health`: filas, heartbeat do worker GPU, jobs em andamento e falhas da plataforma."""
+"""`/admin/health`: filas, heartbeat do worker GPU, jobs, etapas do pipeline, serviços e falhas."""
 
 from __future__ import annotations
 
@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import redis
 
+from eclume_server.agents.base import ProviderError
+from eclume_server.health import CPU_HEALTH_KEY
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.fakes import run_cpu, run_gpu
+from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -137,11 +139,13 @@ def test_falhas_recentes_da_plataforma(
 
     body: dict[str, Any] = admin.get(URL).json()
     assert body["queue"]["failed_last_24h"] == 1
-    (failure,) = body["recent_failures"]
-    assert failure["recording_id"] == recording["id"]
+    (failure,) = [f for f in body["recent_failures"] if f["recording_id"] == recording["id"]]
+    assert failure["step"] == "transcription"
     assert failure["code"] == "gpu_oom"
     assert failure["message"] == "CUDA out of memory"
     assert failure["retryable"] is True
+    assert failure["job_id"] is not None
+    assert "Vai falhar" not in admin.get(URL).text
 
 
 def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
@@ -177,3 +181,57 @@ def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert member.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+
+def test_etapas_das_ultimas_24h(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    before = {step["step"]: step for step in admin.get(URL).json()["steps"]}
+    assert list(before) == ["preprocessing", "transcription", "fields", "agenda_type", "summary"]
+    user = as_user(make_user())
+    upload_file(user, audio_bytes(1400))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    after = {step["step"]: step for step in admin.get(URL).json()["steps"]}
+    assert after["transcription"]["runs"] == before["transcription"]["runs"] + 1
+    assert after["transcription"]["median_ms"] is not None
+    # Sem provider, campos, tipo e resumo saem pulados: não contam como execução.
+    assert after["fields"]["runs"] == before["fields"]["runs"]
+
+    # Uma etapa por agente que falhou aparece sem job (não há o que o admin retente).
+    admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
+    upload_file(user, audio_bytes(1500))
+    run_gpu(services.settings)
+    run_cpu(services.settings, FakeAgents(errors=[ProviderError("provider_auth", "Not logged in")]))
+    body = admin.get(URL).json()
+    fields_failure = next(f for f in body["recent_failures"] if f["step"] == "fields")
+    assert (fields_failure["job_id"], fields_failure["retryable"], fields_failure["code"]) == (
+        None,
+        False,
+        "provider_auth",
+    )
+    assert {s["step"]: s for s in body["steps"]}["fields"]["failures"] >= 1
+
+
+def test_servicos(admin: Api, cache: redis.Redis):
+    cache.delete(GPU_HEALTH_KEY, CPU_HEALTH_KEY)
+    services = {item["name"]: item for item in admin.get(URL).json()["services"]}
+    assert list(services) == ["api", "postgres", "redis", "storage", "gpu_worker", "cpu_worker", "mcp"]
+    assert {name: item["status"] for name, item in services.items()} == {
+        "api": "healthy",
+        "postgres": "healthy",
+        "redis": "healthy",
+        "storage": "healthy",
+        "gpu_worker": "down",
+        "cpu_worker": "down",
+        "mcp": "absent",
+    }
+    assert services["postgres"]["detail"] == "RLS ativa"
+    assert all(item["latency_ms"] is not None for name, item in services.items() if name != "mcp")
+
+    cache.hset(GPU_HEALTH_KEY, mapping=BEAT)
+    cache.set(CPU_HEALTH_KEY, b"Oct-01 12:00:00 j_complete=1")
+    services = {item["name"]: item for item in admin.get(URL).json()["services"]}
+    assert (services["gpu_worker"]["status"], services["gpu_worker"]["detail"]) == ("healthy", "whisperx-local")
+    assert services["cpu_worker"]["status"] == "healthy"
+    cache.delete(CPU_HEALTH_KEY)

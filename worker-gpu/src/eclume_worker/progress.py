@@ -14,8 +14,9 @@ if TYPE_CHECKING:
 
 PROGRESS_TTL_SECONDS = 86_400
 STAGE_RANGES: dict[str, tuple[float, float]] = {
-    "download": (0, 5),
-    "asr": (5, 55),
+    "download": (0, 3),
+    "preprocess": (3, 10),
+    "asr": (10, 55),
     "align": (55, 70),
     "diarize": (70, 90),
     "embed": (90, 95),
@@ -54,6 +55,11 @@ class ProgressReporter:
         self.started_at = _rfc3339(clock())
         self._last: tuple[str, int] | None = None
         self._pct = 0
+
+    @property
+    def stage(self) -> str | None:
+        """A última etapa registrada (a da falha, quando o job falha)."""
+        return self._last[0] if self._last else None
 
     async def report(self, stage: str, stage_pct: float = 0.0) -> None:
         """Registra a etapa; o `pct` nunca recua."""

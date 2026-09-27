@@ -5,6 +5,7 @@ O boto3 é síncrono; as corrotinas daqui rodam as chamadas numa thread.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -78,6 +79,10 @@ class Storage:
             region_name=settings.s3_region,
             config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
+
+    async def head_bucket(self) -> None:
+        """O bucket responde (a sonda da saúde); falha com a exceção do boto3."""
+        await asyncio.to_thread(self._s3.head_bucket, Bucket=self.bucket)
 
     async def create_multipart(self, key: str, content_type: str) -> str:
         """Abre um multipart upload e devolve o `UploadId`."""

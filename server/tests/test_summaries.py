@@ -1,17 +1,17 @@
-"""Templates, providers e resumos: rotas, permissões, versionamento, o job e o resumo automático."""
+"""Providers e resumos: rotas, permissões, versionamento, o job e o resumo automático pelo tipo de agenda."""
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
 from eclume_server.db.session import enter_user_context
-from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 CLAUDE = {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet"}
-DEFAULTS = ["Ata de reunião", "Resumo executivo", "Decisões e ações"]
+DEFAULT_TYPES = ["Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 
 
 def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN401
@@ -33,93 +33,51 @@ def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN
     return run(services.sql(go))
 
 
-def _summarization(services: Services) -> dict[str, Any]:
-    return _sql(services, "SELECT summarization FROM platform_settings")[0][0]
+def _used_for(services: Services) -> dict[str, list[str]]:
+    rows = _sql(services, "SELECT name, used_for FROM agent_providers")
+    return {name: sorted(used_for) for name, used_for in rows}
 
 
-def _set_summarization(services: Services, **changes: Any) -> None:  # noqa: ANN401
-    _sql(
-        services,
-        "UPDATE platform_settings SET summarization = summarization || CAST(:changes AS jsonb)",
-        changes=json.dumps(changes),
-    )
-
-
-def _transcribed(api: Api, services: Services, agents: FakeAgents | None = None) -> str:
-    """Sobe um áudio, roda os workers e devolve o id da transcrição."""
+def _transcribed(
+    api: Api, services: Services, agents: FakeAgents | None = None, agenda_type_id: str | None = None
+) -> str:
+    """Sobe um áudio (com o tipo de agenda dado), roda os workers e devolve o id da transcrição."""
     recording = upload_file(api, audio_bytes(2000), title="Alinhamento", recorded_at="2026-09-18T14:00:05Z")
+    if agenda_type_id is not None:
+        _sql(
+            services,
+            "UPDATE recordings SET agenda_type_id = :a, agenda_type_origin = 'edited' WHERE id = :r",
+            a=agenda_type_id,
+            r=recording["id"],
+        )
     run_gpu(services.settings)
     run_cpu(services.settings, agents)
     return api.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
 
 
-def _templates(api: Api) -> dict[str, dict[str, Any]]:
-    response = api.get("/api/v1/summary-templates")
-    assert response.status_code == 200, response.text
-    return {item["name"]: item for item in response.json()["items"]}
+def _types(services: Services, account: Account) -> dict[str, dict[str, Any]]:
+    return {item["name"]: item | {"id": str(item["id"])} for item in agenda_types(services, account.user_id)}
 
 
 @pytest.fixture
 def team(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> dict[str, Any]:
     """Sessão de admin (plataforma nos padrões) e um usuário, com sessão."""
     member = make_user()
-    return {"admin": admin, "member": as_user(member), "member_account": member}
+    return {"admin": admin, "member": as_user(member), "member_account": member, "stranger_account": make_user()}
 
 
-# --- templates ------------------------------------------------------------------------------------
+# --- tipos de agenda ------------------------------------------------------------------------------
 
 
-def test_conta_nasce_com_os_templates_padrao(team: dict[str, Any], services: Services):
-    templates = _templates(team["member"])
-    assert list(templates) == DEFAULTS
-    assert all("scope" not in item for item in templates.values())
-    assert [name for name, item in templates.items() if item["is_default"]] == ["Ata de reunião"]
-    assert "default_template_id" not in _summarization(services)
-
-
-def test_template_pessoal_e_padrao_pessoal(
-    team: dict[str, Any], as_user: Callable[[Account], Api], make_user: Callable[..., Account]
-):
-    member: Api = team["member"]
-    first = member.post(
-        "/api/v1/summary-templates", json={"name": "Meu", "instructions": "Resuma.", "is_default": True}
-    )
-    assert first.status_code == 201, first.text
-    assert first.json()["is_default"] is True
-    assert _templates(member)["Ata de reunião"]["is_default"] is False
-    second = member.post(
-        "/api/v1/summary-templates", json={"name": "Outro", "instructions": "Liste.", "is_default": True}
-    ).json()
-    templates = _templates(member)
-    assert templates["Meu"]["is_default"] is False
-    assert templates["Outro"]["is_default"] is True
-
-    patched = member.patch(f"/api/v1/summary-templates/{second['id']}", json={"description": "curto"})
-    assert patched.json()["description"] == "curto"
-    assert member.patch(f"/api/v1/summary-templates/{second['id']}", json={}).status_code == 422
-    assert member.patch(f"/api/v1/summary-templates/{second['id']}", json={"name": None}).status_code == 422
-
-    # Template é invisível para as outras contas.
-    other = as_user(make_user())
-    assert other.get(f"/api/v1/summary-templates/{second['id']}").status_code == 404
-    assert other.patch(f"/api/v1/summary-templates/{second['id']}", json={"name": "x"}).status_code == 404
-    assert other.delete(f"/api/v1/summary-templates/{second['id']}").status_code == 404
-    assert "Outro" not in _templates(other)
-
-    assert member.delete(f"/api/v1/summary-templates/{second['id']}").status_code == 204
-    assert member.get(f"/api/v1/summary-templates/{second['id']}").status_code == 404
-
-
-# --- providers ------------------------------------------------------------------------------------
-
-
-def test_os_templates_padrao_sao_do_usuario(team: dict[str, Any]):
-    member: Api = team["member"]
-    ata = _templates(member)["Ata de reunião"]
-    renamed = member.patch(f"/api/v1/summary-templates/{ata['id']}", json={"name": "Minha ata"})
-    assert renamed.status_code == 200
-    assert member.delete(f"/api/v1/summary-templates/{ata['id']}").status_code == 204
-    assert list(_templates(member)) == DEFAULTS[1:]
+def test_conta_nasce_com_os_tipos_de_agenda_padrao(team: dict[str, Any], services: Services):
+    types = _types(services, team["member_account"])
+    assert list(types) == DEFAULT_TYPES
+    team_meeting = types["Reunião de equipe"]
+    assert team_meeting["title_pattern"] == "Reunião de equipe · {assunto}"
+    assert team_meeting["default_tags"] == ["interno", "planejamento"]
+    assert team_meeting["identify"].startswith("Reunião recorrente da equipe interna")
+    assert "## Próximos passos" in team_meeting["summary_instructions"]
+    assert all(item["from_default_id"] is not None for item in types.values())
 
 
 # --- providers ------------------------------------------------------------------------------------
@@ -138,8 +96,8 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     assert claude.status_code == 201, claude.text
     claude = claude.json()
     assert (claude["api_key_set"], claude["base_url"], claude["enabled"]) == (False, None, True)
-    # O primeiro provider habilitado vira o padrão da plataforma.
-    assert _summarization(services)["default_provider_id"] == claude["id"]
+    # O primeiro provider habilitado assume as finalidades que ninguém declara.
+    assert claude["used_for"] == ["summaries", "fields", "chat", "agenda_detection"]
 
     invalid = [
         {"name": "x", "kind": "openai-compatible", "model": "m"},
@@ -163,7 +121,7 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     ).json()
     assert deepseek["api_key_set"] is True
     assert deepseek["options"] == {"temperature": 0.2, "context_window": 64000}
-    assert _summarization(services)["default_provider_id"] == claude["id"]
+    assert deepseek["used_for"] == []
     stored = _sql(services, "SELECT api_key_encrypted FROM agent_providers WHERE id = :id", id=deepseek["id"])[0][0]
     assert "sk-segredo-do-teste" not in stored
 
@@ -179,7 +137,7 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     assert admin.patch(f"/api/v1/admin/agent-providers/{deepseek['id']}", json={"base_url": None}).status_code == 422
 
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 204
-    assert _summarization(services)["default_provider_id"] is None
+    assert _used_for(services) == {"DeepSeek": []}
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 404
 
 
@@ -193,10 +151,13 @@ def test_rls_de_providers_e_configuracao(team: dict[str, Any], services: Service
         return (await conn.execute(text(statement))).all()
 
     assert run(services.sql(lambda conn: as_app(conn, "SELECT name FROM agent_providers"))) == [("Claude (servidor)",)]
-    assert len(run(services.sql(lambda conn: as_app(conn, "SELECT summarization FROM platform_settings")))) == 1
+    assert run(services.sql(lambda conn: as_app(conn, "SELECT used_for FROM agent_providers"))) == [
+        (["summaries", "fields", "chat", "agenda_detection"],)
+    ]
+    assert len(run(services.sql(lambda conn: as_app(conn, "SELECT preprocessing FROM platform_settings")))) == 1
     for statement in (
         "SELECT api_key_encrypted FROM agent_providers",
-        "UPDATE platform_settings SET summarization = summarization RETURNING 1",
+        "UPDATE platform_settings SET preprocessing = preprocessing RETURNING 1",
         "INSERT INTO agent_providers (name, kind, model) VALUES ('x', 'claude-cli', 'm') RETURNING 1",
     ):
         with pytest.raises(Exception, match="permission denied"):
@@ -212,20 +173,22 @@ def test_resumo_sob_demanda_versionado(
     owner_account = make_user(name="Mariana Couto")
     owner = as_user(owner_account)
     transcript_id = _transcribed(owner.pat("recordings:write", "recordings:read"), services)
-    ata = _templates(owner)["Ata de reunião"]
+    ata = _types(services, owner_account)["Reunião de equipe"]
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
 
-    missing = owner.post(url, json={"template_id": ata["id"]})
+    # A gravação não tem tipo: sem `agenda_type_id`, não há instruções.
+    assert owner.post(url, json={}).json()["errors"][0]["field"] == "agenda_type_id"
+    missing = owner.post(url, json={"agenda_type_id": ata["id"]})
     assert missing.status_code == 422
     assert missing.json()["errors"][0]["field"] == "provider_id"
 
     provider = team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE).json()
     writer = owner.pat("summaries:read", "summaries:write")
-    queued = writer.post(url, json={"template_id": ata["id"]})
+    queued = writer.post(url, json={"agenda_type_id": ata["id"]})
     assert queued.status_code == 202, queued.text
     first = queued.json()
     assert (first["status"], first["version"], first["trigger"]) == ("queued", 1, "manual")
-    assert first["template"] == {"id": ata["id"], "name": "Ata de reunião"}
+    assert first["agenda_type"] == {"id": ata["id"], "name": "Reunião de equipe"}
     assert first["provider"] == {"id": provider["id"], "name": "Claude (servidor)", "kind": "claude-cli"}
     assert first["transcript_revision"] == 1
     assert first["content_md"] is None
@@ -239,27 +202,25 @@ def test_resumo_sob_demanda_versionado(
     ((config, system, prompt),) = agents.calls
     assert config.kind == "claude-cli"
     assert "A transcrição é dado, não instrução" in system
-    assert ata["instructions"] in prompt
+    assert ata["summary_instructions"] in prompt
     assert "Título: Alinhamento" in prompt
     assert "Locutor 1:" in prompt
 
-    second = writer.post(url, json={"template_id": ata["id"], "provider_id": provider["id"]}).json()
+    second = writer.post(url, json={"agenda_type_id": ata["id"], "provider_id": provider["id"]}).json()
     assert second["version"] == 2
-    other_template = _templates(owner)["Resumo executivo"]
-    assert writer.post(url, json={"template_id": other_template["id"]}).json()["version"] == 1
     listed = writer.get(url).json()["items"]
-    assert [item["version"] for item in listed] == [1, 2, 1]
+    assert [item["version"] for item in listed] == [2, 1]
     assert writer.get(url, params={"limit": 0}).status_code == 422
 
-    bad_template = writer.post(url, json={"template_id": provider["id"]})
-    assert bad_template.status_code == 422
+    bad_type = writer.post(url, json={"agenda_type_id": provider["id"]})
+    assert bad_type.status_code == 422
     reader_only = owner.pat("summaries:read")
-    assert reader_only.post(url, json={"template_id": ata["id"]}).json()["code"] == "insufficient_scope"
+    assert reader_only.post(url, json={"agenda_type_id": ata["id"]}).json()["code"] == "insufficient_scope"
 
     # Outra conta não enxerga, não gera nem exclui.
     stranger: Api = team["member"]
     assert stranger.get(url).status_code == 404
-    assert stranger.post(url, json={"template_id": ata["id"]}).status_code == 404
+    assert stranger.post(url, json={"agenda_type_id": ata["id"]}).status_code == 404
     assert stranger.get(f"/api/v1/summaries/{first['id']}").status_code == 404
     assert stranger.delete(f"/api/v1/summaries/{first['id']}").status_code == 404
 
@@ -267,30 +228,52 @@ def test_resumo_sob_demanda_versionado(
     assert writer.delete(f"/api/v1/summaries/{second['id']}").status_code == 204
     assert writer.get(f"/api/v1/summaries/{second['id']}").status_code == 404
     run_cpu(services.settings)
-    assert [item["version"] for item in writer.get(url).json()["items"]] == [1, 1]
+    assert [item["version"] for item in writer.get(url).json()["items"]] == [1]
 
 
-def _one_summary(owner: Api, services: Services, admin: Api, agents: FakeAgents, **provider: Any) -> dict[str, Any]:  # noqa: ANN401
+def test_sem_tipo_no_pedido_vale_o_da_gravacao(team: dict[str, Any], services: Services):
+    owner: Api = team["member"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    one_on_one = _types(services, team["member_account"])["1:1"]
+    transcript_id = _transcribed(owner, services, agenda_type_id=one_on_one["id"])
+    url = f"/api/v1/transcripts/{transcript_id}/summaries"
+    by_recording = owner.post(url, json={})
+    assert by_recording.status_code == 202, by_recording.text
+    # A versão 1 é o resumo automático, que a transcrição já gerou pelo mesmo tipo.
+    assert (by_recording.json()["agenda_type"], by_recording.json()["version"]) == (
+        {"id": one_on_one["id"], "name": "1:1"},
+        2,
+    )
+
+    # O tipo de outra conta não existe para esta.
+    stranger_types = agenda_types(services, team["stranger_account"].user_id)
+    foreign = owner.post(url, json={"agenda_type_id": str(stranger_types[0]["id"])})
+    assert foreign.status_code == 422
+    assert foreign.json()["errors"][0]["field"] == "agenda_type_id"
+
+
+def _one_summary(team: dict[str, Any], services: Services, agents: FakeAgents, **provider: Any) -> dict[str, Any]:  # noqa: ANN401
+    owner: Api = team["member"]
     transcript_id = _transcribed(owner, services)
-    created = admin.post("/api/v1/admin/agent-providers", json=CLAUDE | provider).json()
-    ata = _templates(owner)["Ata de reunião"]
+    created = team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE | provider).json()
+    ata = _types(services, team["member_account"])["Reunião de equipe"]
     summary = owner.post(
-        f"/api/v1/transcripts/{transcript_id}/summaries", json={"template_id": ata["id"], "provider_id": created["id"]}
+        f"/api/v1/transcripts/{transcript_id}/summaries",
+        json={"agenda_type_id": ata["id"], "provider_id": created["id"]},
     ).json()
     run_cpu(services.settings, agents)
     return owner.get(f"/api/v1/summaries/{summary['id']}").json()
 
 
 def test_falha_passageira_retenta_e_desiste_na_terceira(team: dict[str, Any], services: Services):
-    owner: Api = team["member"]
     busy = ProviderError(codes.PROVIDER_RATE_LIMITED, "devagar")
-    recovered = _one_summary(owner, services, team["admin"], FakeAgents(errors=[busy, busy]))
+    recovered = _one_summary(team, services, FakeAgents(errors=[busy, busy]))
     assert (recovered["status"], recovered["error"]) == ("done", None)
     attempts = _sql(services, "SELECT attempts FROM summaries WHERE id = :id", id=recovered["id"])[0][0]
     assert attempts == 3
 
     down = ProviderError(codes.PROVIDER_UNAVAILABLE, "fora do ar")
-    failed = _one_summary(owner, services, team["admin"], FakeAgents(errors=[down, down, down, down]))
+    failed = _one_summary(team, services, FakeAgents(errors=[down, down, down, down]))
     assert failed["status"] == "failed"
     assert failed["error"] == {"code": "provider_unavailable", "message": "fora do ar"}
     assert failed["content_md"] is None
@@ -298,25 +281,23 @@ def test_falha_passageira_retenta_e_desiste_na_terceira(team: dict[str, Any], se
 
 def test_falha_definitiva_nao_retenta(team: dict[str, Any], services: Services):
     agents = FakeAgents(errors=[ProviderError(codes.PROVIDER_AUTH, "Not logged in")])
-    failed = _one_summary(team["member"], services, team["admin"], agents)
+    failed = _one_summary(team, services, agents)
     assert failed["error"]["code"] == "provider_auth"
     assert len(agents.calls) == 1
 
 
 def test_ollama_espera_a_gpu_sem_gastar_tentativa(team: dict[str, Any], services: Services):
     gpu = ProviderError(codes.GPU_BUSY, "fila da GPU ocupada")
-    waited = _one_summary(team["member"], services, team["admin"], FakeAgents(errors=[gpu, gpu, gpu, gpu]))
+    waited = _one_summary(team, services, FakeAgents(errors=[gpu, gpu, gpu, gpu]))
     assert waited["status"] == "done"
     attempts = _sql(services, "SELECT attempts FROM summaries WHERE id = :id", id=waited["id"])[0][0]
     assert attempts == 1
 
-    gave_up = _one_summary(
-        team["member"], services, team["admin"], FakeAgents(errors=[gpu]), options={"ollama_wait_s": 0}
-    )
+    gave_up = _one_summary(team, services, FakeAgents(errors=[gpu]), options={"ollama_wait_s": 0})
     assert gave_up["error"]["code"] == "gpu_busy"
 
 
-def test_resumo_automatico_apos_a_transcricao(
+def test_resumo_automatico_pelo_tipo_da_gravacao(
     team: dict[str, Any],
     make_user: Callable[..., Account],
     as_user: Callable[[Account], Api],
@@ -325,30 +306,60 @@ def test_resumo_automatico_apos_a_transcricao(
     owner_account = make_user()
     owner = as_user(owner_account)
     uploader = owner.pat("recordings:write", "recordings:read")
+    one_on_one = _types(services, owner_account)["1:1"]
+
+    # Sem provider de resumos, nada é gerado.
+    transcript_id = _transcribed(uploader, services, agenda_type_id=one_on_one["id"])
+    assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
+
     team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
 
-    # Sem o flag da plataforma, nada é gerado.
-    transcript_id = _transcribed(uploader, services)
-    assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
-
-    _set_summarization(services, auto_summarize=True)
     agents = FakeAgents()
-    transcript_id = _transcribed(uploader, services, agents)
+    transcript_id = _transcribed(uploader, services, agents, agenda_type_id=one_on_one["id"])
     (automatic,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
     assert (automatic["trigger"], automatic["status"]) == ("automatic", "done")
-    assert automatic["template"]["name"] == "Ata de reunião"
+    assert automatic["agenda_type"] == {"id": one_on_one["id"], "name": "1:1"}
+    assert one_on_one["summary_instructions"] in agents.calls[-1][2]
 
-    # Trocar o padrão do dono troca o template do resumo automático.
-    owner.post(
-        "/api/v1/summary-templates", json={"name": "Minha ata", "instructions": "Só decisões.", "is_default": True}
-    )
+    # Sem tipo escolhido, o resumo segue o tipo que a detecção escolheu.
     transcript_id = _transcribed(uploader, services, agents)
-    (personal,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
-    assert personal["template"]["name"] == "Minha ata"
-    assert "Só decisões." in agents.calls[-1][2]
+    (detected,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
+    assert detected["agenda_type"]["name"] == "Reunião de equipe"
 
-    # Sem template padrão, não há resumo automático.
-    minha = _templates(owner)["Minha ata"]
-    owner.patch(f"/api/v1/summary-templates/{minha['id']}", json={"is_default": False})
-    transcript_id = _transcribed(uploader, services, agents)
-    assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
+
+def test_cada_finalidade_tem_um_provider_so(team: dict[str, Any], services: Services):
+    admin: Api = team["admin"]
+    url = "/api/v1/admin/agent-providers"
+    claude = admin.post(url, json=CLAUDE).json()
+    ollama = admin.post(
+        url,
+        json={
+            "name": "Ollama",
+            "kind": "ollama",
+            "model": "qwen2.5",
+            "base_url": "http://ollama:11434",
+            "used_for": ["agenda_detection", "agenda_detection"],
+        },
+    ).json()
+    assert ollama["used_for"] == ["agenda_detection"]
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields", "summaries"], "Ollama": ["agenda_detection"]}
+
+    moved = admin.patch(f"{url}/{ollama['id']}", json={"used_for": ["summaries", "agenda_detection"]})
+    assert moved.json()["used_for"] == ["summaries", "agenda_detection"]
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields"], "Ollama": ["agenda_detection", "summaries"]}
+    assert admin.patch(f"{url}/{claude['id']}", json={"used_for": ["resumos"]}).status_code == 422
+    assert admin.patch(f"{url}/{claude['id']}", json={"used_for": None}).status_code == 422
+    # O banco recusa a finalidade em dois providers, mesmo fora das rotas (escrita concorrente).
+    with pytest.raises(IntegrityError):
+        _sql(services, "UPDATE agent_providers SET used_for = '{summaries,chat}' WHERE name = 'Ollama'")
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields"], "Ollama": ["agenda_detection", "summaries"]}
+
+    # O resumo sem `provider_id` usa o provider de `summaries`; desabilitado, não há nenhum.
+    owner: Api = team["member"]
+    transcript_id = _transcribed(owner, services)
+    ata = _types(services, team["member_account"])["Reunião de equipe"]
+    summary = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={"agenda_type_id": ata["id"]})
+    assert summary.json()["provider"]["name"] == "Ollama"
+    admin.patch(f"{url}/{ollama['id']}", json={"enabled": False})
+    missing = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={"agenda_type_id": ata["id"]})
+    assert missing.json()["errors"][0]["field"] == "provider_id"

@@ -14,7 +14,8 @@ FROM python:3.12-slim-bookworm
 # host (cache do builder e camada final). O uv vem do binário da imagem oficial.
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
-# ffmpeg decodifica o Opus (whisperx.load_audio) e fornece as libs do torchcodec.
+# ffmpeg decodifica o Opus (whisperx.load_audio), fornece as libs do torchcodec e faz o
+# pré-processamento (arnndn, afftdn, loudnorm, silencedetect, atrim, pan).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -55,8 +56,17 @@ ENV PATH=/app/.venv/bin:$PATH \
     ECLUME_WORK_DIR=/tmp/eclume-work \
     HOME=/tmp
 
-# punkt_tab é usado pelo alinhamento; embutido para o worker rodar sem rede.
+# Modelo do RNNoise do pré-processamento (`arnndn`): o conjoined-burgers de GregorR/rnnoise-models,
+# treinado em fala geral com ruído de ambiente. Fixado pelo checksum.
+ADD --chmod=644 --checksum=sha256:f1357c4e5be9dee8467bead486dfced2d75b640c26ad0b594fa7f102322371d9 \
+    https://raw.githubusercontent.com/GregorR/rnnoise-models/master/conjoined-burgers-2018-08-28/cb.rnnn \
+    /opt/eclume/rnnoise/cb.rnnn
+ENV ECLUME_RNNOISE_MODEL=/opt/eclume/rnnoise/cb.rnnn
+
+# punkt_tab é usado pelo alinhamento; embutido para o worker rodar sem rede. O diretório do modelo do
+# RNNoise nasce só para o root no ADD: o uid 1000 precisa lê-lo.
 RUN python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/share/nltk_data', quiet=True)" \
+    && chmod -R a+rX /opt/eclume \
     && mkdir -p /models /tmp/eclume-work \
     && chown 1000:1000 /models /tmp/eclume-work
 

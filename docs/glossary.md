@@ -29,8 +29,9 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
 - [aviso de consentimento](standards/code/server-nucleo.md) — Texto versionado que a pessoa aceita no cadastro ("Sou responsável por pedir o consentimento das pessoas que gravo"), no lugar do consentimento de voz por pessoa; versão nova pede novo aceite no login.
+- [campo](standards/code/processamento-automatico.md) — Dado de uma gravação que o usuário define (texto, lista ou escolha), com uma regra de preenchimento; título e tags são os campos embutidos de toda conta.
 - [coleção](standards/code/server-nucleo.md) — Agrupamento de gravações de um usuário (por cliente, projeto ou programa); uma gravação pode estar em várias.
-- [configuração da plataforma](standards/code/server-admin.md) — A linha única de `platform_settings` que o admin edita (transcrição, locutores, voz, resumo automático) e que vale para todas as contas.
+- [configuração da plataforma](standards/code/server-admin.md) — A linha única de `platform_settings` que o admin edita (transcrição, locutores, voz, pré-processamento) e que vale para todas as contas.
 - [conta de admin](standards/code/server-admin.md) — Conta da tabela `admins`, separada das contas de usuário, com login e sessão próprios (`/admin/auth/login`) que só alcançam `/admin/*`; criada pelo CLI `eclume-server admin create`.
 - [contrato de jobs](standards/api/jobs-transcricao.md) — Acordo entre o server e o worker GPU: filas arq `eclume:gpu`/`eclume:default`, job `transcribe`, artefatos no bucket e `ingest_transcript`/`transcription_failed`.
 - [contrato v1](standards/api/contrato-v1.md) — OpenAPI e JSON Schema da transcrição em `contracts/`, fonte da verdade entre o eclume e os clientes; só evolui de forma aditiva, com a 2.0.0 (fim da organização) como exceção única.
@@ -40,6 +41,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - **eclume** — Serviço de transcrição institucional e auto-hospedado (eco + lume), extraído do lumea e ligado a ele só por contrato de API.
 - **engine** — Implementação da interface de ASR do pacote `eclume_engines` (`whisperx-local`, remota OpenAI-compatível ou CPU para dev).
 - **épico** — Spec orquestradora (`holetz/eclume#1`) cujas tasks apontam para specs filhas, cada uma uma issue própria.
+- [etapa do pipeline](standards/code/processamento-automatico.md) — Um dos seis passos do processamento de uma gravação por revisão (recebido, pré-processamento, transcrição, campos, tipo de agenda, resumo), com estado `pending`, `active`, `done`, `failed` ou `skipped`.
 - [ffmpeg.wasm](standards/code/formato-audio-upload.md) — O ffmpeg compilado para WebAssembly, fallback da conversão no navegador para contêineres e codecs que o WebCodecs não atende.
 - [gaveta de ajuda](standards/code/frontend-web.md) — O painel lateral `.help-drawer` do web, aberto com `?` ou pelo botão Ajuda do cabeçalho da página, com os links de ajuda daquela página e os atalhos de teclado.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
@@ -49,13 +51,19 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
 - [mock server](../contracts/README.md) — Prism servindo o bundle do contrato v1 com as fixtures (`deploy/docker-compose.mock.yml`, `127.0.0.1:4010`), contra o qual o lumea, o desktop e o web desenvolvem sem o backend.
 - **OKF** — Open Knowledge Format: o formato do bundle `docs/`, com homes fixas e frontmatter por doc.
+- [origem do valor](standards/code/processamento-automatico.md) — De onde veio o valor de um campo: `auto` (o agente), `edited` (o usuário escreveu) ou `accepted` (o usuário aceitou o automático); os dois últimos o automático não sobrescreve.
+- [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
 - **PAT** — Personal Access Token: token pessoal com escopo, guardado como hash, usado pelo lumea e pelo desktop para acessar a API.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `contracts/`, `deploy/`.
+- [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.
+- [regra de preenchimento](standards/code/processamento-automatico.md) — O "como identificar" de um campo: a instrução que o agente segue para preenchê-lo a partir da transcrição.
 - [RLS](standards/code/server-nucleo.md) — Row-Level Security do Postgres: as políticas por dono (`app.user_id`) que isolam os dados do eclume sob o papel `eclume_app`.
 - [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel admin, só de escrita: a API nunca o devolve.
 - **spec** — Unidade de trabalho do ciclo Quenching, guardada como issue do GitHub e conduzida por `develop` → `execute` → `conclude`.
 - [sugestão por voz](standards/code/identificacao-por-voz.md) — Pessoa proposta para um locutor sem pessoa quando a voz passa do limiar da plataforma; nunca liga sozinha, só vira vínculo quando alguém aceita.
+- [tipo de agenda](standards/code/processamento-automatico.md) — Categoria de gravação do usuário (reunião de equipe, 1:1…) com como identificar, padrão de título, tags padrão e as instruções do resumo; o agente detecta o tipo depois da transcrição.
+- [tipo de agenda padrão](standards/code/server-admin.md) — Tipo de agenda mantido pelo admin na plataforma e copiado para cada conta nova no cadastro.
 - [WhisperX](project/referencias.md) — Biblioteca de ASR (faster-whisper em lote, alinhamento por palavra, diarização pyannote) usada como motor no worker GPU.
 - [updater](standards/code/desktop-distribuicao.md) — Atualização automática do app desktop pelo plugin do Tauri: lê `latest.json` em `/downloads/` do servidor eclume e só instala o pacote assinado com a chave minisign do eclume.
 - **worker CPU** — O processo arq do pacote `server` (`eclume_server.worker`, fila `eclume:default`) que ingere as transcrições do worker GPU e descarta uploads vencidos.

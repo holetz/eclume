@@ -75,7 +75,20 @@ def test_transcreve_o_dialogo_de_duas_vozes():
     client = s3()
     client.upload_file(str(FIXTURE), BUCKET, audio_key)
 
-    options = {"language": "pt", "diarize": True, "embeddings": True, "min_speakers": 2, "max_speakers": 2}
+    options = {
+        "language": "pt",
+        "diarize": True,
+        "embeddings": True,
+        "min_speakers": 2,
+        "max_speakers": 2,
+        # O padrão da plataforma: RNNoise, loudness e o corte do silêncio das pontas.
+        "preprocess": {
+            "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6},
+            "loudnorm": {"enabled": True, "target_lufs": -16, "true_peak_db": -1.5, "lra": 11},
+            "trim_silence": {"enabled": True, "min_silence_s": 3, "threshold_db": -50},
+            "split_channels": {"enabled": False},
+        },
+    }
     job, extra = asyncio.run(enqueue_and_wait(recording_id, audio_key, options))
 
     assert job.function == "ingest_transcript", job.args
@@ -86,6 +99,13 @@ def test_transcreve_o_dialogo_de_duas_vozes():
     assert info["engine"] == "whisperx-local"
     assert info["model"] == "large-v3-turbo"
     assert info["duration_ms"] > 25_000
+    pre = info["preprocess"]
+    steps = {step["step"]: step for step in pre["steps"]}
+    # A imagem traz o modelo do RNNoise: a cadeia roda inteira, sem queda para só o formato.
+    assert (steps["denoise"]["state"], steps["denoise"]["params"]["method"]) == ("done", "rnnoise")
+    assert steps["loudnorm"]["state"] == "done"
+    assert pre["fallback"] is False
+    assert "rnnoise_model_missing" not in info["warnings"]
 
     transcript = json.loads(client.get_object(Bucket=BUCKET, Key=t_key)["Body"].read())
     schema = json.loads((ROOT / "contracts" / "transcript.schema.json").read_text())
@@ -96,6 +116,8 @@ def test_transcreve_o_dialogo_de_duas_vozes():
     words = [w for s in transcript["segments"] for w in s.get("words", [])]
     assert words
     assert sum(w["start_ms"] is not None for w in words) / len(words) > 0.9
+    # As marcas de tempo são as do áudio original: nenhuma fala antes do silêncio cortado.
+    assert all(s["start_ms"] >= pre["offset_ms"] for s in transcript["segments"])
 
     embeddings = json.loads(client.get_object(Bucket=BUCKET, Key=e_key)["Body"].read())
     if "diarization_skipped_no_token" in info["warnings"]:
