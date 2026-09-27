@@ -29,16 +29,39 @@ pub(crate) fn dirs_de(base: &std::path::Path) -> Dirs {
     }
 }
 
-/// O serviço em primeiro plano do Android (notificação e microfone com a tela bloqueada). Fora do
-/// Android, não há serviço.
+/// O serviço em primeiro plano do Android (notificação e microfone com a tela bloqueada), pelo
+/// plugin `gravador`. Cada chamada corre numa thread própria: o lado Kotlin responde na thread de
+/// quem chama, e nenhum comando deve esperar por ele.
 pub(crate) mod servico {
     use tauri::{AppHandle, Runtime};
+    use tauri_plugin_eclume_gravador::GravadorExt;
 
-    pub fn iniciar<R: Runtime>(_app: &AppHandle<R>) {}
+    fn em_segundo_plano<R: Runtime>(
+        app: &AppHandle<R>,
+        o_que: &'static str,
+        f: fn(
+            &tauri_plugin_eclume_gravador::Gravador<R>,
+        ) -> tauri_plugin_eclume_gravador::Resultado<()>,
+    ) {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Err(err) = f(app.gravador()) {
+                log::warn!("serviço de gravação ({o_que}): {err}");
+            }
+        });
+    }
 
-    pub fn atualizar<R: Runtime>(_app: &AppHandle<R>) {}
+    pub fn iniciar<R: Runtime>(app: &AppHandle<R>) {
+        em_segundo_plano(app, "iniciar", |g| g.iniciar_servico());
+    }
 
-    pub fn parar<R: Runtime>(_app: &AppHandle<R>) {}
+    pub fn atualizar<R: Runtime>(app: &AppHandle<R>) {
+        em_segundo_plano(app, "atualizar", |g| g.atualizar_servico());
+    }
+
+    pub fn parar<R: Runtime>(app: &AppHandle<R>) {
+        em_segundo_plano(app, "parar", |g| g.parar_servico());
+    }
 }
 
 fn iniciar_log() {
@@ -61,6 +84,7 @@ fn abrir_nucleo<R: Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<()> {
 pub fn run() {
     iniciar_log();
     tauri::Builder::default()
+        .plugin(tauri_plugin_eclume_gravador::init())
         .setup(|app| {
             abrir_nucleo(app.handle())?;
             eventos::iniciar_laco(app.handle().clone());

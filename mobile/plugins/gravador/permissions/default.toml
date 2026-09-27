@@ -1,0 +1,3 @@
+[default]
+description = "O que a janela do app móvel pode pedir ao plugin gravador: as permissões de microfone e notificação."
+permissions = ["allow-check-permissions", "allow-request-permissions"]

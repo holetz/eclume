@@ -19,6 +19,7 @@ eclume-mobile-core = { path = "../crates/core" }
 eclume-recorder = { path = "../../desktop/crates/recorder" }
 # Só o microfone (cpal; AAudio no Android): o celular não tem os backends de áudio do sistema.
 eclume-audio-capture = { path = "../../desktop/crates/audio-capture", default-features = false, features = ["mic"] }
+tauri-plugin-eclume-gravador = { path = "../plugins/gravador" }
 anyhow = "1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

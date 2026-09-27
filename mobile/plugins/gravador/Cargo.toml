@@ -1,0 +1,17 @@
+[package]
+name = "tauri-plugin-eclume-gravador"
+description = "Plugin nativo do app móvel do eclume: serviço de gravação em primeiro plano, notificação, descoberta, rede, aparelho, sync em segundo plano e instalação da atualização."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+links = "tauri-plugin-eclume-gravador"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
