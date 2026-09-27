@@ -205,7 +205,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
     <form className={`panel ${styles.typePanel}`} onSubmit={submit} aria-label={title}>
       <div className={styles.panelHead}>
         <h4>{title}</h4>
-        <div className="row">
+        <div className={styles.row}>
           <Switch
             checked={effective.include_for_new_users}
             onChange={(include) =>
@@ -273,7 +273,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
         <span id={ids.tags} className={styles.label}>
           Tags padrão
         </span>
-        <div className="row">
+        <div className={styles.row}>
           {draft.default_tags.map((value) => (
             <span key={value} className="tag">
               {value}
@@ -321,7 +321,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           {errorMessage(toggle.error ?? remove.error)}
         </p>
       )}
-      <div className="row">
+      <div className={styles.row}>
         <button
           type="submit"
           className="btn btn-primary"

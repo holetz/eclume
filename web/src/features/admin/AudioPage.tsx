@@ -251,7 +251,7 @@ function AudioForm({ settings }: { settings: Settings }) {
                   <br />
                   <span className={`text-muted ${styles.note}`}>{step.summary}</span>
                 </span>
-                <span className="row">
+                <span className={styles.row}>
                   {step.key === 'resample' ? (
                     <span className={`text-muted ${styles.small}`}>Sempre ligada</span>
                   ) : (

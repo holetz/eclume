@@ -55,7 +55,7 @@ function HealthView({ health }: { health: Health }) {
 
   return (
     <>
-      <div className="stats">
+      <div className={`stats ${styles.healthStats}`}>
         <Stat
           kicker="Worker GPU"
           value={worker ? (worker.busy ? 'Transcrevendo' : 'Ocioso') : 'Sem sinal'}
@@ -100,7 +100,7 @@ function HealthView({ health }: { health: Health }) {
             <tbody>
               {steps.map((step) => (
                 <tr key={step.step}>
-                  <th scope="row">
+                  <th scope="row" className={styles.rowHead}>
                     <strong>{labelOf(STEPS, step.step)}</strong>
                   </th>
                   <td className="tabular">{step.runs}</td>
@@ -135,7 +135,7 @@ function HealthView({ health }: { health: Health }) {
                   .join(' · ')
                 return (
                   <tr key={service.name}>
-                    <th scope="row">
+                    <th scope="row" className={styles.rowHead}>
                       <strong>{labelOf(SERVICES, service.name)}</strong>
                     </th>
                     <td>

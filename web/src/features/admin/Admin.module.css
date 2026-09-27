@@ -282,6 +282,12 @@
   gap: 32px;
 }
 
+/* O `.seg` ocupa só a largura das opções, como no DS, mesmo dentro de uma grade. */
+.label + :global(.seg) {
+  width: fit-content;
+  max-width: 100%;
+}
+
 /* O rótulo de um grupo (.seg), igual ao `label` de `.field`. */
 .label {
   display: block;
@@ -328,6 +334,15 @@
 .lede {
   max-width: 62ch;
   margin: 0;
+}
+
+/* O respiro do DS entre a introdução e a lista; no form do áudio, o `gap` da grade já o dá. */
+.lede + * {
+  margin-top: var(--space-4);
+}
+
+.audioForm > .lede + * {
+  margin-top: 0;
 }
 
 .orderList li {
@@ -409,7 +424,8 @@
   min-height: 80px;
 }
 
-.instructionsInput {
+/* `textarea.input` do DS fixa 90px; o seletor precisa pesar mais que ele. */
+textarea.instructionsInput {
   min-height: 196px;
   font-size: 13px;
 }
@@ -436,6 +452,14 @@
   }
 }
 
+/* A linha de ações dos exemplos do DS (o `.row` de examples/*.html, fora do styles.css). */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* Saúde: os títulos das tabelas com o espaço do DS e o worker sem sinal em vermelho. */
 .healthTitle {
   margin: 32px 0 12px;
@@ -443,4 +467,22 @@
 
 .danger {
   color: var(--color-danger);
+}
+
+/* O cabeçalho de linha das tabelas da Saúde tem a cara de célula do DS (`td` com `<strong>`),
+   não a de cabeçalho de coluna em caixa alta. */
+:global(.table) th.rowHead {
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
+  border-bottom-width: 1px;
+}
+
+/* Na tela estreita, o valor do indicador ("Transcrevendo", o nome do modelo) quebra na coluna. */
+@media (max-width: 56rem) {
+  .healthStats :global(.stat-value) {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
 }

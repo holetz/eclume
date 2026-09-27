@@ -314,7 +314,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
           {errorMessage(save.error ?? remove.error)}
         </p>
       )}
-      <div className="row">
+      <div className={styles.row}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>
