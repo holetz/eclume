@@ -19,6 +19,7 @@ const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeopleP
 const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
 const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchPage')
 const TokensPage = named(() => import('../features/tokens/TokensPage'), 'TokensPage')
+const SignupPage = named(() => import('../features/auth/SignupPage'), 'SignupPage')
 const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
 
 function page(Page: ComponentType) {
@@ -33,6 +34,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
+      <Route path="/cadastro" element={page(SignupPage)} />
       {/* O painel admin fica fora da sessão do usuário: conta, login e guarda próprios. */}
       <Route path="/admin/entrar" element={page(AdminLoginPage)} />
       <Route path="/admin/*" element={page(AdminRoutes)} />

@@ -1,6 +1,6 @@
 // Fluxo principal contra o Prism. O mock não emite cookies nem guarda estado, então o teste:
-// - põe os cookies de sessão na resposta do login, como o servidor real faria (o da sessão de
-//   admin só no caminho /api/v1/admin, como o servidor o define);
+// - põe os cookies de sessão na resposta do login e do cadastro, como o servidor real faria (o da
+//   sessão de admin só no caminho /api/v1/admin, como o servidor o define);
 // - pede o upload novo com `Prefer: code=201` (o mock responde 200/deduplicado por padrão);
 // - encaminha o PUT de parte (URL absoluta em 127.0.0.1:4010, outra origem) com a credencial que
 //   o mock exige e os headers CORS que o armazenamento real devolve.
@@ -43,7 +43,7 @@ async function screenshot(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ page, baseURL }) => {
-  await page.route('**/api/v1/auth/login', async (route) => {
+  await page.route(/\/api\/v1\/auth\/(login|signup)$/, async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
       await page.context().addCookies([
@@ -100,6 +100,20 @@ async function login(page: Page, shot?: string) {
   await page.getByLabel('Senha').fill('senha-de-teste')
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
+
+test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }) => {
+  await page.goto('/entrar')
+  await page.getByRole('link', { name: 'Criar conta' }).click()
+  await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
+  await page.getByLabel('Nome').fill('Paulo Andrade')
+  await page.getByLabel('E-mail').fill('paulo.andrade@example.com')
+  await page.getByLabel('Senha').fill('senha-bem-longa-2026')
+  const submit = page.getByRole('button', { name: 'Criar conta' })
+  await expect(submit).toBeDisabled()
+  await page.getByText('Sou responsável por pedir o consentimento das pessoas que gravo.').click()
+  await submit.click()
+  await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
+})
 
 /** Entra no painel pela conta de admin, que é outra conta, com login próprio. */
 async function adminLogin(page: Page, path = '/admin') {

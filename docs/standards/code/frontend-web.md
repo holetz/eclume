@@ -101,8 +101,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   seções mora em `sections.ts`. Usuários lista as contas com a contagem de gravações e só
   desativa e reativa; Segredos só têm campo de escrita e nunca mostram o valor; a Saúde relê a
   cada 10 s (`refetchInterval`). As regras do server estão em [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar`, `/cadastro` (Criar conta, com o aceite obrigatório de "Sou
-  responsável por pedir o consentimento das pessoas que gravo.") e `/admin/entrar`.
+- **Rotas públicas:** `/entrar`, `/cadastro` e `/admin/entrar`. Criar conta (`SignupPage`) lê
+  de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
+  12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
+  `notice_version` aceita; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
+  uma conta com este e-mail."; cadastro fechado (`open: false` ou `signup_closed`) mostra o aviso
+  no lugar do formulário.
+- **Aceite do aviso em vigor:** com `notice_required: true` em `/me`, o `RequireSession` mostra o
+  `NoticePage` (na `.auth`) no lugar do shell, até `POST /me/notice` com a versão lida de
+  `GET /auth/signup`.
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.

@@ -4,7 +4,6 @@
 //   test-results/screens/app-<tela>[-movel]-<claro|escuro>.png;
 // - com ECLUME_DS_DIR apontando para o eclume-design, salva também os quadros equivalentes de
 //   examples/access.html (ds-<quadro>-<claro|escuro>.png), para a revisão lado a lado.
-// A tela Criar conta entra aqui com a task 4.2 (contrato de holetz/eclume#32).
 import { pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
@@ -108,6 +107,15 @@ for (const [viewport, tag] of [
     await page.goto('/entrar')
     await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
     await shoot(page, `entrar${tag}`)
+
+    // Preenchida como o quadro sign-up do DS, para a comparação lado a lado.
+    await page.goto('/cadastro')
+    await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
+    await page.getByLabel('Nome').fill('Paulo Andrade')
+    await page.getByLabel('E-mail').fill('paulo.andrade@example.com')
+    await page.getByLabel('Senha').fill('senha-bem-longa-2026')
+    await page.getByText('Sou responsável por pedir o consentimento das pessoas que gravo.').click()
+    await shoot(page, `cadastro${tag}`)
 
     await login(page)
     await expect(page.getByRole('list', { name: 'Gravações' }).getByRole('listitem')).toHaveCount(2)
