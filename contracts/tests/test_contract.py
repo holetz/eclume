@@ -145,7 +145,8 @@ def test_schema_da_transcricao_e_2020_12_valido(transcript_schema: dict[str, Any
 
 
 def test_versoes_do_contrato_sao_v1(source_spec: dict[str, Any], transcript: dict[str, Any]) -> None:
-    assert re.fullmatch(r"1\.\d+\.\d+", source_spec["info"]["version"])
+    # A 2.0.0 (fim da organização) segue sob /api/v1; a próxima quebra vai para /api/v2.
+    assert re.fullmatch(r"2\.\d+\.\d+", source_spec["info"]["version"])
     assert transcript["schema_version"].startswith("1.")
     assert all(path.startswith("/api/v1/") for path in source_spec["paths"])
 
@@ -215,8 +216,14 @@ def test_operacoes_declaram_401_e_escopos_conhecidos(source_spec: dict[str, Any]
             assert "401" in operation["responses"], f"{method.upper()} {path} sem 401"
         for requirement in security:
             assert set(requirement.get("pat", [])) <= scopes, f"{method.upper()} {path}"
-        if path.startswith(("/api/v1/admin/", "/api/v1/tokens")):
+        if path == "/api/v1/admin/auth/login":
+            assert security == [], f"{method.upper()} {path} deve ser público"
+        elif path.startswith("/api/v1/admin/"):
+            assert security == [{"adminSessionCookie": []}], f"{method.upper()} {path} deve aceitar só a sessão de admin"
+        elif path.startswith("/api/v1/tokens"):
             assert security == [{"sessionCookie": []}], f"{method.upper()} {path} deve aceitar só sessão"
+        else:
+            assert {"adminSessionCookie": []} not in security, f"{method.upper()} {path} fora de /admin/*"
 
 
 # --- export .md ------------------------------------------------------------------------------

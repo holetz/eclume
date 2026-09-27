@@ -3,15 +3,18 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 1.4.0
+  version: 2.0.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
     \n- Tudo sob `/api/v1`. Datas em RFC 3339 (UTC), durações em milissegundos, ids em UUID.\n- Listagens\
     \ paginam por cursor opaco: `?cursor=&limit=`, resposta `{items, next_cursor}`;\n  `next_cursor: null`\
     \ é a última página.\n- Erros em `application/problem+json` (RFC 9457) com o campo estável `code`.\n\
-    - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores\n  de enum\
-    \ novos em respostas. Mudança incompatível vira `/api/v2`.\n"
+    - Cada usuário tem a própria conta, isolada; não há organização. O painel admin usa uma\n  conta e\
+    \ uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.\n- **Evolução só\
+    \ aditiva.** O cliente ignora propriedades que não conhece e tolera valores\n  de enum novos em respostas.\
+    \ A 2.0.0 é a única quebra sob `/api/v1` (fim da organização);\n  a próxima mudança incompatível vira\
+    \ `/api/v2`.\n"
   license:
     name: MIT
     identifier: MIT
@@ -26,30 +29,29 @@ tags:
 - name: meta
   description: Saúde e versão do contrato.
 - name: auth
-  description: Sessão do navegador, usuário corrente e convites.
+  description: Sessão do navegador, cadastro com o aviso de consentimento e usuário corrente.
 - name: tokens
   description: PATs pessoais. Só com sessão.
 - name: uploads
   description: Upload resumível em partes (multipart S3) com deduplicação por hash.
 - name: recordings
-  description: Gravações, estado do job e compartilhamento.
+  description: Gravações e estado do job.
 - name: transcripts
   description: Transcrições, export e edição de locutores e segmentos.
 - name: people
-  description: Diretório de pessoas da organização.
+  description: Diretório de pessoas do usuário.
 - name: voice
-  description: 'Identificação por voz (LGPD): consentimento, impressão de voz, recusa de sugestão e auditoria.
-    Só sessão: um PAT nunca lê nem apaga dado biométrico.'
+  description: 'Identificação por voz (LGPD): impressão de voz e recusa de sugestão. Só sessão: um PAT
+    nunca lê nem apaga dado biométrico.'
 - name: search
   description: Busca full-text sobre segmentos.
 - name: organize
   description: Coleções e tags.
-- name: groups
-  description: Grupos da organização.
 - name: summaries
   description: Templates por usuário e resumos gerados por agente.
 - name: admin
-  description: Configuração em runtime, usuários e saúde. Só sessão de `admin`.
+  description: Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
+    admin (`adminSessionCookie`); nenhuma credencial de usuário alcança estas rotas.
 paths:
   /api/v1/health:
     get:
@@ -118,26 +120,52 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /api/v1/auth/invitations/{invitation_token}/accept:
+  /api/v1/auth/signup:
+    get:
+      tags:
+      - auth
+      operationId: getSignupInfo
+      summary: Estado do cadastro e o aviso em vigor
+      description: Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova
+        aceita.
+      security: []
+      responses:
+        '200':
+          description: Cadastro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupInfo'
+              examples:
+                aberto:
+                  $ref: '#/components/examples/SignupInfo'
     post:
       tags:
       - auth
-      operationId: acceptInvitation
-      summary: Aceitar um convite e criar a conta
+      operationId: signup
+      summary: Criar uma conta e abrir a sessão
+      description: 'Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso
+        em vigor
+
+        (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
+
+        templates de resumo padrão, e a resposta define os cookies de sessão, como o login.
+
+        Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
+
+        cadastrado, 409 `email_taken`.
+
+        '
       security: []
-      parameters:
-      - name: invitation_token
-        in: path
-        required: true
-        description: Token do link de convite.
-        schema:
-          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InvitationAccept'
+              $ref: '#/components/schemas/SignupRequest'
+            examples:
+              conta:
+                $ref: '#/components/examples/SignupRequest'
       responses:
         '204':
           description: Conta criada e sessão aberta.
@@ -146,8 +174,10 @@ paths:
               description: '`eclume_session` e `eclume_csrf`.'
               schema:
                 type: string
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
   /api/v1/me:
@@ -173,6 +203,34 @@ paths:
                   $ref: '#/components/examples/MeViaPat'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/me/notice:
+    post:
+      tags:
+      - auth
+      operationId: acceptNotice
+      summary: Aceitar o aviso de consentimento em vigor
+      description: Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em `GET
+        /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeAccept'
+            examples:
+              aceite:
+                $ref: '#/components/examples/NoticeAcceptRequest'
+      responses:
+        '204':
+          description: Aceite registrado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/tokens:
     get:
       tags:
@@ -514,7 +572,7 @@ paths:
       tags:
       - recordings
       operationId: listRecordings
-      summary: Listar gravações visíveis ao usuário
+      summary: Listar as gravações do usuário
       security:
       - sessionCookie: []
       - pat:
@@ -528,16 +586,6 @@ paths:
         description: Filtra por estado.
         schema:
           $ref: '#/components/schemas/RecordingStatus'
-      - name: owner
-        in: query
-        description: '`me` (padrão): as minhas; `shared`: compartilhadas comigo; `all`: ambas.'
-        schema:
-          type: string
-          enum:
-          - me
-          - shared
-          - all
-          default: me
       - $ref: '#/components/parameters/TagFilter'
       - $ref: '#/components/parameters/CollectionFilter'
       responses:
@@ -702,102 +750,13 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /api/v1/recordings/{recording_id}/shares:
-    parameters:
-    - $ref: '#/components/parameters/RecordingId'
-    get:
-      tags:
-      - recordings
-      operationId: listShares
-      summary: Compartilhamentos da gravação
-      security:
-      - sessionCookie: []
-      - pat:
-        - recordings:read
-      responses:
-        '200':
-          description: Compartilhamentos. Vazio = gravação privada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SharePage'
-              examples:
-                comGrupo:
-                  $ref: '#/components/examples/SharePage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      tags:
-      - recordings
-      operationId: createShare
-      summary: Compartilhar com um grupo ou com a organização
-      description: Só o dono compartilha. O compartilhamento dá leitura da gravação, da transcrição e
-        dos resumos.
-      security:
-      - sessionCookie: []
-      - pat:
-        - recordings:write
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ShareCreate'
-            examples:
-              grupo:
-                $ref: '#/components/examples/ShareCreateRequest'
-      responses:
-        '201':
-          description: Compartilhado.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Share'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /api/v1/recordings/{recording_id}/shares/{share_id}:
-    parameters:
-    - $ref: '#/components/parameters/RecordingId'
-    - $ref: '#/components/parameters/ShareId'
-    delete:
-      tags:
-      - recordings
-      operationId: deleteShare
-      summary: Desfazer um compartilhamento
-      security:
-      - sessionCookie: []
-      - pat:
-        - recordings:write
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Desfeito.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /api/v1/transcripts:
     get:
       tags:
       - transcripts
       operationId: listTranscripts
       summary: Listar transcrições (incremental)
-      description: 'Transcrições concluídas visíveis ao usuário, em ordem crescente de `(updated_at, id)`.
+      description: 'Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
 
         `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
 
@@ -1138,12 +1097,10 @@ paths:
       - summaries
       operationId: createSummary
       summary: Gerar um resumo com um template
-      description: 'Cada geração é uma nova `version` do resumo daquele template. Só o dono da gravação
-        gera
+      description: 'Cada geração é uma nova `version` do resumo daquele template. Sem `provider_id` e
+        sem
 
-        resumos; quem vê a transcrição por compartilhamento lê os resumos dela. Sem `provider_id`
-
-        e sem provider padrão habilitado na organização, responde 422.
+        provider padrão habilitado na plataforma, responde 422.
 
         '
       security:
@@ -1232,7 +1189,7 @@ paths:
       tags:
       - summaries
       operationId: listSummaryTemplates
-      summary: Templates do usuário e padrões da organização
+      summary: Templates do usuário
       security:
       - sessionCookie: []
       - pat:
@@ -1260,8 +1217,7 @@ paths:
       tags:
       - summaries
       operationId: createSummaryTemplate
-      summary: Criar um template pessoal ou da organização
-      description: '`scope: organization` cria um padrão da organização e exige `admin` com sessão.'
+      summary: Criar um template
       security:
       - sessionCookie: []
       - pat:
@@ -1277,8 +1233,6 @@ paths:
             examples:
               resumoExecutivo:
                 $ref: '#/components/examples/SummaryTemplateCreateRequest'
-              padraoDaOrganizacao:
-                $ref: '#/components/examples/SummaryTemplateCreateOrgRequest'
       responses:
         '201':
           description: Template criado.
@@ -1322,7 +1276,6 @@ paths:
       - summaries
       operationId: updateSummaryTemplate
       summary: Editar um template
-      description: 'Templates de `scope: organization` só são editados por `admin`, com sessão.'
       security:
       - sessionCookie: []
       - pat:
@@ -1355,7 +1308,6 @@ paths:
       - summaries
       operationId: deleteSummaryTemplate
       summary: Excluir um template
-      description: 'Templates de `scope: organization` só são excluídos por `admin`, com sessão.'
       security:
       - sessionCookie: []
       - pat:
@@ -1376,7 +1328,7 @@ paths:
       tags:
       - people
       operationId: listPeople
-      summary: Diretório de pessoas da organização
+      summary: Diretório de pessoas do usuário
       security:
       - sessionCookie: []
       - pat:
@@ -1549,49 +1501,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/v1/people/{person_id}/voice-consent:
-    parameters:
-    - $ref: '#/components/parameters/PersonId'
-    put:
-      tags:
-      - voice
-      operationId: setVoiceConsent
-      summary: Registrar ou revogar o consentimento de voz
-      description: 'Registra o consentimento LGPD da pessoa para a impressão de voz, com quem registrou,
-
-        quando e o termo em vigor na organização (`voice_identification.consent_term_*`). O
-
-        histórico fica guardado e sai na exportação. Revogar apaga as amostras da impressão e
-
-        as sugestões pendentes da pessoa.
-
-        '
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VoiceConsentPut'
-            examples:
-              registrar:
-                $ref: '#/components/examples/VoiceConsentPutRequest'
-      responses:
-        '200':
-          description: Pessoa com o consentimento novo.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Person'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
   /api/v1/people/{person_id}/voiceprint:
     parameters:
     - $ref: '#/components/parameters/PersonId'
@@ -1622,47 +1531,12 @@ paths:
       - voice
       operationId: deleteVoiceprint
       summary: Excluir a impressão de voz
-      description: Apaga todas as amostras e as sugestões pendentes da pessoa; o consentimento fica.
+      description: Apaga todas as amostras e as sugestões pendentes da pessoa.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
           description: Excluída.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/people/{person_id}/voiceprint/export:
-    parameters:
-    - $ref: '#/components/parameters/PersonId'
-    get:
-      tags:
-      - voice
-      operationId: exportVoiceprint
-      summary: Exportar os dados de voz da pessoa
-      description: 'Direito de acesso da LGPD: consentimentos, amostras **com os vetores** e a trilha
-        de
-
-        auditoria da pessoa, num JSON para download. Só `admin`; a exportação fica na auditoria.
-
-        '
-      responses:
-        '200':
-          description: Exportação.
-          headers:
-            Content-Disposition:
-              description: '`attachment; filename="voz-<pessoa>.json"`.'
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceprintExport'
-              examples:
-                exportacao:
-                  $ref: '#/components/examples/VoiceprintExport'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1675,7 +1549,7 @@ paths:
       - search
       operationId: search
       summary: Busca full-text sobre segmentos
-      description: 'Busca em português (`tsvector` pt) nos segmentos das transcrições visíveis ao usuário.
+      description: 'Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
 
         Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
 
@@ -1841,7 +1715,7 @@ paths:
       tags:
       - organize
       operationId: listTags
-      summary: Tags em uso nas gravações visíveis
+      summary: Tags em uso nas gravações do usuário
       security:
       - sessionCookie: []
       - pat:
@@ -1860,166 +1734,88 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /api/v1/groups:
-    get:
-      tags:
-      - groups
-      operationId: listGroups
-      summary: Grupos da organização
-      description: Todo membro lista os grupos (para compartilhar); só `admin` cria e edita.
-      parameters:
-      - $ref: '#/components/parameters/Cursor'
-      - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Grupos.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GroupPage'
-              examples:
-                grupos:
-                  $ref: '#/components/examples/GroupPage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/auth/login:
     post:
       tags:
-      - groups
-      operationId: createGroup
-      summary: Criar um grupo (admin)
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
+      - admin
+      operationId: adminLogin
+      summary: Abrir a sessão de admin
+      description: 'Conta de admin, separada das contas de usuário (o mesmo e-mail pode existir nas duas).
+
+        Define os cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+
+        `Path=/api/v1/admin`) e `eclume_admin_csrf` (legível pelo JavaScript). Toda requisição
+
+        mutável em `/api/v1/admin/*` ecoa `eclume_admin_csrf` no header `X-CSRF-Token`.
+
+        '
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GroupCreate'
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              credenciais:
+                $ref: '#/components/examples/LoginRequest'
       responses:
-        '201':
-          description: Grupo criado.
-          content:
-            application/json:
+        '204':
+          description: Sessão de admin aberta.
+          headers:
+            Set-Cookie:
+              description: '`eclume_admin_session` e `eclume_admin_csrf`.'
               schema:
-                $ref: '#/components/schemas/Group'
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/admin/auth/logout:
+    post:
+      tags:
+      - admin
+      operationId: adminLogout
+      security:
+      - adminSessionCookie: []
+      summary: Encerrar a sessão de admin
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Sessão encerrada e cookies removidos.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-  /api/v1/groups/{group_id}:
-    parameters:
-    - $ref: '#/components/parameters/GroupId'
+  /api/v1/admin/me:
     get:
       tags:
-      - groups
-      operationId: getGroup
-      summary: Um grupo e os seus membros
+      - admin
+      operationId: getAdminMe
+      security:
+      - adminSessionCookie: []
+      summary: Conta de admin corrente
       responses:
         '200':
-          description: Grupo.
+          description: Conta de admin.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Group'
+                $ref: '#/components/schemas/AdminAccount'
+              examples:
+                admin:
+                  $ref: '#/components/examples/AdminMe'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    patch:
-      tags:
-      - groups
-      operationId: updateGroup
-      summary: Editar um grupo (admin)
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GroupPatch'
-      responses:
-        '200':
-          description: Grupo atualizado.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Group'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-    delete:
-      tags:
-      - groups
-      operationId: deleteGroup
-      summary: Excluir um grupo (admin)
-      description: Compartilhamentos com o grupo são desfeitos.
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Excluído.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/groups/{group_id}/members/{user_id}:
-    parameters:
-    - $ref: '#/components/parameters/GroupId'
-    - $ref: '#/components/parameters/UserId'
-    put:
-      tags:
-      - groups
-      operationId: addGroupMember
-      summary: Pôr um usuário no grupo (admin)
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Membro do grupo (idempotente).
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags:
-      - groups
-      operationId: removeGroupMember
-      summary: Tirar um usuário do grupo (admin)
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Fora do grupo.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /api/v1/admin/settings:
     get:
       tags:
       - admin
       operationId: getAdminSettings
-      summary: Configuração em runtime da organização
+      security:
+      - adminSessionCookie: []
+      summary: Configuração em runtime da plataforma
       responses:
         '200':
           description: Configuração.
@@ -2038,8 +1834,11 @@ paths:
       tags:
       - admin
       operationId: updateAdminSettings
+      security:
+      - adminSessionCookie: []
       summary: Alterar a configuração
-      description: Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs.
+      description: Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs. Desligar
+        `voice_identification.enabled` apaga as impressões de voz e as sugestões pendentes de toda a plataforma.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -2064,62 +1863,13 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
-  /api/v1/admin/voice-audit:
-    get:
-      tags:
-      - admin
-      - voice
-      operationId: listVoiceAudit
-      summary: Trilha de auditoria da identificação por voz
-      description: Comparações, sugestões, aceites, recusas, consentimentos, exclusões e exportações,
-        do mais novo ao mais antigo.
-      parameters:
-      - $ref: '#/components/parameters/PersonFilter'
-      - $ref: '#/components/parameters/Cursor'
-      - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Eventos.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceAuditPage'
-              examples:
-                trilha:
-                  $ref: '#/components/examples/VoiceAuditPage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-  /api/v1/admin/voiceprints:
-    delete:
-      tags:
-      - admin
-      - voice
-      operationId: purgeVoiceprints
-      summary: Apagar todas as impressões de voz da organização
-      description: Apaga as amostras de todas as pessoas e as sugestões pendentes; consentimentos e auditoria
-        ficam.
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '200':
-          description: O que foi apagado.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoicePurgeResult'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /api/v1/admin/agent-providers:
     get:
       tags:
       - admin
       operationId: listAgentProviders
+      security:
+      - adminSessionCookie: []
       summary: Providers de agente de sumarização
       responses:
         '200':
@@ -2139,6 +1889,8 @@ paths:
       tags:
       - admin
       operationId: createAgentProvider
+      security:
+      - adminSessionCookie: []
       summary: Cadastrar um provider
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
@@ -2171,6 +1923,8 @@ paths:
       tags:
       - admin
       operationId: updateAgentProvider
+      security:
+      - adminSessionCookie: []
       summary: Editar um provider
       description: '`api_key: null` apaga a chave guardada; ausente, mantém.'
       parameters:
@@ -2200,6 +1954,8 @@ paths:
       tags:
       - admin
       operationId: deleteAgentProvider
+      security:
+      - adminSessionCookie: []
       summary: Remover um provider
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
@@ -2219,7 +1975,9 @@ paths:
       tags:
       - admin
       operationId: listSecrets
-      summary: Segredos da organização (sem valor)
+      security:
+      - adminSessionCookie: []
+      summary: Segredos da plataforma (sem valor)
       responses:
         '200':
           description: Nomes e estado; o valor nunca volta.
@@ -2248,6 +2006,8 @@ paths:
       tags:
       - admin
       operationId: putSecret
+      security:
+      - adminSessionCookie: []
       summary: Gravar um segredo (cifrado)
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
@@ -2270,6 +2030,8 @@ paths:
       tags:
       - admin
       operationId: deleteSecret
+      security:
+      - adminSessionCookie: []
       summary: Apagar um segredo
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
@@ -2287,7 +2049,10 @@ paths:
       tags:
       - admin
       operationId: listUsers
-      summary: Usuários da organização
+      security:
+      - adminSessionCookie: []
+      summary: Contas de usuário
+      description: Dados da conta e a contagem de gravações; nunca o conteúdo do usuário.
       parameters:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
@@ -2297,10 +2062,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserPage'
+                $ref: '#/components/schemas/AdminUserPage'
               examples:
                 usuarios:
-                  $ref: '#/components/examples/UserPage'
+                  $ref: '#/components/examples/AdminUserPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2312,7 +2077,9 @@ paths:
       tags:
       - admin
       operationId: updateUser
-      summary: Mudar papel ou desativar um usuário
+      security:
+      - adminSessionCookie: []
+      summary: Desativar ou reativar um usuário
       description: Desativar encerra as sessões e revoga os PATs do usuário.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
@@ -2328,7 +2095,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/AdminUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2337,93 +2104,17 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
-  /api/v1/admin/invitations:
-    get:
-      tags:
-      - admin
-      operationId: listInvitations
-      summary: Convites pendentes e aceitos
-      parameters:
-      - $ref: '#/components/parameters/Cursor'
-      - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Convites.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvitationPage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    post:
-      tags:
-      - admin
-      operationId: createInvitation
-      summary: Convidar um usuário
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InvitationCreate'
-            examples:
-              consultor:
-                $ref: '#/components/examples/InvitationCreateRequest'
-      responses:
-        '201':
-          description: Convite criado. `accept_url` volta só nesta resposta.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invitation'
-              examples:
-                consultor:
-                  $ref: '#/components/examples/Invitation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-  /api/v1/admin/invitations/{invitation_id}:
-    parameters:
-    - name: invitation_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    delete:
-      tags:
-      - admin
-      operationId: revokeInvitation
-      summary: Revogar um convite pendente
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Revogado.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /api/v1/admin/jobs/{job_id}/retry:
     post:
       tags:
       - admin
       operationId: retryTranscriptionJob
+      security:
+      - adminSessionCookie: []
       summary: Retentar um job de transcrição que falhou
-      description: Cria o job da revisão seguinte da gravação, com a configuração atual da organização,
-        e o enfileira. Vale para qualquer gravação da organização, inclusive privada, mas só para o job
-        mais recente da gravação e em estado `failed`.
+      description: Cria o job da revisão seguinte da gravação, com a configuração atual da plataforma,
+        e o enfileira. Vale para a gravação de qualquer usuário, mas só para o job mais recente da gravação
+        e em estado `failed`.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       - name: job_id
@@ -2452,6 +2143,8 @@ paths:
       tags:
       - admin
       operationId: getAdminHealth
+      security:
+      - adminSessionCookie: []
       summary: Saúde da fila, da GPU e dos modelos
       responses:
         '200':
@@ -2473,14 +2166,27 @@ components:
       type: apiKey
       in: cookie
       name: eclume_session
-      description: 'Sessão do navegador, aberta por `POST /api/v1/auth/login`. Tem todas as permissões
-        do
+      description: 'Sessão do navegador, aberta por `POST /api/v1/auth/login` ou pelo cadastro. Tem todas
+        as
 
-        usuário. Métodos mutáveis exigem `X-CSRF-Token` igual ao cookie `eclume_csrf`
+        permissões do usuário sobre a própria conta. Métodos mutáveis exigem `X-CSRF-Token` igual
 
-        (double-submit). Gestão de PATs, escrita de grupos e `/api/v1/admin/*` aceitam **só**
+        ao cookie `eclume_csrf` (double-submit). Gestão de PATs, o aceite do aviso e as rotas de
 
-        sessão; `/api/v1/admin/*` exige ainda o papel `admin`.
+        voz aceitam **só** sessão. Não alcança `/api/v1/admin/*`.
+
+        '
+    adminSessionCookie:
+      type: apiKey
+      in: cookie
+      name: eclume_admin_session
+      description: 'Sessão da conta de admin, aberta por `POST /api/v1/admin/auth/login` (HttpOnly, Secure,
+
+        SameSite=Strict, `Path=/api/v1/admin`, 12 h). É a única credencial aceita em
+
+        `/api/v1/admin/*`, e é ignorada em qualquer outra rota. Métodos mutáveis exigem
+
+        `X-CSRF-Token` igual ao cookie `eclume_admin_csrf` (double-submit).
 
         '
     pat:
@@ -2501,7 +2207,8 @@ components:
       name: X-CSRF-Token
       in: header
       required: false
-      description: Obrigatório com sessão (valor do cookie `eclume_csrf`); ignorado com PAT.
+      description: 'Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf`
+        em `/api/v1/admin/*`. Ignorado com PAT.'
       schema:
         type: string
     Cursor:
@@ -2567,13 +2274,6 @@ components:
       schema:
         type: string
         format: uuid
-    ShareId:
-      name: share_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
     TranscriptId:
       name: transcript_id
       in: path
@@ -2604,13 +2304,6 @@ components:
         format: uuid
     CollectionId:
       name: collection_id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    GroupId:
-      name: group_id
       in: path
       required: true
       schema:
@@ -2647,8 +2340,8 @@ components:
             semCredencial:
               $ref: '#/components/examples/ProblemUnauthorized'
     Forbidden:
-      description: 'Credencial válida sem permissão (escopo, papel ou dono), ou PAT numa operação que
-        aceita só sessão (`code: session_required`).'
+      description: 'Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só
+        sessão (`code: session_required`), ou cadastro fechado (`code: signup_closed`).'
       content:
         application/problem+json:
           schema:
@@ -2657,7 +2350,7 @@ components:
             semEscopo:
               $ref: '#/components/examples/ProblemInsufficientScope'
     NotFound:
-      description: Não existe ou não é visível ao usuário (o eclume não distingue os dois).
+      description: Não existe ou não é do usuário (o eclume não distingue os dois).
       content:
         application/problem+json:
           schema:
@@ -2706,7 +2399,9 @@ components:
 
             `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
 
-            `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão).
+            `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
+
+            desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`.
 
             Códigos novos entram de forma aditiva.
 
@@ -2774,49 +2469,170 @@ components:
           type: string
           minLength: 1
           writeOnly: true
-    InvitationAccept:
+    Notice:
+      description: Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das
+        pessoas que gravo").
+      type: object
+      required:
+      - version
+      - text
+      properties:
+        version:
+          type: string
+        text:
+          type: string
+    SignupInfo:
+      type: object
+      required:
+      - open
+      - notice
+      properties:
+        open:
+          description: '`false` com `ECLUME_SIGNUP_OPEN=false`: o cadastro responde 403 `signup_closed`.'
+          type: boolean
+        notice:
+          $ref: '#/components/schemas/Notice'
+    SignupRequest:
       type: object
       required:
       - name
+      - email
       - password
+      - notice_version
       properties:
         name:
           type: string
           minLength: 1
+        email:
+          type: string
+          format: email
         password:
           type: string
           minLength: 12
           writeOnly: true
-    Organization:
+        notice_version:
+          description: Versão do aviso aceito; tem de ser a em vigor.
+          type: string
+          minLength: 1
+    NoticeAccept:
       type: object
       required:
-      - id
-      - name
+      - notice_version
       properties:
-        id:
+        notice_version:
           type: string
-          format: uuid
-        name:
-          type: string
-    GroupRef:
-      type: object
-      required:
-      - id
-      - name
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
+          minLength: 1
     User:
       type: object
       required:
       - id
       - email
       - name
-      - role
       - active
+      - created_at
+      - last_login_at
+      - notice_version
+      - notice_accepted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        notice_version:
+          description: Versão do aviso aceito, ou `null` numa conta que ainda não aceitou.
+          type:
+          - string
+          - 'null'
+        notice_accepted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    AdminUser:
+      description: Conta de usuário vista pelo admin (o `User` mais a contagem de gravações).
+      type: object
+      required:
+      - id
+      - email
+      - name
+      - active
+      - created_at
+      - last_login_at
+      - notice_version
+      - notice_accepted_at
+      - recording_count
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        notice_version:
+          type:
+          - string
+          - 'null'
+        notice_accepted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        recording_count:
+          type: integer
+          minimum: 0
+    UserPatch:
+      type: object
+      required:
+      - active
+      properties:
+        active:
+          description: '`false` desativa a conta, encerra as sessões e revoga os PATs.'
+          type: boolean
+    AdminUserPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    AdminAccount:
+      description: Conta de admin, separada das contas de usuário.
+      type: object
+      required:
+      - id
+      - email
+      - name
       - created_at
       - last_login_at
       properties:
@@ -2828,13 +2644,6 @@ components:
           format: email
         name:
           type: string
-        role:
-          type: string
-          enum:
-          - admin
-          - member
-        active:
-          type: boolean
         created_at:
           type: string
           format: date-time
@@ -2843,48 +2652,29 @@ components:
           - string
           - 'null'
           format: date-time
-    UserPatch:
-      type: object
-      minProperties: 1
-      properties:
-        name:
-          type: string
-          minLength: 1
-        role:
-          type: string
-          enum:
-          - admin
-          - member
-        active:
-          type: boolean
-    UserPage:
+    AdminRef:
       type: object
       required:
-      - items
-      - next_cursor
+      - id
+      - name
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        next_cursor:
-          $ref: '#/components/schemas/NextCursor'
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
     Me:
       type: object
       required:
       - user
-      - organization
-      - groups
       - auth
+      - notice_required
       properties:
         user:
           $ref: '#/components/schemas/User'
-        organization:
-          $ref: '#/components/schemas/Organization'
-        groups:
-          type: array
-          items:
-            $ref: '#/components/schemas/GroupRef'
+        notice_required:
+          description: A conta ainda não aceitou o aviso em vigor (`POST /api/v1/me/notice`).
+          type: boolean
         auth:
           type: object
           required:
@@ -3072,7 +2862,7 @@ components:
           type: integer
           minimum: 0
         language:
-          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da organização ou a detecção.
+          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção.
           type: string
           pattern: ^[a-z]{2,3}(-[A-Z]{2})?$
         source:
@@ -3350,7 +3140,6 @@ components:
       - content_type
       - content_hash
       - owner
-      - visibility
       - tags
       - collection_ids
       - metadata
@@ -3393,12 +3182,6 @@ components:
           pattern: ^sha256:[0-9a-f]{64}$
         owner:
           $ref: '#/components/schemas/UserRef'
-        visibility:
-          description: '`private` sem compartilhamento; `shared` com pelo menos um.'
-          type: string
-          enum:
-          - private
-          - shared
         tags:
           type: array
           items:
@@ -3476,70 +3259,6 @@ components:
         language:
           type: string
           pattern: ^[a-z]{2,3}(-[A-Z]{2})?$
-    Share:
-      type: object
-      required:
-      - id
-      - target
-      - permission
-      - created_by
-      - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        target:
-          type: object
-          required:
-          - type
-          - id
-          - name
-          properties:
-            type:
-              type: string
-              enum:
-              - group
-              - organization
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
-        permission:
-          type: string
-          enum:
-          - read
-        created_by:
-          $ref: '#/components/schemas/UserRef'
-        created_at:
-          type: string
-          format: date-time
-    ShareCreate:
-      type: object
-      required:
-      - target_type
-      properties:
-        target_type:
-          type: string
-          enum:
-          - group
-          - organization
-        target_id:
-          description: Id do grupo; ignorado para `organization`.
-          type: string
-          format: uuid
-    SharePage:
-      type: object
-      required:
-      - items
-      - next_cursor
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Share'
-        next_cursor:
-          $ref: '#/components/schemas/NextCursor'
     TranscriptSummary:
       description: Resumo de listagem de uma transcrição (sem segmentos).
       type: object
@@ -3648,85 +3367,6 @@ components:
         speaker_id:
           type: string
           pattern: ^S[0-9]+$
-    VoiceConsent:
-      description: Consentimento LGPD da pessoa para a impressão de voz. Sem `granted`, nada é comparado.
-      type: object
-      required:
-      - status
-      - updated_at
-      properties:
-        status:
-          type: string
-          enum:
-          - none
-          - granted
-          - revoked
-        updated_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
-        term_version:
-          description: Versão do termo de consentimento vigente quando o estado foi registrado.
-          type:
-          - string
-          - 'null'
-        recorded_by:
-          description: Quem registrou o estado atual.
-          oneOf:
-          - $ref: '#/components/schemas/UserRef'
-          - type: 'null'
-        sample_count:
-          description: Amostras (locutores confirmados) na impressão de voz da pessoa.
-          type: integer
-          minimum: 0
-    VoiceConsentPut:
-      type: object
-      required:
-      - status
-      properties:
-        status:
-          type: string
-          enum:
-          - granted
-          - revoked
-        notes:
-          description: Como o consentimento foi colhido (documento assinado, e-mail, ata).
-          type:
-          - string
-          - 'null'
-          maxLength: 2000
-    VoiceConsentRecord:
-      description: Um registro do histórico de consentimento, com o termo exato em vigor.
-      type: object
-      required:
-      - status
-      - term_version
-      - term_text
-      - notes
-      - recorded_by
-      - recorded_at
-      properties:
-        status:
-          type: string
-          enum:
-          - granted
-          - revoked
-        term_version:
-          type: string
-        term_text:
-          type: string
-        notes:
-          type:
-          - string
-          - 'null'
-        recorded_by:
-          oneOf:
-          - $ref: '#/components/schemas/UserRef'
-          - type: 'null'
-        recorded_at:
-          type: string
-          format: date-time
     VoiceSample:
       description: Uma amostra da impressão de voz — um locutor confirmado como a pessoa.
       type: object
@@ -3743,7 +3383,7 @@ components:
           type: string
           format: uuid
         recording_title:
-          description: Título da gravação, ou `null` se quem pergunta não a vê.
+          description: Título da gravação, ou `null` se ela não existe mais.
           type:
           - string
           - 'null'
@@ -3763,74 +3403,21 @@ components:
         created_at:
           type: string
           format: date-time
-    VoiceSampleExport:
-      description: Amostra com o vetor, só na exportação.
-      type: object
-      required:
-      - transcript_id
-      - recording_title
-      - speaker_id
-      - model
-      - talk_ms
-      - created_by
-      - created_at
-      - embedding
-      properties:
-        transcript_id:
-          type: string
-          format: uuid
-        recording_title:
-          type:
-          - string
-          - 'null'
-        speaker_id:
-          type: string
-        model:
-          type: string
-        talk_ms:
-          type: integer
-          minimum: 0
-        created_by:
-          oneOf:
-          - $ref: '#/components/schemas/UserRef'
-          - type: 'null'
-        created_at:
-          type: string
-          format: date-time
-        embedding:
-          type: array
-          items:
-            type: number
     Voiceprint:
       type: object
       required:
       - person_id
-      - consent
-      - opt_in
-      - term
+      - enabled
       - sample_count
       - samples
       properties:
         person_id:
           type: string
           format: uuid
-        opt_in:
-          description: Opt-in de identificação por voz da organização. Desligado, nada é comparado nem
-            vira amostra.
+        enabled:
+          description: Identificação por voz ligada na plataforma. Desligada, nada é comparado nem vira
+            amostra.
           type: boolean
-        term:
-          description: Termo de consentimento em vigor na organização, o que a pessoa aceita ao consentir.
-          type: object
-          required:
-          - version
-          - text
-          properties:
-            version:
-              type: string
-            text:
-              type: string
-        consent:
-          $ref: '#/components/schemas/VoiceConsent'
         sample_count:
           type: integer
           minimum: 0
@@ -3838,138 +3425,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VoiceSample'
-    VoiceAuditEvent:
-      type: object
-      required:
-      - id
-      - event
-      - person
-      - actor
-      - transcript_id
-      - speaker_id
-      - score
-      - details
-      - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        event:
-          description: Tipo do evento; o cliente mostra cru um valor que não conhece.
-          type: string
-          enum:
-          - comparison
-          - suggested
-          - accepted
-          - rejected
-          - sample_added
-          - sample_removed
-          - link_restored
-          - link_dropped
-          - consent_granted
-          - consent_revoked
-          - voiceprint_deleted
-          - exported
-          - org_opt_in_changed
-          - org_purged
-          - embeddings_purged
-        person:
-          oneOf:
-          - $ref: '#/components/schemas/PersonRef'
-          - type: 'null'
-        actor:
-          description: Quem agiu; `null` numa ação do sistema (a comparação da ingestão).
-          oneOf:
-          - $ref: '#/components/schemas/UserRef'
-          - type: 'null'
-        transcript_id:
-          type:
-          - string
-          - 'null'
-          format: uuid
-        speaker_id:
-          type:
-          - string
-          - 'null'
-        score:
-          type:
-          - number
-          - 'null'
-          minimum: 0
-          maximum: 1
-        details:
-          description: Dados do evento (contagens, limiar, modelo); nunca vetores.
-          type: object
-        created_at:
-          type: string
-          format: date-time
-    VoiceAuditPage:
-      type: object
-      required:
-      - items
-      - next_cursor
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/VoiceAuditEvent'
-        next_cursor:
-          $ref: '#/components/schemas/NextCursor'
-    VoiceprintExport:
-      type: object
-      required:
-      - exported_at
-      - exported_by
-      - person
-      - consents
-      - samples
-      - audit
-      properties:
-        exported_at:
-          type: string
-          format: date-time
-        exported_by:
-          $ref: '#/components/schemas/UserRef'
-        person:
-          type: object
-          required:
-          - id
-          - name
-          - email
-          properties:
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
-            email:
-              type:
-              - string
-              - 'null'
-        consents:
-          type: array
-          items:
-            $ref: '#/components/schemas/VoiceConsentRecord'
-        samples:
-          type: array
-          items:
-            $ref: '#/components/schemas/VoiceSampleExport'
-        audit:
-          type: array
-          items:
-            $ref: '#/components/schemas/VoiceAuditEvent'
-    VoicePurgeResult:
-      type: object
-      required:
-      - deleted_samples
-      - deleted_suggestions
-      properties:
-        deleted_samples:
-          type: integer
-          minimum: 0
-        deleted_suggestions:
-          type: integer
-          minimum: 0
     Person:
       type: object
       required:
@@ -3977,7 +3432,6 @@ components:
       - name
       - email
       - notes
-      - voice_consent
       - transcript_count
       - last_seen_at
       - created_at
@@ -3997,10 +3451,8 @@ components:
           type:
           - string
           - 'null'
-        voice_consent:
-          $ref: '#/components/schemas/VoiceConsent'
         transcript_count:
-          description: Transcrições visíveis ao usuário em que a pessoa fala.
+          description: Transcrições do usuário em que a pessoa fala.
           type: integer
           minimum: 0
         last_seen_at:
@@ -4190,70 +3642,6 @@ components:
               count:
                 type: integer
                 minimum: 0
-    Group:
-      type: object
-      required:
-      - id
-      - name
-      - description
-      - member_count
-      - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type:
-          - string
-          - 'null'
-        member_count:
-          type: integer
-          minimum: 0
-        members:
-          description: Presente em `GET /api/v1/groups/{group_id}`.
-          type: array
-          items:
-            $ref: '#/components/schemas/UserRef'
-        created_at:
-          type: string
-          format: date-time
-    GroupCreate:
-      type: object
-      required:
-      - name
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type:
-          - string
-          - 'null'
-    GroupPatch:
-      type: object
-      minProperties: 1
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type:
-          - string
-          - 'null'
-    GroupPage:
-      type: object
-      required:
-      - items
-      - next_cursor
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Group'
-        next_cursor:
-          $ref: '#/components/schemas/NextCursor'
     SummaryTemplate:
       type: object
       required:
@@ -4261,7 +3649,6 @@ components:
       - name
       - description
       - instructions
-      - scope
       - is_default
       - created_at
       - updated_at
@@ -4278,13 +3665,6 @@ components:
         instructions:
           description: Instruções ao agente, em Markdown; a transcrição é anexada pelo servidor.
           type: string
-        scope:
-          description: '`user`: pessoal; `organization`: padrão definido pelo admin, só leitura para os
-            demais.'
-          type: string
-          enum:
-          - user
-          - organization
         is_default:
           description: Template usado no resumo automático do usuário.
           type: boolean
@@ -4311,15 +3691,8 @@ components:
           type: string
           minLength: 1
         is_default:
-          description: 'Pessoal: o template do resumo automático do usuário. Da organização: o padrão
-            da organização.'
+          description: O template do resumo automático do usuário.
           type: boolean
-        scope:
-          description: Padrão `user`. `organization` exige `admin` com sessão.
-          type: string
-          enum:
-          - user
-          - organization
     SummaryTemplatePatch:
       type: object
       minProperties: 1
@@ -4461,7 +3834,7 @@ components:
           type: string
           format: uuid
         provider_id:
-          description: Sem valor, o provider padrão da organização.
+          description: Sem valor, o provider padrão da plataforma.
           type: string
           format: uuid
     SummaryPage:
@@ -4545,7 +3918,6 @@ components:
       required:
       - default_provider_id
       - auto_summarize
-      - default_template_id
       properties:
         default_provider_id:
           type:
@@ -4553,13 +3925,8 @@ components:
           - 'null'
           format: uuid
         auto_summarize:
-          description: Gera o resumo do template padrão de cada usuário ao fim da transcrição.
+          description: Gera o resumo do template padrão do dono ao fim da transcrição.
           type: boolean
-        default_template_id:
-          type:
-          - string
-          - 'null'
-          format: uuid
     VoiceIdentificationSettings:
       type: object
       required:
@@ -4567,19 +3934,14 @@ components:
       - suggestion_threshold
       properties:
         enabled:
-          description: Opt-in da organização (LGPD). Desligado, nenhuma impressão é comparada nem criada.
+          description: Liga a identificação por voz na plataforma. Desligado, nenhuma impressão é comparada
+            nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
           type: boolean
         suggestion_threshold:
           description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
           type: number
           minimum: 0
           maximum: 1
-        consent_term_version:
-          description: Versão do termo de consentimento; sobe sozinha a cada texto novo.
-          type: string
-        consent_term_text:
-          description: Texto do termo que a pessoa aceita ao consentir.
-          type: string
     AdminSettings:
       type: object
       required:
@@ -4602,8 +3964,9 @@ components:
           type: string
           format: date-time
         updated_by:
+          description: Conta de admin que mudou por último.
           oneOf:
-          - $ref: '#/components/schemas/UserRef'
+          - $ref: '#/components/schemas/AdminRef'
           - type: 'null'
     AdminSettingsPatch:
       description: Cada bloco é mesclado campo a campo; campos ausentes ficam como estão.
@@ -4668,11 +4031,6 @@ components:
               format: uuid
             auto_summarize:
               type: boolean
-            default_template_id:
-              type:
-              - string
-              - 'null'
-              format: uuid
         voice_identification:
           type: object
           properties:
@@ -4682,12 +4040,6 @@ components:
               type: number
               minimum: 0
               maximum: 1
-            consent_term_text:
-              description: Texto novo do termo; a versão sobe. Consentimentos antigos guardam o termo
-                que aceitaram.
-              type: string
-              minLength: 1
-              maxLength: 20000
     AgentProvider:
       type: object
       required:
@@ -4841,94 +4193,6 @@ components:
           type: string
           minLength: 1
           writeOnly: true
-    Invitation:
-      type: object
-      required:
-      - id
-      - email
-      - role
-      - group_ids
-      - expires_at
-      - accepted_at
-      - created_by
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum:
-          - admin
-          - member
-        group_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        expires_at:
-          type: string
-          format: date-time
-        accepted_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
-        created_by:
-          $ref: '#/components/schemas/UserRef'
-        accept_url:
-          description: Link de aceite, só na resposta da criação.
-          type: string
-          format: uri
-        status:
-          description: '`pending` enquanto válido e não aceito; `expired` depois de `expires_at`.'
-          type: string
-          enum:
-          - pending
-          - accepted
-          - expired
-        created_at:
-          type: string
-          format: date-time
-    InvitationCreate:
-      type: object
-      required:
-      - email
-      properties:
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum:
-          - admin
-          - member
-          default: member
-        group_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        expires_in_days:
-          description: Validade do link em dias; padrão 7.
-          type: integer
-          minimum: 1
-          maximum: 30
-          default: 7
-    InvitationPage:
-      type: object
-      required:
-      - items
-      - next_cursor
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Invitation'
-        next_cursor:
-          $ref: '#/components/schemas/NextCursor'
     AdminJobRetried:
       description: O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`.
       type: object
@@ -5119,7 +4383,7 @@ components:
                 type: integer
                 minimum: 0
         running_jobs:
-          description: Jobs de transcrição da organização ainda não concluídos, com o progresso.
+          description: Jobs de transcrição da plataforma ainda não concluídos, com o progresso.
           type: array
           items:
             type: object
@@ -5441,22 +4705,44 @@ components:
           id: 01928f3a-1c00-7a00-8000-000000000101
           email: mariana.couto@example.com
           name: Mariana Couto
-          role: admin
           active: true
           created_at: '2026-09-10T12:00:00Z'
           last_login_at: '2026-09-18T13:55:02Z'
-        organization:
-          id: 01928f3a-1c00-7a00-8000-000000000001
-          name: EK Consultoria
-        groups:
-        - id: 01928f3a-1c00-7a00-8000-000000000201
-          name: Consultores
+          notice_version: '1'
+          notice_accepted_at: '2026-09-28T12:00:00Z'
         auth:
           method: pat
           scopes:
           - transcripts:read
           - people:read
           token_id: 01928f3a-1c00-7a00-8000-000000000701
+        notice_required: false
+    SignupInfo:
+      summary: Cadastro aberto com o aviso v1
+      value:
+        open: true
+        notice:
+          version: '1'
+          text: Sou responsável por pedir o consentimento das pessoas que gravo.
+    SignupRequest:
+      summary: Nova conta aceitando o aviso
+      value:
+        name: Paulo Andrade
+        email: paulo.andrade@example.com
+        password: senha-bem-longa-2026
+        notice_version: '1'
+    NoticeAcceptRequest:
+      summary: Aceite do aviso v1
+      value:
+        notice_version: '1'
+    AdminMe:
+      summary: Conta de admin
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000a01
+        email: mariana.couto@example.com
+        name: Administração EK
+        created_at: '2026-09-10T12:00:00Z'
+        last_login_at: '2026-09-28T11:40:00Z'
     TokenPage:
       summary: PAT do lumea e PAT do desktop
       value:
@@ -5641,7 +4927,6 @@ components:
           device_name: NB-MARIANA
           client_version: eclume-desktop/0.3.0
         status: queued
-        visibility: private
         tags: []
         collection_ids: []
         metadata: {}
@@ -5659,7 +4944,7 @@ components:
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
     RecordingTranscribed:
-      summary: Gravação transcrita e compartilhada com um grupo
+      summary: Gravação transcrita
       value:
         id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
@@ -5678,7 +4963,6 @@ components:
           device_name: NB-MARIANA
           client_version: eclume-desktop/0.3.0
         status: transcribed
-        visibility: shared
         tags:
         - programa-liderancas
         - cliente-metalurgica
@@ -5718,7 +5002,6 @@ components:
           owner:
             id: 01928f3a-1c00-7a00-8000-000000000101
             name: Mariana Couto
-          visibility: private
           tags: []
           collection_ids:
           - 01928f3a-1c00-7a00-8000-000000000801
@@ -5754,7 +5037,6 @@ components:
             device_name: NB-MARIANA
             client_version: eclume-desktop/0.3.0
           status: transcribed
-          visibility: shared
           tags:
           - programa-liderancas
           - cliente-metalurgica
@@ -5790,26 +5072,6 @@ components:
           tipo_reuniao: alinhamento
           cliente: Metalúrgica Serra Azul
           projeto: Programa de lideranças 2026
-    SharePage:
-      summary: Compartilhada com o grupo Consultores
-      value:
-        items:
-        - id: 01928f3a-1c00-7a00-8000-000000000c01
-          target:
-            type: group
-            id: 01928f3a-1c00-7a00-8000-000000000201
-            name: Consultores
-          permission: read
-          created_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          created_at: '2026-09-18T15:00:40Z'
-        next_cursor: null
-    ShareCreateRequest:
-      summary: Compartilhar com um grupo
-      value:
-        target_type: group
-        target_id: 01928f3a-1c00-7a00-8000-000000000201
     TranscriptPage:
       summary: Listagem incremental com uma transcrição
       value:
@@ -6460,7 +5722,7 @@ components:
           '
         completed_at: '2026-09-18T15:03:48Z'
     SummaryTemplatePage:
-      summary: Padrão da organização e template pessoal
+      summary: Ata de reunião (padrão) e resumo executivo
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000901
@@ -6468,7 +5730,6 @@ components:
           description: Decisões e encaminhamentos com responsável.
           instructions: Escreva uma ata em português com as seções Decisões e Encaminhamentos. Cada encaminhamento
             tem responsável e prazo, quando ditos. Não invente o que não foi dito.
-          scope: organization
           is_default: true
           created_at: '2026-09-10T12:05:00Z'
           updated_at: '2026-09-10T12:05:00Z'
@@ -6477,7 +5738,6 @@ components:
           description: null
           instructions: 'Resuma em até cinco tópicos o que importa para a diretoria do cliente: riscos,
             decisões e próximos passos.'
-          scope: user
           is_default: false
           created_at: '2026-09-15T09:30:00Z'
           updated_at: '2026-09-15T09:30:00Z'
@@ -6488,14 +5748,6 @@ components:
         name: Resumo executivo
         instructions: 'Resuma em até cinco tópicos o que importa para a diretoria do cliente: riscos,
           decisões e próximos passos.'
-    SummaryTemplateCreateOrgRequest:
-      summary: Padrão da organização (admin)
-      value:
-        name: Devolutiva de assessment
-        description: Padrão da organização para as devolutivas individuais.
-        instructions: Escreva a devolutiva em Markdown com as seções Pontos fortes, Pontos de desenvolvimento
-          e Combinados. Use só o que foi dito na conversa.
-        scope: organization
     PersonPage:
       summary: Diretório com três pessoas
       value:
@@ -6504,12 +5756,6 @@ components:
           name: Juliana Prado
           email: juliana.prado@example.com
           notes: Diretora de Pessoas da Metalúrgica Serra Azul.
-          voice_consent:
-            status: none
-            updated_at: null
-            term_version: null
-            recorded_by: null
-            sample_count: 0
           transcript_count: 0
           last_seen_at: null
           created_at: '2026-09-12T11:00:00Z'
@@ -6518,14 +5764,6 @@ components:
           name: Mariana Couto
           email: mariana.couto@example.com
           notes: Consultora EK.
-          voice_consent:
-            status: granted
-            updated_at: '2026-09-12T11:05:00Z'
-            term_version: '1'
-            recorded_by:
-              id: 01928f3a-1c00-7a00-8000-000000000101
-              name: Mariana Couto
-            sample_count: 5
           transcript_count: 14
           last_seen_at: '2026-09-18T14:00:05Z'
           created_at: '2026-09-12T11:00:00Z'
@@ -6534,34 +5772,18 @@ components:
           name: Rafael Lima
           email: rafael.lima@example.com
           notes: Gerente de RH da Metalúrgica Serra Azul.
-          voice_consent:
-            status: granted
-            updated_at: '2026-09-12T11:05:00Z'
-            term_version: '1'
-            recorded_by:
-              id: 01928f3a-1c00-7a00-8000-000000000101
-              name: Mariana Couto
-            sample_count: 2
           transcript_count: 3
           last_seen_at: '2026-09-11T13:00:00Z'
           created_at: '2026-09-12T11:00:00Z'
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
     Person:
-      summary: Pessoa com consentimento de voz
+      summary: Pessoa ligada a locutores
       value:
         id: 01928f3a-1c00-7a00-8000-000000000302
         name: Rafael Lima
         email: rafael.lima@example.com
         notes: Gerente de RH da Metalúrgica Serra Azul.
-        voice_consent:
-          status: granted
-          updated_at: '2026-09-12T11:05:00Z'
-          term_version: '1'
-          recorded_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          sample_count: 2
         transcript_count: 3
         last_seen_at: '2026-09-11T13:00:00Z'
         created_at: '2026-09-12T11:00:00Z'
@@ -6665,21 +5887,6 @@ components:
           count: 1
         - name: programa-liderancas
           count: 1
-    GroupPage:
-      summary: Consultores e Diretoria
-      value:
-        items:
-        - id: 01928f3a-1c00-7a00-8000-000000000201
-          name: Consultores
-          description: Equipe de consultoria da EK.
-          member_count: 2
-          created_at: '2026-09-10T12:10:00Z'
-        - id: 01928f3a-1c00-7a00-8000-000000000202
-          name: Diretoria
-          description: null
-          member_count: 1
-          created_at: '2026-09-10T12:11:00Z'
-        next_cursor: null
     AdminSettings:
       summary: WhisperX na GTX 1660 Super
       value:
@@ -6699,20 +5906,13 @@ components:
         summarization:
           default_provider_id: 01928f3a-1c00-7a00-8000-000000000b01
           auto_summarize: false
-          default_template_id: 01928f3a-1c00-7a00-8000-000000000901
         voice_identification:
           enabled: true
           suggestion_threshold: 0.75
-          consent_term_version: '1'
-          consent_term_text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada
-            das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como
-            locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11),
-            que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
-            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
-          id: 01928f3a-1c00-7a00-8000-000000000101
-          name: Mariana Couto
+          id: 01928f3a-1c00-7a00-8000-000000000a01
+          name: Administração EK
     AdminSettingsPatchRequest:
       summary: Trocar o modelo e ligar o resumo automático
       value:
@@ -6769,48 +5969,29 @@ components:
         - name: anthropic_api_key
           is_set: false
           updated_at: null
-    UserPage:
-      summary: Admin e consultor
+    AdminUserPage:
+      summary: Duas contas de usuário
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000101
           email: mariana.couto@example.com
           name: Mariana Couto
-          role: admin
           active: true
           created_at: '2026-09-10T12:00:00Z'
           last_login_at: '2026-09-18T13:55:02Z'
+          notice_version: null
+          notice_accepted_at: null
+          recording_count: 37
         - id: 01928f3a-1c00-7a00-8000-000000000102
           email: paulo.andrade@example.com
           name: Paulo Andrade
-          role: member
           active: true
           created_at: '2026-09-11T17:20:44Z'
           last_login_at: '2026-09-17T19:03:10Z'
+          notice_version: '1'
+          notice_accepted_at: '2026-09-28T12:00:00Z'
+          recording_count: 12
         next_cursor: null
-    InvitationCreateRequest:
-      summary: Convidar um consultor
-      value:
-        email: beatriz.nunes@example.com
-        role: member
-        group_ids:
-        - 01928f3a-1c00-7a00-8000-000000000201
-    Invitation:
-      summary: Convite criado
-      value:
-        id: 01928f3a-1c00-7a00-8000-000000000d01
-        email: beatriz.nunes@example.com
-        role: member
-        group_ids:
-        - 01928f3a-1c00-7a00-8000-000000000201
-        expires_at: '2026-09-25T16:00:00Z'
-        accepted_at: null
-        created_by:
-          id: 01928f3a-1c00-7a00-8000-000000000101
-          name: Mariana Couto
-        accept_url: https://192.168.15.199:8443/convite/Zk3qW8rT5yU1iO7pA2sD
-        status: pending
-        created_at: '2026-09-18T16:00:00Z'
     AdminHealth:
       summary: Um job rodando na GPU
       value:
@@ -6879,31 +6060,11 @@ components:
         person: null
         suggestions: []
         talk_ms: 37050
-    VoiceConsentPutRequest:
-      summary: Consentimento colhido por escrito
-      value:
-        status: granted
-        notes: Termo assinado na reunião de abertura do programa (ata de 12/09/2026).
     Voiceprint:
       summary: Impressão com duas amostras
       value:
         person_id: 01928f3a-1c00-7a00-8000-000000000302
-        consent:
-          status: granted
-          updated_at: '2026-09-12T11:05:00Z'
-          term_version: '1'
-          recorded_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          sample_count: 2
-        opt_in: true
-        term:
-          version: '1'
-          text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada das
-            gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como locutor
-            nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11), que nenhuma
-            sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
-            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
+        enabled: true
         sample_count: 2
         samples:
         - transcript_id: 01928f3a-1c00-7a00-8000-000000000501
@@ -6924,153 +6085,6 @@ components:
             id: 01928f3a-1c00-7a00-8000-000000000101
             name: Mariana Couto
           created_at: '2026-09-12T16:40:00Z'
-    VoiceprintExport:
-      summary: Exportação LGPD de uma pessoa
-      value:
-        exported_at: '2026-09-20T10:00:00Z'
-        exported_by:
-          id: 01928f3a-1c00-7a00-8000-000000000101
-          name: Mariana Couto
-        person:
-          id: 01928f3a-1c00-7a00-8000-000000000302
-          name: Rafael Lima
-          email: rafael.lima@example.com
-        consents:
-        - status: granted
-          term_version: '1'
-          term_text: Autorizo a EK Consultoria a criar e guardar uma impressão da minha voz, calculada
-            das gravações de reuniões de que participo, com a única finalidade de sugerir meu nome como
-            locutor nas transcrições do eclume. Sei que a impressão é dado biométrico (LGPD, art. 11),
-            que nenhuma sugestão vira identificação sem confirmação humana, e que posso revogar este consentimento,
-            pedir a exclusão ou a cópia dos meus dados a qualquer momento.
-          notes: Termo assinado na reunião de abertura do programa (ata de 12/09/2026).
-          recorded_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          recorded_at: '2026-09-12T11:05:00Z'
-        samples:
-        - transcript_id: 01928f3a-1c00-7a00-8000-000000000501
-          recording_title: Alinhamento do programa de lideranças
-          speaker_id: S2
-          model: pyannote/wespeaker-voxceleb-resnet34-LM
-          talk_ms: 37050
-          created_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          created_at: '2026-09-18T15:02:17Z'
-          embedding:
-          - 0.009
-          - -0.002
-          - -0.0031
-          - -0.0351
-          - 0.011
-          - -0.0009
-          - 0.066
-          - -0.0623
-        - transcript_id: 01928f3a-1c00-7a00-8000-000000000502
-          recording_title: null
-          speaker_id: S1
-          model: pyannote/wespeaker-voxceleb-resnet34-LM
-          talk_ms: 412300
-          created_by:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          created_at: '2026-09-12T16:40:00Z'
-          embedding:
-          - 0.1554
-          - -0.1944
-          - 0.0035
-          - 0.0544
-          - -0.0126
-          - -0.047
-          - -0.0036
-          - 0.0431
-        audit:
-        - id: 01928f3a-1c00-7a00-8000-000000000d03
-          event: accepted
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
-          speaker_id: S2
-          score: 0.82
-          details: {}
-          created_at: '2026-09-18T15:02:17Z'
-        - id: 01928f3a-1c00-7a00-8000-000000000d02
-          event: suggested
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor: null
-          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
-          speaker_id: S2
-          score: 0.82
-          details:
-            threshold: 0.6
-            model: pyannote/wespeaker-voxceleb-resnet34-LM
-          created_at: '2026-09-18T14:40:02Z'
-        - id: 01928f3a-1c00-7a00-8000-000000000d01
-          event: consent_granted
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          transcript_id: null
-          speaker_id: null
-          score: null
-          details:
-            term_version: '1'
-          created_at: '2026-09-12T11:05:00Z'
-    VoiceAuditPage:
-      summary: Sugestão, aceite e consentimento
-      value:
-        items:
-        - id: 01928f3a-1c00-7a00-8000-000000000d03
-          event: accepted
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
-          speaker_id: S2
-          score: 0.82
-          details: {}
-          created_at: '2026-09-18T15:02:17Z'
-        - id: 01928f3a-1c00-7a00-8000-000000000d02
-          event: suggested
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor: null
-          transcript_id: 01928f3a-1c00-7a00-8000-000000000501
-          speaker_id: S2
-          score: 0.82
-          details:
-            threshold: 0.6
-            model: pyannote/wespeaker-voxceleb-resnet34-LM
-          created_at: '2026-09-18T14:40:02Z'
-        - id: 01928f3a-1c00-7a00-8000-000000000d01
-          event: consent_granted
-          person:
-            id: 01928f3a-1c00-7a00-8000-000000000302
-            name: Rafael Lima
-          actor:
-            id: 01928f3a-1c00-7a00-8000-000000000101
-            name: Mariana Couto
-          transcript_id: null
-          speaker_id: null
-          score: null
-          details:
-            term_version: '1'
-          created_at: '2026-09-12T11:05:00Z'
-        next_cursor: null
     ProblemUnauthorized:
       summary: Sem credencial
       value:
