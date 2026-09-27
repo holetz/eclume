@@ -110,6 +110,8 @@ recordings = Table(
     _uuid("agenda_type_id"),
     Column("agenda_type_origin", Text),
     Column("subject", Text),
+    Column("kind", Text, server_default=FetchedValue()),
+    Column("recorded_at_source", Text, server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
 )
@@ -309,6 +311,7 @@ summaries = Table(
     Column("agenda_type_name", Text),
     Column("instructions", Text),
     Column("version", Integer),
+    Column("origin", Text, server_default=FetchedValue()),
     Column("status", Text),
     Column("trigger", Text),
     _uuid("provider_id"),
@@ -319,10 +322,56 @@ summaries = Table(
     Column("error_code", Text),
     Column("error_message", Text),
     Column("attempts", Integer),
+    _uuid("restored_from_id"),
+    _uuid("chat_message_id"),
     _uuid("created_by"),
     _ts("created_at"),
     _ts("started_at"),
     _ts("completed_at"),
+)
+
+# --- gravação centrada no resumo (014_gravacao_resumo) --------------------------------------------
+
+summary_chat_messages = Table(
+    "summary_chat_messages",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    _uuid("transcript_id"),
+    Column("role", Text),
+    Column("content", Text),
+    Column("status", Text),
+    _uuid("reply_to"),
+    _uuid("base_summary_id"),
+    _uuid("summary_id"),
+    Column("reads", JSONB, server_default=FetchedValue()),
+    _uuid("provider_id"),
+    Column("provider_name", Text),
+    Column("provider_kind", Text),
+    Column("model", Text),
+    Column("error_code", Text),
+    Column("error_message", Text),
+    Column("attempts", Integer, server_default=FetchedValue()),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("started_at"),
+    _ts("completed_at"),
+)
+
+markers = Table(
+    "markers",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("recording_id"),
+    _uuid("client_id"),
+    Column("at_ms", BigInteger),
+    Column("note", Text),
+    Column("device_name", Text),
+    _uuid("created_by"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
 )
 
 # --- pessoas, coleções e impressões de voz (003_pessoas_e_busca) ---------------------------------

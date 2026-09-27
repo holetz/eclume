@@ -22,7 +22,7 @@ from eclume_server.problems import not_found
 from eclume_server.routes.transcripts import SPEAKER_ID, speaker_response
 from eclume_server.serialize import user_ref
 from eclume_server.transcripts import bump_revision, editable_transcript
-from eclume_server.voice import SpeakerKey, forget, platform_voice, reject
+from eclume_server.voice import SpeakerKey, forget, forget_sample, platform_voice, reject
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -53,12 +53,20 @@ async def reject_speaker_suggestion(
 
 _SAMPLES = text(
     """
-    SELECT s.transcript_id, r.title AS recording_title, s.speaker_id, s.model, s.talk_ms,
+    SELECT s.transcript_id, r.id AS recording_id, r.title AS recording_title, s.speaker_id, s.model,
+           s.talk_ms, excerpt.start_ms AS excerpt_start_ms, excerpt.end_ms AS excerpt_end_ms,
            s.created_by, u.name AS created_by_name, s.created_at
     FROM voice_samples s
     LEFT JOIN transcripts tr ON tr.id = s.transcript_id
     LEFT JOIN recordings r ON r.id = tr.recording_id
     LEFT JOIN users u ON u.id = s.created_by
+    -- A fala mais longa do locutor: o trecho para ouvir a amostra.
+    LEFT JOIN LATERAL (
+        SELECT g.start_ms, g.end_ms FROM segments g
+        WHERE g.transcript_id = s.transcript_id AND g.speaker_id = s.speaker_id
+        ORDER BY g.end_ms - g.start_ms DESC, g.start_ms
+        LIMIT 1
+    ) excerpt ON true
     WHERE s.person_id = :person
     ORDER BY s.created_at DESC, s.transcript_id, s.speaker_id
     """
@@ -68,10 +76,16 @@ _SAMPLES = text(
 def _sample_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAlchemy
     return {
         "transcript_id": str(row.transcript_id),
+        "recording_id": str(row.recording_id) if row.recording_id else None,
         "recording_title": row.recording_title,
         "speaker_id": row.speaker_id,
         "model": row.model,
         "talk_ms": row.talk_ms,
+        "excerpt": (
+            {"start_ms": row.excerpt_start_ms, "end_ms": row.excerpt_end_ms}
+            if row.recording_id and row.excerpt_start_ms is not None
+            else None
+        ),
         "created_by": user_ref(row.created_by, row.created_by_name) if row.created_by and row.created_by_name else None,
         "created_at": iso(row.created_at),
     }
@@ -99,4 +113,20 @@ async def delete_voiceprint(person_id: UUID, principal: Member, ctx: Ctx) -> Res
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         await forget(conn, person_id)
+    return Response(status_code=204)
+
+
+@router.delete("/people/{person_id}/voice-samples/{transcript_id}/{speaker_id}", status_code=204)
+async def delete_voice_sample(
+    person_id: UUID,
+    transcript_id: UUID,
+    speaker_id: Annotated[str, Path(pattern=SPEAKER_ID)],
+    principal: Member,
+    ctx: Ctx,
+) -> Response:
+    """Tira uma amostra da impressão; o locutor segue ligado à pessoa."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await get_person(conn, person_id)
+        if not await forget_sample(conn, person_id, SpeakerKey(transcript_id, speaker_id)):
+            raise not_found("Amostra inexistente ou sem acesso.")
     return Response(status_code=204)

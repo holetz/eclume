@@ -8,7 +8,7 @@ dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice
 toda gravação; `voices=` troca as vozes de uma rodada.
 
 `FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`,
-`detect_agenda_type`):
+`detect_agenda_type`, `summary_chat`):
 nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
 """
 
@@ -25,6 +25,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
+from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
@@ -157,16 +158,18 @@ def run_gpu(
 
 
 def purpose_of(system: str) -> str:
-    """A finalidade da chamada, pelo prompt de sistema: `fields`, `agenda_detection` ou `summaries`."""
-    return {FIELDS_SYSTEM: "fields", DETECT_SYSTEM: "agenda_detection"}.get(system, "summaries")
+    """A finalidade da chamada, pelo prompt de sistema: `fields`, `agenda_detection`, `chat` ou `summaries`."""
+    return {FIELDS_SYSTEM: "fields", DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat"}.get(system, "summaries")
 
 
 @dataclass
 class FakeAgents:
     """Fábrica de providers falsos, com respostas por finalidade e erros programados, em ordem.
 
-    `replies[finalidade]` é a fila de respostas daquela finalidade; vazia, vale o padrão: Markdown
-    determinístico no resumo, `{}` (nada encontrado) nos campos e o primeiro tipo (`T1`) na detecção.
+    `replies[finalidade]` é a fila de respostas daquela finalidade, uma por chamada (o roteiro do
+    chat: consultas e a resposta); vazia, vale o padrão: Markdown determinístico no resumo, `{}`
+    (nada encontrado) nos campos, o primeiro tipo (`T1`) na detecção e um `reply` sem mudar o
+    resumo no chat.
     Os `errors` valem para qualquer
     chamada, antes das respostas.
     """
@@ -201,6 +204,8 @@ class _FakeAgent:
             text = "{}"
         elif purpose == "agenda_detection":
             text = '{"tipo": "T1", "confianca": 0.9, "motivo": "o primeiro tipo"}'
+        elif purpose == "chat":
+            text = '{"action": "reply", "message": "Pronto.", "summary_md": null}'
         else:
             text = f"# Resumo\n\n- gerado por {self.config.name}"
         return Completion(text=text, model=f"{self.config.model}-fake")

@@ -62,8 +62,14 @@ def _types(services: Services, account: Account) -> dict[str, dict[str, Any]]:
 @pytest.fixture
 def team(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> dict[str, Any]:
     """Sessão de admin (plataforma nos padrões) e um usuário, com sessão."""
-    member = make_user()
-    return {"admin": admin, "member": as_user(member), "member_account": member, "stranger_account": make_user()}
+    member, stranger = make_user(), make_user()
+    return {
+        "admin": admin,
+        "member": as_user(member),
+        "member_account": member,
+        "stranger": as_user(stranger),
+        "stranger_account": stranger,
+    }
 
 
 # --- tipos de agenda ------------------------------------------------------------------------------
@@ -250,6 +256,80 @@ def test_sem_tipo_no_pedido_vale_o_da_gravacao(team: dict[str, Any], services: S
     foreign = owner.post(url, json={"agenda_type_id": str(stranger_types[0]["id"])})
     assert foreign.status_code == 422
     assert foreign.json()["errors"][0]["field"] == "agenda_type_id"
+
+
+def test_versoes_edicao_voltar_a_gerada_e_excluir(team: dict[str, Any], services: Services):
+    owner: Api = team["member"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    one_on_one = _types(services, team["member_account"])["1:1"]
+    transcript_id = _transcribed(owner, services, agenda_type_id=one_on_one["id"])
+    recording_id = owner.get(f"/api/v1/transcripts/{transcript_id}").json()["recording_id"]
+    url = f"/api/v1/recordings/{recording_id}/summary"
+
+    state = owner.get(url).json()
+    generated = state["current"]
+    assert (generated["version"], generated["origin"], state["version_count"]) == (1, "generated", 1)
+    assert (state["generated"]["id"], state["pending"]) == (generated["id"], None)
+
+    edited = owner.put(url, json={"content_md": "# Editado à mão", "base_version": 1})
+    assert edited.status_code == 200, edited.text
+    manual = edited.json()
+    assert (manual["version"], manual["origin"], manual["status"], manual["provider"]) == (2, "manual", "done", None)
+    assert manual["agenda_type"] == {"id": one_on_one["id"], "name": "1:1"}
+    assert manual["created_by"] == str(team["member_account"].user_id)
+    # Quem abriu a versão 1 não sobrescreve a 2 sem saber.
+    stale = owner.put(url, json={"content_md": "# Outra edição", "base_version": 1})
+    assert (stale.status_code, stale.json()["code"]) == (409, "summary_changed")
+
+    # Uma geração nova só vira a atual quando termina.
+    queued = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={}).json()
+    state = owner.get(url).json()
+    assert (state["current"]["id"], state["pending"]["id"]) == (manual["id"], queued["id"])
+    # Uma edição durante a geração vira a atual até a geração terminar; ao terminar, a geração
+    # toma o próximo número (a 3 vira 5) e passa a ser a atual.
+    during = owner.put(url, json={"content_md": "# Durante a geração", "base_version": 2}).json()
+    assert (during["version"], owner.get(url).json()["current"]["id"]) == (4, during["id"])
+    run_cpu(services.settings)
+    state = owner.get(url).json()
+    assert (state["current"]["id"], state["generated"]["id"], state["version_count"]) == (queued["id"], queued["id"], 4)
+    assert state["current"]["version"] == 5
+
+    reverted = owner.post(f"{url}/revert")
+    assert reverted.status_code == 201, reverted.text
+    back = reverted.json()
+    assert (back["version"], back["origin"], back["restored_from_id"]) == (6, "manual", queued["id"])
+    assert back["content_md"] == owner.get(f"/api/v1/summaries/{queued['id']}").json()["content_md"]
+    listed = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
+    assert [item["version"] for item in listed] == [6, 5, 4, 2, 1]
+    first = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries", params={"limit": 2}).json()
+    rest = owner.get(
+        f"/api/v1/transcripts/{transcript_id}/summaries", params={"limit": 2, "cursor": first["next_cursor"]}
+    ).json()
+    assert [item["version"] for item in first["items"] + rest["items"]] == [6, 5, 4, 2]
+
+    # Outra conta não enxerga nem mexe; um PAT só de leitura não edita.
+    stranger: Api = team["stranger"]
+    for method in ("get", "delete"):
+        assert getattr(stranger, method)(url).status_code == 404
+    assert stranger.put(url, json={"content_md": "x", "base_version": 6}).status_code == 404
+    assert stranger.post(f"{url}/revert").status_code == 404
+    reader = owner.pat("summaries:read")
+    assert reader.get(url).status_code == 200
+    assert reader.put(url, json={"content_md": "x", "base_version": 6}).json()["code"] == "insufficient_scope"
+
+    assert owner.delete(url).status_code == 204
+    assert owner.get(url).json() == {"current": None, "generated": None, "pending": None, "version_count": 0}
+    missing = owner.post(f"{url}/revert")
+    assert (missing.status_code, missing.json()["code"]) == (409, "summary_missing")
+    fresh = owner.put(url, json={"content_md": "# Do zero", "base_version": 0}).json()
+    assert (fresh["version"], fresh["origin"], fresh["agenda_type"]) == (1, "manual", None)
+
+
+def test_resumo_da_gravacao_sem_transcricao(team: dict[str, Any]):
+    owner: Api = team["member"]
+    recording = upload_file(owner, audio_bytes(100))
+    response = owner.get(f"/api/v1/recordings/{recording['id']}/summary")
+    assert (response.status_code, response.json()["code"]) == (409, "transcript_missing")
 
 
 def _one_summary(team: dict[str, Any], services: Services, agents: FakeAgents, **provider: Any) -> dict[str, Any]:  # noqa: ANN401

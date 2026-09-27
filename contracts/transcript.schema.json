@@ -25,7 +25,7 @@
       "description": "Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva.",
       "type": "string",
       "pattern": "^1\\.[0-9]+$",
-      "examples": ["1.0"]
+      "examples": ["1.1"]
     },
     "id": {
       "description": "Id da transcrição. Estável entre revisões e retranscrições.",
@@ -108,6 +108,16 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "kind": {
+      "description": "Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema 1.1.",
+      "type": "string",
+      "enum": ["meeting", "note"]
+    },
+    "recorded_at_source": {
+      "description": "De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload` (hora do envio). Desde o schema 1.1.",
+      "type": "string",
+      "enum": ["capture", "file_metadata", "user", "upload"]
     }
   },
   "$defs": {

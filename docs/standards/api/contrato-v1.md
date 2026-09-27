@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -54,7 +54,21 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
-  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`.
+  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Um cursor vale
+  só para a ordenação (`sort`) que o gerou.
+- **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
+  valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota
+  com a tag `a` ou `b`. Intervalo de tempo é `from` (inclusivo) e `to` (exclusivo) sobre
+  `recorded_at`, como na busca.
+- **Exportação** por `GET /recordings/{id}/export?format=`: `txt` (`text/plain`, cabeçalho e uma
+  linha `[HH:MM:SS] Nome: texto` por segmento), `srt` (`application/x-subrip`, uma legenda por
+  segmento), `md` (`text/markdown`, título, data e o resumo atual; sem resumo, 409
+  `summary_missing`) e `docx` (Word, com o resumo e a transcrição). O nome do arquivo vem em
+  `Content-Disposition`, em slug do título. `GET /transcripts/{id}/export?format=md` segue como o
+  export da transcrição com frontmatter, que o lumea lê.
+- **Concorrência otimista.** Uma escrita sobre um estado que o cliente leu leva a versão lida
+  (`base_version` na edição do resumo); se o estado mudou, a resposta é 409 com um `code` próprio
+  (`summary_changed`) e nada é sobrescrito.
 - **Upload** resumível em partes (multipart S3 orquestrado pela API): `POST /uploads` com o
   `sha256` do arquivo → partes por `PUT` em URLs opacas que expiram → `POST /uploads/{id}/complete`.
   Mesmo hash de uma gravação do usuário responde 200 `deduplicated` sem transferir nada. Retomar é
@@ -86,7 +100,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
   e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes
   do redesign (holetz/eclume#33 a #41) ainda quebram rotas que só o web do próprio repositório usa
-  (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações). Os dois clientes de
+  (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações; a 2.2.0 torna
+anuláveis `agenda_type`, `provider` e `model` do `Summary`, que passa a ter versões editadas à
+mão, e troca os filtros de `GET /recordings` por listas repetíveis, compatíveis com um valor só). Os dois clientes de
   fora do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, que seguem
   compatíveis; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a linha 2.x evolui no
   mesmo prefixo até o redesign terminar, e os contract tests exigem a 2.x. Depois dele a 2.x

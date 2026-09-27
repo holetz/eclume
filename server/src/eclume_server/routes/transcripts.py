@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -17,6 +15,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
+from eclume_server.exports import slug
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.people import get_person
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
@@ -101,12 +100,6 @@ async def get_transcript(
         return await load_transcript(conn, transcript_id, words=include == "words")
 
 
-def _filename(title: str) -> str:
-    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
-    return f"{slug or 'transcricao'}.md"
-
-
 @router.get("/transcripts/{transcript_id}/export")
 async def export_transcript(
     transcript_id: UUID,
@@ -121,7 +114,7 @@ async def export_transcript(
     return Response(
         render_markdown(transcript),
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{_filename(transcript["title"])}"'},
+        headers={"Content-Disposition": f'attachment; filename="{slug(transcript["title"])}.md"'},
     )
 
 

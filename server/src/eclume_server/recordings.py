@@ -31,21 +31,26 @@ _job = (
     .limit(1)
     .lateral("job")
 )
+_markers = (
+    select(func.count().label("marker_count")).where(t.markers.c.recording_id == t.recordings.c.id).lateral("markers")
+)
 
 
 def recording_select() -> Select:
-    """Gravações com dono, tipo de agenda, job mais recente e transcrição (sob a RLS)."""
+    """Gravações com dono, tipo de agenda, job mais recente, transcrição e marcadores (sob a RLS)."""
     return select(
         t.recordings,
         t.users.c.name.label("owner_name"),
         t.agenda_types.c.name.label("agenda_type_name"),
         t.transcripts.c.id.label("transcript_id"),
+        _markers.c.marker_count,
         *(column.label(f"job_{column.name}") for column in _job.c),
     ).select_from(
         t.recordings.join(t.users, t.users.c.id == t.recordings.c.owner_id)
         .outerjoin(t.agenda_types, t.agenda_types.c.id == t.recordings.c.agenda_type_id)
         .outerjoin(_job, true())
         .outerjoin(t.transcripts, t.transcripts.c.recording_id == t.recordings.c.id)
+        .join(_markers, true())
     )
 
 
@@ -95,8 +100,10 @@ def recording_json(row: Row, pipeline: list[Row], progress: tuple[str | None, fl
         "id": str(row["id"]),
         "title": row["title"],
         "status": status,
+        "kind": row["kind"],
         "source": row["source"],
         "recorded_at": iso(row["recorded_at"]),
+        "recorded_at_source": row["recorded_at_source"],
         "duration_ms": row["duration_ms"],
         "language": row["language"],
         "size_bytes": row["size_bytes"],
@@ -111,6 +118,7 @@ def recording_json(row: Row, pipeline: list[Row], progress: tuple[str | None, fl
         "job": job,
         "pipeline": pipeline_json(pipeline, (progress[0] or "asr") if progress is not None else None),
         "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
+        "marker_count": row["marker_count"],
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
     }

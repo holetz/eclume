@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from eclume_server.storage import Storage
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 _SPEAKER_ID = re.compile(r"^S[0-9]+$")
 log = logging.getLogger(__name__)
 
@@ -331,6 +331,8 @@ def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
         r.source,
         r.content_hash,
         r.tags,
+        r.kind,
+        r.recorded_at_source,
         r.owner_id,
         t.users.c.name.label("owner_name"),
     ).select_from(
@@ -427,6 +429,8 @@ def summary_json(row: Row, speakers: list[Row]) -> dict[str, Any]:
         "owner": user_ref(row["owner_id"], row["owner_name"]),
         "speakers": [speaker_json(s) for s in speakers],
         "tags": list(row["tags"]),
+        "kind": row["kind"],
+        "recorded_at_source": row["recorded_at_source"],
     }
 
 

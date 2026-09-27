@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from eclume_server_testing.fakes import transcribed
+from eclume_server_testing.fakes import contract_transcript, transcribed
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -39,6 +39,7 @@ def test_cadastro_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user
     person = created.json()
     assert "voice_consent" not in person
     assert (person["transcript_count"], person["last_seen_at"]) == (0, None)
+    assert (person["voice_sample_count"], person["speaking_time_ms"]) == (0, 0)
     assert api.get(f"/api/v1/people/{person['id']}").json() == person
 
     duplicate = api.post("/api/v1/people", json={"name": "Outro", "email": "rafael.lima@example.com"})
@@ -141,6 +142,10 @@ def test_transcricoes_da_pessoa(
 
     seen = alice.get(f"/api/v1/people/{person['id']}").json()
     assert (seen["transcript_count"], seen["last_seen_at"]) == (2, "2026-09-18T14:00:00Z")
+    talk = {speaker["id"]: speaker["talk_ms"] for speaker in contract_transcript()["speakers"]}
+    # O tempo de fala soma os locutores ligados, em todas as transcrições.
+    assert seen["speaking_time_ms"] == talk["S2"] + talk["S1"]
+    assert seen["voice_sample_count"] == 0
     listed = alice.get(f"/api/v1/people/{person['id']}/transcripts").json()
     assert [t["title"] for t in listed["items"]] == ["Nova", "Antiga"]
     speaker = next(s for s in listed["items"][0]["speakers"] if s["id"] == "S1")
