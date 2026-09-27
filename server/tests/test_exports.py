@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +11,7 @@ import pytest
 from docx import Document
 
 from eclume_server.agents.prompting import hms
+from eclume_server.exports import Export, Line, render_docx, render_srt
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import contract_transcript, run_cpu, run_gpu
 
@@ -160,3 +162,21 @@ def test_escopos_e_isolamento(
     pending = upload_file(api, audio_bytes(100))
     missing = _export(api, pending["id"], "txt")
     assert (missing.status_code, missing.json()["code"]) == (409, "transcript_missing")
+
+
+def test_texto_do_asr_com_quebras_e_controles():
+    export = Export(
+        title="Reunião\x0b",
+        recorded_at=datetime(2026, 9, 18, 14, tzinfo=UTC),
+        duration_ms=4_000,
+        agenda_type=None,
+        participants=["Ana\x01"],
+        lines=[Line(0, 2_000, "Ana", "primeira\n\nsegunda\x07"), Line(2_000, 4_000, "Bia", "ok")],
+        summary_md="# Resumo\x1f",
+    )
+    srt = render_srt(export)
+    assert srt.split("\n\n")[0] == "1\n00:00:00,000 --> 00:00:02,000\nAna: primeira segunda\x07"
+    assert srt.count("\n\n") == 1
+    doc = Document(BytesIO(render_docx(export)))
+    assert doc.paragraphs[0].text == "Reunião"
+    assert any(p.text == "Ana [00:00:00]: primeira\n\nsegunda" for p in doc.paragraphs)

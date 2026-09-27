@@ -4,10 +4,10 @@ title: Estação de desenvolvimento e teste no Windows
 description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, CA e PAT no app, depuração pela janela via CDP do WebView2, log do app e build cruzado de binários Windows no host com cargo xwin.
 resource: desktop/**, deploy/**
 tags: [windows, estacao, desktop, runbook, cross-build]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#28
+source: holetz/eclume#28, holetz/eclume#34
 maintainer: holetz
 ---
 
@@ -59,6 +59,12 @@ ssh "$host" "export PATH=\$HOME/.cargo/bin:\$HOME/.local/bin:\$PATH; cd ~/build/
 Um arquivo apagado na estação continua na cópia do host até um `rm` explícito. Arquivos gerados
 lá (um `Cargo.lock`, um `cargo fmt`) voltam por `scp gpu-host:build/<nome>/<arquivo> <local>`.
 Exemplos: `remote-run desktop 'cargo test --workspace'`, `remote-run . 'uv run pytest server/tests'`.
+
+A cópia do host não tem `.git`: um `git diff` dentro do `remote-run` sai com 129. Checagens que
+dependem do git, como a do cliente gerado (`npm --prefix web run gen:api` seguido de
+`git diff --exit-code web/src/api/schema.gen.ts`), rodam na estação. Os testes do web (Vitest com
+jsdom) também rodam no host: na estação alguns `findBy` de 1 s estouram o tempo por lentidão do
+jsdom no Windows, sem ser regressão.
 
 ## 3. App instalado: CA, PAT e log
 

@@ -1090,10 +1090,10 @@ paths:
       - recordings
       operationId: upsertMarkers
       summary: Enviar marcadores em lote
-      description: 'Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica.
-        Sem
+      description: 'Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica;
+        um
 
-        `device_name`, vale o do dispositivo da credencial, se houver.
+        reenvio sem nota mantém a que já existe. `device_name` é o do corpo (sem ele, nulo).
 
         '
       security:
@@ -1647,6 +1647,7 @@ paths:
       - summaries
       operationId: listSummaries
       summary: Resumos da transcrição
+      description: Da maior `version` para a menor; os números podem pular (ver `Summary`).
       security:
       - sessionCookie: []
       - pat:
@@ -5743,6 +5744,10 @@ components:
       - chat
     Summary:
       description: 'Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
+
+        Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
+
+        atual; por isso os números podem pular.
 
         '
       type: object

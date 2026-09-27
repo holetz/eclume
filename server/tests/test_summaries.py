@@ -285,27 +285,37 @@ def test_versoes_edicao_voltar_a_gerada_e_excluir(team: dict[str, Any], services
     queued = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={}).json()
     state = owner.get(url).json()
     assert (state["current"]["id"], state["pending"]["id"]) == (manual["id"], queued["id"])
+    # Uma edição durante a geração vira a atual até a geração terminar; ao terminar, a geração
+    # toma o próximo número (a 3 vira 5) e passa a ser a atual.
+    during = owner.put(url, json={"content_md": "# Durante a geração", "base_version": 2}).json()
+    assert (during["version"], owner.get(url).json()["current"]["id"]) == (4, during["id"])
     run_cpu(services.settings)
     state = owner.get(url).json()
-    assert (state["current"]["id"], state["generated"]["id"], state["version_count"]) == (queued["id"], queued["id"], 3)
+    assert (state["current"]["id"], state["generated"]["id"], state["version_count"]) == (queued["id"], queued["id"], 4)
+    assert state["current"]["version"] == 5
 
     reverted = owner.post(f"{url}/revert")
     assert reverted.status_code == 201, reverted.text
     back = reverted.json()
-    assert (back["version"], back["origin"], back["restored_from_id"]) == (4, "manual", queued["id"])
+    assert (back["version"], back["origin"], back["restored_from_id"]) == (6, "manual", queued["id"])
     assert back["content_md"] == owner.get(f"/api/v1/summaries/{queued['id']}").json()["content_md"]
     listed = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
-    assert [item["version"] for item in listed] == [4, 3, 2, 1]
+    assert [item["version"] for item in listed] == [6, 5, 4, 2, 1]
+    first = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries", params={"limit": 2}).json()
+    rest = owner.get(
+        f"/api/v1/transcripts/{transcript_id}/summaries", params={"limit": 2, "cursor": first["next_cursor"]}
+    ).json()
+    assert [item["version"] for item in first["items"] + rest["items"]] == [6, 5, 4, 2]
 
     # Outra conta não enxerga nem mexe; um PAT só de leitura não edita.
     stranger: Api = team["stranger"]
     for method in ("get", "delete"):
         assert getattr(stranger, method)(url).status_code == 404
-    assert stranger.put(url, json={"content_md": "x", "base_version": 4}).status_code == 404
+    assert stranger.put(url, json={"content_md": "x", "base_version": 6}).status_code == 404
     assert stranger.post(f"{url}/revert").status_code == 404
     reader = owner.pat("summaries:read")
     assert reader.get(url).status_code == 200
-    assert reader.put(url, json={"content_md": "x", "base_version": 4}).json()["code"] == "insufficient_scope"
+    assert reader.put(url, json={"content_md": "x", "base_version": 6}).json()["code"] == "insufficient_scope"
 
     assert owner.delete(url).status_code == 204
     assert owner.get(url).json() == {"current": None, "generated": None, "pending": None, "version_count": 0}
