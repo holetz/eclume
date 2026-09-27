@@ -2,10 +2,12 @@ import { useEffect, useId, useState, type FormEvent } from 'react'
 import { ApiError, errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
+import { FieldTest } from './FieldTest'
 import styles from './Organize.module.css'
 import {
   cleanDraft,
   KIND_LABELS,
+  startFieldPreview,
   useDeleteField,
   useSaveField,
   type Field,
@@ -13,6 +15,7 @@ import {
   type FieldKind,
 } from './queries'
 import { TagInput } from './TagInput'
+import { usePreview } from './usePreview'
 
 const EMPTY: FieldDraft = { name: '', kind: 'text', options: [], instructions: '', auto_fill: true }
 
@@ -50,6 +53,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
   const [draft, setDraft] = useState<FieldDraft>(initial)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const save = useSaveField()
+  const test = usePreview(startFieldPreview)
   const builtin = field?.builtin != null
   const dirty = !sameDraft(draft, initial)
   const errors = invalidFields(save.error)
@@ -59,7 +63,9 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
 
   const set = (changes: Partial<FieldDraft>) => setDraft((current) => ({ ...current, ...changes }))
   const missingOptions = draft.kind === 'choice' && options.length === 0
-  const canSave = dirty && draft.name.trim() !== '' && !missingOptions && !save.isPending
+  const complete = draft.name.trim() !== '' && !missingOptions
+  const canSave = dirty && complete && !save.isPending
+  const testing = test.state === 'queued' || test.state === 'running'
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -175,9 +181,20 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
         </p>
       )}
 
+      <FieldTest test={test} />
+
       <div className="row">
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
+        </button>
+        {/* Testa o rascunho como está, sem salvar. */}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={!complete || testing}
+          onClick={() => test.run({ field: cleanDraft(draft) })}
+        >
+          Testar numa gravação
         </button>
       </div>
 

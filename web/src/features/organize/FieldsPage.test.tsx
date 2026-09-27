@@ -183,3 +183,85 @@ describe('campos e regras', () => {
     expect(await screen.findByRole('form', { name: 'Editar Título' })).toBeInTheDocument()
   })
 })
+
+describe('testar numa gravação', () => {
+  const queued = () => ({ ...fixtures.previewFieldRule(), status: 'queued', items: [] })
+
+  it('roda o rascunho nas últimas gravações, mostra a espera e o valor de cada uma, sem salvar', async () => {
+    const http = mockFields({
+      'POST /api/v1/fields/preview': () => queued(),
+      'GET /api/v1/previews/:id': () => fixtures.previewFieldRule(),
+    })
+    renderApp(`/config/campos?campo=${CLIENTE}`)
+    const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
+    const rule = within(panel).getByLabelText('Como identificar')
+    await userEvent.clear(rule)
+    await userEvent.type(rule, 'Nome curto.')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
+
+    expect(within(panel).getByRole('status')).toHaveTextContent('Testando a regra nas últimas 3 gravações…')
+    expect(within(panel).getByRole('button', { name: 'Testar numa gravação' })).toBeDisabled()
+    expect(await http.requests('POST /api/v1/fields/preview')[0].json()).toEqual({
+      field: {
+        name: 'Cliente',
+        kind: 'choice',
+        options: ['Serra Azul', 'Vale Verde'],
+        instructions: 'Nome curto.',
+        auto_fill: true,
+      },
+    })
+
+    const result = await within(panel).findByRole('list', { name: 'Resultado do teste' }, { timeout: 5000 })
+    expect(within(panel).getByText('Nas últimas 2 gravações')).toBeInTheDocument()
+    const [first, second] = within(result).getAllByRole('listitem')
+    expect(first).toHaveTextContent('Revisão do contrato → Serra Azul')
+    expect(within(first).getByText('Serra Azul').tagName).toBe('STRONG')
+    expect(second).toHaveTextContent('Planejamento interno → vazio')
+    expect(within(second).getByText('vazio').tagName).toBe('EM')
+    expect(http.requests('PATCH /api/v1/fields/:id')).toHaveLength(0)
+    expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeEnabled()
+  })
+
+  it('explica quando nenhum agente preenche campos', async () => {
+    mockFields({
+      'POST /api/v1/fields/preview': () => ({
+        ...queued(),
+        status: 'failed',
+        error: { code: 'no_provider', message: 'Nenhum provider serve a finalidade fields.' },
+      }),
+    })
+    renderApp(`/config/campos?campo=${CLIENTE}`)
+    const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      'Nenhum agente está configurado para preencher campos. Peça a quem administra o servidor.',
+    )
+  })
+
+  it('mostra a falha do agente e o erro da API', async () => {
+    let calls = 0
+    mockFields({
+      'POST /api/v1/fields/preview': () =>
+        ++calls === 1
+          ? { ...queued(), status: 'failed', error: { code: 'provider_error', message: 'O agente não respondeu.' } }
+          : problem('rate_limited', 429),
+    })
+    renderApp(`/config/campos?campo=${CLIENTE}`)
+    const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
+    const button = within(panel).getByRole('button', { name: 'Testar numa gravação' })
+    await userEvent.click(button)
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('O agente não respondeu.')
+    await userEvent.click(button)
+    expect(await within(panel).findByText('Muitas requisições seguidas. Aguarde um instante e tente de novo.')).toBeInTheDocument()
+  })
+
+  it('avisa quando ainda não há gravações transcritas', async () => {
+    mockFields({ 'POST /api/v1/fields/preview': () => ({ ...queued(), status: 'done' }) })
+    renderApp('/config/campos')
+    const panel = await screen.findByRole('form', { name: 'Editar Título' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
+    expect(await within(panel).findByRole('status')).toHaveTextContent(
+      'Você ainda não tem gravações transcritas para testar.',
+    )
+  })
+})
