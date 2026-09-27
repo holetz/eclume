@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -11,8 +13,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from eclume_server.app import create_app
-from eclume_server.devices import purge_pairing_codes
 from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR
+from eclume_server.worker import purge_pairing_codes
 from eclume_server_testing.api import PASSWORD, Api
 from eclume_server_testing.conformance import CONFORMANCE
 from eclume_server_testing.harness import run
@@ -215,3 +217,11 @@ def _sql(services: Services, sql: str, **params: Any) -> Any:  # noqa: ANN401
         return result.all() if result.returns_rows else None
 
     return run(services.sql(go))
+
+
+def test_worker_importa_sozinho():
+    """O worker sobe com `arq eclume_server.worker.WorkerSettings`, sem a API carregada antes."""
+    result = subprocess.run(
+        [sys.executable, "-c", "import eclume_server.worker"], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
