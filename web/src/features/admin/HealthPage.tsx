@@ -1,11 +1,10 @@
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
 import { formatDateTime, stageLabel } from '../library/format'
 import styles from './Admin.module.css'
 import { HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
-import { sectionTitle } from './sections'
+import { useAdminTitle } from './sections'
 
 type Health = Schemas['AdminHealth']
 
@@ -24,7 +23,7 @@ const QUEUE_LABELS: Record<string, string> = {
 
 /** Saúde do serviço, relida a cada 10 s. */
 export function HealthPage() {
-  usePageTitle(sectionTitle('saude'))
+  useAdminTitle('Saúde')
   const health = useAdminHealth()
   return (
     <section className={styles.page} aria-labelledby="saude-titulo">

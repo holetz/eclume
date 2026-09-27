@@ -295,3 +295,25 @@
   font-weight: 600;
   margin-bottom: var(--space-3);
 }
+
+/* Locutores: as duas seções do DS, a segunda com o divisor em cima. */
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 16px;
+}
+
+.divided {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--color-accent);
+}

@@ -34,6 +34,24 @@ export function useSecrets() {
   return useQuery({ queryKey: SECRETS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/secrets')) })
 }
 
+/** Grava ou apaga um segredo da plataforma (só escrita); a lista se relê em seguida. */
+export function usePlatformSecret(name: string) {
+  const queryClient = useQueryClient()
+  const path = { params: { path: { secret_name: name } } }
+  const refresh = () => queryClient.invalidateQueries({ queryKey: SECRETS_KEY })
+  return {
+    save: useMutation({
+      mutationFn: (value: string) =>
+        unwrap(api.PUT('/api/v1/admin/secrets/{secret_name}', { ...path, body: { value } })),
+      onSuccess: refresh,
+    }),
+    clear: useMutation({
+      mutationFn: () => unwrap(api.DELETE('/api/v1/admin/secrets/{secret_name}', path)),
+      onSuccess: refresh,
+    }),
+  }
+}
+
 // A busca de usuários filtra a lista já carregada: o contrato não tem `q`, e são poucas contas.
 const MAX_USER_PAGES = 20
 

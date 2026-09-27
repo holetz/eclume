@@ -2,18 +2,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
 import { formatDateTime } from '../library/format'
 import styles from './Admin.module.css'
 import { SECRET_INFO } from './labels'
 import { SECRETS_KEY, useSecrets } from './queries'
-import { sectionTitle } from './sections'
+import { useAdminTitle } from './sections'
 
 type Secret = Schemas['SecretList']['items'][number]
 
 /** Segredos da plataforma: só escrita. O valor salvo nunca volta do servidor. */
 export function SecretsPage() {
-  usePageTitle(sectionTitle('segredos'))
+  useAdminTitle('Segredos')
   const secrets = useSecrets()
   return (
     <section className={styles.page} aria-labelledby="segredos-titulo">

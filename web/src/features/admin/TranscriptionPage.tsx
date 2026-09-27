@@ -2,11 +2,10 @@ import { useId, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
-import { PageHead } from '../../app/PageHead'
+import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { COMPUTE_TYPES, ENGINES, lastChangeText, MODELS, optionalInt } from './labels'
 import { useAdminSettings, useUpdateSettings } from './queries'
-import { ADMIN_KICKER } from './sections'
 import { whisperLanguages } from './whisperLanguages'
 
 type Settings = Schemas['AdminSettings']
@@ -20,7 +19,7 @@ export function TranscriptionPage() {
   if (settings.data) return <TranscriptionForm settings={settings.data} />
   return (
     <>
-      <PageHead kicker={ADMIN_KICKER} title="Transcrição" />
+      <AdminPageHead title="Transcrição" />
       {settings.isPending && <p role="status">Carregando a configuração…</p>}
       {settings.isError && (
         <p className="alert alert-error" role="alert">
@@ -40,7 +39,8 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
   const [batchSize, setBatchSize] = useState(settings.asr.batch_size?.toString() ?? '')
   const [fallbackModel, setFallbackModel] = useState(settings.asr.fallback_model ?? '')
   const [endpoint, setEndpoint] = useState(settings.asr.endpoint_url ?? '')
-  const [saved, setSaved] = useState(false)
+  // O que foi salvo por último: o aviso vale até o form mudar de novo.
+  const [sent, setSent] = useState<string | null>(null)
   const languages = useMemo(() => whisperLanguages(), [])
   const ids = {
     engine: useId(),
@@ -61,7 +61,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
     batch_size: optionalInt(batchSize),
     default_language: language,
     fallback_model: fallbackModel.trim() || null,
-    endpoint_url: remote ? endpoint.trim() || null : settings.asr.endpoint_url,
+    endpoint_url: endpoint.trim() || null,
   }
   // Sem idioma salvo, o server usa o português: o form já parte dele.
   const current = { ...settings.asr, default_language: settings.asr.default_language ?? 'pt' }
@@ -72,14 +72,14 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!canSave) return
-    setSaved(false)
-    update.mutate({ asr }, { onSuccess: () => setSaved(true) })
+    const json = JSON.stringify(asr)
+    setSent(null)
+    update.mutate({ asr }, { onSuccess: () => setSent(json) })
   }
 
   return (
     <>
-      <PageHead
-        kicker={ADMIN_KICKER}
+      <AdminPageHead
         title="Transcrição"
         actions={
           // Fora do form, no cabeçalho: `form=` o liga ao form, e Enter nos campos também salva.
@@ -88,12 +88,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
           </button>
         }
       />
-      <form
-        id={FORM_ID}
-        className={styles.narrowForm}
-        onSubmit={submit}
-        aria-label="Configuração de transcrição"
-      >
+      <form id={FORM_ID} className={styles.narrowForm} onSubmit={submit} aria-label="Configuração de transcrição">
         <div className="field">
           <span id={ids.engine} className={styles.label}>
             Motor
@@ -215,7 +210,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
           </p>
         )}
         <p role="status" className="text-muted">
-          {saved && !changed ? 'Configuração salva.' : ''}
+          {sent === JSON.stringify(asr) ? 'Configuração salva.' : ''}
         </p>
         <p className={styles.meta}>{lastChangeText(settings)}</p>
       </form>

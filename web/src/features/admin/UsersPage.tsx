@@ -2,11 +2,10 @@ import { useId, useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
-import { PageHead } from '../../app/PageHead'
+import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { foldText, formatShortDate } from './labels'
 import { useAllUsers, useSetUserActive } from './queries'
-import { ADMIN_KICKER } from './sections'
 
 type User = Schemas['AdminUser']
 
@@ -29,7 +28,7 @@ export function UsersPage() {
 
   return (
     <>
-      <PageHead kicker={ADMIN_KICKER} title="Usuários" />
+      <AdminPageHead title="Usuários" />
       {users.isPending && <p role="status">Carregando usuários…</p>}
       {users.isError && (
         <p className="alert alert-error" role="alert">

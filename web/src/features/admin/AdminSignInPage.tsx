@@ -1,14 +1,13 @@
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
 import { AuthLayout } from '../auth/AuthLayout'
 import { adminReturnPath, useAdminLogin, useAdminMe } from './adminSession'
+import { useAdminTitle } from './sections'
 
 /** Login da conta de admin, na variante `.auth-admin`: sem cadastro nem "esqueci a senha" (é pelo CLI). */
 export function AdminSignInPage() {
-  useEffect(() => {
-    document.title = 'Entrar — Admin eclume'
-  }, [])
+  useAdminTitle('Entrar')
   const [params] = useSearchParams()
   const volta = adminReturnPath(params.get('volta'))
   const me = useAdminMe()

@@ -54,7 +54,7 @@ export function providerSecret(kind: string): ProviderSecret {
 export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
   hf_token: {
     label: 'Token do Hugging Face',
-    hint: 'Libera a diarização (pyannote). A conta precisa ter aceitado os termos de pyannote/speaker-diarization-community-1.',
+    hint: 'Baixa os modelos do pyannote. A conta precisa ter aceitado os termos de pyannote/speaker-diarization-community-1.',
   },
   anthropic_api_key: {
     label: 'Chave da API da Anthropic',
@@ -65,6 +65,37 @@ export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
 export function labelOf(options: readonly Option[], value: string | null | undefined): string {
   if (value == null) return '—'
   return options.find((option) => option.value === value)?.label ?? value
+}
+
+export interface SpeakerPreset {
+  value: string
+  label: string
+  min: number | null
+  max: number | null
+  custom?: boolean
+}
+
+/** "Pessoas esperadas" de Locutores: cada opção fixa `min_speakers` e `max_speakers`. */
+export const SPEAKER_PRESETS: readonly SpeakerPreset[] = [
+  { value: 'detectar', label: 'Detectar', min: null, max: null },
+  { value: '2', label: '2', min: 2, max: 2 },
+  { value: '3-6', label: '3–6', min: 3, max: 6 },
+  { value: '7+', label: '7+', min: 7, max: null },
+]
+
+type SpeakerRange = { min_speakers: number | null; max_speakers: number | null }
+
+/** A opção do valor salvo; fora das opções, "Personalizado", que o preserva até o admin trocar. */
+export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerRange): SpeakerPreset {
+  return (
+    SPEAKER_PRESETS.find((preset) => preset.min === min && preset.max === max) ?? {
+      value: 'personalizado',
+      label: `Personalizado (${min ?? '…'}–${max ?? '…'})`,
+      min,
+      max,
+      custom: true,
+    }
+  )
 }
 
 const lastChange = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })

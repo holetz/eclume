@@ -193,7 +193,8 @@ test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
   // Transcrição: a configuração do exemplo, salva de volta.
   await expect(page.getByRole('heading', { name: 'Transcrição' })).toBeVisible()
   await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('large-v3-turbo')
-  await page.getByRole('button', { name: 'Salvar configuração' }).click()
+  await page.getByLabel('Modelo', { exact: true }).selectOption('large-v3')
+  await page.getByRole('button', { name: 'Salvar' }).click()
   await expect(page.getByText('Configuração salva.')).toBeVisible()
   await screenshot(page, '12-admin-transcricao')
 
@@ -296,11 +297,10 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await screenshot(page, '16-pessoa-voz')
   await voice.getByRole('button', { name: 'Manter' }).click()
 
-  // Admin: o liga-desliga da plataforma e o limiar, sem termo nem trilha.
-  await adminLogin(page, '/admin/locutores')
-  await expect(page.getByRole('checkbox', { name: /Ligar a identificação por voz/ })).toBeChecked()
+  // Admin: a identificação por voz fica em Locutores, sem termo nem trilha.
+  await adminLogin(page, '/admin/voz')
+  await expect(page.getByRole('heading', { level: 1, name: 'Locutores' })).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Sugerir quem está falando pelas amostras de voz' })).toBeChecked()
   await expect(page.getByRole('table')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Salvar' }).click()
-  await expect(page.getByText('Configuração de voz salva.')).toBeVisible()
   await screenshot(page, '17-admin-voz')
 })

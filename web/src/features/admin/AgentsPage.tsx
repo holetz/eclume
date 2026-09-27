@@ -2,18 +2,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
 import styles from './Admin.module.css'
 import { labelOf, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret } from './labels'
 import { PROVIDERS_KEY, SETTINGS_KEY, useAdminSettings, useProviders, useUpdateSettings } from './queries'
-import { sectionTitle } from './sections'
+import { useAdminTitle } from './sections'
 
 type Provider = Schemas['AgentProvider']
 type ProviderKind = Schemas['AgentProviderKind']
 
 /** Providers de agente de sumarização da plataforma e o provider padrão. */
 export function AgentsPage() {
-  usePageTitle(sectionTitle('agentes'))
+  useAdminTitle('Agentes')
   const providers = useProviders()
   const [editing, setEditing] = useState<Provider | 'new' | null>(null)
   const items = providers.data?.items ?? []

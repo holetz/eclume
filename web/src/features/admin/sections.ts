@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 // Seções do painel, na ordem da barra lateral "Plataforma". Os caminhos são relativos a /admin.
 export interface AdminSection {
   path: string
@@ -16,8 +18,9 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
 
 export const ADMIN_KICKER = 'Painel de administração'
 
-/** Título da aba: "<seção> — Admin eclume"; fora das seções, a página não encontrada. */
-export function sectionTitle(path: string): string {
-  const label = ADMIN_SECTIONS.find((section) => section.path === path)?.label ?? 'Página não encontrada'
-  return `${label} — Admin eclume`
+/** Põe o título da aba do painel: "<título> — Admin eclume". */
+export function useAdminTitle(title: string): void {
+  useEffect(() => {
+    document.title = `${title} — Admin eclume`
+  }, [title])
 }
