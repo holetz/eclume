@@ -57,6 +57,8 @@ class PreprocessResult:
     warnings: list[str] = field(default_factory=list)
     ms: int = 0
     ffmpeg_version: str | None = None
+    # A duração do original (ffprobe), que o usuário ouve; `None` se o contêiner não a diz.
+    duration_ms: int | None = None
 
     def info(self) -> dict[str, Any]:
         """O `engine_info.preprocess`."""
@@ -90,8 +92,8 @@ def ffmpeg_version() -> str | None:
     return match.group(1) if match else None
 
 
-def probe(path: Path) -> int:
-    """Canais do primeiro fluxo de áudio; `PreprocessError` se o arquivo não abre."""
+def probe(path: Path) -> tuple[int, int | None]:
+    """Canais do primeiro fluxo de áudio e a duração (ms) do arquivo; `PreprocessError` se não abre."""
     result = subprocess.run(
         [
             "ffprobe",
@@ -100,7 +102,7 @@ def probe(path: Path) -> int:
             "-select_streams",
             "a:0",
             "-show_entries",
-            "stream=channels",
+            "stream=channels:format=duration",
             "-of",
             "json",
             str(path),
@@ -110,10 +112,16 @@ def probe(path: Path) -> int:
         check=False,
     )
     try:
-        return int(json.loads(result.stdout)["streams"][0]["channels"])
+        data = json.loads(result.stdout)
+        channels = int(data["streams"][0]["channels"])
     except (ValueError, KeyError, IndexError) as exc:
         msg = f"o áudio não abre: {_tail(result.stderr)}"
         raise PreprocessError(msg) from exc
+    try:
+        duration_ms = round(float(data["format"]["duration"]) * 1000)
+    except (ValueError, KeyError, TypeError):
+        duration_ms = None
+    return channels, duration_ms
 
 
 def _dual_mono(path: Path) -> bool:
@@ -209,12 +217,17 @@ def _trim(paths: list[Path], config: dict[str, Any]) -> tuple[float, dict[str, A
     if end is not None and end <= start:
         return 0.0, {"step": "trim_silence", "state": "skipped", "reason": "all_silence", "params": params}
     window = f"atrim=start={start:.3f}" + (f":end={end:.3f}" if end is not None else "")
-    for path in paths:
-        trimmed = path.with_name(path.stem + ".trim.wav")
-        result = _run("-y", "-i", str(path), "-af", f"{window},asetpts=PTS-STARTPTS", "-c:a", "pcm_s16le", str(trimmed))
+    # Todos os canais cortados em temporários e trocados só no fim: ou todos saem cortados (com o
+    # deslocamento), ou nenhum.
+    trimmed = [path.with_name(path.stem + ".trim.wav") for path in paths]
+    for path, target in zip(paths, trimmed, strict=True):
+        result = _run("-y", "-i", str(path), "-af", f"{window},asetpts=PTS-STARTPTS", "-c:a", "pcm_s16le", str(target))
         if result.returncode != 0:
+            for leftover in trimmed:
+                leftover.unlink(missing_ok=True)
             return 0.0, {"step": "trim_silence", "state": "failed", "error": _tail(result.stderr), "params": params}
-        trimmed.replace(path)
+    for path, target in zip(paths, trimmed, strict=True):
+        target.replace(path)
     return start, {"step": "trim_silence", "state": "done", "params": params}
 
 
@@ -226,7 +239,7 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
     """
     started = time.monotonic()
     config = config or {}
-    channels = probe(src)
+    channels, duration_ms = probe(src)
     warnings: list[str] = []
     steps: list[dict[str, Any]] = [
         {"step": "resample", "state": "done", "params": {"rate": SAMPLE_RATE, "channels": 1}}
@@ -271,4 +284,5 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
         warnings=warnings,
         ms=round((time.monotonic() - started) * 1000),
         ffmpeg_version=ffmpeg_version(),
+        duration_ms=duration_ms,
     )

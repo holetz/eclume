@@ -76,7 +76,9 @@ A ordem é fixa:
 
 O áudio tratado vive só no diretório de trabalho: o bucket guarda o original, que o usuário ouve.
 O **deslocamento** do corte (`offset_ms`) é somado a todo `start_ms`/`end_ms` de segmento e palavra
-do raw e à `duration_ms`: as marcas de tempo são as do áudio original.
+do raw: as marcas de tempo são as do áudio original. A `duration_ms` do raw é a do original (pelo
+`ffprobe`), com os silêncios cortados. O corte vale para todos os canais ou para nenhum: cada canal
+é cortado num temporário, e a troca acontece só quando todos saíram.
 
 **Canais separados no ASR:** a engine roda uma vez por canal com `min_speakers = max_speakers = 1`
 (o que mantém o embedding do locutor para a identificação por voz); as falas de cada canal ganham

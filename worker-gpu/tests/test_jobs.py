@@ -26,6 +26,7 @@ class FakePreprocess:
     """O `preprocess` sem ffmpeg: devolve o próprio arquivo (ou um por canal) e registra o pedido."""
 
     offset_ms: int = 0
+    duration_ms: int | None = None
     split: bool = False
     error: Exception | None = None
     calls: list[tuple[dict[str, Any] | None, str | None]] = field(default_factory=list)
@@ -47,6 +48,7 @@ class FakePreprocess:
             fallback=False,
             steps=[{"step": "resample", "state": "done"}],
             ffmpeg_version="6.1",
+            duration_ms=self.duration_ms,
         )
 
 
@@ -378,6 +380,8 @@ def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
 
 def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: FakePreprocess):
     pre.offset_ms = 2000
+    # O original tem 15 s: 2 s cortados do início, 10 s tratados e 3 s cortados do fim.
+    pre.duration_ms = 15_000
     ctx = contexto(tmp_path, rnnoise_model="/opt/cb.rnnn")
     options = {"preprocess": {"denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6}}}
     rodar(ctx, options)
@@ -386,7 +390,7 @@ def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: 
     # Os tempos voltam ao áudio original: a fala de 0 s no tratado é 2 s no original.
     assert [(s["start_ms"], s["end_ms"]) for s in transcript["segments"]] == [(2000, 4000), (4000, 6000)]
     assert transcript["segments"][0]["words"][0]["start_ms"] == 2000
-    assert transcript["duration_ms"] == 12000
+    assert transcript["duration_ms"] == 15_000
     [(_, args, _)] = ctx["redis"].jobs
     info = args[3]
     assert info["preprocess"]["offset_ms"] == 2000

@@ -68,11 +68,14 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
     language: str,
     now: datetime,
     offset_ms: int = 0,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
     """Transcrição no schema do contrato, com locutores `Locutor N` e `person: null`.
 
     `offset_ms` é o silêncio que o pré-processamento cortou do início: somado a todo tempo de
     segmento e palavra, as marcas voltam a ser as do áudio original, que o usuário ouve.
+    `duration_ms` é a duração desse original; sem ela, a do áudio tratado mais o deslocamento (o
+    silêncio cortado do fim fica de fora).
     """
     mapping = speaker_map(result)
     speaker_ids = _segment_speakers(result, mapping)
@@ -107,7 +110,7 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
         "title": f"Gravação {recording_id}",
         "language": language,
         "recorded_at": timestamp,
-        "duration_ms": _ms(result.duration_s) + offset_ms,
+        "duration_ms": duration_ms if duration_ms is not None else _ms(result.duration_s) + offset_ms,
         "source": PROVISIONAL_SOURCE,
         "content_hash": content_hash,
         "revision": revision,

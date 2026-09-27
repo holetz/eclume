@@ -334,6 +334,7 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
         language=options.get("language") or result.language,
         now=datetime.now(UTC),
         offset_ms=pre.offset_ms,
+        duration_ms=pre.duration_ms,
     )
     await reporter.report("upload")
     t_key, e_key = transcript_key(recording_id), embeddings_key(recording_id)

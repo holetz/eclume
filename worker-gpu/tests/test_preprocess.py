@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from eclume_worker import preprocess as module
 from eclume_worker.preprocess import (
     AUDIO_DECODE_FAILED,
     PREPROCESS_FAILED,
@@ -64,6 +65,8 @@ def test_corta_o_silencio_e_converte_para_16k_mono(tmp_path: Path):
     assert (channels, rate) == (1, 16_000)
     assert duration == pytest.approx(3.0, abs=0.3)
     assert result.offset_ms == pytest.approx(2000, abs=150)
+    # A duração é a do original, com os silêncios cortados.
+    assert result.duration_ms == pytest.approx(7000, abs=100)
     steps = _steps(result)
     assert steps["trim_silence"]["state"] == "done"
     assert (steps["loudnorm"]["state"], steps["denoise"]["params"]["method"]) == ("done", "afftdn")
@@ -135,3 +138,28 @@ def test_audio_que_nao_abre(tmp_path: Path):
     with pytest.raises(PreprocessError) as info:
         preprocess(src, tmp_path, CONFIG, None)
     assert info.value.code == AUDIO_DECODE_FAILED
+
+
+def test_corte_que_falha_num_canal_nao_corta_nenhum(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    graph = (
+        "anullsrc=r=44100:cl=mono:d=2,asplit[s1][s2];sine=f=300:r=44100:d=2[v1];sine=f=900:r=44100:d=2[v2];"
+        "[s1][v1]concat=n=2:v=0:a=1[l];[s2][v2]concat=n=2:v=0:a=1[r];[l][r]join=inputs=2:channel_layout=stereo"
+    )
+    src = _make(tmp_path / "estereo.ogg", graph)
+    real_run = module._run
+    trims: list[str] = []
+
+    def second_trim_fails(*args: str) -> subprocess.CompletedProcess[str]:
+        if any("atrim=" in arg for arg in args):
+            trims.append(args[-1])
+            if len(trims) == 2:
+                return subprocess.CompletedProcess(args, 1, "", "falha simulada")
+        return real_run(*args)
+
+    monkeypatch.setattr(module, "_run", second_trim_fails)
+    result = preprocess(src, tmp_path, CONFIG, None)
+    assert len(trims) == 2
+    assert (result.offset_ms, _steps(result)["trim_silence"]["state"]) == (0, "failed")
+    # Os dois canais ficam inteiros (4 s), e nenhum temporário sobra.
+    assert [round(_wav(path)[2]) for path in result.paths] == [4, 4]
+    assert not list(tmp_path.glob("*.trim.wav"))
