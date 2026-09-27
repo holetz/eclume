@@ -1,7 +1,8 @@
 //! App desktop do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus, percebe sozinho
-//! quando uma reunião começa, mantém a fila local de gravações, sobe-as ao servidor por PAT e
-//! fica na bandeja do sistema.
+//! quando uma reunião começa, mantém a fila local de gravações, sobe-as ao servidor com a
+//! credencial de dispositivo (ou o PAT de uma versão anterior) e fica na bandeja do sistema.
 
+mod account;
 mod auto;
 pub mod capture;
 mod commands;
@@ -257,6 +258,14 @@ pub fn run() {
             commands::mic_test,
             commands::mic_test_meter,
             commands::open_data_dir,
+            commands::discover_servers,
+            commands::prepare_server,
+            commands::sign_in,
+            commands::pair,
+            commands::sign_out,
+            commands::test_connection,
+            commands::open_signup,
+            commands::pick_ca_file,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");

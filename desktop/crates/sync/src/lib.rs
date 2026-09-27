@@ -11,7 +11,7 @@ pub mod protocol;
 pub mod transport;
 pub mod uploader;
 
-pub use devices::{platform, Devices};
+pub use devices::{device_name, platform, Devices};
 pub use pat::{PatSource, PatStore};
 pub use protocol::{Client, RetryPolicy, Uploaded, PAT_PREFIX};
 pub use transport::{HttpRequest, HttpResponse, Transport, UreqTransport};

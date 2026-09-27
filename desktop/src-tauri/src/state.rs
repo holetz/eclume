@@ -1,5 +1,5 @@
-//! Estado do app: a gravação em andamento (e quem a iniciou), a fila, a configuração, o PAT e a
-//! detecção de reuniões.
+//! Estado do app: a gravação em andamento (e quem a iniciou), a fila, a configuração, a conta (a
+//! credencial de dispositivo ou o PAT antigo) e a detecção de reuniões.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -15,11 +15,12 @@ use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
 };
-use eclume_sync::{PatSource, PatStore, UploaderConfig};
+use eclume_sync::{Client, PatSource, PatStore, RetryPolicy, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
+use crate::account::{self, Login, Net, PreparedServer, SignedIn};
 use crate::capture::{AudioChoice, OpenedSources};
-use crate::config::{self, Config, PendingUpdate};
+use crate::config::{self, Account, Config, Connection, PendingUpdate};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
 
 /// A versão deste build.
@@ -158,6 +159,17 @@ pub struct StatusView {
     pub sync_notice: Option<String>,
     /// "Atualizado para X", até a pessoa fechar o aviso.
     pub updated: Option<PendingUpdate>,
+    /// Primeira execução, PAT antigo ou conta.
+    pub connection: Connection,
+    pub account: Option<Account>,
+}
+
+/// "Testar conexão": quem o servidor reconhece e quando foi o último envio.
+#[derive(Clone, Debug, Serialize)]
+pub struct ConnectionTest {
+    pub email: String,
+    /// Quando o servidor confirmou a última gravação deste computador (ms desde a época).
+    pub last_upload_at: Option<i64>,
 }
 
 /// A política de um app, como a tela de configurações a mostra.
@@ -200,6 +212,8 @@ pub struct SettingsView {
     pub apps: Vec<AppPolicyView>,
     pub retention_days: Option<u32>,
     pub pat_source: Option<PatSource>,
+    pub connection: Connection,
+    pub account: Option<Account>,
     pub shortcuts: Vec<ShortcutView>,
     /// O microfone escolhido; `None` é o padrão do sistema.
     pub mic: Option<String>,
@@ -267,6 +281,13 @@ struct Inner {
     mic_test: Option<MicTest>,
     /// A atualização a notificar nesta abertura (sai uma vez).
     update_to_notify: Option<PendingUpdate>,
+    /// Há credencial guardada (PAT ou de dispositivo); lido na abertura e a cada mudança, para a
+    /// consulta de 1 s não ir ao chaveiro.
+    has_token: bool,
+    /// O servidor escolhido na primeira execução, esperando a pessoa entrar.
+    prepared: Option<PreparedServer>,
+    /// A CA do servidor não é mais a fixada: o sync para e a janela volta à primeira execução.
+    ca_changed: bool,
 }
 
 impl Inner {
@@ -365,6 +386,7 @@ impl AppState {
         config: Config,
         pat: PatStore,
     ) -> Self {
+        let has_token = pat.load().ok().flatten().is_some();
         Self {
             queue: Arc::new(Mutex::new(queue)),
             recorder,
@@ -383,8 +405,15 @@ impl AppState {
                 importing: None,
                 mic_test: None,
                 update_to_notify: None,
+                has_token,
+                prepared: None,
+                ca_changed: false,
             }),
         }
+    }
+
+    fn config_dir(&self) -> &Path {
+        self.config_path.parent().unwrap_or(Path::new("."))
     }
 
     fn inner(&self) -> Result<MutexGuard<'_, Inner>> {
@@ -448,6 +477,8 @@ impl AppState {
             notice: inner.notice.clone(),
             sync_notice: inner.sync_notice.clone(),
             updated: inner.config.update_notice(CURRENT_VERSION).cloned(),
+            connection: connection(&inner),
+            account: inner.config.account.clone(),
         })
     }
 
@@ -648,6 +679,9 @@ impl AppState {
 
     /// O que o uploader precisa; `None` sem PAT configurado.
     pub fn uploader_config(&self) -> Result<Option<UploaderConfig>> {
+        if self.inner()?.ca_changed {
+            return Ok(None);
+        }
         let Some((pat, _)) = self.pat.load()? else {
             return Ok(None);
         };
@@ -876,6 +910,8 @@ impl AppState {
                 .collect(),
             retention_days: config.retention_days,
             pat_source,
+            connection: connection(&inner),
+            account: config.account.clone(),
             mic: config.mic.clone(),
             system_audio: config.system_audio,
             note_silence_s: config.note_silence_s,
@@ -925,20 +961,137 @@ impl AppState {
 
         if input.clear_pat {
             self.pat.clear()?;
+            next.account = None;
         } else if let Some(pat) = non_empty(input.pat) {
-            if self.pat.save(&pat)? == PatSource::File {
-                self.inner()?.notice = Some(
-                    "chaveiro do sistema indisponível: o PAT ficou num arquivo só seu, no \
-                     diretório de configuração"
-                        .into(),
-                );
-            }
+            self.save_secret(&pat)?;
         }
         next.save(&self.config_path)?;
+        let has_token = self.pat.load()?.is_some();
         let mut inner = self.inner()?;
+        inner.has_token = has_token;
         let action = inner.auto.on_config_change(&next.detection);
         inner.config = next;
         Ok(action)
+    }
+
+    /// Guarda a credencial no chaveiro; sem chaveiro, avisa que ela foi para o arquivo.
+    fn save_secret(&self, secret: &str) -> Result<()> {
+        if self.pat.save(secret)? == PatSource::File {
+            self.inner()?.notice = Some(
+                "chaveiro do sistema indisponível: a credencial ficou num arquivo só seu, no \
+                 diretório de configuração"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
+    /// Fixa a CA do servidor escolhido e o guarda para a pessoa entrar.
+    pub fn prepare_server(
+        &self,
+        net: &dyn Net,
+        url: &str,
+        ca_sha256: Option<&str>,
+    ) -> Result<PreparedServer> {
+        let server = account::prepare(net, self.config_dir(), url, ca_sha256)?;
+        self.inner()?.prepared = Some(server.clone());
+        Ok(server)
+    }
+
+    /// Entra no servidor escolhido, guarda a credencial e passa a sincronizar com ele.
+    pub fn sign_in(&self, net: &dyn Net, login: Login<'_>) -> Result<()> {
+        let server = account::require(self.inner()?.prepared.clone())?;
+        let signed = account::sign_in(
+            net,
+            self.config_dir(),
+            &server,
+            login,
+            &eclume_sync::device_name(),
+        )?;
+        self.apply_sign_in(signed)
+    }
+
+    fn apply_sign_in(&self, signed: SignedIn) -> Result<()> {
+        self.save_secret(&signed.secret)?;
+        let mut next = self.inner()?.config.clone();
+        next.web_url = signed.web_url;
+        next.api_url = None;
+        next.ca_path = signed.ca_path;
+        next.account = Some(signed.account);
+        next.save(&self.config_path)?;
+        let mut inner = self.inner()?;
+        inner.config = next;
+        inner.has_token = true;
+        inner.prepared = None;
+        inner.ca_changed = false;
+        inner.sync_notice = None;
+        Ok(())
+    }
+
+    /// "Sair": apaga a credencial deste computador e volta à primeira execução; a fila fica.
+    pub fn sign_out(&self) -> Result<()> {
+        self.pat.clear()?;
+        let mut next = self.inner()?.config.clone();
+        next.account = None;
+        next.save(&self.config_path)?;
+        let mut inner = self.inner()?;
+        inner.config = next;
+        inner.has_token = false;
+        Ok(())
+    }
+
+    /// O endereço e a CA fixada pela primeira execução; `None` com CA escolhida à mão ou sem CA.
+    pub fn pinned_ca(&self) -> Result<Option<(String, PathBuf)>> {
+        let inner = self.inner()?;
+        let ca_path = inner.config.ca_path.as_deref();
+        Ok(account::is_pinned(self.config_dir(), ca_path)
+            .then(|| ca_path.map(|path| (inner.config.web_url.clone(), path.to_path_buf())))
+            .flatten())
+    }
+
+    /// O sync está parado porque a CA fixada mudou.
+    pub fn pinned_ca_changed(&self) -> Result<bool> {
+        Ok(self.inner()?.ca_changed)
+    }
+
+    /// A CA do servidor mudou: o sync para e a janela pede para entrar de novo.
+    pub fn mark_ca_changed(&self) -> Result<()> {
+        let mut inner = self.inner()?;
+        inner.ca_changed = true;
+        inner.sync_notice = Some(eclume_sync::pin::CA_CHANGED.into());
+        Ok(())
+    }
+
+    /// "Testar conexão": `GET /api/v1/me` com a credencial guardada.
+    pub fn test_connection(&self, net: &dyn Net) -> Result<ConnectionTest> {
+        let Some(config) = self.uploader_config()? else {
+            bail!("Entre para testar a conexão");
+        };
+        let retry = RetryPolicy {
+            retries: 0,
+            ..RetryPolicy::default()
+        };
+        let transport = net.verified(config.ca_path.as_deref())?;
+        let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
+        let last_upload_at = self
+            .lock_queue()?
+            .list(500)?
+            .into_iter()
+            .filter_map(|recording| recording.synced_at)
+            .max();
+        Ok(ConnectionTest {
+            email: me.user.email,
+            last_upload_at,
+        })
+    }
+}
+
+/// A primeira execução aparece sem credencial e quando a CA fixada mudou.
+fn connection(inner: &Inner) -> Connection {
+    if inner.ca_changed {
+        Connection::FirstRun
+    } else {
+        inner.config.connection(inner.has_token)
     }
 }
 
@@ -1619,5 +1772,94 @@ mod tests {
         );
         assert_eq!(state.retention_days().unwrap(), Some(7));
         assert!(state.detection_enabled().unwrap());
+    }
+
+    #[test]
+    fn primeira_execucao_entrar_e_sair() {
+        use crate::account::tests::{body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL};
+
+        let (state, dir) = state("conta");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
+        let err = state
+            .sign_in(
+                &Shared(std::sync::Arc::new(ScriptNet::default())),
+                Login::Code("K7Q4MX"),
+            )
+            .unwrap_err();
+        assert_eq!(err.to_string(), "Escolha o servidor antes de entrar");
+
+        let net = std::sync::Arc::new(
+            ScriptNet::default()
+                .expect("inseguro GET /downloads/eclume-root.crt", pem())
+                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256))))
+                .expect("verificado POST /api/v1/devices/login", body(201, credential())),
+        );
+        let shared = Shared(std::sync::Arc::clone(&net));
+        let server = state.prepare_server(&shared, URL, Some(CA_SHA256)).unwrap();
+        assert_eq!(server.name, "eclume");
+        state
+            .sign_in(
+                &shared,
+                Login::Password {
+                    email: "ana@exemplo.com.br",
+                    password: "segredo",
+                },
+            )
+            .unwrap();
+        assert!(net.done());
+
+        let view = state.view().unwrap();
+        assert_eq!(view.connection, Connection::Account);
+        assert_eq!(view.account.unwrap().email, "ana@exemplo.com.br");
+        assert_eq!(view.web_url, URL);
+        let pinned = dir.join(eclume_sync::pin::PINNED_FILE);
+        assert_eq!(
+            state.pinned_ca().unwrap(),
+            Some((URL.to_string(), pinned.clone()))
+        );
+        let uploader = state.uploader_config().unwrap().unwrap();
+        assert_eq!(uploader.pat, SECRET);
+        assert_eq!(uploader.ca_path, Some(pinned));
+        let saved = Config::load(&dir.join("config.json"));
+        assert_eq!(saved.account.unwrap().token_id.as_deref(), Some("t-1"));
+
+        // A CA mudou: o sync para e a janela volta à primeira execução.
+        state.mark_ca_changed().unwrap();
+        assert!(state.uploader_config().unwrap().is_none());
+        let view = state.view().unwrap();
+        assert_eq!(view.connection, Connection::FirstRun);
+        assert_eq!(
+            view.sync_notice.as_deref(),
+            Some("O certificado do servidor mudou")
+        );
+
+        // Sair apaga a credencial, mas não a fila nem o servidor.
+        state.sign_out().unwrap();
+        assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
+        assert!(state.uploader_config().unwrap().is_none());
+        assert_eq!(Config::load(&dir.join("config.json")).account, None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn quem_ja_usa_pat_continua_sincronizando() {
+        let (state, dir) = state("pat-antigo");
+        let mut input = settings_input(&state);
+        input.pat = Some("eclp_antigo".into());
+        state.save_settings(input).unwrap();
+        let view = state.view().unwrap();
+        assert_eq!(view.connection, Connection::PersonalToken);
+        assert_eq!(view.account, None);
+        assert_eq!(
+            state.settings().unwrap().connection,
+            Connection::PersonalToken
+        );
+        assert_eq!(state.pinned_ca().unwrap(), None);
+        let mut clear = settings_input(&state);
+        clear.clear_pat = true;
+        state.save_settings(clear).unwrap();
+        assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

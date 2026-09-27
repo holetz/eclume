@@ -3,9 +3,12 @@
 use eclume_recorder::{Marker, QueuedRecording};
 use tauri::{AppHandle, State};
 
+use crate::account::{Login, PreparedServer, RealNet, ServerChoice};
 use crate::import::ImportPreview;
 
-use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView, StorageInfo};
+use crate::state::{
+    AppState, ConnectionTest, NoteMeter, SettingsInput, SettingsView, StatusView, StorageInfo,
+};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -249,4 +252,102 @@ pub fn dismiss_update_notice(app: AppHandle, state: State<'_, AppState>) -> Comm
 #[tauri::command]
 pub fn sync_now(app: AppHandle) -> CommandResult<()> {
     to_js(crate::sync::sync_now(&app))
+}
+
+/// Os servidores da primeira execução: o do instalador e, por até 3 s, os anunciados na rede.
+#[tauri::command(async)]
+pub fn discover_servers() -> Vec<ServerChoice> {
+    let found = eclume_sync::discovery::discover(eclume_sync::discovery::DEFAULT_TIMEOUT)
+        .unwrap_or_else(|err| {
+            log::warn!("{err:#}");
+            Vec::new()
+        });
+    crate::account::server_choices(crate::config::embedded_server(), found)
+}
+
+/// Fixa a CA do servidor escolhido (conferindo a impressão digital, quando há) e o guarda.
+#[tauri::command(async)]
+pub fn prepare_server(
+    state: State<'_, AppState>,
+    url: String,
+    ca_sha256: Option<String>,
+) -> CommandResult<PreparedServer> {
+    to_js(state.prepare_server(&RealNet, &url, ca_sha256.as_deref()))
+}
+
+/// Entra com e-mail e senha no servidor escolhido.
+#[tauri::command(async)]
+pub fn sign_in(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    email: String,
+    password: String,
+) -> CommandResult<()> {
+    let result = state.sign_in(
+        &RealNet,
+        Login::Password {
+            email: &email,
+            password: &password,
+        },
+    );
+    signed_in(&app, result)
+}
+
+/// Entra com o código de pareamento mostrado na web.
+#[tauri::command(async)]
+pub fn pair(app: AppHandle, state: State<'_, AppState>, code: String) -> CommandResult<()> {
+    let result = state.sign_in(&RealNet, Login::Code(&code));
+    signed_in(&app, result)
+}
+
+/// Depois de entrar, as gravações que esperavam sobem já.
+fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
+    if result.is_ok() {
+        if let Err(err) = crate::sync::sync_now(app) {
+            log::error!("{err:#}");
+        }
+    }
+    crate::refresh_ui(app);
+    to_js(result)
+}
+
+/// "Sair": apaga a credencial deste computador; a fila espera o próximo login.
+#[tauri::command]
+pub fn sign_out(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    let result = state.sign_out();
+    crate::refresh_ui(&app);
+    to_js(result)
+}
+
+/// "Testar conexão".
+#[tauri::command(async)]
+pub fn test_connection(state: State<'_, AppState>) -> CommandResult<ConnectionTest> {
+    to_js(state.test_connection(&RealNet))
+}
+
+/// "Escolher…" da CA extra: o diálogo nativo com filtro de PEM; `null` quando a pessoa desiste.
+#[tauri::command(async)]
+pub fn pick_ca_file(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Autoridade certificadora extra")
+        .add_filter("Certificado PEM", &["pem", "crt", "cer"])
+        .blocking_pick_file()
+        .and_then(|file| file.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// "Criar conta": abre o cadastro do servidor escolhido no navegador.
+#[tauri::command]
+pub fn open_signup(app: AppHandle, url: String) -> CommandResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    to_js(
+        crate::config::validate_web_url(url.trim()).and_then(|()| {
+            let signup = format!("{}/cadastro", url.trim().trim_end_matches('/'));
+            app.opener()
+                .open_url(&signup, None::<&str>)
+                .map_err(anyhow::Error::from)
+        }),
+    )
 }

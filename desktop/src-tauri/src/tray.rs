@@ -369,6 +369,8 @@ mod tests {
             notice: None,
             sync_notice: None,
             updated: None,
+            connection: crate::config::Connection::Account,
+            account: None,
         }
     }
 

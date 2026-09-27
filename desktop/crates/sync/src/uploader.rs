@@ -55,7 +55,7 @@ impl HttpUploader {
             client,
             queue,
             client_version: client_version.to_string(),
-            device_name: gethostname::gethostname().into_string().ok(),
+            device_name: Some(crate::device_name()),
         }
     }
 

@@ -25,6 +25,15 @@ pub fn platform() -> &'static str {
     }
 }
 
+/// O nome deste computador: o `device_name` da credencial e do `capture` do upload.
+pub fn device_name() -> String {
+    gethostname::gethostname()
+        .into_string()
+        .ok()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "computador".into())
+}
+
 /// As rotas públicas de ligação do aparelho num servidor.
 pub struct Devices {
     transport: Arc<dyn Transport>,
