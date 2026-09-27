@@ -117,10 +117,11 @@ jobs:
             libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
+      - run: cargo fmt --manifest-path desktop/Cargo.toml --all --check
       - run: cargo check --manifest-path desktop/Cargo.toml --workspace --locked
       - run: cargo clippy --manifest-path desktop/Cargo.toml --workspace --locked -- -D warnings
       - run: cargo test --manifest-path desktop/Cargo.toml --workspace --locked

@@ -59,11 +59,13 @@ struct Audio {
 
 /// Lê o arquivo sem decodificar o áudio.
 pub fn probe(path: &Path) -> Result<Probe> {
-    let mp4 = mp4date::read(File::open(path).with_context(|| format!("falha ao abrir {}", path.display()))?)
-        .unwrap_or_else(|err| {
-            log::warn!("MP4 ilegível em {}: {err}", path.display());
-            None
-        });
+    let mp4 = mp4date::read(
+        File::open(path).with_context(|| format!("falha ao abrir {}", path.display()))?,
+    )
+    .unwrap_or_else(|err| {
+        log::warn!("MP4 ilegível em {}: {err}", path.display());
+        None
+    });
     let audio = match read_audio(path) {
         Ok(audio) => audio,
         Err(err) => {
@@ -157,10 +159,12 @@ fn duration_ms(track: &Track) -> Option<u64> {
 
 /// Sem duração declarada (WebM, por exemplo), soma os pacotes da trilha, sem decodificar.
 fn count_duration(format: &mut dyn FormatReader, track: &Track) -> Option<u64> {
-    let time_base = track
-        .codec_params
-        .time_base
-        .or_else(|| track.codec_params.sample_rate.map(|r| symphonia::core::units::TimeBase::new(1, r)))?;
+    let time_base = track.codec_params.time_base.or_else(|| {
+        track
+            .codec_params
+            .sample_rate
+            .map(|r| symphonia::core::units::TimeBase::new(1, r))
+    })?;
     let mut end = 0;
     while let Ok(packet) = format.next_packet() {
         if packet.track_id() == track.id {
@@ -176,13 +180,13 @@ fn date_tag(revision: &MetadataRevision) -> Option<i64> {
     // O symphonia põe o ID3 `TDRC`/`TYER`, o Vorbis `DATE` e o MP4 `©day` em `Date`.
     [StandardTagKey::Date, StandardTagKey::OriginalDate]
         .into_iter()
-    .find_map(|key| {
-        revision
-            .tags()
-            .iter()
-            .filter(|tag| tag.std_key == Some(key))
-            .find_map(|tag| parse_date(&tag.value.to_string()))
-    })
+        .find_map(|key| {
+            revision
+                .tags()
+                .iter()
+                .filter(|tag| tag.std_key == Some(key))
+                .find_map(|tag| parse_date(&tag.value.to_string()))
+        })
 }
 
 /// `AAAA-MM-DD`, com hora opcional (`THH:MM[:SS]` ou com espaço), em UTC. Só com o dia, vale o
@@ -233,7 +237,9 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name)
     }
 
     /// 2026-09-19T14:02:00Z.
@@ -248,7 +254,10 @@ mod tests {
     fn datas_de_tag() {
         assert_eq!(parse_date("2026-09-19T14:02:00Z"), Some(MVHD_MS));
         assert_eq!(parse_date("2026-09-19 14:02"), Some(MVHD_MS));
-        assert_eq!(parse_date("2026-09-19"), Some(MVHD_MS - (2 * 3600 + 120) * 1000));
+        assert_eq!(
+            parse_date("2026-09-19"),
+            Some(MVHD_MS - (2 * 3600 + 120) * 1000)
+        );
         assert_eq!(parse_date("1970-01-01T00:00:00"), None);
         assert_eq!(parse_date("2026"), None);
         assert_eq!(parse_date("2026-13-01"), None);
@@ -297,7 +306,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        assert_eq!(probe.recorded_at, modified - probe.duration_ms.unwrap() as i64);
+        assert_eq!(
+            probe.recorded_at,
+            modified - probe.duration_ms.unwrap() as i64
+        );
     }
 
     #[test]

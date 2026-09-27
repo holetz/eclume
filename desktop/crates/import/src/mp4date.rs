@@ -123,7 +123,10 @@ mod tests {
     use super::*;
 
     fn caixa(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
-        let mut out = u32::try_from(body.len() + 8).unwrap().to_be_bytes().to_vec();
+        let mut out = u32::try_from(body.len() + 8)
+            .unwrap()
+            .to_be_bytes()
+            .to_vec();
         out.extend_from_slice(kind);
         out.extend_from_slice(body);
         out
@@ -175,15 +178,16 @@ mod tests {
         assert_eq!(zero.created_at_ms, None);
         assert!(!zero.has_sound);
         let antiga = 400_000_000 + MP4_EPOCH_OFFSET_S as u64;
-        let info = read(Cursor::new(mp4(&[mvhd(0, antiga)])))
-            .unwrap()
-            .unwrap();
+        let info = read(Cursor::new(mp4(&[mvhd(0, antiga)]))).unwrap().unwrap();
         assert_eq!(info.created_at_ms, None);
     }
 
     #[test]
     fn nao_mp4_ou_truncado_nao_quebra() {
-        assert_eq!(read(Cursor::new(b"RIFF\0\0\0\0WAVEfmt ".to_vec())).unwrap(), None);
+        assert_eq!(
+            read(Cursor::new(b"RIFF\0\0\0\0WAVEfmt ".to_vec())).unwrap(),
+            None
+        );
         assert_eq!(read(Cursor::new(Vec::new())).unwrap(), None);
         let mut cortado = mp4(&[mvhd(0, DATA_1904)]);
         cortado.truncate(cortado.len() - 10);
