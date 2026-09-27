@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from arq import cron
+from arq import Retry, cron
 from arq.connections import RedisSettings
 from arq.worker import func
 from sqlalchemy import select, update
@@ -24,14 +24,17 @@ from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
 from eclume_server.fields import run_fill_fields
-from eclume_server.pipeline import GONE, STALE, current_revision
+from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
 from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
-from eclume_server.summaries import run_summary, start_auto_summary
+from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
 from eclume_server.transcripts import fail, ingest
 from eclume_server.voice import platform_voice
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
@@ -86,9 +89,47 @@ async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revisi
     )
 
 
+async def _run_step(
+    ctx: dict[str, Any],
+    step: str,
+    recording_id: str,
+    revision: int,
+    run: Callable[[dict[str, Any], UUID, int], Awaitable[str]],
+) -> str:
+    """Roda a etapa por agente; uma falha inesperada fora da chamada ao agente deixa a etapa `failed`.
+
+    O `Retry` (falha passageira do agente) volta à fila como sempre; o resto vira `internal_error`,
+    e quem chamou segue a cadeia.
+    """
+    try:
+        return await run(ctx, UUID(recording_id), revision)
+    except Retry:
+        raise
+    except Exception as exc:
+        log.exception("etapa %s de %s (revisão %d): falha inesperada", step, recording_id, revision)
+        async with system_tx(ctx["engine"]) as conn:
+            recording = (
+                (
+                    await conn.execute(
+                        select(t.recordings.c.id, t.recordings.c.owner_id).where(
+                            t.recordings.c.id == UUID(recording_id)
+                        )
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if recording is None:
+                return GONE
+            if await current_revision(conn, recording["id"]) != revision:
+                return STALE
+            await set_step(conn, recording, revision, step, "failed", error=(INTERNAL_ERROR, type(exc).__name__))
+        return f"falhou: {INTERNAL_ERROR}"
+
+
 async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
     """Preenche os campos automáticos da revisão e segue para a detecção do tipo."""
-    result = await run_fill_fields(ctx, UUID(recording_id), revision)
+    result = await _run_step(ctx, "fields", recording_id, revision, run_fill_fields)
     if result not in {GONE, STALE}:
         await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
@@ -97,7 +138,7 @@ async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> 
 
 async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
     """Escolhe e aplica o tipo de agenda da revisão e abre o resumo automático pelo tipo."""
-    result = await run_detect(ctx, UUID(recording_id), revision)
+    result = await _run_step(ctx, "agenda_type", recording_id, revision, run_detect)
     if result not in {GONE, STALE}:
         async with system_tx(ctx["engine"]) as conn:
             summary_id = await start_auto_summary(conn, UUID(recording_id), revision)

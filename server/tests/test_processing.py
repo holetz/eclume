@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from eclume_server import agenda_types as agenda_types_module
+from eclume_server import fields as fields_module
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
@@ -273,3 +275,35 @@ def test_o_mesmo_tipo_de_novo_nao_duplica_o_resumo_automatico(user: Api, service
     run_cpu(services.settings)
     summaries = user.get(f"/api/v1/transcripts/{recording['transcript_id']}/summaries").json()["items"]
     assert sorted(s["agenda_type"]["name"] for s in summaries) == ["Conversa com cliente", "Reunião de equipe"]
+
+
+def test_falha_inesperada_fora_do_agente_marca_a_etapa_e_segue(
+    user: Api, services: Services, monkeypatch: pytest.MonkeyPatch
+):
+    def boom(*_args: object) -> None:
+        raise RuntimeError
+
+    monkeypatch.setattr(fields_module, "known_tags", boom)
+    monkeypatch.setattr(agenda_types_module, "apply_type", boom)
+    recording = _process(user, services, FakeAgents())
+    for name in ("fields", "agenda_type"):
+        step = _step(recording, name)
+        assert (step["state"], step["error"]["code"]) == ("failed", "internal_error"), name
+    # A cadeia chegou ao resumo: sem tipo aplicado, ele sai pulado.
+    assert (_step(recording, "summary")["state"], _step(recording, "summary")["reason"]) == (
+        "skipped",
+        "no_agenda_type",
+    )
+
+
+def test_resumo_automatico_apagado_antes_de_gerar_fecha_a_etapa(user: Api, services: Services):
+    recording = _process(user, services, FakeAgents())
+    client = _types(user)["Conversa com cliente"]
+    path = f"/api/v1/recordings/{recording['id']}"
+    assert _step(user.patch(path, json={"agenda_type_id": client["id"]}).json(), "summary")["state"] == "active"
+    summaries = user.get(f"/api/v1/transcripts/{recording['transcript_id']}/summaries").json()["items"]
+    queued = next(s for s in summaries if s["agenda_type"]["name"] == "Conversa com cliente")
+    assert user.delete(f"/api/v1/summaries/{queued['id']}").status_code == 204
+    run_cpu(services.settings)
+    step = _step(user.get(path).json(), "summary")
+    assert (step["state"], step["reason"]) == ("skipped", "summary_deleted")

@@ -99,7 +99,8 @@ job já falho (pelo reaper) ou ingestão repetida não enfileiram o `fill_fields
 (`provider_for`) e chama o agente por `summaries.call_agent_step`, que aplica as retentativas do
 `summarize` (3 tentativas, 30 s e 120 s; `gpu_busy` adia sem gastar tentativa) e conta as
 tentativas em `detail.attempts` da etapa. A falha definitiva deixa a etapa `failed`, e a cadeia
-segue.
+segue; uma falha inesperada fora da chamada ao agente também (`internal_error`, em
+`worker._run_step`).
 
 ### `fill_fields`
 
@@ -134,7 +135,8 @@ segue.
 `summaries.start_auto_summary` abre o resumo `trigger: automatic` com as instruções do tipo da
 gravação e o provider `summaries`, e marca a etapa `summary` `active` com o `summary_id`. Sem tipo
 → `skipped` (`no_agenda_type`); sem provider → `no_provider`. Já existindo o automático da mesma
-revisão e do mesmo tipo, nada é criado. O `summarize` fecha a etapa.
+revisão e do mesmo tipo, nada é criado. O `summarize` fecha a etapa; o resumo apagado antes de
+gerar a fecha `skipped` (`summary_deleted`).
 
 ## Retranscrição
 

@@ -195,18 +195,23 @@ async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision
     return row["id"]
 
 
-async def _finish_step(conn: AsyncConnection, summary_id: UUID, state: str, error: tuple[str, str] | None) -> None:
-    """Fecha a etapa `summary` da revisão cujo resumo automático é este (se é)."""
+async def _finish_step(
+    conn: AsyncConnection, summary_id: UUID, state: str, error: tuple[str, str] | None, reason: str | None = None
+) -> None:
+    """Fecha a etapa `summary` da revisão cujo resumo automático é este (se é); `reason` se pulada."""
     ps = t.pipeline_steps.c
+    values: dict[str, Any] = {
+        "state": state,
+        "finished_at": func.now(),
+        "error_code": error[0] if error else None,
+        "error_message": error[1] if error else None,
+    }
+    if reason is not None:
+        values["detail"] = ps.detail.op("||")(func.jsonb_build_object("reason", reason))
     await conn.execute(
         update(t.pipeline_steps)
         .where(ps.step == "summary", ps.state == "active", ps.detail["summary_id"].astext == str(summary_id))
-        .values(
-            state=state,
-            finished_at=func.now(),
-            error_code=error[0] if error else None,
-            error_message=error[1] if error else None,
-        )
+        .values(**values)
     )
 
 
@@ -418,6 +423,8 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             .first()
         )
         if summary is None:
+            # Apagado antes de gerar: a etapa do resumo automático não fica `active` para sempre.
+            await _finish_step(conn, summary_id, "skipped", None, reason="summary_deleted")
             return "resumo apagado"
         if summary["status"] not in {"queued", "running"}:
             return f"resumo já {summary['status']}"
