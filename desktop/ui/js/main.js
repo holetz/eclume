@@ -5,6 +5,7 @@ import { preencherIcones } from "./icones.js";
 import * as principal from "./vistas/principal.js";
 import * as importar from "./vistas/importar.js";
 import * as configuracoes from "./vistas/configuracoes.js";
+import * as ajuda from "./vistas/ajuda.js";
 
 /** As vistas registradas: nome → { entrar?(params), sair?(), atualizar?(estado) }. */
 const vistas = new Map();
@@ -32,6 +33,7 @@ function ir(nome, params) {
   const vista = vistas.get(nome);
   if (!vista) return false;
   if (atual && atual !== nome) vistas.get(atual).sair?.();
+  menuDeAjuda?.fechar();
   for (const outra of document.querySelectorAll("[data-vista]")) outra.hidden = outra.dataset.vista !== nome;
   atual = nome;
   vista.entrar?.(params);
@@ -68,6 +70,8 @@ function aoTeclar(evento) {
 registrar("principal", principal);
 registrar("importar", importar);
 registrar("configuracoes", configuracoes);
+registrar("atalhos", ajuda);
+const menuDeAjuda = ajuda.ligarMenu(app);
 
 const temaEscuro = window.matchMedia("(prefers-color-scheme: dark)");
 aplicarTema(temaEscuro.matches);

@@ -33,6 +33,22 @@
               data-icone="configuracoes" aria-label="Configurações"></button>
           </div>
         </div>
+        <div class="menu menu-ajuda" role="menu" id="menu-ajuda" aria-label="Ajuda" hidden>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-primeiros-passos">Primeiros passos</button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-permissoes">Permissões de microfone</button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-atalhos">
+            Atalhos de teclado<kbd id="ajuda-atalhos-tecla"></kbd>
+          </button>
+          <button type="button" class="menu-item" role="menuitem" id="ajuda-central">
+            Abrir a central de ajuda<kbd>↗</kbd>
+          </button>
+          <div class="menu-sep"></div>
+          <button type="button" class="menu-item menu-item-dica" role="menuitem" id="ajuda-problema">
+            Relatar um problema…<small>Anexe o eclume.log</small>
+          </button>
+          <div class="menu-sep"></div>
+          <span class="menu-item" aria-disabled="true" id="ajuda-versao"></span>
+        </div>
         <span class="status-line" id="linha-status" role="status">Carregando…</span>
         <div class="row row-meter" id="nota" hidden>
           <div class="meter" id="medidor" aria-hidden="true"></div>
@@ -139,6 +155,28 @@
           <span class="alert-title">Não deu para importar</span>
           <span id="importar-erro-texto"></span>
         </div>
+      </div>
+    </section>
+
+    <section class="tray tray-window" data-vista="atalhos" aria-label="Atalhos de teclado" hidden>
+      <div class="tray-section">
+        <div class="row row-between">
+          <div>
+            <span class="kicker">Ajuda</span>
+            <h2 class="flush titulo-folha">Atalhos de teclado</h2>
+          </div>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="atalhos-fechar"
+            data-icone="fechar" aria-label="Fechar"></button>
+        </div>
+      </div>
+      <div class="tray-section">
+        <span class="kicker text-muted">Em qualquer lugar do computador</span>
+        <dl class="shortcuts" id="atalhos-globais"></dl>
+        <span class="kicker text-muted">Nesta janela</span>
+        <dl class="shortcuts" id="atalhos-janela"></dl>
+      </div>
+      <div class="tray-section">
+        <a href="#" class="small" id="atalhos-mudar">Mudar os atalhos nas configurações</a>
       </div>
     </section>
 

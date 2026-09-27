@@ -98,6 +98,23 @@ pub(crate) fn add_marker(app: &AppHandle) {
     refresh_ui(app);
 }
 
+/// O endereço de um artigo da central de ajuda do servidor; sem artigo, a central.
+pub(crate) fn help_url(web_url: &str, article: Option<&str>) -> anyhow::Result<String> {
+    let base = format!("{}/ajuda", web_url.trim_end_matches('/'));
+    match article {
+        None => Ok(base),
+        Some(slug)
+            if !slug.is_empty()
+                && slug
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') =>
+        {
+            Ok(format!("{base}/{slug}"))
+        }
+        Some(slug) => anyhow::bail!("artigo de ajuda inválido: {slug}"),
+    }
+}
+
 /// Arquivo de log, no diretório de logs do app.
 const LOG_FILE: &str = "eclume.log";
 /// Acima disso, o log vira `eclume.log.1` ao abrir o app.
@@ -217,6 +234,8 @@ pub fn run() {
             commands::probe_import,
             commands::import_file,
             commands::cancel_import,
+            commands::open_help,
+            commands::open_log_dir,
             commands::open_web,
             commands::settings,
             commands::save_settings,
@@ -234,7 +253,21 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{open_log, APP_NAME, LOG_FILE};
+    use super::{help_url, open_log, APP_NAME, LOG_FILE};
+
+    #[test]
+    fn endereco_da_ajuda() {
+        assert_eq!(
+            help_url("https://192.168.15.199:8443/", None).unwrap(),
+            "https://192.168.15.199:8443/ajuda"
+        );
+        assert_eq!(
+            help_url("https://eclume.local", Some("primeiros-passos")).unwrap(),
+            "https://eclume.local/ajuda/primeiros-passos"
+        );
+        assert!(help_url("https://eclume.local", Some("../admin")).is_err());
+        assert!(help_url("https://eclume.local", Some("")).is_err());
+    }
 
     #[test]
     fn nome_do_app() {

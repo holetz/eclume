@@ -102,6 +102,43 @@ pub fn cancel_import(state: State<'_, AppState>) -> CommandResult<()> {
     to_js(state.cancel_import())
 }
 
+/// Abre um artigo da central de ajuda do servidor (`<web_url>/ajuda/<artigo>`), ou a central.
+#[tauri::command]
+pub fn open_help(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    article: Option<String>,
+) -> CommandResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    to_js(
+        state
+            .web_url()
+            .and_then(|web| crate::help_url(&web, article.as_deref()))
+            .and_then(|url| {
+                app.opener()
+                    .open_url(&url, None::<&str>)
+                    .map_err(anyhow::Error::from)
+            }),
+    )
+}
+
+/// "Relatar um problema…": abre a pasta de logs, para anexar o `eclume.log`.
+#[tauri::command]
+pub fn open_log_dir(app: AppHandle) -> CommandResult<()> {
+    use tauri::Manager;
+    use tauri_plugin_opener::OpenerExt;
+    to_js(
+        app.path()
+            .app_log_dir()
+            .map_err(anyhow::Error::from)
+            .and_then(|dir| {
+                app.opener()
+                    .open_path(dir.to_string_lossy(), None::<&str>)
+                    .map_err(anyhow::Error::from)
+            }),
+    )
+}
+
 #[tauri::command]
 pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     to_js(crate::open_web(&app, &state))

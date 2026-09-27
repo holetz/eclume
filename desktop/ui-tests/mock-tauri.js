@@ -298,6 +298,8 @@
       return e.settings;
     },
     storage_info: (e) => e.armazenamento,
+    open_help: () => null,
+    open_log_dir: () => null,
     list_input_devices: (e) => e.microfones,
     mic_test(e) {
       e.testeDeNivel = 10;

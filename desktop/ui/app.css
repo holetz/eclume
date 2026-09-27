@@ -145,3 +145,34 @@
 .list-row-sub[data-problema] {
   color: var(--color-warning);
 }
+
+/* O menu de ajuda fica ancorado no ícone de ajuda, sobre a janela. */
+.tray-window {
+  position: relative;
+}
+
+.menu-ajuda {
+  position: absolute;
+  top: 52px;
+  right: 44px;
+  z-index: 2;
+  width: 280px;
+}
+
+.menu-item-dica {
+  flex-wrap: wrap;
+}
+
+.menu-item-dica small {
+  width: 100%;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+#abrir-ajuda[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.titulo-folha {
+  font-size: 20px;
+}
