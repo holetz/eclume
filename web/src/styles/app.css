@@ -116,3 +116,26 @@ svg.lucide {
     scroll-behavior: auto !important;
   }
 }
+
+/* O diálogo fica acima da barra lateral aberta em tela estreita e rola quando não cabe. */
+.dialog-backdrop {
+  z-index: 50;
+}
+
+.dialog {
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+}
+
+/* O `.menu` do DS aberto por um botão, ancorado abaixo dele. */
+.menu-button {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu-button > .menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+}
