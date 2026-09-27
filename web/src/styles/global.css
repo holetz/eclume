@@ -1,5 +1,6 @@
 /* Ponto de entrada do CSS global: fontes locais, a base do Design System e a camada de produto. O
-   layout de cada tela fica no CSS Module do componente. */
+   layout de cada tela fica no CSS Module do componente. O DS vai na camada `ds`: o CSS sem camada
+   (app.css e os CSS Modules) vence qualquer regra dele, seja qual for a ordem dos chunks no build. */
 @import './fonts.css';
-@import './eclume.css';
+@import './eclume.css' layer(ds);
 @import './app.css';

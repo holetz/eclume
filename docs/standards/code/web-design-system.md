@@ -22,7 +22,11 @@ fonte, espaçamento, raio e sombra dos tokens do DS e monta as telas com as clas
 ## Camadas de CSS
 
 `web/src/styles/global.css` é só o ponto de entrada, importado pelo `main.tsx` **antes** do
-`App`, para os CSS Modules virem depois no bundle e vencerem com especificidade igual:
+`App`. O `eclume.css` entra na cascade layer `ds` (`@import './eclume.css' layer(ds)`), e o resto
+(`app.css` e os CSS Modules) fica sem camada, então vence o DS com qualquer especificidade e em
+qualquer ordem de chunk. A ordem do bundle não basta: o Vite põe o CSS de um chunk compartilhado
+(o do `RequireSession`, com a moldura do shell) **antes** do CSS da entrada, e o menu compacto do
+shell deixava de valer no build de produção:
 
 | Arquivo | O que tem | Quem edita |
 |---|---|---|

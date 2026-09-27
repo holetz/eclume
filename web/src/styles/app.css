@@ -108,6 +108,24 @@ svg.lucide {
   }
 }
 
+/* No celular, os `.stats` do DS quebram em linhas com a régua da esquerda no começo da linha
+   nova: empilhados, cada número ganha a régua de cima. */
+@media (max-width: 30rem) {
+  .stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stats > .stat {
+    padding: var(--space-3) 0;
+    border-left: 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .stats > .stat:first-child {
+    border-top: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

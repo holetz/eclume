@@ -23,7 +23,7 @@ function mockPerson(extra: Parameters<typeof mockFetch>[0] = {}) {
 const stat = (label: string) => screen.getByText(label, { selector: '.stat .kicker' }).closest('.stat') as HTMLElement
 
 describe('página da pessoa', () => {
-  it('mostra o cabeçalho e os números: gravações, amostras de voz e última gravação', async () => {
+  it('mostra o cabeçalho e os números: gravações, tempo de fala e amostras de voz', async () => {
     mockPerson()
     renderApp(`/pessoas/${RAFAEL}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Rafael Lima' })).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('página da pessoa', () => {
     expect(within(stat('Gravações')).getByText('3')).toBeInTheDocument()
     expect(await within(stat('Amostras de voz')).findByText('2')).toBeInTheDocument()
     expect(within(stat('Amostras de voz')).getByText('Suficiente para sugerir')).toBeInTheDocument()
-    expect(within(stat('Última gravação')).getByText(/11 de set/)).toBeInTheDocument()
+    expect(within(stat('Tempo de fala')).getByText('7 min 29 s')).toBeInTheDocument()
   })
 
   it('diz quando a identificação por voz está desligada ou sem amostras', async () => {

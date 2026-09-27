@@ -88,13 +88,13 @@ function PersonStats({ person, voiceprint }: { person: Person; voiceprint: Voice
         <span className="stat-value">{person.transcript_count}</span>
       </div>
       <div className="stat">
-        <span className="kicker">Amostras de voz</span>
-        <span className="stat-value">{voiceprint ? voiceprint.sample_count : '—'}</span>
-        {samplesSub && <span className="stat-sub">{samplesSub}</span>}
+        <span className="kicker">Tempo de fala</span>
+        <span className="stat-value">{formatDuration(person.speaking_time_ms)}</span>
       </div>
       <div className="stat">
-        <span className="kicker">Última gravação</span>
-        <span className="stat-value">{person.last_seen_at ? formatDate(person.last_seen_at) : '—'}</span>
+        <span className="kicker">Amostras de voz</span>
+        <span className="stat-value">{voiceprint ? voiceprint.sample_count : person.voice_sample_count}</span>
+        {samplesSub && <span className="stat-sub">{samplesSub}</span>}
       </div>
     </div>
   )

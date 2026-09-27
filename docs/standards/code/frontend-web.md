@@ -307,10 +307,10 @@ desce; abaixo de 56rem, os campos também):
   biblioteca e da busca): sem foco automático, lista só com texto e sem cadastro. Cada sugestão por
   voz pendente aparece como "Parece ser <pessoa> — NN%", com Aceitar e Recusar; nunca é aplicada
   sozinha.
-- **Pessoas** (`/pessoas`) é a `table.table` do DS com busca em `?q=` e o cadastro em linha na
-  primeira linha (nome e e-mail, Enter envia, e-mail repetido aparece na linha). A **pessoa**
-  (`/pessoas/:id`) tem Editar e Excluir em `Dialog`, três `.stat` (gravações, amostras de voz,
-  última gravação) e as abas Gravações, Falas e Amostras de voz, com a escolhida em `?aba=`.
+- **Pessoas** (`/pessoas`) é a `table.table` do DS com busca em `?q=`, o cadastro em linha na
+  primeira linha (nome e e-mail, Enter envia, e-mail repetido aparece na linha) e as colunas nome,
+  e-mail, gravações e amostras de voz. A **pessoa** (`/pessoas/:id`) tem Editar e Excluir em
+  `Dialog`, três `.stat` (gravações, tempo de fala, amostras de voz) e as abas Gravações, Falas e Amostras de voz, com a escolhida em `?aba=`.
 - **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a aba Amostras de voz lista as
   amostras e tem "Esquecer a voz", com confirmação; não há consentimento por pessoa, que o aceite
   do aviso no cadastro substitui. O admin liga a identificação e ajusta o limiar em Locutores

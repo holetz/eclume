@@ -39,6 +39,12 @@
   padding: 20px;
 }
 
+/* O `.card-body` do DS cresce para encher o cartão; aqui o cartão estica até a altura do vizinho,
+   e o requisito crescendo empurraria o Baixar do macOS para baixo dos outros dois. */
+.card > :global(.card-body) {
+  flex: none;
+}
+
 .file {
   font-size: 12px;
   overflow-wrap: anywhere;

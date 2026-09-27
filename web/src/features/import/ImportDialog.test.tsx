@@ -90,6 +90,9 @@ describe('modal Importar', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Remover reuniao-03.mkv' }))
     expect(within(dialog).getByRole('button', { name: 'Enviar 1 arquivo' })).toBeEnabled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Remover kickoff-guion.m4a' }))
+    expect(within(dialog).getByRole('button', { name: 'Enviar arquivos' })).toBeDisabled()
   })
 
   it('avisa quando os metadados trazem só o dia', async () => {

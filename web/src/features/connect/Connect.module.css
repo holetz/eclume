@@ -30,6 +30,11 @@
   min-width: 0;
 }
 
+/* O endereço do MCP cabe numa linha na coluna de 1440 px: o botão Copiar já tem o respiro dele. */
+.stepBlock :global(.code-block) {
+  gap: 0;
+}
+
 .stepBlock :global(.code-block) span {
   overflow-wrap: anywhere;
 }
