@@ -34,6 +34,9 @@
     };
   }
 
+  const CA = "98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f";
+  const CONTA = { email: "ana@exemplo.com.br", token_id: "t-1", server_name: "eclume" };
+
   function base() {
     return {
       status: {
@@ -53,6 +56,8 @@
         notice: null,
         sync_notice: null,
         updated: null,
+        connection: "account",
+        account: CONTA,
       },
       recordings: [
         gravacao("a", { started_at: hoje(9, 0), duration_ms: 54 * MIN }),
@@ -75,6 +80,8 @@
         ].map(([app, label, policy]) => ({ app, label, policy, default_policy: app === "outro" ? "ignore" : "ask" })),
         retention_days: 7,
         pat_source: "keyring",
+        connection: "account",
+        account: CONTA,
         shortcuts: [
           ["record", "Iniciar ou parar a gravação", "Ctrl+Alt+R"],
           ["note", "Nova nota", "Ctrl+Alt+N"],
@@ -127,7 +134,19 @@
         stops_in_ms: 2_400,
       },
       versao: "0.2.0",
+      servidores: [
+        { name: "192.168.15.199", url: "https://192.168.15.199:8443", ca_sha256: CA, origin: "installer" },
+        { name: "Escritório", url: "https://10.0.0.2", ca_sha256: null, origin: "network" },
+      ],
+      preparado: null,
+      testeDeConexao: { email: CONTA.email, last_upload_at: new Date(2026, 8, 27, 10, 38).getTime() },
     };
+  }
+
+  /** Sem credencial: a janela abre na primeira execução. */
+  function semConta(e) {
+    for (const alvo of [e.status, e.settings]) Object.assign(alvo, { connection: "first_run", account: null });
+    e.settings.pat_source = null;
   }
 
   const cenarios = {
@@ -184,9 +203,20 @@
     vazio(e) {
       e.recordings = [];
       e.status.counts = { recording: 0, pending: 0, syncing: 0, synced: 0, failed: 0 };
-      e.settings.pat_source = null;
       e.settings.detection_enabled = false;
-      e.status.sync_notice = "Sem PAT: as gravações ficam na fila até você configurar o PAT nas configurações.";
+      e.status.sync_notice = "Falha ao sincronizar: o servidor respondeu 503";
+    },
+    pat(e) {
+      for (const alvo of [e.status, e.settings]) Object.assign(alvo, { connection: "personal_token", account: null });
+    },
+    primeiraExecucao: semConta,
+    semServidor(e) {
+      semConta(e);
+      e.servidores = [];
+    },
+    caMudou(e) {
+      semConta(e);
+      e.status.sync_notice = "O certificado do servidor mudou";
     },
   };
 
@@ -320,7 +350,47 @@
     },
     open_data_dir: () => null,
     sync_now: () => null,
+    discover_servers: (e) => e.servidores,
+    prepare_server(e, { url, caSha256 }) {
+      if (url.includes("fora")) throw `não foi possível falar com o servidor em ${url}`;
+      if (caSha256 && caSha256 !== CA) throw "a CA não confere com a impressão digital esperada";
+      e.preparado = {
+        name: "eclume",
+        url,
+        ca_sha256: caSha256 ?? "3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d",
+        trusted_by: caSha256 ? "fingerprint" : "first_use",
+      };
+      return e.preparado;
+    },
+    sign_in(e, { email, password }) {
+      if (!e.preparado) throw "Escolha o servidor antes de entrar";
+      if (password === "errada") throw "E-mail ou senha incorretos";
+      entrar(e, email);
+      return null;
+    },
+    pair(e, { code }) {
+      if (!e.preparado) throw "Escolha o servidor antes de entrar";
+      if (code.replace("-", "").toUpperCase() !== "K7Q4MX") throw "Código inválido ou vencido";
+      entrar(e, CONTA.email);
+      return null;
+    },
+    sign_out(e) {
+      semConta(e);
+      return null;
+    },
+    test_connection: (e) => e.testeDeConexao,
+    open_signup: () => null,
+    pick_ca_file: () => "/home/ana/caddy-root.pem",
   };
+
+  function entrar(e, email) {
+    const conta = { ...CONTA, email };
+    for (const alvo of [e.status, e.settings]) {
+      Object.assign(alvo, { connection: "account", account: conta, web_url: e.preparado.url });
+    }
+    e.settings.pat_source = "keyring";
+    e.status.sync_notice = null;
+  }
 
   window.__mock = mock;
   window.__TAURI__ = {

@@ -3,6 +3,7 @@
 // de reunião detectada, a fila de envio e a conta.
 import { el, trocar, $ } from "../dom.js";
 import { versao } from "../tauri.js";
+import { rotuloDoServidor } from "./primeira-execucao.js";
 
 const MIN = 60_000;
 const DIA = 24 * 60 * MIN;
@@ -255,9 +256,13 @@ export function montar(secao, app) {
     evento.preventDefault();
     executar("open_web");
   });
-  $("#conta-acao", secao).addEventListener("click", (evento) => {
+  $("#conta-acao", secao).addEventListener("click", async (evento) => {
     evento.preventDefault();
-    app.ir("configuracoes", { aba: "servidor" });
+    if (app.estado?.connection === "account") {
+      await executar("sign_out");
+    } else {
+      app.ir("configuracoes", { aba: "servidor" });
+    }
   });
 
   /** Troca a política do app da gravação automática em curso, pelas configurações salvas. */
@@ -312,12 +317,12 @@ export function montar(secao, app) {
     }
   }
 
-  function desenharConta() {
-    if (!configuracoes) return;
-    const host = new URL(configuracoes.web_url).hostname;
-    $("#conta-nome", secao).textContent = configuracoes.pat_source ? "Conectado com um token pessoal" : "Sem conexão com o servidor";
-    $("#conta-servidor", secao).textContent = `eclume em ${host}`;
-    $("#conta-acao", secao).textContent = configuracoes.pat_source ? "Servidor" : "Conectar";
+  /** A conta, como no frame "Main window": o e-mail e "eclume em <host> · v0.2.0 · Sair". */
+  function desenharConta(estado) {
+    const conta = estado.account;
+    $("#conta-nome", secao).textContent = conta?.email ?? "Conectado com um token pessoal";
+    $("#conta-servidor", secao).textContent = rotuloDoServidor({ name: conta?.server_name, url: estado.web_url });
+    $("#conta-acao", secao).textContent = estado.connection === "account" ? "Sair" : "Servidor";
   }
 
   function desenharFila(gravacoes, agora) {
@@ -348,7 +353,6 @@ export function montar(secao, app) {
       configuracoes = lidas;
       $("#conta-versao", secao).textContent = `v${numero}`;
       desenharAtalhos();
-      desenharConta();
       if (app.estado) this.atualizar(app.estado, app.fila);
     },
 
@@ -367,6 +371,7 @@ export function montar(secao, app) {
 
       desenharAviso(estado);
       desenharAtualizacao(estado);
+      desenharConta(estado);
       desenharFila(gravacoes, agora);
     },
   };

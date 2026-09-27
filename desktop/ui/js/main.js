@@ -3,6 +3,7 @@
 import { invoke, listen } from "./tauri.js";
 import { preencherIcones } from "./icones.js";
 import * as principal from "./vistas/principal.js";
+import * as primeiraExecucao from "./vistas/primeira-execucao.js";
 import * as importar from "./vistas/importar.js";
 import * as configuracoes from "./vistas/configuracoes.js";
 import * as ajuda from "./vistas/ajuda.js";
@@ -46,7 +47,9 @@ async function atualizar() {
     const [estado, fila] = await Promise.all([invoke("status"), invoke("recordings", { limit: 50 })]);
     app.estado = estado;
     app.fila = fila;
-    vistas.get(atual)?.atualizar?.(estado, fila);
+    // Sem credencial (ou com a CA do servidor trocada), a janela fica na primeira execução.
+    if (estado.connection === "first_run" && atual !== "primeira-execucao") ir("primeira-execucao");
+    else vistas.get(atual)?.atualizar?.(estado, fila);
   } catch (erro) {
     console.error(erro);
   }
@@ -58,6 +61,7 @@ function aplicarTema(escuro) {
 
 /** Teclas da janela; os atalhos globais são do Rust. */
 function aoTeclar(evento) {
+  if (app.estado?.connection === "first_run") return;
   if (evento.key === "Escape") {
     if (atual !== "principal" && ir("principal")) evento.preventDefault();
     return;
@@ -68,6 +72,7 @@ function aoTeclar(evento) {
 }
 
 registrar("principal", principal);
+registrar("primeira-execucao", primeiraExecucao);
 registrar("importar", importar);
 registrar("configuracoes", configuracoes);
 registrar("atalhos", ajuda);

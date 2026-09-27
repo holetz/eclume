@@ -25,6 +25,17 @@
   justify-content: space-between;
 }
 
+/* Primeira execução: o código de 6 caracteres cabe inteiro; o endereço ocupa a linha. */
+.input-codigo {
+  width: 12ch;
+  text-transform: uppercase;
+}
+
+.input-endereco {
+  flex: 1;
+  min-width: 0;
+}
+
 .stack {
   display: grid;
   gap: var(--space-3);

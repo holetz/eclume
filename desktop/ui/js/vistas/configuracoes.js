@@ -1,9 +1,11 @@
 // Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Áudio
 // (microfone, áudio do sistema, teste de nível, atalhos globais e parada por silêncio),
-// Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor. As
-// abas salvam a cada mudança, menos o Servidor, que salva pelo botão.
+// Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor (a conta
+// com "Sair", o endereço e, em "Avançado", a API e a CA extra). As abas salvam a cada mudança,
+// menos o Servidor, que salva pelo botão.
 import { el, trocar, $ } from "../dom.js";
 import { teclas } from "./principal.js";
+import { rotuloDoServidor } from "./primeira-execucao.js";
 
 /** O subtítulo de cada app, como no frame "Settings · Meetings". */
 const APPS = {
@@ -45,6 +47,13 @@ export function combinacao(evento) {
   return [...partes, tecla].join("+");
 }
 
+/** "Conectado · último envio 10:38", do resultado de `test_connection`. */
+export function textoDaConexao(teste) {
+  if (!teste.last_upload_at) return "Conectado · nenhum envio ainda";
+  const hora = new Date(teste.last_upload_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `Conectado · último envio ${hora}`;
+}
+
 /** "41 MB", "1,2 GB". */
 export function tamanho(bytes) {
   const unidades = ["B", "KB", "MB", "GB", "TB"];
@@ -80,6 +89,8 @@ export function montar(secao, app) {
   const barrasDoTeste = Array.from({ length: 16 }, () => el("i", { "data-quiet": true }));
   trocar($("#medidor-teste", secao), barrasDoTeste);
   let config = null;
+  /** A CA extra escolhida na aba Servidor, até salvar. */
+  let caPath = null;
   /** O atalho sendo capturado ("record", "note" ou "marker"). */
   let capturando = null;
   let consultaDoTeste = null;
@@ -271,11 +282,33 @@ export function montar(secao, app) {
 
     $("#servidor-endereco", secao).value = config.web_url;
     $("#servidor-api", secao).value = config.api_url ?? "";
-    $("#servidor-ca", secao).value = config.ca_path ?? "";
-    $("#servidor-token-estado", secao).textContent = config.pat_source
-      ? "Conectado com um token pessoal."
-      : "Sem token: as gravações ficam na fila até você colar um.";
-    $("#servidor-esquecer", secao).hidden = !config.pat_source;
+    caPath = config.ca_path ?? null;
+    desenharCa();
+    desenharConta();
+  }
+
+  function desenharCa() {
+    $("#servidor-ca", secao).textContent = caPath ?? "Nenhuma";
+    $("#servidor-ca-limpar", secao).hidden = !caPath;
+  }
+
+  function desenharConta() {
+    const conta = config.account;
+    const pessoal = config.connection === "personal_token";
+    const servidor = rotuloDoServidor({ name: conta?.server_name, url: config.web_url });
+    $("#servidor-conta", secao).textContent = conta
+      ? conta.email
+      : pessoal
+        ? "Conectado com um token pessoal"
+        : "Nenhuma conta neste computador";
+    $("#servidor-conta-sub", secao).textContent = conta
+      ? `Conectado ao ${servidor}`
+      : pessoal
+        ? "Entre com e-mail e senha para trocar o token pela conta"
+        : "Entre para enviar as gravações";
+    $("#servidor-entrar", secao).hidden = config.connection === "account";
+    $("#servidor-sair", secao).hidden = config.connection === "first_run";
+    $("#servidor-conexao", secao).hidden = true;
   }
 
   async function lerArmazenamento() {
@@ -336,20 +369,53 @@ export function montar(secao, app) {
   });
 
   $("#servidor-salvar", secao).addEventListener("click", () => {
-    const token = $("#servidor-token", secao).value.trim();
     salvar(
       {
         web_url: $("#servidor-endereco", secao).value.trim(),
         api_url: $("#servidor-api", secao).value.trim() || null,
-        ca_path: $("#servidor-ca", secao).value.trim() || null,
-        pat: token || null,
+        ca_path: caPath,
       },
       "Configurações do servidor salvas.",
-    ).then(() => {
-      $("#servidor-token", secao).value = "";
-    });
+    );
   });
-  $("#servidor-esquecer", secao).addEventListener("click", () => salvar({ clear_pat: true }, "Token esquecido."));
+  $("#servidor-ca-escolher", secao).addEventListener("click", async () => {
+    const escolhido = await app.invoke("pick_ca_file").catch((falha) => {
+      mostrarAviso(String(falha));
+      return null;
+    });
+    if (!escolhido) return;
+    caPath = escolhido;
+    desenharCa();
+  });
+  $("#servidor-ca-limpar", secao).addEventListener("click", () => {
+    caPath = null;
+    desenharCa();
+  });
+  $("#servidor-testar", secao).addEventListener("click", async () => {
+    const linha = $("#servidor-conexao", secao);
+    linha.hidden = false;
+    linha.dataset.status = "syncing";
+    linha.textContent = "Testando…";
+    try {
+      const teste = await app.invoke("test_connection");
+      linha.dataset.status = "synced";
+      linha.textContent = textoDaConexao(teste);
+      mostrarAviso(null);
+    } catch (falha) {
+      linha.hidden = true;
+      mostrarAviso(String(falha));
+    }
+  });
+  $("#servidor-sair", secao).addEventListener("click", async () => {
+    try {
+      await app.invoke("sign_out");
+    } catch (falha) {
+      mostrarAviso(String(falha));
+      return;
+    }
+    await app.atualizar();
+  });
+  $("#servidor-entrar", secao).addEventListener("click", () => app.ir("primeira-execucao"));
 
   return {
     sair() {

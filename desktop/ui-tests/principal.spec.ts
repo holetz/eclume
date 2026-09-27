@@ -3,7 +3,7 @@ import { test, expect, chamadas } from './fixtures'
 test('a vista principal carrega com as fontes do app e sem requisição externa', async ({ abrir, externas }) => {
   const page = await abrir()
   await expect(page.locator('[data-vista="principal"]')).toBeVisible()
-  await expect(page.locator('.brand')).toHaveText('eclume')
+  await expect(page.locator('[data-vista="principal"] .brand')).toHaveText('eclume')
   await expect(page.locator('#abrir-configuracoes svg')).toBeVisible()
   await expect(page.locator('#linha-status')).not.toHaveText('Carregando…')
 
@@ -34,9 +34,10 @@ test('ocioso: status, gravar, fila e conta', async ({ abrir }) => {
   await expect(page.locator('#fila li').first()).toContainText('Hoje, 09:00 · 54 min')
   await expect(page.locator('#fila li').first().locator('.badge')).toHaveText('Enviada')
   await expect(page.locator('#fila-resumo')).toHaveText('3 de 3 enviadas')
-  await expect(page.locator('#conta-nome')).toHaveText('Conectado com um token pessoal')
+  await expect(page.locator('#conta-nome')).toHaveText('ana@exemplo.com.br')
   await expect(page.locator('#conta-servidor')).toHaveText('eclume em 192.168.15.199')
   await expect(page.locator('#conta-versao')).toHaveText('v0.2.0')
+  await expect(page.locator('#conta-acao')).toHaveText('Sair')
 })
 
 test('gravar alterna o botão e a linha de status', async ({ abrir }) => {
@@ -74,12 +75,18 @@ test('fila com as etiquetas, nota, importação e o erro no title', async ({ abr
   await expect(page.locator('#fila-resumo')).toHaveText('1 de 4 enviadas')
 })
 
-test('sem token: aviso do envio, fila vazia e conta desconectada', async ({ abrir }) => {
+test('fila vazia com o aviso do envio', async ({ abrir }) => {
   const page = await abrir('vazio')
   await expect(page.locator('#linha-status')).toHaveText('Tudo enviado')
   await expect(page.locator('#fila-vazia')).toBeVisible()
-  await expect(page.locator('#aviso')).toContainText('Sem PAT')
-  await expect(page.locator('#conta-nome')).toHaveText('Sem conexão com o servidor')
+  await expect(page.locator('#aviso')).toContainText('o servidor respondeu 503')
+})
+
+test('"Sair" na conta apaga a credencial e volta à primeira execução', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#conta-acao').click()
+  await expect(page.locator('[data-vista="primeira-execucao"]')).toBeVisible()
+  expect((await chamadas(page)).map((c) => c.comando)).toContain('sign_out')
 })
 
 test('erro de um comando aparece e some no próximo que dá certo', async ({ abrir }) => {
