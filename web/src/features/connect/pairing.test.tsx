@@ -62,6 +62,10 @@ describe('âncora e formato da contagem', () => {
     expect(anchorFrom('2026-09-27T14:52:00Z', null, 0).expiresInMs).toBe(600_000)
   })
 
+  it('não passa dos 10 minutos quando o Date da resposta está atrasado', () => {
+    expect(anchorFrom('2026-09-27T14:12:01.400Z', 'Sun, 27 Sep 2026 14:01:59 GMT', 0).expiresInMs).toBe(600_000)
+  })
+
   it('formata em m:ss arredondando para baixo', () => {
     expect(formatCountdown(582_000)).toBe('9:42')
     expect(formatCountdown(600_900)).toBe('10:00')

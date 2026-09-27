@@ -18,14 +18,19 @@ export interface Pairing {
   anchor: CountdownAnchor
 }
 
+/** Um código vale 10 minutos (holetz/eclume#35). */
+export const PAIRING_TTL_MS = 10 * 60_000
+
 /**
  * A âncora da contagem: `expires_at` menos o `Date` da resposta (o relógio do servidor), contada a
  * partir do `performance.now()`. Assim a contagem não depende do relógio do computador estar certo.
+ * O `Date` só tem segundos e o servidor o renova uma vez por segundo, então pode ficar até ~2 s
+ * atrás: a validade nunca passa dos 10 minutos do código.
  */
 export function anchorFrom(expiresAt: string, dateHeader: string | null, now: number = performance.now()): CountdownAnchor {
   const serverNow = dateHeader ? Date.parse(dateHeader) : Number.NaN
   const base = Number.isNaN(serverNow) ? Date.now() : serverNow
-  return { expiresInMs: Date.parse(expiresAt) - base, at: now }
+  return { expiresInMs: Math.min(Date.parse(expiresAt) - base, PAIRING_TTL_MS), at: now }
 }
 
 /** Gera um código de vínculo. Um código novo anula o anterior (holetz/eclume#35). */
