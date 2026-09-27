@@ -1,6 +1,22 @@
+/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
+   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
+:where(.page) h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+:where(.page) h3 {
+  font-size: 17px;
+  margin: 0;
+}
+
+:where(.page) p {
+  margin: 0;
+}
+
 .page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .header {
@@ -17,7 +33,7 @@
 
 .back {
   justify-self: start;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .search {
@@ -28,7 +44,7 @@
   display: grid;
   gap: var(--space-3);
   max-width: 32rem;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
 }
 
 .actions {
@@ -48,11 +64,11 @@
 .row {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-6);
 }
 
 .name {
-  font-size: var(--text-md);
+  font-size: 15px;
   font-weight: 620;
 }
 
@@ -62,7 +78,7 @@
 }
 
 .name a:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
   text-decoration: underline;
 }
 
@@ -70,7 +86,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
@@ -82,7 +98,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   align-items: start;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .section {
@@ -100,7 +116,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-3);
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
@@ -109,7 +125,7 @@
 }
 
 .empty {
-  padding: var(--space-5);
+  padding: var(--space-6);
   color: var(--color-text-muted);
 }
 

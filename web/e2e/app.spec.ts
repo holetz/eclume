@@ -1,6 +1,6 @@
 // Fluxo principal contra o Prism. O mock não emite cookies nem guarda estado, então o teste:
-// - põe os cookies de sessão na resposta do login, como o servidor real faria (o da sessão de
-//   admin só no caminho /api/v1/admin, como o servidor o define);
+// - põe os cookies de sessão na resposta do login e do cadastro, como o servidor real faria (o da
+//   sessão de admin só no caminho /api/v1/admin, como o servidor o define);
 // - pede o upload novo com `Prefer: code=201` (o mock responde 200/deduplicado por padrão);
 // - encaminha o PUT de parte (URL absoluta em 127.0.0.1:4010, outra origem) com a credencial que
 //   o mock exige e os headers CORS que o armazenamento real devolve.
@@ -43,7 +43,7 @@ async function screenshot(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ page, baseURL }) => {
-  await page.route('**/api/v1/auth/login', async (route) => {
+  await page.route(/\/api\/v1\/auth\/(login|signup)$/, async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
       await page.context().addCookies([
@@ -85,6 +85,13 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
+/** Clica num item da navegação principal, abrindo "Configurações e ajuda" quando ele está recolhido. */
+async function navTo(page: Page, name: string) {
+  const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name })
+  if (!(await link.isVisible())) await page.getByText('Configurações e ajuda').click()
+  await link.click()
+}
+
 async function login(page: Page, shot?: string) {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
@@ -93,6 +100,20 @@ async function login(page: Page, shot?: string) {
   await page.getByLabel('Senha').fill('senha-de-teste')
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
+
+test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }) => {
+  await page.goto('/entrar')
+  await page.getByRole('link', { name: 'Criar conta' }).click()
+  await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
+  await page.getByLabel('Nome').fill('Paulo Andrade')
+  await page.getByLabel('E-mail').fill('paulo.andrade@example.com')
+  await page.getByLabel('Senha').fill('senha-bem-longa-2026')
+  const submit = page.getByRole('button', { name: 'Criar conta' })
+  await expect(submit).toBeDisabled()
+  await page.getByText('Sou responsável por pedir o consentimento das pessoas que gravo.').click()
+  await submit.click()
+  await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
+})
 
 /** Entra no painel pela conta de admin, que é outra conta, com login próprio. */
 async function adminLogin(page: Page, path = '/admin') {
@@ -133,7 +154,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await screenshot(page, '3-transcricao')
 
   // Import: conversão real no navegador e upload create → PUT → complete.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Importar arquivo' }).click()
+  await navTo(page, 'Importar arquivo')
   await page.getByLabel('Escolher arquivo').setInputFiles({ name: 'reuniao.wav', mimeType: 'audio/wav', buffer: wav(3) })
   await expect(page.getByText(/Duração 3 s/)).toBeVisible()
   await expect(page.getByLabel('Título da gravação')).toHaveValue('reuniao')
@@ -149,14 +170,14 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   )
 
   // Token: o segredo aparece uma vez.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Tokens de acesso' }).click()
+  await navTo(page, 'Tokens de acesso')
   await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
   await page.getByRole('button', { name: 'lumea', exact: true }).click()
   await page.getByRole('button', { name: 'Criar token' }).click()
   await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
   await screenshot(page, '5-tokens')
 
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'App desktop' }).click()
+  await navTo(page, 'App desktop')
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
 })

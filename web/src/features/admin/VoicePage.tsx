@@ -16,7 +16,7 @@ export function VoicePage() {
     <section className={styles.page} aria-labelledby="voz-titulo">
       <div className={styles.intro}>
         <h2 id="voz-titulo">Identificação por voz</h2>
-        <p className="muted">
+        <p className="text-muted">
           O eclume pode sugerir quem é cada locutor comparando a voz com a das pessoas que o próprio usuário já
           confirmou. Voz é dado biométrico (LGPD): cada conta aceita, no cadastro, a responsabilidade de pedir o
           consentimento de quem grava, e nenhuma sugestão vira identificação sem alguém aceitar.
@@ -60,7 +60,7 @@ function VoiceForm({ settings }: { settings: Settings }) {
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           <span>
             <span>Ligar a identificação por voz</span>
-            <span className="hint">
+            <span className="field-hint">
               Desligada, nada é comparado nem guardado como impressão, e as sugestões pendentes somem. Desligar apaga as
               impressões de voz por gravação de todas as contas; as vozes já confirmadas ficam até o usuário esquecê-las
               na página da pessoa.
@@ -79,7 +79,7 @@ function VoiceForm({ settings }: { settings: Settings }) {
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
           />
-          <span className="hint">
+          <span className="field-hint">
             O padrão veio da calibração com fala real em português; mais alto, menos sugestões erradas e mais
             pessoas não reconhecidas.
           </span>

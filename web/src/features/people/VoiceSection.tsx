@@ -114,7 +114,7 @@ function Confirm({
         <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={pending}>
           {action}
         </button>
-        <button type="button" className="btn" onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Manter
         </button>
       </div>

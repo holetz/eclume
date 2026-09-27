@@ -19,7 +19,7 @@ export function UsersPage() {
     <section className={styles.page} aria-labelledby="usuarios-titulo">
       <div className={styles.intro}>
         <h2 id="usuarios-titulo">Usuários</h2>
-        <p className="muted">
+        <p className="text-muted">
           Cada pessoa cria a própria conta pelo cadastro. Desativar encerra as sessões e revoga os tokens da conta; as
           gravações dela continuam. O painel não mostra o conteúdo de ninguém.
         </p>
@@ -33,7 +33,7 @@ export function UsersPage() {
             {errorMessage(users.error)}
           </p>
         )}
-        {users.data && users.data.items.length === 0 && <p className="muted">Nenhuma conta criada ainda.</p>}
+        {users.data && users.data.items.length === 0 && <p className="text-muted">Nenhuma conta criada ainda.</p>}
         {users.data && users.data.items.length > 0 && (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -89,7 +89,7 @@ function UserRow({ user }: { user: User }) {
       </th>
       <td>{user.recording_count}</td>
       <td>
-        {user.active ? <span className="badge badge-success">Ativo</span> : <span className="badge badge-neutral">Desativado</span>}
+        {user.active ? <span className="badge badge-success">Ativo</span> : <span className="badge">Desativado</span>}
       </td>
       <td>{user.last_login_at ? formatDateTime(user.last_login_at) : 'Nunca entrou'}</td>
       <td className={styles.actionsCell}>
@@ -105,7 +105,7 @@ function UserRow({ user }: { user: User }) {
               >
                 Confirmar desativação
               </button>
-              <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
                 Manter
               </button>
             </div>
@@ -122,7 +122,7 @@ function UserRow({ user }: { user: User }) {
         ) : (
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-secondary btn-sm"
             onClick={() => patch.mutate({ active: true })}
             disabled={patch.isPending}
             aria-label={`Reativar ${user.name}`}

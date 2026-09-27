@@ -11,7 +11,7 @@
   gap: var(--space-2);
   padding: var(--space-3) 0;
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .audio {
@@ -22,7 +22,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
@@ -40,9 +40,8 @@
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--speaker-color);
-  border-radius: 0 var(--radius) var(--radius) 0;
   cursor: pointer;
-  scroll-margin: 7rem 0 var(--space-5);
+  scroll-margin: 7rem 0 var(--space-6);
 }
 
 .segment:hover {
@@ -67,7 +66,7 @@
 }
 
 .speaker {
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 650;
   color: var(--speaker-color);
 }
@@ -75,19 +74,18 @@
 .time {
   padding: 0 var(--space-1);
   font: inherit;
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
   background: none;
   border: none;
-  border-radius: var(--radius-sm);
   cursor: pointer;
   text-decoration: underline dotted;
   text-underline-offset: 0.2em;
 }
 
 .time:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
 }
 
 .text {
@@ -120,6 +118,6 @@
 }
 
 .hint {
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--color-text-muted);
 }
