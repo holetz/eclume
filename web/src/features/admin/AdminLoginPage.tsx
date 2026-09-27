@@ -4,7 +4,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
-import styles from '../auth/LoginPage.module.css'
+import { AuthLayout } from '../auth/AuthLayout'
 import { ADMIN_LOGIN_PATH, ADMIN_ME_KEY, useAdminMe } from './session'
 
 /** Volta dentro do painel; qualquer outra coisa cai no início do painel. */
@@ -12,7 +12,7 @@ function adminReturnPath(value: string | null): string {
   return value && value.startsWith('/admin') && !value.startsWith(ADMIN_LOGIN_PATH) ? value : '/admin'
 }
 
-/** Login da conta de admin, com o mesmo estilo do login de usuário. */
+/** Login da conta de admin, na mesma `.auth` do login de usuário. */
 export function AdminLoginPage() {
   usePageTitle('Entrar no painel admin')
   const [params] = useSearchParams()
@@ -45,48 +45,45 @@ export function AdminLoginPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <div className={`card ${styles.card}`}>
-        <p className={styles.brand}>eclume</p>
-        <h1>Painel admin</h1>
-        <p className="muted">Entre com a conta de admin da plataforma, que é separada da conta de usuário.</p>
-        <form className={styles.form} onSubmit={submit} noValidate>
-          <div className="field">
-            <label htmlFor="admin-login-email">E-mail</label>
-            <input
-              id="admin-login-email"
-              className="input"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              aria-describedby={error ? errorId : undefined}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="admin-login-password">Senha</label>
-            <input
-              id="admin-login-password"
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-describedby={error ? errorId : undefined}
-            />
-          </div>
-          {error && (
-            <p id={errorId} className="alert alert-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button type="submit" className="btn btn-primary" disabled={submitting || !email || !password}>
-            {submitting ? 'Entrando…' : 'Entrar'}
-          </button>
-        </form>
-      </div>
-    </main>
+    <AuthLayout>
+      <form onSubmit={submit} noValidate>
+        <h2>Painel admin</h2>
+        <p className="text-muted">Entre com a conta de admin da plataforma, que é separada da conta de usuário.</p>
+        <div className="field">
+          <label htmlFor="admin-login-email">E-mail</label>
+          <input
+            id="admin-login-email"
+            className="input"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-describedby={error ? errorId : undefined}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="admin-login-password">Senha</label>
+          <input
+            id="admin-login-password"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-describedby={error ? errorId : undefined}
+          />
+        </div>
+        {error && (
+          <p id={errorId} className="alert alert-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !email || !password}>
+          {submitting ? 'Entrando…' : 'Entrar'}
+        </button>
+      </form>
+    </AuthLayout>
   )
 }

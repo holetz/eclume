@@ -30,7 +30,7 @@ export function HealthPage() {
     <section className={styles.page} aria-labelledby="saude-titulo">
       <div className={styles.intro}>
         <h2 id="saude-titulo">Saúde</h2>
-        <p className="muted">
+        <p className="text-muted">
           Filas, worker GPU e jobs da plataforma. Atualiza sozinha a cada {HEALTH_REFRESH_MS / 1000} segundos.
         </p>
         {health.data && <p className={styles.meta}>Verificado às {formatDateTime(health.data.checked_at)}.</p>}
@@ -57,18 +57,18 @@ function HealthView({ health }: { health: Health }) {
         <article className={`card ${styles.card}`} aria-labelledby="saude-worker">
           <h3 id="saude-worker">Worker GPU</h3>
           {worker === undefined ? (
-            <p className="muted">O servidor não informa o estado do worker.</p>
+            <p className="text-muted">O servidor não informa o estado do worker.</p>
           ) : worker === null ? (
             <p>
               <span className="badge badge-danger">Sem sinal</span>{' '}
-              <span className="muted">Nenhum heartbeat nos últimos 45 segundos: o worker pode estar parado.</span>
+              <span className="text-muted">Nenhum heartbeat nos últimos 45 segundos: o worker pode estar parado.</span>
             </p>
           ) : (
             <dl className={styles.facts}>
               <dt>Estado</dt>
               <dd>
                 <span className="badge badge-success">No ar</span>{' '}
-                {worker.busy ? <span className="badge badge-progress">Transcrevendo</span> : <span className="badge badge-neutral">Ocioso</span>}
+                {worker.busy ? <span className="badge badge-progress">Transcrevendo</span> : <span className="badge">Ocioso</span>}
               </dd>
               <dt>Último sinal</dt>
               <dd>{formatDateTime(worker.last_seen_at)}</dd>
@@ -101,11 +101,11 @@ function HealthView({ health }: { health: Health }) {
               <p className={styles.meta}>Utilização: {Math.round(gpu.utilization_pct)}%</p>
             </>
           ) : (
-            <p className="muted">Sem leitura da GPU (worker parado ou rodando em CPU).</p>
+            <p className="text-muted">Sem leitura da GPU (worker parado ou rodando em CPU).</p>
           )}
           <h4>Modelos carregados</h4>
           {health.models_loaded.length === 0 ? (
-            <p className="muted">Nenhum: os modelos saem da GPU depois de alguns minutos sem job.</p>
+            <p className="text-muted">Nenhum: os modelos saem da GPU depois de alguns minutos sem job.</p>
           ) : (
             <ul className={styles.list}>
               {health.models_loaded.map((model) => (
@@ -154,7 +154,7 @@ function HealthView({ health }: { health: Health }) {
       <section className={styles.section} aria-labelledby="saude-jobs">
         <h3 id="saude-jobs">Transcrições em andamento</h3>
         {jobs.length === 0 ? (
-          <p className="muted">Nenhuma transcrição na fila ou rodando.</p>
+          <p className="text-muted">Nenhuma transcrição na fila ou rodando.</p>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -220,12 +220,12 @@ function HealthView({ health }: { health: Health }) {
 /** Retentar um job da lista de falhas; a falha passageira vem destacada. */
 function RetryJobButton({ jobId, retryable }: { jobId: string; retryable: boolean }) {
   const retry = useRetryJob()
-  if (retry.isSuccess) return <span className="muted">Na fila de novo.</span>
+  if (retry.isSuccess) return <span className="text-muted">Na fila de novo.</span>
   return (
     <>
       <button
         type="button"
-        className={retryable ? 'btn btn-primary' : 'btn'}
+        className={retryable ? 'btn btn-primary' : 'btn btn-secondary'}
         disabled={retry.isPending}
         title={retryable ? 'Falha passageira: tentar de novo costuma resolver.' : undefined}
         onClick={() => retry.mutate(jobId)}

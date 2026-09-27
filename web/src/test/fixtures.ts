@@ -15,6 +15,8 @@ import recordingPage from '../../../contracts/fixtures/recording-page.json'
 import recordingQueued from '../../../contracts/fixtures/recording-queued.json'
 import recordingTranscribed from '../../../contracts/fixtures/recording-transcribed.json'
 import secretList from '../../../contracts/fixtures/secret-list.json'
+import signupInfo from '../../../contracts/fixtures/signup-info.json'
+import signupRequest from '../../../contracts/fixtures/signup-request.json'
 import searchPage from '../../../contracts/fixtures/search-page.json'
 import speakerLinked from '../../../contracts/fixtures/speaker-linked.json'
 import summaryDone from '../../../contracts/fixtures/summary-done.json'
@@ -43,6 +45,8 @@ export const fixtures = {
     ...meViaPat,
     auth: { method: 'session', scopes: [], token_id: null },
   }),
+  signupInfo: fresh<Schemas['SignupInfo']>(signupInfo),
+  signupRequest: fresh<Schemas['SignupRequest']>(signupRequest),
   recordingPage: fresh<Schemas['RecordingPage']>(recordingPage),
   recordingQueued: fresh<Schemas['Recording']>(recordingQueued),
   recordingTranscribed: fresh<Schemas['Recording']>(recordingTranscribed),

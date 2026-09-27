@@ -35,7 +35,7 @@ export function OrganizePanel({ recording }: { recording: Recording }) {
 
 function OrganizeSummary({ recording }: { recording: Recording }) {
   const fields = METADATA_FIELDS.filter(({ key }) => recording.metadata[key])
-  if (recording.tags.length === 0 && fields.length === 0) return <p className="muted">Sem tags nem metadados.</p>
+  if (recording.tags.length === 0 && fields.length === 0) return <p className="text-muted">Sem tags nem metadados.</p>
   return (
     <dl className={styles.summary}>
       {recording.tags.length > 0 && (
@@ -99,7 +99,7 @@ function OrganizeForm({ recording, onSaved }: { recording: Recording; onSaved: (
       <div className="field">
         <label htmlFor={`${id}-tags`}>Tags</label>
         <input id={`${id}-tags`} className="input" value={tags} onChange={(e) => setTags(e.target.value)} aria-describedby={`${id}-tags-dica`} />
-        <span id={`${id}-tags-dica`} className="hint">
+        <span id={`${id}-tags-dica`} className="field-hint">
           Separadas por vírgula.
         </span>
       </div>
@@ -121,7 +121,7 @@ function OrganizeForm({ recording, onSaved }: { recording: Recording; onSaved: (
         ))}
       </datalist>
       <fieldset className={styles.collections}>
-        <legend className="label">Coleções</legend>
+        <legend className="field-label">Coleções</legend>
         {collections.data?.items.length === 0 && (
           <p className={styles.hint}>
             Nenhuma coleção. <Link to="/colecoes">Criar uma</Link>.

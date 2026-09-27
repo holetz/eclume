@@ -1,6 +1,22 @@
+/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
+   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
+:where(.page) h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+:where(.page) h3 {
+  font-size: 17px;
+  margin: 0;
+}
+
+:where(.page) p {
+  margin: 0;
+}
+
 .page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .header {
@@ -10,7 +26,7 @@
 
 .back {
   justify-self: start;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .titleRow {
@@ -24,12 +40,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
 .pending {
-  padding: var(--space-5);
+  padding: var(--space-6);
   color: var(--color-text-muted);
 }
 
@@ -37,7 +53,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 18rem;
   align-items: start;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .main {
@@ -48,7 +64,7 @@
   position: sticky;
   top: var(--space-4);
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
   /* Com locutores, organização e resumos o painel passa da tela: rola por conta própria. */
   max-height: calc(100vh - 2 * var(--space-4));
   overflow-y: auto;

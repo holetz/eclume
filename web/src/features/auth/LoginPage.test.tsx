@@ -58,6 +58,15 @@ describe('login', () => {
     await waitFor(() => expect(http.requests('POST /api/v1/auth/logout')).toHaveLength(1))
   })
 
+  it('mostra a marca e leva a Criar conta', async () => {
+    mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
+    renderApp('/entrar')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Entrar' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Cada palavra, guardada em casa.' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveClass('auth')
+    expect(screen.getByRole('link', { name: 'Criar conta' })).toHaveAttribute('href', '/cadastro')
+  })
+
   it('só aceita volta para caminho interno', () => {
     expect(safeReturnPath('/gravacoes/1')).toBe('/gravacoes/1')
     expect(safeReturnPath('//evil.example')).toBe('/')

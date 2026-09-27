@@ -82,7 +82,7 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
             <label htmlFor={templateId}>Template</label>
             <select
               id={templateId}
-              className="select"
+              className="input"
               value={selected}
               onChange={(event) => setChosen(event.target.value)}
               disabled={templateItems.length === 0}
@@ -111,7 +111,7 @@ export function SummariesPanel({ transcriptId }: { transcriptId: string }) {
           {errorMessage(summaries.error)}
         </p>
       )}
-      {summaries.data?.items.length === 0 && <p className="muted">Nenhum resumo gerado ainda.</p>}
+      {summaries.data?.items.length === 0 && <p className="text-muted">Nenhum resumo gerado ainda.</p>}
       {summaries.data && summaries.data.items.length > 0 && (
         <ul className={styles.list} aria-label="Resumos gerados">
           {summaries.data.items.map((summary) => (
@@ -128,7 +128,7 @@ function SummaryItem({ summary }: { summary: Summary }) {
   const heading = (
     <span className={styles.head}>
       <span className={styles.name}>
-        {summary.template.name} <span className="muted">· v{summary.version}</span>
+        {summary.template.name} <span className="text-muted">· v{summary.version}</span>
       </span>
       <span className={`badge badge-${status.tone}`}>{status.label}</span>
     </span>

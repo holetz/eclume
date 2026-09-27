@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { errorMessage } from '../api/problem'
+import { NoticePage } from '../features/auth/NoticePage'
 import { AppShell } from './AppShell'
 import styles from './RequireSession.module.css'
 import { useLogout, useMe } from './session'
@@ -13,7 +14,10 @@ export function PageStatus({ children }: { children: ReactNode }) {
   )
 }
 
-/** Guarda das rotas autenticadas: sem sessão, leva ao login com a rota de volta. */
+/**
+ * Guarda das rotas autenticadas: sem sessão, leva ao login com a rota de volta; com o aviso em
+ * vigor ainda não aceito, pede o aceite antes do shell.
+ */
 export function RequireSession() {
   const me = useMe()
   const location = useLocation()
@@ -24,7 +28,7 @@ export function RequireSession() {
     return (
       <PageStatus>
         <p>{errorMessage(me.error)}</p>
-        <button type="button" className="btn" onClick={() => me.refetch()}>
+        <button type="button" className="btn btn-secondary" onClick={() => me.refetch()}>
           Tentar de novo
         </button>
       </PageStatus>
@@ -33,6 +37,9 @@ export function RequireSession() {
   if (!me.data) {
     const volta = encodeURIComponent(location.pathname + location.search)
     return <Navigate to={`/entrar?volta=${volta}`} replace />
+  }
+  if (me.data.notice_required) {
+    return <NoticePage onLogout={() => logout.mutate()} loggingOut={logout.isPending} />
   }
   const { user } = me.data
   return (

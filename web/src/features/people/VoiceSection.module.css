@@ -1,7 +1,7 @@
 .voice {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
 }
 
 .body {
@@ -10,7 +10,7 @@
 }
 
 .detail {
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
@@ -28,7 +28,7 @@
 
 .samples summary {
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 560;
 }
 
@@ -42,5 +42,5 @@
 
 .samples li {
   display: grid;
-  font-size: var(--text-sm);
+  font-size: 14px;
 }

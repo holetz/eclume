@@ -16,7 +16,7 @@ export function AdminLayout() {
     return (
       <PageStatus>
         <p>{errorMessage(me.error)}</p>
-        <button type="button" className="btn" onClick={() => me.refetch()}>
+        <button type="button" className="btn btn-secondary" onClick={() => me.refetch()}>
           Tentar de novo
         </button>
       </PageStatus>
@@ -33,11 +33,11 @@ export function AdminLayout() {
         <div className={styles.actions}>
           <h1>Administração</h1>
           <span className={styles.meta}>{me.data.email}</span>
-          <button type="button" className="btn btn-sm" onClick={() => logout.mutate()} disabled={logout.isPending}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => logout.mutate()} disabled={logout.isPending}>
             {logout.isPending ? 'Saindo…' : 'Sair'}
           </button>
         </div>
-        <p className="muted">
+        <p className="text-muted">
           Configuração da plataforma, contas e saúde do serviço. Mudanças valem para os próximos jobs.
         </p>
       </header>

@@ -47,7 +47,7 @@ export function LibraryPage() {
       <header className={styles.header}>
         <div>
           <h1 id="biblioteca-titulo">Biblioteca</h1>
-          <p className="muted">Suas gravações.</p>
+          <p className="text-muted">Suas gravações.</p>
         </div>
         <Link to="/importar" className="btn btn-primary">
           Importar arquivo
@@ -66,7 +66,7 @@ export function LibraryPage() {
       {recordings.isError && (
         <div className="alert alert-error" role="alert">
           {errorMessage(recordings.error)}{' '}
-          <button type="button" className="btn btn-sm" onClick={() => recordings.refetch()}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => recordings.refetch()}>
             Tentar de novo
           </button>
         </div>
@@ -84,7 +84,7 @@ export function LibraryPage() {
       {recordings.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => recordings.fetchNextPage()}
           disabled={recordings.isFetchingNextPage}
         >
@@ -118,7 +118,7 @@ function EmptyLibrary() {
   return (
     <div className={`card ${styles.empty}`}>
       <h2>Nenhuma gravação ainda</h2>
-      <p className="muted">
+      <p className="text-muted">
         Importe um arquivo de áudio ou vídeo, ou instale o <Link to="/app-desktop">app desktop</Link> para gravar
         reuniões automaticamente.
       </p>

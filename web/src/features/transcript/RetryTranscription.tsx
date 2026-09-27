@@ -31,12 +31,12 @@ export function RetryTranscription({ recording }: { recording: Recording }) {
   const retryable = recording.job?.error?.retryable === true
   return (
     <div role="group" aria-label="Retentar a transcrição">
-      <p className="muted">
+      <p className="text-muted">
         {retryable
           ? 'A falha foi passageira: tentar de novo costuma resolver.'
           : 'Você pode tentar de novo com a configuração atual.'}
       </p>
-      <button type="button" className="btn" disabled={retry.isPending} onClick={() => retry.mutate()}>
+      <button type="button" className="btn btn-secondary" disabled={retry.isPending} onClick={() => retry.mutate()}>
         {retry.isPending ? 'Enfileirando…' : 'Tentar de novo'}
       </button>
       {retry.isError && (

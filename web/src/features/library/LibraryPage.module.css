@@ -1,6 +1,22 @@
+/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
+   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
+:where(.page) h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+:where(.page) h3 {
+  font-size: 17px;
+  margin: 0;
+}
+
+:where(.page) p {
+  margin: 0;
+}
+
 .page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .header {
@@ -28,7 +44,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
 }
 
 .main {
@@ -38,7 +54,7 @@
 }
 
 .title {
-  font-size: var(--text-md);
+  font-size: 15px;
   font-weight: 620;
 }
 
@@ -48,7 +64,7 @@
 }
 
 .title a:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-ink);
   text-decoration: underline;
 }
 
@@ -56,7 +72,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--color-text-muted);
 }
 
@@ -64,7 +80,7 @@
   display: grid;
   justify-items: start;
   gap: var(--space-3);
-  padding: var(--space-6);
+  padding: var(--space-8);
 }
 
 .more {
@@ -76,5 +92,5 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
