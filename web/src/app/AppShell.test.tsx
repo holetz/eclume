@@ -34,13 +34,18 @@ describe('navegação', () => {
     const { main, more } = navGroups()
     expect(titles(main)).toEqual(['Gravações', 'Organizar'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
-    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções'])
-    expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop', 'Central de ajuda'])
+    // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem.
+    const enabled = (section: string) => NAV_ITEMS.filter((i) => i.enabled && i.section === section).map((i) => i.label)
+    expect(labels(main)).toEqual(enabled('main'))
+    expect(labels(main).slice(0, 6)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções', 'Campos e regras'])
+    expect(labels(more)).toEqual(enabled('more'))
+    expect(labels(more)).toEqual(expect.arrayContaining(['Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
 
   it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
     const { main, more } = navGroups()
-    expect(labels([...main, ...more])).not.toContain('Campos e regras')
+    const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos e regras' }))
+    expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos e regras')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
@@ -80,7 +85,9 @@ describe('AppShell', () => {
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
     expect(titles).toEqual(['Gravações', 'Organizar', 'Minhas configurações', 'Ajuda'])
     expect(within(nav).getByText('Configurações e ajuda').tagName).toBe('SUMMARY')
-    expect(within(nav).queryByRole('link', { name: 'Campos e regras' })).not.toBeInTheDocument()
+    for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
+      expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
+    }
   })
 
   it('não mostra o painel admin', () => {

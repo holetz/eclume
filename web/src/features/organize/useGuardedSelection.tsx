@@ -1,0 +1,60 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { Dialog } from '../../app/Dialog'
+
+/** O valor da seleção para o rascunho de um item novo. */
+export const NEW = 'novo'
+
+/**
+ * A seleção vive na URL (`?<param>=<id>` ou `novo`); com alterações não salvas, trocar de item pede
+ * confirmação, e fechar a aba também (o aviso do navegador).
+ */
+export function useGuardedSelection(param: string) {
+  const [params, setParams] = useSearchParams()
+  const [dirty, setDirty] = useState(false)
+  const [pending, setPending] = useState<string | null | undefined>(undefined)
+  const selected = params.get(param)
+
+  const apply = useCallback(
+    (id: string | null) => {
+      setDirty(false)
+      setPending(undefined)
+      setParams(id ? { [param]: id } : {}, { replace: true })
+    },
+    [param, setParams],
+  )
+
+  const select = (id: string | null) => {
+    if (id === selected) return
+    if (dirty) setPending(id)
+    else apply(id)
+  }
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const discardDialog =
+    pending === undefined ? null : (
+      <Dialog
+        title="Descartar alterações?"
+        message="As alterações ainda não foram salvas."
+        onClose={() => setPending(undefined)}
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={() => setPending(undefined)}>
+              Continuar editando
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => apply(pending)}>
+              Descartar
+            </button>
+          </>
+        }
+      />
+    )
+
+  return { selected, select, apply, setDirty, discardDialog }
+}

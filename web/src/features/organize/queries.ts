@@ -11,6 +11,13 @@ export type AgendaType = Schemas['AgendaType']
 export type AgendaTypeDraft = Schemas['AgendaTypeDraft']
 export type Preview = Schemas['Preview']
 
+export const KIND_LABELS: Record<FieldKind, string> = { text: 'Texto', list: 'Lista', choice: 'Escolha' }
+
+/** O rascunho de um campo no formato do contrato: nome sem espaços nas pontas, e só a Escolha leva opções. */
+export function cleanDraft(draft: FieldDraft): FieldDraft {
+  return { ...draft, name: draft.name.trim(), options: draft.kind === 'choice' ? draft.options : [] }
+}
+
 export const FIELDS_KEY = ['fields'] as const
 // A mesma chave (e a mesma página) que o painel de resumos da gravação usa.
 export const AGENDA_TYPES_KEY = ['agenda-types'] as const

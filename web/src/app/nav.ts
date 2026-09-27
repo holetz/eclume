@@ -21,7 +21,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
   // Coleção convive com tag (mapa v6): agrupa as gravações que o usuário escolhe.
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: false },
+  { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: false },
   { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'more', enabled: false },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'more', enabled: true },

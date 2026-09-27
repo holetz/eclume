@@ -15,6 +15,7 @@ const AdminLoginPage = named(() => import('../features/admin/AdminLoginPage'), '
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
+const FieldsPage = named(() => import('../features/organize/FieldsPage'), 'FieldsPage')
 const HelpCenterPage = named(() => import('../features/help/HelpCenterPage'), 'HelpCenterPage')
 const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
 const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
@@ -48,6 +49,7 @@ export function AppRoutes() {
         <Route path="/pessoas/:id" element={page(PersonPage)} />
         <Route path="/busca" element={page(SearchPage)} />
         <Route path="/colecoes" element={page(CollectionsPage)} />
+        <Route path="/config/campos" element={page(FieldsPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
         <Route path="/ajuda" element={page(HelpCenterPage)} />
