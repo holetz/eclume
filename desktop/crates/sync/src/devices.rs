@@ -114,6 +114,9 @@ fn sign_in_error(response: &HttpResponse) -> anyhow::Error {
     match (response.status, problem.code.as_deref()) {
         (401, Some("invalid_pairing_code")) => anyhow!("Código inválido ou vencido"),
         (401, _) => anyhow!("E-mail ou senha incorretos"),
+        (403, Some("notice_required")) => anyhow!(
+            "Aceite o aviso de responsabilidade na web do eclume e entre de novo aqui"
+        ),
         (429, _) => match response
             .header("retry-after")
             .and_then(|value| value.trim().parse::<u64>().ok())
@@ -225,6 +228,10 @@ mod tests {
             )
             .expect(
                 "POST /api/v1/devices/login",
+                problem(403, "notice_required", None),
+            )
+            .expect(
+                "POST /api/v1/devices/login",
                 problem(422, "validation_failed", None),
             );
         let (devices, _) = devices(script);
@@ -244,6 +251,10 @@ mod tests {
         assert_eq!(
             text(devices.pair("AAAAAA", "pc")),
             "Muitas tentativas; tente de novo em instantes"
+        );
+        assert_eq!(
+            text(devices.login("a@b.c", "x", "pc")),
+            "Aceite o aviso de responsabilidade na web do eclume e entre de novo aqui"
         );
         assert!(text(devices.login("a@b.c", "x", "pc")).contains("validation_failed"));
     }
