@@ -3,12 +3,15 @@
 //! O arquivo nasce como `<id>.ogg.part` e só vira `<id>.ogg` ao parar. A linha da fila nasce em
 //! `recording` e passa a `pending` no mesmo momento. Se o processo morrer no meio,
 //! [`recover`] acerta arquivo e linha na abertura seguinte.
+//!
+//! Uma nota por voz passa as amostras mixadas pelo [`SilenceDetector`]: o laço encerra sozinho no
+//! silêncio configurado, ou quando não houve voz, e o [`Progress`] conta por quê.
 
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -16,7 +19,8 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::encode::{OggOpusWriter, DEFAULT_BITRATE};
 use crate::mix::{Mixer, TARGET_RATE};
-use crate::queue::{now_ms, Queue, QueuedRecording};
+use crate::queue::{now_ms, Kind, Queue, QueuedRecording};
+use crate::vad::{SilenceDetector, VadEvent, METER_BARS};
 use crate::AudioSource;
 
 /// Quanto cada leitura de fonte espera, no máximo, por amostras.
@@ -41,21 +45,148 @@ impl RecorderConfig {
     }
 }
 
+/// O que gravar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StartOptions {
+    pub kind: Kind,
+    /// Numa nota, o silêncio que a encerra; `None` ("Nunca") não para sozinha. Ignorado numa
+    /// reunião.
+    pub stop_after_silence: Option<Duration>,
+}
+
+impl StartOptions {
+    /// Uma reunião ou gravação manual: para só a pedido ou quando as fontes caem.
+    pub const MEETING: Self = Self {
+        kind: Kind::Meeting,
+        stop_after_silence: None,
+    };
+
+    pub fn note(stop_after_silence: Option<Duration>) -> Self {
+        Self {
+            kind: Kind::Note,
+            stop_after_silence,
+        }
+    }
+}
+
+/// Por que o laço de gravação terminou.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StopReason {
+    /// Pedido de parada (botão, atalho, bandeja, fim da reunião).
+    Requested,
+    /// Todas as fontes acabaram, ou houve erro.
+    SourcesEnded,
+    /// Nota: houve voz e depois o silêncio configurado.
+    Silence,
+    /// Nota: nenhuma voz nos primeiros segundos.
+    NoSpeech,
+}
+
+impl StopReason {
+    const ALL: [Self; 4] = [
+        Self::Requested,
+        Self::SourcesEnded,
+        Self::Silence,
+        Self::NoSpeech,
+    ];
+}
+
+/// O andamento de uma gravação, compartilhado com a thread que grava.
+#[derive(Debug)]
+pub struct Progress {
+    /// Amostras gravadas, a 16 kHz.
+    samples: AtomicU64,
+    /// 0 enquanto grava; depois, 1 + o índice em [`StopReason::ALL`].
+    reason: AtomicU8,
+    /// Quanto falta de silêncio para a nota parar; `u64::MAX` quando não conta.
+    stops_in_ms: AtomicU64,
+    meter: Mutex<[f32; METER_BARS]>,
+}
+
+impl Default for Progress {
+    fn default() -> Self {
+        Self {
+            samples: AtomicU64::new(0),
+            reason: AtomicU8::new(0),
+            stops_in_ms: AtomicU64::new(u64::MAX),
+            meter: Mutex::new([0.0; METER_BARS]),
+        }
+    }
+}
+
+impl Progress {
+    /// A posição no áudio gravado, em ms: a base dos marcadores, que não se desalinha com um vazio
+    /// de fonte como o relógio se desalinharia.
+    pub fn position_ms(&self) -> i64 {
+        let samples = self.samples.load(Ordering::Acquire);
+        i64::try_from(samples * 1_000 / u64::from(TARGET_RATE)).unwrap_or(i64::MAX)
+    }
+
+    /// Os últimos níveis da nota, de 0 a 1 (vazio numa reunião).
+    pub fn meter(&self) -> [f32; METER_BARS] {
+        self.meter.lock().map_or([0.0; METER_BARS], |meter| *meter)
+    }
+
+    /// Quanto falta de silêncio para a nota parar, enquanto a pessoa está calada.
+    pub fn stops_in_ms(&self) -> Option<u64> {
+        match self.stops_in_ms.load(Ordering::Acquire) {
+            u64::MAX => None,
+            ms => Some(ms),
+        }
+    }
+
+    /// Por que a gravação terminou; `None` enquanto grava.
+    pub fn stop_reason(&self) -> Option<StopReason> {
+        match self.reason.load(Ordering::Acquire) {
+            0 => None,
+            n => StopReason::ALL.get(usize::from(n - 1)).copied(),
+        }
+    }
+
+    /// Guarda o primeiro motivo; os seguintes não o trocam.
+    fn finish(&self, reason: StopReason) {
+        let code = StopReason::ALL
+            .iter()
+            .position(|r| *r == reason)
+            .map_or(0, |i| i as u8 + 1);
+        let _ = self
+            .reason
+            .compare_exchange(0, code, Ordering::AcqRel, Ordering::Acquire);
+    }
+
+    fn record(&self, samples: usize, detector: Option<&SilenceDetector>) {
+        self.samples.fetch_add(samples as u64, Ordering::AcqRel);
+        if let Some(detector) = detector {
+            if let Ok(mut meter) = self.meter.lock() {
+                *meter = detector.meter();
+            }
+            self.stops_in_ms.store(
+                detector.stops_in_ms().unwrap_or(u64::MAX),
+                Ordering::Release,
+            );
+        }
+    }
+}
+
 /// Uma gravação em andamento.
 pub struct ActiveRecording {
     id: String,
+    kind: Kind,
     part_path: PathBuf,
     final_path: PathBuf,
     started_at: i64,
     stop: Arc<AtomicBool>,
+    progress: Arc<Progress>,
     worker: JoinHandle<Result<u64>>,
 }
 
-/// Começa a gravar as fontes dadas (tipicamente mic e sistema) e registra a gravação na fila.
+/// Começa a gravar as fontes dadas (mic e sistema numa reunião, só o mic numa nota) e registra a
+/// gravação na fila.
 pub fn start(
     config: &RecorderConfig,
     queue: &Queue,
     sources: Vec<Box<dyn AudioSource>>,
+    options: StartOptions,
 ) -> Result<ActiveRecording> {
     if sources.is_empty() {
         return Err(anyhow!("nenhuma fonte de áudio para gravar"));
@@ -72,23 +203,36 @@ pub fn start(
         .with_context(|| format!("falha ao criar {}", part_path.display()))?;
     let writer = OggOpusWriter::new(BufWriter::new(file), config.bitrate, serial_for(&id))?;
     queue.begin(&id, &part_path, started_at)?;
+    if options.kind != Kind::Meeting {
+        queue.set_kind(&id, options.kind)?;
+    }
 
     let stop = Arc::new(AtomicBool::new(false));
+    let progress = Arc::new(Progress::default());
+    let detector =
+        (options.kind == Kind::Note).then(|| SilenceDetector::new(options.stop_after_silence));
     let worker = {
         let stop = Arc::clone(&stop);
+        let progress = Arc::clone(&progress);
         std::thread::Builder::new()
             .name("eclume-gravacao".into())
-            .spawn(move || record_loop(sources, writer, &stop))
+            .spawn(move || record_loop(sources, writer, detector, &stop, &progress))
             .context("falha ao criar a thread de gravação")?
     };
-    log::info!("gravação {id} iniciada em {}", part_path.display());
+    log::info!(
+        "gravação {id} ({}) iniciada em {}",
+        options.kind.as_str(),
+        part_path.display()
+    );
 
     Ok(ActiveRecording {
         id,
+        kind: options.kind,
         part_path,
         final_path,
         started_at,
         stop,
+        progress,
         worker,
     })
 }
@@ -98,12 +242,21 @@ impl ActiveRecording {
         &self.id
     }
 
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+
     /// Início, em milissegundos desde a época Unix.
     pub fn started_at(&self) -> i64 {
         self.started_at
     }
 
-    /// Se a gravação terminou sozinha (todas as fontes acabaram, ou houve erro).
+    pub fn progress(&self) -> &Progress {
+        &self.progress
+    }
+
+    /// Se a gravação terminou sozinha (fontes acabaram, erro, ou a nota parou no silêncio); o
+    /// motivo está em [`Progress::stop_reason`].
     pub fn is_finished(&self) -> bool {
         self.worker.is_finished()
     }
@@ -137,12 +290,30 @@ impl ActiveRecording {
     }
 }
 
-/// Lê as fontes até o pedido de parada (ou até todas acabarem), mixa e codifica. Devolve as
-/// amostras gravadas, a 16 kHz.
+/// Lê as fontes até o pedido de parada (ou até todas acabarem, ou até o detector da nota pedir),
+/// mixa e codifica. Devolve as amostras gravadas, a 16 kHz.
 fn record_loop(
+    sources: Vec<Box<dyn AudioSource>>,
+    writer: OggOpusWriter<BufWriter<File>>,
+    detector: Option<SilenceDetector>,
+    stop: &AtomicBool,
+    progress: &Progress,
+) -> Result<u64> {
+    let result = record_until_done(sources, writer, detector, stop, progress);
+    progress.finish(if stop.load(Ordering::Acquire) {
+        StopReason::Requested
+    } else {
+        StopReason::SourcesEnded
+    });
+    result
+}
+
+fn record_until_done(
     mut sources: Vec<Box<dyn AudioSource>>,
     mut writer: OggOpusWriter<BufWriter<File>>,
+    mut detector: Option<SilenceDetector>,
     stop: &AtomicBool,
+    progress: &Progress,
 ) -> Result<u64> {
     let rates: Vec<u32> = sources.iter().map(|s| s.sample_rate()).collect();
     let mut mixer = Mixer::new(&rates)?;
@@ -165,7 +336,17 @@ fn record_loop(
                 }
             }
         }
-        writer.write(&mixer.pop_ready())?;
+        let ready = mixer.pop_ready();
+        writer.write(&ready)?;
+        let event = detector.as_mut().and_then(|d| d.push(&ready));
+        progress.record(ready.len(), detector.as_ref());
+        if let Some(event) = event {
+            progress.finish(match event {
+                VadEvent::Silence => StopReason::Silence,
+                VadEvent::NoSpeech => StopReason::NoSpeech,
+            });
+            break;
+        }
     }
 
     // Solta os dispositivos antes de fechar o arquivo.
@@ -252,7 +433,13 @@ mod tests {
                 Duration::from_millis(1_500),
             )),
         ];
-        let active = start(&RecorderConfig::new(&dir), &queue, sources).unwrap();
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            sources,
+            StartOptions::MEETING,
+        )
+        .unwrap();
         assert_eq!(
             queue.get(active.id()).unwrap().unwrap().status,
             Status::Recording
@@ -262,9 +449,14 @@ mod tests {
         while !active.is_finished() {
             std::thread::sleep(Duration::from_millis(5));
         }
+        assert_eq!(
+            active.progress().stop_reason(),
+            Some(StopReason::SourcesEnded)
+        );
         let rec = active.stop(&queue).unwrap();
 
         assert_eq!(rec.status, Status::Pending);
+        assert_eq!(rec.kind, Kind::Meeting);
         assert!(!rec.interrupted);
         assert_eq!(rec.path.extension().unwrap(), "ogg");
         assert!(rec.path.exists());
@@ -285,9 +477,19 @@ mod tests {
             Box::new(SineSource::new(16_000, 440.0, 0.3, Duration::from_secs(30))),
             Box::new(silent),
         ];
-        let active = start(&RecorderConfig::new(&dir), &queue, sources).unwrap();
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            sources,
+            StartOptions::MEETING,
+        )
+        .unwrap();
         std::thread::sleep(Duration::from_millis(100));
+        let position = active.progress().position_ms();
+        assert!(position > 0, "posição {position} ms");
+        let progress = Arc::clone(&active.progress);
         let rec = active.stop(&queue).unwrap();
+        assert_eq!(progress.stop_reason(), Some(StopReason::Requested));
         assert_eq!(rec.status, Status::Pending);
         assert!(rec.duration_ms.unwrap() > 0);
         std::fs::remove_dir_all(dir).unwrap();
@@ -314,6 +516,130 @@ mod tests {
     #[test]
     fn session_recusa_gravar_sem_fontes() {
         let queue = Queue::open_in_memory().unwrap();
-        assert!(start(&RecorderConfig::new(temp_dir("vazia")), &queue, Vec::new()).is_err());
+        assert!(start(
+            &RecorderConfig::new(temp_dir("vazia")),
+            &queue,
+            Vec::new(),
+            StartOptions::MEETING
+        )
+        .is_err());
+    }
+
+    /// Fala (tom em rajadas) por `speech_ms` e depois silêncio digital até `total_ms`.
+    fn voice_then_silence(speech_ms: u64, total_ms: u64) -> ScriptedSource {
+        let chunk_ms = 10;
+        let chunks = (0..total_ms / chunk_ms).map(move |i| {
+            let t = i * chunk_ms;
+            let samples = (0..160)
+                .map(|n| {
+                    if t < speech_ms && t % 300 < 200 {
+                        0.3 * (2.0 * std::f32::consts::PI * 220.0 * (t * 16 + n) as f32 / 16_000.0)
+                            .sin()
+                    } else {
+                        0.0
+                    }
+                })
+                .collect::<Vec<f32>>();
+            Some(samples)
+        });
+        ScriptedSource::new(16_000, chunks)
+    }
+
+    fn wait_finished(active: &ActiveRecording) {
+        for _ in 0..2_000 {
+            if active.is_finished() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("a gravação não terminou sozinha");
+    }
+
+    #[test]
+    fn nota_para_sozinha_no_silencio_com_medidor_e_posicao() {
+        let dir = temp_dir("nota-silencio");
+        let queue = Queue::open_in_memory().unwrap();
+        let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(1_000, 60_000))];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            source,
+            StartOptions::note(Some(Duration::from_secs(2))),
+        )
+        .unwrap();
+        assert_eq!(queue.get(active.id()).unwrap().unwrap().kind, Kind::Note);
+        wait_finished(&active);
+
+        let progress = active.progress();
+        assert_eq!(progress.stop_reason(), Some(StopReason::Silence));
+        // Fala até 1 s (última rajada até 0,9 s), 300 ms de hangover e 2 s de silêncio.
+        let position = progress.position_ms();
+        assert!(
+            (3_100..=3_400).contains(&position),
+            "parou em {position} ms"
+        );
+        assert_eq!(progress.stops_in_ms(), None);
+        let rec = active.stop(&queue).unwrap();
+        assert_eq!(rec.kind, Kind::Note);
+        let duration = rec.duration_ms.unwrap();
+        assert!((3_000..=3_500).contains(&duration), "{duration} ms");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nota_sem_voz_para_por_falta_de_fala() {
+        let dir = temp_dir("nota-muda");
+        let queue = Queue::open_in_memory().unwrap();
+        let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(0, 60_000))];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            source,
+            StartOptions::note(Some(Duration::from_secs(4))),
+        )
+        .unwrap();
+        wait_finished(&active);
+        assert_eq!(active.progress().stop_reason(), Some(StopReason::NoSpeech));
+        assert!(active.progress().meter().iter().all(|bar| *bar == 0.0));
+        active.stop(&queue).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nota_mostra_o_nivel_e_quanto_falta_enquanto_grava() {
+        let dir = temp_dir("nota-medidor");
+        let queue = Queue::open_in_memory().unwrap();
+        let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(1_500, 1_500))];
+        // "Nunca": a fonte acaba antes, e o laço termina pelas fontes.
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            source,
+            StartOptions::note(None),
+        )
+        .unwrap();
+        wait_finished(&active);
+        assert_eq!(
+            active.progress().stop_reason(),
+            Some(StopReason::SourcesEnded)
+        );
+        assert_eq!(active.progress().stops_in_ms(), None);
+        assert!(active.progress().meter().iter().any(|bar| *bar > 0.5));
+        active.stop(&queue).unwrap();
+
+        let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(600, 2_000))];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            source,
+            StartOptions::note(Some(Duration::from_secs(8))),
+        )
+        .unwrap();
+        wait_finished(&active);
+        // A fala acaba em 0,5 s, o hangover em 0,8 s e a fonte em 2 s: faltavam uns 6,8 s.
+        let left = active.progress().stops_in_ms().unwrap();
+        assert!((6_600..=7_000).contains(&left), "faltavam {left} ms");
+        active.stop(&queue).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

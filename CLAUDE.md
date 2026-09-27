@@ -22,6 +22,7 @@ npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
 npm --prefix web run test:e2e
+cargo fmt --manifest-path desktop/Cargo.toml --all --check
 cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace

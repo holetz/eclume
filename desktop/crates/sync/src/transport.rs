@@ -3,7 +3,8 @@
 //!
 //! TLS: sem CA extra vale o verificador da plataforma, que enxerga a CA do Caddy instalada no SO
 //! pelo runbook do host. Com `ca_path`, as raízes nativas do SO mais os certificados do PEM
-//! indicado — é o caminho para confiar na CA interna sem instalá-la no sistema.
+//! indicado — é o caminho para confiar na CA interna sem instalá-la no sistema, e o que a CA
+//! fixada pelo `pin.rs` usa.
 
 use std::path::Path;
 use std::time::Duration;
@@ -91,6 +92,17 @@ impl UreqTransport {
         let tls = TlsConfig::builder()
             .root_certs(root_certs(ca_path)?)
             .build();
+        Ok(Self::with_tls(tls, user_agent))
+    }
+
+    /// Sem verificação de TLS: só para baixar a CA raiz que o `pin.rs` confere pela impressão
+    /// digital. Nunca leva credencial.
+    pub fn insecure(user_agent: &str) -> Self {
+        let tls = TlsConfig::builder().disable_verification(true).build();
+        Self::with_tls(tls, user_agent)
+    }
+
+    fn with_tls(tls: TlsConfig, user_agent: &str) -> Self {
         let config = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_connect(Some(CONNECT_TIMEOUT))
@@ -98,9 +110,9 @@ impl UreqTransport {
             .user_agent(user_agent)
             .tls_config(tls)
             .build();
-        Ok(Self {
+        Self {
             agent: config.into(),
-        })
+        }
     }
 }
 

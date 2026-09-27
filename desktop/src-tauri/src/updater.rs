@@ -74,6 +74,13 @@ async fn check_and_install(app: &AppHandle) -> Result<bool> {
         );
         return Ok(false);
     }
+    // As notas vão para o aviso "Atualizado para X" da próxima abertura.
+    if let Err(err) = state.record_pending_update(&update.version, update.body.clone()) {
+        log::warn!(
+            "falha ao guardar as notas da versão {}: {err:#}",
+            update.version
+        );
+    }
     // No Windows, `install` abre o instalador em modo passivo e encerra o app.
     update.install(bytes)?;
     log::info!("versão {} instalada", update.version);

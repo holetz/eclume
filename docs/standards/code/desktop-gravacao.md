@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), registra cada gravação numa fila SQLite local (v2) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida e os pontos de extensão.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v3, com natureza, origem da data, fonte e marcadores) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, o detector de silêncio, os marcadores e os pontos de extensão.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#6, holetz/eclume#28
+source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40
 maintainer: holetz
 ---
 
@@ -19,9 +19,14 @@ sintético; a captura real vive em `eclume-audio-capture` (`desktop/crates/audio
 
 ## Fontes
 
-- Duas fontes por gravação: o **mic** padrão (`cpal`) e o **áudio do sistema** (loopback) —
+- Duas fontes por gravação: o **mic** (`cpal`) e o **áudio do sistema** (loopback) —
   PipeWire seguindo o sink em uso, com fallback para o monitor do Pulse, no Linux; WASAPI loopback
   seguindo o endpoint em uso no Windows; Core Audio process tap no macOS (14.2+).
+- **Escolha em Configurações · Áudio.** O microfone vai por nome (`config.json` → `mic`; nulo é o
+  padrão do sistema): `list_input_devices()` lista os nomes e `MicSource::open_named` abre o
+  escolhido, caindo no padrão, com aviso, quando ele sumiu. `system_audio` (padrão ligado) decide
+  se a reunião leva também o áudio do sistema. "Fale para testar o nível" (`mic_test`) abre o
+  microfone por até 10 s só para o medidor, sem gravar.
 - Toda fonte implementa `AudioSource`: `sample_rate()` e `read(timeout)`, que devolve amostras mono
   `f32` na taxa nativa — `Some(vec![])` quando o prazo vence sem amostras, `None` quando a fonte
   acabou. A taxa pode mudar no meio da gravação e é relida a cada leitura.
@@ -49,6 +54,53 @@ mais longa das outras, o caso de uma rajada atrasada. A fonte que volta a entreg
 depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amostra nova apagava o
 áudio do sistema depois da primeira pausa (holetz/eclume#28).
 
+## Nota por voz e parada por silêncio
+
+- `AppState::start_note()` abre **só o microfone**, pelo mesmo `capture.rs` e com o dispositivo
+  escolhido: uma nota é fala de quem grava, e o áudio do sistema traria música e notificações. A
+  linha da fila nasce com `kind = 'note'`, e o upload leva `kind: note`.
+- **Detector** (`recorder/src/vad.rs`, puro), sobre as amostras mixadas a 16 kHz que o
+  `record_loop` já produz, em quadros de 20 ms (320 amostras):
+
+| Parâmetro | Valor |
+|---|---|
+| Nível | RMS do quadro em dBFS |
+| Piso de ruído | desce na hora para um quadro mais baixo e sobe 0,5 dB/s (um ventilador ligado no meio não vira voz) |
+| Voz | `nível > max(piso + 12 dB, −55 dBFS)`, mantida por 300 ms (hangover) |
+| `Silence` | o silêncio passou do configurado (2, 4 ou 8 s; padrão 4 s), e só depois de ter havido voz |
+| `NoSpeech` | nenhuma voz nos primeiros 10 s |
+| Medidor | os últimos 16 níveis, de −60 a 0 dBFS mapeados para 0 a 1 |
+
+- Com "Nunca" (`note_silence_s: null`), o detector só alimenta o medidor. Energia com piso
+  adaptativo basta para "a pessoa parou de falar" com um só locutor perto do microfone, sem
+  dependência nativa e testável com áudio sintético; um VAD treinado (WebRTC por FFI, Silero por
+  `onnxruntime`) não compensa.
+- **Sessão.** `session::start` recebe `StartOptions { kind, stop_after_silence }`. Um `Progress`
+  compartilhado expõe `position_ms()` (amostras gravadas ÷ 16), `meter()` e `stop_reason()`. O
+  `record_loop` encerra sozinho em `Silence` ou `NoSpeech`, e o reaper, que fecha as gravações
+  terminadas a cada 1 s, decide pelo motivo: `SourcesEnded` dá o aviso de sempre; `Silence`, a
+  notificação "Nota salva · 42 s · processando no servidor"; `NoSpeech` **descarta** a nota
+  (`queue.discard` e o arquivo apagado) com "Nota descartada · não ouvimos voz".
+- **Parada manual** pelo mesmo atalho, pelo botão ("Parar nota") ou pela bandeja; parada à mão
+  nunca é descartada. Com uma gravação em curso, "Nova nota" responde "Já há uma gravação em
+  andamento", e o atalho não abre outra captura.
+- A janela mostra o medidor (`note_meter`, a cada 100 ms) e "Silêncio · para em N s". Nada mais
+  abre (variante A): a bandeja troca o ícone e mostra o tempo — no título, no macOS e no Linux; na
+  dica, no Windows, cuja área de notificação não mostra texto.
+
+## Marcadores
+
+- `AppState::add_marker(note)` marca o `position_ms()` da gravação ativa — a posição no **áudio**,
+  e não o relógio, para um vazio de fonte não desalinhar o marcador — com um `client_id` UUID v4, na
+  tabela `markers` da fila. `set_marker_note` edita a nota (até 500 caracteres) enquanto a gravação
+  não subiu.
+- Entradas: o botão "Marcador" da janela (com a nota do último marcador), o item "Adicionar
+  marcador" da bandeja (só gravando) e o atalho global, que não abre nada nem notifica, para não
+  atrapalhar a reunião. A dica da bandeja diz "3 marcadores".
+- Os marcadores sobem **junto do upload** (`UploadCreate.markers`), idempotentes pelo `client_id`:
+  a retomada e o upload deduplicado reenviam os mesmos, e o servidor mescla sem duplicar
+  (holetz/eclume#34).
+
 ## Arquivos e fila
 
 - Os dados ficam no diretório de dados do app (`app_data_dir`): `queue.sqlite` e `gravacoes/`.
@@ -58,7 +110,14 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
   Unix. O esquema v2 (`user_version = 2`) acrescenta `upload_id` e `sha256` (retomada do upload),
   `next_attempt_at` (backoff), `synced_at` (confirmação do servidor), `purged_at` (arquivo local
   apagado pela retenção) e `meeting_app` (app da reunião detectada, no vocabulário do contrato).
-  Uma fila v1 ganha as colunas na abertura, sem perder linhas.
+  O esquema v3 (`user_version = 3`) acrescenta `kind` (`meeting|note`, padrão `meeting`),
+  `recorded_at_source` (`capture|file_metadata|user`, padrão `capture`), `source`
+  (`desktop|upload`, padrão `desktop`), `original_name` e `content_type` (nulo é
+  `audio/ogg; codecs=opus`), e a tabela `markers (client_id PRIMARY KEY, recording_id, at_ms,
+  note, created_at)`. Uma fila v1 ou v2 ganha as colunas na abertura, sem perder linhas.
+- Métodos da v3: `set_kind`, `begin_import` (a importação já nasce `pending`,
+  [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` e
+  `markers(recording_id)`.
 
 ```
 recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)
@@ -94,10 +153,14 @@ Implementados pela spec `desktop-deteccao-e-sync`; o detalhe está em
 
 - A janela nasce oculta e fechar só a esconde; o app vive na bandeja (AppIndicator no Linux, barra
   de menus no macOS, área de notificação no Windows). No Linux o clique só abre o menu, então toda
-  ação mora nele: status (com quantas gravações faltam sincronizar), iniciar/parar, abrir o eclume
-  web, mostrar gravações e sair (sair fecha a gravação em curso antes).
-- O endereço do eclume web vem de `config.json` no diretório de config do app (`web_url`, padrão
-  `https://192.168.15.199:8443`) e pode ser sobreposto por `ECLUME_WEB_URL`.
+  ação mora nele, como o frame "Tray menu" do DS: a linha de status, "Iniciar gravação" ou "Parar
+  gravação", "Nova nota", "Adicionar marcador" (só gravando), "Importar arquivo…", "Abrir o
+  eclume", "Abrir a biblioteca na web" e "Sair" (que fecha a gravação em curso antes), com os
+  atalhos como acelerador. A pergunta de reunião entra como dois itens. A UI da janela está em
+  [desktop-interface.md](desktop-interface.md).
+- O endereço do eclume web vem de `config.json` no diretório de config do app (`web_url`: o
+  servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
+  pode ser sobreposto por `ECLUME_WEB_URL`.
 - Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
 - O log (`info`, ou o filtro de `RUST_LOG`) vai para o stderr e para `eclume.log` no diretório de
   logs do app (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` no Windows,

@@ -28,6 +28,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 ## Terms
 
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
+- [atalho global](standards/code/desktop-interface.md#atalhos) — Combinação de teclas que o app desktop registra no sistema inteiro para gravar, começar uma nota e marcar, `Ctrl+Alt+R/N/M` no Windows e no Linux e `⌘⇧R/N/K` no macOS, mudada em Configurações · Áudio.
 - [aviso de consentimento](standards/code/server-nucleo.md) — Texto versionado que a pessoa aceita no cadastro ("Sou responsável por pedir o consentimento das pessoas que gravo"), no lugar do consentimento de voz por pessoa; versão nova pede novo aceite no login.
 - [biblioteca no tempo](standards/code/frontend-web.md#biblioteca-no-tempo) — A tela inicial do web: as gravações no calendário (semana como agenda, mês e lista), posicionadas pelo início e pela duração.
 - [campo](standards/code/processamento-automatico.md) — Dado de uma gravação que o usuário define (texto, lista ou escolha), com uma regra de preenchimento; título e tags são os campos embutidos de toda conta.
@@ -52,6 +53,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [fila de importação](standards/code/frontend-web.md#importar-modal-e-fila) — Os arquivos escolhidos no modal Importar, convertidos e enviados um por vez pelo shell, que sobrevivem a fechar o modal e a navegar.
 - [gaveta de ajuda](standards/code/frontend-web.md) — O painel lateral `.help-drawer` do web, aberto com `?` ou pelo botão Ajuda do cabeçalho da página, com os links de ajuda daquela página e os atalhos de teclado.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
+- [importação no desktop](standards/code/desktop-importacao.md) — Um arquivo de áudio ou vídeo trazido para o app desktop pelo diálogo ou arrastado para a janela, com a data lida do arquivo e confirmada, convertido para Ogg/Opus (ou copiado como está) e enviado com `source: upload`.
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
 - [impressão de voz](standards/code/identificacao-por-voz.md) — Conjunto de amostras de uma pessoa (embeddings de locutores confirmados como ela, do mesmo modelo da diarização), comparado por centroide para sugeri-la em transcrições novas; dado biométrico sensível pela LGPD, só com a identificação ligada na plataforma e só entre as pessoas do dono.
 - [impressão digital da CA](standards/code/server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps) — SHA-256, em hex, do DER do certificado raiz do Caddy publicado em `/downloads/eclume-root.crt`; os apps a conferem para fixar essa raiz sem instalá-la no sistema.
@@ -67,10 +69,12 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
 - [painel de administração](standards/code/frontend-web.md) — App à parte dentro do web (`/admin/entrar`, `/admin/*`), com login, sessão e moldura próprios, onde a conta de admin configura a plataforma sem ver conteúdo de usuário.
 - [painel de filtros](standards/code/frontend-web.md#biblioteca-no-tempo) — O `.filters` recolhível à direita da biblioteca (tipo, situação, tags, pessoas, coleções e campos do usuário), cujos filtros vão na URL e na consulta.
+- [parada por silêncio](standards/code/desktop-gravacao.md#nota-por-voz-e-parada-por-silêncio) — O fim automático da nota por voz depois de 2, 4 ou 8 s sem fala, decidido pelo detector de energia do app desktop; sem voz nos primeiros 10 s, a nota é descartada.
 - **PAT** — Personal Access Token: token pessoal com escopo, guardado como hash, usado pelo lumea e pelo desktop para acessar a API.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `contracts/`, `deploy/`.
 - [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.
+- [primeira execução](standards/code/desktop-deteccao-e-sync.md#primeira-execução-descoberta-e-ca-fixada) — A tela "Bem-vindo" do app desktop sem credencial: o servidor do instalador, achado na rede ou digitado, a CA fixada pela impressão digital e a entrada por e-mail e senha ou código de pareamento.
 - [regra de preenchimento](standards/code/processamento-automatico.md) — O "como identificar" de um campo: a instrução que o agente segue para preenchê-lo a partir da transcrição.
 - [RLS](standards/code/server-nucleo.md) — Row-Level Security do Postgres: as políticas por dono (`app.user_id`) que isolam os dados do eclume sob o papel `eclume_app`.
 - [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel de administração, só de escrita: a API nunca o devolve; o token do Hugging Face fica em Locutores, e a chave da Anthropic, em Agentes.

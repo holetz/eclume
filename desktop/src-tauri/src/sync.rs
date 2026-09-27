@@ -15,8 +15,14 @@ use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(30);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
-const NO_PAT: &str =
-    "Sem PAT: as gravações ficam na fila até você configurar o PAT nas configurações.";
+
+/// Sem credencial, as gravações esperam o próximo login.
+fn sign_in_to_send(pending: u32) -> String {
+    match pending {
+        1 => "Entre para enviar 1 gravação".into(),
+        n => format!("Entre para enviar {n} gravações"),
+    }
+}
 
 /// O canal para cutucar o laço.
 pub struct SyncHandle(Mutex<Sender<()>>);
@@ -75,7 +81,8 @@ fn run_once(app: &AppHandle) -> Result<()> {
     };
     if pending > 0 {
         match state.uploader_config()? {
-            None => state.set_sync_notice(Some(NO_PAT.into()))?,
+            None if state.pinned_ca_changed()? => {}
+            None => state.set_sync_notice(Some(sign_in_to_send(pending)))?,
             Some(config) => {
                 let uploader = HttpUploader::new(&config, state.shared_queue());
                 let notice = match uploader {
@@ -93,7 +100,11 @@ fn run_once(app: &AppHandle) -> Result<()> {
                     }
                     Err(err) => Some(format!("{err:#}")),
                 };
+                let failed = notice.is_some();
                 state.set_sync_notice(notice.map(|err| format!("Falha ao sincronizar: {err}")))?;
+                if failed {
+                    check_pinned_ca(&state)?;
+                }
             }
         }
     }
@@ -101,6 +112,22 @@ fn run_once(app: &AppHandle) -> Result<()> {
     let retention_days = state.retention_days()?;
     apply_retention(&*lock(state.queue())?, retention_days, now_ms())?;
     Ok(())
+}
+
+/// Depois de uma falha, confere se a CA fixada ainda é a do servidor; se mudou, o sync para e a
+/// janela volta à primeira execução ("O certificado do servidor mudou").
+fn check_pinned_ca(state: &AppState) -> Result<()> {
+    let Some((web_url, pinned)) = state.pinned_ca()? else {
+        return Ok(());
+    };
+    match crate::account::ca_changed(&crate::account::RealNet, &web_url, &pinned) {
+        Ok(true) => state.mark_ca_changed(),
+        Ok(false) => Ok(()),
+        Err(err) => {
+            log::info!("não deu para conferir a CA do servidor: {err:#}");
+            Ok(())
+        }
+    }
 }
 
 /// O erro da falha mais recente, para a janela.
@@ -179,6 +206,12 @@ mod tests {
         );
         assert!(queue.get("a").unwrap().unwrap().purged_at.is_some());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sem_credencial_as_gravacoes_esperam_o_login() {
+        assert_eq!(sign_in_to_send(1), "Entre para enviar 1 gravação");
+        assert_eq!(sign_in_to_send(2), "Entre para enviar 2 gravações");
     }
 
     #[test]

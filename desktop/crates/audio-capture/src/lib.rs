@@ -2,7 +2,8 @@
 //!
 //! Duas fontes, cada uma entregando amostras mono `f32` na taxa nativa do dispositivo:
 //!
-//! - [`MicSource`]: o dispositivo de entrada padrão, por `cpal`;
+//! - [`MicSource`]: o dispositivo de entrada escolhido ou o padrão, por `cpal`
+//!   ([`list_input_devices`] lista os nomes);
 //! - [`SystemSource`]: o áudio que o sistema está tocando (loopback), por plataforma —
 //!   PipeWire/Pulse no Linux, WASAPI no Windows, Core Audio tap no macOS.
 //!
@@ -19,7 +20,7 @@ mod mic;
 mod system;
 
 #[cfg(feature = "backends")]
-pub use mic::MicSource;
+pub use mic::{InputDevices, MicSource, list_input_devices};
 #[cfg(feature = "backends")]
 pub use system::SystemSource;
 

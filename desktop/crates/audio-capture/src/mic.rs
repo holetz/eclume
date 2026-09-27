@@ -1,4 +1,4 @@
-//! Mic pelo dispositivo de entrada padrão, via `cpal`.
+//! Mic pelo dispositivo de entrada escolhido (ou o padrão), via `cpal`.
 //!
 //! O `cpal::Stream` não é `Send` em todas as plataformas, então ele vive numa thread própria,
 //! que o mantém tocando até a fonte ser descartada.
@@ -15,23 +15,56 @@ use crate::ring::{self, RingCloser, RingSource, RingWriter};
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// O mic padrão, como [`AudioSource`].
+/// Os microfones que o sistema oferece agora: o nome do padrão e os nomes de todos.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InputDevices {
+    pub default: Option<String>,
+    pub names: Vec<String>,
+}
+
+/// Lista os dispositivos de entrada pelo nome que a aba Áudio mostra e a config guarda.
+pub fn list_input_devices() -> Result<InputDevices> {
+    let host = cpal::default_host();
+    let default = host.default_input_device().and_then(|d| device_name(&d));
+    let mut names: Vec<String> = host
+        .input_devices()
+        .context("falha ao listar os microfones")?
+        .filter_map(|d| device_name(&d))
+        .collect();
+    names.dedup();
+    Ok(InputDevices { default, names })
+}
+
+fn device_name(device: &cpal::Device) -> Option<String> {
+    device.description().ok().map(|d| d.name().to_string())
+}
+
+/// O mic, como [`AudioSource`].
 pub struct MicSource {
     ring: RingSource,
+    /// O microfone pedido sumiu e a captura caiu no padrão.
+    fell_back: bool,
 }
 
 impl MicSource {
     /// Abre o dispositivo de entrada padrão e começa a capturar.
     pub fn open() -> Result<Self> {
-        let (init_tx, init_rx) = mpsc::channel::<Result<u32>>();
+        Self::open_named(None)
+    }
+
+    /// Abre o microfone de nome `name` e começa a capturar. Se ele sumiu (um headset
+    /// desconectado), cai no padrão com um aviso no log e em [`MicSource::fell_back`].
+    pub fn open_named(name: Option<&str>) -> Result<Self> {
+        let name = name.map(str::to_string);
+        let (init_tx, init_rx) = mpsc::channel::<Result<(u32, bool)>>();
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let (ring_tx, ring_rx) = mpsc::channel::<RingSource>();
 
         let thread = std::thread::Builder::new()
             .name("eclume-mic".into())
             .spawn(move || {
-                let started = start_default_input();
-                let (stream, source) = match started {
+                let started = start_input(name.as_deref());
+                let (stream, source, fell_back) = match started {
                     Ok(pair) => pair,
                     Err(err) => {
                         let _ = init_tx.send(Err(err));
@@ -40,7 +73,7 @@ impl MicSource {
                 };
                 let rate = source.sample_rate();
                 let _ = ring_tx.send(source);
-                let _ = init_tx.send(Ok(rate));
+                let _ = init_tx.send(Ok((rate, fell_back)));
                 // Mantém o stream vivo até o descarte da fonte.
                 let _ = stop_rx.recv();
                 drop(stream);
@@ -48,7 +81,7 @@ impl MicSource {
             .context("falha ao criar a thread do mic")?;
 
         match init_rx.recv_timeout(INIT_TIMEOUT) {
-            Ok(Ok(rate)) => {
+            Ok(Ok((rate, fell_back))) => {
                 let ring = ring_rx
                     .recv()
                     .map_err(|_| anyhow!("a thread do mic terminou antes de entregar a fonte"))?
@@ -57,7 +90,7 @@ impl MicSource {
                         let _ = thread.join();
                     });
                 log::info!("mic aberto a {rate} Hz");
-                Ok(Self { ring })
+                Ok(Self { ring, fell_back })
             }
             Ok(Err(err)) => {
                 let _ = thread.join();
@@ -72,6 +105,13 @@ impl MicSource {
     }
 }
 
+impl MicSource {
+    /// O microfone pedido não estava lá e a captura usa o padrão.
+    pub fn fell_back(&self) -> bool {
+        self.fell_back
+    }
+}
+
 impl AudioSource for MicSource {
     fn sample_rate(&self) -> u32 {
         self.ring.sample_rate()
@@ -82,11 +122,26 @@ impl AudioSource for MicSource {
     }
 }
 
-fn start_default_input() -> Result<(cpal::Stream, RingSource)> {
+fn start_input(name: Option<&str>) -> Result<(cpal::Stream, RingSource, bool)> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| anyhow!("nenhum dispositivo de entrada (mic) disponível"))?;
+    let named = name.and_then(|wanted| {
+        host.input_devices()
+            .ok()?
+            .find(|d| device_name(d).as_deref() == Some(wanted))
+    });
+    let fell_back = name.is_some() && named.is_none();
+    if fell_back {
+        log::warn!(
+            "microfone {:?} não encontrado; usando o padrão",
+            name.unwrap_or_default()
+        );
+    }
+    let device = match named {
+        Some(device) => device,
+        None => host
+            .default_input_device()
+            .ok_or_else(|| anyhow!("nenhum dispositivo de entrada (mic) disponível"))?,
+    };
     let config = device
         .default_input_config()
         .context("o mic não informou uma configuração padrão")?;
@@ -112,7 +167,7 @@ fn start_default_input() -> Result<(cpal::Stream, RingSource)> {
     .context("falha ao montar o stream do mic")?;
 
     stream.play().context("falha ao iniciar o stream do mic")?;
-    Ok((stream, source))
+    Ok((stream, source, fell_back))
 }
 
 fn build<S>(

@@ -310,6 +310,15 @@ uv run eclume-server discover --timeout 10
 - **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
   digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
 
+### Desktop 0.2.0 (27/09/2026, holetz/eclume#40)
+
+- **Release:** `desktop-release` pelo dispatch em `plan/40-desktop-ds` (run 36338364507, com macOS),
+  tag `desktop-v0.2.0` em `0b08ab39`, notas "Nova nota, Importar arquivo e entrar com e-mail e
+  senha" e o servidor embutido pelas variáveis do repositório.
+- **Publicação:** `publicar-desktop.sh desktop-v0.2.0` conferiu o `SHA256SUMS`, gravou
+  `/srv/eclume/downloads/0.2.0/` e trocou a raiz; `latest.json` serve `0.2.0`, e os apps 0.1.x
+  se atualizam sozinhos, mantendo o PAT.
+
 ### Biblioteca e gravação em produção (2026-09-27)
 
 - **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
@@ -416,7 +425,16 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   `/srv/eclume/secrets/hf_token` (600). O worker relê a cada job, sem reiniciar
   ([worker-gpu.md](worker-gpu.md)).
 - **Instaladores do desktop:** `deploy/publicar-desktop.sh` grava em `/srv/eclume/downloads/`,
-  que o Caddy já serve ([host-setup.md](host-setup.md), seção dos instaladores).
+  que o Caddy já serve ([host-setup.md](host-setup.md), seção dos instaladores). Desde a 0.2.0,
+  o release embute o endereço e a impressão digital da CA deste servidor (variáveis
+  `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz ou o endereço exige
+  atualizar as variáveis e soltar um release novo
+  ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
+  Publicar é
+  `gh workflow run desktop-release.yml -f publicar=true -f macos=true -f notas="<texto>"` e,
+  com o run verde, `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`
+  a partir de um checkout com LF (num Windows com `core.autocrlf`, o script sai com CRLF e o
+  `bash` recusa o `set -o pipefail`).
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
   `docker --context gpu-host builder prune -f --filter until=720h`; nunca faça `image prune -a`,
   porque ele apagaria imagens dos serviços pessoais.

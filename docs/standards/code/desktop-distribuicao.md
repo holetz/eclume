@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Distribuição do app desktop
-description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume e publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh.
-resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/scripts/**, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
+description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
+resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40
 maintainer: holetz
 ---
 
@@ -43,6 +43,23 @@ tag desktop-v0.1.0 ──► desktop-release.yml ──► GitHub Release (priva
   é ensaio — os artefatos ficam no run — e `macos: false` pula o job mais caro.
 - A CLI do Tauri roda por `npx @tauri-apps/cli@2 build --ci --bundles <lista>`, sem
   `tauri-action`: o `latest.json` dela apontaria para URLs privadas do GitHub.
+- A entrada `notas` do dispatch vira o `notes` do `latest.json` e o texto do aviso "Atualizado
+  para X" (vazia, `eclume desktop <versão>`). O release da 0.2.0 passa "Nova nota, Importar
+  arquivo e entrar com e-mail e senha".
+
+## Servidor embutido no instalador
+
+- O release é por servidor (os manifestos já têm URLs absolutas deste host), então o build
+  embute o endereço e a impressão digital da CA raiz: o passo de build recebe
+  `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` das **variáveis do repositório** (gravadas pela
+  holetz/eclume#35, ao lado de `ECLUME_DOWNLOADS_URL`).
+- O app os lê por `option_env!` (`config::embedded_server`), com
+  `cargo:rerun-if-env-changed` no `build.rs`. Variável vazia ou endereço inválido não embutem
+  nada; um build local, sem elas, não tem servidor embutido.
+- A primeira execução mostra o embutido como "Veio com este instalador" e fixa a CA pela
+  impressão digital, sem a pessoa digitar endereço
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)). O `web_url` padrão de uma config
+  nova é o embutido; o `https://192.168.15.199:8443` só vale num build sem servidor embutido.
 
 | Job | Runner | Saída |
 |---|---|---|
@@ -113,6 +130,12 @@ recentes. O Caddy do eclume serve a pasta em `/downloads/`.
   Nada de `dangerousAcceptInvalidCerts`.
 - `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor: o plugin fica fixado
   em `2.12` e o `reqwest` do app é o mesmo `0.13`, sem features próprias.
+- **"Atualizado para X".** Antes do `update.install`, o updater grava em `config.json`
+  `pending_update: {version, notes}` (o `body` do `latest.json`). Na abertura, se `last_version`
+  difere da versão atual e o `pending_update` é desta versão, a janela mostra o `.alert-success`
+  "Atualizado para 0.2.0" com as notas, e sai uma vez a notificação "eclume atualizado para
+  0.2.0". `dismiss_update_notice` limpa o `pending_update`. Na primeira instalação (sem
+  `last_version`), não há aviso.
 - **Prova da atualização ponta a ponta** (Linux, no host): a 0.1.0 publicada roda sob Xvfb
   (`xvfb-run -a dbus-run-session -- ./eclume.AppImage`, com `HOME`/`XDG_*` temporários e
   `SSL_CERT_FILE` = CAs do sistema + `eclume-root.crt`, porque a 0.1.0 só conhece as do sistema e
