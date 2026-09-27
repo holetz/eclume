@@ -3,6 +3,7 @@ import { useId, useState, type SyntheticEvent } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
+import { HelpProvider } from './HelpProvider'
 import { isInMoreSection, navGroups, type NavGroupEntry, type Role } from './nav'
 import { applyThemePreference, readThemePreference, type ThemePreference } from './theme'
 
@@ -68,64 +69,66 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
   }
 
   return (
-    <div className={`shell ${styles.shell}`}>
-      <a className="skip-link" href="#conteudo">
-        Pular para o conteúdo
-      </a>
-      <header className={styles.topbar}>
-        <Brand to="/" />
-        <button
-          type="button"
-          className="btn btn-secondary"
-          aria-expanded={menuOpen}
-          aria-controls={navId}
-          onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
-        >
-          {menuOpen ? <X size={16} aria-hidden /> : <Menu size={16} aria-hidden />}
-          Menu
-        </button>
-      </header>
-      <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
-        <Brand to="/" className={styles.brandSide} />
-        <nav aria-label="Principal" className={styles.nav}>
-          <NavGroups groups={main} />
-          {more.length > 0 && (
-            <details className="nav-more" open={moreShown} onToggle={toggleMore}>
-              <summary>Configurações e ajuda</summary>
-              <NavGroups groups={more} />
-            </details>
-          )}
-        </nav>
-        <div className={`sidebar-footer ${styles.footer}`}>
-          <div className={styles.user}>
-            <strong>{user.name}</strong>
-            <span className="text-muted">{user.email}</span>
-          </div>
-          <div className={styles.theme}>
-            <span id={themeId}>Tema</span>
-            <div className={`seg ${styles.seg}`} role="radiogroup" aria-labelledby={themeId}>
-              {THEMES.map((option) => (
-                <label key={option.value} className="seg-opt">
-                  <input
-                    type="radio"
-                    name={themeId}
-                    value={option.value}
-                    checked={theme === option.value}
-                    onChange={() => changeTheme(option.value)}
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          </div>
-          <button type="button" className="btn btn-secondary" onClick={onLogout} disabled={loggingOut}>
-            {loggingOut ? 'Saindo…' : 'Sair'}
+    <HelpProvider>
+      <div className={`shell ${styles.shell}`}>
+        <a className="skip-link" href="#conteudo">
+          Pular para o conteúdo
+        </a>
+        <header className={styles.topbar}>
+          <Brand to="/" />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            aria-expanded={menuOpen}
+            aria-controls={navId}
+            onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
+          >
+            {menuOpen ? <X size={16} aria-hidden /> : <Menu size={16} aria-hidden />}
+            Menu
           </button>
-        </div>
-      </aside>
-      <main id="conteudo" tabIndex={-1} className={`main ${styles.main}`}>
-        <Outlet />
-      </main>
-    </div>
+        </header>
+        <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
+          <Brand to="/" className={styles.brandSide} />
+          <nav aria-label="Principal" className={styles.nav}>
+            <NavGroups groups={main} />
+            {more.length > 0 && (
+              <details className="nav-more" open={moreShown} onToggle={toggleMore}>
+                <summary>Configurações e ajuda</summary>
+                <NavGroups groups={more} />
+              </details>
+            )}
+          </nav>
+          <div className={`sidebar-footer ${styles.footer}`}>
+            <div className={styles.user}>
+              <strong>{user.name}</strong>
+              <span className="text-muted">{user.email}</span>
+            </div>
+            <div className={styles.theme}>
+              <span id={themeId}>Tema</span>
+              <div className={`seg ${styles.seg}`} role="radiogroup" aria-labelledby={themeId}>
+                {THEMES.map((option) => (
+                  <label key={option.value} className="seg-opt">
+                    <input
+                      type="radio"
+                      name={themeId}
+                      value={option.value}
+                      checked={theme === option.value}
+                      onChange={() => changeTheme(option.value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={onLogout} disabled={loggingOut}>
+              {loggingOut ? 'Saindo…' : 'Sair'}
+            </button>
+          </div>
+        </aside>
+        <main id="conteudo" tabIndex={-1} className={`main ${styles.main}`}>
+          <Outlet />
+        </main>
+      </div>
+    </HelpProvider>
   )
 }
