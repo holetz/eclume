@@ -113,14 +113,21 @@ describe('biblioteca na semana', () => {
 
   it('mostra o carregamento, o erro com nova tentativa e o período vazio', async () => {
     let fail = true
-    mockLibrary((request) => {
-      if (fail) return problem('internal', 500, { detail: 'O servidor não respondeu.' })
+    // A primeira resposta espera o teste conferir o carregamento: sem isso, o erro chega antes.
+    let answer = () => {}
+    const held = new Promise<void>((resolve) => (answer = resolve))
+    mockLibrary(async (request) => {
+      if (fail) {
+        await held
+        return problem('internal', 500, { detail: 'O servidor não respondeu.' })
+      }
       // Nada nesta semana, mas a conta tem gravações.
       return new URL(request.url).searchParams.has('from') ? { items: [], next_cursor: null } : fixtures.recordingPage()
     })
     renderApp(WEEK)
     expect(await screen.findByText('Carregando gravações…')).toHaveAttribute('role', 'status')
     expect(document.querySelector('.cal-week')).toHaveAttribute('aria-busy', 'true')
+    answer()
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('O servidor não respondeu.')

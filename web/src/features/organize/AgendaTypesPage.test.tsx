@@ -97,6 +97,7 @@ describe('tipos de agenda', () => {
         '{data}',
         '{tipo}',
         '{cliente}',
+        '{projeto}',
       ]),
     )
     const title = within(panel).getByRole<HTMLInputElement>('textbox', { name: /^Título da gravação/ })
