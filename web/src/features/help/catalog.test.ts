@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ARTICLES,
+  articlesByTopic,
   articlesForPage,
   buildCatalog,
   getArticle,
@@ -11,6 +12,7 @@ import {
   TOPICS,
 } from './catalog'
 import { parseFrontmatter } from './frontmatter'
+import { HELP_PAGES, type HelpPageKey } from './pages'
 
 // O produto é por usuário (holetz/eclume#32): sem organização, sem convite, sem termo de
 // consentimento por pessoa, sem compartilhamento entre contas, sem transcrição ao vivo e sem os
@@ -46,6 +48,14 @@ describe('artigos da central de ajuda', () => {
     expect(ARTICLES.length).toBeGreaterThan(0)
     for (const article of ARTICLES) expect(article.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/)
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
+  })
+
+  it('cobrem a central inteira: 34 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+    expect(ARTICLES).toHaveLength(34)
+    for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
+    for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
+      expect(articlesForPage(key).length, `chave ${key}`).toBeGreaterThanOrEqual(1)
+    }
   })
 
   it.each(ARTICLES.map((a) => [a.slug, a] as const))('%s: cabeçalho, títulos e relacionados válidos', (slug, article) => {
