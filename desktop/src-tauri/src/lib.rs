@@ -7,6 +7,7 @@ pub mod capture;
 mod commands;
 pub mod config;
 mod notify;
+pub mod shortcuts;
 pub mod state;
 mod sync;
 mod tray;
@@ -50,6 +51,22 @@ pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> 
     app.opener()
         .open_url(&url, None::<&str>)
         .with_context(|| format!("falha ao abrir {url}"))
+}
+
+/// Inicia ou para a gravação, da bandeja ou do atalho. Abrir dispositivos pode levar segundos:
+/// fora da thread da UI.
+pub(crate) fn spawn_toggle_recording(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Err(err) = app
+            .state::<AppState>()
+            .toggle_recording(capture::open_sources)
+        {
+            log::error!("falha ao alternar a gravação: {err:#}");
+        }
+        sync::nudge(&app);
+        refresh_ui(&app);
+    });
 }
 
 /// "Nova nota", da janela, da bandeja ou do atalho: começa uma nota ou para a nota em curso. O
@@ -154,6 +171,7 @@ pub fn run() {
             log::info!("dados em {}", data_dir.display());
             app.manage(state);
             tray::build(app.handle())?;
+            shortcuts::init(app.handle());
             // No macOS, o app vive na barra de menus, sem ícone no Dock.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);

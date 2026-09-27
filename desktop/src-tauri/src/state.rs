@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::capture::OpenedSources;
 use crate::config::{self, Config};
+use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
 
 /// Versão que vai no `capture.client_version` e no `User-Agent`.
 pub const CLIENT_VERSION: &str = concat!("eclume-desktop/", env!("CARGO_PKG_VERSION"));
@@ -159,6 +160,18 @@ pub struct AppPolicyView {
     pub policy: Policy,
 }
 
+/// Um atalho global, como a aba Áudio o mostra.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ShortcutView {
+    pub action: ShortcutAction,
+    pub label: &'static str,
+    pub keys: String,
+    /// `None` antes do primeiro registro (no app, ele acontece na abertura).
+    pub registration: Option<Registration>,
+    /// "Em uso por outro app" ou "Indisponível nesta sessão".
+    pub problem: Option<&'static str>,
+}
+
 /// O que a tela de configurações mostra. O PAT nunca volta à janela: só de onde ele vem.
 #[derive(Clone, Debug, Serialize)]
 pub struct SettingsView {
@@ -169,6 +182,7 @@ pub struct SettingsView {
     pub apps: Vec<AppPolicyView>,
     pub retention_days: Option<u32>,
     pub pat_source: Option<PatSource>,
+    pub shortcuts: Vec<ShortcutView>,
 }
 
 /// O que a tela de configurações manda ao salvar.
@@ -189,6 +203,9 @@ pub struct SettingsInput {
     /// Esquecer o PAT guardado.
     #[serde(default)]
     pub clear_pat: bool,
+    /// Atalhos novos; ausente mantém os de hoje.
+    #[serde(default)]
+    pub shortcuts: Option<Shortcuts>,
 }
 
 struct Inner {
@@ -202,6 +219,8 @@ struct Inner {
     auto: AutoRecorder,
     notice: Option<String>,
     sync_notice: Option<String>,
+    /// Como ficou o registro de cada atalho global.
+    shortcut_registrations: Registrations,
 }
 
 impl Inner {
@@ -274,6 +293,7 @@ impl AppState {
                 auto: AutoRecorder::default(),
                 notice: None,
                 sync_notice: None,
+                shortcut_registrations: Registrations::new(),
             }),
         }
     }
@@ -563,6 +583,17 @@ impl AppState {
         Ok(self.inner()?.config.detection.enabled)
     }
 
+    /// Os atalhos globais da config.
+    pub fn shortcuts(&self) -> Result<Shortcuts> {
+        Ok(self.inner()?.config.shortcuts.clone())
+    }
+
+    /// Guarda como ficou o registro dos atalhos, para a aba Áudio.
+    pub fn set_shortcut_registrations(&self, registrations: Registrations) -> Result<()> {
+        self.inner()?.shortcut_registrations = registrations;
+        Ok(())
+    }
+
     pub fn recordings(&self, limit: u32) -> Result<Vec<QueuedRecording>> {
         self.lock_queue()?.list(limit)
     }
@@ -590,6 +621,19 @@ impl AppState {
                 .collect(),
             retention_days: config.retention_days,
             pat_source,
+            shortcuts: ShortcutAction::ALL
+                .into_iter()
+                .map(|action| {
+                    let registration = inner.shortcut_registrations.get(&action).copied();
+                    ShortcutView {
+                        action,
+                        label: action.label(),
+                        keys: config.shortcuts.get(action).to_string(),
+                        registration,
+                        problem: registration.and_then(Registration::label),
+                    }
+                })
+                .collect(),
         })
     }
 
@@ -603,6 +647,13 @@ impl AppState {
         next.detection.enabled = input.detection_enabled;
         next.detection.policies = input.policies;
         next.retention_days = input.retention_days;
+        if let Some(shortcuts) = input.shortcuts {
+            next.shortcuts = Shortcuts {
+                record: shortcuts.record.trim().to_string(),
+                note: shortcuts.note.trim().to_string(),
+                marker: shortcuts.marker.trim().to_string(),
+            };
+        }
         next.validate()?;
 
         if input.clear_pat {
@@ -685,6 +736,7 @@ mod tests {
             retention_days: view.retention_days,
             pat: None,
             clear_pat: false,
+            shortcuts: None,
         }
     }
 
@@ -975,6 +1027,60 @@ mod tests {
         clear.clear_pat = true;
         state.save_settings(clear).unwrap();
         assert!(state.uploader_config().unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn configuracoes_trocam_os_atalhos_e_mostram_o_registro() {
+        let (state, dir) = state("atalhos");
+        let view = state.settings().unwrap();
+        assert_eq!(view.shortcuts.len(), 3);
+        assert_eq!(view.shortcuts[0].keys, Shortcuts::default().record);
+        assert_eq!(view.shortcuts[0].registration, None);
+
+        let mut input = settings_input(&state);
+        input.shortcuts = Some(Shortcuts {
+            marker: " Ctrl+Alt+J ".into(),
+            ..Shortcuts::default()
+        });
+        state.save_settings(input).unwrap();
+        assert_eq!(state.shortcuts().unwrap().marker, "Ctrl+Alt+J");
+        assert_eq!(
+            Config::load(&dir.join("config.json")).shortcuts.marker,
+            "Ctrl+Alt+J"
+        );
+
+        let mut repeated = settings_input(&state);
+        repeated.shortcuts = Some(Shortcuts {
+            note: "Ctrl+Alt+J".into(),
+            marker: "Ctrl+Alt+J".into(),
+            ..Shortcuts::default()
+        });
+        assert!(state.save_settings(repeated).is_err());
+        assert_eq!(state.shortcuts().unwrap().note, Shortcuts::default().note);
+
+        state
+            .set_shortcut_registrations(Registrations::from([
+                (ShortcutAction::Record, Registration::Registered),
+                (ShortcutAction::Note, Registration::InUse),
+                (ShortcutAction::Marker, Registration::Unavailable),
+            ]))
+            .unwrap();
+        let problems: Vec<_> = state
+            .settings()
+            .unwrap()
+            .shortcuts
+            .into_iter()
+            .map(|s| s.problem)
+            .collect();
+        assert_eq!(
+            problems,
+            [
+                None,
+                Some("Em uso por outro app"),
+                Some("Indisponível nesta sessão")
+            ]
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

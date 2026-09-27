@@ -153,20 +153,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
-        MENU_TOGGLE => {
-            // Abrir dispositivos pode levar segundos: fora da thread da UI.
-            let app = app.clone();
-            std::thread::spawn(move || {
-                if let Err(err) = app
-                    .state::<AppState>()
-                    .toggle_recording(crate::capture::open_sources)
-                {
-                    log::error!("falha ao alternar a gravação: {err:#}");
-                }
-                crate::sync::nudge(&app);
-                crate::refresh_ui(&app);
-            });
-        }
+        MENU_TOGGLE => crate::spawn_toggle_recording(app),
         MENU_MARKER => crate::add_marker(app),
         MENU_ASK_RECORD => crate::auto::answer(app, true),
         MENU_ASK_IGNORE => crate::auto::answer(app, false),

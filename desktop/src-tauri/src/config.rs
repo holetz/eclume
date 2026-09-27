@@ -7,6 +7,8 @@ use anyhow::{bail, Context, Result};
 use eclume_detect::DetectionConfig;
 use serde::{Deserialize, Serialize};
 
+use crate::shortcuts::Shortcuts;
+
 /// Endereço padrão do eclume web: o host GPU, pela porta do eclume.
 pub const DEFAULT_WEB_URL: &str = "https://192.168.15.199:8443";
 /// Variável de ambiente que sobrepõe `web_url` sem mexer no arquivo.
@@ -43,6 +45,9 @@ pub struct Config {
     /// Silêncio que encerra uma nota por voz, em segundos; `null` é "Nunca".
     #[serde(default = "default_note_silence")]
     pub note_silence_s: Option<u32>,
+    /// Atalhos globais de gravar, nova nota e marcador.
+    #[serde(default)]
+    pub shortcuts: Shortcuts,
 }
 
 fn default_web_url() -> String {
@@ -66,6 +71,7 @@ impl Default for Config {
             detection: DetectionConfig::default(),
             retention_days: default_retention_days(),
             note_silence_s: default_note_silence(),
+            shortcuts: Shortcuts::default(),
         }
     }
 }
@@ -127,7 +133,7 @@ impl Config {
                 bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
             }
         }
-        Ok(())
+        self.shortcuts.validate()
     }
 }
 
@@ -212,6 +218,7 @@ mod tests {
         assert!(config.detection.enabled);
         assert_eq!(config.retention_days, Some(DEFAULT_RETENTION_DAYS));
         assert_eq!(config.note_silence_s, Some(DEFAULT_NOTE_SILENCE_S));
+        assert_eq!(config.shortcuts, Shortcuts::default());
         let keep: Config =
             serde_json::from_str(r#"{"retention_days": null, "note_silence_s": null}"#).unwrap();
         assert_eq!(keep.retention_days, None);
@@ -248,6 +255,9 @@ mod tests {
         assert!(config.validate().is_err());
         config.note_silence_s = None;
         config.validate().unwrap();
+        config.shortcuts.marker = config.shortcuts.note.clone();
+        assert!(config.validate().is_err());
+        config.shortcuts = Shortcuts::default();
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
         assert!(format!("{err:#}").contains("CA extra"), "{err:#}");

@@ -86,6 +86,7 @@ pub fn save_settings(
     let result = state.save_settings(input);
     if let Ok(action) = &result {
         crate::auto::execute(&app, *action);
+        crate::shortcuts::register(&app);
         // PAT ou servidor novos: as falhas tentam de novo já.
         if let Err(err) = crate::sync::sync_now(&app) {
             log::error!("{err:#}");
