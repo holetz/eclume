@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
+import { FieldsPanel } from './FieldsPanel'
 import { MarkerBar } from './MarkerBar'
 import { useMarkers } from './markers'
 import { Pipeline } from './Pipeline'
@@ -101,6 +102,20 @@ export function RecordingPage() {
         {data.transcript_id !== null && (
           <div className={styles.docGrid}>
             <SummaryDoc recording={data} onChangeType={() => setChangingType(true)} />
+            <FieldsPanel
+              recording={data}
+              transcript={transcript.data}
+              onChangeType={() => setChangingType(true)}
+              onFixSpeakers={() => {
+                // Abre a transcrição; depois do render, leva o foco ao bloco Locutores.
+                setTranscriptOpen(true)
+                window.setTimeout(() => {
+                  const block = document.getElementById('locutores')
+                  block?.scrollIntoView({ block: 'start' })
+                  block?.focus()
+                })
+              }}
+            />
           </div>
         )}
         {changingType && <ChangeTypeDialog recording={data} onClose={() => setChangingType(false)} />}

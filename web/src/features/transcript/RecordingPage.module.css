@@ -221,3 +221,53 @@
   font-family: var(--font-mono);
   color: var(--color-text-muted);
 }
+
+/* O painel de campos (componente "Filled fields"). */
+.fields {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.fieldsHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fieldsHead h6 {
+  margin: 0;
+}
+
+.props:global(.props) {
+  border-top: 2px solid var(--color-divider);
+}
+
+.propForm {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.propFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.speakers,
+.legacy {
+  display: grid;
+  gap: 2px;
+}
+
+.legacy {
+  font-size: 13px;
+}
+
+.fixSpeakers {
+  justify-self: start;
+  margin-top: 4px;
+}
