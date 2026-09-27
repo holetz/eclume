@@ -3,6 +3,9 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 interface DialogProps {
   title: string
   onClose: () => void
+  /** O texto do diálogo, no `.dialog-body`. */
+  message?: ReactNode
+  /** Conteúdo livre (um formulário, por exemplo), depois da mensagem e sem o esmaecido dela. */
   children?: ReactNode
   /** Os botões do rodapé (`.dialog-actions`). */
   actions?: ReactNode
@@ -13,7 +16,7 @@ interface DialogProps {
  * O `.dialog` do Design System num `<dialog>` nativo aberto com `showModal()`: o navegador prende o
  * foco e trata o Esc. Monte-o só enquanto estiver aberto; ao desmontar, o foco volta a quem abriu.
  */
-export function Dialog({ title, onClose, children, actions, size }: DialogProps) {
+export function Dialog({ title, onClose, message, children, actions, size }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
 
@@ -41,7 +44,8 @@ export function Dialog({ title, onClose, children, actions, size }: DialogProps)
       <div className="dialog-title" id={titleId}>
         {title}
       </div>
-      {children && <div className="dialog-body">{children}</div>}
+      {message && <div className="dialog-body">{message}</div>}
+      {children}
       {actions && <div className="dialog-actions">{actions}</div>}
     </dialog>
   )

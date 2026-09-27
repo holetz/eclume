@@ -38,15 +38,14 @@ function DialogHarness() {
       {open && (
         <Dialog
           title="Excluir pessoa?"
+          message="As transcrições ficam."
           onClose={() => setOpen(false)}
           actions={
             <button type="button" onClick={() => setOpen(false)}>
               Cancelar
             </button>
           }
-        >
-          As transcrições ficam.
-        </Dialog>
+        />
       )}
     </>
   )
