@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissões da janela principal do app móvel.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "eclume-gravador:default"]
 }

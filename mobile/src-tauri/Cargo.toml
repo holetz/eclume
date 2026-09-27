@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 eclume-mobile-core = { path = "../crates/core" }
 eclume-recorder = { path = "../../desktop/crates/recorder" }
+eclume-sync = { path = "../../desktop/crates/sync", default-features = false }
 # Só o microfone (cpal; AAudio no Android): o celular não tem os backends de áudio do sistema.
 eclume-audio-capture = { path = "../../desktop/crates/audio-capture", default-features = false, features = ["mic"] }
 tauri-plugin-eclume-gravador = { path = "../plugins/gravador" }
@@ -25,6 +26,9 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"

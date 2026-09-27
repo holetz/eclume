@@ -1,6 +1,6 @@
 // Os comandos que a UI chama direto no plugin nativo; os demais o Rust do app chama por
 // `run_mobile_plugin`, sem passar por permissão de capability.
-const COMMANDS: &[&str] = &["check_permissions", "request_permissions"];
+const COMMANDS: &[&str] = &["check_permissions", "request_permissions", "estado_do_dispositivo"];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)

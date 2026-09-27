@@ -64,6 +64,92 @@ pub(crate) mod servico {
     }
 }
 
+/// Um servidor achado na rede, já interpretado pelo parser do TXT do crate de sync.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Achado {
+    pub nome: String,
+    pub url: String,
+    pub ca_sha256: Option<String>,
+}
+
+/// Procura o servidor na rede por `segundos`: no Android, pelo `NsdManager` do plugin; no
+/// desenvolvimento, pelo mDNS do crate de sync.
+#[tauri::command]
+async fn descobrir<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    segundos: u32,
+) -> Result<Vec<Achado>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(mobile)]
+        let achados = {
+            use tauri_plugin_eclume_gravador::GravadorExt;
+            app.gravador()
+                .descobrir(segundos)
+                .map_err(|err| err.to_string())?
+                .into_iter()
+                .filter_map(|anuncio| {
+                    let txt: Vec<(String, String)> = anuncio.txt.into_iter().collect();
+                    eclume_sync::discovery::parse(&anuncio.nome, &txt)
+                })
+                .collect::<Vec<_>>()
+        };
+        #[cfg(not(mobile))]
+        let achados = {
+            let _ = &app;
+            eclume_sync::discovery::discover(std::time::Duration::from_secs(u64::from(segundos)))
+                .map_err(|err| format!("{err:#}"))?
+        };
+        Ok(achados
+            .into_iter()
+            .map(|f| Achado {
+                nome: f.name,
+                url: f.url,
+                ca_sha256: f.ca_sha256,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Lê o aparelho a cada poucos segundos (bateria, espaço, Wi-Fi não medido) e leva ao núcleo; uma
+/// mudança de rede dispara o ciclo (a sonda roda de novo).
+fn acompanhar_aparelho<R: Runtime>(app: tauri::AppHandle<R>) {
+    use tauri_plugin_eclume_gravador::GravadorExt;
+
+    std::thread::spawn(move || {
+        let mut modelo_definido = false;
+        loop {
+            match app.gravador().estado_do_dispositivo() {
+                Ok(estado) => {
+                    let mudou = eclume_mobile_core::global()
+                        .and_then(|nucleo| eclume_mobile_core::trancar(nucleo).ok())
+                        .map(|mut core| {
+                            if !modelo_definido {
+                                modelo_definido = core.definir_aparelho(&estado.modelo).is_ok();
+                            }
+                            core.atualizar_aparelho(
+                                estado.bateria,
+                                estado.carregando,
+                                estado.espaco_livre,
+                            );
+                            core.mudou_rede(estado.wifi_nao_medido)
+                        })
+                        .unwrap_or(false);
+                    if mudou {
+                        eventos::ciclo_em_segundo_plano(&app, false);
+                    }
+                }
+                Err(err) => log::warn!("estado do aparelho: {err}"),
+            }
+            std::thread::sleep(INTERVALO_DO_APARELHO);
+        }
+    });
+}
+
+/// De quanto em quanto tempo o aparelho é lido.
+const INTERVALO_DO_APARELHO: std::time::Duration = std::time::Duration::from_secs(5);
+
 fn iniciar_log() {
     #[cfg(target_os = "android")]
     android_logger::init_once(
@@ -83,14 +169,19 @@ fn abrir_nucleo<R: Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     iniciar_log();
-    tauri::Builder::default()
-        .plugin(tauri_plugin_eclume_gravador::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_eclume_gravador::init());
+    // O leitor de QR (câmera) só existe no celular.
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    builder
         .setup(|app| {
             abrir_nucleo(app.handle())?;
+            acompanhar_aparelho(app.handle().clone());
             eventos::iniciar_laco(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            descobrir,
             comandos::estado,
             comandos::conectar_descoberto,
             comandos::conectar_endereco,

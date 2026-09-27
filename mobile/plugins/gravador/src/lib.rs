@@ -1,4 +1,4 @@
-//! O plugin nativo do app móvel do eclume (`gravador`). No Android, a classe Kotlin
+//! O plugin nativo do app móvel do eclume (`eclume-gravador`). No Android, a classe Kotlin
 //! `GravadorPlugin` cuida do que só o sistema faz: o serviço em primeiro plano do tipo microfone,
 //! com a notificação contínua que grava com a tela bloqueada. Fora do Android (o build de
 //! desenvolvimento e os testes no Linux), os métodos não fazem nada.
@@ -19,6 +19,32 @@ pub type Erro = tauri::plugin::mobile::PluginInvokeError;
 pub type Erro = std::convert::Infallible;
 
 pub type Resultado<T> = Result<T, Erro>;
+
+/// O aparelho: bateria, espaço livre, rede, modelo e os recortes de borda a borda (em dp).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstadoDoDispositivo {
+    pub bateria: u8,
+    pub carregando: bool,
+    pub espaco_livre: u64,
+    pub wifi_nao_medido: bool,
+    pub modelo: String,
+    pub inset_topo: f64,
+    pub inset_base: f64,
+}
+
+/// Um anúncio `_eclume._tcp` achado pelo `NsdManager`, com o TXT cru.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+pub struct Anuncio {
+    pub nome: String,
+    pub txt: std::collections::BTreeMap<String, String>,
+}
+
+#[cfg(mobile)]
+#[derive(serde::Deserialize)]
+struct Anuncios {
+    servicos: Vec<Anuncio>,
+}
 
 /// O acesso ao plugin, guardado no estado do app.
 pub struct Gravador<R: Runtime> {
@@ -48,6 +74,37 @@ impl<R: Runtime> Gravador<R> {
         Ok(())
     }
 
+    /// O estado do aparelho. Fora do celular (desenvolvimento), um aparelho na tomada e no Wi-Fi.
+    pub fn estado_do_dispositivo(&self) -> Resultado<EstadoDoDispositivo> {
+        #[cfg(mobile)]
+        return self.chamar("estadoDoDispositivo");
+        #[cfg(not(mobile))]
+        Ok(EstadoDoDispositivo {
+            bateria: 100,
+            carregando: true,
+            espaco_livre: 64 * 1_000_000_000,
+            wifi_nao_medido: true,
+            modelo: "computador".into(),
+            inset_topo: 0.0,
+            inset_base: 0.0,
+        })
+    }
+
+    /// Procura `_eclume._tcp` por `segundos` pelo `NsdManager` (bloqueia). Fora do celular, a
+    /// descoberta é a do crate de sync, e isto não acha nada.
+    pub fn descobrir(&self, segundos: u32) -> Resultado<Vec<Anuncio>> {
+        #[cfg(mobile)]
+        return self
+            .handle
+            .run_mobile_plugin::<Anuncios>("descobrir", serde_json::json!({ "segundos": segundos }))
+            .map(|a| a.servicos);
+        #[cfg(not(mobile))]
+        {
+            let _ = segundos;
+            Ok(Vec::new())
+        }
+    }
+
     /// Tira a notificação e para o serviço.
     pub fn parar_servico(&self) -> Resultado<()> {
         #[cfg(mobile)]
@@ -69,7 +126,7 @@ impl<R: Runtime, T: Manager<R>> GravadorExt<R> for T {
 
 /// Registra o plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("gravador")
+    Builder::new("eclume-gravador")
         .setup(|app, api| {
             #[cfg(target_os = "android")]
             let gravador = Gravador {
