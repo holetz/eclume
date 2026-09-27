@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, a conta, o protocolo, a CA e a retenção.
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, a conta, o protocolo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41
 maintainer: holetz
 ---
 
@@ -91,7 +91,8 @@ decisão do usuário, então `auto` nunca é padrão.
 
 1. `POST /api/v1/uploads` com `filename`, `content_type`, `size_bytes`, `sha256` hex,
    `recorded_at`, `recorded_at_source`, `kind`, `duration_ms`, `source`, `markers` (omitido quando
-   vazio) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
+   vazio), `title` e `agenda_type_id` (os dois só quando a linha os tem: o celular os escolhe ao
+   parar) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
    ([desktop-gravacao.md](desktop-gravacao.md)):
 
 | Gravação | `filename` | `kind` | `source` | `recorded_at_source` | `content_type` |
@@ -193,6 +194,32 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   url, ca_sha256, trusted_by}`, com `trusted_by` `fingerprint`, `first_use`, `system` ou
   `unencrypted`), `confirm_server(url, ca_sha256?)`, `sign_in`, `pair`, `sign_out`, `test_connection`, `open_signup` (abre
   `<url>/cadastro`) e `pick_ca_file`.
+
+## O que o crate de sync oferece ao app móvel
+
+O app móvel ([mobile-app.md](mobile-app.md)) usa o mesmo `eclume-sync`; as peças abaixo existem por
+ele e não mudam o desktop.
+
+- **`source` vem da linha da fila** (`desktop`, `mobile` ou `upload`): o celular grava com
+  `RecorderConfig { source: Mobile, .. }`, e o `HttpUploader` não sabe de onde veio.
+  `HttpUploader::with_device_name` troca o `capture.device_name` (no celular, o modelo do aparelho,
+  não o hostname).
+- **`TrustMode`** (`transport.rs`): `PlatformPlus(ca_path?)` é o do desktop (verificador da
+  plataforma, ou as raízes nativas mais o PEM); `Pinned(ca_path)` confia **só** nos certificados do
+  PEM, sem as raízes do SO nem o `rustls-platform-verifier`, que no Android exige inicialização JNI
+  própria. `UreqTransport::with_trust(modo, user_agent, prazo)` aceita um prazo total menor que o
+  padrão de 600 s (a sonda da rede do celular usa 3 s); `UreqTransport::pinned` é o atalho do modo
+  fixado.
+- **Feature `os-keyring`** (padrão): o `OsKeyring` e o crate `keyring` só entram com ela. Sem ela
+  (o celular), o `PatStore::new` usa o `NoKeyring`, e a credencial fica só no arquivo privado 0600;
+  `cargo check -p eclume-sync --no-default-features` prova que o crate compila assim.
+- **`parse_pair_url`** (`devices.rs`) lê o QR da web, `https://<host>/parear?codigo=<6>&ca=<64 hex>`,
+  e devolve `PairUrl { url, code, ca_sha256? }`. O texto vem da câmera e não é confiável: outro
+  esquema, outro caminho, código fora de 6 alfanuméricos (o hífen de `K7Q-4MX` é aceito) ou `ca`
+  inválida são recusados antes de qualquer rede.
+- **`platform()`** devolve também `android` e `ios`, os valores do `DevicePlatform` do contrato.
+- No `eclume-audio-capture`, a feature **`mic`** liga só o `MicSource` (`cpal`, AAudio no Android),
+  sem os backends de áudio do sistema; `backends` a inclui.
 
 ## Servidor, CA extra e retenção
 
