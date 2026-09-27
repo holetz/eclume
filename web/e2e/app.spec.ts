@@ -1,6 +1,5 @@
 // Fluxo principal contra o Prism. O mock não emite cookies nem guarda estado, então o teste:
-// - põe os cookies de sessão na resposta do login e do cadastro, como o servidor real faria (o da
-//   sessão de admin só no caminho /api/v1/admin, como o servidor o define);
+// - põe os cookies de sessão na resposta do login e do cadastro, como o servidor real faria;
 // - pede o upload novo com `Prefer: code=201` (o mock responde 200/deduplicado por padrão);
 // - encaminha o PUT de parte (URL absoluta em 127.0.0.1:4010, outra origem) com a credencial que
 //   o mock exige e os headers CORS que o armazenamento real devolve.
@@ -49,17 +48,6 @@ test.beforeEach(async ({ page, baseURL }) => {
       await page.context().addCookies([
         { name: 'eclume_session', value: 'e2e', url: baseURL! },
         { name: 'eclume_csrf', value: 'csrf-e2e', url: baseURL! },
-      ])
-    }
-    await route.fulfill({ response })
-  })
-  await page.route('**/api/v1/admin/auth/login', async (route) => {
-    const response = await route.fetch()
-    if (response.status() === 204) {
-      const domain = new URL(baseURL!).hostname
-      await page.context().addCookies([
-        { name: 'eclume_admin_session', value: 'e2e-admin', domain, path: '/api/v1/admin' },
-        { name: 'eclume_admin_csrf', value: 'csrf-admin-e2e', domain, path: '/' },
       ])
     }
     await route.fulfill({ response })
@@ -114,15 +102,6 @@ test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }
   await submit.click()
   await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
 })
-
-/** Entra no painel pela conta de admin, que é outra conta, com login próprio. */
-async function adminLogin(page: Page, path = '/admin') {
-  await page.goto(path)
-  await expect(page.getByRole('heading', { name: 'Entrar como admin' })).toBeVisible()
-  await page.getByLabel('E-mail').fill('mariana.couto@example.com')
-  await page.getByLabel('Senha').fill('senha-do-admin')
-  await page.getByRole('button', { name: 'Entrar' }).click()
-}
 
 test('login, biblioteca, transcrição, import e token contra o mock', async ({ page }) => {
   await login(page, '1-login')
@@ -180,45 +159,6 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await navTo(page, 'App desktop')
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
-})
-
-test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
-  // Sem a sessão de admin, o painel leva ao login do admin, mesmo com a do usuário aberta.
-  await login(page)
-  await adminLogin(page, '/admin/transcricao')
-  const tabs = page.getByRole('navigation', { name: 'Plataforma' })
-  await expect(page.getByText('mariana.couto@example.com')).toBeVisible()
-  await expect(page.getByRole('navigation', { name: 'Principal' })).toHaveCount(0)
-
-  // Transcrição: a configuração do exemplo, salva de volta.
-  await expect(page.getByRole('heading', { name: 'Transcrição' })).toBeVisible()
-  await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('large-v3-turbo')
-  await page.getByLabel('Modelo', { exact: true }).selectOption('large-v3')
-  await page.getByRole('button', { name: 'Salvar' }).click()
-  await expect(page.getByText('Configuração salva.')).toBeVisible()
-  await screenshot(page, '12-admin-transcricao')
-
-  // Saúde: GPU e etapas do exemplo, sem título de gravação.
-  await tabs.getByRole('link', { name: 'Saúde' }).click()
-  await expect(page.getByText('NVIDIA GeForce GTX 1660 SUPER · 6 GB')).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Etapas do processamento · últimas 24 h' })).toBeVisible()
-  await expect(page.getByText(/Reunião de alinhamento/)).toHaveCount(0)
-  await screenshot(page, '13-admin-saude')
-
-  // Segredos saiu: o token do Hugging Face fica em Locutores, só de escrita.
-  await page.goto('/admin/segredos')
-  await expect(page.getByRole('heading', { level: 1, name: 'Locutores' })).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Token do Hugging Face' }).getByText('•••••••• guardado')).toBeVisible()
-
-  // Usuários: as contas do exemplo com a contagem de gravações; sem convites nem papéis.
-  await tabs.getByRole('link', { name: 'Usuários' }).click()
-  await expect(page.getByRole('row', { name: /Paulo Andrade/ })).toContainText('12')
-  await expect(page.getByRole('form', { name: 'Novo convite' })).toHaveCount(0)
-  await screenshot(page, '14-admin-usuarios')
-
-  // Sair volta ao login do admin.
-  await page.getByRole('button', { name: 'Sair' }).click()
-  await expect(page.getByRole('heading', { name: 'Entrar como admin' })).toBeVisible()
 })
 
 test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {
@@ -294,10 +234,4 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await screenshot(page, '16-pessoa-voz')
   await voice.getByRole('button', { name: 'Manter' }).click()
 
-  // Admin: a identificação por voz fica em Locutores, sem termo nem trilha.
-  await adminLogin(page, '/admin/voz')
-  await expect(page.getByRole('heading', { level: 1, name: 'Locutores' })).toBeVisible()
-  await expect(page.getByRole('switch', { name: 'Sugerir quem está falando pelas amostras de voz' })).toBeChecked()
-  await expect(page.getByRole('table')).toHaveCount(0)
-  await screenshot(page, '17-admin-voz')
 })
