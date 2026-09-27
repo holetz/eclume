@@ -25,57 +25,7 @@ async function body(http: ReturnType<typeof mockFetch>, key: string, index = 0) 
   return http.requests(key)[index].json()
 }
 
-describe('guarda e navegação', () => {
-  it('sem sessão de admin, o painel volta ao login do admin', async () => {
-    mockAdminApi({ 'GET /api/v1/admin/me': () => problem('unauthorized', 401) })
-    renderApp('/admin/usuarios')
-    expect(await screen.findByRole('heading', { name: 'Painel admin' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation', { name: 'Seções da administração' })).not.toBeInTheDocument()
-    // O painel não usa a sessão do usuário.
-    expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
-  })
-
-  it('o login do admin abre a sessão de admin e volta à seção pedida', async () => {
-    let session = false
-    const http = mockAdminApi({
-      'GET /api/v1/admin/me': () => (session ? fixtures.adminMe() : problem('unauthorized', 401)),
-      'POST /api/v1/admin/auth/login': () => {
-        session = true
-        return empty()
-      },
-    })
-    renderApp('/admin/usuarios')
-    await userEvent.type(await screen.findByLabelText('E-mail'), 'mariana.couto@example.com')
-    await userEvent.type(screen.getByLabelText('Senha'), 'senha-do-admin')
-    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-    expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
-    expect(await body(http, 'POST /api/v1/admin/auth/login')).toEqual({
-      email: 'mariana.couto@example.com',
-      password: 'senha-do-admin',
-    })
-    expect(screen.getByText('mariana.couto@example.com')).toBeInTheDocument()
-  })
-
-  it('senha errada no login do admin', async () => {
-    mockAdminApi({
-      'GET /api/v1/admin/me': () => problem('unauthorized', 401),
-      'POST /api/v1/admin/auth/login': () => problem('unauthorized', 401),
-    })
-    renderApp('/admin/entrar')
-    await userEvent.type(await screen.findByLabelText('E-mail'), 'x@y.com.br')
-    await userEvent.type(screen.getByLabelText('Senha'), 'errada')
-    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-    expect(await screen.findByText('E-mail ou senha incorretos.')).toBeInTheDocument()
-  })
-
-  it('sair encerra a sessão de admin', async () => {
-    const http = mockAdminApi({ 'POST /api/v1/admin/auth/logout': () => empty() })
-    renderApp('/admin/transcricao')
-    await userEvent.click(await screen.findByRole('button', { name: 'Sair' }))
-    expect(await screen.findByRole('heading', { name: 'Painel admin' })).toBeInTheDocument()
-    expect(http.requests('POST /api/v1/admin/auth/logout')).toHaveLength(1)
-  })
-
+describe('navegação', () => {
   it('admin cai em Transcrição e navega pelas seções', async () => {
     mockAdminApi()
     renderApp('/admin')

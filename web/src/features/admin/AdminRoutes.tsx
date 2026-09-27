@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router'
-import { AdminLayout } from './AdminLayout'
 import { AgentsPage } from './AgentsPage'
 import { HealthPage } from './HealthPage'
+import { RequireAdmin } from './RequireAdmin'
 import { SecretsPage } from './SecretsPage'
 import { SettingsPage } from './SettingsPage'
 import { UsersPage } from './UsersPage'
@@ -11,7 +11,7 @@ import { VoicePage } from './VoicePage'
 export function AdminRoutes() {
   return (
     <Routes>
-      <Route element={<AdminLayout />}>
+      <Route element={<RequireAdmin />}>
         <Route index element={<Navigate to="transcricao" replace />} />
         <Route path="transcricao" element={<SettingsPage />} />
         <Route path="voz" element={<VoicePage />} />
