@@ -153,3 +153,12 @@ export function fieldErrorsOf(error: unknown): Record<string, string> {
   if (!(error instanceof ApiError)) return {}
   return Object.fromEntries((error.problem?.errors ?? []).map((e) => [e.field, e.message]))
 }
+
+/** "Resumo: <seções>": os títulos `##` das instruções, até três, ou o começo do texto. */
+export function summaryOf(instructions: string): string {
+  const headings = [...instructions.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1].trim())
+  if (headings.length > 0) return headings.slice(0, 3).join(', ')
+  const text = instructions.replace(/\s+/g, ' ').trim()
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text
+}
+

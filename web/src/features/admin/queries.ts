@@ -8,6 +8,7 @@ export const PROVIDERS_KEY = ['admin', 'agent-providers'] as const
 export const SECRETS_KEY = ['admin', 'secrets'] as const
 export const USERS_KEY = ['admin', 'users'] as const
 export const HEALTH_KEY = ['admin', 'health'] as const
+export const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
 
 export const HEALTH_REFRESH_MS = 10_000
 
@@ -102,5 +103,75 @@ export function useAdminHealth() {
     queryFn: () => unwrap(api.GET('/api/v1/admin/health')),
     refetchInterval: HEALTH_REFRESH_MS,
     staleTime: 0,
+  })
+}
+
+type DefaultAgendaType = Schemas['DefaultAgendaType']
+
+/** Os tipos de agenda padrão, na ordem de `position`. */
+export function useDefaultAgendaTypes() {
+  return useQuery({
+    queryKey: DEFAULT_TYPES_KEY,
+    queryFn: async () => {
+      const page = await unwrap(api.GET('/api/v1/admin/default-agenda-types'))
+      return [...page.items].sort((a, b) => a.position - b.position)
+    },
+  })
+}
+
+const replaceType = (updated: DefaultAgendaType) => (types: DefaultAgendaType[] | undefined) =>
+  types?.map((type) => (type.id === updated.id ? updated : type))
+
+/** Cria (sem `id`) ou edita um tipo padrão; a resposta entra no cache. */
+export function useSaveDefaultAgendaType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: Schemas['DefaultAgendaTypePatch'] }) =>
+      id === null
+        ? unwrap(api.POST('/api/v1/admin/default-agenda-types', { body: body as Schemas['DefaultAgendaTypeCreate'] }))
+        : unwrap(
+            api.PATCH('/api/v1/admin/default-agenda-types/{agenda_type_id}', {
+              params: { path: { agenda_type_id: id } },
+              body,
+            }),
+          ),
+    onSuccess: (saved, { id }) =>
+      queryClient.setQueryData<DefaultAgendaType[]>(DEFAULT_TYPES_KEY, (types) =>
+        id === null ? [...(types ?? []), saved] : replaceType(saved)(types),
+      ),
+  })
+}
+
+/** "Incluir para novos usuários" na hora: otimista, e volta atrás se o servidor recusar. */
+export function useToggleDefaultAgendaType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, include }: { id: string; include: boolean }) =>
+      unwrap(
+        api.PATCH('/api/v1/admin/default-agenda-types/{agenda_type_id}', {
+          params: { path: { agenda_type_id: id } },
+          body: { include_for_new_users: include },
+        }),
+      ),
+    onMutate: async ({ id, include }) => {
+      await queryClient.cancelQueries({ queryKey: DEFAULT_TYPES_KEY })
+      const before = queryClient.getQueryData<DefaultAgendaType[]>(DEFAULT_TYPES_KEY)
+      queryClient.setQueryData<DefaultAgendaType[]>(DEFAULT_TYPES_KEY, (types) =>
+        types?.map((type) => (type.id === id ? { ...type, include_for_new_users: include } : type)),
+      )
+      return { before }
+    },
+    onError: (_error, _vars, context) => queryClient.setQueryData(DEFAULT_TYPES_KEY, context?.before),
+    onSuccess: (saved) => queryClient.setQueryData<DefaultAgendaType[]>(DEFAULT_TYPES_KEY, replaceType(saved)),
+  })
+}
+
+export function useDeleteDefaultAgendaType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.DELETE('/api/v1/admin/default-agenda-types/{agenda_type_id}', { params: { path: { agenda_type_id: id } } })),
+    onSuccess: (_data, id) =>
+      queryClient.setQueryData<DefaultAgendaType[]>(DEFAULT_TYPES_KEY, (types) => types?.filter((type) => type.id !== id)),
   })
 }
