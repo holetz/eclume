@@ -173,6 +173,8 @@ def test_valores_com_origem_editar_e_aceitar(user: Api, services: Services):
         (notes["id"], "texto"),
         (values["titulo"]["field"]["id"], None),
         (values["titulo"]["field"]["id"], "x" * 301),
+        (notes["id"], [f"item {n}" for n in range(51)]),
+        (notes["id"], ["x" * 301]),
     ):
         assert user.put(f"{base}/{field_id}", json={"value": value}).status_code == 422, value
     assert user.put(f"{base}/{client['id']}", json={}).status_code == 422
@@ -202,6 +204,15 @@ def test_titulo_e_tags_do_usuario_viram_edited(user: Api):
     put = user.put(f"/api/v1/recordings/{plain['id']}/fields/{tags_id}", json={"value": ["a", "b"]})
     assert put.status_code == 200
     assert user.get(f"/api/v1/recordings/{plain['id']}").json()["tags"] == ["a", "b"]
+    # A tag tem o teto das tags padrão de um tipo.
+    too_long = user.put(f"/api/v1/recordings/{plain['id']}/fields/{tags_id}", json={"value": ["t" * 65]})
+    assert too_long.status_code == 422
+
+
+def test_regra_do_campo_tem_teto(user: Api):
+    assert user.post(URL, json={**CLIENT, "instructions": "x" * 4001}).status_code == 422
+    field = user.post(URL, json={**CLIENT, "instructions": "x" * 4000}).json()
+    assert user.patch(f"{URL}/{field['id']}", json={"instructions": "x" * 4001}).status_code == 422
 
 
 def test_valores_de_outra_conta_nao_existem(

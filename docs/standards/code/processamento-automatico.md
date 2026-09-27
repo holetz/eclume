@@ -65,6 +65,9 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
   com título ou tags e um upload com título ou tags explícitos viram `edited`; o nome do arquivo
   não tem origem, e o automático o troca.
 - Mudar o `kind` de um campo descarta os valores dele.
+- **Tetos:** regra do campo, `identify` e `summary_instructions` até 4000 caracteres; valor escrito
+  pelo usuário até 300 caracteres (texto) ou 50 itens de até 300 (lista); tag, a escrita e a
+  automática, até 64, como as tags padrão de um tipo.
 
 ## Tipos de agenda
 

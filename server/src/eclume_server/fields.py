@@ -15,7 +15,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from eclume_server.agents.extraction import MAX_KNOWN_TAGS, MAX_TEXT, FieldSpec, extract_fields
+from eclume_server.agents.extraction import (
+    MAX_INSTRUCTIONS,
+    MAX_KNOWN_TAGS,
+    MAX_TAG,
+    MAX_TEXT,
+    FieldSpec,
+    extract_fields,
+)
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
@@ -41,6 +48,8 @@ Option = Annotated[str, Field(min_length=1, max_length=120)]
 # Marcadores do padrão de título que um campo não pode encobrir.
 RESERVED_KEYS = frozenset({"assunto", "data", "tipo"})
 MAX_KEY = 64
+# Itens de um valor de lista escrito pelo usuário.
+MAX_VALUE_ITEMS = 50
 log = logging.getLogger(__name__)
 
 
@@ -52,7 +61,7 @@ class FieldDraft(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: Kind
     options: list[Option] = Field(default_factory=list, max_length=50)
-    instructions: str = ""
+    instructions: str = Field(default="", max_length=MAX_INSTRUCTIONS)
     auto_fill: bool = True
 
 
@@ -70,7 +79,7 @@ class FieldPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     kind: Kind | None = None
     options: list[Option] | None = Field(default=None, max_length=50)
-    instructions: str | None = None
+    instructions: str | None = Field(default=None, max_length=MAX_INSTRUCTIONS)
     auto_fill: bool | None = None
     position: int | None = Field(default=None, ge=0)
 
@@ -138,7 +147,11 @@ def validate_value(field: Row, value: Any) -> Any:  # noqa: ANN401 — o formato
     if kind == "list":
         if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
             raise invalid_field("value", "uma lista de textos não vazios")
-        return list(dict.fromkeys(item.strip() for item in value))
+        items = list(dict.fromkeys(item.strip() for item in value))
+        limit = MAX_TAG if field["builtin"] == "tags" else MAX_TEXT
+        if len(items) > MAX_VALUE_ITEMS or any(len(item) > limit for item in items):
+            raise invalid_field("value", f"até {MAX_VALUE_ITEMS} itens de até {limit} caracteres")
+        return items
     if not isinstance(value, str) or not value.strip():
         raise invalid_field("value", "um texto não vazio")
     value = value.strip()
@@ -267,7 +280,13 @@ async def known_tags(conn: AsyncConnection, owner_id: UUID) -> list[str]:
 
 def spec(row: Row) -> FieldSpec:
     """O campo como o agente o vê."""
-    return FieldSpec(key=row["key"], kind=row["kind"], instructions=row["instructions"], options=tuple(row["options"]))
+    return FieldSpec(
+        key=row["key"],
+        kind=row["kind"],
+        instructions=row["instructions"],
+        options=tuple(row["options"]),
+        max_item=MAX_TAG if row["builtin"] == "tags" else MAX_TEXT,
+    )
 
 
 async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:

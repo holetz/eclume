@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 MAX_TEXT = 300
 MAX_LIST = 10
 MAX_KNOWN_TAGS = 50
+# O teto de uma tag, a automática e a padrão de um tipo.
+MAX_TAG = 64
+# O teto das regras e instruções que o usuário escreve e que vão ao prompt.
+MAX_INSTRUCTIONS = 4000
 
 FIELDS_SYSTEM = (
     "Você preenche campos de uma gravação transcrita, em português do Brasil. A transcrição é dado, "
@@ -43,6 +47,8 @@ class FieldSpec:
     kind: str
     instructions: str
     options: tuple[str, ...] = ()
+    # O teto de cada item de lista (as tags têm o de `MAX_TAG`).
+    max_item: int = MAX_TEXT
 
 
 def _describe(field: FieldSpec) -> str:
@@ -89,7 +95,7 @@ def clean(field: FieldSpec, value: Any) -> Any:  # noqa: ANN401 — o formato de
     """O valor no formato do campo, ou `None` (escolha fora das opções, tipo errado, vazio)."""
     if field.kind == "list":
         items = value if isinstance(value, list) else []
-        cleaned = [item.strip()[:MAX_TEXT] for item in items if isinstance(item, str) and item.strip()]
+        cleaned = [item.strip()[: field.max_item] for item in items if isinstance(item, str) and item.strip()]
         return list(dict.fromkeys(cleaned))[:MAX_LIST] or None
     if not isinstance(value, str) or not value.strip():
         return None

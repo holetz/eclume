@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 
-from eclume_server.agents.extraction import TypeSpec, detect_type
+from eclume_server.agents.extraction import MAX_INSTRUCTIONS, MAX_TAG, TypeSpec, detect_type
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pipeline import GONE, STALE, current_revision, get_step, set_step
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from eclume_server.serialize import Row
 
-Tag = Annotated[str, Field(min_length=1, max_length=64)]
+Tag = Annotated[str, Field(min_length=1, max_length=MAX_TAG)]
 # Não podem ser nulos num PATCH (os demais aceitam `null`, que limpa).
 REQUIRED = ("name", "summary_instructions", "identify", "default_tags", "position")
 
@@ -39,9 +39,9 @@ class AgendaTypeDraft(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     title_pattern: str | None = Field(default=None, max_length=300)
-    identify: str = ""
+    identify: str = Field(default="", max_length=MAX_INSTRUCTIONS)
     default_tags: list[Tag] = Field(default_factory=list, max_length=20)
-    summary_instructions: str = Field(min_length=1)
+    summary_instructions: str = Field(min_length=1, max_length=MAX_INSTRUCTIONS)
 
 
 class AgendaTypeCreate(AgendaTypeDraft):
@@ -57,9 +57,9 @@ class AgendaTypePatch(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     title_pattern: str | None = Field(default=None, max_length=300)
-    identify: str | None = None
+    identify: str | None = Field(default=None, max_length=MAX_INSTRUCTIONS)
     default_tags: list[Tag] | None = Field(default=None, max_length=20)
-    summary_instructions: str | None = Field(default=None, min_length=1)
+    summary_instructions: str | None = Field(default=None, min_length=1, max_length=MAX_INSTRUCTIONS)
     position: int | None = Field(default=None, ge=0)
 
 

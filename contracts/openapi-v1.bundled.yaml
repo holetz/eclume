@@ -4386,6 +4386,7 @@ components:
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
+          maxLength: 4000
         default_tags:
           description: Tags somadas às automáticas quando o tipo é aplicado.
           type: array
@@ -4398,6 +4399,7 @@ components:
           description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
+          maxLength: 4000
     AgendaTypeCreate:
       type: object
       additionalProperties: false
@@ -4424,6 +4426,7 @@ components:
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
+          maxLength: 4000
         default_tags:
           description: Tags somadas às automáticas quando o tipo é aplicado.
           type: array
@@ -4436,6 +4439,7 @@ components:
           description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
+          maxLength: 4000
         position:
           description: Sem valor, o fim da lista.
           type: integer
@@ -4464,6 +4468,7 @@ components:
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
+          maxLength: 4000
         default_tags:
           description: Tags somadas às automáticas quando o tipo é aplicado.
           type: array
@@ -4476,6 +4481,7 @@ components:
           description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
+          maxLength: 4000
         position:
           type: integer
           minimum: 0
@@ -4570,6 +4576,7 @@ components:
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
+          maxLength: 4000
         default_tags:
           description: Tags somadas às automáticas quando o tipo é aplicado.
           type: array
@@ -4582,6 +4589,7 @@ components:
           description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
+          maxLength: 4000
         position:
           description: Sem valor, o fim da lista.
           type: integer
@@ -4613,6 +4621,7 @@ components:
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
+          maxLength: 4000
         default_tags:
           description: Tags somadas às automáticas quando o tipo é aplicado.
           type: array
@@ -4625,6 +4634,7 @@ components:
           description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
           type: string
           minLength: 1
+          maxLength: 4000
         position:
           type: integer
           minimum: 0
@@ -4727,6 +4737,7 @@ components:
         instructions:
           description: A regra ("como identificar") que o agente segue ao preencher o campo.
           type: string
+          maxLength: 4000
         auto_fill:
           description: Preencher automaticamente depois da transcrição.
           type: boolean
@@ -4754,6 +4765,7 @@ components:
         instructions:
           description: A regra ("como identificar") que o agente segue ao preencher o campo.
           type: string
+          maxLength: 4000
         auto_fill:
           description: Preencher automaticamente depois da transcrição.
           type: boolean
@@ -4783,6 +4795,7 @@ components:
         instructions:
           description: A regra ("como identificar") que o agente segue ao preencher o campo.
           type: string
+          maxLength: 4000
         auto_fill:
           description: Preencher automaticamente depois da transcrição.
           type: boolean
@@ -4858,7 +4871,21 @@ components:
       - value
       properties:
         value:
-          $ref: '#/components/schemas/FieldValue'
+          description: '`text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres
+            (64
+
+            nas tags); `null` limpa (menos o título).
+
+            '
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: array
+            maxItems: 50
+            items:
+              type: string
+              maxLength: 300
+          - type: 'null'
     FieldPreviewRequest:
       type: object
       additionalProperties: false

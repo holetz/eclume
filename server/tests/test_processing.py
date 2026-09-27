@@ -90,6 +90,12 @@ def test_o_que_o_usuario_escreveu_nao_e_sobrescrito(user: Api, services: Service
     assert "- titulo" not in agents.of("fields")[0][2]
 
 
+def test_tag_automatica_tem_o_teto_das_tags_padrao(user: Api, services: Services):
+    reply = json.dumps({"tags": ["t" * 100, "curta"]})
+    recording = _process(user, services, FakeAgents(replies={"fields": [reply]}))
+    assert recording["tags"][:2] == ["t" * 64, "curta"]
+
+
 def test_etapa_pulada_sem_provider_ou_sem_campos(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services, admin: Api
 ):

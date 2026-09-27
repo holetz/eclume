@@ -2056,7 +2056,11 @@ export interface components {
             items: components["schemas"]["RecordingFieldValue"][];
         };
         FieldValuePut: {
-            value: components["schemas"]["FieldValue"];
+            /**
+             * @description `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
+             *     nas tags); `null` limpa (menos o título).
+             */
+            value: string | string[] | null;
         };
         FieldPreviewRequest: {
             field: components["schemas"]["FieldDraft"];

@@ -77,6 +77,13 @@ def test_criar_editar_e_excluir_um_tipo(user: Api):
     assert user.delete(f"{URL}/{first['id']}").status_code == 404
 
 
+def test_textos_do_tipo_tem_teto(user: Api):
+    for field in ("identify", "summary_instructions"):
+        assert user.post(URL, json={**DRAFT, field: "x" * 4001}).status_code == 422, field
+    body = user.post(URL, json={**DRAFT, "identify": "x" * 4000}).json()
+    assert user.patch(f"{URL}/{body['id']}", json={"summary_instructions": "x" * 4001}).status_code == 422
+
+
 def test_tipo_de_outra_conta_nao_existe(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
