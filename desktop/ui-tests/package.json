@@ -1,0 +1,12 @@
+{
+  "name": "eclume-desktop-ui-tests",
+  "private": true,
+  "type": "module",
+  "description": "Testes de navegador da UI do app desktop do eclume, com o Tauri simulado.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

@@ -4,92 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eclume</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="eclume.css" />
+    <link rel="stylesheet" href="app.css" />
+    <script type="module" src="js/main.js"></script>
   </head>
   <body>
-    <main>
-      <header class="topo">
-        <div>
-          <h1>eclume</h1>
-          <p class="estado" id="estado" data-status="idle">Ocioso</p>
-        </div>
-        <button type="button" id="alternar" class="primario">Iniciar gravação</button>
-      </header>
-
-      <section class="pergunta" id="pergunta" aria-live="polite" hidden>
-        <p id="pergunta-texto">Reunião detectada.</p>
-        <div class="linha">
-          <button type="button" id="pergunta-gravar" class="primario">Gravar</button>
-          <button type="button" id="pergunta-ignorar">Ignorar esta reunião</button>
-        </div>
-      </section>
-
-      <p class="aviso" id="aviso" hidden></p>
-      <p class="aviso" id="aviso-sync" hidden></p>
-
-      <section aria-labelledby="titulo-fila">
-        <div class="secao-topo">
-          <h2 id="titulo-fila">Gravações</h2>
-          <span class="resumo">
-            <span id="resumo"></span>
-            <button type="button" id="sincronizar" class="discreto">Sincronizar agora</button>
-          </span>
-        </div>
-        <ul class="fila" id="fila"></ul>
-        <p class="vazio" id="vazio">Nenhuma gravação ainda.</p>
-      </section>
-
-      <section aria-labelledby="titulo-config">
-        <h2 id="titulo-config">Configurações</h2>
-        <form id="form-config" class="config">
-          <label for="web-url">Servidor do eclume</label>
-          <div class="linha">
-            <input id="web-url" type="url" required spellcheck="false" autocomplete="off" />
-            <button type="button" id="abrir-web">Abrir</button>
+    <section class="tray tray-window" data-vista="principal" aria-label="eclume">
+      <div class="tray-section">
+        <div class="row row-between">
+          <span class="brand brand-sm"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="0.5" y="8" width="3" height="8"></rect>
+              <rect x="5.5" y="3" width="3" height="18"></rect>
+              <rect x="10.5" y="0" width="3" height="24"></rect>
+              <rect x="15.5" y="5.5" width="3" height="13"></rect>
+              <rect x="20.5" y="9" width="3" height="6"></rect></svg
+            >eclume</span
+          >
+          <div class="row">
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-ajuda"
+              data-icone="ajuda" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-configuracoes"
+              data-icone="configuracoes" aria-label="Configurações"></button>
           </div>
-
-          <label for="pat">Token pessoal (PAT)</label>
-          <div class="linha">
-            <input id="pat" type="password" spellcheck="false" autocomplete="off" placeholder="eclp_…" />
-            <button type="button" id="esquecer-pat">Esquecer</button>
-          </div>
-          <p class="dica" id="pat-origem">Crie o PAT no eclume web com o escopo <code>recordings:write</code>.</p>
-
-          <details>
-            <summary>Avançado</summary>
-            <label for="api-url">Endereço da API</label>
-            <input id="api-url" type="url" spellcheck="false" autocomplete="off" placeholder="igual ao servidor" />
-            <label for="ca-path">CA extra (arquivo PEM)</label>
-            <input id="ca-path" type="text" spellcheck="false" autocomplete="off" placeholder="/caminho/eclume-root.crt" />
-            <p class="dica">Para confiar na CA interna do servidor sem instalá-la no sistema.</p>
-          </details>
-
-          <label class="marcar">
-            <input id="deteccao" type="checkbox" />
-            Detectar reuniões automaticamente
-          </label>
-          <table class="politicas" id="politicas" aria-label="O que fazer quando uma reunião começa">
-            <thead><tr><th scope="col">App</th><th scope="col">Quando a reunião começa</th></tr></thead>
-            <tbody></tbody>
-          </table>
-
-          <label for="retencao">Arquivo local depois de sincronizado</label>
-          <select id="retencao">
-            <option value="0">Apagar assim que o servidor confirmar</option>
-            <option value="1">Manter por 1 dia</option>
-            <option value="7">Manter por 7 dias</option>
-            <option value="30">Manter por 30 dias</option>
-            <option value="90">Manter por 90 dias</option>
-            <option value="sempre">Manter sempre</option>
-          </select>
-
-          <div class="linha acoes">
-            <button type="submit" class="primario">Salvar</button>
-            <span class="resumo" id="config-status" role="status"></span>
-          </div>
-        </form>
-      </section>
-    </main>
+        </div>
+        <span class="status-line" id="linha-status" role="status">Carregando…</span>
+      </div>
+    </section>
   </body>
 </html>
