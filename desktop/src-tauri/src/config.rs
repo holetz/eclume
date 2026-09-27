@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::shortcuts::Shortcuts;
 
-/// Endereço padrão do eclume web: o host GPU, pela porta do eclume.
+/// Endereço do eclume web quando o build não embutiu servidor nenhum (build local, e a
+/// `config.json` de uma versão anterior sem `web_url`).
 pub const DEFAULT_WEB_URL: &str = "https://192.168.15.199:8443";
 /// Variável de ambiente que sobrepõe `web_url` sem mexer no arquivo.
 pub const WEB_URL_ENV: &str = "ECLUME_WEB_URL";
@@ -24,11 +25,66 @@ pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
 /// A parada por silêncio padrão da nota, em segundos.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
 
+/// O servidor embutido no instalador pelo release por servidor (`desktop-release.yml` passa as
+/// variáveis do repositório ao `tauri build`): a primeira execução o mostra como "Veio com este
+/// instalador" e fixa a CA pela impressão digital.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct EmbeddedServer {
+    pub url: String,
+    pub ca_sha256: Option<String>,
+}
+
+/// O servidor embutido neste build; `None` num build sem `ECLUME_SERVER_URL`.
+pub fn embedded_server() -> Option<EmbeddedServer> {
+    embedded_from(
+        option_env!("ECLUME_SERVER_URL"),
+        option_env!("ECLUME_SERVER_CA_SHA256"),
+    )
+}
+
+/// Lê as variáveis do build: vazias (variável do repositório ausente) ou inválidas não valem.
+fn embedded_from(url: Option<&str>, ca_sha256: Option<&str>) -> Option<EmbeddedServer> {
+    let url = url
+        .map(str::trim)
+        .filter(|url| validate_web_url(url).is_ok())?;
+    Some(EmbeddedServer {
+        url: url.trim_end_matches('/').to_string(),
+        ca_sha256: ca_sha256.and_then(|ca| eclume_sync::pin::normalize_fingerprint(ca).ok()),
+    })
+}
+
+/// A conta em que este computador entrou com e-mail e senha ou código de pareamento.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Account {
+    pub email: String,
+    /// O token de dispositivo, que a web desvincula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+}
+
+/// Como o app fala com o servidor, o que decide a primeira execução.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Connection {
+    /// Nenhuma credencial guardada: a janela abre na primeira execução.
+    FirstRun,
+    /// Um PAT colado numa versão anterior (ou `ECLUME_PAT`): continua sincronizando, e a aba
+    /// Servidor oferece entrar com e-mail e senha.
+    PersonalToken,
+    /// A credencial de dispositivo de uma conta.
+    Account,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Endereço do servidor do eclume: o eclume web (item da bandeja) e, sem `api_url`, a API.
     #[serde(default = "default_web_url")]
     pub web_url: String,
+    /// A conta em que este computador entrou; `null` antes de entrar e com um PAT antigo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Account>,
     /// Endereço da API quando difere do eclume web.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
@@ -76,8 +132,9 @@ fn default_system_audio() -> bool {
     true
 }
 
+/// O servidor embutido, ou o padrão de um build sem servidor.
 fn default_web_url() -> String {
-    DEFAULT_WEB_URL.to_string()
+    embedded_server().map_or_else(|| DEFAULT_WEB_URL.to_string(), |server| server.url)
 }
 
 fn default_retention_days() -> Option<u32> {
@@ -92,6 +149,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             web_url: default_web_url(),
+            account: None,
             api_url: None,
             ca_path: None,
             detection: DetectionConfig::default(),
@@ -107,6 +165,16 @@ impl Default for Config {
 }
 
 impl Config {
+    /// A primeira execução aparece sem credencial guardada; um PAT sem `account` é de uma versão
+    /// anterior e segue valendo.
+    pub fn connection(&self, has_token: bool) -> Connection {
+        match (has_token, &self.account) {
+            (false, _) => Connection::FirstRun,
+            (true, None) => Connection::PersonalToken,
+            (true, Some(_)) => Connection::Account,
+        }
+    }
+
     /// O aviso "Atualizado para X" da janela: a atualização guardada é a desta versão.
     pub fn update_notice(&self, current: &str) -> Option<&PendingUpdate> {
         self.pending_update
@@ -210,8 +278,66 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_padrao_aponta_para_o_host() {
-        assert_eq!(Config::default().web_url, "https://192.168.15.199:8443");
+    fn config_padrao_aponta_para_o_servidor_embutido_ou_o_host() {
+        let expected = embedded_server().map_or(DEFAULT_WEB_URL.to_string(), |s| s.url);
+        assert_eq!(Config::default().web_url, expected);
+        assert_eq!(DEFAULT_WEB_URL, "https://192.168.15.199:8443");
+    }
+
+    #[test]
+    fn servidor_embutido_no_build() {
+        // O verify roda também com ECLUME_SERVER_URL=https://eclume.teste:8443.
+        match option_env!("ECLUME_SERVER_URL").filter(|url| !url.trim().is_empty()) {
+            Some(url) => {
+                let server = embedded_server().expect("o build embutiu um servidor");
+                assert_eq!(server.url, url.trim().trim_end_matches('/'));
+                assert_eq!(Config::default().web_url, server.url);
+            }
+            None => assert_eq!(embedded_server(), None),
+        }
+    }
+
+    #[test]
+    fn variaveis_do_build_vazias_ou_invalidas_nao_embutem() {
+        let ca = "98E209F5457514B7B12EC349D22B3B0D93C03C3F10E52350EA5F9E0B3D97792F";
+        assert_eq!(
+            embedded_from(Some(" https://eclume.teste:8443/ "), Some(ca)),
+            Some(EmbeddedServer {
+                url: "https://eclume.teste:8443".into(),
+                ca_sha256: Some(ca.to_ascii_lowercase()),
+            })
+        );
+        assert_eq!(
+            embedded_from(Some("https://eclume.teste"), Some("")),
+            Some(EmbeddedServer {
+                url: "https://eclume.teste".into(),
+                ca_sha256: None,
+            })
+        );
+        assert_eq!(embedded_from(Some(""), Some(ca)), None);
+        assert_eq!(embedded_from(Some("eclume.teste"), None), None);
+        assert_eq!(embedded_from(None, None), None);
+    }
+
+    #[test]
+    fn primeira_execucao_so_sem_credencial() {
+        let mut config = Config::default();
+        assert_eq!(config.connection(false), Connection::FirstRun);
+        // Quem já usa um PAT (0.1.x) não vê a primeira execução.
+        assert_eq!(config.connection(true), Connection::PersonalToken);
+        config.account = Some(Account {
+            email: "ana@exemplo.com.br".into(),
+            token_id: Some("t-1".into()),
+            server_name: Some("eclume".into()),
+        });
+        assert_eq!(config.connection(true), Connection::Account);
+        // A credencial sumiu do chaveiro: entra de novo.
+        assert_eq!(config.connection(false), Connection::FirstRun);
+        let back: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(back.account, config.account);
+        let legacy: Config =
+            serde_json::from_str(r#"{"web_url": "https://192.168.15.199:8443"}"#).unwrap();
+        assert_eq!(legacy.account, None);
     }
 
     #[test]
@@ -255,9 +381,9 @@ mod tests {
         );
         assert_eq!(
             config.effective_web_url(Some("ftp://x".into())),
-            DEFAULT_WEB_URL
+            default_web_url()
         );
-        assert_eq!(config.effective_web_url(None), DEFAULT_WEB_URL);
+        assert_eq!(config.effective_web_url(None), default_web_url());
     }
 
     #[test]
@@ -281,7 +407,7 @@ mod tests {
     #[test]
     fn config_endereco_da_api() {
         let mut config = Config::default();
-        assert_eq!(config.effective_api_url(None, None), DEFAULT_WEB_URL);
+        assert_eq!(config.effective_api_url(None, None), default_web_url());
         assert_eq!(
             config.effective_api_url(None, Some("http://web:5173".into())),
             "http://web:5173"
