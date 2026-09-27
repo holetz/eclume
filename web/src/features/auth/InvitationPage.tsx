@@ -6,7 +6,7 @@ import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { ME_KEY, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { MIN_PASSWORD } from './invitation'
-import styles from './LoginPage.module.css'
+import { AuthLayout } from './AuthLayout'
 
 /** Aceite do convite (`/convite/:token`): cria a conta e entra, sem sessão prévia. */
 export function InvitationPage() {
@@ -51,10 +51,9 @@ export function InvitationPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <div className={`card ${styles.card}`}>
-        <p className={styles.brand}>eclume</p>
-        <h1>Aceitar convite</h1>
+    <AuthLayout>
+      <div>
+        <h2>Aceitar convite</h2>
         {me.data ? (
           <p className="alert alert-info">
             Você já está conectado como {me.data.user.name}. Para aceitar este convite com outra conta, saia primeiro.{' '}
@@ -63,7 +62,7 @@ export function InvitationPage() {
         ) : (
           <>
             <p className="text-muted">Escolha seu nome e uma senha para criar a conta na organização.</p>
-            <form className={styles.form} onSubmit={submit} noValidate>
+            <form onSubmit={submit} noValidate>
               <div className="field">
                 <label htmlFor="convite-nome">Nome</label>
                 <input
@@ -118,6 +117,6 @@ export function InvitationPage() {
           </>
         )}
       </div>
-    </main>
+    </AuthLayout>
   )
 }

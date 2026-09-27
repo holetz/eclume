@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { ME_KEY, safeReturnPath, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
-import styles from './LoginPage.module.css'
+import { AuthLayout } from './AuthLayout'
 
 export function LoginPage() {
   usePageTitle('Entrar')
@@ -41,49 +41,47 @@ export function LoginPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <div className={`card ${styles.card}`}>
-        <p className={styles.brand}>eclume</p>
-        <h1>Entrar</h1>
-        <p className="text-muted">Transcrição institucional da sua organização.</p>
-        <form className={styles.form} onSubmit={submit} noValidate>
-          <div className="field">
-            <label htmlFor="login-email">E-mail</label>
-            <input
-              id="login-email"
-              className="input"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              aria-describedby={error ? errorId : undefined}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="login-password">Senha</label>
-            <input
-              id="login-password"
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-describedby={error ? errorId : undefined}
-            />
-          </div>
-          {error && (
-            <p id={errorId} className="alert alert-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button type="submit" className="btn btn-primary" disabled={submitting || !email || !password}>
-            {submitting ? 'Entrando…' : 'Entrar'}
-          </button>
-        </form>
-        <p className={`text-muted ${styles.note}`}>Sem conta? Peça um convite ao administrador da organização.</p>
-      </div>
-    </main>
+    <AuthLayout>
+      <form onSubmit={submit} noValidate>
+        <h2>Entrar</h2>
+        <div className="field">
+          <label htmlFor="login-email">E-mail</label>
+          <input
+            id="login-email"
+            className="input"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-describedby={error ? errorId : undefined}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="login-password">Senha</label>
+          <input
+            id="login-password"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-describedby={error ? errorId : undefined}
+          />
+        </div>
+        {error && (
+          <p id={errorId} className="alert alert-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !email || !password}>
+          {submitting ? 'Entrando…' : 'Entrar'}
+        </button>
+        <p className="text-muted auth-note">
+          Não tem conta? <Link to="/cadastro">Criar conta</Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }

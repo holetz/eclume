@@ -81,6 +81,20 @@ svg.lucide {
   stroke-linejoin: miter;
 }
 
+.auth-tagline {
+  font-size: 13px;
+}
+
+/* Título e rodapé do formulário de acesso, como nas composições do DS. */
+.auth-form h2 {
+  margin: 0;
+}
+
+.auth-note {
+  margin: 0;
+  font-size: 13px;
+}
+
 @media (max-width: 56rem) {
   .auth {
     grid-template-columns: minmax(0, 1fr);
