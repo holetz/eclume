@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
-from eclume_server_testing.fakes import transcribed
+from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
+from eclume_server_testing.fakes import run_cpu, run_gpu, transcribed
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -139,3 +140,66 @@ def test_escopos_e_gravacao_de_outra_conta(
     assert other["isError"] is True
     assert "inexistente" in other["content"][0]["text"]
     assert call(client, stranger, "get_recording", recording_id="nao-e-uuid")["isError"] is True
+
+
+WRITE_TOOLS = {"update_summary", "request_summary", "update_fields", "delete_recording"}
+CLAUDE = {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet"}
+
+
+def test_ferramentas_de_escrita_com_escopos(
+    client: TestClient, admin: Api, as_user: Callable[[Account], Api], make_user: Callable, services: Services
+):
+    admin.post("/api/v1/admin/agent-providers", json=CLAUDE)
+    account = make_user()
+    session = as_user(account)
+    one_on_one = next(t for t in agenda_types(services, account.user_id) if t["name"] == "1:1")
+    recording = upload_file(session, audio_bytes(2001), title="Alinhamento", agenda_type_id=str(one_on_one["id"]))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    rid = recording["id"]
+    reader = token_of(session.pat(*ALL_READ))
+    writer = token_of(session.pat(*ALL_READ, "summaries:write", "recordings:write"))
+
+    tools = {tool["name"]: tool for tool in rpc(client, reader, "tools/list").json()["result"]["tools"]}
+    assert set(tools) == READ_TOOLS | WRITE_TOOLS
+    assert tools["delete_recording"]["annotations"]["destructiveHint"] is True
+    assert tools["update_fields"]["annotations"]["idempotentHint"] is True
+
+    # Resumo: edição sobre a atual e os dois pedidos.
+    denied = call(client, reader, "update_summary", recording_id=rid, content_md="# Novo")
+    assert denied["isError"] is True
+    assert "summaries:write" in denied["content"][0]["text"]
+    edited = call(client, writer, "update_summary", recording_id=rid, content_md="# Novo")["structuredContent"]
+    summary = call(client, reader, "get_summary", recording_id=rid)["structuredContent"]
+    assert (summary["version_id"], summary["origin"], summary["content_md"]) == (
+        edited["version_id"],
+        "manual",
+        "# Novo",
+    )
+
+    generated = call(client, writer, "request_summary", recording_id=rid)["structuredContent"]
+    assert generated["mode"] == "generate"
+    assert session.get(f"/api/v1/summaries/{generated['pending_id']}").json()["status"] == "queued"
+    chat = call(client, writer, "request_summary", recording_id=rid, instruction="Mais curto.")["structuredContent"]
+    assert chat["mode"] == "chat"
+    assert session.get(f"/api/v1/summary-chat-messages/{chat['pending_id']}").json()["status"] == "queued"
+
+    # Campos: título e tags viram `edited`; campo desconhecido é erro de ferramenta.
+    changed = call(client, writer, "update_fields", recording_id=rid, title="Com a Aurora", tags=["aurora", "1-1"])
+    values = {f["name"]: f for f in changed["structuredContent"]["fields"]}
+    assert (values["Título"]["value"], values["Título"]["origin"]) == ("Com a Aurora", "edited")
+    assert (values["Tags"]["value"], values["Tags"]["origin"]) == (["aurora", "1-1"], "edited")
+    assert session.get(f"/api/v1/recordings/{rid}").json()["title"] == "Com a Aurora"
+    unknown = call(
+        client, writer, "update_fields", recording_id=rid, fields={"00000000-0000-0000-0000-000000000000": "x"}
+    )
+    assert unknown["isError"] is True
+    assert call(client, writer, "update_fields", recording_id=rid)["isError"] is True
+
+    # Exclusão: escopo próprio.
+    refused = call(client, writer, "delete_recording", recording_id=rid)
+    assert refused["isError"] is True
+    assert refused["content"][0]["text"].endswith("Falta o escopo recordings:delete neste token.")
+    deleter = token_of(session.pat("recordings:delete"))
+    assert call(client, deleter, "delete_recording", recording_id=rid)["structuredContent"]["deleted"] is True
+    assert session.get(f"/api/v1/recordings/{rid}").status_code == 404

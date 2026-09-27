@@ -21,13 +21,22 @@ from sqlalchemy import select, text
 from eclume_server.agenda_types import agenda_type_json
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.fields import field_json, recording_values
+from eclume_server.fields import builtin_fields, field_json, get_field, recording_values, set_value, validate_value
 from eclume_server.markers import list_markers, marker_json
 from eclume_server.pagination import decode_position, encode_position
 from eclume_server.problems import ApiProblemError
-from eclume_server.recordings import Library, get_visible, list_library, render
+from eclume_server.recordings import Library, delete_recording_of, get_visible, list_library, render
 from eclume_server.search import SearchFilters, search
-from eclume_server.summaries import recording_transcript, summary_state
+from eclume_server.summaries import (
+    create_summary,
+    edit_current,
+    recording_transcript,
+    summary_agenda_type,
+    summary_json,
+    summary_provider,
+    summary_state,
+)
+from eclume_server.summary_chat import open_request
 from eclume_server.transcripts import load_speakers, load_transcript, speaker_json, transcript_text_window
 
 if TYPE_CHECKING:
@@ -39,6 +48,9 @@ if TYPE_CHECKING:
     from eclume_server.context import AppContext
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False)
+IDEMPOTENT = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=False)
 MAX_TRANSCRIPT_CHARS = 60_000
 RecordingId = Annotated[str, Field(description="Id (UUID) da gravação, de search_recordings.")]
 _TAGS = text(
@@ -140,6 +152,11 @@ async def _search(  # noqa: PLR0913 — os filtros da busca
 
 def register(server: MCPServer) -> None:
     """Registra as ferramentas no servidor."""
+    _read_tools(server)
+    _write_tools(server)
+
+
+def _read_tools(server: MCPServer) -> None:
 
     @server.tool(
         annotations=READ_ONLY,
@@ -281,6 +298,125 @@ def register(server: MCPServer) -> None:
             async with user_tx(app_of(ctx).engine, principal.user_id) as conn:
                 state = await summary_state(conn, (await recording_transcript(conn, rid))["id"])
         return summary_view(recording_id, state)
+
+
+def _write_tools(server: MCPServer) -> None:
+    @server.tool(
+        annotations=WRITE,
+        description=(
+            "Grava um novo texto do resumo (Markdown) como versão manual, sobre a versão atual. As versões "
+            "anteriores ficam guardadas."
+        ),
+    )
+    async def update_summary(
+        recording_id: RecordingId,
+        content_md: Annotated[str, Field(min_length=1, max_length=200_000, description="O resumo inteiro.")],
+        ctx: Context,
+    ) -> dict[str, Any]:
+        principal = need(ctx, "summaries:read", "summaries:write")
+        rid = uuid_of(recording_id)
+        with as_tool_error():
+            async with user_tx(app_of(ctx).engine, principal.user_id) as conn:
+                transcript = await recording_transcript(conn, rid)
+                row = await edit_current(conn, transcript, content_md, principal.user_id)
+        version = summary_json(row)
+        return {"recording_id": recording_id, "version_id": version["id"], "version": version["version"]}
+
+    @server.tool(
+        annotations=WRITE,
+        description=(
+            "Pede um resumo novo. Sem instruction, gera pelas instruções do tipo de agenda da gravação; com "
+            "instruction, manda o pedido ao agente de ajuste, que muda o resumo atual. Volta o id da versão ou "
+            "da resposta pendente: consulte get_summary depois."
+        ),
+    )
+    async def request_summary(
+        recording_id: RecordingId,
+        ctx: Context,
+        instruction: Annotated[
+            str | None, Field(max_length=4000, description="O que mudar no resumo atual (chat de ajuste).")
+        ] = None,
+    ) -> dict[str, Any]:
+        principal = need(ctx, "summaries:read", "summaries:write")
+        app = app_of(ctx)
+        rid = uuid_of(recording_id)
+        with as_tool_error():
+            async with user_tx(app.engine, principal.user_id) as conn:
+                transcript = await recording_transcript(conn, rid)
+                if instruction and instruction.strip():
+                    _, reply = await open_request(conn, transcript, instruction.strip(), principal.user_id)
+                else:
+                    agenda_type = await summary_agenda_type(conn, transcript, None)
+                    provider = await summary_provider(conn, None)
+                    row = await create_summary(
+                        conn,
+                        transcript=transcript,
+                        agenda_type=agenda_type,
+                        provider=provider,
+                        trigger="manual",
+                        created_by=principal.user_id,
+                    )
+        if instruction and instruction.strip():
+            await app.queue.enqueue_summary_chat(reply["id"])
+            return {"recording_id": recording_id, "mode": "chat", "pending_id": str(reply["id"])}
+        await app.queue.enqueue_summarize(row["id"])
+        return {"recording_id": recording_id, "mode": "generate", "pending_id": str(row["id"])}
+
+    @server.tool(
+        annotations=IDEMPOTENT,
+        description=(
+            "Edita o título, as tags (a lista inteira) e os campos do usuário de uma gravação; o valor vira "
+            "origem editado, que o preenchimento automático não sobrescreve. Use os ids e as opções de "
+            "list_fields_and_tags."
+        ),
+    )
+    async def update_fields(
+        recording_id: RecordingId,
+        ctx: Context,
+        title: Annotated[str | None, Field(min_length=1, description="Título novo.")] = None,
+        tags: Annotated[list[str] | None, Field(description="A lista inteira de tags.")] = None,
+        fields: Annotated[
+            dict[str, Any] | None,
+            Field(description="Valores por id de campo: texto, uma das opções ou lista de textos; null limpa."),
+        ] = None,
+    ) -> dict[str, Any]:
+        principal = need(ctx, "recordings:write")
+        rid = uuid_of(recording_id)
+        if title is None and tags is None and not fields:
+            msg = "Informe title, tags ou fields."
+            raise ToolError(msg)
+        with as_tool_error():
+            async with user_tx(app_of(ctx).engine, principal.user_id) as conn:
+                await get_visible(conn, rid)
+                builtins = await builtin_fields(conn, principal.user_id)
+                changes = [(builtins["title"], title), (builtins["tags"], tags)]
+                changes = [(field, value) for field, value in changes if value is not None]
+                for field_id, value in (fields or {}).items():
+                    changes.append((await get_field(conn, uuid_of(field_id, "field_id")), value))
+                for field, value in changes:
+                    await set_value(conn, rid, field, validate_value(field, value), "edited")
+                recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == rid))).mappings().one()
+                values = await recording_values(conn, recording)
+        return {
+            "recording_id": recording_id,
+            "fields": [
+                {"field_id": v["field"]["id"], "name": v["field"]["name"], "value": v["value"], "origin": v["origin"]}
+                for v in values
+            ],
+        }
+
+    @server.tool(
+        annotations=DESTRUCTIVE,
+        description=(
+            "Exclui a gravação para sempre: áudio, transcrição, resumos, marcadores e campos. Confirme com o "
+            "usuário antes."
+        ),
+    )
+    async def delete_recording(recording_id: RecordingId, ctx: Context) -> dict[str, Any]:
+        principal = need(ctx, "recordings:delete")
+        with as_tool_error():
+            await delete_recording_of(app_of(ctx), principal.user_id, uuid_of(recording_id))
+        return {"recording_id": recording_id, "deleted": True}
 
 
 def summary_view(recording_id: str, state: dict[str, Any]) -> dict[str, Any]:

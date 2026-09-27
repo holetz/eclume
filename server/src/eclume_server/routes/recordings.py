@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from eclume_server.agenda_types import apply_type
@@ -26,6 +26,7 @@ from eclume_server.recordings import (
     Library,
     Sort,
     Status,
+    delete_recording_of,
     enqueue_transcription,
     get_visible,
     list_library,
@@ -160,10 +161,7 @@ async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> 
 
     As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
     """
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        row = await get_visible(conn, recording_id)
-        await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
-    await ctx.storage.delete_recording(row["audio_key"], recording_id)
+    await delete_recording_of(ctx, principal.user_id, recording_id)
     return Response(status_code=204)
 
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, and_, exists, false, func, insert, or_, select, true, tuple_, update
+from sqlalchemy import ColumnElement, and_, delete, exists, false, func, insert, or_, select, true, tuple_, update
 
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
@@ -137,6 +137,17 @@ async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa
     if row is None:
         raise not_found("Gravação inexistente ou sem acesso.")
     return row
+
+
+async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID) -> None:
+    """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
+
+    As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
+    """
+    async with user_tx(ctx.engine, user_id) as conn:
+        row = await get_visible(conn, recording_id)
+        await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
+    await ctx.storage.delete_recording(row["audio_key"], recording_id)
 
 
 async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[str, Any]]:

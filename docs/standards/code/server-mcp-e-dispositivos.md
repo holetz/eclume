@@ -51,8 +51,9 @@ rotas no [contrato v1](../api/contrato-v1.md).
 
 Nomes em inglês (convenção dos clientes MCP); descrições, erros e `instructions` em pt-BR. Recebem
 `recording_id` como UUID em texto e devolvem JSON estruturado (`structuredContent`, com o texto
-espelhado). Chamam as funções de domínio (`recordings.list_library`, `search.search`,
-`summaries`, `fields`, `transcripts`), nunca os handlers das rotas.
+espelhado). Chamam as funções de domínio (`recordings.list_library`, `recordings.delete_recording_of`,
+`search.search`, `summaries`, `summary_chat.open_request`, `fields`, `transcripts`), nunca os
+handlers das rotas; o que vivia só no handler desce para o módulo de domínio.
 
 | Ferramenta | O que faz | Escopos | Anotação |
 |---|---|---|---|
@@ -61,6 +62,10 @@ espelhado). Chamam as funções de domínio (`recordings.list_library`, `search.
 | `list_fields_and_tags()` | campos (tipo e opções), tags em uso e tipos de agenda, para editar com valores válidos | `recordings:read` | readOnly |
 | `get_transcript(recording_id, start_ms?, end_ms?)` | `[mm:ss] Locutor: fala`, até 60 000 caracteres, com `next_start_ms` quando sobra | `transcripts:read` | readOnly |
 | `get_summary(recording_id)` | a versão atual (Markdown, id, número, origem) e a geração em aberto | `summaries:read` | readOnly |
+| `update_summary(recording_id, content_md)` | versão `manual` nova sobre a atual (`summaries.edit_current`, sem `base_version`) | `summaries:read`, `summaries:write` | — |
+| `request_summary(recording_id, instruction?)` | sem instrução, um resumo novo pelas instruções do tipo e o provider de resumos; com instrução, uma mensagem ao chat de ajuste; devolve o id pendente | `summaries:read`, `summaries:write` | — |
+| `update_fields(recording_id, title?, tags?, fields?)` | título, tags (a lista inteira) e campos do usuário por id, validados pelo tipo do campo, com origem `edited` | `recordings:write` | idempotent |
+| `delete_recording(recording_id)` | a exclusão da API (`recordings.delete_recording_of`) | `recordings:delete` | destructive |
 
 - **Erros.** Escopo faltando, gravação inexistente ou de outra conta e validação voltam como erro
   de ferramenta (`isError: true`), com a mensagem em pt-BR ("Falta o escopo recordings:delete
