@@ -198,20 +198,17 @@ test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
   await expect(page.getByText('Configuração salva.')).toBeVisible()
   await screenshot(page, '12-admin-transcricao')
 
-  // Saúde: GPU e jobs do exemplo.
+  // Saúde: GPU e etapas do exemplo, sem título de gravação.
   await tabs.getByRole('link', { name: 'Saúde' }).click()
-  await expect(page.getByText('NVIDIA GeForce GTX 1660 SUPER')).toBeVisible()
-  await expect(page.getByRole('row', { name: /Reunião de alinhamento — cliente Aurora/ })).toBeVisible()
+  await expect(page.getByText('NVIDIA GeForce GTX 1660 SUPER · 6 GB')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Etapas do processamento · últimas 24 h' })).toBeVisible()
+  await expect(page.getByText(/Reunião de alinhamento/)).toHaveCount(0)
   await screenshot(page, '13-admin-saude')
 
-  // Segredos (fora da barra até a 2.5): só escrita.
+  // Segredos saiu: o token do Hugging Face fica em Locutores, só de escrita.
   await page.goto('/admin/segredos')
-  const hf = page.getByRole('form', { name: 'Token do Hugging Face' })
-  await expect(hf.getByText('Definido')).toBeVisible()
-  await hf.getByLabel('Novo valor').fill('hf_e2e_token')
-  await hf.getByRole('button', { name: 'Salvar' }).click()
-  await expect(hf.getByText('Token do Hugging Face salvo.')).toBeVisible()
-  await expect(hf.getByLabel('Novo valor')).toHaveValue('')
+  await expect(page.getByRole('heading', { level: 1, name: 'Locutores' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Token do Hugging Face' }).getByText('•••••••• guardado')).toBeVisible()
 
   // Usuários: as contas do exemplo com a contagem de gravações; sem convites nem papéis.
   await tabs.getByRole('link', { name: 'Usuários' }).click()
