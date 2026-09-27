@@ -51,7 +51,7 @@ describe('AppShell', () => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     expect(localStorage.getItem('eclume-tema')).toBe('dark')
     await userEvent.selectOptions(screen.getByLabelText('Tema'), 'system')
-    expect(document.documentElement).not.toHaveAttribute('data-theme')
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light')
     expect(localStorage.getItem('eclume-tema')).toBeNull()
   })
 
