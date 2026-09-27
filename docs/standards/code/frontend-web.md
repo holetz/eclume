@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features (biblioteca, gravação, pessoas, busca, coleções) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca, gravação, pessoas, busca, coleções) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#36
 maintainer: holetz
 ---
 
@@ -45,14 +45,14 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | Pasta | O que tem |
 |---|---|
 | `src/api/` | cliente gerado, `client.ts`, `problem.ts` |
-| `src/app/` | shell, navegação (`nav.ts`), rotas (`routes.tsx`), sessão, providers, tema |
+| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema |
 | `src/features/<área>/` | página, componentes, CSS Module e testes de cada área |
 | `src/upload/` | motor de upload multipart, sem React |
-| `src/styles/` | tokens (`tokens.css`) e primitivas globais (`global.css`) |
+| `src/styles/` | `global.css` (entrada), `fonts.css`, `eclume.css` (cópia fiel do DS) e `app.css` (produto): [web-design-system.md](web-design-system.md) |
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/convite/:token`, `/gravacoes/:id`, `/importar`, `/pessoas`,
+- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/convite/:token`, `/gravacoes/:id`, `/importar`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/*`), e os filtros na
   query string também em pt-BR (`?de=`, `?colecao=`, `?tag=` na biblioteca;
   `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
@@ -63,8 +63,25 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
-- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`; uma área nova de
-  outra spec entra desligada, e ligá-la é mudar `enabled` e registrar a rota.
+- **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `group`, `section`
+  (`main` ou `more`), `enabled` e `adminOnly`, e `navGroups()` devolve as duas seções. A principal
+  tem Gravações (Biblioteca, Busca, Importar arquivo), Organizar (Pessoas, Coleções, Campos e
+  regras, Tipos de agenda) e Administração (só admin); a recolhível **Configurações e ajuda** (um
+  `<details class="nav-more">`) tem Minhas configurações (Conexão MCP, Tokens de acesso, App
+  desktop, App móvel) e Ajuda (Central de ajuda). Ela abre sozinha quando a rota atual é dela e,
+  fora isso, guarda a escolha enquanto a página vive. Uma área nova de outra spec entra desligada,
+  com a rota do mapa de telas v6 (`/config/campos`, `/config/agendas`, `/config/mcp`, `/app-movel`,
+  `/ajuda`), e ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`;
+  cada grupo é um `role="group"` rotulado pelo título.
+- **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
+  shell, o botão Ajuda); ele também dá o título da aba. Rota desconhecida mostra
+  `NotFoundPage` dentro do shell, com o link de volta à biblioteca.
+- **Gaveta de ajuda** (`help.ts`, `HelpProvider`, `HelpDrawer`): o `HelpProvider`, montado no
+  `AppShell`, abre a `.help-drawer` com `?` (sem Ctrl, Meta ou Alt, fora de `input`, `textarea`,
+  `select` e `contenteditable`) ou pelo botão Ajuda do `PageHead`, e fecha com Esc, devolvendo o
+  foco a quem abriu. A página declara o tópico com `useHelpTopic(chave)`; os tópicos moram em
+  `HELP_TOPICS` (o conteúdo chega com holetz/eclume#38). A gaveta mostra os links da página, os
+  atalhos e, quando `/ajuda` estiver ligada, o link para a central.
 - **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
   `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
   vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
@@ -76,7 +93,9 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   escrita e nunca mostram o valor; o link de convite, como o segredo do PAT, aparece uma vez; a
   Saúde relê a cada 10 s (`refetchInterval`). As regras do server estão em
   [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar` e `/convite/:token` (aceite do convite: nome, senha de 12+ e
+- **Rotas públicas:** `/entrar`, `/cadastro` (Criar conta, com o aceite obrigatório de "Sou
+  responsável por pedir o consentimento das pessoas que gravo."; a tela chega com o contrato de
+  holetz/eclume#32) e `/convite/:token` (aceite do convite: nome, senha de 12+ e
   confirmação; 404 vira "convite inválido, expirado ou já usado").
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
@@ -86,12 +105,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 
 ## Visual e acessibilidade
 
-- Tokens em CSS custom properties, tema claro e escuro por `prefers-color-scheme` ou pela escolha
-  no shell (`data-theme` no `<html>`, lembrada no `localStorage`). Cores novas entram como token
-  nos três blocos de `tokens.css` (claro, escuro por preferência e escuro explícito), com
-  contraste AA.
-- CSS Modules por componente e primitivas globais (`btn`, `field`, `card`, `badge`, `alert`,
-  `progress`). Sem framework de CSS e sem fonte externa.
+- A base visual é o Design System do eclume ([web-design-system.md](web-design-system.md)):
+  tokens e classes do `eclume.css`, fontes Archivo e IBM Plex Mono servidas pelo build, ícones
+  Lucide e tema por `data-theme` no `<html>` ("Do sistema" resolve `prefers-color-scheme`; a
+  escolha explícita fica no `localStorage`). Cor nova entra como token no DS.
+- As telas de acesso usam o `AuthLayout` (`.auth` do DS: campo da marca e formulário alinhado à
+  esquerda); o resto fica no `AppShell` (`.shell`, `.sidebar`, `.main`), com a barra superior e o
+  menu compacto abaixo de 56rem.
+- CSS Modules por componente, só com o que o DS não tem. Sem framework de CSS e sem fonte
+  externa.
 - Toda ação alcançável por teclado, foco visível, skip link, rótulos em todos os campos,
   `aria-live` em progresso e confirmações. Estado nunca só por cor: o selo tem texto.
 - Enum desconhecido na resposta aparece cru, sem quebrar a tela (o contrato só cresce).
@@ -151,7 +173,9 @@ Depois de recarregar, o import recomeça pela conversão.
   resposta do login, pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em
-  `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado.
+  `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado. O helper `navTo()`
+  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts` é a
+  verificação visual contra o DS ([web-design-system.md](web-design-system.md)).
 - A CI roda os unitários no job `web` e o E2E, junto dos testes de navegador da conversão, no
   job `web-browser`.
 - **E2E contra o backend real** (`npm run test:e2e:real`, `playwright.real.config.ts`,
