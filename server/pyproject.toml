@@ -25,6 +25,8 @@ dependencies = [
   "python-docx>=1.1",
   # servidor MCP em /mcp (holetz/eclume#35)
   "mcp>=2.2,<3",
+  # anúncio e descoberta na rede local (mDNS, holetz/eclume#35)
+  "zeroconf>=0.151,<1",
 ]
 
 [project.scripts]

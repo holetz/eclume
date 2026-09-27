@@ -123,3 +123,45 @@ e as versões. `ca_sha256` é o SHA-256, em hex minúsculo, do DER do primeiro c
 em cache pelo `mtime`: no primeiro deploy a CA é publicada depois de o server subir, e o
 descritor passa a trazê-la sem restart. Sem arquivo (ou PEM inválido), `null`. É a fonte do mDNS,
 do QR, do pareamento e do endereço embutido no instalador.
+
+## Descoberta na rede (mDNS)
+
+- **Registro** (`discovery.py`): tipo `_eclume._tcp.local.`, instância `<ECLUME_SERVER_NAME>`,
+  host `<nome>.local.`, endereço e porta lidos de `ECLUME_PUBLIC_URL` (um nome é resolvido para
+  IPv4). Nunca os IPs das interfaces: na rede do host, as bridges do Docker também são
+  interfaces. O TXT tem `url` (a URL pública), `ca` (o `ca_sha256`, vazio sem CA), `v` (versão do
+  contrato) e `name`.
+- **`eclume-server announce`** registra com `zeroconf.asyncio` só na interface do endereço
+  público, relê o PEM a cada 60 s e atualiza o TXT quando a CA muda (inclusive quando ela é
+  publicada depois); ao parar, manda os goodbyes. Sem `ECLUME_PUBLIC_URL`, recusa.
+- **`eclume-server discover [--timeout N]`** escuta `N` segundos e imprime um JSON por servidor
+  (`name`, `url`, `ca_sha256`, `contract_version`, `addresses`, `port`); nenhum → saída 1. Serve
+  ao diagnóstico e à prova do deploy.
+- **Onde roda.** No serviço `mdns` do compose de produção: a imagem do server, `network_mode:
+  host` (o multicast não sai da bridge), a pasta de downloads montada read-only e nenhuma porta
+  publicada. Não depende de sudo nem de pacote no host; o deploy o recria depois do `publish-ca`.
+- **Firewall.** O multicast usa 5353/udp na rede do host e passa pelo ufw (só as portas
+  publicadas pelo Docker passam por fora): `ufw allow from 192.168.15.0/24 to any port 5353 proto
+  udp`, passo manual do runbook do host.
+
+## Fixação da CA pelos apps
+
+O Caddy `tls internal` troca o certificado folha a cada ~12 h e o intermediário a cada ~7 dias, e
+não envia a raiz na cadeia; a raiz vale 10 anos e vive no volume `caddy-data`. Por isso os apps
+fixam a **raiz**, nunca o folha, sem instalar a CA no sistema:
+
+1. obter `url` e `ca_sha256` — do instalador (endereço embutido no build), do TXT do mDNS ou do
+   QR (`pair_url`);
+2. baixar `<url>/downloads/eclume-root.crt` numa conexão sem verificação;
+3. conferir o SHA-256 do DER; divergiu, descartar e parar;
+4. gravar o PEM e usá-lo como `ca_path` (raízes do SO + esta), o caminho que o `transport.rs` e o
+   updater do desktop já honram.
+
+Com endereço digitado e sem impressão digital, o app confia na primeira CA (TOFU) e mostra a
+impressão digital ao usuário. A troca do código de pareamento e o login só acontecem depois da
+fixação; `GET /api/v1/server` confirma o que veio e permite trocar de servidor ("Usar outro").
+
+**Endereço embutido no instalador.** O empacotamento Tauri de hoje embute no **build**: o
+`desktop-release.yml` passa `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (variáveis do
+repositório, ao lado de `ECLUME_DOWNLOADS_URL`), e o app os lê por `option_env!`, como o
+`DEFAULT_WEB_URL`. O release já é por servidor: os manifestos têm URLs absolutas deste host.
