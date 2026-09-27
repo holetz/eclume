@@ -89,7 +89,9 @@ dele. O prefixo segue `eclp_`, que o `PatStore` do desktop valida.
 ## Credencial de dispositivo
 
 - **É um token `kind: device`** com `platform`, nome = nome do aparelho, escopos
-  `recordings:read` e `recordings:write` (upload, marcadores e status das próprias gravações) e
+  `recordings:read` e `recordings:write` (upload, marcadores, status das próprias gravações e a
+  lista dos tipos de agenda, que `GET /agenda-types` aceita com `recordings:read` desde a 2.4.0;
+  o dispositivo não ganha `summaries:read`, então não lê resumos nem o resto de `/agenda-types`) e
   sem validade. Aparece em `GET /tokens?kind=device` ("App móvel", "App desktop"), e
   `DELETE /tokens/{id}` ("Desvincular") desliga o aparelho. `POST /tokens` nunca cria um.
 - **Login** (`POST /devices/login`, público): e-mail, senha, `device_name` e `platform`; a senha

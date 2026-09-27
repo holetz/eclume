@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.3.0
+  version: 2.4.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -513,6 +513,8 @@ paths:
             examples:
               desktop:
                 $ref: "#/components/examples/UploadCreateRequest"
+              celular:
+                $ref: "#/components/examples/UploadCreateMobile"
       responses:
         "200":
           description: Deduplicado. Já existe gravação com este hash.
@@ -1917,10 +1919,15 @@ paths:
       tags: [agenda-types]
       operationId: listAgendaTypes
       summary: Tipos de agenda do usuário
-      description: Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+      description: |
+        Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde a
+        2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
+        lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+        `summaries:*`).
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
+        - pat: ["recordings:read"]
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
@@ -3277,8 +3284,9 @@ components:
       description: |
         PAT pessoal: `Authorization: Bearer eclp_<segredo>`. Age como o usuário dono, limitado
         aos escopos concedidos. Os escopos exigidos por operação estão no requisito de segurança
-        (`pat: [escopo, ...]`, todos obrigatórios). Nenhum escopo implica outro. Faltando
-        escopo, a resposta é 403 com `code: insufficient_scope` e `required_scopes`.
+        (`pat: [escopo, ...]`, todos obrigatórios; vários requisitos `pat` são alternativas, e
+        basta um). Nenhum escopo implica outro. Faltando escopo, a resposta é 403 com
+        `code: insufficient_scope` e `required_scopes`.
 
   parameters:
     CsrfToken:
@@ -3525,7 +3533,9 @@ components:
             vigor). Códigos novos entram de forma aditiva.
           type: string
         required_scopes:
-          description: Com `insufficient_scope`, os escopos que faltaram.
+          description: |
+            Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
+            alternativos, as alternativas (basta um deles).
           type: array
           items:
             $ref: "#/components/schemas/Scope"
@@ -3970,12 +3980,12 @@ components:
           $ref: "#/components/schemas/NextCursor"
 
     Source:
-      description: Origem do áudio.
+      description: Origem do áudio. `desktop` e `mobile` são os apps que gravam.
       type: string
-      enum: [desktop, upload, api]
+      enum: [desktop, mobile, upload, api]
 
     Capture:
-      description: Contexto da captura, preenchido pelo app desktop.
+      description: Contexto da captura, preenchido pelo app que gravou (desktop ou celular).
       type: object
       properties:
         meeting_app:
@@ -3985,7 +3995,7 @@ components:
         device_name:
           type: [string, "null"]
         client_version:
-          description: Versão do app que gravou (`eclume-desktop/0.3.0`).
+          description: Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`).
           type: [string, "null"]
 
     RecordingMetadata:
@@ -4024,8 +4034,8 @@ components:
         recorded_at_source:
           description: |
             De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
-            `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
-            `recorded_at`, `upload`.
+            `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
+            sem `recorded_at`, `upload`.
           $ref: "#/components/schemas/RecordedAtSource"
         kind:
           $ref: "#/components/schemas/RecordingKind"
@@ -6452,6 +6462,9 @@ components:
     UploadCreateRequest:
       summary: Gravação do desktop, 18 MB em Opus
       externalValue: ./fixtures/upload-create-request.json
+    UploadCreateMobile:
+      summary: Gravação do celular com marcadores e tipo de agenda escolhido ao parar
+      externalValue: ./fixtures/upload-create-mobile.json
     UploadCreated:
       summary: Upload em 3 partes, URLs das partes emitidas
       externalValue: ./fixtures/upload-created.json

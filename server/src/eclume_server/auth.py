@@ -161,6 +161,19 @@ def requires(
     return dependency
 
 
+def requires_any(*scopes: str) -> Callable[[Request, AppContext], Awaitable[Principal]]:
+    """Como `requires`, mas basta ao PAT um dos escopos (o contrato lista um requisito `pat` por escopo)."""
+    authenticated = requires()
+
+    async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
+        principal = await authenticated(request, ctx)
+        if principal.method == "pat" and not any(scope in principal.scopes for scope in scopes):
+            raise insufficient_scope(list(scopes), any_of=True)
+        return principal
+
+    return dependency
+
+
 async def require_admin(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> AdminPrincipal:
     """Dependência das rotas de admin: só a sessão de admin; PAT ou sessão de usuário são 401."""
     if request.headers.get("Authorization") is not None:

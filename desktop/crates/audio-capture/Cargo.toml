@@ -12,9 +12,12 @@ publish = false
 
 [features]
 # Sem `backends`, o crate só expõe o trait `AudioSource` e o anel de amostras, sem nenhuma
-# dependência de sistema — é assim que o `eclume-recorder` o usa nos testes.
+# dependência de sistema — é assim que o `eclume-recorder` o usa nos testes. `mic` é só o
+# microfone por `cpal` (AAudio no Android), sem os backends de áudio do sistema, que o celular
+# não tem.
 default = ["backends"]
-backends = ["dep:cpal", "dep:pipewire", "dep:libpulse-binding", "dep:wasapi", "dep:cidre"]
+mic = ["dep:cpal"]
+backends = ["mic", "dep:pipewire", "dep:libpulse-binding", "dep:wasapi", "dep:cidre"]
 
 [dependencies]
 anyhow = "1"

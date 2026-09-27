@@ -14,7 +14,12 @@
 //! data de início (captura, metadados do arquivo importado ou a pessoa), `source` separa a
 //! gravação do app da importação de arquivo, e `original_name`/`content_type` guardam o nome e o
 //! tipo do arquivo importado. A tabela `markers` guarda os marcadores de cada gravação até o
-//! upload. Uma fila v1 ou v2 ganha as colunas e a tabela na abertura, sem perder linhas.
+//! upload.
+//!
+//! Esquema v4: `title` e `agenda_type_id` são o título e o tipo de agenda escolhidos ao parar (no
+//! celular, a folha "Gravação salva"), e `details_pending` segura o sync enquanto essa folha está
+//! aberta, por no máximo [`DETAILS_WAIT_MS`]. Uma fila v1, v2 ou v3 ganha as colunas e a tabela na
+//! abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,7 +29,10 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRe
 use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
 use serde::Serialize;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
+
+/// Quanto uma gravação com `details_pending` espera o título e o tipo antes de subir sem eles.
+pub const DETAILS_WAIT_MS: i64 = 10 * 60 * 1_000;
 
 /// Tamanho máximo da nota de um marcador, em caracteres (o limite do contrato).
 pub const MAX_MARKER_NOTE: usize = 500;
@@ -52,7 +60,10 @@ CREATE TABLE IF NOT EXISTS recordings (
     recorded_at_source TEXT NOT NULL DEFAULT 'capture',
     source             TEXT NOT NULL DEFAULT 'desktop',
     original_name      TEXT,
-    content_type       TEXT
+    content_type       TEXT,
+    title              TEXT,
+    agenda_type_id     TEXT,
+    details_pending    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
 CREATE TABLE IF NOT EXISTS markers (
@@ -65,8 +76,8 @@ CREATE TABLE IF NOT EXISTS markers (
 CREATE INDEX IF NOT EXISTS markers_recording ON markers (recording_id, at_ms);
 ";
 
-/// Colunas que a v2 e a v3 acrescentaram, com o tipo, para migrar uma fila anterior.
-const ADDED_COLUMNS: [(&str, &str); 11] = [
+/// Colunas que a v2, a v3 e a v4 acrescentaram, com o tipo, para migrar uma fila anterior.
+const ADDED_COLUMNS: [(&str, &str); 14] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
     ("next_attempt_at", "INTEGER"),
@@ -78,6 +89,9 @@ const ADDED_COLUMNS: [(&str, &str); 11] = [
     ("source", "TEXT NOT NULL DEFAULT 'desktop'"),
     ("original_name", "TEXT"),
     ("content_type", "TEXT"),
+    ("title", "TEXT"),
+    ("agenda_type_id", "TEXT"),
+    ("details_pending", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
 /// Um enum guardado como texto na fila, lido, escrito e serializado no vocabulário do contrato.
@@ -148,8 +162,10 @@ text_enum! {
 text_enum! {
     /// Como o áudio chegou (`source` do contrato).
     Source {
-        /// Gravado pelo app.
+        /// Gravado pelo app desktop.
         Desktop = "desktop",
+        /// Gravado pelo app móvel.
+        Mobile = "mobile",
         /// Arquivo importado.
         Upload = "upload",
     }
@@ -275,6 +291,12 @@ pub struct QueuedRecording {
     pub original_name: Option<String>,
     /// Tipo do arquivo; `None` é Ogg/Opus.
     pub content_type: Option<String>,
+    /// Título escolhido ao parar; `None` deixa o servidor derivar.
+    pub title: Option<String>,
+    /// Tipo de agenda escolhido ao parar (UUID do servidor).
+    pub agenda_type_id: Option<String>,
+    /// A pessoa ainda pode dar título e tipo: o sync espera.
+    pub details_pending: bool,
 }
 
 impl QueuedRecording {
@@ -305,6 +327,9 @@ impl QueuedRecording {
                 source: row.get("source")?,
                 original_name: row.get("original_name")?,
                 content_type: row.get("content_type")?,
+                title: row.get("title")?,
+                agenda_type_id: row.get("agenda_type_id")?,
+                details_pending: row.get::<_, i64>("details_pending")? != 0,
             },
             status,
         ))
@@ -419,12 +444,15 @@ impl Queue {
     }
 
     /// Reserva a próxima gravação a sincronizar (a `pending` mais antiga) e a marca `syncing`.
+    /// Uma gravação com `details_pending` fica de fora até [`DETAILS_WAIT_MS`] depois do fim.
     pub fn claim_next(&mut self) -> Result<Option<QueuedRecording>> {
         let tx = self.conn.transaction()?;
         let id: Option<String> = tx
             .query_row(
-                "SELECT id FROM recordings WHERE status = 'pending' ORDER BY started_at LIMIT 1",
-                [],
+                "SELECT id FROM recordings WHERE status = 'pending'
+                   AND (details_pending = 0 OR COALESCE(ended_at, started_at) <= ?1)
+                 ORDER BY started_at LIMIT 1",
+                params![now_ms().saturating_sub(DETAILS_WAIT_MS)],
                 |row| row.get(0),
             )
             .optional()?;
@@ -532,6 +560,57 @@ impl Queue {
             bail!("gravação {id} não está na fila");
         }
         Ok(())
+    }
+
+    /// Muda a origem da gravação (o app móvel grava com `source = mobile`).
+    pub fn set_source(&self, id: &str, source: Source) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET source = ?2 WHERE id = ?1",
+            params![id, source],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está na fila");
+        }
+        Ok(())
+    }
+
+    /// Segura o sync da gravação até a pessoa dar título e tipo, ou pular.
+    pub fn set_details_pending(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET details_pending = 1 WHERE id = ?1",
+            params![id],
+        )?;
+        if changed == 0 {
+            bail!("gravação {id} não está na fila");
+        }
+        Ok(())
+    }
+
+    /// Grava o título e o tipo de agenda (vazios viram `None`) e libera o sync. Pular é chamar
+    /// com os dois `None`.
+    pub fn save_details(
+        &self,
+        id: &str,
+        title: Option<&str>,
+        agenda_type_id: Option<&str>,
+    ) -> Result<()> {
+        self.ensure_editable(id)?;
+        let title = title.map(str::trim).filter(|t| !t.is_empty());
+        let agenda_type_id = agenda_type_id.map(str::trim).filter(|t| !t.is_empty());
+        self.conn.execute(
+            "UPDATE recordings SET title = ?2, agenda_type_id = ?3, details_pending = 0 WHERE id = ?1",
+            params![id, title, agenda_type_id],
+        )?;
+        Ok(())
+    }
+
+    /// Libera as gravações que esperavam título e tipo: na abertura seguinte, a folha que segurava
+    /// o sync já não existe.
+    pub fn release_details_pending(&self) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE recordings SET details_pending = 0 WHERE details_pending = 1",
+            [],
+        )?)
     }
 
     /// Registra um arquivo importado, já pronto: nasce `pending`, com `source = upload`.
@@ -744,7 +823,7 @@ fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     Ok(())
 }
 
-/// Acrescenta as colunas da v2 e da v3 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
+/// Acrescenta as colunas da v2, da v3 e da v4 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
 /// mexe numa tabela que já existe; a tabela `markers` nasce no `SCHEMA`).
 fn migrate(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
@@ -954,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_migra_fila_v2_real_com_os_padroes_da_v3() {
+    fn queue_migra_fila_v2_real_com_os_padroes_da_v4() {
         let dir = std::env::temp_dir().join(format!("eclume-queue-v2-{}", now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("queue.sqlite");
@@ -978,6 +1057,9 @@ mod tests {
             assert_eq!(rec.source, Source::Desktop);
             assert_eq!(rec.original_name, None);
             assert_eq!(rec.content_type, None);
+            assert_eq!(rec.title, None);
+            assert_eq!(rec.agenda_type_id, None);
+            assert!(!rec.details_pending);
         }
         let synced = queue.get("1790000000000-a1b2").unwrap().unwrap();
         assert_eq!(synced.status, Status::Synced);
@@ -1101,6 +1183,41 @@ mod tests {
         assert!(queue.add_marker("g", 9_900, None).is_err());
         queue.set_upload_state("g", None, None).unwrap();
         queue.add_marker("g", 9_900, None).unwrap();
+    }
+
+    #[test]
+    fn queue_detalhes_seguram_o_sync_ate_salvar_ou_vencer() {
+        let mut queue = Queue::open_in_memory().unwrap();
+        let agora = now_ms();
+        begin_and_finish(&queue, "folha", agora);
+        queue.set_source("folha", Source::Mobile).unwrap();
+        queue.set_details_pending("folha").unwrap();
+        assert!(queue.get("folha").unwrap().unwrap().details_pending);
+        assert!(queue.claim_next().unwrap().is_none());
+
+        queue
+            .save_details("folha", Some("  Visita ao cliente "), Some(""))
+            .unwrap();
+        let rec = queue.claim_next().unwrap().unwrap();
+        assert_eq!(rec.id, "folha");
+        assert_eq!(rec.source, Source::Mobile);
+        assert_eq!(rec.title.as_deref(), Some("Visita ao cliente"));
+        assert_eq!(rec.agenda_type_id, None);
+        assert!(!rec.details_pending);
+        // Depois de sair para o servidor, título e tipo não mudam mais aqui.
+        assert!(queue.save_details("folha", Some("outro"), None).is_err());
+
+        // A folha esquecida aberta não segura o sync para sempre.
+        begin_and_finish(&queue, "esquecida", 1);
+        queue.set_details_pending("esquecida").unwrap();
+        assert_eq!(queue.claim_next().unwrap().unwrap().id, "esquecida");
+
+        // Na abertura seguinte, o flag de uma folha que já não existe cai (o da esquecida também).
+        begin_and_finish(&queue, "reaberta", agora);
+        queue.set_details_pending("reaberta").unwrap();
+        assert_eq!(queue.release_details_pending().unwrap(), 2);
+        assert_eq!(queue.claim_next().unwrap().unwrap().id, "reaberta");
+        assert!(queue.set_details_pending("nao-existe").is_err());
     }
 
     #[test]

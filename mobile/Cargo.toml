@@ -1,0 +1,12 @@
+# Workspace cargo do app móvel do eclume. Os crates de gravação e sync são os do desktop, por
+# caminho (`../desktop/crates`); o plugin nativo fica em `plugins/`. O Cargo.lock é deste
+# workspace.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/core", "plugins/gravador"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.88"

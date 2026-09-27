@@ -7,12 +7,18 @@ license.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+# O chaveiro do SO (Secret Service, Credential Manager, Keychain). Sem ele, o segredo fica só no
+# arquivo privado: é o caso do celular, cujo cofre é o diretório do app.
+default = ["os-keyring"]
+os-keyring = ["dep:keyring"]
+
 [dependencies]
 eclume-recorder = { path = "../recorder" }
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 gethostname = "1"
-keyring = "4"
+keyring = { version = "4", optional = true }
 log = "0.4"
 mdns-sd = "0.21"
 rustls-native-certs = "0.8"

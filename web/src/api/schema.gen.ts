@@ -992,7 +992,10 @@ export interface paths {
         };
         /**
          * Tipos de agenda do usuário
-         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde a
+         *     2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
+         *     lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+         *     `summaries:*`).
          */
         get: operations["listAgendaTypes"];
         put?: never;
@@ -1648,7 +1651,10 @@ export interface components {
              *     vigor). Códigos novos entram de forma aditiva.
              */
             code: string;
-            /** @description Com `insufficient_scope`, os escopos que faltaram. */
+            /**
+             * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
+             *     alternativos, as alternativas (basta um deles).
+             */
             required_scopes?: components["schemas"]["Scope"][];
             /** @description Com `validation_failed`, um item por campo inválido. */
             errors?: {
@@ -1883,11 +1889,11 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         /**
-         * @description Origem do áudio.
+         * @description Origem do áudio. `desktop` e `mobile` são os apps que gravam.
          * @enum {string}
          */
-        Source: "desktop" | "upload" | "api";
-        /** @description Contexto da captura, preenchido pelo app desktop. */
+        Source: "desktop" | "mobile" | "upload" | "api";
+        /** @description Contexto da captura, preenchido pelo app que gravou (desktop ou celular). */
         Capture: {
             /**
              * @description App de reunião detectado.
@@ -1895,7 +1901,7 @@ export interface components {
              */
             meeting_app?: "teams" | "meet" | "zoom" | "other" | null;
             device_name?: string | null;
-            /** @description Versão do app que gravou (`eclume-desktop/0.3.0`). */
+            /** @description Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`). */
             client_version?: string | null;
         };
         /** @description Metadados livres de organização (tipo de reunião, cliente, projeto). */
@@ -1918,8 +1924,8 @@ export interface components {
             recorded_at?: string;
             /**
              * @description De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
-             *     `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
-             *     `recorded_at`, `upload`.
+             *     `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
+             *     sem `recorded_at`, `upload`.
              */
             recorded_at_source?: components["schemas"]["RecordedAtSource"];
             kind?: components["schemas"]["RecordingKind"];

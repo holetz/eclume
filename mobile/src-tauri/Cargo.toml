@@ -1,0 +1,36 @@
+[package]
+name = "eclume-mobile"
+description = "App móvel do eclume: grava com a tela bloqueada, marca instantes e sincroniza no Wi-Fi do servidor."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "eclume_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+eclume-mobile-core = { path = "../crates/core" }
+eclume-recorder = { path = "../../desktop/crates/recorder" }
+eclume-sync = { path = "../../desktop/crates/sync", default-features = false }
+# Só o microfone (cpal; AAudio no Android): o celular não tem os backends de áudio do sistema.
+eclume-audio-capture = { path = "../../desktop/crates/audio-capture", default-features = false, features = ["mic"] }
+tauri-plugin-eclume-gravador = { path = "../plugins/gravador" }
+anyhow = "1"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["protocol-asset"] }
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"
+# A mesma linha do `jni` que o Tauri usa no Android.
+jni = "0.21"

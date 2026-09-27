@@ -235,8 +235,10 @@ def test_origem_da_data_e_natureza(as_user: Callable[[Account], Api], make_user:
         recording = upload_file(api, audio_bytes(100), **fields)
         return recording["recorded_at_source"], recording["kind"], recording["recorded_at"]
 
-    # O desktop manda o relógio da captura; o navegador, a data que a pessoa confirmou ou digitou.
+    # Os apps (desktop e celular) mandam o relógio da captura; o navegador, a data que a pessoa
+    # confirmou ou digitou.
     assert origin(source="desktop", recorded_at=when) == ("capture", "meeting", when)
+    assert origin(source="mobile", recorded_at=when) == ("capture", "meeting", when)
     assert origin(recorded_at=when) == ("user", "meeting", when)
     assert origin(recorded_at=when, recorded_at_source="file_metadata", kind="note") == ("file_metadata", "note", when)
     source, kind, recorded_at = origin()

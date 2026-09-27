@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v3, com natureza, origem da data, fonte e marcadores) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, o detector de silêncio, os marcadores e os pontos de extensão.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40
+source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41
 maintainer: holetz
 ---
 
@@ -76,7 +76,8 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
   dependência nativa e testável com áudio sintético; um VAD treinado (WebRTC por FFI, Silero por
   `onnxruntime`) não compensa.
 - **Sessão.** `session::start` recebe `StartOptions { kind, stop_after_silence }`. Um `Progress`
-  compartilhado expõe `position_ms()` (amostras gravadas ÷ 16), `meter()` e `stop_reason()`. O
+  compartilhado expõe `position_ms()` (amostras gravadas ÷ 16), `meter()`, `level()` e
+  `stop_reason()`. O
   `record_loop` encerra sozinho em `Silence` ou `NoSpeech`, e o reaper, que fecha as gravações
   terminadas a cada 1 s, decide pelo motivo: `SourcesEnded` dá o aviso de sempre; `Silence`, a
   notificação "Nota salva · 42 s · processando no servidor"; `NoSpeech` **descarta** a nota
@@ -87,6 +88,19 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 - A janela mostra o medidor (`note_meter`, a cada 100 ms) e "Silêncio · para em N s". Nada mais
   abre (variante A): a bandeja troca o ícone e mostra o tempo — no título, no macOS e no Linux; na
   dica, no Windows, cuja área de notificação não mostra texto.
+
+## Pausa, tempo de áudio e nível
+
+- `ActiveRecording::set_paused(bool)` pausa sem fechar as fontes: o laço continua lendo e mixando,
+  e descarta o que lê. Reabrir o microfone em segundo plano esbarraria nas restrições do celular
+  (Android 14+), e o dispositivo aberto dá a retomada instantânea.
+- **Tempo de áudio** é o gravado sem as pausas: `audio_ms()` (o `position_ms()` do `Progress`) é o
+  `at_ms` dos marcadores e vira o `duration_ms` do upload. O relógio das telas mostra o tempo de
+  áudio.
+- `level()` é o RMS do último trecho gravado, de 0 a 1, e cai a 0 pausado: é o medidor contínuo que
+  a UI lê a cada 100 ms (o `meter()` da nota continua sendo o histórico em dBFS do detector).
+- `RecorderConfig` leva, além de `dir` e `bitrate`, a `source` gravada na fila (`desktop`, o
+  padrão, ou `mobile`) e `ask_details`: com ele, `stop` deixa a linha com `details_pending`.
 
 ## Marcadores
 
@@ -114,10 +128,13 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
   `recorded_at_source` (`capture|file_metadata|user`, padrão `capture`), `source`
   (`desktop|upload`, padrão `desktop`), `original_name` e `content_type` (nulo é
   `audio/ogg; codecs=opus`), e a tabela `markers (client_id PRIMARY KEY, recording_id, at_ms,
-  note, created_at)`. Uma fila v1 ou v2 ganha as colunas na abertura, sem perder linhas.
+  note, created_at)`. O esquema v4 (`user_version = 4`) acrescenta `title` e `agenda_type_id`
+  (escolhidos ao parar e levados no `UploadCreate`), `details_pending` (0/1) e o valor `mobile` em
+  `source`. Uma fila v1, v2 ou v3 ganha as colunas na abertura, sem perder linhas.
 - Métodos da v3: `set_kind`, `begin_import` (a importação já nasce `pending`,
   [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` e
-  `markers(recording_id)`.
+  `markers(recording_id)`. Da v4: `set_source`, `set_details_pending`, `save_details(id, título,
+  tipo)` (vazios viram nulos; libera o sync; só antes do upload) e `release_details_pending`.
 
 ```
 recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)
@@ -127,8 +144,10 @@ recording ──parar──▶ pending ──claim_next──▶ syncing ──�
 
 - **Recuperação:** ao abrir, o app chama `session::recover`: cada linha ainda em `recording` tem o
   `.part` renomeado (o Ogg é legível até a última página escrita) e vira `pending` com
-  `interrupted = 1`; o que ficou em `syncing` volta a `pending`.
-- `claim_next` reserva só `pending`. `mark_failed` agenda `next_attempt_at` por
+  `interrupted = 1`; o que ficou em `syncing` volta a `pending`, e todo `details_pending` cai (a
+  folha que segurava o sync já não existe).
+- `claim_next` reserva só `pending`, e pula a que tem `details_pending` até `DETAILS_WAIT_MS`
+  (10 min) depois do fim: a folha esquecida aberta não segura o sync para sempre. `mark_failed` agenda `next_attempt_at` por
   `retry_backoff_ms` (30 s dobrando a cada tentativa, até 1 h); `retry_due(agora, max)` devolve à
   fila as falhas cujo prazo venceu, e `retry_failed(max)` as devolve já.
 - `purge_candidates(até)` lista as `synced` com `remote_id` cujo arquivo ainda existe;

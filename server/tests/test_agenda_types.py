@@ -104,6 +104,18 @@ def test_escopos_do_pat(user: Api):
     assert user.pat("summaries:read", "summaries:write").post(URL, json=DRAFT).status_code == 201
 
 
+def test_a_lista_aceita_recordings_read(user: Api):
+    # A credencial de dispositivo (só `recordings:*`) lê a lista para a folha "Gravação salva".
+    device = user.pat("recordings:read", "recordings:write")
+    assert _names(device) == DEFAULT_TYPES
+    one = device.get(URL).json()["items"][0]
+    assert device.get(f"{URL}/{one['id']}").json()["code"] == "insufficient_scope"
+    assert device.post(URL, json=DRAFT).json()["code"] == "insufficient_scope"
+    denied = user.pat("transcripts:read").get(URL)
+    assert denied.status_code == 403
+    assert set(denied.json()["required_scopes"]) == {"summaries:read", "recordings:read"}
+
+
 def _recording(api: Api) -> dict[str, Any]:
     return upload_file(api, audio_bytes(1500), title="Reunião de segunda")
 

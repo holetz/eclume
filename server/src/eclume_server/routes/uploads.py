@@ -69,7 +69,7 @@ class UploadCreate(BaseModel):
     markers: list[MarkerInput] = Field(default_factory=list, max_length=MAX_BATCH)
     duration_ms: int | None = Field(default=None, ge=0)
     language: str | None = Field(default=None, pattern=LANGUAGE)
-    source: Literal["desktop", "upload", "api"] | None = None
+    source: Literal["desktop", "mobile", "upload", "api"] | None = None
     capture: Capture | None = None
     tags: list[Annotated[str, Field(min_length=1)]] = Field(default_factory=list)
     collection_ids: list[UUID] = Field(default_factory=list)
@@ -410,12 +410,12 @@ async def _add_markers(
 
 
 def recorded_at_source(requested: dict[str, Any], source: str) -> str:
-    """A origem pedida, ou a regra: o relógio do desktop, a data informada, ou a hora do envio."""
+    """A origem pedida, ou a regra: o relógio do app que gravou, a data informada, ou a hora do envio."""
     if requested.get("recorded_at_source"):
         return requested["recorded_at_source"]
     if not requested.get("recorded_at"):
         return "upload"
-    return "capture" if source == "desktop" else "user"
+    return "capture" if source in {"desktop", "mobile"} else "user"
 
 
 async def _finish(

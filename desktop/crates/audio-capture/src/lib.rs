@@ -8,18 +8,19 @@
 //!   PipeWire/Pulse no Linux, WASAPI no Windows, Core Audio tap no macOS.
 //!
 //! Quem consome as fontes só conhece o trait [`AudioSource`]; sem a feature `backends`, o crate
-//! expõe apenas o trait e o anel ([`ring`]), sem nenhuma dependência de sistema.
+//! expõe apenas o trait e o anel ([`ring`]), sem nenhuma dependência de sistema. A feature `mic`
+//! liga só o [`MicSource`] (o app móvel).
 
 use std::time::Duration;
 
 pub mod ring;
 
-#[cfg(feature = "backends")]
+#[cfg(feature = "mic")]
 mod mic;
 #[cfg(feature = "backends")]
 mod system;
 
-#[cfg(feature = "backends")]
+#[cfg(feature = "mic")]
 pub use mic::{InputDevices, MicSource, list_input_devices};
 #[cfg(feature = "backends")]
 pub use system::SystemSource;

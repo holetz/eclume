@@ -134,3 +134,46 @@ jobs:
       - run: npm --prefix desktop/ui-tests ci
       - run: npm --prefix desktop/ui-tests exec -- playwright install --with-deps chromium
       - run: npm --prefix desktop/ui-tests test
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dependências de sistema do Tauri 2 e do microfone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential \
+            libasound2-dev clang cmake ninja-build
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm --prefix mobile ci
+      - run: npm --prefix mobile run lint
+      - run: npm --prefix mobile test
+      - run: npm --prefix mobile run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile
+      - run: cargo fmt --manifest-path mobile/Cargo.toml --all --check
+      - run: cargo check --manifest-path mobile/Cargo.toml --workspace --locked
+      - run: cargo clippy --manifest-path mobile/Cargo.toml --workspace --locked -- -D warnings
+      - run: cargo test --manifest-path mobile/Cargo.toml --workspace --locked
+      # O núcleo compila para o Android sem o gradle: prova a compilação cruzada do libopus (cmake)
+      # e do SQLite com o NDK que o runner já traz.
+      - name: Núcleo para aarch64-linux-android
+        run: |
+          ndk="$ANDROID_NDK_LATEST_HOME"
+          bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
+          export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
+          export AR_aarch64_linux_android="$bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$bin/aarch64-linux-android26-clang"
+          cargo check --manifest-path mobile/Cargo.toml -p eclume-mobile-core --target aarch64-linux-android --locked

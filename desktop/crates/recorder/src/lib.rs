@@ -16,7 +16,7 @@ pub use ext::{sync_pending, MeetingDetector, MeetingEvent, SyncReport, Uploader}
 pub use mix::{Mixer, FRAME, TARGET_RATE};
 pub use queue::{
     now_ms, retry_backoff_ms, Kind, Marker, NewImport, Queue, QueueCounts, QueuedRecording,
-    RecordedAtSource, Source, Status, MAX_MARKER_NOTE,
+    RecordedAtSource, Source, Status, DETAILS_WAIT_MS, MAX_MARKER_NOTE,
 };
 pub use session::{ActiveRecording, RecorderConfig};
 pub use vad::{SilenceDetector, VadEvent, METER_BARS};

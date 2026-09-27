@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Layout do monorepo e comandos por pilar
-description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/ e workspace cargo em desktop/ — e estes são os comandos de build, lint e teste que a CI e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml
+description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI e as specs usam.
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml
 tags: [code, monorepo, toolchain, ci]
-timestamp: 2026-09-24
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#2
+source: holetz/eclume#2, holetz/eclume#41
 maintainer: holetz
 ---
 
@@ -23,6 +23,7 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
 | `worker-gpu/` | worker de ASR (`eclume_worker`) | uv (membro do workspace) |
 | `web/` | frontend React + Vite + TS | npm, Node 22 |
 | `desktop/` | app Tauri 2 (`desktop/src-tauri`) | cargo (workspace em `desktop/Cargo.toml`) |
+| `mobile/` | app móvel Tauri 2 (Android; `mobile/src-tauri`) | npm em `mobile/` e cargo (workspace em `mobile/Cargo.toml`) |
 | `contracts/` | OpenAPI v1 e JSON Schema da transcrição | — |
 | `deploy/` | compose de dev, de teste e de produção, imagens do server e do web, scripts de deploy e backup ([deploy-producao.md](../../project/deploy-producao.md)) | Docker compose |
 | `docs/` | bundle OKF | `cq knowledge` |
@@ -116,6 +117,48 @@ cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace
 ```
 
+## Móvel — npm e workspace cargo em `mobile/`
+
+O app móvel ([mobile-app.md](mobile-app.md)) é Tauri 2 mobile, Android primeiro:
+
+- **UI:** Vite + React + TS em `mobile/ui/src/`, com o `index.html` na raiz de `mobile/`, a mesma
+  toolchain do web (eslint, vitest com jsdom e Testing Library) e a cópia fiel do `styles.css` do
+  DS em `ui/src/styles/eclume.css`. O `package-lock.json` é versionado.
+- **Rust:** o workspace de `mobile/Cargo.toml` tem `src-tauri` (a lib `eclume_mobile_lib`) e
+  `crates/core` (`eclume-mobile-core`, sem Tauri, testável no Linux), e mais tarde o plugin nativo em
+  `plugins/`. Os crates de gravação e sync são os de `desktop/crates/`, por **dependência de
+  caminho**: mover os crates para uma pasta comum mexeria no desktop sem ganho. O `Cargo.lock` é do
+  `mobile/`.
+- **Android:** `mobile/src-tauri/gen/android/` é gerado uma vez por `tauri android init` e
+  **versionado** (manifesto, gradle e assinatura são código); `build/` e `.gradle/` ficam no
+  `.gitignore` dele. O SDK, o NDK e o JDK vivem no host de build
+  ([host-setup.md](../../project/host-setup.md#ambiente-android-build-e-emulador-do-app-móvel)), e todo
+  comando Android começa com `source ~/.config/eclume/android-env.sh`.
+
+```bash
+npm --prefix mobile ci
+npm --prefix mobile run lint
+npm --prefix mobile test
+npm --prefix mobile run build
+cargo test --manifest-path mobile/Cargo.toml --workspace
+cargo clippy --manifest-path mobile/Cargo.toml --workspace -- -D warnings
+remote-run . 'source ~/.config/eclume/android-env.sh && npm --prefix mobile ci && npm --prefix mobile run tauri -- android build --debug --apk --target x86_64'
+```
+
+O APK de depuração x86_64 (o do emulador) sai em
+`mobile/src-tauri/gen/android/app/build/outputs/apk/*/debug/`.
+
+O job `mobile` da CI roda a UI (lint, vitest e build), o workspace cargo no Linux (fmt, check,
+clippy e testes; o plugin compila no Linux pelo lado sem Android) e um `cargo check` do
+`eclume-mobile-core` para `aarch64-linux-android` com o NDK que o runner já traz
+(`ANDROID_NDK_LATEST_HOME`), sem o gradle: prova a compilação cruzada do libopus (cmake e ninja) e
+do SQLite. O compilador e o linker do NDK entram por `CC_aarch64_linux_android`,
+`AR_aarch64_linux_android` e `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`; no host, o
+`android-env.sh` os exporta pelo nome, com o `bin` do NDK no fim do `PATH`. Não há
+`mobile/.cargo/config.toml`: um `CC` por nome nele valeria também dentro do `tauri android build`,
+que não o acha no `PATH` dele. O APK de release sai de `mobile-release.yml`
+([mobile-distribuicao.md](mobile-distribuicao.md)).
+
 ## Serviços de apoio — `deploy/docker-compose.dev.yml`
 
 Postgres com pgvector (`pgvector/pgvector:pg16`), Redis e MinIO, **toda porta publicada só em
@@ -131,8 +174,8 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 ## CI — `.github/workflows/ci.yml`
 
 Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
-`contracts`, `web` e `desktop`, cada um rodando os comandos acima (com `--locked` no uv e no
-cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
+`contracts`, `web`, `desktop` e `mobile`, cada um rodando os comandos acima (com `--locked` no uv e
+no cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
 e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
 O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.

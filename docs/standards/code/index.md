@@ -3,7 +3,7 @@
 **Como o código do eclume é organizado e verificado** — layout do monorepo, toolchain de cada
 pilar e os comandos de build, lint e teste que as specs citam no `verify:`.
 
-* [monorepo.md](monorepo.md) — pilares na raiz, workspace uv, npm em `web/`, workspace cargo em `desktop/`, e os comandos de cada um
+* [monorepo.md](monorepo.md) — pilares na raiz, workspace uv, npm em `web/`, workspace cargo em `desktop/`, o app móvel em `mobile/`, e os comandos de cada um
 * [formato-audio-upload.md](formato-audio-upload.md) — o formato Opus mono 16 kHz em Ogg que o navegador produz antes do upload, os motores (WebCodecs/Mediabunny e ffmpeg.wasm) e a API de `web/src/lib/media-convert`
 * [desktop-gravacao.md](desktop-gravacao.md) — como o app desktop grava (mic + sistema em Ogg/Opus mono 16 kHz), a nota por voz com parada por silêncio, os marcadores, a fila SQLite v3 e os traits de sync e detecção
 * [desktop-distribuicao.md](desktop-distribuicao.md) — como o app desktop vira instaladores (tag `desktop-v*`, workflow `desktop-release`, servidor embutido no build), se atualiza pelo updater com chave minisign própria, avisa "Atualizado para X" e é publicado em `/srv/eclume/downloads`
@@ -15,6 +15,8 @@ pilar e os comandos de build, lint e teste que as specs citam no `verify:`.
 * [frontend-web.md](frontend-web.md) — o app web: cliente gerado do contrato, origem única com sessão e CSRF, estrutura de pastas, painel admin fora da sessão do usuário, navegação agrupada, gaveta de ajuda, motor de upload multipart e testes (vitest sobre as fixtures e E2E contra o mock)
 * [web-central-de-ajuda.md](web-central-de-ajuda.md) — a central de ajuda do web: artigos Markdown com cabeçalho no build, seis tópicos, chaves de página, busca local sem acento, gaveta por página, dicas em linha, regras de redação e a revisão dos artigos quando uma tela muda
 * [web-design-system.md](web-design-system.md) — o Design System do eclume no web: `eclume.css` fiel ao `eclume-design`, `app.css` de produto, fontes locais, ícones Lucide, tema por `data-theme`, o sync e o mapa dos tokens antigos
+* [mobile-app.md](mobile-app.md) — o app móvel (Tauri 2, Android): o núcleo sobre os crates do desktop, o plugin nativo pela ponte JNI, a conexão com a CA fixada, a rede do eclume, a sessão com tempo de áudio e marcadores, o sync, as telas e a prova no emulador
+* [mobile-distribuicao.md](mobile-distribuicao.md) — como o app móvel vira um APK assinado (tag `mobile-v*`, workflow `mobile-release`, keystore e secrets), o `movel.json`, a publicação em `/srv/eclume/downloads/movel` e a atualização dentro do app
 * [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) — como o app desktop detecta reuniões (mic, processo e janela, com debounce e políticas por app), entra no servidor (primeira execução, mDNS, CA fixada, credencial de dispositivo) e sobe as gravações pelo upload resumível, com retenção
 * [server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md) — o servidor MCP em `/mcp` (sem estado, Bearer `eclp_`, ferramentas × escopos), os grupos de escopo da Conexão MCP, a credencial de dispositivo por login ou código de pareamento com o QR, o limite de tentativas, o descritor `/server` com a impressão digital da CA e a descoberta por mDNS
 * [server-admin.md](server-admin.md) — o painel admin no server: conta e sessão de admin separadas, configuração da plataforma entregue ao worker pelas `options`, segredos cifrados só de escrita, usuários com ativar e desativar, a saúde com o heartbeat do worker GPU e o CLI de contas de admin

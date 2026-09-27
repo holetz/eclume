@@ -6,7 +6,7 @@
 //! indicado — é o caminho para confiar na CA interna sem instalá-la no sistema, e o que a CA
 //! fixada pelo `pin.rs` usa.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -77,42 +77,87 @@ pub trait Transport: Send + Sync {
 
 /// Prazos do transporte real: conectar é rápido; uma parte (5 MiB ou mais) numa rede lenta não.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
-/// Teto do corpo de resposta lido (as respostas do upload são JSON pequenos).
+/// O prazo total padrão de uma requisição.
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
+/// Teto padrão do corpo de resposta lido (as respostas do upload são JSON pequenos).
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Em quem o transporte confia.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrustMode {
+    /// As raízes do SO (o verificador da plataforma) mais a CA do PEM, se houver: o desktop.
+    PlatformPlus(Option<PathBuf>),
+    /// Só os certificados do PEM, sem as raízes do SO nem o `rustls-platform-verifier` (que no
+    /// Android exige inicialização JNI própria): o celular, que fixa a CA do servidor.
+    Pinned(PathBuf),
+}
 
 /// Transporte real em `ureq`.
 pub struct UreqTransport {
     agent: ureq::Agent,
+    max_response: u64,
 }
 
 impl UreqTransport {
     /// `ca_path`: PEM com a CA extra a confiar (a CA interna do Caddy), além das do SO.
     pub fn new(ca_path: Option<&Path>, user_agent: &str) -> Result<Self> {
+        Self::with_trust(
+            &TrustMode::PlatformPlus(ca_path.map(Path::to_path_buf)),
+            user_agent,
+            REQUEST_TIMEOUT,
+        )
+    }
+
+    /// Só a CA fixada em `ca_path` ([`TrustMode::Pinned`]).
+    pub fn pinned(ca_path: &Path, user_agent: &str) -> Result<Self> {
+        Self::with_trust(
+            &TrustMode::Pinned(ca_path.to_path_buf()),
+            user_agent,
+            REQUEST_TIMEOUT,
+        )
+    }
+
+    /// Com a confiança e o prazo total dados (a sonda da rede do celular usa 3 s).
+    pub fn with_trust(trust: &TrustMode, user_agent: &str, timeout: Duration) -> Result<Self> {
         let tls = TlsConfig::builder()
-            .root_certs(root_certs(ca_path)?)
+            .root_certs(trusted_roots(trust)?)
             .build();
-        Ok(Self::with_tls(tls, user_agent))
+        Ok(Self::with_tls(tls, user_agent, timeout))
+    }
+
+    /// Troca o teto do corpo de resposta (o app móvel baixa o APK da atualização por aqui).
+    pub fn com_limite(mut self, bytes: u64) -> Self {
+        self.max_response = bytes;
+        self
     }
 
     /// Sem verificação de TLS: só para baixar a CA raiz que o `pin.rs` confere pela impressão
     /// digital. Nunca leva credencial.
     pub fn insecure(user_agent: &str) -> Self {
         let tls = TlsConfig::builder().disable_verification(true).build();
-        Self::with_tls(tls, user_agent)
+        Self::with_tls(tls, user_agent, REQUEST_TIMEOUT)
     }
 
-    fn with_tls(tls: TlsConfig, user_agent: &str) -> Self {
+    fn with_tls(tls: TlsConfig, user_agent: &str, timeout: Duration) -> Self {
         let config = ureq::Agent::config_builder()
             .http_status_as_error(false)
-            .timeout_connect(Some(CONNECT_TIMEOUT))
-            .timeout_global(Some(REQUEST_TIMEOUT))
+            .timeout_connect(Some(CONNECT_TIMEOUT.min(timeout)))
+            .timeout_global(Some(timeout))
             .user_agent(user_agent)
             .tls_config(tls)
             .build();
         Self {
             agent: config.into(),
+            max_response: MAX_RESPONSE_BYTES,
         }
+    }
+}
+
+/// As raízes de confiança de um [`TrustMode`].
+pub fn trusted_roots(trust: &TrustMode) -> Result<RootCerts> {
+    match trust {
+        TrustMode::PlatformPlus(ca_path) => root_certs(ca_path.as_deref()),
+        TrustMode::Pinned(ca_path) => Ok(RootCerts::new_with_certs(&read_pem_certs(ca_path)?)),
     }
 }
 
@@ -182,7 +227,7 @@ impl Transport for UreqTransport {
         let body = response
             .body_mut()
             .with_config()
-            .limit(MAX_RESPONSE_BYTES)
+            .limit(self.max_response)
             .read_to_vec()
             .with_context(|| format!("falha ao ler a resposta de {}", request.url))?;
         Ok(HttpResponse {
@@ -224,6 +269,25 @@ mod tests {
             panic!("esperava raízes específicas");
         };
         assert!(!certs.is_empty());
+    }
+
+    #[test]
+    fn ca_fixada_confia_so_no_pem() {
+        let path = temp("fixada.pem", TEST_CA);
+        let RootCerts::Specific(pinned) = trusted_roots(&TrustMode::Pinned(path.clone())).unwrap()
+        else {
+            panic!("esperava raízes específicas");
+        };
+        assert_eq!(pinned.len(), 1);
+        let RootCerts::Specific(plus) =
+            trusted_roots(&TrustMode::PlatformPlus(Some(path.clone()))).unwrap()
+        else {
+            panic!("esperava raízes específicas");
+        };
+        assert!(plus.len() >= pinned.len());
+        assert!(UreqTransport::pinned(&path, "eclume-android/0.1.0").is_ok());
+        // Sem PEM, o modo fixado não cai nas raízes do SO: é erro.
+        assert!(trusted_roots(&TrustMode::Pinned(PathBuf::from("/nao/existe.pem"))).is_err());
     }
 
     #[test]

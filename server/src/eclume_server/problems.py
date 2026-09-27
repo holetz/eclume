@@ -93,14 +93,14 @@ def notice_required() -> ApiProblemError:
     return ApiProblemError(403, "notice_required", "Aceite o aviso em vigor em POST /api/v1/me/notice.")
 
 
-def insufficient_scope(missing: list[str]) -> ApiProblemError:
-    """403 — o PAT não tem os escopos exigidos pela operação."""
-    return ApiProblemError(
-        403,
-        "insufficient_scope",
-        f"Este PAT não tem o escopo {', '.join(missing)}.",
-        extra={"required_scopes": missing},
+def insufficient_scope(missing: list[str], *, any_of: bool = False) -> ApiProblemError:
+    """403 — o PAT não tem os escopos exigidos pela operação (`any_of`: bastaria um deles)."""
+    detail = (
+        f"Este PAT precisa de um destes escopos: {', '.join(missing)}."
+        if any_of
+        else f"Este PAT não tem o escopo {', '.join(missing)}."
     )
+    return ApiProblemError(403, "insufficient_scope", detail, extra={"required_scopes": missing})
 
 
 def not_found(detail: str = "Recurso inexistente ou sem acesso.") -> ApiProblemError:

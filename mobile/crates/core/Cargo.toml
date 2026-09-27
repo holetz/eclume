@@ -1,0 +1,16 @@
+[package]
+name = "eclume-mobile-core"
+description = "Núcleo do app móvel do eclume, sem Tauri: conexão, rede, sessão de gravação e sync."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+eclume-recorder = { path = "../../../desktop/crates/recorder" }
+eclume-sync = { path = "../../../desktop/crates/sync", default-features = false }
+anyhow = "1"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
