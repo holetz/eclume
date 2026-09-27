@@ -1,0 +1,70 @@
+/* Camada de produto do desktop: só o que a janela precisa e o Design System (eclume.css) não
+   define. A CSP da janela bloqueia style="", então as utilidades que os exemplos do DS fazem por
+   atributo de estilo moram aqui. */
+
+[hidden] {
+  display: none !important;
+}
+
+/* A .tray-window do DS é um painel de 520 × 600 com moldura; no app ela é a janela inteira. */
+.tray.tray-window {
+  width: 100%;
+  min-height: 100vh;
+  border: 0;
+  box-shadow: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.row-between {
+  justify-content: space-between;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stack-tight {
+  gap: 4px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.brand-sm {
+  font-size: 18px;
+}
+
+.btn-icon-sm {
+  width: 28px;
+  height: 28px;
+}
+
+.btn kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.tiny {
+  font-size: 12px;
+}
+
+/* O medidor de nível com 16 barras; a altura de cada uma vem de --h, por setProperty. */
+.meter i {
+  transition: height 80ms linear;
+}
