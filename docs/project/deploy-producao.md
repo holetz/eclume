@@ -363,6 +363,25 @@ bash deploy/prova-web-prod.sh
   MCP bateu com o descritor, e o token só de leitura foi criado e revogado; a busca "token" abriu
   o artigo; a gaveta de Pessoas mostrou os artigos da página. `OK`.
 
+### App móvel em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (2 usuários, 7 gravações,
+  7 transcrições, 38 resumos, 18 objetos).
+- **Deploy:** de uma exportação com LF de `main` (holetz/eclume#41), só `server` e `web`; a
+  migração `016_origem_mobile` (origem `mobile` no upload) aplicada, o descritor com o contrato
+  2.4.0 (`GET /agenda-types` aceita `recordings:read`) e a mesma CA `98e209f5…3d97792f`; os
+  scripts em `/srv/eclume/bin/` ficaram sem CRLF; disco em 88%. A primeira tentativa falhou no
+  build por um tempo esgotado no Docker Hub (`dockerfile:1.9`) e passou na segunda.
+- **Smoke:** `smoke_prod.py` e `smoke_mcp.py` `OK`.
+- **Prova do app no emulador** (`mobile/scripts/prova-emulador.sh`, task 8.1): entrou pelo
+  endereço conferindo a impressão digital, gravou 1 min 14 s com 60 s de tela bloqueada e o
+  serviço de microfone em primeiro plano, marcou pela tela e pela notificação, ficou "1
+  aguardando" fora da rede e sincronizou ao voltar; no servidor, `source: mobile`,
+  `recorded_at_source: capture` e dois marcadores; depois do `am force-stop` gravando, a gravação
+  ficou salva e subiu. Limpeza: gravações da prova excluídas e o token do aparelho revogado.
+- **Sem APK publicado:** o `mobile-release.yml` espera a keystore de release e os secrets
+  `ANDROID_KEYSTORE_*` (passo humano; `mobile/scripts/criar-keystore.sh`).
+
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo

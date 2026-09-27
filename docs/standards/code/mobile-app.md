@@ -198,8 +198,10 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   Contra a produção, com a conta de smoke (`/srv/eclume/secrets/smoke-password`): entra pelo
   endereço conferindo a impressão digital com o `/server`, grava, marca pela tela e pela
   notificação, fica 60 s com a tela bloqueada e o serviço de microfone em primeiro plano, sai da
-  rede, para e dá título, volta, confere a gravação no servidor (`source: mobile`, dois marcadores)
-  e a recuperação depois de `am force-stop`. A limpeza apaga as gravações da prova e revoga o token
-  do aparelho.
+  rede (e espera o app notar, porque o emulador ainda alcança o servidor pelos dados móveis), para
+  e dá título, volta, confere a gravação no servidor (`source: mobile`, dois marcadores) e a
+  recuperação depois de `am force-stop` (a gravação fica salva, `interrompida` ou já
+  `sincronizada`). Parte do Wi‑Fi ligado, que o AVD guarda de uma prova que caiu no meio. A
+  limpeza apaga as gravações da prova e revoga o token do aparelho.
 - **Passos humanos:** o aceite em aparelho real (mDNS no Wi‑Fi real, QR da web, 10 min no bolso,
   fabricantes com economia de bateria agressiva) e tudo de iOS.
