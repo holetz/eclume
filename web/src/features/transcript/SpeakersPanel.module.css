@@ -160,3 +160,8 @@
   font-size: 14px;
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
+
+/* A lista do combobox some quando não há opção (o display do módulo venceria o atributo). */
+.options[hidden] {
+  display: none;
+}

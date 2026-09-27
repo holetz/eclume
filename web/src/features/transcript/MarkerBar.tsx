@@ -1,5 +1,6 @@
 import { commonDevice, hms, type Marker } from './markers'
 import { usePlayback } from './playback'
+import styles from './RecordingPage.module.css'
 
 /** A `.marker-bar`: uma ficha por marcador, que toca dali, e o dispositivo quando é um só. */
 export function MarkerBar({ markers }: { markers: Marker[] }) {
@@ -21,7 +22,7 @@ export function MarkerBar({ markers }: { markers: Marker[] }) {
           <span>{marker.note ?? 'Marcador'}</span>
         </button>
       ))}
-      {device && <span className="text-muted">Marcado no {device}</span>}
+      {device && <span className={`text-muted ${styles.markerDevice}`}>Marcado no {device}</span>}
     </div>
   )
 }

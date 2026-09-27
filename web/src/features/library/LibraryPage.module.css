@@ -49,6 +49,13 @@
   width: calc((100% - 6px) / var(--lanes));
 }
 
+/* A nota é um bloco baixo: o título fica numa linha, com reticências. */
+.week :global(.cal-event[data-kind='note']) strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .eventMarkers:global(.marker-count) {
   font-size: 10.5px;
 }
