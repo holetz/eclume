@@ -27,9 +27,6 @@ export function McpPage() {
   return (
     <section className={styles.page}>
       <PageHead kicker="Minhas configurações" title="Conexão MCP" />
-      <p className={`text-muted ${styles.lead}`}>
-        Conecte um assistente de IA às suas gravações: ele busca, lê e resume o que você permitir no token.
-      </p>
       <div className={`split ${styles.split}`}>
         <ol className="steps">
           <li>

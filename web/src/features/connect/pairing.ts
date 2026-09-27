@@ -43,9 +43,12 @@ export function remainingMs(anchor: CountdownAnchor, now: number = performance.n
   return Math.max(0, anchor.expiresInMs - (now - anchor.at))
 }
 
-/** `m:ss`, arredondado para cima: "0:01" até o último segundo acabar. */
+/**
+ * `m:ss`, arredondado para baixo: o header `Date` só tem segundos, e arredondar para cima mostraria
+ * "10:01" num código de 10 minutos.
+ */
 export function formatCountdown(ms: number): string {
-  const total = Math.ceil(ms / 1000)
+  const total = Math.floor(ms / 1000)
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 

@@ -65,6 +65,7 @@
   min-width: 0;
 }
 
+/* O rótulo divide a linha com a dica: repete o estilo de `.field > label` do DS, que não o alcança. */
 .labelRow {
   display: flex;
   align-items: center;
@@ -73,7 +74,20 @@
 }
 
 .labelRow label {
-  margin-bottom: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+/* O .seg do DS tem a largura das opções, não a do campo. */
+.fieldset :global(.seg) {
+  justify-self: start;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .instructions {

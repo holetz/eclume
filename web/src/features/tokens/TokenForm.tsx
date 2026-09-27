@@ -163,7 +163,7 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
           {submitButton}
         </div>
       ) : (
-        <div>{submitButton}</div>
+        submitButton
       )}
     </form>
   )

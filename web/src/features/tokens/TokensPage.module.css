@@ -4,6 +4,7 @@
 
 .page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
@@ -33,8 +34,14 @@
   background: var(--color-bg);
 }
 
+.secret :global(.code-block) span {
+  overflow-wrap: anywhere;
+}
+
 /* Em telas estreitas a tabela rola no próprio contêiner, sem rolar a página. */
+/* O `position` segura o `.visually-hidden` do cabeçalho dentro do contêiner que rola. */
 .tableWrap {
+  position: relative;
   overflow-x: auto;
 }
 

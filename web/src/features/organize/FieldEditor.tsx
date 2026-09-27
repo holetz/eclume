@@ -174,7 +174,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
 
       <FieldTest test={test} />
 
-      <div className="row">
+      <div className={styles.actions}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>

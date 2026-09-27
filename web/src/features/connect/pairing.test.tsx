@@ -62,10 +62,11 @@ describe('âncora e formato da contagem', () => {
     expect(anchorFrom('2026-09-27T14:52:00Z', null, 0).expiresInMs).toBe(600_000)
   })
 
-  it('formata em m:ss arredondando para cima', () => {
+  it('formata em m:ss arredondando para baixo', () => {
     expect(formatCountdown(582_000)).toBe('9:42')
+    expect(formatCountdown(600_900)).toBe('10:00')
     expect(formatCountdown(60_000)).toBe('1:00')
-    expect(formatCountdown(999)).toBe('0:01')
+    expect(formatCountdown(999)).toBe('0:00')
     expect(formatCountdown(0)).toBe('0:00')
   })
 })

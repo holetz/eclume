@@ -206,7 +206,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
 
       <AgendaPreviewResult preview={preview} stale={previewedDraft !== null && previewedDraft !== draftKey} />
 
-      <div className="row">
+      <div className={styles.actions}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>
