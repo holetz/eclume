@@ -377,6 +377,7 @@ mod tests {
 
     use super::*;
     use crate::api::Capture;
+    use eclume_recorder::{Kind, RecordedAtSource, Source};
 
     const BASE: &str = "https://eclume.test:8443";
     const PAT: &str = "eclp_teste";
@@ -479,8 +480,11 @@ mod tests {
             size_bytes: 12,
             sha256: "ab".into(),
             recorded_at: None,
+            recorded_at_source: RecordedAtSource::Capture,
+            kind: Kind::Meeting,
+            markers: Vec::new(),
             duration_ms: Some(1_000),
-            source: "desktop".into(),
+            source: Source::Desktop,
             capture: Capture {
                 meeting_app: Some("teams".into()),
                 device_name: None,

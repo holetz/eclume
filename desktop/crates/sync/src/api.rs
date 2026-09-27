@@ -2,6 +2,7 @@
 //! contrato exige: propriedades desconhecidas são ignoradas e os estados ficam em texto, para um
 //! valor novo de enum não quebrar o cliente.
 
+use eclume_recorder::{Kind, RecordedAtSource, Source};
 use serde::{Deserialize, Serialize};
 
 /// Contexto da captura, preenchido pelo desktop.
@@ -15,6 +16,15 @@ pub struct Capture {
     pub client_version: String,
 }
 
+/// Um marcador feito durante a gravação; o `client_id` torna o reenvio idempotente.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct MarkerInput {
+    pub client_id: String,
+    pub at_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
 /// `POST /api/v1/uploads`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct UploadCreate {
@@ -24,9 +34,13 @@ pub struct UploadCreate {
     pub sha256: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recorded_at: Option<String>,
+    pub recorded_at_source: RecordedAtSource,
+    pub kind: Kind,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<MarkerInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    pub source: String,
+    pub source: Source,
     pub capture: Capture,
 }
 
