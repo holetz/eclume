@@ -30,6 +30,7 @@
     "cliente": "Metalúrgica Serra Azul",
     "projeto": "Programa de lideranças 2026"
   },
+  "agenda_type": {"id": "01928f3a-1c00-7a00-8000-000000000901", "name": "Reunião de equipe", "origin": "auto"},
   "job": {
     "id": "01928f3a-1c00-7a00-8000-000000000e01",
     "state": "succeeded",

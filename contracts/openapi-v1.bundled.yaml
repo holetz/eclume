@@ -47,6 +47,9 @@ tags:
   description: Busca full-text sobre segmentos.
 - name: organize
   description: Coleções e tags.
+- name: agenda-types
+  description: 'Tipos de agenda do usuário: como reconhecer a gravação, o título e as tags que ela ganha
+    e as instruções do resumo.'
 - name: summaries
   description: Resumos gerados por agente com as instruções de um tipo de agenda.
 - name: admin
@@ -1186,6 +1189,157 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/agenda-types:
+    get:
+      tags:
+      - agenda-types
+      operationId: listAgendaTypes
+      summary: Tipos de agenda do usuário
+      description: Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Tipos de agenda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaTypePage'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/AgendaTypePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags:
+      - agenda-types
+      operationId: createAgendaType
+      summary: Criar um tipo de agenda
+      description: Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário
+        é 409.
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaTypeCreate'
+            examples:
+              mentoria:
+                $ref: '#/components/examples/AgendaTypeCreateRequest'
+      responses:
+        '201':
+          description: Tipo criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/agenda-types/{agenda_type_id}:
+    parameters:
+    - $ref: '#/components/parameters/AgendaTypeId'
+    get:
+      tags:
+      - agenda-types
+      operationId: getAgendaType
+      summary: Um tipo de agenda
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      responses:
+        '200':
+          description: Tipo de agenda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - agenda-types
+      operationId: updateAgendaType
+      summary: Editar um tipo de agenda
+      description: 'Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções
+        do
+
+        momento. Nome repetido é 422 em `name`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaTypePatch'
+      responses:
+        '200':
+          description: Tipo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - agenda-types
+      operationId: deleteAgendaType
+      summary: Excluir um tipo de agenda
+      description: As gravações que o usavam ficam sem tipo; os resumos ficam.
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Excluído.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/people:
     get:
       tags:
@@ -2151,6 +2305,13 @@ components:
       schema:
         type: string
         format: uuid
+    AgendaTypeId:
+      name: agenda_type_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     PersonId:
       name: person_id
       in: path
@@ -3002,6 +3163,7 @@ components:
       - collection_ids
       - metadata
       - capture
+      - agenda_type
       - job
       - transcript_id
       - created_at
@@ -3055,6 +3217,30 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Capture'
           - type: 'null'
+        agenda_type:
+          description: 'Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
+
+            (`edited`), que a detecção nunca troca.
+
+            '
+          oneOf:
+          - type: object
+            required:
+            - id
+            - name
+            - origin
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              origin:
+                type: string
+                enum:
+                - auto
+                - edited
+          - type: 'null'
         job:
           oneOf:
           - $ref: '#/components/schemas/Job'
@@ -3099,6 +3285,16 @@ components:
         metadata:
           description: Substitui o objeto inteiro.
           $ref: '#/components/schemas/RecordingMetadata'
+        agenda_type_id:
+          description: 'Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
+
+            `null` tira o tipo e devolve a escolha à detecção.
+
+            '
+          type:
+          - string
+          - 'null'
+          format: uuid
     RecordingPage:
       type: object
       required:
@@ -3500,6 +3696,187 @@ components:
               count:
                 type: integer
                 minimum: 0
+    AgendaType:
+      type: object
+      required:
+      - id
+      - name
+      - title_pattern
+      - identify
+      - default_tags
+      - summary_instructions
+      - position
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+        position:
+          description: Ordem na lista do usuário.
+          type: integer
+          minimum: 0
+    AgendaTypeDraft:
+      description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - summary_instructions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+    AgendaTypeCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - summary_instructions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+        position:
+          description: Sem valor, o fim da lista.
+          type: integer
+          minimum: 0
+    AgendaTypePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        title_pattern:
+          description: 'Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
+
+            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
+
+            título automático fica como está.
+
+            '
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        identify:
+          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          type: string
+        default_tags:
+          description: Tags somadas às automáticas quando o tipo é aplicado.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        summary_instructions:
+          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          type: string
+          minLength: 1
+        position:
+          type: integer
+          minimum: 0
+    AgendaTypePage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgendaType'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
     AgentProviderKind:
       type: string
       enum:
@@ -4713,6 +5090,7 @@ components:
         tags: []
         collection_ids: []
         metadata: {}
+        agenda_type: null
         job:
           id: 01928f3a-1c00-7a00-8000-000000000e01
           state: queued
@@ -4755,6 +5133,10 @@ components:
           tipo_reuniao: alinhamento
           cliente: Metalúrgica Serra Azul
           projeto: Programa de lideranças 2026
+        agenda_type:
+          id: 01928f3a-1c00-7a00-8000-000000000901
+          name: Reunião de equipe
+          origin: auto
         job:
           id: 01928f3a-1c00-7a00-8000-000000000e01
           state: succeeded
@@ -4790,6 +5172,7 @@ components:
           - 01928f3a-1c00-7a00-8000-000000000801
           metadata: {}
           capture: null
+          agenda_type: null
           job:
             id: 01928f3a-1c00-7a00-8000-000000000e02
             state: running
@@ -4829,6 +5212,7 @@ components:
             tipo_reuniao: alinhamento
             cliente: Metalúrgica Serra Azul
             projeto: Programa de lideranças 2026
+          agenda_type: null
           job:
             id: 01928f3a-1c00-7a00-8000-000000000e01
             state: succeeded
@@ -5504,6 +5888,63 @@ components:
 
           '
         completed_at: '2026-09-18T15:03:48Z'
+    AgendaTypePage:
+      summary: Os tipos padrão de uma conta nova
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000901
+          name: Reunião de equipe
+          title_pattern: Reunião de equipe · {assunto}
+          identify: Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa
+            com cliente nem 1:1.
+          default_tags:
+          - interno
+          - planejamento
+          summary_instructions: '## Resumo
+
+            De duas a quatro frases sobre o que a reunião tratou.
+
+
+            ## Decisões
+
+            Um item por decisão, com quem é o responsável.
+
+
+            ## Próximos passos
+
+            Um item por tarefa: responsável, o quê e quando.'
+          position: 1
+        - id: 01928f3a-1c00-7a00-8000-000000000902
+          name: '1:1'
+          title_pattern: null
+          identify: Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.
+          default_tags: []
+          summary_instructions: '## Pontos tratados
+
+            Um item por assunto, em uma ou duas frases.
+
+
+            ## Combinados
+
+            Um item por acompanhamento combinado: quem, o quê e até quando.'
+          position: 2
+        next_cursor: WyIyIiwgIjAxOTI4ZjNhLTFjMDAtN2EwMC04MDAwLTAwMDAwMDAwMDkwMiJd
+    AgendaTypeCreateRequest:
+      summary: Tipo de agenda para mentorias
+      value:
+        name: Mentoria
+        title_pattern: Mentoria · {assunto}
+        identify: Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.
+        default_tags:
+        - mentoria
+        summary_instructions: '## Temas
+
+          Um item por tema tratado.
+
+
+          ## Combinados
+
+          Um item por combinado, com prazo quando dito.'
     PersonPage:
       summary: Diretório com três pessoas
       value:

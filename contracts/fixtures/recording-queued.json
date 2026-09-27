@@ -21,6 +21,7 @@
   "tags": [],
   "collection_ids": [],
   "metadata": {},
+  "agenda_type": null,
   "job": {
     "id": "01928f3a-1c00-7a00-8000-000000000e01",
     "state": "queued",

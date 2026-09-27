@@ -33,14 +33,16 @@ _job = (
 
 
 def recording_select() -> Select:
-    """Gravações com dono, job mais recente e transcrição (sob a RLS)."""
+    """Gravações com dono, tipo de agenda, job mais recente e transcrição (sob a RLS)."""
     return select(
         t.recordings,
         t.users.c.name.label("owner_name"),
+        t.agenda_types.c.name.label("agenda_type_name"),
         t.transcripts.c.id.label("transcript_id"),
         *(column.label(f"job_{column.name}") for column in _job.c),
     ).select_from(
         t.recordings.join(t.users, t.users.c.id == t.recordings.c.owner_id)
+        .outerjoin(t.agenda_types, t.agenda_types.c.id == t.recordings.c.agenda_type_id)
         .outerjoin(_job, true())
         .outerjoin(t.transcripts, t.transcripts.c.recording_id == t.recordings.c.id)
     )
@@ -78,6 +80,13 @@ def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, 
 def recording_json(row: Row, progress: tuple[str | None, float] | None = None) -> dict[str, Any]:
     """Schema `Recording`, com o progresso em curso publicado pelo worker GPU."""
     job = _job_json(row, progress)
+    agenda_type = None
+    if row["agenda_type_id"] is not None:
+        agenda_type = {
+            "id": str(row["agenda_type_id"]),
+            "name": row["agenda_type_name"],
+            "origin": row["agenda_type_origin"],
+        }
     status = row["status"]
     if status == "queued" and job is not None and job["state"] == "running":
         status = "processing"
@@ -97,6 +106,7 @@ def recording_json(row: Row, progress: tuple[str | None, float] | None = None) -
         "collection_ids": [str(c) for c in row["collection_ids"]],
         "metadata": row["metadata"],
         "capture": row["capture"],
+        "agenda_type": agenda_type,
         "job": job,
         "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
         "created_at": iso(row["created_at"]),

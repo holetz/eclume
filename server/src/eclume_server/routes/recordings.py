@@ -47,6 +47,7 @@ class RecordingPatch(BaseModel):
     tags: list[Annotated[str, Field(min_length=1)]] | None = None
     collection_ids: list[UUID] | None = None
     metadata: dict[str, str] | None = None
+    agenda_type_id: UUID | None = None
 
 
 class RetranscribeRequest(BaseModel):
@@ -108,10 +109,19 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
     for field, value in values.items():
-        if value is None:
+        if value is None and field != "agenda_type_id":
             raise invalid_field(field, "não pode ser nulo")
+    if "agenda_type_id" in values:
+        # Escolha do usuário (a detecção não a troca); sem tipo, a escolha volta à detecção.
+        values["agenda_type_origin"] = None if values["agenda_type_id"] is None else "edited"
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_visible(conn, recording_id)
+        if values.get("agenda_type_id") is not None:
+            exists = await conn.execute(
+                select(t.agenda_types.c.id).where(t.agenda_types.c.id == values["agenda_type_id"])
+            )
+            if exists.first() is None:
+                raise invalid_field("agenda_type_id", "tipo de agenda inexistente ou sem acesso")
         if "collection_ids" in values:
             await check_collections(conn, values["collection_ids"])
             values["collection_ids"] = list(dict.fromkeys(values["collection_ids"]))
