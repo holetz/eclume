@@ -5,7 +5,14 @@ export interface HighlightPart {
   marked: boolean
 }
 
-const ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&#x27;': "'", '&#39;': "'" }
+const ENTITIES: Record<string, string> = {
+  '&lt;': '<',
+  '&gt;': '>',
+  '&amp;': '&',
+  '&quot;': '"',
+  '&#x27;': "'",
+  '&#39;': "'",
+}
 
 function unescape(text: string): string {
   return text.replace(/&(?:lt|gt|amp|quot|#x27|#39);/g, (entity) => ENTITIES[entity])

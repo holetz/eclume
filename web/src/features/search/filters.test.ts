@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { apiQuery, filtersFromParams, isSearchable, paramsFromFilters } from './filters'
+import { fixtures } from '../../test/fixtures'
+import { apiQuery, filtersFromParams, isSearchable, paramsFromFilters, periodStart } from './filters'
+import { groupHits, totalLabel } from './group'
 import { parseHighlight } from './highlight'
 
 describe('destaque', () => {
@@ -20,15 +22,54 @@ describe('destaque', () => {
 
 describe('filtros', () => {
   it('vão e voltam da URL em pt-BR e viram a consulta da API', () => {
-    const filters = filtersFromParams(new URLSearchParams('q=turmas&pessoa=p1&de=2026-09-01&ate=2026-09-18&tag=a'))
-    expect(filters).toEqual({ q: 'turmas', person: 'p1', from: '2026-09-01', to: '2026-09-18', tag: 'a', collection: '' })
-    expect(paramsFromFilters(filters)).toEqual({ q: 'turmas', pessoa: 'p1', de: '2026-09-01', ate: '2026-09-18', tag: 'a' })
+    const filters = filtersFromParams(
+      new URLSearchParams('q=turmas&pessoa=p1&de=2026-09-01&ate=2026-09-18&tag=a&campo=f1:Serra&campo=sem'),
+    )
+    expect(filters).toEqual({
+      q: 'turmas',
+      person: 'p1',
+      period: '',
+      from: '2026-09-01',
+      to: '2026-09-18',
+      tag: 'a',
+      collection: '',
+      field: ['f1:Serra'],
+    })
+    expect(paramsFromFilters(filters).toString()).toBe(
+      'q=turmas&pessoa=p1&de=2026-09-01&ate=2026-09-18&tag=a&campo=f1%3ASerra',
+    )
     const query = apiQuery(filters)
     expect(query.from).toBe(new Date(2026, 8, 1).toISOString())
     expect(query.to).toBe(new Date(2026, 8, 19).toISOString())
-    expect(query).toMatchObject({ q: 'turmas', person: 'p1', tag: 'a' })
+    expect(query).toMatchObject({ q: 'turmas', person: 'p1', tag: 'a', field: ['f1:Serra'] })
     expect(query).not.toHaveProperty('collection')
     expect(isSearchable(filtersFromParams(new URLSearchParams('tag=a')))).toBe(false)
     expect(isSearchable(filtersFromParams(new URLSearchParams('pessoa=p1')))).toBe(true)
+  })
+
+  it('o período rápido vira só o `from`, na meia-noite local', () => {
+    const now = new Date(2026, 8, 26, 15, 30)
+    expect(periodStart('7d', now)).toBe(new Date(2026, 8, 20).toISOString())
+    expect(periodStart('30d', now)).toBe(new Date(2026, 7, 28).toISOString())
+    expect(periodStart('ano', now)).toBe(new Date(2026, 0, 1).toISOString())
+    const query = apiQuery(filtersFromParams(new URLSearchParams('q=a&periodo=30d&de=2026-01-01&ate=2026-02-01')), now)
+    expect(query.from).toBe(new Date(2026, 7, 28).toISOString())
+    expect(query).not.toHaveProperty('to')
+    expect(filtersFromParams(new URLSearchParams('periodo=semestre')).period).toBe('')
+  })
+})
+
+describe('grupos da busca', () => {
+  it('junta só os acertos consecutivos da mesma gravação e conta trechos e gravações', () => {
+    const [a, b] = fixtures.searchPage().items
+    const other = { ...a, transcript: { ...a.transcript, id: 't2', recording_id: 'r2', title: 'Outra' } }
+    const groups = groupHits([a, b, other, a])
+    expect(groups.map((group) => [group.transcript.title, group.hits.length])).toEqual([
+      [a.transcript.title, 2],
+      ['Outra', 1],
+      [a.transcript.title, 1],
+    ])
+    expect(totalLabel([a, b, other, a], false)).toBe('4 trechos em 2 gravações')
+    expect(totalLabel([a], true)).toBe('1 trecho em 1 gravação ou mais')
   })
 })

@@ -16,13 +16,16 @@ video() {
   echo "testsrc2=size=320x240:rate=25:duration=$1"
 }
 ff() { ffmpeg -hide_banner -loglevel error -y "$@"; }
+# O início da gravação que o import lê antes de converter (recorded-at.ts): creation_time vira o
+# mvhd do MP4/MOV/M4A e o DateUTC do MKV; no MP3, a data só com o dia vira a tag ID3 TDRC.
+CREATED=(-metadata creation_time=2026-09-19T14:02:00Z)
 
-ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 128k "$OUT/video.mp4"
-ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 128k "$OUT/video.mov"
-ff -f lavfi -i "$(audio 10)" -c:a aac -b:a 128k "$OUT/audio.m4a"
+ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 128k "${CREATED[@]}" "$OUT/video.mp4"
+ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 128k "${CREATED[@]}" "$OUT/video.mov"
+ff -f lavfi -i "$(audio 10)" -c:a aac -b:a 128k "${CREATED[@]}" "$OUT/audio.m4a"
 ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libvpx -b:v 300k -c:a libopus -b:a 96k "$OUT/video.webm"
-ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a libvorbis -q:a 4 "$OUT/video.mkv"
-ff -f lavfi -i "$(audio 10)" -c:a libmp3lame -b:a 128k "$OUT/audio.mp3"
+ff -f lavfi -i "$(video 10)" -f lavfi -i "$(audio 10)" -c:v libx264 -pix_fmt yuv420p -c:a libvorbis -q:a 4 "${CREATED[@]}" "$OUT/video.mkv"
+ff -f lavfi -i "$(audio 10)" -c:a libmp3lame -b:a 128k -metadata date=2026-09-19 "$OUT/audio.mp3"
 ff -f lavfi -i "$(audio 10)" -c:a pcm_s16le "$OUT/audio.wav"
 ff -f lavfi -i "$(audio 10)" -c:a libvorbis -q:a 4 "$OUT/audio.ogg"
 # AVI: contêiner que o Mediabunny não lê — exercita o fallback ffmpeg.wasm.

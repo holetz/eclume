@@ -1,0 +1,56 @@
+/* O conteúdo do modal fora do .dialog-body (que atenua o texto), com o respiro do frame "Import files". */
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* O input de arquivo é visualmente oculto: o foco aparece na zona inteira. */
+.dropzone:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.choose {
+  color: var(--color-accent-ink);
+  text-decoration: underline;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.date {
+  max-width: 200px;
+}
+
+/* Sem data no arquivo: a borda e a origem no tom de aviso, como no frame. */
+.date[data-warning] {
+  border-color: var(--color-warning);
+}
+
+.body :global(.date-source)[data-warning] {
+  color: var(--color-warning);
+}
+
+.remove {
+  width: 28px;
+  height: 28px;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

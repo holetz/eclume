@@ -865,6 +865,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/RecordingPage'
               examples:
+                semana:
+                  $ref: '#/components/examples/RecordingWeekPage'
                 biblioteca:
                   $ref: '#/components/examples/RecordingPage'
         '401':
@@ -1183,6 +1185,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SummaryChatPage'
+              examples:
+                conversa:
+                  $ref: '#/components/examples/SummaryChatPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1231,6 +1236,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SummaryChatExchange'
+              examples:
+                na_fila:
+                  $ref: '#/components/examples/SummaryChatExchangeQueued'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2750,6 +2758,16 @@ paths:
           format: date-time
       - $ref: '#/components/parameters/TagFilter'
       - $ref: '#/components/parameters/CollectionFilter'
+      - name: field
+        in: query
+        description: 'Valor de um campo do usuário, `<field_id>:<valor>`; repetível, como em `GET /api/v1/recordings`:
+          valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o
+          valor ser um dos itens; título e tags valem como os embutidos.'
+        schema:
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9a-fA-F-]{36}:.+$
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
       responses:
@@ -8321,6 +8339,833 @@ components:
           created_at: '2026-09-18T14:09:31Z'
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
+    RecordingWeekPage:
+      summary: Semana de 21/09/2026, com notas, falha, sobreposição e resumo em andamento
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-0000000004a1
+          title: Planejamento semanal
+          source: desktop
+          recorded_at: '2026-09-21T12:00:00Z'
+          recorded_at_source: capture
+          duration_ms: 3480000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea1
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-21T12:59:00Z'
+            started_at: '2026-09-21T12:59:00Z'
+            finished_at: '2026-09-21T13:00:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-21T12:59:00Z'
+            finished_at: '2026-09-21T12:59:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-21T12:59:01Z'
+            finished_at: '2026-09-21T12:59:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-21T12:59:10Z'
+            finished_at: '2026-09-21T13:00:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-21T13:00:29Z'
+            finished_at: '2026-09-21T13:00:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-21T13:00:39Z'
+            finished_at: '2026-09-21T13:00:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-21T13:00:44Z'
+            finished_at: '2026-09-21T13:01:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a1
+          marker_count: 2
+          created_at: '2026-09-21T12:59:00Z'
+          updated_at: '2026-09-21T13:01:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a2
+          title: Mentoria · turma 3
+          source: desktop
+          recorded_at: '2026-09-21T17:00:00Z'
+          recorded_at_source: capture
+          duration_ms: 2700000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea2
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-21T17:46:00Z'
+            started_at: '2026-09-21T17:46:00Z'
+            finished_at: '2026-09-21T17:47:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-21T17:46:00Z'
+            finished_at: '2026-09-21T17:46:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-21T17:46:01Z'
+            finished_at: '2026-09-21T17:46:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-21T17:46:10Z'
+            finished_at: '2026-09-21T17:47:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-21T17:47:29Z'
+            finished_at: '2026-09-21T17:47:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-21T17:47:39Z'
+            finished_at: '2026-09-21T17:47:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-21T17:47:44Z'
+            finished_at: '2026-09-21T17:48:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a2
+          marker_count: 0
+          created_at: '2026-09-21T17:46:00Z'
+          updated_at: '2026-09-21T17:48:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a3
+          title: Círculo de liderança · sessão 7
+          source: desktop
+          recorded_at: '2026-09-22T13:30:00Z'
+          recorded_at_source: capture
+          duration_ms: 6000000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea3
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-22T15:11:00Z'
+            started_at: '2026-09-22T15:11:00Z'
+            finished_at: '2026-09-22T15:12:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-22T15:11:00Z'
+            finished_at: '2026-09-22T15:11:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-22T15:11:01Z'
+            finished_at: '2026-09-22T15:11:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-22T15:11:10Z'
+            finished_at: '2026-09-22T15:12:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-22T15:12:29Z'
+            finished_at: '2026-09-22T15:12:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-22T15:12:39Z'
+            finished_at: '2026-09-22T15:12:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-22T15:12:44Z'
+            finished_at: '2026-09-22T15:13:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a3
+          marker_count: 3
+          created_at: '2026-09-22T15:11:00Z'
+          updated_at: '2026-09-22T15:13:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a4
+          title: Rascunho da pauta
+          source: desktop
+          recorded_at: '2026-09-22T19:30:00Z'
+          recorded_at_source: capture
+          duration_ms: 42000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: null
+            device_name: iPhone 15 · Mariana
+            client_version: eclume-mobile/0.1.0
+          status: transcribed
+          kind: note
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type: null
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea4
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-22T19:32:00Z'
+            started_at: '2026-09-22T19:32:00Z'
+            finished_at: '2026-09-22T19:33:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-22T19:32:00Z'
+            finished_at: '2026-09-22T19:32:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-22T19:32:01Z'
+            finished_at: '2026-09-22T19:32:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-22T19:32:10Z'
+            finished_at: '2026-09-22T19:33:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-22T19:33:29Z'
+            finished_at: '2026-09-22T19:33:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: skipped
+            started_at: '2026-09-22T19:33:39Z'
+            finished_at: '2026-09-22T19:33:39Z'
+            duration_ms: 0
+            error: null
+            reason: no_types
+          - step: summary
+            state: skipped
+            started_at: '2026-09-22T19:33:44Z'
+            finished_at: '2026-09-22T19:33:44Z'
+            duration_ms: 0
+            error: null
+            reason: no_agenda_type
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a4
+          marker_count: 0
+          created_at: '2026-09-22T19:32:00Z'
+          updated_at: '2026-09-22T19:34:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a5
+          title: Ligação do fornecedor
+          source: desktop
+          recorded_at: '2026-09-23T11:18:00Z'
+          recorded_at_source: capture
+          duration_ms: 54000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: null
+            device_name: iPhone 15 · Mariana
+            client_version: eclume-mobile/0.1.0
+          status: transcribed
+          kind: note
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type: null
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea5
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-23T11:20:00Z'
+            started_at: '2026-09-23T11:20:00Z'
+            finished_at: '2026-09-23T11:21:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-23T11:20:00Z'
+            finished_at: '2026-09-23T11:20:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-23T11:20:01Z'
+            finished_at: '2026-09-23T11:20:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-23T11:20:10Z'
+            finished_at: '2026-09-23T11:21:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-23T11:21:29Z'
+            finished_at: '2026-09-23T11:21:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: skipped
+            started_at: '2026-09-23T11:21:39Z'
+            finished_at: '2026-09-23T11:21:39Z'
+            duration_ms: 0
+            error: null
+            reason: no_types
+          - step: summary
+            state: skipped
+            started_at: '2026-09-23T11:21:44Z'
+            finished_at: '2026-09-23T11:21:44Z'
+            duration_ms: 0
+            error: null
+            reason: no_agenda_type
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a5
+          marker_count: 0
+          created_at: '2026-09-23T11:20:00Z'
+          updated_at: '2026-09-23T11:22:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a6
+          title: reuniao-03.mkv
+          source: upload
+          recorded_at: '2026-09-23T16:00:00Z'
+          recorded_at_source: file_metadata
+          duration_ms: 3240000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: video/x-matroska
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture: null
+          status: failed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type: null
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea6
+            state: failed
+            stage: null
+            progress: 1
+            attempts: 1
+            error:
+              code: media_unreadable
+              message: O áudio do arquivo não pôde ser lido.
+            queued_at: '2026-09-23T16:55:00Z'
+            started_at: '2026-09-23T16:55:00Z'
+            finished_at: '2026-09-23T16:56:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-23T16:55:00Z'
+            finished_at: '2026-09-23T16:55:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-23T16:55:01Z'
+            finished_at: '2026-09-23T16:55:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: failed
+            started_at: '2026-09-23T16:55:10Z'
+            finished_at: '2026-09-23T16:55:50Z'
+            duration_ms: 40000
+            error:
+              code: media_unreadable
+              message: O áudio do arquivo não pôde ser lido.
+            reason: null
+          - step: fields
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: agenda_type
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          - step: summary
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          transcript_id: null
+          marker_count: 0
+          created_at: '2026-09-23T16:55:00Z'
+          updated_at: '2026-09-23T16:57:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a7
+          title: Revisão trimestral · equipe regional
+          source: desktop
+          recorded_at: '2026-09-24T12:00:00Z'
+          recorded_at_source: capture
+          duration_ms: 4320000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea7
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-24T13:13:00Z'
+            started_at: '2026-09-24T13:13:00Z'
+            finished_at: '2026-09-24T13:14:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-24T13:13:00Z'
+            finished_at: '2026-09-24T13:13:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-24T13:13:01Z'
+            finished_at: '2026-09-24T13:13:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-24T13:13:10Z'
+            finished_at: '2026-09-24T13:14:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-24T13:14:29Z'
+            finished_at: '2026-09-24T13:14:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-24T13:14:39Z'
+            finished_at: '2026-09-24T13:14:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-24T13:14:44Z'
+            finished_at: '2026-09-24T13:15:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a7
+          marker_count: 0
+          created_at: '2026-09-24T13:13:00Z'
+          updated_at: '2026-09-24T13:15:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a8
+          title: 1:1 Bruno / Carla
+          source: desktop
+          recorded_at: '2026-09-24T12:45:00Z'
+          recorded_at_source: capture
+          duration_ms: 2880000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000902
+            name: '1:1'
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea8
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-24T13:34:00Z'
+            started_at: '2026-09-24T13:34:00Z'
+            finished_at: '2026-09-24T13:35:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-24T13:34:00Z'
+            finished_at: '2026-09-24T13:34:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-24T13:34:01Z'
+            finished_at: '2026-09-24T13:34:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-24T13:34:10Z'
+            finished_at: '2026-09-24T13:35:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-24T13:35:29Z'
+            finished_at: '2026-09-24T13:35:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-24T13:35:39Z'
+            finished_at: '2026-09-24T13:35:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-24T13:35:44Z'
+            finished_at: '2026-09-24T13:36:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a8
+          marker_count: 0
+          created_at: '2026-09-24T13:34:00Z'
+          updated_at: '2026-09-24T13:36:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004a9
+          title: Onboarding · Guion
+          source: desktop
+          recorded_at: '2026-09-25T14:00:00Z'
+          recorded_at_source: capture
+          duration_ms: 2820000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000901
+            name: Reunião de equipe
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000ea9
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-25T14:48:00Z'
+            started_at: '2026-09-25T14:48:00Z'
+            finished_at: '2026-09-25T14:49:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-25T14:48:00Z'
+            finished_at: '2026-09-25T14:48:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-25T14:48:01Z'
+            finished_at: '2026-09-25T14:48:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-25T14:48:10Z'
+            finished_at: '2026-09-25T14:49:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-25T14:49:29Z'
+            finished_at: '2026-09-25T14:49:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-25T14:49:39Z'
+            finished_at: '2026-09-25T14:49:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: done
+            started_at: '2026-09-25T14:49:44Z'
+            finished_at: '2026-09-25T14:50:10Z'
+            duration_ms: 26000
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005a9
+          marker_count: 0
+          created_at: '2026-09-25T14:48:00Z'
+          updated_at: '2026-09-25T14:50:00Z'
+        - id: 01928f3a-1c00-7a00-8000-0000000004aa
+          title: 1:1 Elisa / Ana
+          source: desktop
+          recorded_at: '2026-09-26T13:30:00Z'
+          recorded_at_source: capture
+          duration_ms: 2340000
+          language: pt-BR
+          size_bytes: 19287595
+          content_type: audio/ogg
+          content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+          owner:
+            id: 01928f3a-1c00-7a00-8000-000000000101
+            name: Mariana Couto
+          capture:
+            meeting_app: teams
+            device_name: NB-MARIANA
+            client_version: eclume-desktop/0.3.0
+          status: transcribed
+          kind: meeting
+          tags: []
+          collection_ids: []
+          metadata: {}
+          agenda_type:
+            id: 01928f3a-1c00-7a00-8000-000000000902
+            name: '1:1'
+            origin: auto
+          job:
+            id: 01928f3a-1c00-7a00-8000-000000000eaa
+            state: succeeded
+            stage: null
+            progress: 1
+            attempts: 1
+            error: null
+            queued_at: '2026-09-26T14:10:00Z'
+            started_at: '2026-09-26T14:10:00Z'
+            finished_at: '2026-09-26T14:11:30Z'
+          pipeline:
+          - step: received
+            state: done
+            started_at: '2026-09-26T14:10:00Z'
+            finished_at: '2026-09-26T14:10:00Z'
+            duration_ms: 0
+            error: null
+            reason: null
+          - step: preprocessing
+            state: done
+            started_at: '2026-09-26T14:10:01Z'
+            finished_at: '2026-09-26T14:10:09Z'
+            duration_ms: 8000
+            error: null
+            reason: null
+          - step: transcription
+            state: done
+            started_at: '2026-09-26T14:10:10Z'
+            finished_at: '2026-09-26T14:11:28Z'
+            duration_ms: 78000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-26T14:11:29Z'
+            finished_at: '2026-09-26T14:11:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
+          - step: agenda_type
+            state: done
+            started_at: '2026-09-26T14:11:39Z'
+            finished_at: '2026-09-26T14:11:43Z'
+            duration_ms: 4000
+            error: null
+            reason: null
+          - step: summary
+            state: active
+            started_at: '2026-09-26T14:11:44Z'
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
+          transcript_id: 01928f3a-1c00-7a00-8000-0000000005aa
+          marker_count: 1
+          created_at: '2026-09-26T14:10:00Z'
+          updated_at: '2026-09-26T14:12:00Z'
+        next_cursor: null
     RecordingPatchRequest:
       summary: Tags, coleção e metadados
       value:
@@ -9134,6 +9979,89 @@ components:
       summary: Pedir quem falou do orçamento
       value:
         message: Quem falou do orçamento? Acrescente isso nas decisões.
+    SummaryChatPage:
+      summary: Um pedido e a resposta que leu a transcrição
+      value:
+        items:
+        - id: 01928f3a-1c00-7a00-8000-000000000d01
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          role: user
+          content: Quem falou do orçamento? Coloque isso nas decisões.
+          status: done
+          reply_to: null
+          base_summary_id: 01928f3a-1c00-7a00-8000-000000000a02
+          summary_id: null
+          reads: []
+          provider: null
+          model: null
+          error: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+          created_at: '2026-09-18T15:12:00Z'
+          completed_at: '2026-09-18T15:12:00Z'
+        - id: 01928f3a-1c00-7a00-8000-000000000d02
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          role: assistant
+          content: Foi a Mariana Couto, aos 00:01:05. Acrescentei o orçamento nas decisões.
+          status: done
+          reply_to: 01928f3a-1c00-7a00-8000-000000000d01
+          base_summary_id: 01928f3a-1c00-7a00-8000-000000000a02
+          summary_id: 01928f3a-1c00-7a00-8000-000000000a03
+          reads:
+          - tool: search_transcript
+            query: orçamento
+            hits: 2
+          - tool: read_transcript
+            from_ms: 60000
+            to_ms: 90000
+            clipped: false
+          provider:
+            id: 01928f3a-1c00-7a00-8000-000000000b01
+            name: Claude (servidor)
+            kind: claude-cli
+          model: claude-sonnet-4-5
+          error: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+          created_at: '2026-09-18T15:12:00Z'
+          completed_at: '2026-09-18T15:12:21Z'
+        next_cursor: null
+    SummaryChatExchangeQueued:
+      summary: Pedido gravado e resposta na fila
+      value:
+        message:
+          id: 01928f3a-1c00-7a00-8000-000000000d03
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          role: user
+          content: Liste as decisões em tabela.
+          status: done
+          reply_to: null
+          base_summary_id: 01928f3a-1c00-7a00-8000-000000000a03
+          summary_id: null
+          reads: []
+          provider: null
+          model: null
+          error: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+          created_at: '2026-09-18T15:20:00Z'
+          completed_at: '2026-09-18T15:20:00Z'
+        reply:
+          id: 01928f3a-1c00-7a00-8000-000000000d04
+          recording_id: 01928f3a-1c00-7a00-8000-000000000401
+          role: assistant
+          content: null
+          status: queued
+          reply_to: 01928f3a-1c00-7a00-8000-000000000d03
+          base_summary_id: 01928f3a-1c00-7a00-8000-000000000a03
+          summary_id: null
+          reads: []
+          provider:
+            id: 01928f3a-1c00-7a00-8000-000000000b01
+            name: Claude (servidor)
+            kind: claude-cli
+          model: null
+          error: null
+          created_by: 01928f3a-1c00-7a00-8000-000000000101
+          created_at: '2026-09-18T15:20:00Z'
+          completed_at: null
     SummaryChatMessageDone:
       summary: Resposta que leu um trecho e mudou o resumo
       value:
@@ -9328,6 +10256,15 @@ components:
           instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
           auto_fill: true
           position: 3
+        - id: 01928f3a-1c00-7a00-8000-000000000d04
+          key: projeto
+          name: Projeto
+          kind: text
+          builtin: null
+          options: []
+          instructions: O projeto ou programa de que a conversa trata, como está escrito na conversa.
+          auto_fill: true
+          position: 4
         next_cursor: null
     RecordingFieldValues:
       summary: Título aceito, tags automáticas e um campo sem valor
@@ -9377,6 +10314,19 @@ components:
           value: null
           origin: null
           updated_at: null
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d04
+            key: projeto
+            name: Projeto
+            kind: text
+            builtin: null
+            options: []
+            instructions: O projeto ou programa de que a conversa trata, como está escrito na conversa.
+            auto_fill: true
+            position: 4
+          value: Programa de lideranças 2026
+          origin: edited
+          updated_at: '2026-09-18T15:05:00Z'
     FieldPreviewRequest:
       summary: Testar a regra do campo Cliente
       value:

@@ -1,90 +1,132 @@
-import { Link, useParams, useSearchParams } from 'react-router'
+import { useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
-import { formatDateTime, formatDuration, sourceLabel } from '../library/format'
-import { JobProgress, StatusBadge } from '../library/RecordingStatus'
-import { OrganizePanel } from './OrganizePanel'
-import { useRecording, useTranscript } from './queries'
-import { RetryTranscription } from './RetryTranscription'
-import { parseStart } from './segments'
+import { ChatPanel } from './ChatPanel'
+import { FieldsPanel } from './FieldsPanel'
+import { MarkerBar } from './MarkerBar'
+import { useMarkers } from './markers'
+import { Pipeline } from './Pipeline'
+import { PlaybackProvider } from './PlaybackProvider'
+import { Player } from './Player'
+import { useRecording, useRefreshOnPipeline, useTranscript } from './queries'
+import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
-import { SpeakersPanel } from './SpeakersPanel'
-import { SummariesPanel } from './SummariesPanel'
-import { TranscriptView } from './TranscriptView'
+import { parseStart } from './segments'
+import { useSummaryState } from './summary'
+import { ChangeTypeDialog, SummaryDoc } from './SummaryDoc'
+import { TranscriptDisclosure } from './TranscriptDisclosure'
+
+/** A URL da biblioteca de onde a pessoa veio (calendário, lista ou busca); sem ela, a biblioteca. */
+function useBackTo(): string {
+  const { state } = useLocation()
+  const from = (state as { from?: unknown } | null)?.from
+  return typeof from === 'string' && from.startsWith('/') ? from : '/'
+}
 
 export function RecordingPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const backTo = useBackTo()
   const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
+  // Com `?t=` (vindo da busca), a transcrição já abre na fala.
+  const [transcriptOpen, setTranscriptOpen] = useState(startMs !== null)
+  const [changingType, setChangingType] = useState(false)
+  const summary = useSummaryState(id, Boolean(recording.data?.transcript_id))
+  const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
+  useRefreshOnPipeline(recording.data)
   usePageTitle(recording.data?.title ?? 'Gravação')
+
+  const back = (
+    <Link to={backTo} className={styles.back}>
+      ← Biblioteca
+    </Link>
+  )
 
   if (recording.isPending) return <p role="status">Carregando gravação…</p>
   if (recording.isError) {
     return (
-      <section className={styles.page}>
-        <Link to="/" className={styles.back}>
-          ← Biblioteca
-        </Link>
+      <div className={styles.content}>
+        {back}
         <p className="alert alert-error" role="alert">
           {errorMessage(recording.error)}
         </p>
-      </section>
+      </div>
     )
   }
 
   const data = recording.data
   return (
-    <section className={styles.page} aria-labelledby="gravacao-titulo">
-      <header className={styles.header}>
-        <Link to="/" className={styles.back}>
-          ← Biblioteca
-        </Link>
-        <div className={styles.titleRow}>
-          <h1 id="gravacao-titulo">{data.title}</h1>
-          <StatusBadge status={data.status} />
-        </div>
-        <p className={styles.meta}>
-          <span>{formatDateTime(data.recorded_at)}</span>
-          <span className="tabular">{formatDuration(data.duration_ms)}</span>
-          <span>{sourceLabel(data.source)}</span>
-          {data.language && <span>{data.language}</span>}
-          <span>{data.owner.name}</span>
-        </p>
-        <JobProgress recording={data} />
-        <RetryTranscription recording={data} />
-      </header>
+    <div className={`bleed ${styles.layout}`}>
+      <div className={styles.content}>
+        {back}
+        <RecordingHeader
+          recording={data}
+          hasSummary={Boolean(summary.data?.current)}
+          onDeleted={() => navigate(backTo, { state: { notice: 'Gravação excluída.' } })}
+        />
+        <Pipeline recording={data} />
 
-      {data.transcript_id === null ? (
-        <p className={`card ${styles.pending}`}>
-          {data.status === 'failed'
-            ? 'Não há transcrição: o job falhou.'
-            : 'A transcrição aparece aqui assim que o processamento terminar.'}
-        </p>
-      ) : transcript.isPending ? (
-        <p role="status">Carregando transcrição…</p>
-      ) : transcript.isError ? (
-        <p className="alert alert-error" role="alert">
-          {errorMessage(transcript.error)}
-        </p>
-      ) : (
-        <div className={styles.layout}>
-          <div className={styles.main}>
-            <TranscriptView
-              key={startMs ?? 'inicio'}
-              recordingId={data.id}
+        <PlaybackProvider recordingId={data.id} durationMs={data.duration_ms} startMs={startMs}>
+          {data.transcript_id !== null && (
+            <>
+              <Player markers={markers.data ?? []} />
+              <MarkerBar markers={markers.data ?? []} />
+            </>
+          )}
+          {data.transcript_id === null ? (
+            <p className={styles.pending}>
+              {data.status === 'failed'
+                ? 'Não há transcrição: o job falhou.'
+                : 'A transcrição aparece aqui assim que o processamento terminar.'}
+            </p>
+          ) : transcript.isPending ? (
+            <p role="status">Carregando transcrição…</p>
+          ) : transcript.isError ? (
+            <p className="alert alert-error" role="alert">
+              {errorMessage(transcript.error)}
+            </p>
+          ) : (
+            <TranscriptDisclosure
               transcript={transcript.data}
-              startMs={startMs}
+              markers={markers.data ?? []}
+              recordingId={data.id}
+              open={transcriptOpen}
+              onOpenChange={setTranscriptOpen}
+            />
+          )}
+        </PlaybackProvider>
+
+        {data.transcript_id !== null && (
+          <div className={styles.docGrid}>
+            <SummaryDoc recording={data} onChangeType={() => setChangingType(true)} />
+            <FieldsPanel
+              recording={data}
+              transcript={transcript.data}
+              onChangeType={() => setChangingType(true)}
+              onFixSpeakers={() => {
+                // Abre a transcrição; depois do render, leva o foco ao bloco Locutores.
+                setTranscriptOpen(true)
+                window.setTimeout(() => {
+                  const block = document.getElementById('locutores')
+                  block?.scrollIntoView({ block: 'start' })
+                  block?.focus()
+                })
+              }}
             />
           </div>
-          <aside className={styles.side} aria-label="Locutores, organização e resumos">
-            <SpeakersPanel transcript={transcript.data} />
-            <OrganizePanel recording={data} />
-            <SummariesPanel transcriptId={transcript.data.id} />
-          </aside>
-        </div>
-      )}
-    </section>
+        )}
+        {changingType && <ChangeTypeDialog recording={data} onClose={() => setChangingType(false)} />}
+      </div>
+      <ChatPanel
+        recordingId={data.id}
+        hasTranscript={data.transcript_id !== null}
+        hasSummary={Boolean(summary.data?.current)}
+        className={styles.chat}
+      />
+    </div>
   )
 }

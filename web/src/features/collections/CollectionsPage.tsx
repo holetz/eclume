@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
+import { PageHead } from '../../app/PageHead'
 import styles from './CollectionsPage.module.css'
 import { COLLECTIONS_KEY, useCollections, type Collection } from './queries'
 
@@ -13,7 +13,6 @@ interface CollectionFields {
 }
 
 export function CollectionsPage() {
-  usePageTitle('Coleções')
   const collections = useCollections()
   const queryClient = useQueryClient()
   const [creating, setCreating] = useState(false)
@@ -27,18 +26,21 @@ export function CollectionsPage() {
   const items = collections.data?.items ?? []
 
   return (
-    <section className={styles.page} aria-labelledby="colecoes-titulo">
-      <header className={styles.header}>
-        <div>
-          <h1 id="colecoes-titulo">Coleções</h1>
-          <p className="text-muted">Agrupe suas gravações por cliente, projeto ou programa. Uma gravação pode estar em várias.</p>
-        </div>
-        {!creating && (
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-            Nova coleção
-          </button>
-        )}
-      </header>
+    <section className={styles.page}>
+      <PageHead
+        kicker="Organizar"
+        title="Coleções"
+        actions={
+          !creating && (
+            <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+              Nova coleção
+            </button>
+          )
+        }
+      />
+      <p className="text-muted">
+        Coleção agrupa gravações; tag marca assuntos. As duas convivem, e uma gravação pode estar em várias coleções.
+      </p>
 
       {creating && (
         <div className="card">

@@ -17,8 +17,8 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
   const { speakers } = transcript
 
   return (
-    <section className={`card ${styles.panel}`} aria-labelledby={titleId}>
-      <h2 id={titleId}>Locutores</h2>
+    <section id="locutores" tabIndex={-1} className={styles.panel} aria-labelledby={titleId}>
+      <h6 id={titleId}>Locutores</h6>
       <ul className={styles.list}>
         {speakers.map((speaker) => (
           <SpeakerItem

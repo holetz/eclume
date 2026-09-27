@@ -4,10 +4,10 @@ title: Formato do áudio enviado pelo navegador
 description: Antes do upload, o navegador converte áudio e vídeo para Opus mono 16 kHz em Ogg (32 kbps) pela biblioteca isolada web/src/lib/media-convert — WebCodecs com Mediabunny, ffmpeg.wasm de fallback — e este é o formato, o porquê e a API que o app consome.
 resource: web/src/lib/media-convert/**, web/vitest.browser.config.ts, web/scripts/media-fixtures.sh
 tags: [code, web, audio, opus, webcodecs, upload]
-timestamp: 2026-09-24
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#7
+source: holetz/eclume#7, holetz/eclume#37
 maintainer: holetz
 ---
 
@@ -93,10 +93,49 @@ OUTPUT_FORMAT, DEFAULT_BITRATE, MIN_BITRATE, MAX_BITRATE, sha256Hex
   abaixo de `bytesTotal`, porque o demuxer pula o vídeo; no ffmpeg.wasm, é estimado pela razão.
 - **Duração:** `durationSec` é relida do próprio arquivo convertido.
 
+## O início da gravação, lido antes da conversão
+
+O Opus convertido não carrega os metadados do original. Por isso o import lê o **início da
+gravação** do arquivo original na seleção, em paralelo ao `probeMedia` e antes de converter:
+
+```ts
+readRecordedAt(file: Blob, options?: { now?: Date }): Promise<{
+  at: Date
+  source: 'metadata' | 'file_date'
+  precision: 'minute' | 'day'
+  detail: string                  // mvhd, DateUTC, a tag lida ou lastModified
+}>
+```
+
+As fontes, na ordem de preferência:
+
+1. **MP4, MOV e M4A:** o `creation_time` do `moov/mvhd`, em segundos desde 1904-01-01 UTC
+   (versões 0 e 1). Um leitor de caixas próprio percorre as caixas de topo por `blob.slice` de
+   16 bytes, porque o `moov` pode estar no fim do arquivo, e lê só o `mvhd`. O Mediabunny 1.59
+   pula esse campo no demux.
+2. **Matroska e WebM:** o `DateUTC` (ID `0x4461`, nanossegundos desde 2001-01-01 UTC) no `Info`
+   do segmento, procurado nos primeiros 256 KB.
+3. **As tags pelo Mediabunny** (`getMetadataTags()`, carregado sob demanda): QuickTime
+   `com.apple.quicktime.creationdate`, ID3 `TDRC`, `©day`, Vorbis `DATE` e WAV `ICRD`. Uma tag sem
+   fuso é hora local. Uma tag só com o dia fica com `precision: 'day'` e recebe a hora da data de
+   modificação quando é o mesmo dia local; senão, 12:00.
+4. **Fallback:** `file.lastModified`, com `source: 'file_date'`.
+
+As fontes 1 e 2 são UTC. Uma data zerada (1904 ou 1970), anterior a 1990 ou mais de um dia no
+futuro é descartada e a leitura passa à fonte seguinte. `readRecordedAt` nunca rejeita: falha de
+leitura vira o fallback.
+
+**O que o import envia.** A pessoa confirma ou corrige a data por arquivo. O upload manda
+`recorded_at` (o valor local convertido em ISO) e `recorded_at_source`: `file_metadata` quando a
+data veio dos metadados e não foi editada; `user` quando foi editada ou quando veio do fallback,
+porque a pessoa confirmou uma data que o arquivo não trazia. O `title` não vai: sem ele, o servidor
+usa o nome do arquivo e o preenchimento automático pode trocá-lo.
+
 ## Como é verificado
 
 - **Unitários** (`npm --prefix web test`, ambiente node): ambiente, estimativa, hash, progresso,
-  erros e a escolha de motor com os motores substituídos por dublês.
+  erros e a escolha de motor com os motores substituídos por dublês; o início da gravação com
+  bytes sintéticos de `mvhd` e `DateUTC` e tags simuladas.
 - **Navegador** (`npm run fixtures && npm run test:browser`, no host de build por `remote-run`
   e na CI): vitest browser mode com `@vitest/browser-playwright` no canal `chrome` — o
   Google Chrome tem os decoders proprietários (AAC), que o Chromium do Playwright não tem.
