@@ -7,8 +7,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
-from eclume_server.accounts import password_login
+from eclume_server.accounts import NOTICE_VERSION, password_login
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
@@ -20,8 +21,8 @@ from eclume_server.devices import (
     pairing_code_json,
     redeem_pairing_code,
 )
-from eclume_server.problems import ApiProblemError, not_found, unauthorized
-from eclume_server.ratelimit import attempts
+from eclume_server.problems import ApiProblemError, not_found, notice_required, unauthorized
+from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR, attempts, count_login
 from eclume_server.routes.auth import WRONG_PASSWORD, check_email
 from eclume_server.server_info import server_info
 
@@ -54,11 +55,18 @@ class DevicePair(BaseModel):
 async def device_login(
     body: DeviceLogin, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("devices_login"))]
 ) -> dict[str, Any]:
-    """Confere a senha como o login do navegador e emite o token de dispositivo."""
+    """Confere a senha como o login do navegador e emite o token de dispositivo.
+
+    Conta sem o aceite do aviso em vigor não ganha credencial nova: 403 `notice_required`.
+    """
+    await count_login(ctx, "user", body.email)
     async with system_tx(ctx.engine) as conn:
         user_id = await password_login(conn, body.email, body.password)
         if user_id is None:
             raise unauthorized(WRONG_PASSWORD)
+        accepted = await conn.scalar(select(t.users.c.notice_version).where(t.users.c.id == user_id))
+        if accepted != NOTICE_VERSION:
+            raise notice_required()
         server = server_info(ctx.settings, str(request.base_url))
         return await issue_credential(conn, user_id, body.device_name, body.platform, server)
 
@@ -84,7 +92,10 @@ async def get_pairing_code(pairing_code_id: UUID, principal: SessionUser, ctx: C
 
 @router.post("/devices/pair", status_code=201)
 async def pair_device(
-    body: DevicePair, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("devices_pair"))]
+    body: DevicePair,
+    request: Request,
+    ctx: Ctx,
+    _: Annotated[None, Depends(attempts("devices_pair", global_factor=PAIR_GLOBAL_FACTOR))],
 ) -> dict[str, Any]:
     """Troca o código (uso único) pela credencial de dispositivo do dono dele."""
     async with system_tx(ctx.engine) as conn:

@@ -55,8 +55,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
-  de admin e `/devices/*`) têm limite de tentativas por IP: estourado, **429** `rate_limited` com
-  `Retry-After`. Código de pareamento inválido, vencido ou usado é **401** `invalid_pairing_code`.
+  de admin e `/devices/*`) têm limite de tentativas por IP (os logins também por conta):
+  estourado, **429** `rate_limited` com `Retry-After`. Código de pareamento inválido, vencido
+  ou usado é **401** `invalid_pairing_code`.
 - **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
   impressão e recusa de sugestão). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
