@@ -58,6 +58,18 @@ class AgendaTypePatch(BaseModel):
     position: int | None = Field(default=None, ge=0)
 
 
+class DefaultAgendaTypeCreate(AgendaTypeCreate):
+    """Schema `DefaultAgendaTypeCreate`."""
+
+    include_for_new_users: bool = True
+
+
+class DefaultAgendaTypePatch(AgendaTypePatch):
+    """Schema `DefaultAgendaTypePatch`."""
+
+    include_for_new_users: bool | None = None
+
+
 def agenda_type_json(row: Row) -> dict[str, Any]:
     """Schema `AgendaType`."""
     return {
@@ -71,12 +83,24 @@ def agenda_type_json(row: Row) -> dict[str, Any]:
     }
 
 
+def default_agenda_type_json(row: Row) -> dict[str, Any]:
+    """Schema `DefaultAgendaType`: o `AgendaType` com `include_for_new_users`."""
+    return {**agenda_type_json(row), "include_for_new_users": row["include_for_new_users"]}
+
+
+def create_values(body: AgendaTypeCreate) -> dict[str, Any]:
+    """Os valores de um tipo novo, com as tags sem repetição (`position` resolvido por quem insere)."""
+    values = body.model_dump()
+    values["default_tags"] = list(dict.fromkeys(values["default_tags"]))
+    return values
+
+
 def changes_of(body: AgendaTypePatch) -> dict[str, Any]:
     """Os campos enviados; recusa corpo vazio e `null` onde o schema não aceita."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
-    for field in REQUIRED:
+    for field in (*REQUIRED, "include_for_new_users"):
         if field in values and values[field] is None:
             raise invalid_field(field, "não pode ser nulo")
     if "default_tags" in values:
@@ -84,9 +108,12 @@ def changes_of(body: AgendaTypePatch) -> dict[str, Any]:
     return values
 
 
-async def next_position(conn: AsyncConnection, table: Table, *where: Any) -> int:  # noqa: ANN401
-    """Uma posição depois da última da lista."""
-    last = (await conn.execute(select(func.max(table.c.position)).where(*where))).scalar()
+async def next_position(conn: AsyncConnection, table: Table) -> int:
+    """Uma posição depois da última da lista (a do usuário, sob a RLS, ou a da plataforma).
+
+    Serve às listas ordenadas pelo usuário: tipos de agenda e campos.
+    """
+    last = (await conn.execute(select(func.max(table.c.position)))).scalar()
     return 1 if last is None else last + 1
 
 
