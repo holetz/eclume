@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -6,20 +7,24 @@ import { AppShell, type ShellUser } from './AppShell'
 import { isInMoreSection, isItemActive, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
+import { createQueryClient } from './queryClient'
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
+  // O shell monta a fila de importação, que usa o QueryClient.
   render(
-    <MemoryRouter initialEntries={[at]}>
-      <Routes>
-        <Route element={<AppShell user={user} onLogout={onLogout} />}>
-          <Route path="/tokens" element={<h1>Tokens</h1>} />
-          <Route path="/pessoas" element={<h1>Pessoas</h1>} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={createQueryClient({ retry: false })}>
+      <MemoryRouter initialEntries={[at]}>
+        <Routes>
+          <Route element={<AppShell user={user} onLogout={onLogout} />}>
+            <Route path="/tokens" element={<h1>Tokens</h1>} />
+            <Route path="/pessoas" element={<h1>Pessoas</h1>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
   return onLogout
 }

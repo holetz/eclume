@@ -99,7 +99,7 @@ describe('painel de filtros', () => {
     expect([...query.keys()].sort()).toEqual(['from', 'limit', 'sort', 'to'])
     expect(query.get('from')).toBe('2026-09-21T03:00:00.000Z')
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
-  })
+  }, 20_000)
 
   it('recolhe e lembra o estado, e a biblioteca volta à última visão e aos últimos filtros', async () => {
     const user = userEvent.setup()

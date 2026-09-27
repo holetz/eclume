@@ -2,6 +2,7 @@ import { useId, useState, type SyntheticEvent } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
+import { ImportProvider } from '../features/import/ImportProvider'
 import { HelpProvider } from './HelpProvider'
 import { isInMoreSection, isItemActive, navGroups, type NavGroupEntry } from './nav'
 import { ShellFrame } from './ShellFrame'
@@ -113,7 +114,9 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           </>
         }
       >
-        <Outlet />
+        <ImportProvider>
+          <Outlet />
+        </ImportProvider>
       </ShellFrame>
     </HelpProvider>
   )
