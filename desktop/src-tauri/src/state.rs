@@ -3,14 +3,16 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use eclume_detect::{Action, AppKey, AutoRecorder, Policy, Recording};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
 use eclume_recorder::{
-    Kind, Marker, MeetingEvent, Queue, QueueCounts, QueuedRecording, METER_BARS,
+    Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
+    METER_BARS,
 };
 use eclume_sync::{PatSource, PatStore, UploaderConfig};
 use serde::{Deserialize, Serialize};
@@ -221,6 +223,8 @@ struct Inner {
     sync_notice: Option<String>,
     /// Como ficou o registro de cada atalho global.
     shortcut_registrations: Registrations,
+    /// O pedido de cancelamento da importação em curso, se houver uma.
+    importing: Option<Arc<AtomicBool>>,
 }
 
 impl Inner {
@@ -239,6 +243,18 @@ pub struct AppState {
     config_path: PathBuf,
     pat: PatStore,
     inner: Mutex<Inner>,
+}
+
+/// Id de um arquivo importado: o instante da importação e um sufixo, como o das gravações.
+fn import_id() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    format!(
+        "{}-i{:04x}",
+        now.as_millis(),
+        (now.subsec_nanos() ^ std::process::id()) & 0xffff
+    )
 }
 
 /// Texto vazio (ou só espaços) vira `None`.
@@ -294,6 +310,7 @@ impl AppState {
                 notice: None,
                 sync_notice: None,
                 shortcut_registrations: Registrations::new(),
+                importing: None,
             }),
         }
     }
@@ -592,6 +609,68 @@ impl AppState {
     pub fn set_shortcut_registrations(&self, registrations: Registrations) -> Result<()> {
         self.inner()?.shortcut_registrations = registrations;
         Ok(())
+    }
+
+    /// Marca o início de uma importação; só uma por vez.
+    pub fn begin_import(&self) -> Result<Arc<AtomicBool>> {
+        let mut inner = self.inner()?;
+        if inner.importing.is_some() {
+            bail!("Já há uma importação em andamento");
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        inner.importing = Some(Arc::clone(&cancel));
+        Ok(cancel)
+    }
+
+    /// Pede o cancelamento da importação em curso.
+    pub fn cancel_import(&self) -> Result<()> {
+        if let Some(cancel) = &self.inner()?.importing {
+            cancel.store(true, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
+    pub fn end_import(&self) {
+        if let Ok(mut inner) = self.inner() {
+            inner.importing = None;
+        }
+    }
+
+    /// Converte `src` para `gravacoes/` (ou o copia) e o põe na fila, já pendente, com
+    /// `source: upload`. `recorded_at` é o início confirmado ou digitado na janela.
+    pub fn import_file(
+        &self,
+        src: &Path,
+        recorded_at: i64,
+        recorded_at_source: RecordedAtSource,
+        cancel: &AtomicBool,
+        progress: impl FnMut(f32),
+    ) -> Result<QueuedRecording> {
+        let probe = eclume_import::probe(src)?;
+        if !probe.has_audio {
+            bail!("{} não tem áudio", src.display());
+        }
+        let id = import_id();
+        let converted = eclume_import::convert(src, &self.recorder.dir, &id, cancel, progress)?;
+        let original_name = src
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| id.clone());
+        let duration_ms = converted.duration_ms.or(probe.duration_ms).unwrap_or(0);
+        let queue = self.lock_queue()?;
+        queue.begin_import(&NewImport {
+            id: &id,
+            path: &converted.path,
+            recorded_at,
+            recorded_at_source,
+            original_name: &original_name,
+            content_type: (!converted.converted).then_some(converted.content_type.as_str()),
+            duration_ms: i64::try_from(duration_ms).unwrap_or(i64::MAX),
+            bytes: i64::try_from(converted.bytes).unwrap_or(i64::MAX),
+        })?;
+        queue
+            .get(&id)?
+            .ok_or_else(|| anyhow!("importação {id} sumiu da fila"))
     }
 
     pub fn recordings(&self, limit: u32) -> Result<Vec<QueuedRecording>> {
@@ -1082,6 +1161,86 @@ mod tests {
             ]
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn fixture(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../crates/import/tests/fixtures")
+            .join(name)
+    }
+
+    #[test]
+    fn importar_converte_e_poe_na_fila_como_upload() {
+        let (state, dir) = state("importa");
+        let cancel = state.begin_import().unwrap();
+        assert!(state.begin_import().is_err(), "uma importação por vez");
+        let mut steps = Vec::new();
+        let recording = state
+            .import_file(
+                &fixture("tom.mp3"),
+                1_789_826_520_000,
+                RecordedAtSource::User,
+                &cancel,
+                |f| steps.push(f),
+            )
+            .unwrap();
+        state.end_import();
+        assert_eq!(steps.last(), Some(&1.0));
+        assert_eq!(recording.status, Status::Pending);
+        assert_eq!(recording.source, eclume_recorder::Source::Upload);
+        assert_eq!(recording.kind, Kind::Meeting);
+        assert_eq!(recording.recorded_at_source, RecordedAtSource::User);
+        assert_eq!(recording.started_at, 1_789_826_520_000);
+        assert_eq!(recording.original_name.as_deref(), Some("tom"));
+        assert_eq!(recording.content_type, None);
+        assert!(recording.path.starts_with(dir.join("gravacoes")));
+        assert!(recording.path.exists());
+        assert!(recording.duration_ms.unwrap() > 1_900);
+
+        let avi = state
+            .import_file(
+                &fixture("tom.avi"),
+                0,
+                RecordedAtSource::FileMetadata,
+                &AtomicBool::new(false),
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(avi.content_type.as_deref(), Some("video/x-msvideo"));
+        assert_eq!(state.view().unwrap().counts.pending, 2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn importar_sem_audio_ou_cancelado_nao_entra_na_fila() {
+        let (state, dir) = state("importa-nao");
+        let err = state
+            .import_file(
+                &fixture("sem-audio.mp4"),
+                0,
+                RecordedAtSource::User,
+                &AtomicBool::new(false),
+                |_| {},
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("não tem áudio"), "{err}");
+
+        let cancel = state.begin_import().unwrap();
+        state.cancel_import().unwrap();
+        let err = state
+            .import_file(
+                &fixture("tom.wav"),
+                0,
+                RecordedAtSource::User,
+                &cancel,
+                |_| {},
+            )
+            .unwrap_err();
+        assert!(err.is::<eclume_import::Cancelled>());
+        state.end_import();
+        assert!(state.begin_import().is_ok());
+        assert!(state.recordings(10).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -3,6 +3,8 @@
 use eclume_recorder::{Marker, QueuedRecording};
 use tauri::{AppHandle, State};
 
+use crate::import::ImportPreview;
+
 use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView};
 
 type CommandResult<T> = Result<T, String>;
@@ -65,6 +67,37 @@ pub fn set_marker_note(
     note: Option<String>,
 ) -> CommandResult<Marker> {
     to_js(state.set_marker_note(&client_id, note))
+}
+
+/// O diálogo nativo de importar; `null` quando a pessoa desiste.
+#[tauri::command(async)]
+pub fn pick_import_file(app: AppHandle) -> Option<String> {
+    crate::import::pick(&app).map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Lê duração e data do arquivo antes da confirmação.
+#[tauri::command(async)]
+pub fn probe_import(path: String) -> CommandResult<ImportPreview> {
+    to_js(crate::import::preview(std::path::Path::new(&path)))
+}
+
+/// Converte e põe na fila em segundo plano; o fim chega por evento.
+#[tauri::command]
+pub fn import_file(
+    app: AppHandle,
+    path: String,
+    recorded_at: i64,
+    recorded_at_source: String,
+) -> CommandResult<()> {
+    to_js(
+        crate::import::parse_source(&recorded_at_source)
+            .and_then(|source| crate::import::spawn(&app, path.into(), recorded_at, source)),
+    )
+}
+
+#[tauri::command]
+pub fn cancel_import(state: State<'_, AppState>) -> CommandResult<()> {
+    to_js(state.cancel_import())
 }
 
 #[tauri::command]

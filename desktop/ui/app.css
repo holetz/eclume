@@ -80,3 +80,7 @@
 #politica-opcoes {
   justify-self: start;
 }
+
+.flush {
+  margin: 0;
+}

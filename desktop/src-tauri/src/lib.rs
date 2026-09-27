@@ -6,6 +6,7 @@ mod auto;
 pub mod capture;
 mod commands;
 pub mod config;
+mod import;
 mod notify;
 pub mod shortcuts;
 pub mod state;
@@ -19,7 +20,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
-use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri::{AppHandle, DragDropEvent, Emitter, Manager, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::state::{AppState, Busy, NoteToggle, Reaped};
@@ -162,6 +163,7 @@ fn spawn_reaper(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             init_logging(&app.path().app_log_dir()?);
@@ -183,10 +185,20 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Fechar a janela só a esconde: o app segue na bandeja.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                // Fechar a janela só a esconde: o app segue na bandeja.
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // Um arquivo arrastado para a janela abre a importação (o primeiro, se vierem
+                // vários).
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                    if let Some(path) = paths.first() {
+                        import::open_in_window(window.app_handle(), path);
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -197,6 +209,10 @@ pub fn run() {
             commands::note_meter,
             commands::add_marker,
             commands::set_marker_note,
+            commands::pick_import_file,
+            commands::probe_import,
+            commands::import_file,
+            commands::cancel_import,
             commands::open_web,
             commands::settings,
             commands::save_settings,

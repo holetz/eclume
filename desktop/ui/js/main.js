@@ -3,6 +3,7 @@
 import { invoke, listen } from "./tauri.js";
 import { preencherIcones } from "./icones.js";
 import * as principal from "./vistas/principal.js";
+import * as importar from "./vistas/importar.js";
 
 /** As vistas registradas: nome → { entrar?(params), sair?(), atualizar?(estado) }. */
 const vistas = new Map();
@@ -64,6 +65,7 @@ function aoTeclar(evento) {
 }
 
 registrar("principal", principal);
+registrar("importar", importar);
 
 const temaEscuro = window.matchMedia("(prefers-color-scheme: dark)");
 aplicarTema(temaEscuro.matches);
@@ -72,6 +74,8 @@ preencherIcones();
 document.addEventListener("keydown", aoTeclar);
 ir("principal");
 listen("status-changed", atualizar);
+// Arquivo arrastado para a janela ou escolhido pela bandeja.
+listen("import-dropped", ({ payload }) => ir("importar", { path: payload }));
 setInterval(() => {
   if (!document.hidden) atualizar();
 }, 1000);

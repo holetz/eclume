@@ -19,6 +19,7 @@ const TRAY_ID: &str = "eclume";
 const MENU_STATUS: &str = "status";
 const MENU_TOGGLE: &str = "toggle";
 const MENU_MARKER: &str = "marker";
+const MENU_IMPORT: &str = "import";
 const MENU_ASK_RECORD: &str = "ask-record";
 const MENU_ASK_IGNORE: &str = "ask-ignore";
 const MENU_SYNC: &str = "sync-now";
@@ -94,6 +95,13 @@ fn build_menu(
             None::<&str>,
         )?)?;
     }
+    menu.append(&MenuItem::with_id(
+        app,
+        MENU_IMPORT,
+        "Importar arquivo…",
+        true,
+        None::<&str>,
+    )?)?;
     menu.append(&MenuItem::with_id(
         app,
         MENU_SYNC,
@@ -178,6 +186,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         MENU_TOGGLE => crate::spawn_toggle_recording(app),
         MENU_MARKER => crate::add_marker(app),
+        MENU_IMPORT => crate::import::pick_from_tray(app),
         MENU_ASK_RECORD => crate::auto::answer(app, true),
         MENU_ASK_IGNORE => crate::auto::answer(app, false),
         MENU_SYNC => {

@@ -104,5 +104,42 @@
         ></span>
       </div>
     </section>
+
+    <section class="tray tray-window" data-vista="importar" aria-label="Importar um arquivo" hidden>
+      <div class="tray-section">
+        <div class="row row-between">
+          <h4 class="flush">Importar um arquivo</h4>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="importar-fechar"
+            data-icone="fechar" aria-label="Fechar"></button>
+        </div>
+        <label class="dropzone" id="importar-alvo">
+          <strong>Solte o áudio ou o vídeo aqui</strong>
+          <span class="text-muted">ou <a href="#" id="importar-escolher">escolha um arquivo</a></span>
+        </label>
+      </div>
+
+      <div class="tray-section" id="importar-arquivo" hidden>
+        <div class="field">
+          <label for="importar-data" id="importar-nome"></label>
+          <input class="input mono" type="datetime-local" id="importar-data" step="60" />
+          <span class="date-source" id="importar-origem"></span>
+        </div>
+        <div class="stack-tight" id="importar-andamento" hidden>
+          <progress class="progress" id="importar-progresso" max="1" value="0"></progress>
+          <span class="progress-row"><span>Convertendo para Opus…</span><span id="importar-porcento"></span></span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="importar-confirmar">Pôr na fila de envio</button>
+          <button type="button" class="btn btn-secondary" id="importar-cancelar">Cancelar</button>
+        </div>
+      </div>
+
+      <div class="tray-section" id="importar-erro" hidden>
+        <div class="alert alert-error" role="alert">
+          <span class="alert-title">Não deu para importar</span>
+          <span id="importar-erro-texto"></span>
+        </div>
+      </div>
+    </section>
   </body>
 </html>

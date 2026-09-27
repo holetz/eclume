@@ -81,6 +81,39 @@
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
       },
       marcadores: [],
+      importacao: {
+        escolhido: "/home/ana/kickoff-guion.m4a",
+        arquivos: {
+          "/home/ana/kickoff-guion.m4a": {
+            name: "kickoff-guion.m4a",
+            duration_ms: 47 * MIN + 12_000,
+            has_audio: true,
+            decodable: true,
+            recorded_at: new Date(2026, 8, 19, 14, 2).getTime(),
+            date_origin: "mvhd",
+          },
+          "/home/ana/gravador.wav": {
+            name: "gravador.wav",
+            duration_ms: 90_000,
+            has_audio: true,
+            decodable: true,
+            recorded_at: new Date(2026, 8, 20, 9, 30).getTime(),
+            date_origin: "file_mtime",
+          },
+          "/home/ana/tela.mp4": {
+            name: "tela.mp4",
+            duration_ms: 60_000,
+            has_audio: false,
+            decodable: false,
+            recorded_at: agora,
+            date_origin: "file_mtime",
+          },
+        },
+        pedido: null,
+        falha: null,
+        segurar: false,
+        cancelada: false,
+      },
       medidor: {
         position_ms: 42_000,
         levels: [0.3, 0.55, 0.8, 0.65, 0.9, 0.45, 0.7, 0.35, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
@@ -189,6 +222,26 @@
       } else {
         Object.assign(e.status, { status: "recording", recording_id: "nota", recording_started_at: Date.now(), recording_kind: "note" });
       }
+      return null;
+    },
+    pick_import_file: (e) => e.importacao.escolhido,
+    probe_import(e, { path }) {
+      const lido = e.importacao.arquivos[path];
+      if (!lido) throw `arquivo ilegível: ${path}`;
+      return { path, ...lido };
+    },
+    import_file(e, args) {
+      e.importacao.pedido = args;
+      if (e.importacao.falha) {
+        setTimeout(() => mock.emitir("import-failed", e.importacao.falha), 20);
+        return null;
+      }
+      setTimeout(() => mock.emitir("import-progress", 0.5), 10);
+      if (!e.importacao.segurar) setTimeout(() => mock.emitir("import-finished", "imp-1"), 30);
+      return null;
+    },
+    cancel_import(e) {
+      e.importacao.cancelada = true;
       return null;
     },
     note_meter: (e) => (e.status.recording_kind === "note" ? e.medidor : null),
