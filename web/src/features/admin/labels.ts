@@ -1,6 +1,4 @@
 // Rótulos em pt-BR dos valores do contrato. Valor desconhecido aparece cru (o contrato só cresce).
-import type { Schemas } from '../../api/client'
-
 type Option = { value: string; label: string; hint?: string }
 
 export const ENGINES: readonly Option[] = [
@@ -70,26 +68,9 @@ export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
   },
 }
 
-export const ROLES: readonly Option[] = [
-  { value: 'member', label: 'Membro' },
-  { value: 'admin', label: 'Administrador' },
-]
-
-export const INVITATION_DAYS = [1, 7, 14, 30] as const
-
 export function labelOf(options: readonly Option[], value: string | null | undefined): string {
   if (value == null) return '—'
   return options.find((option) => option.value === value)?.label ?? value
-}
-
-export function invitationStatus(invitation: Schemas['Invitation']): { label: string; tone: string } {
-  const status =
-    invitation.status ??
-    (invitation.accepted_at ? 'accepted' : new Date(invitation.expires_at) <= new Date() ? 'expired' : 'pending')
-  if (status === 'accepted') return { label: 'Aceito', tone: 'success' }
-  if (status === 'expired') return { label: 'Expirado', tone: 'warning' }
-  if (status === 'pending') return { label: 'Pendente', tone: 'progress' }
-  return { label: status, tone: 'neutral' }
 }
 
 /** Número de um campo opcional: vazio vira `null`. */

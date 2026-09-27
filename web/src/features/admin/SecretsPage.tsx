@@ -11,7 +11,7 @@ import { sectionTitle } from './sections'
 
 type Secret = Schemas['SecretList']['items'][number]
 
-/** Segredos da organização: só escrita. O valor salvo nunca volta do servidor. */
+/** Segredos da plataforma: só escrita. O valor salvo nunca volta do servidor. */
 export function SecretsPage() {
   usePageTitle(sectionTitle('segredos'))
   const secrets = useSecrets()

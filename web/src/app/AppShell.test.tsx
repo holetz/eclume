@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
 import { NAV_ITEMS, navGroups } from './nav'
 
-const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org', role: 'member' }
+const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn()) {
   render(
@@ -21,13 +21,12 @@ function renderShell(user = member, onLogout = vi.fn()) {
 }
 
 describe('navegação', () => {
-  it('mostra só as áreas ligadas, e o admin só para admin', () => {
-    const items = NAV_ITEMS.map((i) => (i.adminOnly ? { ...i, enabled: true } : i))
-    const labels = (role: 'admin' | 'member') =>
-      navGroups(role, items).flatMap((g) => g.items.map((i) => i.label))
-    expect(labels('member')).toContain('Pessoas')
-    expect(labels('member')).not.toContain('Painel admin')
-    expect(labels('admin')).toContain('Painel admin')
+  it('mostra só as áreas ligadas, sem o painel admin (conta e login próprios)', () => {
+    const labels = navGroups().flatMap((g) => g.items.map((i) => i.label))
+    expect(labels).toContain('Pessoas')
+    expect(labels).not.toContain('Painel admin')
+    const off = NAV_ITEMS.map((i) => (i.label === 'Pessoas' ? { ...i, enabled: false } : i))
+    expect(navGroups(off).flatMap((g) => g.items.map((i) => i.label))).not.toContain('Pessoas')
   })
 })
 

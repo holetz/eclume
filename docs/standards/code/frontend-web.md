@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato v1, na mesma origem e com sessão por cookie e CSRF double-submit; organiza-se em shell, features (biblioteca, gravação, pessoas, busca, coleções) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel admin fica fora da sessão do usuário, com login e sessão próprios; organiza-se em shell, features (biblioteca, gravação, pessoas, busca, coleções, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32
 maintainer: holetz
 ---
 
@@ -34,11 +34,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - O app chama `/api/v1/...` relativo à própria origem, com `credentials: 'same-origin'`. Em
   produção o Caddy serve web e API na mesma origem; em dev, o `vite.config.ts` faz proxy de
   `/api` para `ECLUME_API_URL` (padrão: o mock em `http://127.0.0.1:4010`). Não há CORS.
-- A sessão é o cookie `eclume_session`, aberto por `POST /auth/login`. O middleware do cliente
-  copia o cookie `eclume_csrf` para `X-CSRF-Token` em todo método mutável.
-- Estado da sessão = `useMe()` (`GET /me`; 401 vira `null`). Qualquer 401 fora do login zera a
-  sessão no cache, e a guarda `RequireSession` leva a `/entrar?volta=<rota>`; `volta` só aceita
-  caminho interno.
+- A sessão do usuário é o cookie `eclume_session`, aberto por `POST /auth/login`. A do painel
+  admin é outra, `eclume_admin_session` (só viaja para `/api/v1/admin`), aberta por
+  `POST /admin/auth/login`. O `csrfMiddleware` copia para `X-CSRF-Token`, em todo método
+  mutável, o cookie da área: `eclume_admin_csrf` quando a URL começa por `/api/v1/admin/`,
+  `eclume_csrf` nos demais casos (`isAdminUrl`).
+- Estado da sessão do usuário = `useMe()` (`GET /me`; 401 vira `null`). O `unauthorizedMiddleware`
+  zera essa sessão no cache a cada 401 fora do login e **fora de `/api/v1/admin/`** (o 401 do
+  painel é da sessão de admin), e a guarda `RequireSession` leva a `/entrar?volta=<rota>`; `volta`
+  só aceita caminho interno.
 
 ## Estrutura de pastas
 
@@ -52,10 +56,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
-- **Rotas em pt-BR** (`/entrar`, `/convite/:token`, `/gravacoes/:id`, `/importar`, `/pessoas`,
-  `/pessoas/:id`, `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/*`), e os filtros na
-  query string também em pt-BR (`?de=`, `?colecao=`, `?tag=` na biblioteca;
-  `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca).
+- **Rotas em pt-BR** (`/entrar`, `/gravacoes/:id`, `/importar`, `/pessoas`, `/pessoas/:id`,
+  `/busca`, `/colecoes`, `/tokens`, `/app-desktop`, `/admin/entrar`, `/admin/*`), e os filtros na
+  query string também em pt-BR (`?colecao=`, `?tag=` na biblioteca;
+  `?q=&pessoa=&de=&ate=&tag=&colecao=` na busca). A biblioteca mostra só as gravações do usuário:
+  não há filtro Minhas/Compartilhadas nem selo de visibilidade.
 - **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
   biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
   (89 KB gzip). O chunk do WebCodecs (Mediabunny, ~560 KB) só carrega na conversão do import, e
@@ -63,21 +68,23 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
-- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled` e `adminOnly`; uma área nova de
-  outra spec entra desligada, e ligá-la é mudar `enabled` e registrar a rota.
+- **Navegação numa lista só** (`src/app/nav.ts`), com `enabled`; uma área nova de outra spec entra
+  desligada, e ligá-la é mudar `enabled` e registrar a rota. O painel admin não está nela: a conta
+  de usuário não tem papel, e o painel tem conta e login próprios.
 - **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
   `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
   vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
   devolveu.
-- **Administração** (`/admin/*`, `src/features/admin/`): `AdminRoutes` monta as seções
-  (Transcrição, Agentes, Templates padrão, Usuários e convites, Segredos, Saúde) dentro de
-  `AdminLayout`, que **exige `role: admin`** — esconder o item do menu não é controle de acesso; o
-  membro vê "Sem permissão". A lista de seções mora em `sections.ts`. Segredos só têm campo de
-  escrita e nunca mostram o valor; o link de convite, como o segredo do PAT, aparece uma vez; a
-  Saúde relê a cada 10 s (`refetchInterval`). As regras do server estão em
-  [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar` e `/convite/:token` (aceite do convite: nome, senha de 12+ e
-  confirmação; 404 vira "convite inválido, expirado ou já usado").
+- **Administração** (`/admin/*`, `src/features/admin/`), **fora de `RequireSession` e do shell do
+  usuário**: `AdminRoutes` monta as seções (Transcrição, Identificação por voz, Agentes, Usuários,
+  Segredos, Saúde) dentro de `AdminLayout`, cuja guarda é `useAdminMe()` (`GET /admin/me`, chave
+  `['admin', 'me']`): sem sessão de admin, volta a `/admin/entrar?volta=<rota>`. O layout mostra o
+  e-mail da conta de admin e "Sair" (`POST /admin/auth/logout`). `/admin/entrar` é um formulário
+  de e-mail e senha para `POST /admin/auth/login`, com o estilo do login do usuário. A lista de
+  seções mora em `sections.ts`. Usuários lista as contas com a contagem de gravações e só
+  desativa e reativa; Segredos só têm campo de escrita e nunca mostram o valor; a Saúde relê a
+  cada 10 s (`refetchInterval`). As regras do server estão em [server-admin.md](server-admin.md).
+- **Rotas públicas:** `/entrar` e `/admin/entrar`.
 - **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
   só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
@@ -110,10 +117,13 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   “nome”" quando ninguém tem aquele nome. Cada sugestão por voz pendente aparece como "Parece ser
   <pessoa> — NN%", com Aceitar (liga com um clique) e Recusar; nunca é aplicada sozinha.
 - **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a página da pessoa tem a seção
-  Voz (consentimento com o termo, amostras, excluir e exportar), e o admin tem a seção
-  Identificação por voz (`/admin/voz`), com opt-in, limiar, termo, trilha e purga.
+  Voz (amostras e "Esquecer a voz"; não há consentimento por pessoa, que o aceite do aviso no
+  cadastro substitui), e o admin tem a seção Identificação por voz (`/admin/voz`), com o
+  liga-desliga da plataforma e o limiar.
+- **Templates de resumo** são todos do usuário: o painel de resumos lista os dele, sem grupos por
+  escopo.
 - **Organização da gravação** (tags, coleções, tipo de reunião, cliente, projeto) é um painel da
-  página da gravação: o dono edita, quem vê por compartilhamento só lê. Os metadados de
+  página da gravação, editado pelo dono. Os metadados de
   organização são as chaves `tipo_reuniao`, `cliente` e `projeto` do `RecordingMetadata`; as
   demais chaves gravadas são preservadas.
 
@@ -147,8 +157,9 @@ Depois de recarregar, o import recomeça pela conversão.
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
   para o mock, e um cenário percorre login, biblioteca, transcrição, import com conversão real e
   PAT, outro percorre busca, gravação aberta no segundo do trecho, vínculo de locutor, pessoas
-  e coleções, e um terceiro o painel admin. O Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na
-  resposta do login, pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
+  e coleções, e um terceiro o painel admin, que entra por `/admin/entrar` com a sessão de admin. O
+  Prism não emite cookies nem guarda estado, então o teste põe os cookies de sessão na resposta do
+  login (o de admin com `Path=/api/v1/admin`), pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
   absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS. `ECLUME_MOCK_URL` aponta para
   outra porta quando a 4010 está ocupada; `E2E_SCREENSHOTS=1` salva telas claro e escuro em
   `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado.
@@ -160,6 +171,7 @@ Depois de recarregar, o import recomeça pela conversão.
   do `claude -p`. Roda no host GPU por `bash deploy/e2e-real.sh` (da estação:
   `remote-run . 'bash deploy/e2e-real.sh'`), que sobe um stack efêmero próprio
   (`deploy/docker-compose.e2e.yml`, projeto `eclume-e2e`, Caddy em `127.0.0.1:18443`, dados em
-  tmpfs, worker na engine CPU sem GPU), cria organização e admin descartáveis, roda o cenário e
+  tmpfs, worker na engine CPU sem GPU), cria o admin descartável pelo `eclume-server admin create`
+  e o usuário pelo cadastro (`POST /auth/signup`), roda o cenário e
   sai sempre com `down -v` e as imagens `:e2e` apagadas. Nunca toca a produção. Leva ~1 min além
   do build; fica fora da CI (exige o daemon, o Chrome e o login do Claude do host).
