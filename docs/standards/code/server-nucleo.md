@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF, PAT com escopos, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35
 maintainer: holetz
 ---
 
@@ -89,7 +89,7 @@ Três papéis, cada um com um motivo:
 - **O único contexto é `app.user_id`** (`eclume_user()`). Toda política é uma igualdade
   `LEAKPROOF` sobre a própria linha: `<tabela>_own` com `USING` e `WITH CHECK`
   `owner_id = eclume_user()`; `users_self` com `id = eclume_user()`; `api_tokens_own` com
-  `user_id = eclume_user()`. Nenhuma política consulta outra tabela, então não há regra
+  `user_id = eclume_user()`; `pairing_codes_own` idem. Nenhuma política consulta outra tabela, então não há regra
   anti-recursão a manter. O que cada tabela permite fica nos `GRANT`s de `eclume_app`.
 - **Toda transação de requisição de usuário** roda `SET LOCAL ROLE eclume_app` (papel `NOLOGIN`,
   sem `BYPASSRLS`) e fixa `app.user_id` com `set_config(..., true)` —
@@ -129,6 +129,24 @@ nas duas.
 - **PAT** `eclp_` + 40 caracteres base62, guardado como SHA-256 (segredo de alta entropia
   dispensa hash lento); `prefix` = os 9 primeiros caracteres. Um `Authorization: Bearer` presente
   nunca cai para o cookie.
+- **Tipo do token** (`api_tokens.kind`, migration 015): `personal`, o PAT de `POST /tokens`
+  (sempre desse tipo), ou `device`, a credencial de um aparelho (`platform` preenchida), que só
+  nasce de `POST /devices/login` ou `POST /devices/pair`
+  ([server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md)). Os dois autenticam igual, pelo
+  mesmo `Bearer eclp_`; `GET /tokens?kind=` separa as listas e `DELETE /tokens/{id}` revoga
+  qualquer um. O uso pelo servidor MCP grava `mcp_last_used_at` junto de `last_used_at`.
+- **Escopos:** `ALL_SCOPES` em `auth.py`. A exclusão de gravação tem escopo próprio,
+  `recordings:delete` (a 015 o concedeu a todo token que tinha `recordings:write`, que antes
+  excluía).
+- **Aceite do aviso na sessão:** a sessão de uma conta que não aceitou o aviso em vigor recebe
+  **403** `notice_required` em toda rota, menos as marcadas `requires(before_notice=True)`
+  (`GET /me`, `POST /me/notice`, logout); as rotas públicas de `/auth/*` não pedem credencial. O
+  PAT não é barrado (ver [Cadastro e aviso](#cadastro-e-aviso)).
+- **Limite de tentativas** (`ratelimit.py`): janela fixa de 1 minuto no Redis
+  (`INCR` + `EXPIRE` em `eclume:rl:<rota>:<ip>`), 10 tentativas por IP em `/auth/login`,
+  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`. Estourado, **429**
+  `rate_limited` com `Retry-After` (segundos até a janela reabrir). O IP é o do uvicorn com
+  `--proxy-headers`, que confia no `X-Forwarded-For` do Caddy.
 - **Sessão de admin:** `POST /admin/auth/login` abre `eclume_admin_session` (HttpOnly, Secure,
   SameSite=Strict, `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`) e `eclume_admin_csrf`
   legível (`Path=/`), guardados em `admin_sessions`. `auth.require_admin` é a dependência de toda
@@ -139,8 +157,9 @@ nas duas.
   - sem credencial, credencial inválida, CSRF ausente ou errado, ou credencial de usuário em
     `/admin/*` → **401** `unauthorized`: a sessão sem double-submit está incompleta, e o web
     responde a 401 com um login novo, que recupera o cookie;
-  - PAT numa rota só de sessão (PATs, voz, logout) → **403** `session_required` (contrato 1.4.0):
-    a credencial é válida, só não é a aceita ali;
+  - PAT numa rota só de sessão (PATs, código de pareamento, voz, logout) → **403**
+    `session_required` (contrato 1.4.0): a credencial é válida, só não é a aceita ali;
+  - sessão de conta sem o aceite do aviso em vigor → **403** `notice_required` (2.3.0);
   - escopo faltando → **403** `insufficient_scope` com `required_scopes`;
   - requisição fora do contrato (parâmetro, corpo ou regra de negócio) → **422**
     `validation_failed` com `errors[]`, em qualquer operação, como o mock;
@@ -164,8 +183,11 @@ nas duas.
   (`CHECK`). `GET /me` devolve `notice_required` quando a conta não aceitou a versão em vigor, e
   `POST /me/notice` (só sessão) registra o aceite. Um texto novo do aviso é uma versão nova: as
   contas voltam a ver `notice_required`.
-- **O aceite pendente não bloqueia a API:** o desktop e o lumea usam PAT de contas migradas. Quem
-  pede o aceite é o web.
+- **O aceite pendente barra só a sessão** (2.3.0): o web não passa de `/me` e do aceite enquanto
+  ele falta, e o server garante isso também para quem chama a API com o cookie. O PAT não é
+  barrado: o desktop e o lumea usam PAT de contas migradas, e quem pede o aceite é o web.
+- As fábricas dos testes (`make_user()`) criam a conta **com** o aceite;
+  `make_user(notice_version=None)` é a conta migrada, sem ele.
 
 ## Upload e áudio
 

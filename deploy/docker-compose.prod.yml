@@ -40,6 +40,9 @@ x-server-env: &server-env
   # Job de transcrição morto: graça antes de confirmar e teto de progresso parado (segundos).
   ECLUME_JOB_GRACE_SECONDS: ${ECLUME_JOB_GRACE_SECONDS:-120}
   ECLUME_JOB_STALL_SECONDS: ${ECLUME_JOB_STALL_SECONDS:-1800}
+  # Descritor /api/v1/server e anúncio mDNS: o nome da instância e a CA raiz que os apps fixam.
+  ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
+  ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
 
 x-server-image: &server-image
   image: eclume-server:prod
@@ -80,6 +83,9 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    volumes:
+      # A CA raiz publicada pelo `publish-ca`: a impressão digital do descritor (cache pelo mtime).
+      - ${ECLUME_DATA_DIR}/downloads:/srv/downloads:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
       interval: 10s
@@ -136,6 +142,20 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # Anúncio mDNS `_eclume._tcp` (endereço de ECLUME_PUBLIC_URL, TXT com a impressão digital da CA).
+  # Rede do host: o multicast não sai da bridge. Sem porta publicada; o 5353/udp passa pelo ufw
+  # (docs/project/host-setup.md). O deploy o recria depois do `publish-ca`.
+  mdns:
+    <<: [*restart, *server-image]
+    command: ["eclume-server", "announce"]
+    network_mode: host
+    environment:
+      ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
+      ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
+      ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
+    volumes:
+      - ${ECLUME_DATA_DIR}/downloads:/srv/downloads:ro
 
   postgres:
     <<: *restart
@@ -221,9 +241,10 @@ services:
 
 configs:
   # `tls internal`: certificado da CA local do Caddy. `default_sni`: quem acessa por IP não envia
-  # SNI. /api e /media vão ao server sem cortar o prefixo; /downloads/ serve a pasta dos
-  # instaladores do desktop (deploy/publicar-desktop.sh); o resto é o SPA. Nenhuma rota do SPA pode
-  # começar com /api, /media ou /downloads.
+  # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
+  # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o
+  # SPA. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou /downloads (a tela é
+  # /configuracoes/mcp).
   caddyfile:
     content: |
       {
@@ -237,6 +258,9 @@ configs:
           reverse_proxy server:8000
         }
         handle /media/* {
+          reverse_proxy server:8000
+        }
+        handle /mcp {
           reverse_proxy server:8000
         }
         redir /downloads /downloads/ 308

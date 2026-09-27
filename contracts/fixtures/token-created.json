@@ -2,6 +2,8 @@
   "token": {
     "id": "01928f3a-1c00-7a00-8000-000000000701",
     "name": "lumea — importador",
+    "kind": "personal",
+    "platform": null,
     "scopes": [
       "transcripts:read",
       "people:read"

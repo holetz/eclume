@@ -4,7 +4,8 @@ export type Scope = Schemas['Scope']
 
 export const SCOPES: readonly { scope: Scope; label: string; description: string }[] = [
   { scope: 'recordings:read', label: 'Ler gravações', description: 'Listar gravações, ver o estado e ouvir o áudio.' },
-  { scope: 'recordings:write', label: 'Enviar gravações', description: 'Subir áudio, editar e excluir gravações.' },
+  { scope: 'recordings:write', label: 'Enviar gravações', description: 'Subir áudio e editar gravações.' },
+  { scope: 'recordings:delete', label: 'Excluir gravações', description: 'Excluir gravações, o áudio e a transcrição.' },
   { scope: 'transcripts:read', label: 'Ler transcrições', description: 'Ler e exportar transcrições.' },
   { scope: 'transcripts:write', label: 'Editar transcrições', description: 'Renomear locutores e corrigir falas.' },
   { scope: 'people:read', label: 'Ler pessoas', description: 'Consultar o diretório de pessoas.' },

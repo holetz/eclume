@@ -74,6 +74,22 @@ api_tokens = Table(
     _ts("last_used_at"),
     _ts("expires_at"),
     _ts("revoked_at"),
+    # 015_dispositivos_e_mcp
+    Column("kind", Text, server_default=FetchedValue()),
+    Column("platform", Text),
+    _ts("mcp_last_used_at"),
+)
+
+pairing_codes = Table(
+    "pairing_codes",
+    metadata,
+    _pk(),
+    _uuid("user_id"),
+    Column("code_hmac", Text),
+    _ts("expires_at"),
+    _ts("used_at"),
+    _uuid("token_id"),
+    _ts("created_at", server_default=FetchedValue()),
 )
 
 platform_settings = Table(

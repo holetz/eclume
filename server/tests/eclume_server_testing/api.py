@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from eclume_server.accounts import create_admin, create_user
+from eclume_server.accounts import NOTICE_VERSION, create_admin, create_user
 from eclume_server.db import tables as t
 from eclume_server_testing.harness import run
 
@@ -103,8 +103,8 @@ def admin_login(client: TestClient, email: str, password: str = PASSWORD) -> Api
     return Api(client, cookies=cookies, csrf_cookie="eclume_admin_csrf")
 
 
-def new_user(services: Services, *, name: str | None = None, notice_version: str | None = None) -> Account:
-    """Conta de usuário nova, com a senha `PASSWORD`."""
+def new_user(services: Services, *, name: str | None = None, notice_version: str | None = NOTICE_VERSION) -> Account:
+    """Conta de usuário nova, com a senha `PASSWORD` e o aviso aceito (`notice_version=None`: sem aceite)."""
     handle = secrets.token_hex(4)
     email = f"user-{handle}@exemplo.com.br"
     name = name or f"Usuário {handle}"

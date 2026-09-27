@@ -18,17 +18,17 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
-from eclume_server.problems import invalid_field, not_found
+from eclume_server.problems import not_found
 from eclume_server.serialize import Row
 from eclume_server.summaries import (
-    PROVIDER_PUBLIC,
     create_summary,
     delete_all,
     edit_summary,
-    provider_for,
     recording_transcript,
     revert_summary,
+    summary_agenda_type,
     summary_json,
+    summary_provider,
     summary_state,
 )
 
@@ -60,39 +60,6 @@ async def _transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
     row = (await conn.execute(select(t.transcripts).where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
-    return row
-
-
-async def _provider(conn: AsyncConnection, provider_id: UUID | None) -> Row:
-    """O provider pedido, ou o de resumos da plataforma; ausente ou desabilitado → 422."""
-    field = "provider_id"
-    if provider_id is None:
-        provider = await provider_for(conn, "summaries")
-        if provider is None:
-            raise invalid_field(field, "a plataforma não tem provider de resumos; informe provider_id")
-        return provider
-    row = (await conn.execute(select(*PROVIDER_PUBLIC).where(t.agent_providers.c.id == provider_id))).mappings().first()
-    if row is None:
-        raise invalid_field(field, "provider inexistente")
-    if not row["enabled"]:
-        raise invalid_field(field, "provider desabilitado")
-    return row
-
-
-async def _agenda_type(conn: AsyncConnection, transcript: Row, agenda_type_id: UUID | None) -> Row:
-    """O tipo pedido, ou o da gravação; nenhum → 422."""
-    field = "agenda_type_id"
-    if agenda_type_id is None:
-        agenda_type_id = (
-            await conn.execute(
-                select(t.recordings.c.agenda_type_id).where(t.recordings.c.id == transcript["recording_id"])
-            )
-        ).scalar()
-        if agenda_type_id is None:
-            raise invalid_field(field, "a gravação não tem tipo de agenda; informe agenda_type_id")
-    row = (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
-    if row is None:
-        raise invalid_field(field, "tipo de agenda inexistente ou sem acesso")
     return row
 
 
@@ -131,8 +98,8 @@ async def create_transcript_summary(
     """Gera uma nova versão do resumo daquele tipo de agenda, na fila do worker CPU."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await _transcript(conn, transcript_id)
-        agenda_type = await _agenda_type(conn, transcript, body.agenda_type_id)
-        provider = await _provider(conn, body.provider_id)
+        agenda_type = await summary_agenda_type(conn, transcript, body.agenda_type_id)
+        provider = await summary_provider(conn, body.provider_id)
         row = await create_summary(
             conn,
             transcript=transcript,

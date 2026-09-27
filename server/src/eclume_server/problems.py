@@ -26,6 +26,8 @@ _TITLES = {
     "upload_expired": "Upload expirado",
     "email_taken": "E-mail já cadastrado",
     "signup_closed": "Cadastro fechado",
+    "notice_required": "Aviso não aceito",
+    "invalid_pairing_code": "Código de pareamento inválido",
     "method_not_allowed": "Método não permitido",
     "not_implemented": "Ainda não implementado",
 }
@@ -86,6 +88,11 @@ def session_required() -> ApiProblemError:
     return ApiProblemError(403, "session_required", "Esta operação aceita só sessão do navegador, não PAT.")
 
 
+def notice_required() -> ApiProblemError:
+    """403 — sessão de conta que ainda não aceitou o aviso em vigor."""
+    return ApiProblemError(403, "notice_required", "Aceite o aviso em vigor em POST /api/v1/me/notice.")
+
+
 def insufficient_scope(missing: list[str]) -> ApiProblemError:
     """403 — o PAT não tem os escopos exigidos pela operação."""
     return ApiProblemError(
@@ -116,9 +123,10 @@ def conflict(detail: str, code: str = "conflict") -> ApiProblemError:
     return ApiProblemError(409, code, detail)
 
 
-def rate_limited(detail: str) -> ApiProblemError:
-    """429 — o limite de pedidos em aberto foi atingido; tente de novo quando algum terminar."""
-    return ApiProblemError(429, "rate_limited", detail)
+def rate_limited(detail: str, retry_after: int | None = None) -> ApiProblemError:
+    """429 — limite atingido: pedidos em aberto, ou tentativas na janela (com `Retry-After`)."""
+    headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+    return ApiProblemError(429, "rate_limited", detail, headers=headers)
 
 
 def _field(loc: tuple[Any, ...]) -> str:

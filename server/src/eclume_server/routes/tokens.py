@@ -1,4 +1,4 @@
-"""PATs pessoais: criar, listar e revogar. Só com sessão."""
+"""Tokens: PATs pessoais (criar) e credenciais de dispositivo; listar e revogar os dois. Só com sessão."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ SessionUser = Annotated[Principal, Depends(requires(session_only=True))]
 Scope = Literal[
     "recordings:read",
     "recordings:write",
+    "recordings:delete",
     "transcripts:read",
     "transcripts:write",
     "people:read",
@@ -32,6 +33,7 @@ Scope = Literal[
     "summaries:read",
     "summaries:write",
 ]
+TokenKind = Literal["personal", "device"]
 
 
 class TokenCreate(BaseModel):
@@ -47,6 +49,8 @@ def token_json(row: Row) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "name": row["name"],
+        "kind": row["kind"],
+        "platform": row["platform"],
         "scopes": list(row["scopes"]),
         "prefix": row["prefix"],
         "created_at": iso(row["created_at"]),
@@ -57,9 +61,13 @@ def token_json(row: Row) -> dict[str, Any]:
 
 
 @router.get("/tokens")
-async def list_tokens(principal: SessionUser, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """PATs do usuário, inclusive revogados, do mais novo para o mais antigo."""
+async def list_tokens(
+    principal: SessionUser, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50, kind: TokenKind | None = None
+) -> dict[str, Any]:
+    """Tokens do usuário, inclusive revogados, do mais novo para o mais antigo."""
     query = select(t.api_tokens).order_by(t.api_tokens.c.created_at.desc(), t.api_tokens.c.id.desc()).limit(limit + 1)
+    if kind:
+        query = query.where(t.api_tokens.c.kind == kind)
     if cursor:
         position = decode_cursor(cursor)
         query = query.where(tuple_(t.api_tokens.c.created_at, t.api_tokens.c.id) < position)
@@ -102,7 +110,7 @@ async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> d
 
 @router.delete("/tokens/{token_id}", status_code=204)
 async def revoke_token(token_id: UUID, principal: SessionUser, ctx: Ctx) -> Response:
-    """Revoga um PAT do usuário; usos seguintes recebem 401."""
+    """Revoga um token do usuário (PAT ou dispositivo); usos seguintes recebem 401."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         found = (await conn.execute(select(t.api_tokens.c.id).where(t.api_tokens.c.id == token_id))).first()
         if found is None:
