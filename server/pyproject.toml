@@ -23,6 +23,8 @@ dependencies = [
   "cryptography>=44",
   # exportação em DOCX (holetz/eclume#34)
   "python-docx>=1.1",
+  # servidor MCP em /mcp (holetz/eclume#35)
+  "mcp>=2.2,<3",
 ]
 
 [project.scripts]

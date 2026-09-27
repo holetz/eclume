@@ -67,7 +67,7 @@ class AdminPrincipal:
     session_id: UUID
 
 
-async def _from_pat(ctx: AppContext, secret: str) -> Principal:
+async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> Principal:
     now = datetime.now(UTC)
     query = (
         select(t.api_tokens, t.users.c.active)
@@ -83,7 +83,9 @@ async def _from_pat(ctx: AppContext, secret: str) -> Principal:
             or not row["active"]
         ):
             raise unauthorized("PAT inválido, expirado ou revogado.")
-        await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(last_used_at=now))
+        # O uso pelo MCP conta os assistentes conectados na Saúde.
+        used = {"last_used_at": now, "mcp_last_used_at": now} if via_mcp else {"last_used_at": now}
+        await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(**used))
     scopes = tuple(scope for scope in ALL_SCOPES if scope in row["scopes"])
     return Principal(row["user_id"], "pat", scopes, token_id=row["id"])
 
@@ -113,10 +115,11 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
     return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"], notice_pending=pending)
 
 
-async def authenticate(request: Request, ctx: AppContext) -> Principal:
+async def authenticate(request: Request, ctx: AppContext, *, bearer_only: bool = False) -> Principal:
     """Resolve a credencial de usuário; um Bearer presente nunca cai para o cookie.
 
-    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado.
+    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado. Com
+    `bearer_only` (o servidor MCP), só o Bearer vale, e o uso fica marcado como MCP.
     """
     authorization = request.headers.get("Authorization")
     if authorization is not None:
@@ -124,7 +127,9 @@ async def authenticate(request: Request, ctx: AppContext) -> Principal:
         secret = secret.strip()
         if scheme.lower() != "bearer" or not secret.startswith(PAT_PREFIX):
             raise unauthorized("Use Authorization: Bearer eclp_...")
-        return await _from_pat(ctx, secret)
+        return await _from_pat(ctx, secret, via_mcp=bearer_only)
+    if bearer_only:
+        raise unauthorized("Use Authorization: Bearer eclp_...")
     token = request.cookies.get(SESSION_COOKIE)
     if token:
         return await _from_session(ctx, token, request)
