@@ -114,8 +114,8 @@ def scenario(
     person = apis["alice"].post("/api/v1/people", json={"name": "Rafael Lima"}).json()
     apis["alice"].post("/api/v1/collections", json={"name": "Cliente X"})
     _seed_voice(services, recording["transcript_id"], person["id"])
-    # Um upload em andamento, um resumo e um valor de campo, para toda tabela de conteúdo ter linha
-    # da Alice.
+    # Um upload em andamento e um resumo, para toda tabela de conteúdo ter linha da Alice (o título
+    # do upload já é um valor de campo).
     apis["alice"].post(
         "/api/v1/uploads",
         json={"filename": "b.ogg", "content_type": "audio/ogg", "size_bytes": 10, "sha256": "0" * 64},
@@ -130,14 +130,6 @@ def scenario(
                 " gen_random_uuid(), 'p', 'claude-cli', 'm' FROM transcripts WHERE id = :t"
             ),
             {"t": recording["transcript_id"]},
-        )
-        await conn.execute(
-            text(
-                "INSERT INTO field_values (recording_id, field_id, owner_id, value, origin)"
-                " SELECT :r, id, owner_id, '\"Reunião sigilosa\"', 'edited' FROM fields"
-                " WHERE owner_id = :o AND builtin = 'title'"
-            ),
-            {"r": recording["id"], "o": alice.user_id},
         )
 
     run(services.sql(summary))

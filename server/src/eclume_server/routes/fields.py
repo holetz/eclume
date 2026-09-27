@@ -7,20 +7,36 @@ Título e tags são embutidos: não saem nem mudam de tipo. Os valores de cada g
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import delete, insert, select, tuple_, update
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, func, insert, select, tuple_, update
 
 from eclume_server.agenda_types import next_position
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.fields import FieldCreate, FieldPatch, check_options, field_json, free_key, get_field
+from eclume_server.fields import (
+    FieldCreate,
+    FieldPatch,
+    check_options,
+    field_json,
+    free_key,
+    get_field,
+    recording_values,
+    set_value,
+    validate_value,
+)
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
-from eclume_server.problems import conflict, invalid_field
+from eclume_server.problems import conflict, invalid_field, not_found
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
+    from eclume_server.serialize import Row
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -112,3 +128,72 @@ async def delete_field(field_id: UUID, principal: Writer, ctx: Ctx) -> Response:
             raise conflict("Título e tags são campos embutidos e não podem ser excluídos.", "builtin_field")
         await conn.execute(delete(t.fields).where(t.fields.c.id == field_id))
     return Response(status_code=204)
+
+
+# --- valores por gravação ------------------------------------------------------------------------
+
+
+class FieldValuePut(BaseModel):
+    """Schema `FieldValuePut`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: Any
+
+
+async def _recording(conn: AsyncConnection, recording_id: UUID) -> Row:
+    row = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
+    if row is None:
+        raise not_found("Gravação inexistente ou sem acesso.")
+    return row
+
+
+async def _values(conn: AsyncConnection, recording_id: UUID) -> dict[str, Any]:
+    return {"items": await recording_values(conn, await _recording(conn, recording_id))}
+
+
+@router.get("/recordings/{recording_id}/fields")
+async def list_recording_fields(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """Cada campo do usuário com o valor na gravação e a origem (os sem valor saem com `null`)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await _values(conn, recording_id)
+
+
+@router.put("/recordings/{recording_id}/fields/{field_id}")
+async def put_recording_field(
+    recording_id: UUID, field_id: UUID, body: FieldValuePut, principal: Writer, ctx: Ctx
+) -> dict[str, Any]:
+    """O usuário escreve o valor: origem `edited`, que o preenchimento automático não sobrescreve."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await _recording(conn, recording_id)
+        field = await get_field(conn, field_id)
+        await set_value(conn, recording_id, field, validate_value(field, body.value), "edited")
+        return await _values(conn, recording_id)
+
+
+async def _accept(conn: AsyncConnection, recording_id: UUID, field_id: UUID | None = None) -> int:
+    fv = t.field_values.c
+    query = update(t.field_values).where(fv.recording_id == recording_id, fv.origin == "auto")
+    if field_id is not None:
+        query = query.where(fv.field_id == field_id)
+    return (await conn.execute(query.values(origin="accepted", updated_at=func.now()))).rowcount
+
+
+@router.post("/recordings/{recording_id}/fields/accept")
+async def accept_recording_fields(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Aceita todos os valores automáticos da gravação (origem `accepted`)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await _recording(conn, recording_id)
+        await _accept(conn, recording_id)
+        return await _values(conn, recording_id)
+
+
+@router.post("/recordings/{recording_id}/fields/{field_id}/accept")
+async def accept_recording_field(recording_id: UUID, field_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Aceita o valor automático do campo; um valor que não é `auto` dá 409 `not_auto`."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await _recording(conn, recording_id)
+        await get_field(conn, field_id)
+        if not await _accept(conn, recording_id, field_id):
+            raise conflict("O campo não tem valor automático a aceitar.", "not_auto")
+        return await _values(conn, recording_id)

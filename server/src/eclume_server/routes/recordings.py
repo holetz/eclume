@@ -16,6 +16,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.fields import mark_edited
 from eclume_server.pagination import Cursor, Limit, decode_cursor, encode_cursor
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import (
@@ -129,6 +130,7 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
         await conn.execute(
             update(t.recordings).where(t.recordings.c.id == recording_id).values(**values, updated_at=now)
         )
+        await mark_edited(conn, recording_id, principal.user_id, values)
         # Título, data e tags aparecem na transcrição: `?since=` precisa enxergar a mudança.
         await conn.execute(
             update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now)

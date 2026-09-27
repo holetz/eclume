@@ -756,6 +756,146 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/fields:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags:
+      - fields
+      operationId: listRecordingFields
+      summary: Campos da gravação
+      description: 'Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin`
+        nulos.
+
+        Título e tags vêm de `Recording.title`/`tags`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+              examples:
+                valores:
+                  $ref: '#/components/examples/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/recordings/{recording_id}/fields/accept:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags:
+      - fields
+      operationId: acceptRecordingFields
+      summary: Aceitar todos os valores automáticos
+      description: 'Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não
+        sobrescreve.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/recordings/{recording_id}/fields/{field_id}:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    - $ref: '#/components/parameters/FieldId'
+    put:
+      tags:
+      - fields
+      operationId: putRecordingField
+      summary: Escrever o valor de um campo
+      description: 'Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da
+        escolha,
+
+        até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldValuePut'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/recordings/{recording_id}/fields/{field_id}/accept:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    - $ref: '#/components/parameters/FieldId'
+    post:
+      tags:
+      - fields
+      operationId: acceptRecordingField
+      summary: Aceitar o valor automático de um campo
+      description: '`auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Os campos da gravação com valor e origem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingFieldValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/v1/transcripts:
     get:
       tags:
@@ -4453,6 +4593,64 @@ components:
             $ref: '#/components/schemas/Field'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    FieldValue:
+      description: '`text`/`choice` → string; `list` → array de strings; `null` = sem valor.'
+      oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+      - type: 'null'
+    FieldValueOrigin:
+      description: '`auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou
+        o
+
+        automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+
+        '
+      type: string
+      enum:
+      - auto
+      - edited
+      - accepted
+    RecordingFieldValue:
+      type: object
+      required:
+      - field
+      - value
+      - origin
+      - updated_at
+      properties:
+        field:
+          $ref: '#/components/schemas/Field'
+        value:
+          $ref: '#/components/schemas/FieldValue'
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/FieldValueOrigin'
+          - type: 'null'
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    RecordingFieldValues:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordingFieldValue'
+    FieldValuePut:
+      type: object
+      additionalProperties: false
+      required:
+      - value
+      properties:
+        value:
+          $ref: '#/components/schemas/FieldValue'
     AgentProviderKind:
       type: string
       enum:
@@ -6599,6 +6797,54 @@ components:
           auto_fill: true
           position: 3
         next_cursor: null
+    RecordingFieldValues:
+      summary: Título aceito, tags automáticas e um campo sem valor
+      value:
+        items:
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d01
+            key: titulo
+            name: Título
+            kind: text
+            builtin: title
+            options: []
+            instructions: Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data
+              nem nomes de pessoas.
+            auto_fill: true
+            position: 1
+          value: Revisão do contrato de manutenção
+          origin: accepted
+          updated_at: '2026-09-18T15:02:10Z'
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d02
+            key: tags
+            name: Tags
+            kind: list
+            builtin: tags
+            options: []
+            instructions: De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.
+            auto_fill: true
+            position: 2
+          value:
+          - contrato
+          - manutenção
+          origin: auto
+          updated_at: '2026-09-18T15:01:40Z'
+        - field:
+            id: 01928f3a-1c00-7a00-8000-000000000d03
+            key: cliente
+            name: Cliente
+            kind: choice
+            builtin: null
+            options:
+            - Serra Azul
+            - Vale Verde
+            instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
+            auto_fill: true
+            position: 3
+          value: null
+          origin: null
+          updated_at: null
     PersonPage:
       summary: Diretório com três pessoas
       value:
