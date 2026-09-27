@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { AdminPageHead } from './AdminPageHead'
 import { AgentsPage } from './AgentsPage'
+import { AudioPage } from './AudioPage'
 import { HealthPage } from './HealthPage'
 import { NotFound } from './NotFound'
 import { RequireAdmin } from './RequireAdmin'
@@ -9,7 +10,7 @@ import { SpeakersPage } from './SpeakersPage'
 import { TranscriptionPage } from './TranscriptionPage'
 import { UsersPage } from './UsersPage'
 
-/** Seção cuja tela depende do contrato da holetz/eclume#33 (pré-processamento, tipos padrão). */
+/** Seção cuja tela ainda não chegou (tipos de agenda padrão, na 2.6). */
 function Pending({ title }: { title: string }) {
   return (
     <>
@@ -26,7 +27,7 @@ export function AdminRoutes() {
       <Route element={<RequireAdmin />}>
         <Route index element={<Navigate to="usuarios" replace />} />
         <Route path="usuarios" element={<UsersPage />} />
-        <Route path="audio" element={<Pending title="Pré-processamento de áudio" />} />
+        <Route path="audio" element={<AudioPage />} />
         <Route path="transcricao" element={<TranscriptionPage />} />
         <Route path="locutores" element={<SpeakersPage />} />
         <Route path="agentes" element={<AgentsPage />} />

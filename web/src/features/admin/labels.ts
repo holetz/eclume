@@ -1,3 +1,5 @@
+import { ApiError } from '../../api/problem'
+
 // Rótulos em pt-BR dos valores do contrato. Valor desconhecido aparece cru (o contrato só cresce).
 type Option = { value: string; label: string; hint?: string }
 
@@ -15,6 +17,11 @@ export const COMPUTE_TYPES: readonly Option[] = [
   { value: 'int8', label: 'int8' },
   { value: 'int8_float32', label: 'int8_float32' },
   { value: 'float32', label: 'float32 (mais VRAM)' },
+]
+
+export const DENOISE_METHODS: readonly Option[] = [
+  { value: 'rnnoise', label: 'RNNoise' },
+  { value: 'afftdn', label: 'afftdn' },
 ]
 
 /** Para que um provider serve (`used_for`); cada finalidade tem um provider só. */
@@ -132,4 +139,10 @@ export function formatShortDate(iso: string): string {
 /** Compara sem acento e sem caixa. */
 export function foldText(value: string): string {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+}
+
+/** As mensagens de um 422 por campo (`errors[].field`), para mostrar cada uma no seu campo. */
+export function fieldErrorsOf(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError)) return {}
+  return Object.fromEntries((error.problem?.errors ?? []).map((e) => [e.field, e.message]))
 }

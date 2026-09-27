@@ -317,3 +317,30 @@
   width: 100%;
   accent-color: var(--color-accent);
 }
+
+/* Pré-processamento: a lista do DS sem a coluna da alça (a ordem é fixa) e o painel de ajustes
+   aberto logo abaixo da etapa. */
+.audioForm {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.lede {
+  max-width: 62ch;
+  margin: 0;
+}
+
+.orderList li {
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+}
+
+.orderList li.stepPanel {
+  display: block;
+  padding-top: 0;
+}
+
+.fields3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-4);
+}
