@@ -1,79 +1,42 @@
-/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
-   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
-:where(.page) h2 {
-  font-size: 20px;
-  margin: 0;
+/* A biblioteca no tempo ocupa a largura toda (.bleed): o respiro é o do frame "Library · week". */
+.layout {
+  min-height: 100vh;
 }
 
-:where(.page) h3 {
-  font-size: 17px;
-  margin: 0;
-}
-
-:where(.page) p {
-  margin: 0;
-}
-
-.page {
+.content {
   display: grid;
-  gap: var(--space-6);
-}
-
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.header p {
-  margin-top: var(--space-1);
-}
-
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-3);
-}
-
-.row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-}
-
-.main {
-  display: grid;
-  gap: var(--space-2);
+  align-content: start;
   min-width: 0;
+  padding: var(--space-6) var(--space-8) var(--space-8);
 }
 
-.title {
-  font-size: 15px;
-  font-weight: 620;
+.toolbar {
+  margin-bottom: var(--space-4);
 }
 
-.title a {
-  color: var(--color-text);
-  text-decoration: none;
-}
-
-.title a:hover {
-  color: var(--color-accent-ink);
-  text-decoration: underline;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
+.status {
+  margin: 0 0 var(--space-3);
   font-size: 14px;
-  color: var(--color-text-muted);
+}
+
+/* A semana rola dentro do próprio contêiner em tela estreita; a página não rola de lado. */
+.weekScroll {
+  overflow-x: auto;
+}
+
+.week {
+  min-width: 720px;
+}
+
+/* Eventos sobrepostos dividem a coluna em faixas (o DS não trata sobreposição). */
+.laned:global(.cal-event) {
+  left: calc(3px + (100% - 6px) * var(--lane) / var(--lanes));
+  right: auto;
+  width: calc((100% - 6px) / var(--lanes));
+}
+
+.eventMarkers:global(.marker-count) {
+  font-size: 10.5px;
 }
 
 .empty {
@@ -83,14 +46,17 @@
   padding: var(--space-8);
 }
 
-.more {
-  justify-self: center;
+.empty h2 {
+  font-size: 20px;
+  margin: 0;
 }
 
-.active {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-4);
-  font-size: 14px;
+.empty p {
+  margin: 0;
+}
+
+@media (max-width: 56rem) {
+  .content {
+    padding: var(--space-6) var(--space-4) var(--space-8);
+  }
 }

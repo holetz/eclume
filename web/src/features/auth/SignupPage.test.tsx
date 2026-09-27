@@ -41,7 +41,7 @@ describe('criar conta', () => {
     )
     expect(submit).toBeEnabled()
     await userEvent.click(submit)
-    expect(await screen.findByRole('list', { name: 'Gravações' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Biblioteca' })).toBeInTheDocument()
     expect(await http.requests('POST /api/v1/auth/signup')[0].json()).toEqual(request)
   })
 
@@ -90,7 +90,7 @@ describe('criar conta', () => {
       'GET /api/v1/tags': () => fixtures.tagList(),
     })
     renderApp('/cadastro')
-    expect(await screen.findByRole('list', { name: 'Gravações' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Biblioteca' })).toBeInTheDocument()
   })
 })
 

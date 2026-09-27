@@ -1,6 +1,7 @@
 // A biblioteca no tempo: semanas de segunda a domingo e grade do mês, em datas locais do navegador,
 // e a posição de cada gravação na agenda (hora de início e duração, em horas).
 import type { Schemas } from '../../api/client'
+import { recordingState } from './format'
 
 type Recording = Schemas['Recording']
 
@@ -120,6 +121,34 @@ export function monthTitle(day: Date): string {
 /** "09:00". */
 export function timeLabel(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+/** "58 min", "1 h 40", "2 h"; sem duração, "—". */
+export function shortDuration(ms: number | null): string {
+  if (!ms) return '—'
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${Math.max(1, minutes)} min`
+  const rest = minutes % 60
+  return rest ? `${Math.floor(minutes / 60)} h ${String(rest).padStart(2, '0')}` : `${minutes / 60} h`
+}
+
+/** "Nota · Rascunho da pauta" para notas; o título como está para reuniões. */
+export function recordingTitle(recording: Pick<Recording, 'title' | 'kind'>): string {
+  return recording.kind === 'note' ? `Nota · ${recording.title}` : recording.title
+}
+
+export function markersLabel(count: number): string {
+  return count === 1 ? '1 marcador' : `${count} marcadores`
+}
+
+/** O rótulo completo de uma gravação na agenda: título, hora, duração, estado e marcadores. */
+export function eventLabel(recording: Recording): string {
+  const state = recordingState(recording)
+  const parts = [recordingTitle(recording), timeLabel(new Date(recording.recorded_at))]
+  if (recording.kind !== 'note' && recording.duration_ms) parts.push(shortDuration(recording.duration_ms))
+  if (state.state !== 'ready') parts.push(state.label)
+  if (recording.marker_count > 0) parts.push(markersLabel(recording.marker_count))
+  return parts.join(', ')
 }
 
 export interface EventBox {

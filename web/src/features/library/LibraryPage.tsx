@@ -1,116 +1,143 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { useId } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { api, type Schemas } from '../../api/client'
+import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { usePageTitle } from '../../app/usePageTitle'
-import { useCollections } from '../collections/queries'
-import { formatDateTime, formatDuration, recordingState, sourceLabel } from './format'
+import { PageHead } from '../../app/PageHead'
+import { addDays, dayKey, parseDayKey, weekRange, weekTitle } from './calendar'
+import { CalendarWeek } from './CalendarWeek'
+import { activeFilterCount, readFilters, readView, type LibraryView } from './filters'
 import styles from './LibraryPage.module.css'
-import { JobProgress, StatusBadge } from './RecordingStatus'
+import { useLibraryRange } from './queries'
 
-const POLL_MS = 3000
+const VIEWS: { value: LibraryView; label: string }[] = [
+  { value: 'mes', label: 'Mês' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'lista', label: 'Lista' },
+]
 
-export function LibraryPage() {
-  usePageTitle('Biblioteca')
-  const [params] = useSearchParams()
-  const collection = params.get('colecao')
-  const tag = params.get('tag')
-  const collections = useCollections(collection !== null)
-  const collectionName = collections.data?.items.find((c) => c.id === collection)?.name
-
-  const recordings = useInfiniteQuery({
-    queryKey: ['recordings', { collection, tag }],
-    queryFn: ({ pageParam }) =>
-      unwrap(
-        api.GET('/api/v1/recordings', {
-          params: {
-            query: {
-              limit: 25,
-              ...(collection ? { collection: [collection] } : {}),
-              ...(tag ? { tag: [tag] } : {}),
-              ...(pageParam ? { cursor: pageParam } : {}),
-            },
-          },
-        }),
-      ),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page) => page.next_cursor,
-    // Enquanto algum job anda, a lista se atualiza sozinha.
-    refetchInterval: (query) =>
-      query.state.data?.pages.some((page) => page.items.some((item) => recordingState(item).state === 'busy')) ? POLL_MS : false,
+/** Se a conta tem alguma gravação: decide entre "nada neste período" e a biblioteca vazia. */
+function useHasAnyRecording(enabled: boolean) {
+  return useQuery({
+    queryKey: ['recordings', 'any'],
+    enabled,
+    queryFn: () => unwrap(api.GET('/api/v1/recordings', { params: { query: { limit: 1 } } })),
+    select: (page) => page.items.length > 0,
   })
-
-  const items = recordings.data?.pages.flatMap((page) => page.items) ?? []
-
-  return (
-    <section className={styles.page} aria-labelledby="biblioteca-titulo">
-      <header className={styles.header}>
-        <div>
-          <h1 id="biblioteca-titulo">Biblioteca</h1>
-          <p className="text-muted">Suas gravações.</p>
-        </div>
-        <Link to="/importar" className="btn btn-primary">
-          Importar arquivo
-        </Link>
-      </header>
-
-      {(collection || tag) && (
-        <p className={styles.active}>
-          {collection && <span>Coleção: {collectionName ?? 'carregando…'}</span>}
-          {tag && <span>Tag: {tag}</span>}
-          <Link to="/">Limpar filtro</Link>
-        </p>
-      )}
-
-      {recordings.isPending && <p role="status">Carregando gravações…</p>}
-      {recordings.isError && (
-        <div className="alert alert-error" role="alert">
-          {errorMessage(recordings.error)}{' '}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => recordings.refetch()}>
-            Tentar de novo
-          </button>
-        </div>
-      )}
-      {recordings.isSuccess && items.length === 0 && <EmptyLibrary />}
-
-      {items.length > 0 && (
-        <ul className={styles.list} aria-label="Gravações">
-          {items.map((recording) => (
-            <RecordingRow key={recording.id} recording={recording} />
-          ))}
-        </ul>
-      )}
-
-      {recordings.hasNextPage && (
-        <button
-          type="button"
-          className={`btn btn-secondary ${styles.more}`}
-          onClick={() => recordings.fetchNextPage()}
-          disabled={recordings.isFetchingNextPage}
-        >
-          {recordings.isFetchingNextPage ? 'Carregando…' : 'Carregar mais'}
-        </button>
-      )}
-    </section>
-  )
 }
 
-function RecordingRow({ recording }: { recording: Schemas['Recording'] }) {
+export function LibraryPage() {
+  const [params, setParams] = useSearchParams()
+  const segId = useId()
+  const view = readView(params) ?? 'semana'
+  const day = parseDayKey(params.get('data')) ?? new Date()
+  const filters = readFilters(params)
+  const week = weekRange(day)
+  const range = useLibraryRange(week, filters)
+  const items = range.data?.items ?? []
+  const emptyPeriod = range.isSuccess && items.length === 0
+  const anyRecording = useHasAnyRecording(emptyPeriod && activeFilterCount(filters) === 0)
+  const emptyLibrary = anyRecording.data === false
+
+  function update(changes: Record<string, string | null>) {
+    const next = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) next.delete(key)
+      else next.set(key, value)
+    }
+    setParams(next)
+  }
+
+  const moveBy = (days: number) => update({ data: dayKey(addDays(week.from, days)) })
+
   return (
-    <li className={`card ${styles.row}`}>
-      <div className={styles.main}>
-        <h2 className={styles.title}>
-          <Link to={`/gravacoes/${recording.id}`}>{recording.title}</Link>
-        </h2>
-        <p className={styles.meta}>
-          <span>{formatDateTime(recording.recorded_at)}</span>
-          <span className="tabular">{formatDuration(recording.duration_ms)}</span>
-          <span>{sourceLabel(recording.source)}</span>
-        </p>
-        <JobProgress recording={recording} />
+    <div className={`bleed ${styles.layout}`}>
+      <div className={styles.content}>
+        <PageHead
+          kicker="Gravações"
+          title="Biblioteca"
+          actions={
+            <>
+              <Link to="/busca" className="btn btn-secondary">
+                <Search size={16} aria-hidden />
+                Buscar
+              </Link>
+              <Link to="/importar" className="btn btn-primary">
+                Importar arquivos
+              </Link>
+            </>
+          }
+        />
+
+        <div className={`toolbar ${styles.toolbar}`}>
+          <span className="toolbar-title" aria-live="polite">
+            {weekTitle(week.from)}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            aria-label="Semana anterior"
+            onClick={() => moveBy(-7)}
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => update({ data: dayKey(new Date()) })}>
+            Hoje
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            aria-label="Próxima semana"
+            onClick={() => moveBy(7)}
+          >
+            <ChevronRight size={16} aria-hidden />
+          </button>
+          <div className="seg" role="radiogroup" aria-label="Visão">
+            {VIEWS.map((option) => (
+              <label key={option.value} className="seg-opt">
+                <input
+                  type="radio"
+                  name={segId}
+                  value={option.value}
+                  checked={view === option.value}
+                  onChange={() => update({ visao: option.value })}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {range.isError && (
+          <div className="alert alert-error" role="alert">
+            {errorMessage(range.error)}{' '}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => range.refetch()}>
+              Tentar de novo
+            </button>
+          </div>
+        )}
+        {range.isPending && (
+          <p role="status" className={styles.status}>
+            Carregando gravações…
+          </p>
+        )}
+        {range.data?.truncated && (
+          <p role="status" className={styles.status}>
+            Mostrando as primeiras 1000 gravações deste período.
+          </p>
+        )}
+
+        {emptyLibrary ? (
+          <EmptyLibrary />
+        ) : (
+          <>
+            <CalendarWeek days={week.days} recordings={items} busy={range.isPending} />
+            {emptyPeriod && <p className={`text-muted ${styles.status}`}>Nada gravado neste período.</p>}
+          </>
+        )}
       </div>
-      <StatusBadge recording={recording} />
-    </li>
+    </div>
   )
 }
 
@@ -123,7 +150,7 @@ function EmptyLibrary() {
         reuniões automaticamente.
       </p>
       <Link to="/importar" className="btn btn-primary">
-        Importar arquivo
+        Importar arquivos
       </Link>
     </div>
   )

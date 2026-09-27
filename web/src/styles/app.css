@@ -139,3 +139,10 @@ svg.lucide {
   right: 0;
   z-index: 20;
 }
+
+/* Telas de largura total (a biblioteca com o painel de filtros, a gravação com o chat): o .main do
+   shell cede a largura e o respiro, e a tela cuida dos seus. */
+.main:has(> .bleed) {
+  max-width: none;
+  padding: 0;
+}

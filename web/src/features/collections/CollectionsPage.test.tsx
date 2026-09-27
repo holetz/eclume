@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
@@ -77,10 +77,9 @@ describe('coleções', () => {
       'GET /api/v1/recordings': () => fixtures.recordingPage(),
     })
     renderApp(`/?colecao=${SERRA}`)
-    expect(await screen.findByText('Coleção: Metalúrgica Serra Azul')).toBeInTheDocument()
+    await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
     const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
-    expect(query.get('collection')).toBe(SERRA)
-    expect(screen.getByRole('link', { name: 'Limpar filtro' })).toHaveAttribute('href', '/')
+    expect(query.getAll('collection')).toEqual([SERRA])
   })
 })
 
