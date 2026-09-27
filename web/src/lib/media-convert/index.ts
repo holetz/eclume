@@ -17,4 +17,5 @@ export {
   OUTPUT_FORMAT,
 } from './estimate'
 export { sha256Hex } from './hash'
+export { readRecordedAt, type RecordedAt } from './recorded-at'
 export type { ConvertProgress, ProgressCallback } from './progress'
