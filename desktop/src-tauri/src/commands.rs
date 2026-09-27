@@ -29,7 +29,9 @@ pub fn recordings(
 // `async`: abrir dispositivos pode levar segundos e não deve travar a thread da UI.
 #[tauri::command(async)]
 pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandResult<StatusView> {
-    let result = state.toggle_recording(crate::capture::open_sources);
+    let result = state
+        .audio_choice()
+        .and_then(|choice| state.toggle_recording(|| crate::capture::open_sources(&choice)));
     crate::sync::nudge(&app);
     crate::refresh_ui(&app);
     to_js(result.and_then(|()| state.view()))
@@ -133,6 +135,48 @@ pub fn save_settings(
 #[tauri::command]
 pub fn answer_meeting(app: AppHandle, record: bool) {
     crate::auto::answer(&app, record);
+}
+
+/// Os microfones do sistema, para a aba Áudio.
+#[derive(serde::Serialize)]
+pub struct MicDevices {
+    pub default: Option<String>,
+    pub names: Vec<String>,
+}
+
+#[tauri::command(async)]
+pub fn list_input_devices() -> CommandResult<MicDevices> {
+    to_js(
+        eclume_audio_capture::list_input_devices().map(|devices| MicDevices {
+            default: devices.default,
+            names: devices.names,
+        }),
+    )
+}
+
+/// "Fale para testar o nível": 10 s de medidor com o microfone escolhido.
+#[tauri::command(async)]
+pub fn mic_test(state: State<'_, AppState>) -> CommandResult<()> {
+    let choice = state.audio_choice();
+    to_js(choice.and_then(|choice| {
+        state.start_mic_test(
+            move || {
+                let mic = eclume_audio_capture::MicSource::open_named(choice.mic.as_deref())?;
+                Ok(Box::new(mic) as Box<dyn eclume_recorder::AudioSource>)
+            },
+            crate::state::MIC_TEST,
+        )
+    }))
+}
+
+/// O medidor do teste de nível (`null` quando acabou), que a janela consulta a cada 100 ms.
+#[tauri::command]
+pub fn mic_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec<f32>>> {
+    to_js(
+        state
+            .mic_test_meter()
+            .map(|m| m.map(|levels| levels.to_vec())),
+    )
 }
 
 /// Quantas gravações e quanto espaço ainda estão neste computador.

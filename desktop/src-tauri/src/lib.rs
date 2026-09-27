@@ -59,10 +59,11 @@ pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> 
 pub(crate) fn spawn_toggle_recording(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        if let Err(err) = app
-            .state::<AppState>()
-            .toggle_recording(capture::open_sources)
-        {
+        let state = app.state::<AppState>();
+        let result = state
+            .audio_choice()
+            .and_then(|choice| state.toggle_recording(|| capture::open_sources(&choice)));
+        if let Err(err) = result {
             log::error!("falha ao alternar a gravação: {err:#}");
         }
         sync::nudge(&app);
@@ -73,7 +74,10 @@ pub(crate) fn spawn_toggle_recording(app: &AppHandle) {
 /// "Nova nota", da janela, da bandeja ou do atalho: começa uma nota ou para a nota em curso. O
 /// resultado sai por notificação, porque o atalho não abre a janela.
 pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
-    let result = app.state::<AppState>().toggle_note(capture::open_mic);
+    let state = app.state::<AppState>();
+    let result = state
+        .audio_choice()
+        .and_then(|choice| state.toggle_note(|| capture::open_mic(&choice)));
     match &result {
         Ok(NoteToggle::Started) => {}
         Ok(NoteToggle::Stopped(recording)) => notify::note_saved(recording.duration_ms),
@@ -219,6 +223,9 @@ pub fn run() {
             commands::answer_meeting,
             commands::sync_now,
             commands::storage_info,
+            commands::list_input_devices,
+            commands::mic_test,
+            commands::mic_test_meter,
             commands::open_data_dir,
         ])
         .run(tauri::generate_context!())

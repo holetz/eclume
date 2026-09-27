@@ -48,6 +48,16 @@ pub struct Config {
     /// Atalhos globais de gravar, nova nota e marcador.
     #[serde(default)]
     pub shortcuts: Shortcuts,
+    /// O microfone pelo nome; `null` é o padrão do sistema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mic: Option<String>,
+    /// Gravar também o áudio do sistema nas reuniões.
+    #[serde(default = "default_system_audio")]
+    pub system_audio: bool,
+}
+
+fn default_system_audio() -> bool {
+    true
 }
 
 fn default_web_url() -> String {
@@ -72,6 +82,8 @@ impl Default for Config {
             retention_days: default_retention_days(),
             note_silence_s: default_note_silence(),
             shortcuts: Shortcuts::default(),
+            mic: None,
+            system_audio: true,
         }
     }
 }
@@ -219,6 +231,8 @@ mod tests {
         assert_eq!(config.retention_days, Some(DEFAULT_RETENTION_DAYS));
         assert_eq!(config.note_silence_s, Some(DEFAULT_NOTE_SILENCE_S));
         assert_eq!(config.shortcuts, Shortcuts::default());
+        assert_eq!(config.mic, None);
+        assert!(config.system_audio);
         let keep: Config =
             serde_json::from_str(r#"{"retention_days": null, "note_silence_s": null}"#).unwrap();
         assert_eq!(keep.retention_days, None);

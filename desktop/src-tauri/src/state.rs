@@ -10,6 +10,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Result};
 use eclume_detect::{default_policy, Action, AppKey, AutoRecorder, Policy, Recording};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
+use eclume_recorder::{AudioSource, Mixer, SilenceDetector};
 use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
@@ -17,7 +18,7 @@ use eclume_recorder::{
 use eclume_sync::{PatSource, PatStore, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
-use crate::capture::OpenedSources;
+use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Config};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
 
@@ -195,6 +196,11 @@ pub struct SettingsView {
     pub retention_days: Option<u32>,
     pub pat_source: Option<PatSource>,
     pub shortcuts: Vec<ShortcutView>,
+    /// O microfone escolhido; `None` é o padrão do sistema.
+    pub mic: Option<String>,
+    pub system_audio: bool,
+    /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
+    pub note_silence_s: Option<u32>,
 }
 
 /// O que a tela de configurações manda ao salvar.
@@ -218,6 +224,24 @@ pub struct SettingsInput {
     /// Atalhos novos; ausente mantém os de hoje.
     #[serde(default)]
     pub shortcuts: Option<Shortcuts>,
+    /// O microfone pelo nome, `""` para o padrão do sistema; ausente mantém o de hoje.
+    #[serde(default)]
+    pub mic: Option<String>,
+    /// Ausente mantém o de hoje.
+    #[serde(default)]
+    pub system_audio: Option<bool>,
+    /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
+    #[serde(default)]
+    pub note_silence_s: Option<u32>,
+}
+
+/// Quanto dura o teste de nível do microfone.
+pub const MIC_TEST: Duration = Duration::from_secs(10);
+
+/// O teste de nível em curso: o medidor, sem gravar nada.
+struct MicTest {
+    levels: Arc<Mutex<[f32; METER_BARS]>>,
+    running: Arc<AtomicBool>,
 }
 
 struct Inner {
@@ -235,6 +259,7 @@ struct Inner {
     shortcut_registrations: Registrations,
     /// O pedido de cancelamento da importação em curso, se houver uma.
     importing: Option<Arc<AtomicBool>>,
+    mic_test: Option<MicTest>,
 }
 
 impl Inner {
@@ -253,6 +278,29 @@ pub struct AppState {
     config_path: PathBuf,
     pat: PatStore,
     inner: Mutex<Inner>,
+}
+
+/// Lê o microfone por `duration` e publica o medidor em `levels`.
+fn run_mic_test(
+    open: impl FnOnce() -> Result<Box<dyn AudioSource>>,
+    duration: Duration,
+    levels: &Mutex<[f32; METER_BARS]>,
+) -> Result<()> {
+    let mut source = open()?;
+    let mut mixer = Mixer::new(&[source.sample_rate()])?;
+    let mut detector = SilenceDetector::new(None);
+    let deadline = std::time::Instant::now() + duration;
+    while std::time::Instant::now() < deadline {
+        let Some(samples) = source.read(Duration::from_millis(50)) else {
+            break;
+        };
+        mixer.push(0, &samples, source.sample_rate())?;
+        detector.push(&mixer.pop_ready());
+        if let Ok(mut shown) = levels.lock() {
+            *shown = detector.meter();
+        }
+    }
+    Ok(())
 }
 
 /// Id de um arquivo importado: o instante da importação e um sufixo, como o das gravações.
@@ -321,6 +369,7 @@ impl AppState {
                 sync_notice: None,
                 shortcut_registrations: Registrations::new(),
                 importing: None,
+                mic_test: None,
             }),
         }
     }
@@ -610,6 +659,55 @@ impl AppState {
         Ok(self.inner()?.config.detection.enabled)
     }
 
+    /// O microfone e as fontes que a aba Áudio escolheu.
+    pub fn audio_choice(&self) -> Result<AudioChoice> {
+        let inner = self.inner()?;
+        Ok(AudioChoice {
+            mic: inner.config.mic.clone(),
+            system_audio: inner.config.system_audio,
+        })
+    }
+
+    /// "Fale para testar o nível": abre o microfone por `duration`, numa thread, e alimenta o
+    /// medidor do detector de silêncio, sem gravar. Um teste em curso segue valendo.
+    pub fn start_mic_test(
+        &self,
+        open: impl FnOnce() -> Result<Box<dyn AudioSource>> + Send + 'static,
+        duration: Duration,
+    ) -> Result<()> {
+        let mut inner = self.inner()?;
+        if inner
+            .mic_test
+            .as_ref()
+            .is_some_and(|t| t.running.load(Ordering::Relaxed))
+        {
+            return Ok(());
+        }
+        let levels = Arc::new(Mutex::new([0.0; METER_BARS]));
+        let running = Arc::new(AtomicBool::new(true));
+        inner.mic_test = Some(MicTest {
+            levels: Arc::clone(&levels),
+            running: Arc::clone(&running),
+        });
+        std::thread::spawn(move || {
+            if let Err(err) = run_mic_test(open, duration, &levels) {
+                log::warn!("teste de nível do microfone: {err:#}");
+            }
+            running.store(false, Ordering::Relaxed);
+        });
+        Ok(())
+    }
+
+    /// O medidor do teste de nível; `None` quando não há teste em curso.
+    pub fn mic_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
+        let inner = self.inner()?;
+        Ok(inner
+            .mic_test
+            .as_ref()
+            .filter(|t| t.running.load(Ordering::Relaxed))
+            .and_then(|t| t.levels.lock().ok().map(|levels| *levels)))
+    }
+
     /// Os atalhos globais da config.
     pub fn shortcuts(&self) -> Result<Shortcuts> {
         Ok(self.inner()?.config.shortcuts.clone())
@@ -741,6 +839,9 @@ impl AppState {
                 .collect(),
             retention_days: config.retention_days,
             pat_source,
+            mic: config.mic.clone(),
+            system_audio: config.system_audio,
+            note_silence_s: config.note_silence_s,
             shortcuts: ShortcutAction::ALL
                 .into_iter()
                 .map(|action| {
@@ -767,6 +868,15 @@ impl AppState {
         next.detection.enabled = input.detection_enabled;
         next.detection.policies = input.policies;
         next.retention_days = input.retention_days;
+        if let Some(mic) = input.mic {
+            next.mic = non_empty(Some(mic));
+        }
+        if let Some(system_audio) = input.system_audio {
+            next.system_audio = system_audio;
+        }
+        if let Some(seconds) = input.note_silence_s {
+            next.note_silence_s = (seconds > 0).then_some(seconds);
+        }
         if let Some(shortcuts) = input.shortcuts {
             next.shortcuts = Shortcuts {
                 record: shortcuts.record.trim().to_string(),
@@ -857,6 +967,9 @@ mod tests {
             pat: None,
             clear_pat: false,
             shortcuts: None,
+            mic: None,
+            system_audio: None,
+            note_silence_s: None,
         }
     }
 
@@ -1308,6 +1421,86 @@ mod tests {
         assert_eq!(outro.default_policy, Policy::Ignore);
         let teams = apps.iter().find(|a| a.app == AppKey::Teams).unwrap();
         assert_eq!(teams.default_policy, Policy::Ask);
+    }
+
+    #[test]
+    fn audio_escolhe_microfone_sistema_e_silencio() {
+        let (state, dir) = state("audio");
+        assert_eq!(
+            state.audio_choice().unwrap(),
+            AudioChoice {
+                mic: None,
+                system_audio: true
+            }
+        );
+        let mut input = settings_input(&state);
+        input.mic = Some("Jabra Evolve2 65".into());
+        input.system_audio = Some(false);
+        input.note_silence_s = Some(8);
+        state.save_settings(input).unwrap();
+        let view = state.settings().unwrap();
+        assert_eq!(view.mic.as_deref(), Some("Jabra Evolve2 65"));
+        assert!(!view.system_audio);
+        assert_eq!(view.note_silence_s, Some(8));
+        assert_eq!(
+            state.audio_choice().unwrap().mic.as_deref(),
+            Some("Jabra Evolve2 65")
+        );
+
+        // Ausente mantém; "" volta ao padrão; 0 é "Nunca".
+        state.save_settings(settings_input(&state)).unwrap();
+        assert_eq!(state.settings().unwrap().note_silence_s, Some(8));
+        let mut input = settings_input(&state);
+        input.mic = Some(String::new());
+        input.note_silence_s = Some(0);
+        state.save_settings(input).unwrap();
+        let view = state.settings().unwrap();
+        assert_eq!(view.mic, None);
+        assert_eq!(view.note_silence_s, None);
+        let mut bad = settings_input(&state);
+        bad.note_silence_s = Some(5);
+        assert!(state.save_settings(bad).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn teste_de_nivel_mostra_o_medidor_e_acaba_sozinho() {
+        let (state, _dir) = state("teste-nivel");
+        assert!(state.mic_test_meter().unwrap().is_none());
+        /// Um tom que chega no ritmo do relógio, como um microfone de verdade.
+        struct Paced(SineSource);
+        impl AudioSource for Paced {
+            fn sample_rate(&self) -> u32 {
+                self.0.sample_rate()
+            }
+            fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+                std::thread::sleep(Duration::from_millis(10));
+                self.0.read(timeout)
+            }
+        }
+        let open = || -> Result<Box<dyn AudioSource>> {
+            Ok(Box::new(Paced(SineSource::new(
+                48_000,
+                440.0,
+                0.5,
+                Duration::from_secs(5),
+            ))))
+        };
+        state
+            .start_mic_test(open, Duration::from_millis(400))
+            .unwrap();
+        let mut heard = false;
+        for _ in 0..200 {
+            match state.mic_test_meter().unwrap() {
+                Some(levels) => heard |= levels.iter().any(|&l| l > 0.5),
+                None if heard => break,
+                None => {}
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(heard, "o medidor devia subir com o tom");
+        std::thread::sleep(Duration::from_millis(600));
+        assert!(state.mic_test_meter().unwrap().is_none());
     }
 
     #[test]

@@ -79,7 +79,12 @@
           ["note", "Nova nota", "Ctrl+Alt+N"],
           ["marker", "Adicionar marcador", "Ctrl+Alt+M"],
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
+        mic: null,
+        system_audio: true,
+        note_silence_s: 4,
       },
+      microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
+      testeDeNivel: 0,
       marcadores: [],
       armazenamento: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
       importacao: {
@@ -167,6 +172,10 @@
         gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
         gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
       ];
+    },
+    atalhoEmUso(e) {
+      Object.assign(e.settings.shortcuts[1], { registration: "in_use", problem: "Em uso por outro app" });
+      e.settings.mic = "Headset antigo";
     },
     vazio(e) {
       e.recordings = [];
@@ -278,11 +287,27 @@
         detection_enabled: input.detection_enabled,
         retention_days: input.retention_days,
         pat_source: input.clear_pat ? null : input.pat ? "keyring" : e.settings.pat_source,
+        mic: input.mic === undefined ? e.settings.mic : input.mic || null,
+        system_audio: input.system_audio ?? e.settings.system_audio,
+        note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
+        shortcuts: input.shortcuts
+          ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
+          : e.settings.shortcuts,
         apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
       };
       return e.settings;
     },
     storage_info: (e) => e.armazenamento,
+    list_input_devices: (e) => e.microfones,
+    mic_test(e) {
+      e.testeDeNivel = 10;
+      return null;
+    },
+    mic_test_meter(e) {
+      if (e.testeDeNivel <= 0) return null;
+      e.testeDeNivel -= 1;
+      return [0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05];
+    },
     open_data_dir: () => null,
     sync_now: () => null,
   };

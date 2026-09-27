@@ -1,7 +1,9 @@
-// Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Armazenamento
-// (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor. Reuniões e
-// Armazenamento salvam a cada mudança; o Servidor salva pelo botão.
+// Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Áudio
+// (microfone, áudio do sistema, teste de nível, atalhos globais e parada por silêncio),
+// Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor. As
+// abas salvam a cada mudança, menos o Servidor, que salva pelo botão.
 import { el, trocar, $ } from "../dom.js";
+import { teclas } from "./principal.js";
 
 /** O subtítulo de cada app, como no frame "Settings · Meetings". */
 const APPS = {
@@ -19,6 +21,29 @@ const POLITICAS = [
   ["ask", "Perguntar"],
   ["ignore", "Ignorar"],
 ];
+
+/** A tecla principal de um `KeyboardEvent.code`, no formato do `global-hotkey`; `null` se não vale. */
+function teclaDoCodigo(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^F([1-9]|1\d|2[0-4])$/.test(code)) return code;
+  return null;
+}
+
+/**
+ * A combinação que o evento forma ("Ctrl+Alt+K", "Cmd+Shift+N"); `null` enquanto só há
+ * modificadores ou a tecla não serve para atalho global.
+ */
+export function combinacao(evento) {
+  const tecla = teclaDoCodigo(evento.code);
+  if (!tecla) return null;
+  const partes = [];
+  if (evento.ctrlKey) partes.push("Ctrl");
+  if (evento.altKey) partes.push("Alt");
+  if (evento.shiftKey) partes.push("Shift");
+  if (evento.metaKey) partes.push("Cmd");
+  return [...partes, tecla].join("+");
+}
 
 /** "41 MB", "1,2 GB". */
 export function tamanho(bytes) {
@@ -51,7 +76,13 @@ export function montar(secao, app) {
   const paineis = [...secao.querySelectorAll("[data-painel]")];
   const aviso = $("#config-aviso", secao);
   const dias = $("#retencao-dias", secao);
+  const microfone = $("#microfone", secao);
+  const barrasDoTeste = Array.from({ length: 16 }, () => el("i", { "data-quiet": true }));
+  trocar($("#medidor-teste", secao), barrasDoTeste);
   let config = null;
+  /** O atalho sendo capturado ("record", "note" ou "marker"). */
+  let capturando = null;
+  let consultaDoTeste = null;
 
   function mostrarAviso(texto, tom = "alert-error") {
     aviso.hidden = !texto;
@@ -64,6 +95,7 @@ export function montar(secao, app) {
     for (const painel of paineis) painel.hidden = painel.dataset.painel !== nome;
     mostrarAviso(null);
     if (nome === "armazenamento") lerArmazenamento();
+    if (nome === "audio") lerMicrofones();
   }
 
   async function salvar(mudancas, sucesso) {
@@ -115,8 +147,120 @@ export function montar(secao, app) {
     salvar({ policies });
   }
 
+  function linhaDoAtalho(atalho) {
+    const emCaptura = capturando === atalho.action;
+    return el(
+      "div",
+      { class: "list-row", dataset: { atalho: atalho.action } },
+      el("span", { class: "list-row-title" }, atalho.label),
+      el(
+        "span",
+        { class: "list-row-sub", "data-problema": Boolean(atalho.problem) },
+        atalho.problem ?? "Funciona com o eclume em segundo plano",
+      ),
+      el(
+        "span",
+        { class: "list-row-actions" },
+        el(
+          "kbd",
+          { class: "code-block kbd-atalho", "data-capturando": emCaptura },
+          emCaptura ? "Pressione a combinação…" : teclas(atalho.keys),
+        ),
+        el(
+          "button",
+          {
+            type: "button",
+            class: "btn btn-secondary btn-sm",
+            on: { click: () => capturar(emCaptura ? null : atalho.action) },
+          },
+          emCaptura ? "Cancelar" : "Alterar",
+        ),
+      ),
+    );
+  }
+
+  function capturar(acao) {
+    capturando = acao;
+    desenharAtalhos();
+  }
+
+  function desenharAtalhos() {
+    trocar($("#atalhos", secao), (config?.shortcuts ?? []).map(linhaDoAtalho));
+  }
+
+  /** Captura a próxima combinação da janela antes das teclas da janela (Esc, Ctrl+O...). */
+  function aoTeclar(evento) {
+    if (!capturando) return;
+    evento.preventDefault();
+    evento.stopImmediatePropagation();
+    if (evento.key === "Escape") {
+      capturar(null);
+      return;
+    }
+    const teclasNovas = combinacao(evento);
+    if (!teclasNovas) return;
+    if (!/\+/.test(teclasNovas)) {
+      mostrarAviso("Use Ctrl, Alt, Shift ou ⌘ junto da tecla.");
+      return;
+    }
+    const atuais = Object.fromEntries(config.shortcuts.map((a) => [a.action, a.keys]));
+    const acao = capturando;
+    capturando = null;
+    salvar({ shortcuts: { ...atuais, [acao]: teclasNovas } });
+  }
+
+  async function lerMicrofones() {
+    try {
+      const lista = await app.invoke("list_input_devices");
+      const escolhido = config?.mic ?? "";
+      const opcoes = [el("option", { value: "" }, lista.default ? `Padrão do sistema · ${lista.default}` : "Padrão do sistema")];
+      for (const nome of lista.names) opcoes.push(el("option", { value: nome }, nome));
+      if (escolhido && !lista.names.includes(escolhido)) {
+        opcoes.push(el("option", { value: escolhido }, `${escolhido} (desconectado)`));
+      }
+      trocar(microfone, opcoes);
+      microfone.value = escolhido;
+    } catch (falha) {
+      mostrarAviso(String(falha));
+    }
+  }
+
+  function desenharTeste(niveis) {
+    niveis.forEach((nivel, i) => {
+      barrasDoTeste[i].style.setProperty("--h", `${Math.round(Math.max(0.08, nivel) * 100)}%`);
+      barrasDoTeste[i].toggleAttribute("data-quiet", nivel < 0.15);
+    });
+  }
+
+  function pararTeste() {
+    clearInterval(consultaDoTeste);
+    consultaDoTeste = null;
+    $("#testar-nivel", secao).textContent = "Fale para testar o nível";
+    desenharTeste(barrasDoTeste.map(() => 0));
+  }
+
+  async function testarNivel() {
+    try {
+      await app.invoke("mic_test");
+    } catch (falha) {
+      mostrarAviso(String(falha));
+      return;
+    }
+    $("#testar-nivel", secao).textContent = "Ouvindo…";
+    clearInterval(consultaDoTeste);
+    consultaDoTeste = setInterval(async () => {
+      const niveis = await app.invoke("mic_test_meter").catch(() => null);
+      if (niveis) desenharTeste(niveis);
+      else pararTeste();
+    }, 100);
+  }
+
   function desenhar() {
     if (!config) return;
+    $("#audio-sistema", secao).checked = config.system_audio;
+    const silencio = String(config.note_silence_s ?? 0);
+    for (const opcao of secao.querySelectorAll('input[name="silencio"]')) opcao.checked = opcao.value === silencio;
+    desenharAtalhos();
     $("#detectar", secao).checked = config.detection_enabled;
     trocar($("#apps", secao), config.apps.map(linhaDoApp));
 
@@ -146,6 +290,13 @@ export function montar(secao, app) {
   }
 
   for (const aba of abas) aba.addEventListener("click", () => abrirAba(aba.dataset.aba));
+  window.addEventListener("keydown", aoTeclar, true);
+  microfone.addEventListener("change", () => salvar({ mic: microfone.value }));
+  $("#audio-sistema", secao).addEventListener("change", (evento) => salvar({ system_audio: evento.target.checked }));
+  for (const opcao of secao.querySelectorAll('input[name="silencio"]')) {
+    opcao.addEventListener("change", () => salvar({ note_silence_s: Number(opcao.value) }));
+  }
+  $("#testar-nivel", secao).addEventListener("click", testarNivel);
   $("#config-voltar", secao).addEventListener("click", () => app.voltar());
 
   $("#detectar", secao).addEventListener("change", (evento) => salvar({ detection_enabled: evento.target.checked }));
@@ -201,6 +352,11 @@ export function montar(secao, app) {
   $("#servidor-esquecer", secao).addEventListener("click", () => salvar({ clear_pat: true }, "Token esquecido."));
 
   return {
+    sair() {
+      capturando = null;
+      if (consultaDoTeste) pararTeste();
+    },
+
     async entrar(params) {
       try {
         config = await app.invoke("settings");

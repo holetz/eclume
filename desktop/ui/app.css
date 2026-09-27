@@ -125,3 +125,23 @@
   margin-bottom: 5px;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
+
+/* O medidor do teste de nível usa o acento, como o frame "Settings · Audio". */
+.meter-accent {
+  color: var(--color-accent);
+}
+
+/* A combinação de um atalho global, na aba Áudio. */
+.kbd-atalho {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.kbd-atalho[data-capturando] {
+  border-color: var(--color-accent);
+}
+
+.list-row-sub[data-problema] {
+  color: var(--color-warning);
+}

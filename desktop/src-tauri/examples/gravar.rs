@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use eclume_desktop_lib::capture::open_sources;
+use eclume_desktop_lib::capture::{open_sources, AudioChoice};
 use eclume_recorder::session::{self, RecorderConfig};
 use eclume_recorder::Queue;
 
@@ -28,7 +28,10 @@ fn main() -> Result<()> {
         .map_or_else(|| std::env::temp_dir().join("eclume-gravar"), PathBuf::from);
 
     let queue = Queue::open(&dir.join("queue.sqlite"))?;
-    let opened = open_sources()?;
+    let opened = open_sources(&AudioChoice {
+        mic: None,
+        system_audio: true,
+    })?;
     for reason in &opened.missing {
         eprintln!("aviso: gravando sem {reason}");
     }

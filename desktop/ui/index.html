@@ -151,6 +151,7 @@
         </div>
         <div class="tabs tabs-flush" role="tablist">
           <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="true">Reuniões</button>
+          <button type="button" class="tab" role="tab" data-aba="audio" aria-selected="false">Áudio</button>
           <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
           <button type="button" class="tab" role="tab" data-aba="servidor" aria-selected="false">Servidor</button>
         </div>
@@ -179,6 +180,49 @@
             >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
             parar.</span
           >
+        </div>
+      </div>
+
+      <div data-painel="audio" hidden>
+        <div class="tray-section">
+          <span class="kicker">Fontes</span>
+          <div class="field">
+            <label for="microfone">Microfone</label>
+            <select class="input" id="microfone"></select>
+          </div>
+          <div class="row row-meter">
+            <div class="meter meter-accent" id="medidor-teste" aria-hidden="true"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="testar-nivel">Fale para testar o nível</button>
+          </div>
+          <label class="switch"
+            ><input type="checkbox" id="audio-sistema" /><span class="track"></span>Gravar também o áudio do
+            sistema</label
+          >
+          <span class="text-muted small"
+            >Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um
+            arquivo só.</span
+          >
+        </div>
+        <div class="tray-section">
+          <span class="kicker">Atalhos em qualquer lugar do computador</span>
+          <div class="list" id="atalhos"></div>
+        </div>
+        <div class="tray-section">
+          <span class="kicker">Notas por voz</span>
+          <div class="list">
+            <div class="list-row">
+              <span class="list-row-title">Parar depois de silêncio</span>
+              <span class="list-row-sub">Encerra a nota quando você para de falar</span>
+              <span class="list-row-actions">
+                <span class="seg" role="radiogroup" aria-label="Parar depois de silêncio" id="silencio">
+                  <label class="seg-opt"><input type="radio" name="silencio" value="2" />2 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="4" />4 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="8" />8 s</label>
+                  <label class="seg-opt"><input type="radio" name="silencio" value="0" />Nunca</label>
+                </span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

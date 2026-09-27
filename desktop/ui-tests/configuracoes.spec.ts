@@ -117,3 +117,72 @@ test('Servidor pelo link da conta: salva endereço e token, recusa endereço inv
   await page.locator('#config-voltar').click()
   await expect(page.locator('[data-vista="principal"]')).toBeVisible()
 })
+
+test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salvam na hora', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('[data-painel="audio"]')).toBeVisible()
+  await expect(page.locator('#microfone option')).toHaveText([
+    'Padrão do sistema · Microfone embutido',
+    'Microfone embutido',
+    'Jabra Evolve2 65',
+  ])
+  await expect(page.locator('#microfone')).toHaveValue('')
+  await expect(page.locator('#audio-sistema')).toBeChecked()
+  await expect(page.locator('input[name="silencio"][value="4"]')).toBeChecked()
+
+  await page.locator('#microfone').selectOption('Jabra Evolve2 65')
+  await expect.poll(async () => (await ultimaEntrada(page)).mic).toBe('Jabra Evolve2 65')
+
+  await page.locator('.switch', { hasText: 'Gravar também o áudio do sistema' }).click()
+  await expect(page.locator('#audio-sistema')).not.toBeChecked()
+  expect((await ultimaEntrada(page)).system_audio).toBe(false)
+
+  await page.locator('#silencio .seg-opt', { hasText: 'Nunca' }).click()
+  await expect(page.locator('input[name="silencio"][value="0"]')).toBeChecked()
+  expect((await ultimaEntrada(page)).note_silence_s).toBe(0)
+  await page.locator('#silencio .seg-opt', { hasText: '8 s' }).click()
+  await expect.poll(async () => (await ultimaEntrada(page)).note_silence_s).toBe(8)
+})
+
+test('Áudio: o teste de nível mostra o medidor e volta ao fim', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#medidor-teste i')).toHaveCount(16)
+  await page.locator('#testar-nivel').click()
+  await expect(page.locator('#testar-nivel')).toHaveText('Ouvindo…')
+  await expect(page.locator('#medidor-teste i:not([data-quiet])')).toHaveCount(6)
+  await expect(page.locator('#testar-nivel')).toHaveText('Fale para testar o nível')
+  await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
+})
+
+test('Áudio: atalhos com o estado do registro e troca pela próxima combinação', async ({ abrir }) => {
+  const page = await abrir('atalhoEmUso')
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#microfone')).toHaveValue('Headset antigo')
+  await expect(page.locator('#microfone option:checked')).toHaveText('Headset antigo (desconectado)')
+
+  const linhas = page.locator('#atalhos .list-row')
+  await expect(linhas.locator('.list-row-title')).toHaveText(['Iniciar ou parar a gravação', 'Nova nota', 'Adicionar marcador'])
+  await expect(linhas.locator('kbd')).toHaveText(['Ctrl+Alt+R', 'Ctrl+Alt+N', 'Ctrl+Alt+M'])
+  await expect(linhas.nth(1).locator('.list-row-sub')).toHaveText('Em uso por outro app')
+  await expect(linhas.nth(1).locator('.list-row-sub')).toHaveAttribute('data-problema', '')
+
+  const marcador = page.locator('#atalhos [data-atalho="marker"]')
+  await marcador.getByRole('button', { name: 'Alterar' }).click()
+  await expect(marcador.locator('kbd')).toHaveText('Pressione a combinação…')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-vista="configuracoes"]')).toBeVisible()
+  await expect(marcador.locator('kbd')).toHaveText('Ctrl+Alt+M')
+
+  await marcador.getByRole('button', { name: 'Alterar' }).click()
+  await page.keyboard.press('j')
+  await expect(page.locator('#config-aviso')).toContainText('Use Ctrl, Alt, Shift ou ⌘')
+  await page.keyboard.press('Control+Alt+KeyJ')
+  await expect(marcador.locator('kbd')).toHaveText('Ctrl+Alt+J')
+  const entrada = await ultimaEntrada(page)
+  expect(entrada.shortcuts).toEqual({ record: 'Ctrl+Alt+R', note: 'Ctrl+Alt+N', marker: 'Ctrl+Alt+J' })
+})

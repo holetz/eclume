@@ -86,7 +86,12 @@ fn start(app: &AppHandle, key: AppKey) {
         );
         return;
     }
-    match state.start_recording_as(Origin::detected(key), crate::capture::open_sources) {
+    let result = state.audio_choice().and_then(|choice| {
+        state.start_recording_as(Origin::detected(key), || {
+            crate::capture::open_sources(&choice)
+        })
+    });
+    match result {
         Ok(()) => crate::notify::info(
             &format!("Gravando a reunião do {}", key.label()),
             "A gravação começou pela detecção de reunião. Para parar, use a bandeja do eclume.",
