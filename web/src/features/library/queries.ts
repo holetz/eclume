@@ -60,6 +60,15 @@ export function useLibraryRange(range: Range, filters: LibraryFilters, enabled =
   })
 }
 
+/** Os campos do usuário (embutidos e próprios), para os filtros e o painel de campos. */
+export function useUserFields() {
+  return useQuery({
+    queryKey: ['fields'],
+    queryFn: () => unwrap(api.GET('/api/v1/fields')),
+    staleTime: 60_000,
+  })
+}
+
 /** A lista corrida, da mais recente para a mais antiga, com "Carregar mais". */
 export function useLibraryList(filters: LibraryFilters, enabled = true) {
   return useInfiniteQuery({

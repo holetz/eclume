@@ -1,14 +1,26 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
-import { useId } from 'react'
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
+import { Dialog } from '../../app/Dialog'
 import { PageHead } from '../../app/PageHead'
+import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
 import { CalendarMonth } from './CalendarMonth'
 import { CalendarWeek } from './CalendarWeek'
-import { activeFilterCount, readFilters, readView, type LibraryView } from './filters'
+import {
+  activeFilterCount,
+  NO_FILTERS,
+  readFilters,
+  readView,
+  rememberedSearch,
+  writeFilters,
+  type LibraryFilters as Filters,
+  type LibraryView,
+} from './filters'
+import { FilterGroups, LibraryFilters } from './LibraryFilters'
 import styles from './LibraryPage.module.css'
 import { useLibraryList, useLibraryRange } from './queries'
 import { RecordingList } from './RecordingList'
@@ -21,9 +33,17 @@ const VIEWS: { value: LibraryView; label: string }[] = [
 
 const NARROW = '(max-width: 56rem)'
 
-/** Em tela estreita, sem visão na URL, a biblioteca abre na lista. */
-function defaultView(): LibraryView {
-  return typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches ? 'lista' : 'semana'
+function matchesNarrow(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches
+}
+
+/** Se a tela está estreita (abaixo de 56rem), acompanhando a mudança de largura. */
+function useNarrow(): boolean {
+  return useSyncExternalStore((onChange) => {
+    const query = typeof window.matchMedia === 'function' ? window.matchMedia(NARROW) : null
+    query?.addEventListener?.('change', onChange)
+    return () => query?.removeEventListener?.('change', onChange)
+  }, matchesNarrow)
 }
 
 /** Se a conta tem alguma gravação: decide entre "nada neste período" e a biblioteca vazia. */
@@ -39,7 +59,20 @@ function useHasAnyRecording(enabled: boolean) {
 export function LibraryPage() {
   const [params, setParams] = useSearchParams()
   const segId = useId()
-  const view = readView(params) ?? defaultView()
+  const filtersId = useId()
+  const narrow = useNarrow()
+  const [collapsed, setCollapsed] = useState(() => readStored(STORAGE_KEYS.filtersCollapsed) === '1')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  // A biblioteca aberta sem parâmetros volta à última visão e aos últimos filtros.
+  const [restoring] = useState(() => params.size === 0 && Boolean(readStored(STORAGE_KEYS.lastLibrary)))
+  useEffect(() => {
+    if (restoring) setParams(new URLSearchParams(readStored(STORAGE_KEYS.lastLibrary) ?? ''), { replace: true })
+  }, [restoring, setParams])
+  useEffect(() => {
+    if (params.size > 0) writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params))
+  }, [params])
+
+  const view = readView(params) ?? (narrow ? 'lista' : 'semana')
   const day = parseDayKey(params.get('data')) ?? new Date()
   const filters = readFilters(params)
   const week = weekRange(day)
@@ -61,12 +94,21 @@ export function LibraryPage() {
     setParams(next)
   }
 
+  const changeFilters = (next: Filters) => setParams(writeFilters(params, next))
+  const clearFilters = () => changeFilters(NO_FILTERS)
+  const filterCount = activeFilterCount(filters)
+
+  function toggleCollapsed() {
+    setCollapsed(!collapsed)
+    writeStored(STORAGE_KEYS.filtersCollapsed, collapsed ? null : '1')
+  }
+
   const step = (direction: 1 | -1) =>
     update({ data: dayKey(view === 'mes' ? addMonths(day, direction) : addDays(week.from, 7 * direction)) })
   const unit = view === 'mes' ? { previous: 'Mês anterior', next: 'Próximo mês' } : { previous: 'Semana anterior', next: 'Próxima semana' }
 
   return (
-    <div className={`bleed ${styles.layout}`}>
+    <div className={`bleed ${narrow ? '' : 'with-filters'} ${styles.layout}`} data-collapsed={(!narrow && collapsed) || undefined}>
       <div className={styles.content}>
         <PageHead
           kicker="Gravações"
@@ -105,6 +147,12 @@ export function LibraryPage() {
                 <ChevronRight size={16} aria-hidden />
               </button>
             </>
+          )}
+          {narrow && (
+            <button type="button" className="btn btn-secondary" onClick={() => setFiltersOpen(true)}>
+              <SlidersHorizontal size={16} aria-hidden />
+              Filtros ({filterCount})
+            </button>
           )}
           <div className="seg" role="radiogroup" aria-label="Visão">
             {VIEWS.map((option) => (
@@ -173,6 +221,38 @@ export function LibraryPage() {
           </>
         )}
       </div>
+      {!narrow && (
+        <LibraryFilters
+          id={filtersId}
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+          onClear={clearFilters}
+          filters={filters}
+          onChange={changeFilters}
+        />
+      )}
+      {narrow && filtersOpen && (
+        <Dialog
+          title="Filtros"
+          kicker="Biblioteca"
+          plain
+          onClose={() => setFiltersOpen(false)}
+          actions={
+            <>
+              <button type="button" className="btn btn-ghost" onClick={clearFilters} disabled={filterCount === 0}>
+                Limpar filtros
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => setFiltersOpen(false)}>
+                Ver gravações
+              </button>
+            </>
+          }
+        >
+          <div className={styles.dialogGroups}>
+            <FilterGroups filters={filters} onChange={changeFilters} />
+          </div>
+        </Dialog>
+      )}
     </div>
   )
 }

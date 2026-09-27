@@ -84,6 +84,70 @@
   margin: 0;
 }
 
+/* O painel de filtros acompanha a altura da tela e rola por dentro. */
+.layout :global(.filters) {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.filtersTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.count {
+  font-size: 11px;
+}
+
+.collapse {
+  width: 28px;
+  height: 28px;
+}
+
+.groups {
+  display: contents;
+}
+
+.clear {
+  justify-self: start;
+}
+
+.dialogGroups {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tagButton {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chipRemove {
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.manage {
+  font-size: 13px;
+}
+
 @media (max-width: 56rem) {
   .content {
     padding: var(--space-6) var(--space-4) var(--space-8);

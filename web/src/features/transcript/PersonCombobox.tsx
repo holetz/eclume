@@ -11,14 +11,17 @@ type Option = { kind: 'person'; person: Person } | { kind: 'create'; name: strin
 interface PersonComboboxProps {
   label: string
   onSelect: (person: Pick<Person, 'id' | 'name'>) => void
-  onCancel: () => void
+  /** Sem ele, não há Cancelar: o campo fica no lugar (filtro), sem foco automático nem cadastro. */
+  onCancel?: () => void
+  placeholder?: string
 }
 
 /**
  * Combobox (ARIA 1.2, lista em popup) para escolher uma pessoa do diretório pelo nome ou e-mail,
  * com a opção de cadastrar na hora quem ainda não existe. Setas navegam, Enter escolhe, Esc cancela.
  */
-export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProps) {
+export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome ou e-mail' }: PersonComboboxProps) {
+  const inline = onCancel === undefined
   const queryClient = useQueryClient()
   const [text, setText] = useState('')
   const [active, setActive] = useState(0)
@@ -42,10 +45,14 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
   const name = text.trim()
   const matches = people.data?.items ?? []
   const exists = matches.some((p) => p.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))
-  const options: Option[] = [
-    ...matches.map((person) => ({ kind: 'person' as const, person })),
-    ...(name && !exists ? [{ kind: 'create' as const, name }] : []),
-  ]
+  // No filtro, a lista só abre quando há texto, e não cadastra pessoa nova.
+  const options: Option[] =
+    inline && !name
+      ? []
+      : [
+          ...matches.map((person) => ({ kind: 'person' as const, person })),
+          ...(name && !exists && !inline ? [{ kind: 'create' as const, name }] : []),
+        ]
   const current = Math.min(active, options.length - 1)
   const optionId = (index: number) => `${listId}-${index}`
 
@@ -65,7 +72,8 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
       event.preventDefault()
       if (current >= 0 && !create.isPending) choose(options[current])
     } else if (event.key === 'Escape') {
-      onCancel()
+      if (onCancel) onCancel()
+      else setText('')
     }
   }
 
@@ -82,7 +90,7 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
         aria-expanded={options.length > 0}
         aria-controls={listId}
         aria-activedescendant={current >= 0 ? optionId(current) : undefined}
-        placeholder="Nome ou e-mail"
+        placeholder={placeholder}
         value={text}
         onChange={(event) => {
           setText(event.target.value)
@@ -90,7 +98,7 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
         }}
         onKeyDown={onKeyDown}
         autoComplete="off"
-        autoFocus
+        autoFocus={!inline}
       />
       <ul id={listId} role="listbox" aria-label={label} className={styles.options} hidden={options.length === 0}>
         {options.map((option, index) => (
@@ -120,9 +128,11 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
           {errorMessage(create.error)}
         </p>
       )}
-      <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>
-        Cancelar
-      </button>
+      {onCancel && (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>
+          Cancelar
+        </button>
+      )}
     </div>
   )
 }
