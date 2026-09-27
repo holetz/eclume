@@ -127,8 +127,16 @@ done
 
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: acima de ${DISK_LIMIT}%, deploy recusado." >&2; exit 3; }
 
-exec 9>deploy/.deploy.lock
-flock -n 9 || { echo "Outro deploy está em execução." >&2; exit 3; }
+# O Git Bash da estação Windows não tem flock: lá a trava é um diretório (mkdir é atômico).
+lock_dir="" ca=""
+trap '[[ -z "$lock_dir" ]] || rmdir "$lock_dir"; rm -f "$ca"' EXIT
+if command -v flock >/dev/null; then
+  exec 9>deploy/.deploy.lock
+  flock -n 9 || { echo "Outro deploy está em execução." >&2; exit 3; }
+else
+  mkdir deploy/.deploy.lock.d 2>/dev/null || { echo "Outro deploy está em execução (ou sobrou deploy/.deploy.lock.d)." >&2; exit 3; }
+  lock_dir=deploy/.deploy.lock.d
+fi
 
 # --- host: pastas, segredos, scripts de backup ----------------------------------------------------
 echo "Preparando $DATA_DIR no host…" >&2
@@ -139,9 +147,6 @@ host "set -e
     install -m 600 /dev/null '$DATA_DIR/secrets/hf_token'
     echo 'Aviso: sem token do Hugging Face ($DATA_DIR/secrets/hf_token vazio): transcrição sem diarização.' >&2
   fi"
-if [[ -z "$(env_value ECLUME_CLAUDE_OAUTH_TOKEN)" ]]; then
-  echo "Aviso: ECLUME_CLAUDE_OAUTH_TOKEN vazio em $ENV_FILE; o provider claude-cli vai falhar até o token (claude setup-token no host)." >&2
-fi
 host "umask 077; cat > '$DATA_DIR/secrets/env.prod'" < "$ENV_FILE"
 host "cat > '$DATA_DIR/bin/backup.sh' && chmod 755 '$DATA_DIR/bin/backup.sh'" < deploy/backup.sh
 host "cat > '$DATA_DIR/bin/restaurar-backup.sh' && chmod 755 '$DATA_DIR/bin/restaurar-backup.sh'" < deploy/restaurar-backup.sh
@@ -183,9 +188,10 @@ docker image prune -f --filter label=org.eclume.image >/dev/null
 
 # --- conferência ----------------------------------------------------------------------------------
 ca="$(mktemp)"
-trap 'rm -f "$ca"' EXIT
 host "cat '$DATA_DIR/downloads/eclume-root.crt'" > "$ca"
-if curl -fsS --cacert "$ca" "$PUBLIC_URL/api/v1/health" >/dev/null; then
+# O curl do Git Bash (Schannel) exige checar revogação, e a CA interna do Caddy não publica CRL.
+revoke=(); curl -V | grep -q Schannel && revoke=(--ssl-no-revoke)
+if curl -fsS "${revoke[@]}" --cacert "$ca" "$PUBLIC_URL/api/v1/health" >/dev/null; then
   echo "Deploy concluído: $PUBLIC_URL (health ok, disco $(disk_pct)%)." >&2
 else
   echo "Deploy subiu, mas $PUBLIC_URL/api/v1/health falhou pela CA publicada." >&2

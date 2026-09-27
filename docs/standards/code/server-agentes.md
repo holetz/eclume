@@ -7,7 +7,7 @@ tags: [code, server, agentes, resumos, templates, llm, claude]
 timestamp: 2026-09-25
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29
 maintainer: holetz
 ---
 
@@ -36,9 +36,12 @@ e `temperature` (só enviada quando definida); sem elas valem os padrões por ti
   --setting-sources "" --strict-mcp-config --disable-slash-commands --permission-mode dontAsk`,
   num diretório temporário vazio. O agente recebe texto e devolve texto; a transcrição nunca vira
   ação. `options.effort` vira `--effort`. O binário é `ECLUME_CLAUDE_BIN` (padrão `claude`).
-- **Credencial do `claude-cli`:** a `api_key` do provider (vira `ANTHROPIC_API_KEY` do
-  subprocesso), o token de longa duração do `claude setup-token` em `CLAUDE_CODE_OAUTH_TOKEN` ou o
-  OAuth de uma sessão logada do Claude Code em `$HOME/.claude/.credentials.json`. Nenhuma das três →
+- **Credencial do `claude-cli`:** o segredo do provider (`api_key`, cadastrado em Admin → Agentes
+  como "Token do Claude"), o `CLAUDE_CODE_OAUTH_TOKEN` do ambiente ou o OAuth de uma sessão logada
+  do Claude Code em `$HOME/.claude/.credentials.json`. O segredo do provider vence o do ambiente e
+  vira a variável pelo prefixo: `sk-ant-oat…` (o token de 1 ano do `claude setup-token`) →
+  `CLAUDE_CODE_OAUTH_TOKEN`, e qualquer outro (uma chave de API `sk-ant-api…`) →
+  `ANTHROPIC_API_KEY`. A variável que não se aplica sai do env do subprocesso. Nenhuma credencial →
   `provider_not_configured` antes de rodar.
   A falha da CLI é lida do próprio JSON (`is_error`, `result`, `api_error_status`).
 - **`anthropic`** exige `api_key` no cadastro; sem ela o SDK cairia nas credenciais do processo. As

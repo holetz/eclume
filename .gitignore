@@ -32,3 +32,4 @@ web/playwright-report/
 # Segredos do deploy de produção (deploy/deploy.sh --gerar-env)
 deploy/.env.prod
 deploy/.deploy.lock
+deploy/.deploy.lock.d/

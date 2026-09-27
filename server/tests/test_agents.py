@@ -121,6 +121,20 @@ def test_claude_cli_aceita_o_token_de_longa_duracao_sem_arquivo(fake_claude: Fak
     assert record.exists()
 
 
+def test_claude_cli_entrega_o_segredo_do_provider_pela_variavel_certa():
+    def env_of(api_key: str) -> dict[str, str]:
+        config = ProviderConfig(kind="claude-cli", model="sonnet", api_key=api_key)
+        return ClaudeCliProvider(config, env={"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-do-ambiente"}).env
+
+    token = env_of("sk-ant-oat01-do-painel")
+    assert token["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-do-painel"
+    assert "ANTHROPIC_API_KEY" not in token
+
+    chave = env_of("sk-ant-api03-do-painel")
+    assert chave["ANTHROPIC_API_KEY"] == "sk-ant-api03-do-painel"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in chave
+
+
 def test_claude_cli_classifica_as_falhas(fake_claude: FakeClaude):
     auth, _ = fake_claude("auth")
     error = error_of(auth.complete("s", "p"))

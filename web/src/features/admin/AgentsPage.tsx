@@ -4,7 +4,7 @@ import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
 import styles from './Admin.module.css'
-import { labelOf, NEEDS_BASE_URL, PROVIDER_KINDS } from './labels'
+import { labelOf, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret } from './labels'
 import { PROVIDERS_KEY, SETTINGS_KEY, useAdminSettings, useProviders, useUpdateSettings } from './queries'
 import { sectionTitle } from './sections'
 
@@ -23,7 +23,7 @@ export function AgentsPage() {
       <div className={styles.intro}>
         <h2 id="agentes-titulo">Agentes de sumarização</h2>
         <p className="muted">
-          Onde os resumos são gerados. As chaves de API ficam cifradas no servidor e nunca voltam para a tela.
+          Onde os resumos são gerados. Chaves e tokens ficam cifrados no servidor e nunca voltam para a tela.
         </p>
       </div>
       <DefaultProvider providers={items} />
@@ -130,6 +130,8 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
   const [enabled, setEnabled] = useState(provider?.enabled ?? true)
   const ids = { name: useId(), kind: useId(), model: useId(), url: useId(), key: useId() }
   const needsUrl = NEEDS_BASE_URL.has(kind)
+  const secret = providerSecret(kind)
+  const helpId = useId()
 
   const save = useMutation({
     mutationFn: () => {
@@ -220,7 +222,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
         </div>
       )}
       <div className="field">
-        <label htmlFor={ids.key}>Chave de API</label>
+        <label htmlFor={ids.key}>{secret.label}</label>
         <input
           id={ids.key}
           className="input"
@@ -229,13 +231,19 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
           value={apiKey}
           disabled={clearKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder={provider?.api_key_set ? 'Guardada — deixe em branco para manter' : 'Opcional'}
+          aria-describedby={secret.help ? helpId : undefined}
+          placeholder={provider?.api_key_set ? `${secret.stored} — deixe em branco para manter` : 'Opcional'}
         />
+        {secret.help && (
+          <span id={helpId} className="hint">
+            {secret.help}
+          </span>
+        )}
       </div>
       {provider?.api_key_set && (
         <label className={styles.check}>
           <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} />
-          <span>Apagar a chave guardada</span>
+          <span>{secret.clear}</span>
         </label>
       )}
       <label className={styles.check}>
@@ -284,7 +292,7 @@ function ProviderRow({ provider, onEdit }: { provider: Provider; onEdit: () => v
       </th>
       <td>{labelOf(PROVIDER_KINDS, provider.kind)}</td>
       <td className={styles.mono}>{provider.model}</td>
-      <td>{provider.api_key_set ? 'Guardada' : 'Sem chave'}</td>
+      <td>{provider.api_key_set ? providerSecret(provider.kind).stored : providerSecret(provider.kind).missing}</td>
       <td>
         {provider.enabled ? (
           <span className="badge badge-success">Habilitado</span>
