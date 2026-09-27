@@ -25,19 +25,6 @@ async function body(http: ReturnType<typeof mockFetch>, key: string, index = 0) 
   return http.requests(key)[index].json()
 }
 
-describe('navegação', () => {
-  it('admin cai em Transcrição e navega pelas seções', async () => {
-    mockAdminApi()
-    renderApp('/admin')
-    expect(await screen.findByRole('heading', { name: 'Transcrição' })).toBeInTheDocument()
-    const tabs = screen.getByRole('navigation', { name: 'Seções da administração' })
-    expect(within(tabs).getByRole('link', { name: 'Transcrição' })).toHaveAttribute('aria-current', 'page')
-    expect(within(tabs).queryByRole('link', { name: /Templates/ })).not.toBeInTheDocument()
-    await userEvent.click(within(tabs).getByRole('link', { name: 'Saúde' }))
-    expect(await screen.findByRole('heading', { name: 'Saúde' })).toBeInTheDocument()
-  })
-})
-
 describe('Transcrição', () => {
   it('mostra a configuração e salva o que mudou', async () => {
     const http = mockAdminApi({

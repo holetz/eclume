@@ -1,68 +1,34 @@
 /* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
    já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
-:where(.layout) h2 {
+:where(.page) h2 {
   font-size: 20px;
   margin: 0;
 }
 
-:where(.layout) h3 {
+:where(.page) h3 {
   font-size: 17px;
   margin: 0;
 }
 
-:where(.layout) p {
+:where(.page) p {
   margin: 0;
 }
 
-.layout {
-  display: grid;
-  gap: var(--space-6);
-}
-
-/* O painel fica fora da moldura do app do usuário (sessão própria). */
-.standalone {
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-4);
-}
-
-.header {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.header p {
-  max-width: 64ch;
-}
-
-.tabs ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* A marca com o selo Admin, no topo da barra lateral (templates/admin do DS). */
+.brand {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  border-bottom: 1px solid var(--color-divider);
+  align-items: center;
+  gap: 10px;
 }
 
-.tab {
-  display: block;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  font-weight: 560;
-  text-decoration: none;
+.account {
+  display: grid;
+  min-width: 0;
 }
 
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab[aria-current='page'] {
-  color: var(--color-accent-ink);
-  border-bottom-color: var(--color-accent);
+.account > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .page {

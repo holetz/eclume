@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
@@ -116,5 +116,59 @@ describe('sessão de admin', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Sair' }))
     expect(await screen.findByRole('heading', { name: 'Entrar como admin' })).toBeInTheDocument()
     await waitFor(() => expect(http.requests('POST /api/v1/admin/auth/logout')).toHaveLength(1))
+  })
+})
+
+describe('moldura do painel', () => {
+  it('tem a marca com o selo Admin, as sete seções da Plataforma e a conta no rodapé', async () => {
+    const http = mockAdminApi()
+    renderApp('/admin')
+    expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
+    expect(screen.getAllByText('Admin', { selector: '.tag.tag-outline' }).length).toBeGreaterThan(0)
+    const nav = screen.getByRole('navigation', { name: 'Plataforma' })
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Usuários',
+      'Pré-processamento de áudio',
+      'Transcrição',
+      'Locutores',
+      'Agentes',
+      'Tipos de agenda padrão',
+      'Saúde',
+    ])
+    expect(within(nav).getByRole('link', { name: 'Usuários' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('Administração EK')).toBeInTheDocument()
+    expect(screen.getByText('mariana.couto@example.com')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: 'Tema' })).not.toBeInTheDocument()
+    expect(document.title).toBe('Usuários — Admin eclume')
+    expect(http.requests('GET /api/v1/me')).toHaveLength(0)
+  })
+
+  it('navega pelas seções e dá o título da aba', async () => {
+    mockAdminApi()
+    renderApp('/admin/usuarios')
+    const nav = await screen.findByRole('navigation', { name: 'Plataforma' })
+    await userEvent.click(within(nav).getByRole('link', { name: 'Saúde' }))
+    expect(within(nav).getByRole('link', { name: 'Saúde' })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => expect(document.title).toBe('Saúde — Admin eclume'))
+    await userEvent.click(within(nav).getByRole('link', { name: 'Locutores' }))
+    await waitFor(() => expect(document.title).toBe('Locutores — Admin eclume'))
+  })
+
+  it('uma rota inexistente mostra a página não encontrada dentro do painel', async () => {
+    mockAdminApi()
+    renderApp('/admin/nao-existe')
+    const main = await screen.findByRole('main')
+    expect(await within(main).findByRole('heading', { level: 1, name: 'Página não encontrada' })).toBeInTheDocument()
+    expect(within(main).getByRole('link', { name: 'Ir para Usuários' })).toHaveAttribute('href', '/admin/usuarios')
+    expect(screen.getByRole('navigation', { name: 'Plataforma' })).toBeInTheDocument()
+  })
+
+  it('tem o menu compacto do shell', async () => {
+    mockAdminApi()
+    renderApp('/admin/usuarios')
+    const button = await screen.findByRole('button', { name: 'Menu' })
+    await userEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
   })
 })

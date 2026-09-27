@@ -118,7 +118,7 @@ test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }
 /** Entra no painel pela conta de admin, que é outra conta, com login próprio. */
 async function adminLogin(page: Page, path = '/admin') {
   await page.goto(path)
-  await expect(page.getByRole('heading', { name: 'Painel admin' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Entrar como admin' })).toBeVisible()
   await page.getByLabel('E-mail').fill('mariana.couto@example.com')
   await page.getByLabel('Senha').fill('senha-do-admin')
   await page.getByRole('button', { name: 'Entrar' }).click()
@@ -185,8 +185,8 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
 test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
   // Sem a sessão de admin, o painel leva ao login do admin, mesmo com a do usuário aberta.
   await login(page)
-  await adminLogin(page)
-  const tabs = page.getByRole('navigation', { name: 'Seções da administração' })
+  await adminLogin(page, '/admin/transcricao')
+  const tabs = page.getByRole('navigation', { name: 'Plataforma' })
   await expect(page.getByText('mariana.couto@example.com')).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Principal' })).toHaveCount(0)
 
@@ -203,8 +203,8 @@ test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
   await expect(page.getByRole('row', { name: /Reunião de alinhamento — cliente Aurora/ })).toBeVisible()
   await screenshot(page, '13-admin-saude')
 
-  // Segredos: só escrita.
-  await tabs.getByRole('link', { name: 'Segredos' }).click()
+  // Segredos (fora da barra até a 2.5): só escrita.
+  await page.goto('/admin/segredos')
   const hf = page.getByRole('form', { name: 'Token do Hugging Face' })
   await expect(hf.getByText('Definido')).toBeVisible()
   await hf.getByLabel('Novo valor').fill('hf_e2e_token')
@@ -220,7 +220,7 @@ test('painel admin contra o mock, com a sessão de admin', async ({ page }) => {
 
   // Sair volta ao login do admin.
   await page.getByRole('button', { name: 'Sair' }).click()
-  await expect(page.getByRole('heading', { name: 'Painel admin' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Entrar como admin' })).toBeVisible()
 })
 
 test('busca, gravação no segundo, pessoas e coleções contra o mock', async ({ page }) => {
@@ -297,7 +297,7 @@ test('identificação por voz contra o mock', async ({ page }) => {
   await voice.getByRole('button', { name: 'Manter' }).click()
 
   // Admin: o liga-desliga da plataforma e o limiar, sem termo nem trilha.
-  await adminLogin(page, '/admin/voz')
+  await adminLogin(page, '/admin/locutores')
   await expect(page.getByRole('checkbox', { name: /Ligar a identificação por voz/ })).toBeChecked()
   await expect(page.getByRole('table')).toHaveCount(0)
   await page.getByRole('button', { name: 'Salvar' }).click()

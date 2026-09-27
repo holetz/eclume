@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { Navigate, useLocation } from 'react-router'
+import { Navigate, Outlet, useLocation } from 'react-router'
 import { onAdminUnauthorized } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { PageStatus } from '../../app/RequireSession'
-import { AdminLayout } from './AdminLayout'
+import { AdminShell } from './AdminShell'
 import { ADMIN_LOGIN_PATH, ADMIN_ME_KEY, useAdminMe } from './adminSession'
 
 /**
@@ -34,5 +34,9 @@ export function RequireAdmin() {
     const volta = encodeURIComponent(location.pathname + location.search)
     return <Navigate to={`${ADMIN_LOGIN_PATH}?volta=${volta}`} replace />
   }
-  return <AdminLayout admin={me.data} />
+  return (
+    <AdminShell admin={me.data}>
+      <Outlet />
+    </AdminShell>
+  )
 }

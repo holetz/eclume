@@ -22,7 +22,7 @@ describe('Identificação por voz no admin', () => {
     const http = mockVoiceAdmin({
       'PATCH /api/v1/admin/settings': () => fixtures.adminSettings(),
     })
-    renderApp('/admin/voz')
+    renderApp('/admin/locutores')
     const toggle = await screen.findByRole('checkbox', { name: /Ligar a identificação por voz/ })
     expect(toggle).not.toBeChecked()
     expect(screen.getByLabelText('Semelhança mínima para sugerir (%)')).toHaveValue(75)
@@ -39,7 +39,7 @@ describe('Identificação por voz no admin', () => {
 
   it('sem termo, trilha de auditoria nem purga', async () => {
     mockVoiceAdmin()
-    renderApp('/admin/voz')
+    renderApp('/admin/locutores')
     await screen.findByRole('checkbox', { name: /Ligar a identificação por voz/ })
     expect(screen.queryByLabelText('Texto que a pessoa aceita')).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
