@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     session_ttl_days: int = 14
     # A sessão de admin é mais curta: o painel muda a plataforma inteira.
     admin_session_ttl_hours: int = 12
+    # Cadastro aberto (`POST /auth/signup`); `false` o fecha sem deploy de código.
+    signup_open: bool = True
 
     # Cifra das chaves de API dos providers (base64 de 32 bytes). Sem valor, derivada de
     # `secret_key` por HKDF: trocar `secret_key` sem esta variável invalida as chaves guardadas.

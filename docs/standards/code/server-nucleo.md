@@ -35,6 +35,7 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_PUBLIC_URL` | a da requisição | base absoluta das URLs devolvidas ao cliente |
 | `ECLUME_COOKIE_SECURE` | `true` | `false` só em dev por HTTP puro |
 | `ECLUME_SESSION_TTL_DAYS`, `ECLUME_ADMIN_SESSION_TTL_HOURS` | `14`, `12` | validade da sessão de usuário e da sessão de admin |
+| `ECLUME_SIGNUP_OPEN` | `true` | cadastro aberto; `false` fecha o `POST /auth/signup` (403 `signup_closed`) sem deploy de código |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
 
@@ -145,6 +146,24 @@ nas duas.
   - operação do contrato ainda sem implementação → **501** `not_implemented`, com a spec dona no
     `detail` (`routes/not_implemented.py`). A lista sai quando a spec implementa a rota.
 - Desativar um usuário (`PATCH /admin/users/{id}`) apaga as sessões e revoga os PATs dele.
+
+## Cadastro e aviso
+
+- **Cadastro aberto**, sem convite e sem confirmação de e-mail: `POST /auth/signup` (público) com
+  nome, e-mail, senha (12+) e `notice_version`. A conta nasce com o aceite do aviso em vigor
+  ("Sou responsável por pedir o consentimento das pessoas que gravo"), os três templates de resumo
+  padrão (`accounts.create_user`, que chama `eclume_seed_summary_templates`) e a sessão aberta,
+  com os cookies do login. `GET /auth/signup` diz se o cadastro está aberto e devolve o aviso.
+- **Erros:** cadastro fechado (`ECLUME_SIGNUP_OPEN=false`) → 403 `signup_closed`; e-mail já
+  cadastrado (sem distinção de caixa, inclusive na corrida, pelo índice único) → 409 `email_taken`;
+  aviso ausente ou fora da versão em vigor, senha curta, e-mail ou nome inválidos → 422.
+- **O aviso tem versão** (`accounts.NOTICE_VERSION`, `NOTICE_TEXT`). `users.notice_version` e
+  `notice_accepted_at` são os dois nulos (conta migrada, ainda sem aceite) ou os dois preenchidos
+  (`CHECK`). `GET /me` devolve `notice_required` quando a conta não aceitou a versão em vigor, e
+  `POST /me/notice` (só sessão) registra o aceite. Um texto novo do aviso é uma versão nova: as
+  contas voltam a ver `notice_required`.
+- **O aceite pendente não bloqueia a API:** o desktop e o lumea usam PAT de contas migradas. Quem
+  pede o aceite é o web.
 
 ## Upload e áudio
 

@@ -1,4 +1,4 @@
-"""`health`, sessão (`auth/login`, `auth/logout`) e `me`."""
+"""`health`, cadastro (`auth/signup`), sessão (`auth/login`, `auth/logout`), `me` e o aceite do aviso."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
 from eclume_server import __version__
-from eclume_server.accounts import NOTICE_VERSION
+from eclume_server.accounts import MIN_PASSWORD, NOTICE_VERSION, EmailTakenError, create_user, notice
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
-from eclume_server.db.session import system_tx
-from eclume_server.problems import forbidden, unauthorized
+from eclume_server.db.session import system_tx, user_tx
+from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 from eclume_server.serialize import user_json
 
@@ -49,6 +49,28 @@ class LoginRequest(BaseModel):
     _email = field_validator("email")(check_email)
 
 
+class SignupRequest(BaseModel):
+    """Schema `SignupRequest`."""
+
+    name: str = Field(min_length=1)
+    email: str
+    password: str = Field(min_length=MIN_PASSWORD)
+    notice_version: str = Field(min_length=1)
+
+    _email = field_validator("email")(check_email)
+
+
+class NoticeAccept(BaseModel):
+    """Schema `NoticeAccept`."""
+
+    notice_version: str = Field(min_length=1)
+
+
+def _check_notice(version: str) -> None:
+    if version != NOTICE_VERSION:
+        raise invalid_field("notice_version", f"aceite o aviso em vigor (versão {NOTICE_VERSION})")
+
+
 @router.get("/health")
 async def health() -> dict[str, str]:
     """Saúde do serviço e versão do contrato."""
@@ -73,6 +95,36 @@ async def login(body: LoginRequest, ctx: Ctx) -> Response:
             values["password_hash"] = hash_password(body.password)
         await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
         return await _open_session(conn, ctx, user["id"], now)
+
+
+@router.get("/auth/signup")
+async def signup_info(ctx: Ctx) -> dict[str, Any]:
+    """Se o cadastro está aberto, e o aviso que a conta nova aceita."""
+    return {"open": ctx.settings.signup_open, "notice": notice()}
+
+
+@router.post("/auth/signup", status_code=204)
+async def signup(body: SignupRequest, ctx: Ctx) -> Response:
+    """Cria a conta com o aceite do aviso e abre a sessão, como o login."""
+    if not ctx.settings.signup_open:
+        raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
+    if not body.name.strip():
+        raise invalid_field("name", "não pode ser vazio")
+    _check_notice(body.notice_version)
+    now = datetime.now(UTC)
+    async with system_tx(ctx.engine) as conn:
+        try:
+            user_id = await create_user(
+                conn,
+                email=body.email,
+                name=body.name.strip(),
+                password=body.password,
+                notice_version=body.notice_version,
+            )
+        except EmailTakenError as exc:
+            raise conflict("Já existe uma conta com este e-mail.", code="email_taken") from exc
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
+        return await _open_session(conn, ctx, user_id, now)
 
 
 async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, now: datetime) -> Response:
@@ -102,6 +154,21 @@ async def logout(principal: Annotated[Principal, Depends(requires(session_only=T
     response.delete_cookie(SESSION_COOKIE, httponly=True, secure=secure, samesite="lax")
     response.delete_cookie(CSRF_COOKIE, secure=secure, samesite="lax")
     return response
+
+
+@router.post("/me/notice", status_code=204)
+async def accept_notice(
+    body: NoticeAccept, principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx
+) -> Response:
+    """Registra o aceite do aviso em vigor pela conta corrente."""
+    _check_notice(body.notice_version)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await conn.execute(
+            update(t.users)
+            .where(t.users.c.id == principal.user_id)
+            .values(notice_version=body.notice_version, notice_accepted_at=func.now())
+        )
+    return Response(status_code=204)
 
 
 @router.get("/me")

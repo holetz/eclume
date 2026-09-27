@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, insert, select, text, update
+from sqlalchemy.exc import IntegrityError
 
 from eclume_server.db import tables as t
 from eclume_server.security import hash_password
@@ -26,6 +27,15 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 class AccountError(ValueError):
     """Dado de conta inválido ou já existente."""
+
+
+class EmailTakenError(AccountError):
+    """Já existe conta de usuário com o e-mail."""
+
+
+def notice() -> dict[str, str]:
+    """Schema `Notice`: o aviso em vigor."""
+    return {"version": NOTICE_VERSION, "text": NOTICE_TEXT}
 
 
 def _check(email: str, password: str) -> None:
@@ -52,17 +62,22 @@ async def create_user(
     conexão: a conta ainda não existe para a RLS.
     """
     _check(email, password)
+    msg = f"e-mail já cadastrado: {email}"
     if await email_taken(conn, email):
-        msg = f"e-mail já cadastrado: {email}"
-        raise AccountError(msg)
-    notice = {"notice_version": notice_version, "notice_accepted_at": datetime.now(UTC)} if notice_version else {}
-    user_id = (
-        await conn.execute(
-            insert(t.users)
-            .values(email=email, name=name, password_hash=hash_password(password), **notice)
-            .returning(t.users.c.id)
-        )
-    ).scalar_one()
+        raise EmailTakenError(msg)
+    accepted = {"notice_version": notice_version, "notice_accepted_at": datetime.now(UTC)} if notice_version else {}
+    try:
+        async with conn.begin_nested():
+            user_id = (
+                await conn.execute(
+                    insert(t.users)
+                    .values(email=email, name=name, password_hash=hash_password(password), **accepted)
+                    .returning(t.users.c.id)
+                )
+            ).scalar_one()
+    except IntegrityError as exc:
+        # Dois cadastros simultâneos com o mesmo e-mail: o índice único decide.
+        raise EmailTakenError(msg) from exc
     # Os textos dos padrões vivem na migration 008, uma fonte só para contas novas e migradas.
     await conn.execute(text("SELECT eclume_seed_summary_templates(:user)"), {"user": user_id})
     return user_id
