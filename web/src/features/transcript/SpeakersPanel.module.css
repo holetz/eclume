@@ -1,7 +1,17 @@
 .panel {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.panel h6 {
+  margin: 0;
+  color: var(--color-text-muted);
 }
 
 .list {

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
@@ -10,8 +11,7 @@ import { useRecording, useRefreshOnPipeline, useTranscript } from './queries'
 import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
 import { parseStart } from './segments'
-import { SpeakersPanel } from './SpeakersPanel'
-import { TranscriptView } from './TranscriptView'
+import { TranscriptDisclosure } from './TranscriptDisclosure'
 
 /** A URL da biblioteca de onde a pessoa veio (calendário, lista ou busca); sem ela, a biblioteca. */
 function useBackTo(): string {
@@ -28,6 +28,8 @@ export function RecordingPage() {
   const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
+  // Com `?t=` (vindo da busca), a transcrição já abre na fala.
+  const [transcriptOpen, setTranscriptOpen] = useState(startMs !== null)
   const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
   useRefreshOnPipeline(recording.data)
   usePageTitle(recording.data?.title ?? 'Gravação')
@@ -82,10 +84,13 @@ export function RecordingPage() {
               {errorMessage(transcript.error)}
             </p>
           ) : (
-            <>
-              <SpeakersPanel transcript={transcript.data} />
-              <TranscriptView transcript={transcript.data} />
-            </>
+            <TranscriptDisclosure
+              transcript={transcript.data}
+              markers={markers.data ?? []}
+              recordingId={data.id}
+              open={transcriptOpen}
+              onOpenChange={setTranscriptOpen}
+            />
           )}
         </PlaybackProvider>
       </div>

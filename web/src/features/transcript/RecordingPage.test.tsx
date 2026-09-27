@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { renderApp } from '../../test/render'
-import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
+import { mockTranscriptApi, openTranscript, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -97,7 +97,9 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     renderApp(`/gravacoes/${RECORDING}`)
     await user.click(await screen.findByRole('button', { name: 'Excluir' }))
     const dialog = screen.getByRole('dialog', { name: 'Excluir a gravação?' })
-    expect(dialog).toHaveTextContent('O áudio, a transcrição, o resumo com as versões, o chat e os marcadores são apagados.')
+    expect(dialog).toHaveTextContent(
+      'O áudio, a transcrição, o resumo com as versões, o chat e os marcadores são apagados.',
+    )
     await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     expect(http.requests('DELETE /api/v1/recordings/:id')).toHaveLength(0)
 
@@ -109,17 +111,90 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
   })
 })
 
+/** A fala (`.segment`) de um item da lista de falas. */
+const segment = (item: HTMLElement) => item.querySelector('.segment')!
+
+describe('transcrição recolhida', () => {
+  it('fica fechada, com o resumo de locutores, falas e marcadores, e só renderiza as falas aberta', async () => {
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const details = await waitFor(() => {
+      const found = document.querySelector('details.disclosure')
+      expect(found).not.toBeNull()
+      return found as HTMLDetailsElement
+    })
+    expect(details.open).toBe(false)
+    expect(details.querySelector('summary')).toHaveTextContent(
+      'Transcrição3 locutores · 12 falas · 2 marcadores · abra para conferir ou corrigir',
+    )
+    expect(screen.queryByRole('list', { name: 'Falas' })).not.toBeInTheDocument()
+    await openTranscript()
+    expect(details.open).toBe(true)
+    expect(screen.getByRole('region', { name: 'Locutores' })).toBeInTheDocument()
+  })
+
+  it('abre sozinha com ?t=, posiciona o áudio sem tocar e destaca a fala', async () => {
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}?t=80900`)
+    const falas = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(falas).getAllByRole('listitem')
+    expect(segment(items[6])).toHaveAttribute('aria-current', 'true')
+    const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
+    expect(audio.currentTime).toBe(80.9)
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('põe o marcador antes da fala, com a nota, o dispositivo, editar e excluir', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'PATCH /api/v1/markers/:id': async (request) => ({
+        ...fixtures.markerPage().items[1],
+        note: ((await request.json()) as { note: string }).note,
+      }),
+      'DELETE /api/v1/markers/:id': () => empty(),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await openTranscript()
+    const falas = await screen.findByRole('list', { name: 'Falas' })
+    const marker = await within(falas).findByRole('group', { name: 'Marcador em 00:00:42' })
+    expect(marker).toHaveClass('segment-marker')
+    expect(marker).toHaveTextContent('Decisão sobre as turmas')
+    expect(marker).toHaveTextContent('Marcado no NB-MARIANA')
+    // O marcador fica antes da primeira fala que começa nele ou depois.
+    const item = marker.closest('[role="listitem"]') as HTMLElement
+    expect(marker.nextElementSibling).toBe(segment(item))
+    expect(Number(segment(item).textContent?.match(/00:00:(\d\d)/)?.[1])).toBeGreaterThanOrEqual(42)
+
+    const empty2 = within(falas).getByRole('group', { name: 'Marcador em 00:02:11' })
+    expect(empty2).toHaveTextContent('Marcador')
+    await user.click(within(empty2).getByRole('button', { name: 'Editar nota' }))
+    const input = within(empty2).getByRole('textbox', { name: 'Nota do marcador em 00:02:11' })
+    expect(input).toHaveAttribute('maxLength', '500')
+    await user.type(input, 'Próximos passos{Enter}')
+    await waitFor(() => expect(http.requests('PATCH /api/v1/markers/:id')).toHaveLength(1))
+    expect(await http.requests('PATCH /api/v1/markers/:id')[0].json()).toEqual({ note: 'Próximos passos' })
+
+    await user.click(within(marker).getByRole('button', { name: 'Excluir marcador' }))
+    const dialog = screen.getByRole('dialog', { name: 'Excluir o marcador?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Excluir marcador' }))
+    await waitFor(() => expect(http.requests('DELETE /api/v1/markers/:id')).toHaveLength(1))
+    expect(http.requests('DELETE /api/v1/markers/:id')[0].url).toContain('01928f3a-1c00-7a00-8000-000000000c11')
+  })
+})
+
 describe('página da gravação', () => {
   it('mostra as falas com locutor e tempo, e o player do áudio', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     expect(await screen.findByRole('heading', { name: 'Alinhamento do programa de lideranças' })).toBeInTheDocument()
+    await openTranscript()
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
     expect(items).toHaveLength(12)
     expect(within(items[0]).getByText('Mariana Couto')).toBeInTheDocument()
     expect(within(items[1]).getByText('Locutor 2')).toBeInTheDocument()
-    expect(within(items[0]).getByRole('button', { name: /Ouvir a partir de 00:03/ })).toBeInTheDocument()
+    expect(within(items[0]).getByRole('button', { name: /Ouvir a partir de 00:00:03/ })).toBeInTheDocument()
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     expect(audio.getAttribute('src')).toBe(`/api/v1/recordings/${RECORDING}/audio`)
   })
@@ -127,6 +202,7 @@ describe('página da gravação', () => {
   it('clicar num segmento posiciona e toca o player e destaca a fala', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
+    await openTranscript()
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
@@ -134,23 +210,24 @@ describe('página da gravação', () => {
     await userEvent.click(items[3].querySelector('p')!)
     expect(audio.currentTime).toBe(39.5)
     expect(audio.play).toHaveBeenCalled()
-    expect(items[3]).toHaveAttribute('aria-current', 'true')
+    expect(segment(items[3])).toHaveAttribute('aria-current', 'true')
 
-    await userEvent.click(within(items[6]).getByRole('button', { name: /Ouvir a partir de 01:20/ }))
+    await userEvent.click(within(items[6]).getByRole('button', { name: /Ouvir a partir de 00:01:20/ }))
     expect(audio.currentTime).toBe(80.9)
-    expect(items[6]).toHaveAttribute('aria-current', 'true')
-    expect(items[3]).not.toHaveAttribute('aria-current')
+    expect(segment(items[6])).toHaveAttribute('aria-current', 'true')
+    expect(segment(items[3])).not.toHaveAttribute('aria-current')
   })
 
   it('o destaque acompanha o tempo do player', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
+    await openTranscript()
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     audio.currentTime = 100
     fireEvent.timeUpdate(audio)
-    expect(items[7]).toHaveAttribute('aria-current', 'true')
+    expect(segment(items[7])).toHaveAttribute('aria-current', 'true')
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 

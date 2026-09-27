@@ -1,3 +1,5 @@
+import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { fixtures } from './fixtures'
 import { mockFetch } from './http'
 
@@ -26,3 +28,11 @@ export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 
 export const RECORDING_ID = '01928f3a-1c00-7a00-8000-000000000401'
 export const TRANSCRIPT_ID = '01928f3a-1c00-7a00-8000-000000000501'
+
+/** Abre a transcrição recolhida da página da gravação. */
+export async function openTranscript() {
+  const summary = await screen.findByText(
+    (_, element) => element?.tagName === 'SUMMARY' && Boolean(element.textContent?.startsWith('Transcrição')),
+  )
+  await userEvent.click(summary)
+}

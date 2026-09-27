@@ -83,7 +83,7 @@ describe('gravação aberta pela busca', () => {
     renderApp(`/gravacoes/${RECORDING_ID}?t=122500`)
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
-    expect(items[9]).toHaveAttribute('aria-current', 'true')
+    expect(items[9].querySelector('.segment')).toHaveAttribute('aria-current', 'true')
     expect((screen.getByLabelText('Áudio da gravação') as HTMLAudioElement).currentTime).toBe(122.5)
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
