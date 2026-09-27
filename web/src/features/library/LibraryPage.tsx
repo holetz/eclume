@@ -5,6 +5,7 @@ import { Link, useLocation, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
+import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
 import { useImportContext } from '../import/importContext'
@@ -62,6 +63,7 @@ function useHasAnyRecording(enabled: boolean) {
 }
 
 export function LibraryPage() {
+  useHelpTopic('biblioteca')
   const [params, setParams] = useSearchParams()
   const segId = useId()
   const filtersId = useId()

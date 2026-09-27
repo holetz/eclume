@@ -12,7 +12,7 @@ vídeo) entra na sua biblioteca pela importação.
 
 ## Como importar
 
-1. Na [biblioteca](/), use **Importar**. Uma janela abre sobre a biblioteca.
+1. Na [biblioteca](/), use **Importar arquivos**. Uma janela abre sobre a biblioteca.
 2. Solte os arquivos na área indicada ou escolha-os no computador. Dá para mandar vários de uma vez.
 3. Confira a data de cada arquivo e use **Enviar**.
 

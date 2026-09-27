@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
+import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { useCollections, useTags } from '../collections/queries'
 import { shortDayLabel } from '../library/calendar'
@@ -332,6 +333,7 @@ function Group({ group }: { group: HitGroup }) {
 }
 
 export function SearchPage() {
+  useHelpTopic('busca')
   const [params, setParams] = useSearchParams()
   const filters = filtersFromParams(params)
   const searchable = isSearchable(filters)
