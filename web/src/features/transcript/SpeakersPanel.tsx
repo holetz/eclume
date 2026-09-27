@@ -42,7 +42,7 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
             }}
           />
         ) : (
-          <button type="button" className="btn btn-sm" onClick={() => setMerging(true)}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMerging(true)}>
             Mesclar locutores
           </button>
         ))}
@@ -135,7 +135,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
               <span className={styles.buttons}>
                 <button
                   type="button"
-                  className="btn btn-sm"
+                  className="btn btn-secondary btn-sm"
                   onClick={() => link.mutate(suggestion.person.id)}
                   disabled={deciding}
                   aria-label={`Aceitar ${suggestion.person.name} para ${name}`}
@@ -224,7 +224,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
             <button type="submit" className="btn btn-primary btn-sm" disabled={rename.isPending || !label.trim()}>
               Salvar
             </button>
-            <button type="button" className="btn btn-sm" onClick={() => setEditing(false)}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>
               Cancelar
             </button>
           </div>
@@ -279,7 +279,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
         <label htmlFor={targetId}>Manter o locutor</label>
         <select
           id={targetId}
-          className="select"
+          className="input"
           value={target}
           onChange={(event) => {
             setTarget(event.target.value)
@@ -294,7 +294,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
         </select>
       </div>
       <fieldset className={styles.sources}>
-        <legend className="label">Juntar a ele</legend>
+        <legend className="field-label">Juntar a ele</legend>
         {candidates.map((s) => (
           <label key={s.id} className={styles.check}>
             <input type="checkbox" checked={chosen.includes(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
@@ -314,7 +314,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
         <button type="submit" className="btn btn-primary btn-sm" disabled={merge.isPending || chosen.length === 0}>
           Mesclar
         </button>
-        <button type="button" className="btn btn-sm" onClick={() => onDone('')}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => onDone('')}>
           Cancelar
         </button>
       </div>

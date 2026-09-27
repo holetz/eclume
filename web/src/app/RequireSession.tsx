@@ -24,7 +24,7 @@ export function RequireSession() {
     return (
       <PageStatus>
         <p>{errorMessage(me.error)}</p>
-        <button type="button" className="btn" onClick={() => me.refetch()}>
+        <button type="button" className="btn btn-secondary" onClick={() => me.refetch()}>
           Tentar de novo
         </button>
       </PageStatus>

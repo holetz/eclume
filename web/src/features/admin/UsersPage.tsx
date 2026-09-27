@@ -25,7 +25,7 @@ export function UsersPage() {
     <section className={styles.page} aria-labelledby="usuarios-titulo">
       <div className={styles.intro}>
         <h2 id="usuarios-titulo">Usuários e convites</h2>
-        <p className="muted">
+        <p className="text-muted">
           Desativar encerra as sessões e revoga os tokens da pessoa; as gravações dela continuam. A organização mantém ao
           menos um administrador ativo.
         </p>
@@ -112,7 +112,7 @@ function UserRow({ user, self }: { user: User; self: boolean }) {
         </label>
         <select
           id={roleId}
-          className="select"
+          className="input"
           value={user.role}
           disabled={patch.isPending || !user.active}
           onChange={(e) => patch.mutate({ role: e.target.value as Role })}
@@ -126,7 +126,7 @@ function UserRow({ user, self }: { user: User; self: boolean }) {
         </select>
       </td>
       <td>
-        {user.active ? <span className="badge badge-success">Ativo</span> : <span className="badge badge-neutral">Desativado</span>}
+        {user.active ? <span className="badge badge-success">Ativo</span> : <span className="badge">Desativado</span>}
       </td>
       <td>{user.last_login_at ? formatDateTime(user.last_login_at) : 'Nunca entrou'}</td>
       <td className={styles.actionsCell}>
@@ -142,7 +142,7 @@ function UserRow({ user, self }: { user: User; self: boolean }) {
               >
                 Confirmar desativação
               </button>
-              <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
                 Manter
               </button>
             </div>
@@ -161,7 +161,7 @@ function UserRow({ user, self }: { user: User; self: boolean }) {
         ) : (
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-secondary btn-sm"
             onClick={() => patch.mutate({ active: true })}
             disabled={patch.isPending}
             aria-label={`Reativar ${user.name}`}
@@ -217,7 +217,7 @@ function InviteForm({ onCreated }: { onCreated: (invitation: Invitation) => void
         </div>
         <div className="field">
           <label htmlFor={ids.role}>Papel</label>
-          <select id={ids.role} className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+          <select id={ids.role} className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -227,7 +227,7 @@ function InviteForm({ onCreated }: { onCreated: (invitation: Invitation) => void
         </div>
         <div className="field">
           <label htmlFor={ids.days}>Validade do link</label>
-          <select id={ids.days} className="select" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <select id={ids.days} className="input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {INVITATION_DAYS.map((value) => (
               <option key={value} value={value}>
                 {value === 1 ? '1 dia' : `${value} dias`}
@@ -307,7 +307,7 @@ function InvitationLink({ invitation, onDone }: { invitation: Invitation; onDone
         {copied ? 'Link copiado para a área de transferência.' : ''}
       </p>
       <div>
-        <button type="button" className="btn" onClick={onDone}>
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
           Pronto, já enviei
         </button>
       </div>
@@ -325,7 +325,7 @@ function InvitationList() {
       </p>
     )
   }
-  if (invitations.data.items.length === 0) return <p className="muted">Nenhum convite criado.</p>
+  if (invitations.data.items.length === 0) return <p className="text-muted">Nenhum convite criado.</p>
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>

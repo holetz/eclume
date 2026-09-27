@@ -48,7 +48,7 @@ export function SegmentEditor({ transcriptId, segment, label, onClose }: Segment
       </label>
       <textarea
         id={fieldId}
-        className="textarea"
+        className="input"
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
@@ -67,7 +67,7 @@ export function SegmentEditor({ transcriptId, segment, label, onClose }: Segment
         <button type="submit" className="btn btn-primary btn-sm" disabled={save.isPending}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>
-        <button type="button" className="btn btn-sm" onClick={onClose}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
           Cancelar
         </button>
         <span className={styles.hint}>Ctrl+Enter salva · Esc cancela</span>

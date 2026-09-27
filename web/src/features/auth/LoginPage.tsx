@@ -45,7 +45,7 @@ export function LoginPage() {
       <div className={`card ${styles.card}`}>
         <p className={styles.brand}>eclume</p>
         <h1>Entrar</h1>
-        <p className="muted">Transcrição institucional da sua organização.</p>
+        <p className="text-muted">Transcrição institucional da sua organização.</p>
         <form className={styles.form} onSubmit={submit} noValidate>
           <div className="field">
             <label htmlFor="login-email">E-mail</label>
@@ -82,7 +82,7 @@ export function LoginPage() {
             {submitting ? 'Entrando…' : 'Entrar'}
           </button>
         </form>
-        <p className={`muted ${styles.note}`}>Sem conta? Peça um convite ao administrador da organização.</p>
+        <p className={`text-muted ${styles.note}`}>Sem conta? Peça um convite ao administrador da organização.</p>
       </div>
     </main>
   )

@@ -22,7 +22,7 @@ export function AgentsPage() {
     <section className={styles.page} aria-labelledby="agentes-titulo">
       <div className={styles.intro}>
         <h2 id="agentes-titulo">Agentes de sumarização</h2>
-        <p className="muted">
+        <p className="text-muted">
           Onde os resumos são gerados. Chaves e tokens ficam cifrados no servidor e nunca voltam para a tela.
         </p>
       </div>
@@ -31,7 +31,7 @@ export function AgentsPage() {
         <div className={styles.actions}>
           <h3 id="providers-lista">Providers cadastrados</h3>
           {editing === null && (
-            <button type="button" className="btn btn-sm" onClick={() => setEditing('new')}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing('new')}>
               Cadastrar provider
             </button>
           )}
@@ -50,7 +50,7 @@ export function AgentsPage() {
           </p>
         )}
         {providers.isSuccess && items.length === 0 && (
-          <p className="muted">Nenhum provider cadastrado: os resumos não rodam até haver um.</p>
+          <p className="text-muted">Nenhum provider cadastrado: os resumos não rodam até haver um.</p>
         )}
         {items.length > 0 && (
           <div className={styles.tableWrap}>
@@ -93,7 +93,7 @@ function DefaultProvider({ providers }: { providers: Provider[] }) {
         <label htmlFor={selectId}>Provider padrão</label>
         <select
           id={selectId}
-          className="select"
+          className="input"
           value={current}
           disabled={!settings.data || update.isPending}
           onChange={(e) => update.mutate({ summarization: { default_provider_id: e.target.value || null } })}
@@ -105,7 +105,7 @@ function DefaultProvider({ providers }: { providers: Provider[] }) {
             </option>
           ))}
         </select>
-        <span className="hint">Usado no resumo automático e quando o usuário não escolhe outro.</span>
+        <span className="field-hint">Usado no resumo automático e quando o usuário não escolhe outro.</span>
       </div>
       {update.isError && (
         <p className="alert alert-error" role="alert">
@@ -182,7 +182,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
           <label htmlFor={ids.kind}>Tipo</label>
           <select
             id={ids.kind}
-            className="select"
+            className="input"
             value={kind}
             disabled={provider !== null}
             onChange={(e) => setKind(e.target.value as ProviderKind)}
@@ -206,7 +206,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
           />
         </div>
       </div>
-      <span className="hint">{PROVIDER_KINDS.find((option) => option.value === kind)?.hint}</span>
+      <span className="field-hint">{PROVIDER_KINDS.find((option) => option.value === kind)?.hint}</span>
       {needsUrl && (
         <div className="field">
           <label htmlFor={ids.url}>Endereço da API</label>
@@ -235,7 +235,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
           placeholder={provider?.api_key_set ? `${secret.stored} — deixe em branco para manter` : 'Opcional'}
         />
         {secret.help && (
-          <span id={helpId} className="hint">
+          <span id={helpId} className="field-hint">
             {secret.help}
           </span>
         )}
@@ -263,7 +263,7 @@ function ProviderForm({ provider, onDone }: { provider: Provider | null; onDone:
         >
           {save.isPending ? 'Salvando…' : provider ? 'Salvar alterações' : 'Cadastrar'}
         </button>
-        <button type="button" className="btn" onClick={onDone}>
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
           Cancelar
         </button>
       </div>
@@ -297,7 +297,7 @@ function ProviderRow({ provider, onEdit }: { provider: Provider; onEdit: () => v
         {provider.enabled ? (
           <span className="badge badge-success">Habilitado</span>
         ) : (
-          <span className="badge badge-neutral">Desabilitado</span>
+          <span className="badge">Desabilitado</span>
         )}
       </td>
       <td className={styles.actionsCell}>
@@ -307,7 +307,7 @@ function ProviderRow({ provider, onEdit }: { provider: Provider; onEdit: () => v
             <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()} disabled={remove.isPending}>
               Confirmar exclusão
             </button>
-            <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
               Manter
             </button>
             {remove.isError && (

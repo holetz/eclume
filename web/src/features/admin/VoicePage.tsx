@@ -21,7 +21,7 @@ export function VoicePage() {
     <section className={styles.page} aria-labelledby="voz-titulo">
       <div className={styles.intro}>
         <h2 id="voz-titulo">Identificação por voz</h2>
-        <p className="muted">
+        <p className="text-muted">
           O eclume pode sugerir quem é cada locutor comparando a voz com a de pessoas que já foram confirmadas. Voz é
           dado biométrico (LGPD): só entra quem tem o consentimento registrado na página da pessoa, e nenhuma sugestão
           vira identificação sem alguém aceitar.
@@ -70,7 +70,7 @@ function VoiceForm({ settings }: { settings: Settings }) {
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           <span>
             <span>Ligar a identificação por voz</span>
-            <span className="hint">
+            <span className="field-hint">
               Desligada, nada é comparado nem guardado como impressão, e as sugestões pendentes somem da tela. As
               impressões já guardadas ficam até alguém excluí-las (abaixo, ou na página de cada pessoa).
             </span>
@@ -88,7 +88,7 @@ function VoiceForm({ settings }: { settings: Settings }) {
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
           />
-          <span className="hint">
+          <span className="field-hint">
             O padrão veio da calibração com fala real em português; mais alto, menos sugestões erradas e mais
             pessoas não reconhecidas.
           </span>
@@ -98,8 +98,8 @@ function VoiceForm({ settings }: { settings: Settings }) {
         <legend>Termo de consentimento (versão {voice.consent_term_version})</legend>
         <div className="field">
           <label htmlFor={ids.term}>Texto que a pessoa aceita</label>
-          <textarea id={ids.term} className="textarea" rows={6} value={term} onChange={(e) => setTerm(e.target.value)} />
-          <span className="hint">
+          <textarea id={ids.term} className="input" rows={6} value={term} onChange={(e) => setTerm(e.target.value)} />
+          <span className="field-hint">
             Mudar o texto cria uma versão nova; cada consentimento guarda o texto que foi aceito.
           </span>
         </div>
@@ -135,7 +135,7 @@ function Audit() {
           {errorMessage(audit.error)}
         </p>
       )}
-      {audit.isSuccess && audit.data.items.length === 0 && <p className="muted">Nenhum evento ainda.</p>}
+      {audit.isSuccess && audit.data.items.length === 0 && <p className="text-muted">Nenhum evento ainda.</p>}
       {audit.isSuccess && audit.data.items.length > 0 && (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -181,7 +181,7 @@ function Purge() {
   return (
     <section className={styles.section} aria-labelledby="voz-purga">
       <h3 id="voz-purga">Apagar todas as impressões</h3>
-      <p className="muted">
+      <p className="text-muted">
         Apaga as impressões de voz de todas as pessoas e as sugestões pendentes. Consentimentos e auditoria ficam.
       </p>
       {confirming ? (
@@ -189,7 +189,7 @@ function Purge() {
           <button type="button" className="btn btn-danger" onClick={() => purge.mutate()} disabled={purge.isPending}>
             Confirmar: apagar todas
           </button>
-          <button type="button" className="btn" onClick={() => setConfirming(false)}>
+          <button type="button" className="btn btn-secondary" onClick={() => setConfirming(false)}>
             Manter
           </button>
         </div>

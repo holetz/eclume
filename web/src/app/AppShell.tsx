@@ -78,7 +78,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
             <label htmlFor={themeId}>Tema</label>
             <select
               id={themeId}
-              className="select"
+              className="input"
               value={theme}
               onChange={(event) => changeTheme(event.target.value as ThemePreference)}
             >
@@ -87,7 +87,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
               <option value="dark">Escuro</option>
             </select>
           </div>
-          <button type="button" className="btn" onClick={onLogout} disabled={loggingOut}>
+          <button type="button" className="btn btn-secondary" onClick={onLogout} disabled={loggingOut}>
             {loggingOut ? 'Saindo…' : 'Sair'}
           </button>
         </div>

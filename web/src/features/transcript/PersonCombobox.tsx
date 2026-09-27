@@ -120,7 +120,7 @@ export function PersonCombobox({ label, onSelect, onCancel }: PersonComboboxProp
           {errorMessage(create.error)}
         </p>
       )}
-      <button type="button" className="btn btn-sm" onClick={onCancel}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>
         Cancelar
       </button>
     </div>

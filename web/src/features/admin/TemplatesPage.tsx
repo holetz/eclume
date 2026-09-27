@@ -20,14 +20,14 @@ export function TemplatesPage() {
     <section className={styles.page} aria-labelledby="templates-titulo">
       <div className={styles.intro}>
         <h2 id="templates-titulo">Templates padrão</h2>
-        <p className="muted">
+        <p className="text-muted">
           Templates da organização aparecem para todos os usuários, que podem criar os seus. O marcado como padrão é o do
           resumo automático de quem não escolheu um template pessoal.
         </p>
       </div>
       <div className={styles.actions}>
         {editing === null && (
-          <button type="button" className="btn btn-sm" onClick={() => setEditing('new')}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing('new')}>
             Novo template da organização
           </button>
         )}
@@ -45,7 +45,7 @@ export function TemplatesPage() {
           {errorMessage(templates.error)}
         </p>
       )}
-      {templates.isSuccess && items.length === 0 && <p className="muted">A organização não tem templates padrão.</p>}
+      {templates.isSuccess && items.length === 0 && <p className="text-muted">A organização não tem templates padrão.</p>}
       <ul className={styles.list}>
         {items.map((template) => (
           <TemplateItem key={template.id} template={template} onEdit={() => setEditing(template)} />
@@ -115,13 +115,13 @@ function TemplateForm({ template, onDone }: { template: Template | null; onDone:
         <label htmlFor={ids.instructions}>Instruções ao agente</label>
         <textarea
           id={ids.instructions}
-          className="textarea"
+          className="input"
           rows={8}
           required
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
         />
-        <span className="hint">Em Markdown. A transcrição é anexada pelo servidor; não a cole aqui.</span>
+        <span className="field-hint">Em Markdown. A transcrição é anexada pelo servidor; não a cole aqui.</span>
       </div>
       {save.isError && (
         <p className="alert alert-error" role="alert">
@@ -132,7 +132,7 @@ function TemplateForm({ template, onDone }: { template: Template | null; onDone:
         <button type="submit" className="btn btn-primary" disabled={save.isPending || !name.trim() || !instructions.trim()}>
           {save.isPending ? 'Salvando…' : template ? 'Salvar alterações' : 'Criar template'}
         </button>
-        <button type="button" className="btn" onClick={onDone}>
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
           Cancelar
         </button>
       </div>
@@ -160,7 +160,7 @@ function TemplateItem({ template, onEdit }: { template: Template; onEdit: () => 
         <h3>{template.name}</h3>
         {template.is_default && <span className="badge badge-success">Padrão da organização</span>}
       </div>
-      {template.description && <p className="muted">{template.description}</p>}
+      {template.description && <p className="text-muted">{template.description}</p>}
       <p className={styles.instructions}>{template.instructions}</p>
       {confirming ? (
         <div className={styles.actions} role="group" aria-label={`Confirmar exclusão de ${template.name}`}>
@@ -168,14 +168,14 @@ function TemplateItem({ template, onEdit }: { template: Template; onEdit: () => 
           <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()} disabled={remove.isPending}>
             Confirmar exclusão
           </button>
-          <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
             Manter
           </button>
         </div>
       ) : (
         <div className={styles.actions}>
           {!template.is_default && (
-            <button type="button" className="btn btn-sm" onClick={() => makeDefault.mutate()} disabled={makeDefault.isPending}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => makeDefault.mutate()} disabled={makeDefault.isPending}>
               Tornar padrão
             </button>
           )}

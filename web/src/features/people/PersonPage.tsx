@@ -69,11 +69,11 @@ function PersonDetail({ person }: { person: Person }) {
             </span>
             {person.last_seen_at && <span>Última: {formatDate(person.last_seen_at)}</span>}
           </p>
-          {person.notes && <p className={`muted ${styles.notes}`}>{person.notes}</p>}
+          {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
         </div>
         {!editing && (
           <div className={styles.actions}>
-            <button type="button" className="btn" onClick={() => setEditing(true)}>
+            <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>
               Editar
             </button>
             {confirming ? (
@@ -86,7 +86,7 @@ function PersonDetail({ person }: { person: Person }) {
                 >
                   Confirmar exclusão
                 </button>
-                <button type="button" className="btn" onClick={() => setConfirming(false)}>
+                <button type="button" className="btn btn-secondary" onClick={() => setConfirming(false)}>
                   Manter
                 </button>
               </>
@@ -165,7 +165,7 @@ function PersonTranscripts({ personId }: { personId: string }) {
       {transcripts.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => transcripts.fetchNextPage()}
           disabled={transcripts.isFetchingNextPage}
         >
@@ -216,7 +216,7 @@ function PersonSegments({ personId }: { personId: string }) {
       {segments.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => segments.fetchNextPage()}
           disabled={segments.isFetchingNextPage}
         >

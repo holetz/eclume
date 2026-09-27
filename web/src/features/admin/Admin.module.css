@@ -97,9 +97,9 @@
 }
 
 /* A dica global (`.field .hint`) só vale dentro de `.field`; aqui ela acompanha o checkbox e o card. */
-.check :global(.hint),
-.card > :global(.hint),
-.form > :global(.hint) {
+.check :global(.field-hint),
+.card > :global(.field-hint),
+.form > :global(.field-hint) {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }

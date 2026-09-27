@@ -19,7 +19,7 @@ export function SecretsPage() {
     <section className={styles.page} aria-labelledby="segredos-titulo">
       <div className={styles.intro}>
         <h2 id="segredos-titulo">Segredos</h2>
-        <p className="muted">
+        <p className="text-muted">
           Guardados cifrados no servidor. Depois de salvos, não aparecem mais aqui: para trocar, grave um valor novo.
         </p>
       </div>
@@ -81,10 +81,10 @@ function SecretCard({ secret }: { secret: Secret }) {
             {secret.updated_at && ` em ${formatDateTime(secret.updated_at)}`}
           </>
         ) : (
-          <span className="badge badge-neutral">Não definido</span>
+          <span className="badge">Não definido</span>
         )}
       </p>
-      {info.hint && <p className="hint">{info.hint}</p>}
+      {info.hint && <p className="field-hint">{info.hint}</p>}
       <div className="field">
         <label htmlFor={inputId}>{secret.is_set ? 'Novo valor' : 'Valor'}</label>
         <input
@@ -106,7 +106,7 @@ function SecretCard({ secret }: { secret: Secret }) {
               <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()} disabled={remove.isPending}>
                 Confirmar exclusão
               </button>
-              <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
                 Manter
               </button>
             </>

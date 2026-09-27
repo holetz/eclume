@@ -12,7 +12,7 @@ export function AdminLayout() {
     <div className={styles.layout}>
       <header className={styles.header}>
         <h1>Administração</h1>
-        <p className="muted">Configuração da organização, contas e saúde do serviço. Mudanças valem para os próximos jobs.</p>
+        <p className="text-muted">Configuração da organização, contas e saúde do serviço. Mudanças valem para os próximos jobs.</p>
       </header>
       <nav aria-label="Seções da administração" className={styles.tabs}>
         <ul>
@@ -35,7 +35,7 @@ function Forbidden() {
   return (
     <section className={styles.layout}>
       <h1>Sem permissão</h1>
-      <p className="muted">Esta área é só para administradores da organização.</p>
+      <p className="text-muted">Esta área é só para administradores da organização.</p>
     </section>
   )
 }

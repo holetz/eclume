@@ -34,7 +34,7 @@ function NotFoundPage() {
   return (
     <section>
       <h1>Página não encontrada</h1>
-      <p className="muted">
+      <p className="text-muted">
         O endereço não existe ou mudou. <Link to="/">Voltar à biblioteca</Link>.
       </p>
     </section>

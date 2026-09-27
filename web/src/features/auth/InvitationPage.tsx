@@ -62,7 +62,7 @@ export function InvitationPage() {
           </p>
         ) : (
           <>
-            <p className="muted">Escolha seu nome e uma senha para criar a conta na organização.</p>
+            <p className="text-muted">Escolha seu nome e uma senha para criar a conta na organização.</p>
             <form className={styles.form} onSubmit={submit} noValidate>
               <div className="field">
                 <label htmlFor="convite-nome">Nome</label>
@@ -88,7 +88,7 @@ export function InvitationPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   aria-describedby={hintId}
                 />
-                <span id={hintId} className="hint">
+                <span id={hintId} className="field-hint">
                   Ao menos {MIN_PASSWORD} caracteres.
                 </span>
               </div>
@@ -104,7 +104,7 @@ export function InvitationPage() {
                   onChange={(e) => setConfirmation(e.target.value)}
                   aria-invalid={mismatch}
                 />
-                {mismatch && <span className="hint">As senhas não conferem.</span>}
+                {mismatch && <span className="field-hint">As senhas não conferem.</span>}
               </div>
               {error && (
                 <p id={errorId} className="alert alert-error" role="alert">

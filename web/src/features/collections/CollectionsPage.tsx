@@ -31,7 +31,7 @@ export function CollectionsPage() {
       <header className={styles.header}>
         <div>
           <h1 id="colecoes-titulo">Coleções</h1>
-          <p className="muted">Agrupe suas gravações por cliente, projeto ou programa. Uma gravação pode estar em várias.</p>
+          <p className="text-muted">Agrupe suas gravações por cliente, projeto ou programa. Uma gravação pode estar em várias.</p>
         </div>
         {!creating && (
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -119,7 +119,7 @@ function CollectionItem({ collection }: { collection: Collection }) {
     <li className={`card ${styles.item}`}>
       <div className={styles.info}>
         <h2 className={styles.name}>{collection.name}</h2>
-        {collection.description && <p className="muted">{collection.description}</p>}
+        {collection.description && <p className="text-muted">{collection.description}</p>}
         <p className={styles.meta}>
           <span>{count === 1 ? '1 gravação' : `${count} gravações`}</span>
           <Link to={`/?colecao=${collection.id}`}>Ver gravações</Link>
@@ -136,7 +136,7 @@ function CollectionItem({ collection }: { collection: Collection }) {
             <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()} disabled={remove.isPending}>
               Confirmar exclusão
             </button>
-            <button type="button" className="btn btn-sm" onClick={() => setConfirming(false)}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(false)}>
               Manter
             </button>
           </>
@@ -144,7 +144,7 @@ function CollectionItem({ collection }: { collection: Collection }) {
           <>
             <button
               type="button"
-              className="btn btn-sm"
+              className="btn btn-secondary btn-sm"
               onClick={() => setEditing(true)}
               aria-label={`Editar ${collection.name}`}
             >
@@ -203,7 +203,7 @@ function CollectionForm({ initial, submitLabel, pending, error, onSubmit, onCanc
         <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
           {submitLabel}
         </button>
-        <button type="button" className="btn" onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Cancelar
         </button>
       </div>

@@ -6,9 +6,9 @@ import { useDeleteVoiceprint, useExportVoiceprint, useSetConsent, useVoiceprint,
 import styles from './VoiceSection.module.css'
 
 const STATUS = {
-  granted: { text: 'Consentimento registrado', badge: 'badge-success' },
-  revoked: { text: 'Consentimento revogado', badge: 'badge-warning' },
-  none: { text: 'Sem consentimento', badge: 'badge-neutral' },
+  granted: { text: 'Consentimento registrado', badge: 'badge badge-success' },
+  revoked: { text: 'Consentimento revogado', badge: 'badge badge-warning' },
+  none: { text: 'Sem consentimento', badge: 'badge' },
 } as const
 
 /** Seção "Voz" da página da pessoa: consentimento LGPD, impressão de voz, exclusão e exportação. */
@@ -34,7 +34,7 @@ function VoiceDetail({ person, voiceprint, isAdmin }: { person: Person; voicepri
   const [mode, setMode] = useState<Mode>('idle')
   const [notice, setNotice] = useState('')
   const consent = voiceprint.consent
-  const status = STATUS[consent.status as keyof typeof STATUS] ?? { text: consent.status, badge: 'badge-neutral' }
+  const status = STATUS[consent.status as keyof typeof STATUS] ?? { text: consent.status, badge: 'badge' }
   const setConsent = useSetConsent(person.id)
   const remove = useDeleteVoiceprint(person.id)
   const download = useExportVoiceprint(person.id, person.name)
@@ -46,7 +46,7 @@ function VoiceDetail({ person, voiceprint, isAdmin }: { person: Person; voicepri
   return (
     <div className={styles.body}>
       <p className={styles.state}>
-        <span className={`badge ${status.badge}`}>{status.text}</span>
+        <span className={status.badge}>{status.text}</span>
         {consent.updated_at && (
           <span className={styles.detail}>
             {consent.recorded_by ? `por ${consent.recorded_by.name}, ` : ''}em {formatDateTime(consent.updated_at)}
@@ -71,7 +71,7 @@ function VoiceDetail({ person, voiceprint, isAdmin }: { person: Person; voicepri
       {mode === 'idle' && (
         <div className={styles.actions}>
           {consent.status === 'granted' ? (
-            <button type="button" className="btn" onClick={() => setMode('revoking')}>
+            <button type="button" className="btn btn-secondary" onClick={() => setMode('revoking')}>
               Revogar consentimento
             </button>
           ) : (
@@ -187,7 +187,7 @@ function GrantForm({
         <label htmlFor={notesId}>Como o consentimento foi colhido</label>
         <textarea
           id={notesId}
-          className="textarea"
+          className="input"
           rows={2}
           maxLength={2000}
           value={notes}
@@ -203,7 +203,7 @@ function GrantForm({
         <button type="submit" className="btn btn-primary" disabled={!agreed || pending}>
           Registrar
         </button>
-        <button type="button" className="btn" onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Cancelar
         </button>
       </div>
@@ -231,7 +231,7 @@ function Confirm({
         <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={pending}>
           {action}
         </button>
-        <button type="button" className="btn" onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Manter
         </button>
       </div>

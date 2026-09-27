@@ -33,7 +33,7 @@ export function PeoplePage() {
       <header className={styles.header}>
         <div>
           <h1 id="pessoas-titulo">Pessoas</h1>
-          <p className="muted">Quem fala nas gravações da organização. Ligue os locutores a elas na página da gravação.</p>
+          <p className="text-muted">Quem fala nas gravações da organização. Ligue os locutores a elas na página da gravação.</p>
         </div>
         {!creating && (
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -89,7 +89,7 @@ export function PeoplePage() {
       {people.hasNextPage && (
         <button
           type="button"
-          className={`btn ${styles.more}`}
+          className={`btn btn-secondary ${styles.more}`}
           onClick={() => people.fetchNextPage()}
           disabled={people.isFetchingNextPage}
         >

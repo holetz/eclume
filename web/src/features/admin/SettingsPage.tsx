@@ -19,7 +19,7 @@ export function SettingsPage() {
     <section className={styles.page} aria-labelledby="transcricao-titulo">
       <div className={styles.intro}>
         <h2 id="transcricao-titulo">Transcrição</h2>
-        <p className="muted">
+        <p className="text-muted">
           Motor e modelo de ASR, diarização e idioma. O próximo job de transcrição já sai com o que for salvo aqui; os já
           transcritos não mudam (use “Transcrever de novo” na gravação).
         </p>
@@ -91,14 +91,14 @@ function SettingsForm({ settings }: { settings: Settings }) {
         <legend>Reconhecimento de fala (ASR)</legend>
         <div className="field">
           <label htmlFor={ids.engine}>Motor</label>
-          <select id={ids.engine} className="select" value={engine} onChange={(e) => setEngine(e.target.value as typeof engine)}>
+          <select id={ids.engine} className="input" value={engine} onChange={(e) => setEngine(e.target.value as typeof engine)}>
             {ENGINES.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
-          <span className="hint">{ENGINES.find((option) => option.value === engine)?.hint}</span>
+          <span className="field-hint">{ENGINES.find((option) => option.value === engine)?.hint}</span>
         </div>
         {remote && (
           <div className="field">
@@ -133,7 +133,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
           </div>
           <div className="field">
             <label htmlFor={ids.compute}>Tipo de computação</label>
-            <select id={ids.compute} className="select" value={computeType} onChange={(e) => setComputeType(e.target.value)}>
+            <select id={ids.compute} className="input" value={computeType} onChange={(e) => setComputeType(e.target.value)}>
               {!COMPUTE_TYPES.some((option) => option.value === computeType) && <option value={computeType}>{computeType}</option>}
               {COMPUTE_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -153,7 +153,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
               onChange={(e) => setBatchSize(e.target.value)}
               placeholder="Automático"
             />
-            <span className="hint">Vazio: pela VRAM livre (4 ou 2).</span>
+            <span className="field-hint">Vazio: pela VRAM livre (4 ou 2).</span>
           </div>
           <div className="field">
             <label htmlFor={ids.fallback}>Modelo de recuo</label>
@@ -165,12 +165,12 @@ function SettingsForm({ settings }: { settings: Settings }) {
               onChange={(e) => setFallbackModel(e.target.value)}
               placeholder="medium"
             />
-            <span className="hint">Usado se faltar VRAM mesmo com lote 1.</span>
+            <span className="field-hint">Usado se faltar VRAM mesmo com lote 1.</span>
           </div>
         </div>
         <div className="field">
           <label htmlFor={ids.language}>Idioma padrão</label>
-          <select id={ids.language} className="select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+          <select id={ids.language} className="input" value={language} onChange={(e) => setLanguage(e.target.value)}>
             {!knownLanguage && <option value={language}>{language}</option>}
             {LANGUAGES.map((option) => (
               <option key={option.value} value={option.value}>
@@ -178,7 +178,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
               </option>
             ))}
           </select>
-          <span className="hint">Vale quando a gravação não informa o idioma.</span>
+          <span className="field-hint">Vale quando a gravação não informa o idioma.</span>
         </div>
       </fieldset>
 
@@ -188,7 +188,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
           <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} />
           <span>
             <span>Separar os locutores</span>
-            <span className="hint">
+            <span className="field-hint">
               Exige o token do Hugging Face em <Link to="/admin/segredos">Segredos</Link>; sem ele, a transcrição sai
               com um locutor só.
             </span>
@@ -230,7 +230,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
           <input type="checkbox" checked={autoSummarize} onChange={(e) => setAutoSummarize(e.target.checked)} />
           <span>
             <span>Resumir automaticamente ao fim da transcrição</span>
-            <span className="hint">
+            <span className="field-hint">
               Usa o provider padrão (em <Link to="/admin/agentes">Agentes</Link>) e o template padrão de cada usuário
               ou, na falta dele, o da organização (em <Link to="/admin/templates">Templates padrão</Link>).
             </span>

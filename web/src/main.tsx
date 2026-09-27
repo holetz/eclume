@@ -1,8 +1,8 @@
+import './styles/global.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { applyThemePreference, readThemePreference } from './app/theme'
-import './styles/global.css'
 
 applyThemePreference(readThemePreference())
 
