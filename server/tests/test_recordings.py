@@ -286,3 +286,15 @@ def test_retranscrever_so_sem_job_em_andamento(
     assert again.json()["job"]["state"] == "queued"
     assert again.json()["language"] == "en"
     assert redis.Redis.from_url(services.settings.redis_url).zscore("eclume:gpu", f"transcribe:{recording['id']}:2")
+
+
+def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    session = as_user(make_user())
+    recording = upload_file(session, audio_bytes(101))
+    writer = session.pat("recordings:read", "recordings:write")
+    denied = writer.delete(f"/api/v1/recordings/{recording['id']}")
+    assert denied.status_code == 403
+    assert denied.json()["required_scopes"] == ["recordings:delete"]
+    deleter = session.pat("recordings:delete")
+    assert deleter.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
+    assert session.get(f"/api/v1/recordings/{recording['id']}").status_code == 404

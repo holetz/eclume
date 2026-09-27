@@ -11,13 +11,21 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
 from eclume_server import __version__
-from eclume_server.accounts import MIN_PASSWORD, NOTICE_VERSION, EmailTakenError, create_user, notice
+from eclume_server.accounts import (
+    MIN_PASSWORD,
+    NOTICE_VERSION,
+    EmailTakenError,
+    create_user,
+    notice,
+    password_login,
+)
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
-from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
+from eclume_server.ratelimit import attempts, count_login
+from eclume_server.security import new_session_token, sha256_hex
 from eclume_server.serialize import user_json
 
 if TYPE_CHECKING:
@@ -25,7 +33,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.2.0"
+CONTRACT_VERSION = "2.3.0"
+WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -78,23 +87,14 @@ async def health() -> dict[str, str]:
 
 
 @router.post("/auth/login", status_code=204)
-async def login(body: LoginRequest, ctx: Ctx) -> Response:
+async def login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]) -> Response:
     """Abre sessão e define `eclume_session` (HttpOnly) e `eclume_csrf` (legível)."""
-    now = datetime.now(UTC)
+    await count_login(ctx, "user", body.email)
     async with system_tx(ctx.engine) as conn:
-        query = select(t.users).where(func.lower(t.users.c.email) == body.email.lower())
-        user = (await conn.execute(query)).mappings().first()
-        if (
-            not verify_password(user["password_hash"] if user else None, body.password)
-            or not user
-            or not user["active"]
-        ):
-            raise unauthorized("E-mail ou senha incorretos.")
-        values: dict[str, Any] = {"last_login_at": now}
-        if needs_rehash(user["password_hash"]):
-            values["password_hash"] = hash_password(body.password)
-        await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
-        return await _open_session(conn, ctx, user["id"], now)
+        user_id = await password_login(conn, body.email, body.password)
+        if user_id is None:
+            raise unauthorized(WRONG_PASSWORD)
+        return await _open_session(conn, ctx, user_id, datetime.now(UTC))
 
 
 @router.get("/auth/signup")
@@ -104,7 +104,7 @@ async def signup_info(ctx: Ctx) -> dict[str, Any]:
 
 
 @router.post("/auth/signup", status_code=204)
-async def signup(body: SignupRequest, ctx: Ctx) -> Response:
+async def signup(body: SignupRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_signup"))]) -> Response:
     """Cria a conta com o aceite do aviso e abre a sessão, como o login."""
     if not ctx.settings.signup_open:
         raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
@@ -143,7 +143,9 @@ async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, n
 
 
 @router.post("/auth/logout", status_code=204)
-async def logout(principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx) -> Response:
+async def logout(
+    principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))], ctx: Ctx
+) -> Response:
     """Encerra a sessão corrente e remove os cookies."""
     if principal.session_id is None:
         raise forbidden("Logout exige sessão.")
@@ -158,7 +160,9 @@ async def logout(principal: Annotated[Principal, Depends(requires(session_only=T
 
 @router.post("/me/notice", status_code=204)
 async def accept_notice(
-    body: NoticeAccept, principal: Annotated[Principal, Depends(requires(session_only=True))], ctx: Ctx
+    body: NoticeAccept,
+    principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))],
+    ctx: Ctx,
 ) -> Response:
     """Registra o aceite do aviso em vigor pela conta corrente."""
     _check_notice(body.notice_version)
@@ -172,7 +176,7 @@ async def accept_notice(
 
 
 @router.get("/me")
-async def me(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
+async def me(principal: Annotated[Principal, Depends(requires(before_notice=True))], ctx: Ctx) -> dict[str, Any]:
     """Conta e credencial correntes, e se falta aceitar o aviso em vigor."""
     async with system_tx(ctx.engine) as conn:
         user = (await conn.execute(select(t.users).where(t.users.c.id == principal.user_id))).mappings().one()

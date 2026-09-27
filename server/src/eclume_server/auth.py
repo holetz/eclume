@@ -15,10 +15,11 @@ from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy import select, update
 
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.problems import insufficient_scope, session_required, unauthorized
+from eclume_server.problems import insufficient_scope, notice_required, session_required, unauthorized
 from eclume_server.security import PAT_PREFIX, sha256_hex
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ CSRF_HEADER = "X-CSRF-Token"
 ALL_SCOPES = (
     "recordings:read",
     "recordings:write",
+    "recordings:delete",
     "transcripts:read",
     "transcripts:write",
     "people:read",
@@ -53,6 +55,8 @@ class Principal:
     scopes: tuple[str, ...]
     token_id: UUID | None = None
     session_id: UUID | None = None
+    # A conta ainda não aceitou o aviso em vigor (só apurado com sessão).
+    notice_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,7 +67,7 @@ class AdminPrincipal:
     session_id: UUID
 
 
-async def _from_pat(ctx: AppContext, secret: str) -> Principal:
+async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> Principal:
     now = datetime.now(UTC)
     query = (
         select(t.api_tokens, t.users.c.active)
@@ -79,7 +83,9 @@ async def _from_pat(ctx: AppContext, secret: str) -> Principal:
             or not row["active"]
         ):
             raise unauthorized("PAT inválido, expirado ou revogado.")
-        await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(last_used_at=now))
+        # O uso pelo MCP conta os assistentes conectados na Saúde.
+        used = {"last_used_at": now, "mcp_last_used_at": now} if via_mcp else {"last_used_at": now}
+        await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(**used))
     scopes = tuple(scope for scope in ALL_SCOPES if scope in row["scopes"])
     return Principal(row["user_id"], "pat", scopes, token_id=row["id"])
 
@@ -92,7 +98,7 @@ def _check_csrf(request: Request, expected: str, cookie: str) -> None:
 
 async def _from_session(ctx: AppContext, token: str, request: Request) -> Principal:
     query = (
-        select(t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"))
+        select(t.sessions.c.id, t.sessions.c.csrf_token, t.users.c.id.label("user_id"), t.users.c.notice_version)
         .join(t.users, t.users.c.id == t.sessions.c.user_id)
         .where(
             t.sessions.c.token_hash == sha256_hex(token),
@@ -105,13 +111,15 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
     if row is None:
         raise unauthorized("Sessão inválida ou expirada.")
     _check_csrf(request, row["csrf_token"], CSRF_COOKIE)
-    return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"])
+    pending = row["notice_version"] != NOTICE_VERSION
+    return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"], notice_pending=pending)
 
 
-async def authenticate(request: Request, ctx: AppContext) -> Principal:
+async def authenticate(request: Request, ctx: AppContext, *, bearer_only: bool = False) -> Principal:
     """Resolve a credencial de usuário; um Bearer presente nunca cai para o cookie.
 
-    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado.
+    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado. Com
+    `bearer_only` (o servidor MCP), só o Bearer vale, e o uso fica marcado como MCP.
     """
     authorization = request.headers.get("Authorization")
     if authorization is not None:
@@ -119,18 +127,28 @@ async def authenticate(request: Request, ctx: AppContext) -> Principal:
         secret = secret.strip()
         if scheme.lower() != "bearer" or not secret.startswith(PAT_PREFIX):
             raise unauthorized("Use Authorization: Bearer eclp_...")
-        return await _from_pat(ctx, secret)
+        return await _from_pat(ctx, secret, via_mcp=bearer_only)
+    if bearer_only:
+        raise unauthorized("Use Authorization: Bearer eclp_...")
     token = request.cookies.get(SESSION_COOKIE)
     if token:
         return await _from_session(ctx, token, request)
     raise unauthorized()
 
 
-def requires(*scopes: str, session_only: bool = False) -> Callable[[Request, AppContext], Awaitable[Principal]]:
-    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão."""
+def requires(
+    *scopes: str, session_only: bool = False, before_notice: bool = False
+) -> Callable[[Request, AppContext], Awaitable[Principal]]:
+    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão.
+
+    A sessão de uma conta sem o aceite do aviso em vigor só alcança as rotas `before_notice`
+    (`/me`, `/me/notice`, logout); o PAT não é barrado (desktop e lumea de contas migradas).
+    """
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
         principal = await authenticate(request, ctx)
+        if principal.notice_pending and not before_notice:
+            raise notice_required()
         if principal.method == "pat":
             if session_only:
                 # Credencial válida, mas não a aceita aqui (o contrato declara só `sessionCookie`).

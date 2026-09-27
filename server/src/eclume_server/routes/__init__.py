@@ -16,6 +16,7 @@ from eclume_server.routes import (
     agent_providers,
     auth,
     collections,
+    devices,
     exports,
     fields,
     markers,
@@ -23,6 +24,7 @@ from eclume_server.routes import (
     previews,
     recordings,
     search,
+    server_info,
     summaries,
     summary_chat,
     tokens,
@@ -42,6 +44,8 @@ def include_routes(app: FastAPI) -> None:
     """Registra as rotas implementadas."""
     for module in (
         auth,
+        server_info,
+        devices,
         tokens,
         uploads,
         recordings,

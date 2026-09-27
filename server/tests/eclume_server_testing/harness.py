@@ -119,6 +119,8 @@ def provision() -> Services:
         s3_bucket=f"eclume-test-{suffix}",
         secret_key=secrets.token_hex(16),
         public_url="https://testserver",
+        # Os testes entram todos pelo mesmo IP (`testclient`); o limite é provado com um app próprio.
+        credential_attempts_per_minute=100_000,
         # Partes no mínimo do contrato (5 MiB) deixam os testes de upload mais leves.
         upload_part_size=5 * 1024 * 1024,
     )

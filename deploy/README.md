@@ -35,14 +35,16 @@ O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook
 [docs/project/deploy-producao.md](../docs/project/deploy-producao.md):
 
 - `docker-compose.prod.yml`: projeto `eclume` — caddy (a única porta publicada, 8443), web, server,
-  worker-cpu, worker-gpu, postgres, redis e minio, com dados em `/srv/eclume`, e os one-shots
+  worker-cpu, worker-gpu, mdns (anúncio `_eclume._tcp` na rede do host), postgres, redis e minio,
+  com dados em `/srv/eclume`, e os one-shots
   `minio-init`, `migrate` e `publish-ca` no perfil `tools`.
 - `server.Dockerfile`, `web.Dockerfile` e `web.Caddyfile`: as imagens `eclume-server:prod` e
   `eclume-web:prod`, cada uma com o `.dockerignore` ao lado.
 - `.env.prod.example`: as variáveis; `deploy.sh --gerar-env` cria o `deploy/.env.prod` real (600,
   fora do git).
 - `deploy.sh`: build no daemon do host pelo contexto Docker e subida em ordem; `bootstrap-admin.sh`:
-  a primeira organização e o admin; `smoke_prod.py`: prova o caminho inteiro pela API pública.
+  a primeira organização e o admin; `smoke_prod.py`: prova o caminho inteiro pela API pública;
+  `smoke_mcp.py`: prova o servidor MCP com o SDK `mcp` e o pareamento de um aparelho.
 - `backup.sh` e `restaurar-backup.sh`: instalados em `/srv/eclume/bin/` pelo deploy; o backup
   roda no cron do host.
 - `publicar-desktop.sh`: publica um release do desktop em `/srv/eclume/downloads/`.
@@ -52,6 +54,7 @@ bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
 bash deploy/bootstrap-admin.sh
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --ca eclume-root.crt
+ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | uv run python deploy/smoke_mcp.py --ca eclume-root.crt
 ```
 
 O runbook do host está em [docs/project/host-setup.md](../docs/project/host-setup.md).

@@ -12,14 +12,14 @@ docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-autom
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from arq import Retry, cron
 from arq.connections import RedisSettings
 from arq.worker import func
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from eclume_server.agenda_types import run_detect
 from eclume_server.config import Settings, get_settings
@@ -39,9 +39,13 @@ from eclume_server.voice import platform_voice
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
+# Códigos de pareamento vencidos sem uso somem depois disso (cron `expire_pairing_codes`).
+PAIRING_RETENTION = timedelta(days=1)
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -215,6 +219,23 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
     return len(rows)
 
 
+async def purge_pairing_codes(conn: AsyncConnection, now: datetime | None = None) -> int:
+    """Apaga os códigos de pareamento vencidos sem uso há mais de `PAIRING_RETENTION`.
+
+    Fica aqui, e não em `devices.py`, porque aquele importa `routes` e o worker não carrega a API.
+    """
+    cutoff = (now or datetime.now(UTC)) - PAIRING_RETENTION
+    codes = t.pairing_codes
+    result = await conn.execute(delete(codes).where(codes.c.used_at.is_(None), codes.c.expires_at < cutoff))
+    return result.rowcount
+
+
+async def expire_pairing_codes(ctx: dict[str, Any]) -> int:
+    """Cron: os códigos vencidos sem uso somem; os usados ficam com o `token_id`."""
+    async with system_tx(ctx["engine"]) as conn:
+        return await purge_pairing_codes(conn)
+
+
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
@@ -241,6 +262,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
+            cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
         ],

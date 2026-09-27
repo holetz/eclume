@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import ColumnElement, and_, delete, exists, select, tuple_, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from eclume_server.agenda_types import apply_type
@@ -19,14 +18,18 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
-from eclume_server.fields import field_filters, mark_edited
-from eclume_server.pagination import Cursor, Limit, decode_cursor, encode_cursor
+from eclume_server.fields import mark_edited
+from eclume_server.pagination import Cursor, Limit
 from eclume_server.pipeline import current_revision
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import (
+    Library,
+    Sort,
+    Status,
+    delete_recording_of,
     enqueue_transcription,
     get_visible,
-    recording_select,
+    list_library,
     render,
     start_next_revision,
 )
@@ -40,8 +43,7 @@ media_router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("recordings:write"))]
-Status = Literal["uploading", "queued", "processing", "transcribed", "failed"]
-Sort = Literal["created_desc", "recorded_asc", "recorded_desc"]
+Deleter = Annotated[Principal, Depends(requires("recordings:delete"))]
 Many = Annotated[list[str] | None, Query()]
 AUDIO_URL_TTL_SECONDS = 3600
 
@@ -65,58 +67,6 @@ class RetranscribeRequest(BaseModel):
     language: str | None = Field(default=None, pattern=LANGUAGE)
 
 
-def _sort_key(sort: Sort) -> tuple[Any, bool]:
-    """A coluna da ordenação e se é decrescente."""
-    r = t.recordings.c
-    return (r.created_at, True) if sort == "created_desc" else (r.recorded_at, sort == "recorded_desc")
-
-
-def _person_filter(people: list[UUID]) -> ColumnElement[bool]:
-    """Algum locutor da transcrição da gravação está ligado a uma das pessoas."""
-    return exists(
-        select(1)
-        .select_from(t.speakers.join(t.transcripts, t.transcripts.c.id == t.speakers.c.transcript_id))
-        .where(t.transcripts.c.recording_id == t.recordings.c.id, t.speakers.c.person_id.in_(people))
-    )
-
-
-@dataclass(frozen=True)
-class Library:
-    """Os filtros da biblioteca, como vieram na query."""
-
-    since: datetime | None
-    from_: datetime | None
-    to: datetime | None
-    kind: list[Kind] | None
-    status: list[Status] | None
-    tag: list[str] | None
-    collection: list[UUID] | None
-    person: list[UUID] | None
-
-    def filters(self) -> list[ColumnElement[bool]]:
-        """As condições SQL (E entre filtros; OU dentro de cada um)."""
-        r = t.recordings.c
-        conditions: list[ColumnElement[bool]] = []
-        if self.since is not None:
-            conditions.append(r.updated_at >= self.since)
-        if self.from_ is not None:
-            conditions.append(r.recorded_at >= self.from_)
-        if self.to is not None:
-            conditions.append(r.recorded_at < self.to)
-        if self.kind:
-            conditions.append(r.kind.in_(self.kind))
-        if self.status:
-            # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
-            conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
-        if self.tag:
-            conditions.append(r.tags.overlap(self.tag))
-        if self.collection:
-            conditions.append(r.collection_ids.overlap(self.collection))
-        if self.person:
-            conditions.append(_person_filter(self.person))
-        return conditions
-
-
 @router.get("/recordings")
 async def list_recordings(
     principal: Reader,
@@ -135,26 +85,8 @@ async def list_recordings(
     field: Many = None,
 ) -> dict[str, Any]:
     """A biblioteca: por intervalo de `recorded_at` e filtros (OU no mesmo filtro, E entre filtros)."""
-    r = t.recordings.c
-    key, descending = _sort_key(sort)
-    order = (key.desc(), r.id.desc()) if descending else (key.asc(), r.id.asc())
-    library = Library(since, from_, to, kind, status, tag, collection, person)
-    query = recording_select().where(*library.filters()).order_by(*order).limit(limit + 1)
-    if cursor:
-        position = tuple_(key, r.id)
-        after = decode_cursor(cursor)
-        query = query.where(position < after if descending else position > after)
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        if field:
-            query = query.where(and_(*await field_filters(conn, field)))
-        rows = list((await conn.execute(query)).mappings().all())
-    has_more = len(rows) > limit
-    rows = rows[:limit]
-    items = await render(ctx, principal.user_id, rows)
-    if status and {"queued", "processing"} & set(status):
-        items = [item for item in items if item["status"] in status]
-    next_cursor = encode_cursor(rows[-1][key.name], rows[-1]["id"]) if has_more else None
-    return {"items": items, "next_cursor": next_cursor}
+    library = Library(since, from_, to, kind, status, tag, collection, person, field)
+    return await list_library(ctx, principal.user_id, library, sort=sort, cursor=cursor, limit=limit)
 
 
 @router.get("/recordings/{recording_id}")
@@ -224,15 +156,12 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
 
 
 @router.delete("/recordings/{recording_id}", status_code=204)
-async def delete_recording(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
+async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> Response:
     """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
 
     As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
     """
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        row = await get_visible(conn, recording_id)
-        await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
-    await ctx.storage.delete_recording(row["audio_key"], recording_id)
+    await delete_recording_of(ctx, principal.user_id, recording_id)
     return Response(status_code=204)
 
 
