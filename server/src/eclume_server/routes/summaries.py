@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -20,7 +20,17 @@ from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.problems import invalid_field, not_found
 from eclume_server.serialize import Row
-from eclume_server.summaries import PROVIDER_PUBLIC, create_summary, provider_for, summary_json
+from eclume_server.summaries import (
+    PROVIDER_PUBLIC,
+    create_summary,
+    delete_all,
+    edit_summary,
+    provider_for,
+    recording_transcript,
+    revert_summary,
+    summary_json,
+    summary_state,
+)
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -33,6 +43,13 @@ class SummaryCreate(BaseModel):
 
     agenda_type_id: UUID | None = None
     provider_id: UUID | None = None
+
+
+class SummaryEdit(BaseModel):
+    """Schema `SummaryEdit`."""
+
+    content_md: str = Field(min_length=1, max_length=200_000)
+    base_version: int = Field(ge=0)
 
 
 # --- resumos ------------------------------------------------------------------------------------
@@ -141,4 +158,41 @@ async def delete_summary(summary_id: UUID, principal: Writer, ctx: Ctx) -> Respo
         result = await conn.execute(delete(t.summaries).where(t.summaries.c.id == summary_id))
     if result.rowcount == 0:
         raise not_found("Resumo inexistente ou sem acesso.")
+    return Response(status_code=204)
+
+
+# --- o resumo da gravação: versões ---------------------------------------------------------------
+
+
+@router.get("/recordings/{recording_id}/summary")
+async def get_recording_summary(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """A versão atual, a gerada de referência e a geração em aberto."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        transcript = await recording_transcript(conn, recording_id)
+        return await summary_state(conn, transcript["id"])
+
+
+@router.put("/recordings/{recording_id}/summary")
+async def put_recording_summary(recording_id: UUID, body: SummaryEdit, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Grava a edição à mão como versão `manual` (409 `summary_changed` se outra entrou antes)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        transcript = await recording_transcript(conn, recording_id)
+        row = await edit_summary(conn, transcript, body.content_md, body.base_version, principal.user_id)
+    return summary_json(row)
+
+
+@router.post("/recordings/{recording_id}/summary/revert", status_code=201)
+async def revert_recording_summary(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Volta à gerada de referência numa versão nova (409 `summary_missing` sem gerada)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        transcript = await recording_transcript(conn, recording_id)
+        row = await revert_summary(conn, transcript, principal.user_id)
+    return summary_json(row)
+
+
+@router.delete("/recordings/{recording_id}/summary", status_code=204)
+async def delete_recording_summary(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
+    """Apaga todas as versões e o chat de ajuste da gravação."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await delete_all(conn, await recording_transcript(conn, recording_id))
     return Response(status_code=204)

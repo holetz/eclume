@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from arq import Retry
-from sqlalchemy import any_, func, insert, literal, select, text, update
+from sqlalchemy import any_, delete, func, insert, literal, select, text, update
 
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents.base import GPU_BUSY, PROVIDER_NOT_CONFIGURED, PROVIDER_TIMEOUT
@@ -22,6 +22,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.pipeline import set_step
+from eclume_server.problems import conflict, not_found
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
@@ -164,6 +165,136 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
         .mappings()
         .one()
     )
+
+
+# --- versões da gravação (edição, volta à gerada, estado) -------------------------------------------
+
+SUMMARY_CHANGED = "summary_changed"
+SUMMARY_MISSING = "summary_missing"
+TRANSCRIPT_MISSING = "transcript_missing"
+
+
+async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row:
+    """A transcrição da gravação do usuário: 404 sem a gravação, 409 `transcript_missing` sem transcrição."""
+    visible = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id))).first()
+    if visible is None:
+        raise not_found("Gravação inexistente ou sem acesso.")
+    transcript = (
+        (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
+        .mappings()
+        .first()
+    )
+    if transcript is None:
+        raise conflict("A gravação ainda não tem transcrição.", code=TRANSCRIPT_MISSING)
+    return transcript
+
+
+def _latest(transcript_id: UUID, *conditions: Any) -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+    s = t.summaries.c
+    return select(t.summaries).where(s.transcript_id == transcript_id, *conditions).order_by(s.version.desc()).limit(1)
+
+
+async def current_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
+    """A versão atual: a de maior `version` concluída."""
+    return (await conn.execute(_latest(transcript_id, t.summaries.c.status == "done"))).mappings().first()
+
+
+async def generated_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
+    """A gerada de referência: a `generated` concluída mais recente."""
+    s = t.summaries.c
+    return (await conn.execute(_latest(transcript_id, s.status == "done", s.origin == "generated"))).mappings().first()
+
+
+async def summary_state(conn: AsyncConnection, transcript_id: UUID) -> dict[str, Any]:
+    """Schema `SummaryState`: a atual, a gerada de referência, a geração em aberto e o total."""
+    s = t.summaries.c
+    pending = (await conn.execute(_latest(transcript_id, s.status.in_(["queued", "running"])))).mappings().first()
+    count = (await conn.execute(select(func.count()).where(s.transcript_id == transcript_id))).scalar_one()
+    current, generated = await current_version(conn, transcript_id), await generated_version(conn, transcript_id)
+    return {
+        "current": summary_json(current) if current else None,
+        "generated": summary_json(generated) if generated else None,
+        "pending": summary_json(pending) if pending else None,
+        "version_count": count,
+    }
+
+
+async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do conteúdo e de quem a fez
+    conn: AsyncConnection,
+    *,
+    transcript: Row,
+    content_md: str,
+    origin: str,
+    base: Row | None,
+    created_by: UUID,
+    restored_from_id: UUID | None = None,
+    agent: tuple[Row, str] | None = None,
+    chat_message_id: UUID | None = None,
+) -> Row:
+    """Insere uma versão já concluída (`manual` ou `chat`), sob o `lock_versions` de quem chama.
+
+    O tipo de agenda é o da versão de que ela partiu (`base`); `agent` é o par (provider, modelo)
+    de uma versão `chat`.
+    """
+    provider, model = agent if agent is not None else (None, None)
+    values: dict[str, Any] = {
+        "owner_id": transcript["owner_id"],
+        "transcript_id": transcript["id"],
+        "transcript_revision": transcript["revision"],
+        "agenda_type_id": base["agenda_type_id"] if base else None,
+        "agenda_type_name": base["agenda_type_name"] if base else None,
+        "version": await next_version(conn, transcript["id"]),
+        "origin": origin,
+        "status": "done",
+        "trigger": "manual",
+        "provider_id": provider["id"] if provider else None,
+        "provider_name": provider["name"] if provider else None,
+        "provider_kind": provider["kind"] if provider else None,
+        "model": model,
+        "content_md": content_md,
+        "restored_from_id": restored_from_id,
+        "chat_message_id": chat_message_id,
+        "created_by": created_by,
+        "completed_at": func.now(),
+    }
+    return (await conn.execute(insert(t.summaries).values(**values).returning(t.summaries))).mappings().one()
+
+
+async def edit_summary(
+    conn: AsyncConnection, transcript: Row, content_md: str, base_version: int, created_by: UUID
+) -> Row:
+    """A edição à mão: versão `manual` sobre a atual; outra versão no meio → 409 `summary_changed`."""
+    await lock_versions(conn, transcript["id"])
+    current = await current_version(conn, transcript["id"])
+    if base_version != (current["version"] if current else 0):
+        raise conflict("O resumo mudou desde a versão aberta; abra a atual e edite de novo.", code=SUMMARY_CHANGED)
+    return await add_version(
+        conn, transcript=transcript, content_md=content_md, origin="manual", base=current, created_by=created_by
+    )
+
+
+async def revert_summary(conn: AsyncConnection, transcript: Row, created_by: UUID) -> Row:
+    """Voltar à gerada: versão `manual` com o conteúdo da gerada de referência."""
+    await lock_versions(conn, transcript["id"])
+    generated = await generated_version(conn, transcript["id"])
+    if generated is None:
+        raise conflict("Não há versão gerada para voltar.", code=SUMMARY_MISSING)
+    return await add_version(
+        conn,
+        transcript=transcript,
+        content_md=generated["content_md"],
+        origin="manual",
+        base=generated,
+        created_by=created_by,
+        restored_from_id=generated["id"],
+    )
+
+
+async def delete_all(conn: AsyncConnection, transcript: Row) -> None:
+    """Apaga todas as versões e o chat de ajuste da gravação."""
+    chat = t.summary_chat_messages.c
+    await conn.execute(delete(t.summary_chat_messages).where(chat.recording_id == transcript["recording_id"]))
+    await conn.execute(delete(t.summaries).where(t.summaries.c.transcript_id == transcript["id"]))
 
 
 # --- resumo automático ---------------------------------------------------------------------------
