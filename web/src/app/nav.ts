@@ -23,7 +23,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'more', enabled: false },
+  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'more', enabled: true },
   { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', section: 'more', enabled: false },

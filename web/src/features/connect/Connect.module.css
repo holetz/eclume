@@ -1,0 +1,52 @@
+:where(.page) p {
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.page > :global(.page-head) {
+  margin-bottom: var(--space-2);
+}
+
+.lead {
+  max-width: 62ch;
+}
+
+/* O .split do DS vira uma coluna em telas estreitas, com o painel depois dos passos. */
+@media (max-width: 56rem) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+.stepBlock {
+  grid-column: 2;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.stepBlock :global(.code-block) span {
+  overflow-wrap: anywhere;
+}
+
+.panelTitle {
+  margin: 0;
+}
+
+.created {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.created :global(.code-block) span {
+  overflow-wrap: anywhere;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 560;
+}
