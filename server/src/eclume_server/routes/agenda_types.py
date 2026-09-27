@@ -25,7 +25,7 @@ from eclume_server.agenda_types import (
     get_agenda_type,
     next_position,
 )
-from eclume_server.auth import Principal, requires
+from eclume_server.auth import Principal, requires, requires_any
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
@@ -37,12 +37,16 @@ from eclume_server.routes.previews import check_transcribed
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("summaries:read"))]
+# A lista também serve à credencial de dispositivo (só `recordings:*`), que escolhe o tipo ao parar.
+ListReader = Annotated[Principal, Depends(requires_any("summaries:read", "recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("summaries:write"))]
 NAME_TAKEN = "Já existe um tipo de agenda com esse nome."
 
 
 @router.get("/agenda-types")
-async def list_agenda_types(principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
+async def list_agenda_types(
+    principal: ListReader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
+) -> dict[str, Any]:
     """Tipos do usuário, na ordem da lista."""
     c = t.agenda_types.c
     query = select(t.agenda_types).order_by(c.position, c.id).limit(limit + 1)

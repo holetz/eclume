@@ -992,7 +992,10 @@ export interface paths {
         };
         /**
          * Tipos de agenda do usuário
-         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde a
+         *     2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
+         *     lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+         *     `summaries:*`).
          */
         get: operations["listAgendaTypes"];
         put?: never;

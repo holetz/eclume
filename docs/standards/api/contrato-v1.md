@@ -50,8 +50,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Escopos do PAT:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, a
   exclusão de gravação), `transcripts:read`,
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
-  implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Sessão tem todas as
-  permissões do usuário.
+  implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Quando basta um de
+  vários, a operação declara um requisito `pat` por escopo e a rota usa `requires_any` (desde a
+  2.4.0, `GET /agenda-types` aceita `summaries:read` ou `recordings:read`, para a credencial de
+  dispositivo escolher o tipo ao parar). Sessão tem todas as permissões do usuário.
 - **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login

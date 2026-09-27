@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.3.0
+  version: 2.4.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -2061,11 +2061,22 @@ paths:
       - agenda-types
       operationId: listAgendaTypes
       summary: Tipos de agenda do usuário
-      description: Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma.
+      description: 'Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde
+        a
+
+        2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
+
+        lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+
+        `summaries:*`).
+
+        '
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
+      - pat:
+        - recordings:read
       parameters:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
@@ -7800,7 +7811,7 @@ components:
         mcp_url: https://192.168.15.199:8443/mcp
         ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
         version: 0.1.0
-        contract_version: 2.3.0
+        contract_version: 2.4.0
     DeviceLoginRequest:
       summary: Notebook entrando com e-mail e senha
       value:
@@ -7837,7 +7848,7 @@ components:
           mcp_url: https://192.168.15.199:8443/mcp
           ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
           version: 0.1.0
-          contract_version: 2.3.0
+          contract_version: 2.4.0
     PairingCodeCreated:
       summary: Código novo com o link do QR
       value:

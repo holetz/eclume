@@ -91,7 +91,7 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   Salvar/Pular. Depois do sync, com "Excluir depois de sincronizar", a retenção apaga os arquivos
   confirmados há mais de 7 dias; "Excluir sincronizadas" (o aviso de pouco espaço) apaga já.
 - Os **tipos de agenda** da folha ficam em cache na config e são relidos quando a sonda roda
-  (`GET /agenda-types`, que pede `summaries:read`; ver as Discoveries da holetz/eclume#41).
+  (`GET /agenda-types`, que desde a 2.4.0 aceita o `recordings:read` da credencial de dispositivo).
 - **Em segundo plano**, o `SyncWorker` do WorkManager (periódico de 15 min e um único ao ganhar
   Wi‑Fi, só `UNMETERED`) chama `syncPendentes` pela ponte, que faz a sonda antes de subir.
 
