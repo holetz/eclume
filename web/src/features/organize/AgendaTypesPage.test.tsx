@@ -68,7 +68,7 @@ describe('tipos de agenda', () => {
     expect(within(row('Reunião de equipe')).getByText('Resumo: resumo, decisões, próximos passos')).toBeInTheDocument()
     expect(within(row('1:1')).getByText('Resumo: pontos tratados, combinados')).toBeInTheDocument()
     expect(
-      within(row('Nota de voz')).getByText('Resumo: Reescreva o que foi dito como texto limpo, em parágrafos cur'),
+      within(row('Nota de voz')).getByText('Resumo: Reescreva o que foi dito como texto limpo, em parágrafos…'),
     ).toBeInTheDocument()
     expect(within(row('Reunião de equipe')).getByRole('button', { name: 'Reunião de equipe' })).toHaveAttribute('aria-current', 'true')
 

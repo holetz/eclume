@@ -4,7 +4,6 @@ import { ApiError, errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
-import { formatDate } from '../library/format'
 import styles from './People.module.css'
 import { useCreatePerson, usePeople, type Person } from './queries'
 
@@ -53,7 +52,7 @@ export function PeoplePage() {
               <th scope="col">Nome</th>
               <th scope="col">E-mail</th>
               <th scope="col">Gravações</th>
-              <th scope="col">Última gravação</th>
+              <th scope="col">Amostras de voz</th>
             </tr>
           </thead>
           <tbody>
@@ -182,7 +181,7 @@ function PersonRow({ person, index }: { person: Person; index: number }) {
       </td>
       <td className="mono text-muted">{person.email ?? '—'}</td>
       <td className="tabular">{person.transcript_count}</td>
-      <td className="tabular text-muted">{person.last_seen_at ? formatDate(person.last_seen_at) : '—'}</td>
+      <td className="tabular">{person.voice_sample_count}</td>
     </tr>
   )
 }
