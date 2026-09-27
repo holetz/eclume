@@ -13,6 +13,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     // Os testes de navegador rodam só por `npm run test:browser` (vitest.browser.config.ts).
-    exclude: [...configDefaults.exclude, '**/*.browser.test.ts', 'e2e/**', 'e2e-real/**'],
+    exclude: [...configDefaults.exclude, '**/*.browser.test.ts', 'e2e/**', 'e2e-real/**', 'e2e-prod/**'],
   },
 })
