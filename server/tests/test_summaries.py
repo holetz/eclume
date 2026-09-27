@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -33,16 +32,9 @@ def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN
     return run(services.sql(go))
 
 
-def _summarization(services: Services) -> dict[str, Any]:
-    return _sql(services, "SELECT summarization FROM platform_settings")[0][0]
-
-
-def _set_summarization(services: Services, **changes: Any) -> None:  # noqa: ANN401
-    _sql(
-        services,
-        "UPDATE platform_settings SET summarization = summarization || CAST(:changes AS jsonb)",
-        changes=json.dumps(changes),
-    )
+def _used_for(services: Services) -> dict[str, list[str]]:
+    rows = _sql(services, "SELECT name, used_for FROM agent_providers")
+    return {name: sorted(used_for) for name, used_for in rows}
 
 
 def _transcribed(
@@ -85,7 +77,6 @@ def test_conta_nasce_com_os_tipos_de_agenda_padrao(team: dict[str, Any], service
     assert team_meeting["identify"].startswith("Reunião recorrente da equipe interna")
     assert "## Próximos passos" in team_meeting["summary_instructions"]
     assert all(item["from_default_id"] is not None for item in types.values())
-    assert "default_template_id" not in _summarization(services)
 
 
 # --- providers ------------------------------------------------------------------------------------
@@ -104,8 +95,8 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     assert claude.status_code == 201, claude.text
     claude = claude.json()
     assert (claude["api_key_set"], claude["base_url"], claude["enabled"]) == (False, None, True)
-    # O primeiro provider habilitado vira o padrão da plataforma.
-    assert _summarization(services)["default_provider_id"] == claude["id"]
+    # O primeiro provider habilitado assume as finalidades que ninguém declara.
+    assert claude["used_for"] == ["summaries", "fields", "chat", "agenda_detection"]
 
     invalid = [
         {"name": "x", "kind": "openai-compatible", "model": "m"},
@@ -129,7 +120,7 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     ).json()
     assert deepseek["api_key_set"] is True
     assert deepseek["options"] == {"temperature": 0.2, "context_window": 64000}
-    assert _summarization(services)["default_provider_id"] == claude["id"]
+    assert deepseek["used_for"] == []
     stored = _sql(services, "SELECT api_key_encrypted FROM agent_providers WHERE id = :id", id=deepseek["id"])[0][0]
     assert "sk-segredo-do-teste" not in stored
 
@@ -145,7 +136,7 @@ def test_cadastro_de_provider_cifra_a_chave(team: dict[str, Any], services: Serv
     assert admin.patch(f"/api/v1/admin/agent-providers/{deepseek['id']}", json={"base_url": None}).status_code == 422
 
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 204
-    assert _summarization(services)["default_provider_id"] is None
+    assert _used_for(services) == {"DeepSeek": []}
     assert admin.delete(f"/api/v1/admin/agent-providers/{claude['id']}").status_code == 404
 
 
@@ -159,10 +150,13 @@ def test_rls_de_providers_e_configuracao(team: dict[str, Any], services: Service
         return (await conn.execute(text(statement))).all()
 
     assert run(services.sql(lambda conn: as_app(conn, "SELECT name FROM agent_providers"))) == [("Claude (servidor)",)]
-    assert len(run(services.sql(lambda conn: as_app(conn, "SELECT summarization FROM platform_settings")))) == 1
+    assert run(services.sql(lambda conn: as_app(conn, "SELECT used_for FROM agent_providers"))) == [
+        (["summaries", "fields", "chat", "agenda_detection"],)
+    ]
+    assert len(run(services.sql(lambda conn: as_app(conn, "SELECT preprocessing FROM platform_settings")))) == 1
     for statement in (
         "SELECT api_key_encrypted FROM agent_providers",
-        "UPDATE platform_settings SET summarization = summarization RETURNING 1",
+        "UPDATE platform_settings SET preprocessing = preprocessing RETURNING 1",
         "INSERT INTO agent_providers (name, kind, model) VALUES ('x', 'claude-cli', 'm') RETURNING 1",
     ):
         with pytest.raises(Exception, match="permission denied"):
@@ -244,9 +238,10 @@ def test_sem_tipo_no_pedido_vale_o_da_gravacao(team: dict[str, Any], services: S
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
     by_recording = owner.post(url, json={})
     assert by_recording.status_code == 202, by_recording.text
+    # A versão 1 é o resumo automático, que a transcrição já gerou pelo mesmo tipo.
     assert (by_recording.json()["agenda_type"], by_recording.json()["version"]) == (
         {"id": one_on_one["id"], "name": "1:1"},
-        1,
+        2,
     )
 
     # O tipo de outra conta não existe para esta.
@@ -310,14 +305,14 @@ def test_resumo_automatico_pelo_tipo_da_gravacao(
     owner_account = make_user()
     owner = as_user(owner_account)
     uploader = owner.pat("recordings:write", "recordings:read")
-    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
     one_on_one = _types(services, owner_account)["1:1"]
 
-    # Sem o flag da plataforma, nada é gerado.
+    # Sem provider de resumos, nada é gerado.
     transcript_id = _transcribed(uploader, services, agenda_type_id=one_on_one["id"])
     assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
 
-    _set_summarization(services, auto_summarize=True)
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+
     agents = FakeAgents()
     transcript_id = _transcribed(uploader, services, agents, agenda_type_id=one_on_one["id"])
     (automatic,) = owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"]
@@ -328,3 +323,37 @@ def test_resumo_automatico_pelo_tipo_da_gravacao(
     # Sem tipo de agenda na gravação, não há resumo automático.
     transcript_id = _transcribed(uploader, services, agents)
     assert owner.get(f"/api/v1/transcripts/{transcript_id}/summaries").json()["items"] == []
+
+
+def test_cada_finalidade_tem_um_provider_so(team: dict[str, Any], services: Services):
+    admin: Api = team["admin"]
+    url = "/api/v1/admin/agent-providers"
+    claude = admin.post(url, json=CLAUDE).json()
+    ollama = admin.post(
+        url,
+        json={
+            "name": "Ollama",
+            "kind": "ollama",
+            "model": "qwen2.5",
+            "base_url": "http://ollama:11434",
+            "used_for": ["agenda_detection", "agenda_detection"],
+        },
+    ).json()
+    assert ollama["used_for"] == ["agenda_detection"]
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields", "summaries"], "Ollama": ["agenda_detection"]}
+
+    moved = admin.patch(f"{url}/{ollama['id']}", json={"used_for": ["summaries", "agenda_detection"]})
+    assert moved.json()["used_for"] == ["summaries", "agenda_detection"]
+    assert _used_for(services) == {"Claude (servidor)": ["chat", "fields"], "Ollama": ["agenda_detection", "summaries"]}
+    assert admin.patch(f"{url}/{claude['id']}", json={"used_for": ["resumos"]}).status_code == 422
+    assert admin.patch(f"{url}/{claude['id']}", json={"used_for": None}).status_code == 422
+
+    # O resumo sem `provider_id` usa o provider de `summaries`; desabilitado, não há nenhum.
+    owner: Api = team["member"]
+    transcript_id = _transcribed(owner, services)
+    ata = _types(services, team["member_account"])["Reunião de equipe"]
+    summary = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={"agenda_type_id": ata["id"]})
+    assert summary.json()["provider"]["name"] == "Ollama"
+    admin.patch(f"{url}/{ollama['id']}", json={"enabled": False})
+    missing = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={"agenda_type_id": ata["id"]})
+    assert missing.json()["errors"][0]["field"] == "provider_id"

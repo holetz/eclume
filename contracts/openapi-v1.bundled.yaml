@@ -4658,6 +4658,20 @@ components:
       - openai-compatible
       - anthropic
       - claude-cli
+    AgentPurpose:
+      description: 'Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
+
+        `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
+
+        finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+
+        '
+      type: string
+      enum:
+      - summaries
+      - fields
+      - chat
+      - agenda_detection
     AgentProviderRef:
       type: object
       required:
@@ -4847,20 +4861,95 @@ components:
           - integer
           - 'null'
           minimum: 1
-    SummarizationSettings:
+    PreprocessingSettings:
+      description: 'Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar
+        canais,
+
+        reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
+
+        para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
+
+        original.
+
+        '
       type: object
       required:
-      - default_provider_id
-      - auto_summarize
+      - denoise
+      - loudnorm
+      - trim_silence
+      - split_channels
       properties:
-        default_provider_id:
-          type:
-          - string
-          - 'null'
-          format: uuid
-        auto_summarize:
-          description: Gera o resumo pelo tipo de agenda da gravação ao fim da transcrição.
-          type: boolean
+        denoise:
+          type: object
+          required:
+          - enabled
+          - method
+          - strength
+          properties:
+            enabled:
+              type: boolean
+            method:
+              description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+              type: string
+              enum:
+              - rnnoise
+              - afftdn
+            strength:
+              description: Quanto do sinal tratado entra na mistura.
+              type: number
+              minimum: 0
+              maximum: 1
+        loudnorm:
+          type: object
+          required:
+          - enabled
+          - target_lufs
+          - true_peak_db
+          - lra
+          properties:
+            enabled:
+              type: boolean
+            target_lufs:
+              description: Loudness integrado alvo (EBU R128).
+              type: number
+              minimum: -30
+              maximum: -10
+            true_peak_db:
+              type: number
+              minimum: -9
+              maximum: 0
+            lra:
+              description: Faixa de loudness.
+              type: number
+              minimum: 1
+              maximum: 20
+        trim_silence:
+          type: object
+          required:
+          - enabled
+          - min_silence_s
+          - threshold_db
+          properties:
+            enabled:
+              type: boolean
+            min_silence_s:
+              description: Silêncio mínimo, no início ou no fim, para cortar.
+              type: number
+              minimum: 1
+              maximum: 30
+            threshold_db:
+              description: Abaixo deste nível, é silêncio.
+              type: number
+              minimum: -80
+              maximum: -20
+        split_channels:
+          description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+          type: object
+          required:
+          - enabled
+          properties:
+            enabled:
+              type: boolean
     VoiceIdentificationSettings:
       type: object
       required:
@@ -4881,8 +4970,8 @@ components:
       required:
       - asr
       - diarization
-      - summarization
       - voice_identification
+      - preprocessing
       - updated_at
       - updated_by
       properties:
@@ -4890,10 +4979,10 @@ components:
           $ref: '#/components/schemas/AsrSettings'
         diarization:
           $ref: '#/components/schemas/DiarizationSettings'
-        summarization:
-          $ref: '#/components/schemas/SummarizationSettings'
         voice_identification:
           $ref: '#/components/schemas/VoiceIdentificationSettings'
+        preprocessing:
+          $ref: '#/components/schemas/PreprocessingSettings'
         updated_at:
           type: string
           format: date-time
@@ -4955,16 +5044,6 @@ components:
               - integer
               - 'null'
               minimum: 1
-        summarization:
-          type: object
-          properties:
-            default_provider_id:
-              type:
-              - string
-              - 'null'
-              format: uuid
-            auto_summarize:
-              type: boolean
         voice_identification:
           type: object
           properties:
@@ -4974,6 +5053,71 @@ components:
               type: number
               minimum: 0
               maximum: 1
+        preprocessing:
+          description: Cada etapa é mesclada campo a campo.
+          type: object
+          additionalProperties: false
+          properties:
+            denoise:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                method:
+                  description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+                  type: string
+                  enum:
+                  - rnnoise
+                  - afftdn
+                strength:
+                  description: Quanto do sinal tratado entra na mistura.
+                  type: number
+                  minimum: 0
+                  maximum: 1
+            loudnorm:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                target_lufs:
+                  description: Loudness integrado alvo (EBU R128).
+                  type: number
+                  minimum: -30
+                  maximum: -10
+                true_peak_db:
+                  type: number
+                  minimum: -9
+                  maximum: 0
+                lra:
+                  description: Faixa de loudness.
+                  type: number
+                  minimum: 1
+                  maximum: 20
+            trim_silence:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+                min_silence_s:
+                  description: Silêncio mínimo, no início ou no fim, para cortar.
+                  type: number
+                  minimum: 1
+                  maximum: 30
+                threshold_db:
+                  description: Abaixo deste nível, é silêncio.
+                  type: number
+                  minimum: -80
+                  maximum: -20
+            split_channels:
+              description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+              type: object
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
     AgentProvider:
       type: object
       required:
@@ -4985,6 +5129,7 @@ components:
       - api_key_set
       - enabled
       - options
+      - used_for
       - created_at
       - updated_at
       properties:
@@ -5015,6 +5160,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
         created_at:
           type: string
           format: date-time
@@ -5054,6 +5204,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          description: Sem valor, um provider habilitado assume as finalidades que nenhum outro declara.
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
     AgentProviderPatch:
       type: object
       minProperties: 1
@@ -5083,6 +5238,11 @@ components:
             - string
             - number
             - boolean
+        used_for:
+          description: Substitui a lista; as finalidades declaradas saem dos outros providers.
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPurpose'
     AgentProviderPage:
       type: object
       required:
@@ -7000,12 +7160,25 @@ components:
           model: pyannote/speaker-diarization-community-1
           min_speakers: null
           max_speakers: null
-        summarization:
-          default_provider_id: 01928f3a-1c00-7a00-8000-000000000b01
-          auto_summarize: false
         voice_identification:
           enabled: true
           suggestion_threshold: 0.75
+        preprocessing:
+          denoise:
+            enabled: true
+            method: rnnoise
+            strength: 0.6
+          loudnorm:
+            enabled: true
+            target_lufs: -16
+            true_peak_db: -1.5
+            lra: 11
+          trim_silence:
+            enabled: true
+            min_silence_s: 3
+            threshold_db: -50
+          split_channels:
+            enabled: false
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
           id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -7015,8 +7188,11 @@ components:
       value:
         asr:
           model: large-v3
-        summarization:
-          auto_summarize: true
+        preprocessing:
+          denoise:
+            strength: 0.4
+          trim_silence:
+            enabled: false
     AgentProviderPage:
       summary: claude -p do servidor e DeepSeek
       value:
@@ -7032,6 +7208,10 @@ components:
             max_turns: 1
           created_at: '2026-09-10T12:04:00Z'
           updated_at: '2026-09-10T12:04:00Z'
+          used_for:
+          - summaries
+          - fields
+          - chat
         - id: 01928f3a-1c00-7a00-8000-000000000b02
           name: DeepSeek
           kind: openai-compatible
@@ -7044,6 +7224,8 @@ components:
             context_window: 64000
           created_at: '2026-09-14T18:22:00Z'
           updated_at: '2026-09-14T18:22:00Z'
+          used_for:
+          - agenda_detection
         next_cursor: null
     AgentProviderCreateRequest:
       summary: DeepSeek via API OpenAI-compatível
@@ -7056,6 +7238,8 @@ components:
         options:
           temperature: 0.2
           context_window: 64000
+        used_for:
+        - agenda_detection
     SecretList:
       summary: Token do Hugging Face gravado
       value:

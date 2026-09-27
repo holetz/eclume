@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from arq import Retry
-from sqlalchemy import func, insert, select, text, update
+from sqlalchemy import any_, func, insert, literal, select, text, update
 
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents.base import GPU_BUSY, PROVIDER_NOT_CONFIGURED, PROVIDER_TIMEOUT
@@ -37,26 +37,18 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# --- configuração da plataforma (bloco `summarization` de `platform_settings`) ------------------------
+# --- providers por finalidade --------------------------------------------------------------------
 
 # Colunas de `agent_providers` que `eclume_app` lê: a chave de API fica só para o papel de conexão.
 PROVIDER_PUBLIC = [column for column in t.agent_providers.c if column.name != "api_key_encrypted"]
+PURPOSES = ("summaries", "fields", "chat", "agenda_detection")
 
 
-async def get_summarization(conn: AsyncConnection) -> dict[str, Any]:
-    """Bloco `summarization`: `default_provider_id` e `auto_summarize` (legível sob a RLS)."""
-    value = (await conn.execute(select(t.platform_settings.c.summarization))).scalar()
-    return dict(value or {})
-
-
-async def set_summarization(conn: AsyncConnection, admin_id: UUID | None, **changes: Any) -> None:  # noqa: ANN401
-    """Muda campos do bloco `summarization` (papel de conexão, pelas rotas de admin)."""
-    current = await get_summarization(conn)
-    await conn.execute(
-        update(t.platform_settings).values(
-            summarization={**current, **changes}, updated_at=func.now(), updated_by=admin_id
-        )
-    )
+async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
+    """O provider habilitado que declara a finalidade (há no máximo um), sem a chave de API."""
+    c = t.agent_providers.c
+    query = select(*PROVIDER_PUBLIC).where(c.enabled, literal(purpose) == any_(c.used_for))
+    return (await conn.execute(query)).mappings().first()
 
 
 # --- formas JSON ------------------------------------------------------------------------------------
@@ -145,11 +137,11 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 
 
 async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | None:
-    """Cria o resumo automático da transcrição recém-ingerida, se a plataforma pede.
+    """Cria o resumo automático da transcrição recém-ingerida.
 
     Roda com o papel de conexão, na transação do `ingest_transcript`. As instruções são as do tipo de
-    agenda da gravação; sem tipo, não há resumo automático. O provider é o padrão da plataforma. Um
-    resumo automático por revisão da transcrição.
+    agenda da gravação e o provider, o que a plataforma declara para `summaries`; sem um dos dois,
+    não há resumo automático. Um resumo automático por revisão da transcrição.
     """
     transcript = (
         (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
@@ -158,22 +150,9 @@ async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | No
     )
     if transcript is None:
         return None
-    settings = await get_summarization(conn)
-    if not settings.get("auto_summarize") or not settings.get("default_provider_id"):
-        return None
-    provider = (
-        (
-            await conn.execute(
-                select(t.agent_providers).where(
-                    t.agent_providers.c.id == settings["default_provider_id"], t.agent_providers.c.enabled
-                )
-            )
-        )
-        .mappings()
-        .first()
-    )
+    provider = await provider_for(conn, "summaries")
     if provider is None:
-        log.warning("resumo automático sem provider padrão habilitado na plataforma")
+        log.info("resumo automático de %s: nenhum provider habilitado para resumos", recording_id)
         return None
     agenda_type = (
         (

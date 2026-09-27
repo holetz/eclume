@@ -20,7 +20,7 @@ from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.problems import invalid_field, not_found
 from eclume_server.serialize import Row
-from eclume_server.summaries import PROVIDER_PUBLIC, create_summary, get_summarization, summary_json
+from eclume_server.summaries import PROVIDER_PUBLIC, create_summary, provider_for, summary_json
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -47,13 +47,13 @@ async def _transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
 
 
 async def _provider(conn: AsyncConnection, provider_id: UUID | None) -> Row:
-    """O provider pedido, ou o padrão da plataforma; ausente ou desabilitado → 422."""
+    """O provider pedido, ou o de resumos da plataforma; ausente ou desabilitado → 422."""
     field = "provider_id"
     if provider_id is None:
-        default = (await get_summarization(conn)).get("default_provider_id")
-        if default is None:
-            raise invalid_field(field, "a plataforma não tem provider padrão; informe provider_id")
-        provider_id = UUID(default)
+        provider = await provider_for(conn, "summaries")
+        if provider is None:
+            raise invalid_field(field, "a plataforma não tem provider de resumos; informe provider_id")
+        return provider
     row = (await conn.execute(select(*PROVIDER_PUBLIC).where(t.agent_providers.c.id == provider_id))).mappings().first()
     if row is None:
         raise invalid_field(field, "provider inexistente")

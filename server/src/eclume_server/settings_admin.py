@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import urlsplit
-from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
 
     from eclume_server.serialize import Row
 
-BLOCKS = ("asr", "diarization", "summarization", "voice_identification")
+BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing")
 # O `float16` puro é recusado: a série GTX 16xx dá NaN nele, e a engine o troca (worker-gpu.md).
 COMPUTE_TYPES = ("int8_float16", "int8", "int8_float32", "float32")
 # O único pipeline de diarização que a engine `whisperx-local` sabe carregar.
@@ -72,11 +71,47 @@ class DiarizationPatch(_Block):
     max_speakers: int | None = Field(default=None, ge=1)
 
 
-class SummarizationPatch(_Block):
-    """Bloco `summarization` do `AdminSettingsPatch`."""
+class DenoisePatch(_Block):
+    """Etapa `denoise` do pré-processamento: RNNoise (ou `afftdn`) com a força de 0 a 1."""
 
-    default_provider_id: UUID | None = None
-    auto_summarize: bool | None = None
+    enabled: bool | None = None
+    method: Literal["rnnoise", "afftdn"] | None = None
+    strength: float | None = Field(default=None, ge=0, le=1)
+
+
+class LoudnormPatch(_Block):
+    """Etapa `loudnorm` do pré-processamento: normalização de loudness EBU R128."""
+
+    enabled: bool | None = None
+    target_lufs: float | None = Field(default=None, ge=-30, le=-10)
+    true_peak_db: float | None = Field(default=None, ge=-9, le=0)
+    lra: float | None = Field(default=None, ge=1, le=20)
+
+
+class TrimSilencePatch(_Block):
+    """Etapa `trim_silence` do pré-processamento: corta o silêncio do início e do fim."""
+
+    enabled: bool | None = None
+    min_silence_s: float | None = Field(default=None, ge=1, le=30)
+    threshold_db: float | None = Field(default=None, ge=-80, le=-20)
+
+
+class SplitChannelsPatch(_Block):
+    """Etapa `split_channels` do pré-processamento: um canal por pessoa."""
+
+    enabled: bool | None = None
+
+
+class PreprocessingPatch(_Block):
+    """Bloco `preprocessing` do `AdminSettingsPatch`: cada etapa é mesclada campo a campo.
+
+    A conversão para 16 kHz mono não tem chave: é sempre feita.
+    """
+
+    denoise: DenoisePatch | None = None
+    loudnorm: LoudnormPatch | None = None
+    trim_silence: TrimSilencePatch | None = None
+    split_channels: SplitChannelsPatch | None = None
 
 
 class VoiceIdentificationPatch(_Block):
@@ -91,16 +126,16 @@ class AdminSettingsPatch(_Block):
 
     asr: AsrPatch | None = None
     diarization: DiarizationPatch | None = None
-    summarization: SummarizationPatch | None = None
     voice_identification: VoiceIdentificationPatch | None = None
+    preprocessing: PreprocessingPatch | None = None
 
 
 # Campos que o schema aceita como `null`; os demais, enviados como `null`, são 422.
 _NULLABLE = {
     "asr": {"batch_size", "default_language", "fallback_model", "endpoint_url"},
     "diarization": {"min_speakers", "max_speakers"},
-    "summarization": {"default_provider_id"},
     "voice_identification": set(),
+    "preprocessing": set(),
 }
 
 
@@ -124,24 +159,31 @@ def changes_of(body: AdminSettingsPatch) -> dict[str, dict[str, Any]]:
         for field, value in fields.items():
             if value is None and field not in _NULLABLE[block]:
                 raise invalid_field(f"{block}.{field}", "não pode ser nulo")
+            if block == "preprocessing":
+                for name, step_value in value.items():
+                    if step_value is None:
+                        raise invalid_field(f"{block}.{field}.{name}", "não pode ser nulo")
     return sent
 
 
-async def validate_merged(conn: AsyncConnection, merged: dict[str, dict[str, Any]]) -> None:
-    """Regras entre campos e referências, sobre a configuração resultante."""
-    asr, diarization, summarization = merged["asr"], merged["diarization"], merged["summarization"]
+def merge(current: dict[str, Any], changes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Configuração resultante: campo a campo por bloco, e por etapa no `preprocessing`."""
+    merged = {block: {**current[block], **changes.get(block, {})} for block in BLOCKS}
+    merged["preprocessing"] = {
+        step: {**current["preprocessing"].get(step, {}), **changes.get("preprocessing", {}).get(step, {})}
+        for step in {*current["preprocessing"], *changes.get("preprocessing", {})}
+    }
+    return merged
+
+
+def validate_merged(merged: dict[str, dict[str, Any]]) -> None:
+    """Regras entre campos, sobre a configuração resultante."""
+    asr, diarization = merged["asr"], merged["diarization"]
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
         raise invalid_field("asr.endpoint_url", "obrigatória com a engine openai-compatible")
     low, high = diarization.get("min_speakers"), diarization.get("max_speakers")
     if low is not None and high is not None and low > high:
         raise invalid_field("diarization.min_speakers", "não pode passar de max_speakers")
-    provider_id = summarization.get("default_provider_id")
-    if provider_id is not None:
-        enabled = (
-            await conn.execute(select(t.agent_providers.c.enabled).where(t.agent_providers.c.id == UUID(provider_id)))
-        ).scalar()
-        if not enabled:
-            raise invalid_field("summarization.default_provider_id", "precisa ser um provider habilitado")
 
 
 async def secret_encrypted(conn: AsyncConnection, name: str) -> str | None:

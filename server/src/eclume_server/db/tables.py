@@ -82,8 +82,8 @@ platform_settings = Table(
     Column("id", Boolean, primary_key=True, server_default=FetchedValue()),
     Column("asr", JSONB),
     Column("diarization", JSONB),
-    Column("summarization", JSONB),
     Column("voice_identification", JSONB),
+    Column("preprocessing", JSONB),
     _ts("updated_at"),
     _uuid("updated_by"),
 )
@@ -207,6 +207,7 @@ agent_providers = Table(
     Column("api_key_encrypted", Text),
     Column("enabled", Boolean),
     Column("options", JSONB),
+    Column("used_for", ARRAY(Text), server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
 )

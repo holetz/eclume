@@ -16,6 +16,12 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 URL = "/api/v1/admin/settings"
+PREPROCESSING = {
+    "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6},
+    "loudnorm": {"enabled": True, "target_lufs": -16, "true_peak_db": -1.5, "lra": 11},
+    "trim_silence": {"enabled": True, "min_silence_s": 3, "threshold_db": -50},
+    "split_channels": {"enabled": False},
+}
 
 
 def test_so_a_sessao_de_admin(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
@@ -32,7 +38,8 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     body = initial.json()
     assert body["asr"]["model"] == "large-v3-turbo"
     assert body["updated_by"] is None
-    assert body["summarization"] == {"default_provider_id": None, "auto_summarize": False}
+    assert "summarization" not in body
+    assert body["preprocessing"] == PREPROCESSING
     assert body["voice_identification"] == {"enabled": False, "suggestion_threshold": 0.55}
 
     patched = admin.patch(
@@ -40,7 +47,7 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         json={
             "asr": {"model": "large-v3", "compute_type": "int8", "batch_size": 2},
             "diarization": {"min_speakers": 2, "max_speakers": 4},
-            "summarization": {"auto_summarize": True},
+            "preprocessing": {"denoise": {"method": "afftdn"}, "split_channels": {"enabled": True}},
         },
     )
     assert patched.status_code == 200, patched.text
@@ -48,7 +55,12 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     assert result["asr"] == {**body["asr"], "model": "large-v3", "compute_type": "int8", "batch_size": 2}
     assert result["diarization"]["min_speakers"] == 2
     assert result["diarization"]["enabled"] is True
-    assert result["summarization"] == {**body["summarization"], "auto_summarize": True}
+    # O pré-processamento é mesclado por etapa: o resto de cada etapa fica.
+    assert result["preprocessing"] == {
+        **PREPROCESSING,
+        "denoise": {**PREPROCESSING["denoise"], "method": "afftdn"},
+        "split_channels": {"enabled": True},
+    }
     # Quem mudou é a conta de admin, não um usuário.
     me = admin.get("/api/v1/admin/me").json()
     assert result["updated_by"] == {"id": me["id"], "name": me["name"]}
@@ -74,9 +86,18 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"diarization": {"model": "pyannote/speaker-diarization-3.1"}}, None),
         ({"diarization": {"min_speakers": 5, "max_speakers": 2}}, "diarization.min_speakers"),
         ({"diarization": {"enabled": None}}, "diarization.enabled"),
-        ({"summarization": {"default_provider_id": "01928f3a-1c00-7a00-8000-000000000b01"}}, None),
-        # O padrão de template era da organização: agora é de cada usuário.
-        ({"summarization": {"default_template_id": "01928f3a-1c00-7a00-8000-000000000901"}}, None),
+        # O resumo automático segue o tipo de agenda e o provider de `summaries`: o bloco saiu.
+        ({"summarization": {"auto_summarize": True}}, None),
+        ({"preprocessing": {"denoise": {"method": "spleeter"}}}, None),
+        ({"preprocessing": {"denoise": {"strength": 1.2}}}, None),
+        ({"preprocessing": {"loudnorm": {"target_lufs": -5}}}, None),
+        ({"preprocessing": {"loudnorm": {"true_peak_db": 1}}}, None),
+        ({"preprocessing": {"loudnorm": {"lra": 30}}}, None),
+        ({"preprocessing": {"trim_silence": {"min_silence_s": 0.5}}}, None),
+        ({"preprocessing": {"trim_silence": {"threshold_db": -10}}}, None),
+        ({"preprocessing": {"resample": {"enabled": False}}}, None),
+        ({"preprocessing": {"denoise": None}}, "preprocessing.denoise"),
+        ({"preprocessing": {"denoise": {"enabled": None}}}, "preprocessing.denoise.enabled"),
         ({"voice_identification": {"suggestion_threshold": 1.5}}, None),
         ({"voice_identification": {"consent_term_text": "Autorizo."}}, None),
     ],
@@ -87,24 +108,6 @@ def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
     assert response.json()["code"] == "validation_failed"
     if field is not None:
         assert field in {e["field"] for e in response.json()["errors"]}
-
-
-def test_referencia_de_provider(admin: Api):
-    provider = admin.post(
-        "/api/v1/admin/agent-providers",
-        json={
-            "name": "DeepSeek",
-            "kind": "openai-compatible",
-            "model": "deepseek-chat",
-            "base_url": "https://api.deepseek.com/v1",
-        },
-    ).json()
-    ok = admin.patch(URL, json={"summarization": {"default_provider_id": provider["id"]}})
-    assert ok.status_code == 200
-
-    admin.patch(f"/api/v1/admin/agent-providers/{provider['id']}", json={"enabled": False})
-    assert admin.patch(URL, json={"summarization": {"default_provider_id": provider["id"]}}).status_code == 422
-    assert admin.patch(URL, json={"summarization": {"default_provider_id": None}}).status_code == 200
 
 
 def test_proximo_transcribe_sai_com_a_configuracao_nova(
