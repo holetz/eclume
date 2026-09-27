@@ -313,6 +313,23 @@ bash deploy/prova-web-prod.sh
 - **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
   digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
 
+### Organizar, configurações e ajuda em produção (2026-09-27)
+
+- **Antes:** backup do dia (280 KB de banco, 18 objetos no bucket).
+- **Deploy:** de uma exportação com LF, só a imagem `web`; sem migration. Outro deploy paralelo,
+  de um branch sem holetz/eclume#35, trocou `server` e `web` no meio (o `/api/v1/server` voltou
+  404, contrato 2.2.0, e o `mdns` ficou reiniciando sem o `announce`); refeito com
+  `--services "server web"` a partir do branch com `main` mesclado, o descritor voltou com a
+  impressão digital `98e209f5…3d97792f` e o `mdns` saudável. Os scripts em `/srv/eclume/bin/`
+  ficaram sem CRLF. Deploys de branches diferentes se sobrescrevem: o web de produção é o do
+  último deploy, e o estado estável é o deploy de `main`.
+- **Prova** (`E2E_CHANNEL=msedge bash deploy/prova-web-prod.sh`, 21 s): campo temporário salvo,
+  testado pelo agente real nas 3 últimas gravações e excluído; o código de vínculo começou entre
+  9:55 e 10:00 e desceu (a primeira rodada mostrou 10:01, corrigido limitando a validade aos 10
+  minutos do código); o QR lido no navegador trouxe o `pair_url` com o código da tela; o endereço
+  MCP bateu com o descritor, e o token só de leitura foi criado e revogado; a busca "token" abriu
+  o artigo; a gaveta de Pessoas mostrou os artigos da página. `OK`.
+
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo
