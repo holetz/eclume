@@ -134,3 +134,10 @@ def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, 
             if item["step"] == active and item["state"] == "pending":
                 item["state"] = "active"
     return steps
+
+
+async def get_step(conn: AsyncConnection, recording_id: UUID, revision: int, step: str) -> Row | None:
+    """A linha da etapa, se já existe."""
+    ps = t.pipeline_steps.c
+    query = select(t.pipeline_steps).where(ps.recording_id == recording_id, ps.revision == revision, ps.step == step)
+    return (await conn.execute(query)).mappings().first()

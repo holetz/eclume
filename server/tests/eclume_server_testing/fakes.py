@@ -7,8 +7,8 @@ rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso
 dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
 toda gravação; `voices=` troca as vozes de uma rodada.
 
-`FakeAgents` substitui a fábrica de providers do job `summarize`: nenhum teste chama um LLM de
-verdade, e cada chamada fica registrada.
+`FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`):
+nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
+from eclume_server.agents.extraction import FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
 from eclume_server.worker import worker_settings
@@ -126,12 +127,27 @@ def run_gpu(
     return calls
 
 
+def purpose_of(system: str) -> str:
+    """A finalidade da chamada, pelo prompt de sistema: `fields` ou `summaries`."""
+    return "fields" if system == FIELDS_SYSTEM else "summaries"
+
+
 @dataclass
 class FakeAgents:
-    """Fábrica de providers falsos: devolve Markdown determinístico ou os erros programados, em ordem."""
+    """Fábrica de providers falsos, com respostas por finalidade e erros programados, em ordem.
+
+    `replies[finalidade]` é a fila de respostas daquela finalidade; vazia, vale o padrão: Markdown
+    determinístico no resumo e `{}` (nada encontrado) nos campos. Os `errors` valem para qualquer
+    chamada, antes das respostas.
+    """
 
     errors: list[ProviderError] = field(default_factory=list)
+    replies: dict[str, list[str]] = field(default_factory=dict)
     calls: list[tuple[ProviderConfig, str, str]] = field(default_factory=list)
+
+    def of(self, purpose: str) -> list[tuple[ProviderConfig, str, str]]:
+        """As chamadas de uma finalidade."""
+        return [call for call in self.calls if purpose_of(call[1]) == purpose]
 
     def __call__(self, config: ProviderConfig) -> _FakeAgent:
         """O provider falso de `config`."""
@@ -147,7 +163,15 @@ class _FakeAgent:
         self.agents.calls.append((self.config, system, prompt))
         if self.agents.errors:
             raise self.agents.errors.pop(0)
-        return Completion(text=f"# Resumo\n\n- gerado por {self.config.name}", model=f"{self.config.model}-fake")
+        purpose = purpose_of(system)
+        queued = self.agents.replies.get(purpose)
+        if queued:
+            text = queued.pop(0)
+        elif purpose == "fields":
+            text = "{}"
+        else:
+            text = f"# Resumo\n\n- gerado por {self.config.name}"
+        return Completion(text=text, model=f"{self.config.model}-fake")
 
 
 def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:

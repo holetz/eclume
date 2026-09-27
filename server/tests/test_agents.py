@@ -16,6 +16,7 @@ from eclume_server.agents import base as codes
 from eclume_server.agents.anthropic_api import AnthropicProvider
 from eclume_server.agents.base import Completion
 from eclume_server.agents.claude_cli import ClaudeCliProvider, claude_command
+from eclume_server.agents.extraction import FIELDS_SYSTEM, FieldSpec, clean, extract_fields, merge, parse_object
 from eclume_server.agents.ollama import OllamaProvider
 from eclume_server.agents.openai_compat import OpenAICompatibleProvider
 from eclume_server.agents.prompting import (
@@ -430,3 +431,75 @@ def test_secoes_respeitam_o_orcamento():
     lines = ["a" * 30] * 10  # 10 tokens + 1 cada
     assert split_sections(lines, 33) == [(0, 3), (3, 6), (6, 9), (9, 10)]
     assert split_sections(["a" * 300], 10) == [(0, 1)]
+
+
+# --- extração de campos ---------------------------------------------------------------------------
+
+CLIENTE = FieldSpec(key="cliente", kind="choice", instructions="A empresa.", options=("Serra Azul", "Vale Verde"))
+TITULO = FieldSpec(key="titulo", kind="text", instructions="Um título curto.")
+PENDENCIAS = FieldSpec(key="pendencias", kind="list", instructions="O que ficou para depois.")
+
+
+class ScriptedProvider(FakeProvider):
+    """Responde, em ordem, os textos dados."""
+
+    def __init__(self, context_window: int, replies: list[str]) -> None:
+        """Janela e respostas."""
+        super().__init__(context_window)
+        self.replies = replies
+
+    async def complete(self, system: str, prompt: str) -> Completion:
+        """Registra e responde o próximo texto."""
+        self.calls.append((system, prompt))
+        return Completion(text=self.replies.pop(0), model="fake")
+
+
+def test_resposta_json_com_ou_sem_cerca():
+    assert parse_object('```json\n{"titulo": "A"}\n```') == {"titulo": "A"}
+    assert parse_object('Aqui está: {"titulo": null}') == {"titulo": None}
+    for text in ("sem json", "[1, 2]", '{"titulo": '):
+        with pytest.raises(ProviderError) as info:
+            parse_object(text)
+        assert (info.value.code, info.value.retryable) == (codes.PROVIDER_BAD_OUTPUT, True)
+
+
+def test_valores_seguem_o_tipo_do_campo():
+    assert clean(CLIENTE, "Serra Azul") == "Serra Azul"
+    assert clean(CLIENTE, "Outra") is None
+    assert clean(TITULO, "  " + "x" * 400) == "x" * 300
+    assert clean(TITULO, ["lista"]) is None
+    assert clean(PENDENCIAS, ["a", "a", " b ", 3, ""] + [f"i{n}" for n in range(20)]) == [
+        "a",
+        "b",
+        *[f"i{n}" for n in range(8)],
+    ]
+    assert clean(PENDENCIAS, []) is None
+
+
+def test_mescla_das_secoes():
+    assert merge(CLIENTE, [None, "Vale Verde", "Serra Azul", "Serra Azul"]) == "Serra Azul"
+    # Empate: o primeiro que apareceu.
+    assert merge(TITULO, ["B", "A", "A", "B"]) == "B"
+    assert merge(PENDENCIAS, [["a"], None, ["b", "a"]]) == ["a", "b"]
+    assert merge(TITULO, [None, None]) is None
+
+
+def test_extracao_curta_numa_chamada_e_longa_por_secoes():
+    provider = ScriptedProvider(100_000, ['{"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}'])
+    values, completion = run(extract_fields(provider, [TITULO, CLIENTE, PENDENCIAS], ["interno"], _transcript(10)))
+    assert values == {"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}
+    assert completion.model == "fake"
+    ((system, prompt),) = provider.calls
+    assert system == FIELDS_SYSTEM
+    assert "## Tags que o usuário já usa\n\ninterno" in prompt
+    assert '"cliente": "uma das opções" ou null' in prompt
+
+    transcript = _transcript(200)
+    replies = ['{"cliente": "Vale Verde", "pendencias": ["a"]}'] + [
+        '{"cliente": "Serra Azul", "pendencias": ["b"]}'
+    ] * 20
+    provider = ScriptedProvider(3_000, replies)
+    values, _ = run(extract_fields(provider, [CLIENTE, PENDENCIAS], [], transcript))
+    assert len(provider.calls) >= 3
+    assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
+    assert values == {"cliente": "Serra Azul", "pendencias": ["a", "b"]}

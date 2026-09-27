@@ -37,6 +37,11 @@ def transcribe_job_id(recording_id: UUID | str, revision: int) -> str:
     return f"transcribe:{recording_id}:{revision}"
 
 
+def step_job_id(job: str, recording_id: UUID | str, revision: int) -> str:
+    """`_job_id` de uma etapa do pipeline (`fill_fields`, `detect_agenda_type`): uma por revisão."""
+    return f"{job}:{recording_id}:{revision}"
+
+
 def summarize_job_id(summary_id: UUID | str) -> str:
     """`_job_id` do `summarize`: um por resumo."""
     return f"summarize:{summary_id}"

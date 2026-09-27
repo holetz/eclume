@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -20,11 +21,12 @@ from eclume_server.crypto import SecretDecryptError, decrypt
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
+from eclume_server.pipeline import set_step
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -216,7 +218,8 @@ def provider_config(settings: Settings, row: Row, platform_key_encrypted: str | 
     )
 
 
-async def _transcript_text(conn: AsyncConnection, transcript_id: UUID) -> TranscriptText:
+async def transcript_text(conn: AsyncConnection, transcript_id: UUID) -> TranscriptText:
+    """A transcrição pronta para o prompt (título, data, participantes e falas com tempo)."""
     head = (
         (
             await conn.execute(
@@ -274,6 +277,106 @@ async def _fail(engine: AsyncEngine, summary_id: UUID, code: str, message: str, 
     return f"falhou: {code}"
 
 
+async def load_provider(conn: AsyncConnection, provider_id: UUID) -> tuple[Row | None, str | None]:
+    """O provider com a chave cifrada (papel de conexão) e o segredo da plataforma que ele usa.
+
+    Só o `anthropic` sem chave própria usa um: o `anthropic_api_key`.
+    """
+    row = (
+        (await conn.execute(select(t.agent_providers).where(t.agent_providers.c.id == provider_id))).mappings().first()
+    )
+    platform_key = None
+    if row is not None and row["kind"] == "anthropic" and not row["api_key_encrypted"]:
+        platform_key = await secret_encrypted(conn, ANTHROPIC_API_KEY)
+    return row, platform_key
+
+
+def next_try(ctx: dict[str, Any], exc: ProviderError, *, attempts: int, waited_s: float, options: dict) -> float | None:
+    """Em quantos segundos tentar de novo, ou `None` (falha definitiva).
+
+    As regras de todo job de agente (resumo, campos, detecção): falha passageira retenta até
+    `MAX_ATTEMPTS`, e a GPU ocupada (Ollama) adia sem gastar tentativa até `ollama_wait_s`.
+    """
+    if exc.code == GPU_BUSY:
+        wait = options.get("ollama_wait_s", OLLAMA_WAIT_S)
+        if isinstance(wait, int | float) and waited_s < wait:
+            return ctx.get("gpu_retry_s", GPU_RETRY_S)
+        return None
+    if exc.retryable and attempts < MAX_ATTEMPTS:
+        delays = ctx.get("retry_delays", RETRY_DELAYS_S)
+        return delays[min(attempts, len(delays)) - 1]
+    return None
+
+
+@dataclass(frozen=True)
+class AgentStep:
+    """Uma etapa do pipeline feita por agente: a gravação, a revisão, a etapa e o estado anterior."""
+
+    recording: Row
+    revision: int
+    step: str
+    started_at: datetime | None
+    detail: dict[str, Any]
+
+
+async def call_agent_step[T](
+    ctx: dict[str, Any],
+    step: AgentStep,
+    provider: tuple[Row, str | None],
+    call: Callable[[Provider], Awaitable[T]],
+) -> T | str:
+    """Chama o agente de uma etapa: o resultado, ou o desfecho da falha, já gravado na etapa.
+
+    Falha passageira volta à fila (`arq.Retry`, com as tentativas na `detail` da etapa); a definitiva
+    deixa a etapa `failed`, e quem chamou segue a cadeia. `provider` é o par de `load_provider`.
+    """
+    engine: AsyncEngine = ctx["engine"]
+    try:
+        config = provider_config(ctx["settings"], *provider)
+    except SecretDecryptError:
+        error = (PROVIDER_NOT_CONFIGURED, "A chave de API do provider não abre com a chave de cifra atual.")
+        async with system_tx(engine) as conn:
+            await set_step(conn, step.recording, step.revision, step.step, "failed", error=error)
+        return f"falhou: {error[0]}"
+    try:
+        async with asyncio.timeout(JOB_TIMEOUT_S):
+            return await call(provider_factory(ctx)(config))
+    except ProviderError as exc:
+        attempts = step.detail.get("attempts", 0) + (exc.code != GPU_BUSY)
+        waited = (datetime.now(UTC) - (step.started_at or datetime.now(UTC))).total_seconds()
+        defer = next_try(ctx, exc, attempts=attempts, waited_s=waited, options=config.options)
+        detail = {**step.detail, "attempts": attempts}
+        state, error = ("active", None) if defer is not None else ("failed", (exc.code, exc.message))
+        async with system_tx(engine) as conn:
+            await set_step(
+                conn,
+                step.recording,
+                step.revision,
+                step.step,
+                state,
+                error=error,
+                detail=detail,
+                started_at=step.started_at,
+            )
+        if defer is not None:
+            # Fora da transação: o `Retry` dentro dela desfaria a contagem das tentativas.
+            raise Retry(defer=defer) from exc
+        return f"falhou: {exc.code}"
+    except TimeoutError:
+        error = (PROVIDER_TIMEOUT, f"A etapa passou de {JOB_TIMEOUT_S // 60} min.")
+    except Exception as exc:
+        log.exception("etapa %s de %s: falha inesperada", step.step, step.recording["id"])
+        error = (INTERNAL_ERROR, type(exc).__name__)
+    async with system_tx(engine) as conn:
+        await set_step(conn, step.recording, step.revision, step.step, "failed", error=error)
+    return f"falhou: {error[0]}"
+
+
+def provider_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider]:
+    """A fábrica de providers do worker (`ctx["provider_factory"]` nos testes)."""
+    return ctx.get("provider_factory") or _default_factory(ctx)
+
+
 def _default_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider]:
     async def gpu_idle() -> bool:
         return await ctx["redis"].zcard(GPU_QUEUE) == 0
@@ -299,16 +402,8 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             return "resumo apagado"
         if summary["status"] not in {"queued", "running"}:
             return f"resumo já {summary['status']}"
-        provider_row = (
-            (await conn.execute(select(t.agent_providers).where(t.agent_providers.c.id == summary["provider_id"])))
-            .mappings()
-            .first()
-        )
-        # O provider `anthropic` sem chave própria usa o segredo `anthropic_api_key` da plataforma.
-        platform_key = None
-        if provider_row is not None and provider_row["kind"] == "anthropic" and not provider_row["api_key_encrypted"]:
-            platform_key = await secret_encrypted(conn, ANTHROPIC_API_KEY)
-        transcript = await _transcript_text(conn, summary["transcript_id"])
+        provider_row, platform_key = await load_provider(conn, summary["provider_id"])
+        transcript = await transcript_text(conn, summary["transcript_id"])
         await conn.execute(
             update(t.summaries)
             .where(t.summaries.c.id == summary_id)
@@ -324,7 +419,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     except SecretDecryptError:
         message = "A chave de API do provider não abre com a chave de cifra atual; cadastre-a de novo."
         return await _fail(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)
-    factory = ctx.get("provider_factory") or _default_factory(ctx)
+    factory = provider_factory(ctx)
     try:
         async with asyncio.timeout(JOB_TIMEOUT_S):
             completion = await summarize(factory(config), transcript, summary["instructions"])
@@ -356,17 +451,14 @@ async def _on_error(
     """Adia (fila da GPU), retenta (falha passageira) ou falha de vez."""
     engine: AsyncEngine = ctx["engine"]
     summary_id = summary["id"]
-    if exc.code == GPU_BUSY:
-        wait = config.options.get("ollama_wait_s", OLLAMA_WAIT_S)
-        waited = (datetime.now(UTC) - summary["created_at"]).total_seconds()
-        if isinstance(wait, int | float) and waited < wait:
-            # Esperar a GPU não é uma tentativa: o provider nem foi chamado.
-            await _update_open(engine, summary_id, status="queued")
-            raise Retry(defer=ctx.get("gpu_retry_s", GPU_RETRY_S))
-        return await _fail(engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts)
-    if exc.retryable and attempts < MAX_ATTEMPTS:
-        delays = ctx.get("retry_delays", RETRY_DELAYS_S)
-        await _update_open(engine, summary_id, status="queued", attempts=attempts)
+    waited = (datetime.now(UTC) - summary["created_at"]).total_seconds()
+    defer = next_try(ctx, exc, attempts=attempts, waited_s=waited, options=config.options)
+    if defer is not None:
+        # Esperar a GPU não é uma tentativa: o provider nem foi chamado.
+        spent = attempts if exc.code != GPU_BUSY else summary["attempts"]
+        await _update_open(engine, summary_id, status="queued", attempts=spent)
         log.info("resumo %s: tentativa %d falhou (%s), nova tentativa", summary_id, attempts, exc.code)
-        raise Retry(defer=delays[min(attempts, len(delays)) - 1])
+        raise Retry(defer=defer)
+    if exc.code == GPU_BUSY:
+        return await _fail(engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts)
     return await _fail(engine, summary_id, exc.code, exc.message, attempts)

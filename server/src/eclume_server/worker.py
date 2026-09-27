@@ -1,9 +1,10 @@
 """Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, gera os resumos (`summarize`), descarta uploads vencidos e marca como
-falha recuperável o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
-docs/standards/api/jobs-transcricao.md.
+`transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields` e o resumo
+automático), gera os resumos (`summarize`), descarta uploads vencidos e marca como falha recuperável
+o job de transcrição que o worker GPU abandonou (`reap_stalled_jobs`). Contrato em
+docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ from sqlalchemy import select, update
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
-from eclume_server.queue import DEFAULT_QUEUE, progress_key, summarize_job_id
+from eclume_server.fields import GONE, STALE, current_revision, run_fill_fields
+from eclume_server.queue import DEFAULT_QUEUE, progress_key, step_job_id, summarize_job_id
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import auto_summarize, run_summary
@@ -63,18 +65,36 @@ async def ingest_transcript(
             embeddings_key=embeddings_key,
             engine_info=engine_info,
         )
-        # Na mesma transação: a transcrição e o seu resumo automático nascem juntos ou não nascem.
-        summary_id = await auto_summarize(conn, UUID(recording_id))
+        revision = await current_revision(conn, UUID(recording_id))
     await ctx["redis"].delete(progress_key(recording_id))
     if result == RECORDING_GONE:
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
-    if summary_id is not None:
-        await ctx["redis"].enqueue_job(
-            "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-        )
-        result += f"; resumo automático {summary_id} na fila"
+    else:
+        # A cadeia por agente começa pelos campos; o `_job_id` impede a segunda ingestão de repeti-la.
+        await _enqueue_step(ctx, "fill_fields", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, result)
+    return result
+
+
+async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:
+    await ctx["redis"].enqueue_job(
+        job, recording_id, revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=DEFAULT_QUEUE
+    )
+
+
+async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Preenche os campos automáticos da revisão e segue para o resumo automático."""
+    result = await run_fill_fields(ctx, UUID(recording_id), revision)
+    if result not in {GONE, STALE}:
+        async with system_tx(ctx["engine"]) as conn:
+            summary_id = await auto_summarize(conn, UUID(recording_id))
+        if summary_id is not None:
+            await ctx["redis"].enqueue_job(
+                "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
+            )
+            result += f"; resumo automático {summary_id} na fila"
+    log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
     return result
 
 
@@ -148,6 +168,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
             # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
             func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
+            func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),

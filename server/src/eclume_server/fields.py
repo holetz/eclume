@@ -6,6 +6,7 @@ em docs/standards/code/processamento-automatico.md.
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal
@@ -14,9 +15,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from eclume_server.agents.extraction import MAX_KNOWN_TAGS, MAX_TEXT, FieldSpec, extract_fields
 from eclume_server.db import tables as t
+from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
+from eclume_server.pipeline import get_step, set_step
 from eclume_server.problems import invalid_field, not_found
+from eclume_server.summaries import (
+    AgentStep,
+    call_agent_step,
+    load_provider,
+    provider_for,
+    transcript_text,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -30,6 +41,10 @@ Option = Annotated[str, Field(min_length=1, max_length=120)]
 # Marcadores do padrão de título que um campo não pode encobrir.
 RESERVED_KEYS = frozenset({"assunto", "data", "tipo"})
 MAX_KEY = 64
+# Desfechos do job que param a cadeia: a revisão não é mais a da gravação.
+GONE = "gravação apagada"
+STALE = "revisão antiga"
+log = logging.getLogger(__name__)
 
 
 class FieldDraft(BaseModel):
@@ -114,8 +129,6 @@ async def get_field(conn: AsyncConnection, field_id: UUID) -> Row:
 
 
 # --- valores por gravação ------------------------------------------------------------------------
-
-MAX_TEXT = 300
 
 
 def validate_value(field: Row, value: Any) -> Any:  # noqa: ANN401 — o formato depende do tipo do campo
@@ -228,3 +241,106 @@ async def recording_values(conn: AsyncConnection, recording: Row) -> list[dict[s
             }
         )
     return items
+
+
+# --- preenchimento automático (job `fill_fields`) --------------------------------------------------
+
+LOCKED = ("edited", "accepted")
+
+
+async def current_revision(conn: AsyncConnection, recording_id: UUID) -> int | None:
+    """A revisão do job de transcrição mais recente da gravação (a da cadeia em curso)."""
+    jobs = t.transcription_jobs.c
+    return (await conn.execute(select(func.max(jobs.revision)).where(jobs.recording_id == recording_id))).scalar()
+
+
+async def eligible_fields(conn: AsyncConnection, recording_id: UUID, owner_id: UUID) -> list[Row]:
+    """Campos a preencher: os de `auto_fill` cujo valor o usuário não escreveu nem aceitou."""
+    fv = t.field_values.c
+    locked = select(fv.field_id).where(fv.recording_id == recording_id, fv.origin.in_(LOCKED))
+    query = (
+        select(t.fields)
+        .where(t.fields.c.owner_id == owner_id, t.fields.c.auto_fill, t.fields.c.id.not_in(locked))
+        .order_by(t.fields.c.position, t.fields.c.id)
+    )
+    return list((await conn.execute(query)).mappings().all())
+
+
+async def known_tags(conn: AsyncConnection, owner_id: UUID) -> list[str]:
+    """As tags que o usuário mais usa, para o agente preferi-las."""
+    tag = func.unnest(t.recordings.c.tags).label("tag")
+    used = select(tag).where(t.recordings.c.owner_id == owner_id).subquery()
+    query = select(used.c.tag).group_by(used.c.tag).order_by(func.count().desc(), used.c.tag).limit(MAX_KNOWN_TAGS)
+    return list((await conn.execute(query)).scalars())
+
+
+def spec(row: Row) -> FieldSpec:
+    """O campo como o agente o vê."""
+    return FieldSpec(key=row["key"], kind=row["kind"], instructions=row["instructions"], options=tuple(row["options"]))
+
+
+async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:
+    """O job `fill_fields`: preenche os campos automáticos da revisão e grava a etapa `fields`.
+
+    Roda com o papel de conexão, no worker CPU. Nunca sobrescreve um valor `edited` ou `accepted`.
+    Falha passageira volta à fila (`arq.Retry`); a definitiva deixa a etapa `failed`, e a cadeia segue.
+    """
+    engine = ctx["engine"]
+    async with system_tx(engine) as conn:
+        recording = (
+            (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
+        )
+        if recording is None:
+            return GONE
+        if await current_revision(conn, recording_id) != revision:
+            return STALE
+        step = await get_step(conn, recording_id, revision, "fields")
+        fields = await eligible_fields(conn, recording_id, recording["owner_id"])
+        if not fields:
+            await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": "no_auto_fields"})
+            return "sem campos automáticos"
+        provider = await provider_for(conn, "fields")
+        if provider is None:
+            await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": "no_provider"})
+            return "sem provider de campos"
+        provider_row, platform_key = await load_provider(conn, provider["id"])
+        transcript_id = (
+            await conn.execute(select(t.transcripts.c.id).where(t.transcripts.c.recording_id == recording_id))
+        ).scalar_one()
+        transcript = await transcript_text(conn, transcript_id)
+        tags = await known_tags(conn, recording["owner_id"])
+        started = step["started_at"] if step is not None and step["started_at"] else None
+        detail = dict(step["detail"]) if step is not None else {}
+        await set_step(conn, recording, revision, "fields", "active", detail=detail, started_at=started)
+    outcome = await call_agent_step(
+        ctx,
+        AgentStep(recording, revision, "fields", started, detail),
+        (provider_row, platform_key),
+        lambda provider: extract_fields(provider, [spec(row) for row in fields], tags, transcript),
+    )
+    if isinstance(outcome, str):
+        return outcome
+    values, completion = outcome
+    async with system_tx(engine) as conn:
+        # O usuário pode ter escrito um valor enquanto o agente trabalhava: esse fica.
+        still = {row["id"] for row in await eligible_fields(conn, recording_id, recording["owner_id"])}
+        filled = 0
+        for row in fields:
+            value = values.get(row["key"])
+            if row["id"] not in still or (value is None and row["builtin"] == "title"):
+                continue
+            await set_value(
+                conn,
+                recording_id,
+                row,
+                value,
+                "auto",
+                transcript_revision=revision,
+                provider_name=provider_row["name"],
+                model=completion.model,
+            )
+            filled += value is not None
+        await set_step(
+            conn, recording, revision, "fields", "done", detail={"filled": filled, "model": completion.model}
+        )
+    return f"{filled} campo(s) preenchido(s)"
