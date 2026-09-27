@@ -19,7 +19,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   await page.getByLabel('E-mail').fill('mariana.couto@example.com')
   await page.getByLabel('Senha').fill('senha-de-teste')
   await page.getByRole('button', { name: 'Entrar' }).click()
-  await expect(page.getByRole('list', { name: 'Gravações' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
 })
 
 /** O mock só tem o exemplo "usado" do estado do código: aqui o código continua pendente. */
