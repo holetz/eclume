@@ -27,6 +27,7 @@ describe('diretório de pessoas', () => {
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(4)
     expect(within(rows[2]).getByText('14')).toHaveClass('tabular')
+    expect(within(table).getByRole('columnheader', { name: 'Amostras de voz' })).toBeInTheDocument()
     expect(screen.queryByText(/organização/i)).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar pessoas' }), 'raf')
