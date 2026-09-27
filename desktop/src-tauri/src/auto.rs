@@ -10,6 +10,7 @@ use eclume_detect::{Action, AppKey, DebounceConfig, DebouncedDetector, SystemSig
 use eclume_recorder::MeetingDetector;
 use tauri::{AppHandle, Manager};
 
+use crate::notify::Notice;
 use crate::state::{AppState, Origin};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -62,10 +63,7 @@ pub fn execute(app: &AppHandle, action: Action) {
         Action::Start(key) => start(app, key),
         Action::Stop => {
             match app.state::<AppState>().stop_recording() {
-                Ok(_) => crate::notify::info(
-                    "Reunião encerrada",
-                    "A gravação parou e vai para o servidor do eclume.",
-                ),
+                Ok(recording) => crate::notify::show(Notice::MeetingEnded(recording.duration_ms)),
                 Err(err) => log::error!("falha ao parar a gravação automática: {err:#}"),
             }
             crate::sync::nudge(app);
@@ -92,10 +90,7 @@ fn start(app: &AppHandle, key: AppKey) {
         })
     });
     match result {
-        Ok(()) => crate::notify::info(
-            &format!("Gravando a reunião do {}", key.label()),
-            "A gravação começou pela detecção de reunião. Para parar, use a bandeja do eclume.",
-        ),
+        Ok(()) => crate::notify::show(Notice::Recording(key)),
         Err(err) => log::error!("falha ao iniciar a gravação automática: {err:#}"),
     }
 }

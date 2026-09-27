@@ -13,16 +13,17 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager, Wry};
 
+use crate::shortcuts::Shortcuts;
 use crate::state::{AppState, AppStatus, StatusView};
 
 const TRAY_ID: &str = "eclume";
 const MENU_STATUS: &str = "status";
 const MENU_TOGGLE: &str = "toggle";
+const MENU_NOTE: &str = "note";
 const MENU_MARKER: &str = "marker";
 const MENU_IMPORT: &str = "import";
 const MENU_ASK_RECORD: &str = "ask-record";
 const MENU_ASK_IGNORE: &str = "ask-ignore";
-const MENU_SYNC: &str = "sync-now";
 const MENU_OPEN_WEB: &str = "open-web";
 const MENU_SHOW: &str = "show";
 const MENU_QUIT: &str = "quit";
@@ -35,6 +36,8 @@ struct MenuHandles {
     ask: Option<AppKey>,
     /// O menu tem o item "Adicionar marcador" (só gravando).
     recording: bool,
+    /// Os atalhos mostrados como acelerador.
+    shortcuts: Shortcuts,
 }
 
 struct TrayHandles {
@@ -47,104 +50,119 @@ pub fn is_visible(app: &AppHandle) -> bool {
     app.try_state::<TrayHandles>().is_some()
 }
 
+/// Uma linha do menu da bandeja.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MenuLine {
+    Item {
+        id: &'static str,
+        label: String,
+        enabled: bool,
+        /// A combinação mostrada ao lado do item (o atalho global que faz o mesmo).
+        accelerator: Option<String>,
+    },
+    Separator,
+}
+
+fn item(id: &'static str, label: impl Into<String>, accelerator: Option<&str>) -> MenuLine {
+    MenuLine::Item {
+        id,
+        label: label.into(),
+        enabled: true,
+        accelerator: accelerator.map(str::to_string),
+    }
+}
+
+/// As linhas do menu, como o frame "Tray menu" do DS: a linha de status, gravar, nova nota,
+/// marcador (só gravando), importar, abrir o eclume, abrir a biblioteca na web e sair. A
+/// pergunta de reunião detectada entra como dois itens logo abaixo do status.
+pub fn menu_lines(ask: Option<AppKey>, recording: bool, shortcuts: &Shortcuts) -> Vec<MenuLine> {
+    let mut lines = vec![MenuLine::Item {
+        id: MENU_STATUS,
+        label: AppStatus::Idle.label().into(),
+        enabled: false,
+        accelerator: None,
+    }];
+    if let Some(key) = ask {
+        lines.push(MenuLine::Separator);
+        lines.push(item(
+            MENU_ASK_RECORD,
+            format!("Gravar a reunião do {}", key.label()),
+            None,
+        ));
+        lines.push(item(MENU_ASK_IGNORE, "Agora não", None));
+    }
+    lines.push(MenuLine::Separator);
+    let status = if recording {
+        AppStatus::Recording
+    } else {
+        AppStatus::Idle
+    };
+    lines.push(item(
+        MENU_TOGGLE,
+        toggle_label(status),
+        Some(&shortcuts.record),
+    ));
+    lines.push(item(MENU_NOTE, "Nova nota", Some(&shortcuts.note)));
+    if recording {
+        lines.push(item(
+            MENU_MARKER,
+            "Adicionar marcador",
+            Some(&shortcuts.marker),
+        ));
+    }
+    lines.push(item(MENU_IMPORT, "Importar arquivo…", None));
+    lines.push(MenuLine::Separator);
+    lines.push(item(MENU_SHOW, "Abrir o eclume", None));
+    lines.push(item(MENU_OPEN_WEB, "Abrir a biblioteca na web", None));
+    lines.push(MenuLine::Separator);
+    lines.push(item(MENU_QUIT, "Sair", Some("CmdOrCtrl+Q")));
+    lines
+}
+
 fn build_menu(
     app: &AppHandle,
     ask: Option<AppKey>,
     recording: bool,
+    shortcuts: &Shortcuts,
 ) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
-    let status = MenuItem::with_id(
-        app,
-        MENU_STATUS,
-        AppStatus::Idle.label(),
-        false,
-        None::<&str>,
-    )?;
-    let toggle = MenuItem::with_id(
-        app,
-        MENU_TOGGLE,
-        toggle_label(AppStatus::Idle),
-        true,
-        None::<&str>,
-    )?;
-    let menu = Menu::with_items(app, &[&status])?;
-    if let Some(key) = ask {
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
-        menu.append(&MenuItem::with_id(
-            app,
-            MENU_ASK_RECORD,
-            format!("Gravar a reunião do {}", key.label()),
-            true,
-            None::<&str>,
-        )?)?;
-        menu.append(&MenuItem::with_id(
-            app,
-            MENU_ASK_IGNORE,
-            "Ignorar esta reunião",
-            true,
-            None::<&str>,
-        )?)?;
+    let menu = Menu::new(app)?;
+    let mut status = None;
+    let mut toggle = None;
+    for line in menu_lines(ask, recording, shortcuts) {
+        match line {
+            MenuLine::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
+            MenuLine::Item {
+                id,
+                label,
+                enabled,
+                accelerator,
+            } => {
+                let entry = MenuItem::with_id(app, id, label, enabled, accelerator.as_deref())?;
+                menu.append(&entry)?;
+                match id {
+                    MENU_STATUS => status = Some(entry),
+                    MENU_TOGGLE => toggle = Some(entry),
+                    _ => {}
+                }
+            }
+        }
     }
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&toggle)?;
-    if recording {
-        menu.append(&MenuItem::with_id(
-            app,
-            MENU_MARKER,
-            "Adicionar marcador",
-            true,
-            None::<&str>,
-        )?)?;
-    }
-    menu.append(&MenuItem::with_id(
-        app,
-        MENU_IMPORT,
-        "Importar arquivo…",
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        MENU_SYNC,
-        "Sincronizar agora",
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        MENU_OPEN_WEB,
-        "Abrir o eclume web",
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        MENU_SHOW,
-        "Gravações e configurações",
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        MENU_QUIT,
-        "Sair",
-        true,
-        None::<&str>,
-    )?)?;
     Ok((
         menu,
         MenuHandles {
-            status,
-            toggle,
+            status: status.expect("o menu sempre tem a linha de status"),
+            toggle: toggle.expect("o menu sempre tem gravar"),
             ask,
             recording,
+            shortcuts: shortcuts.clone(),
         },
     ))
 }
 
 /// Cria o ícone e o menu da bandeja.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
-    let (menu, handles) = build_menu(app, None, false)?;
+    let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
+    let (menu, handles) = build_menu(app, None, false, &shortcuts)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(AppStatus::Idle)?)
         .tooltip(crate::APP_NAME)
@@ -185,15 +203,17 @@ fn now_ms() -> i64 {
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         MENU_TOGGLE => crate::spawn_toggle_recording(app),
+        MENU_NOTE => {
+            // Abrir o microfone pode levar segundos: fora da thread da UI.
+            let app = app.clone();
+            std::thread::spawn(move || {
+                let _ = crate::toggle_note(&app);
+            });
+        }
         MENU_MARKER => crate::add_marker(app),
         MENU_IMPORT => crate::import::pick_from_tray(app),
         MENU_ASK_RECORD => crate::auto::answer(app, true),
         MENU_ASK_IGNORE => crate::auto::answer(app, false),
-        MENU_SYNC => {
-            if let Err(err) = crate::sync::sync_now(app) {
-                log::error!("{err:#}");
-            }
-        }
         MENU_OPEN_WEB => {
             if let Err(err) = crate::open_web(app, &app.state::<AppState>()) {
                 log::error!("{err:#}");
@@ -233,9 +253,10 @@ pub fn refresh(app: &AppHandle) {
     let line = status_line(&view, now);
     let ask = view.pending_ask.map(|a| a.app);
     let recording = view.status == AppStatus::Recording;
+    let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
     let result = (|| -> tauri::Result<()> {
-        if menu.ask != ask || menu.recording != recording {
-            let (next, next_handles) = build_menu(app, ask, recording)?;
+        if menu.ask != ask || menu.recording != recording || menu.shortcuts != shortcuts {
+            let (next, next_handles) = build_menu(app, ask, recording, &shortcuts)?;
             handles.tray.set_menu(Some(next))?;
             *menu = next_handles;
         }
@@ -407,6 +428,68 @@ mod tests {
         meeting.recording_started_at = Some(1_000);
         assert_eq!(note_title(&meeting, 43_500), None);
         assert_eq!(note_title(&view(AppStatus::Idle, 0), 43_500), None);
+    }
+
+    fn labels(lines: &[MenuLine]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| match line {
+                MenuLine::Separator => "—".into(),
+                MenuLine::Item {
+                    label, accelerator, ..
+                } => match accelerator {
+                    Some(keys) => format!("{label} [{keys}]"),
+                    None => label.clone(),
+                },
+            })
+            .collect()
+    }
+
+    #[test]
+    fn menu_da_bandeja_como_o_ds() {
+        let shortcuts = Shortcuts {
+            record: "Ctrl+Alt+R".into(),
+            note: "Ctrl+Alt+N".into(),
+            marker: "Ctrl+Alt+M".into(),
+        };
+        assert_eq!(
+            labels(&menu_lines(None, false, &shortcuts)),
+            [
+                "Ocioso",
+                "—",
+                "Iniciar gravação [Ctrl+Alt+R]",
+                "Nova nota [Ctrl+Alt+N]",
+                "Importar arquivo…",
+                "—",
+                "Abrir o eclume",
+                "Abrir a biblioteca na web",
+                "—",
+                "Sair [CmdOrCtrl+Q]",
+            ]
+        );
+        let recording = menu_lines(Some(AppKey::Zoom), true, &shortcuts);
+        assert_eq!(
+            labels(&recording)[..8],
+            [
+                "Ocioso",
+                "—",
+                "Gravar a reunião do Zoom",
+                "Agora não",
+                "—",
+                "Parar gravação [Ctrl+Alt+R]",
+                "Nova nota [Ctrl+Alt+N]",
+                "Adicionar marcador [Ctrl+Alt+M]",
+            ]
+        );
+        assert_eq!(
+            recording[0],
+            MenuLine::Item {
+                id: MENU_STATUS,
+                label: "Ocioso".into(),
+                enabled: false,
+                accelerator: None
+            }
+        );
     }
 
     #[test]
