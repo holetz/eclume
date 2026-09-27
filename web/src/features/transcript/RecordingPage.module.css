@@ -127,3 +127,36 @@
 .seek:focus-visible {
   opacity: 0.35;
 }
+
+.summary {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.spacer {
+  margin-left: auto;
+}
+
+.doc {
+  margin-top: var(--space-2);
+}
+
+.docState {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+.docPending {
+  font-size: 12px;
+  color: var(--color-accent-ink);
+}
+
+.dialogStack {
+  display: grid;
+  gap: var(--space-3);
+}
