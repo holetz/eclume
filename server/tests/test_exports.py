@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
+from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from docx import Document
 
 from eclume_server.agents.prompting import hms
 from eclume_server_testing.api import audio_bytes, upload_file
@@ -94,6 +96,51 @@ def test_md_do_resumo_atual(owner: dict[str, Any], services: Services):
     assert md.headers["content-type"].startswith("text/markdown")
     assert md.text == f"# {TITLE}\n\n18/09/2026 11:00 · 1:1\n\n## Pontos\n\n- Um\n"
     assert md.headers["content-disposition"].endswith('.md"')
+
+
+def _docx(api: Api, recording_id: str) -> Any:  # noqa: ANN401 — documento do python-docx
+    response = _export(api, recording_id, "docx")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert response.headers["content-disposition"].endswith('.docx"')
+    assert response.content[:2] == b"PK"
+    return Document(BytesIO(response.content))
+
+
+def test_docx_com_resumo_e_transcricao(owner: dict[str, Any], services: Services):
+    api: Api = owner["api"]
+    recording_id = _recording(owner, services)
+    summary = "## Decisões\n\n- **Três turmas** de 12 gestores\n- [ ] Enviar a lista\n\n1. Primeiro *encontro*\n\nTexto livre."
+    edited = api.put(f"/api/v1/recordings/{recording_id}/summary", json={"content_md": summary, "base_version": 1})
+    assert edited.status_code == 200, edited.text
+    doc = _docx(api, recording_id)
+    paragraphs = [(p.style.name, p.text) for p in doc.paragraphs]
+    assert paragraphs[0] == ("Title", TITLE)
+    assert paragraphs[1][1].startswith("Data: 18/09/2026 11:00 · Duração: ")
+    start = paragraphs.index(("Heading 1", "Resumo"))
+    assert paragraphs[start + 1 : start + 6] == [
+        ("Heading 2", "Decisões"),
+        ("List Bullet", "Três turmas de 12 gestores"),
+        ("List Bullet", "☐ Enviar a lista"),
+        ("List Number", "Primeiro encontro"),
+        ("Normal", "Texto livre."),
+    ]
+    bullet = doc.paragraphs[start + 2]
+    assert [(run.text, bool(run.bold)) for run in bullet.runs] == [("Três turmas", True), (" de 12 gestores", False)]
+    assert [run.italic for run in doc.paragraphs[start + 4].runs] == [None, True]
+    speech = paragraphs[paragraphs.index(("Heading 1", "Transcrição")) + 1 :]
+    assert len(speech) == len(_segments())
+    first = doc.paragraphs[paragraphs.index(("Heading 1", "Transcrição")) + 1]
+    assert first.runs[0].bold is True
+    assert first.runs[0].text == f"Locutor {_segments()[0]['speaker_id'][1:]}"
+
+
+def test_docx_sem_resumo_so_com_a_transcricao(owner: dict[str, Any], services: Services):
+    doc = _docx(owner["api"], _recording(owner, services, summary=False))
+    headings = [p.text for p in doc.paragraphs if p.style.name.startswith("Heading")]
+    assert headings == ["Transcrição"]
 
 
 def test_escopos_e_isolamento(

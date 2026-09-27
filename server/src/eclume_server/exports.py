@@ -1,4 +1,4 @@
-"""Exportação da gravação: transcrição em TXT e SRT e resumo em MD.
+"""Exportação da gravação: transcrição em TXT e SRT, resumo em MD, e os dois em DOCX.
 
 Os nomes dos locutores são os da transcrição (a pessoa ligada ou o rótulo); a data sai no horário
 de Brasília. Contrato em docs/standards/api/contrato-v1.md.
@@ -10,8 +10,10 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
+from docx import Document
 from sqlalchemy import select
 
 from eclume_server.agents.prompting import hms
@@ -23,6 +25,8 @@ from eclume_server.transcripts import load_transcript
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from docx.document import Document as DocxDocument
+    from docx.text.paragraph import Paragraph
     from sqlalchemy.ext.asyncio import AsyncConnection
 
 # O Brasil não tem horário de verão desde 2019: Brasília é UTC-3 o ano todo.
@@ -133,4 +137,69 @@ def render_md(export: Export) -> str:
     return f"# {export.title}\n\n{subtitle}\n\n{export.summary_md.strip()}\n"
 
 
-RENDERERS: dict[str, Any] = {"txt": render_txt, "srt": render_srt, "md": render_md}
+# --- DOCX -----------------------------------------------------------------------------------------
+
+_HEADING = re.compile(r"^(#{1,3})\s+(.*)$")
+_BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
+_NUMBERED = re.compile(r"^\s*\d+[.)]\s+(.*)$")
+_CHECKBOX = re.compile(r"^\[( |x|X)\]\s+")
+_INLINE = re.compile(r"(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)")
+
+
+def _runs(paragraph: Paragraph, text: str) -> None:
+    """`**negrito**` e `*itálico*` viram runs; o resto é texto."""
+    for part in _INLINE.split(text):
+        if part.startswith("**") and part.endswith("**") and len(part) > 4:  # noqa: PLR2004 — os dois marcadores
+            paragraph.add_run(part[2:-2]).bold = True
+        elif part.startswith("*") and part.endswith("*") and len(part) > 2:  # noqa: PLR2004
+            paragraph.add_run(part[1:-1]).italic = True
+        elif part:
+            paragraph.add_run(part)
+
+
+def _markdown(doc: DocxDocument, markdown: str) -> None:
+    """Um subconjunto do Markdown: `#` a `###`, listas, caixas de seleção, negrito, itálico e parágrafos."""
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            _runs(doc.add_paragraph(), " ".join(pending))
+            pending.clear()
+
+    for raw in markdown.splitlines():
+        line = raw.strip()
+        heading, bullet, numbered = _HEADING.match(line), _BULLET.match(raw), _NUMBERED.match(raw)
+        if not line:
+            flush()
+        elif heading:
+            flush()
+            doc.add_heading(heading.group(2).strip(), level=len(heading.group(1)))
+        elif bullet or numbered:
+            flush()
+            item = (bullet or numbered).group(1)
+            item = _CHECKBOX.sub(lambda m: "☑ " if m.group(1).strip() else "☐ ", item)
+            _runs(doc.add_paragraph(style="List Bullet" if bullet else "List Number"), item)
+        else:
+            pending.append(line)
+    flush()
+
+
+def render_docx(export: Export) -> bytes:
+    """Título, data/duração/participantes, o resumo (se houver) e a transcrição, um parágrafo por fala."""
+    doc = Document()
+    doc.add_heading(export.title, level=0)
+    doc.add_paragraph(" · ".join(export.meta()))
+    if export.summary_md:
+        doc.add_heading("Resumo", level=1)
+        _markdown(doc, export.summary_md)
+    doc.add_heading("Transcrição", level=1)
+    for line in export.lines:
+        paragraph = doc.add_paragraph()
+        paragraph.add_run(line.speaker).bold = True
+        paragraph.add_run(f" [{hms(line.start_ms)}]: {line.text}")
+    buffer = BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+RENDERERS: dict[str, Any] = {"txt": render_txt, "srt": render_srt, "md": render_md, "docx": render_docx}
