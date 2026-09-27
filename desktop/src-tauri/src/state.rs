@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
-use eclume_detect::{Action, AppKey, AutoRecorder, Policy, Recording};
+use eclume_detect::{default_policy, Action, AppKey, AutoRecorder, Policy, Recording};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
 use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
@@ -160,6 +160,16 @@ pub struct AppPolicyView {
     pub app: AppKey,
     pub label: &'static str,
     pub policy: Policy,
+    /// A política de fábrica, para "Restaurar padrões".
+    pub default_policy: Policy,
+}
+
+/// As gravações que ainda ocupam este computador, para a aba Armazenamento.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StorageInfo {
+    pub dir: PathBuf,
+    pub recordings: u32,
+    pub bytes: u64,
 }
 
 /// Um atalho global, como a aba Áudio o mostra.
@@ -673,6 +683,36 @@ impl AppState {
             .ok_or_else(|| anyhow!("importação {id} sumiu da fila"))
     }
 
+    /// A pasta das gravações.
+    pub fn data_dir(&self) -> &Path {
+        &self.recorder.dir
+    }
+
+    /// Quantas gravações (e quantos bytes) ainda estão na pasta local; os `.part` de uma
+    /// conversão em curso não contam.
+    pub fn storage_info(&self) -> Result<StorageInfo> {
+        let mut info = StorageInfo {
+            dir: self.recorder.dir.clone(),
+            recordings: 0,
+            bytes: 0,
+        };
+        let entries = match std::fs::read_dir(&self.recorder.dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(info),
+            Err(err) => return Err(err.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let meta = entry.metadata()?;
+            let partial = entry.path().extension().is_some_and(|e| e == "part");
+            if meta.is_file() && !partial {
+                info.recordings += 1;
+                info.bytes += meta.len();
+            }
+        }
+        Ok(info)
+    }
+
     pub fn recordings(&self, limit: u32) -> Result<Vec<QueuedRecording>> {
         self.lock_queue()?.list(limit)
     }
@@ -696,6 +736,7 @@ impl AppState {
                     app,
                     label: app.label(),
                     policy: config.detection.policy(app),
+                    default_policy: default_policy(app),
                 })
                 .collect(),
             retention_days: config.retention_days,
@@ -1241,6 +1282,32 @@ mod tests {
         assert!(state.begin_import().is_ok());
         assert!(state.recordings(10).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn armazenamento_conta_as_gravacoes_da_pasta_local() {
+        let (state, dir) = state("armazenamento");
+        let vazio = state.storage_info().unwrap();
+        assert_eq!((vazio.recordings, vazio.bytes), (0, 0));
+        assert_eq!(vazio.dir, dir.join("gravacoes"));
+        std::fs::create_dir_all(state.data_dir()).unwrap();
+        std::fs::write(state.data_dir().join("a.ogg"), [0u8; 100]).unwrap();
+        std::fs::write(state.data_dir().join("b.avi"), [0u8; 50]).unwrap();
+        std::fs::write(state.data_dir().join("c.ogg.part"), [0u8; 999]).unwrap();
+        let info = state.storage_info().unwrap();
+        assert_eq!((info.recordings, info.bytes), (2, 150));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn configuracoes_trazem_a_politica_de_fabrica() {
+        let (state, _dir) = state("fabrica");
+        let apps = state.settings().unwrap().apps;
+        assert_eq!(apps.len(), 7);
+        let outro = apps.iter().find(|a| a.app == AppKey::Outro).unwrap();
+        assert_eq!(outro.default_policy, Policy::Ignore);
+        let teams = apps.iter().find(|a| a.app == AppKey::Teams).unwrap();
+        assert_eq!(teams.default_policy, Policy::Ask);
     }
 
     #[test]

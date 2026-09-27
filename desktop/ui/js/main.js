@@ -4,6 +4,7 @@ import { invoke, listen } from "./tauri.js";
 import { preencherIcones } from "./icones.js";
 import * as principal from "./vistas/principal.js";
 import * as importar from "./vistas/importar.js";
+import * as configuracoes from "./vistas/configuracoes.js";
 
 /** As vistas registradas: nome → { entrar?(params), sair?(), atualizar?(estado) }. */
 const vistas = new Map();
@@ -66,6 +67,7 @@ function aoTeclar(evento) {
 
 registrar("principal", principal);
 registrar("importar", importar);
+registrar("configuracoes", configuracoes);
 
 const temaEscuro = window.matchMedia("(prefers-color-scheme: dark)");
 aplicarTema(temaEscuro.matches);

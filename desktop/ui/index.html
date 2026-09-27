@@ -141,5 +141,115 @@
         </div>
       </div>
     </section>
+
+    <section class="tray tray-window" data-vista="configuracoes" aria-label="Configurações" hidden>
+      <div class="tray-section tray-section-tabs">
+        <div class="row">
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="config-voltar"
+            data-icone="voltar" aria-label="Voltar"></button>
+          <h4 class="flush">Configurações</h4>
+        </div>
+        <div class="tabs tabs-flush" role="tablist">
+          <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="true">Reuniões</button>
+          <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
+          <button type="button" class="tab" role="tab" data-aba="servidor" aria-selected="false">Servidor</button>
+        </div>
+      </div>
+
+      <div class="tray-section" id="config-aviso-secao">
+        <div class="alert" id="config-aviso" role="status" hidden>
+          <span id="config-aviso-texto"></span>
+        </div>
+      </div>
+
+      <div data-painel="reunioes">
+        <div class="tray-section">
+          <label class="switch"><input type="checkbox" id="detectar" /><span class="track"></span>Detectar reuniões</label>
+          <span class="text-muted small"
+            >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
+          >
+        </div>
+        <div class="tray-section tray-section-list">
+          <div class="row row-between">
+            <span class="kicker">Quando uma reunião começa no</span>
+            <a href="#" class="small" id="restaurar-padroes">Restaurar padrões</a>
+          </div>
+          <div class="list" id="apps"></div>
+          <span class="text-muted small"
+            >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
+            parar.</span
+          >
+        </div>
+      </div>
+
+      <div data-painel="armazenamento" hidden>
+        <div class="tray-section">
+          <span class="kicker">Depois que o servidor confirma uma gravação</span>
+          <label class="choice"
+            ><input type="radio" name="retencao" value="apagar" /><span class="dot"></span
+            ><strong>Apagar a cópia local</strong><small>Libera espaço na hora</small></label
+          >
+          <label class="choice"
+            ><input type="radio" name="retencao" value="dias" /><span class="dot"></span
+            ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small></label
+          >
+          <div class="row row-indent">
+            <input class="input mono input-dias" id="retencao-dias" type="number" min="1" max="3650"
+              aria-label="Dias" />
+            <span class="text-muted small">dias</span>
+          </div>
+          <label class="choice"
+            ><input type="radio" name="retencao" value="sempre" /><span class="dot"></span
+            ><strong>Manter para sempre</strong><small>Nada é apagado deste computador</small></label
+          >
+          <span class="text-muted small">Gravações ainda não enviadas nunca são apagadas.</span>
+        </div>
+        <div class="tray-section">
+          <div class="field">
+            <span class="field-label">Pasta local</span>
+            <div class="code-block">
+              <span id="pasta-local"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="mostrar-pasta">Mostrar</button>
+            </div>
+          </div>
+          <div class="row row-between">
+            <span class="text-muted small" id="espaco-usado"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="tentar-de-novo">Tentar de novo as falhas</button>
+          </div>
+        </div>
+      </div>
+
+      <div data-painel="servidor" hidden>
+        <div class="tray-section">
+          <div class="field">
+            <label for="servidor-endereco">Endereço do servidor</label>
+            <input class="input mono" id="servidor-endereco" />
+          </div>
+          <div class="field">
+            <label for="servidor-token">Token pessoal</label>
+            <input class="input mono" id="servidor-token" type="password" autocomplete="off"
+              placeholder="eclp_…" />
+            <span class="text-muted tiny" id="servidor-token-estado"></span>
+          </div>
+          <details class="disclosure">
+            <summary>Avançado<span class="text-muted">Para servidores com API separada ou certificado próprio</span></summary>
+            <div class="stack">
+              <div class="field">
+                <label for="servidor-api">Endereço da API</label>
+                <input class="input mono" id="servidor-api" placeholder="O mesmo do servidor" />
+              </div>
+              <div class="field">
+                <label for="servidor-ca">Autoridade certificadora extra</label>
+                <input class="input mono" id="servidor-ca" placeholder="Caminho de um arquivo PEM" />
+              </div>
+            </div>
+          </details>
+          <div class="row">
+            <button type="button" class="btn btn-primary" id="servidor-salvar">Salvar</button>
+            <button type="button" class="btn btn-secondary" id="servidor-esquecer">Esquecer o token</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </body>
 </html>

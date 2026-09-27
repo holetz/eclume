@@ -5,7 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::import::ImportPreview;
 
-use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView};
+use crate::state::{AppState, NoteMeter, SettingsInput, SettingsView, StatusView, StorageInfo};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -133,6 +133,28 @@ pub fn save_settings(
 #[tauri::command]
 pub fn answer_meeting(app: AppHandle, record: bool) {
     crate::auto::answer(&app, record);
+}
+
+/// Quantas gravações e quanto espaço ainda estão neste computador.
+#[tauri::command]
+pub fn storage_info(state: State<'_, AppState>) -> CommandResult<StorageInfo> {
+    to_js(state.storage_info())
+}
+
+/// "Mostrar": abre a pasta das gravações no gerenciador de arquivos.
+#[tauri::command]
+pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = state.data_dir();
+    to_js(
+        std::fs::create_dir_all(dir)
+            .map_err(anyhow::Error::from)
+            .and_then(|()| {
+                app.opener()
+                    .open_path(dir.to_string_lossy(), None::<&str>)
+                    .map_err(anyhow::Error::from)
+            }),
+    )
 }
 
 #[tauri::command]

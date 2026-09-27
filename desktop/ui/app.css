@@ -84,3 +84,44 @@
 .flush {
   margin: 0;
 }
+
+/* O cabeçalho das configurações cola nas abas, como no frame "Settings". */
+.tray-section-tabs {
+  padding-bottom: 0;
+}
+
+.tabs-flush {
+  border-bottom: 0;
+}
+
+.tray-section-list {
+  gap: 0;
+}
+
+.tray-section-list > .row-between {
+  padding-bottom: var(--space-2);
+}
+
+.tray-section-list > .text-muted {
+  padding-top: var(--space-3);
+}
+
+.row-indent {
+  padding-left: 32px;
+}
+
+.input-dias {
+  width: 88px;
+}
+
+/* A seção do aviso só ocupa espaço quando há aviso. */
+#config-aviso-secao:has(#config-aviso[hidden]) {
+  display: none;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}

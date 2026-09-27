@@ -218,6 +218,8 @@ pub fn run() {
             commands::save_settings,
             commands::answer_meeting,
             commands::sync_now,
+            commands::storage_info,
+            commands::open_data_dir,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");

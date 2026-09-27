@@ -71,7 +71,7 @@
           ["slack", "Slack", "ask"],
           ["navegador", "navegador", "ask"],
           ["outro", "outro app", "ignore"],
-        ].map(([app, label, policy]) => ({ app, label, policy })),
+        ].map(([app, label, policy]) => ({ app, label, policy, default_policy: app === "outro" ? "ignore" : "ask" })),
         retention_days: 7,
         pat_source: "keyring",
         shortcuts: [
@@ -81,6 +81,7 @@
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
       },
       marcadores: [],
+      armazenamento: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
       importacao: {
         escolhido: "/home/ana/kickoff-guion.m4a",
         arquivos: {
@@ -266,14 +267,24 @@
       return marcador;
     },
     save_settings(e, { input }) {
+      if (!/^https?:\/\/\S+$/.test(input.web_url)) throw "endereço inválido: use http:// ou https:// seguido do host";
+      if (input.retention_days != null && input.retention_days > 3650) throw "retenção acima de 3650 dias";
+      e.ultimaEntrada = input;
       e.settings = {
         ...e.settings,
+        web_url: input.web_url,
+        api_url: input.api_url ?? null,
+        ca_path: input.ca_path ?? null,
         detection_enabled: input.detection_enabled,
         retention_days: input.retention_days,
+        pat_source: input.clear_pat ? null : input.pat ? "keyring" : e.settings.pat_source,
         apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
       };
       return e.settings;
     },
+    storage_info: (e) => e.armazenamento,
+    open_data_dir: () => null,
+    sync_now: () => null,
   };
 
   window.__mock = mock;
