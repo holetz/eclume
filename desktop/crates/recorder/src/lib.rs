@@ -8,6 +8,7 @@ pub mod mix;
 pub mod queue;
 pub mod session;
 pub mod source;
+pub mod vad;
 
 pub use eclume_audio_capture::AudioSource;
 pub use encode::OggOpusWriter;
@@ -18,3 +19,4 @@ pub use queue::{
     RecordedAtSource, Source, Status, MAX_MARKER_NOTE,
 };
 pub use session::{ActiveRecording, RecorderConfig};
+pub use vad::{SilenceDetector, VadEvent, METER_BARS};
