@@ -1,0 +1,20 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000e02",
+  "kind": "agenda_type",
+  "status": "done",
+  "items": [
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000201",
+      "recording_title": "Conversa com a Ana",
+      "detected": true,
+      "detected_type_name": "Mentoria",
+      "confidence": 0.82,
+      "title": "Mentoria · Próximos passos na carreira",
+      "tags": [
+        "mentoria"
+      ],
+      "summary_md": "## Temas\n\n- Próximos passos na carreira.\n\n## Combinados\n\n- Ana revisa o plano até sexta."
+    }
+  ],
+  "error": null
+}

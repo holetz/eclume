@@ -25,6 +25,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision
+from eclume_server.previews import run_preview
 from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
@@ -180,6 +181,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
             func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
             func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+            func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),

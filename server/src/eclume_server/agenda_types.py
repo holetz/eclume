@@ -93,7 +93,7 @@ def default_agenda_type_json(row: Row) -> dict[str, Any]:
     return {**agenda_type_json(row), "include_for_new_users": row["include_for_new_users"]}
 
 
-def create_values(body: AgendaTypeCreate) -> dict[str, Any]:
+def create_values(body: AgendaTypeDraft) -> dict[str, Any]:
     """Os valores de um tipo novo, com as tags sem repetição (`position` resolvido por quem insere)."""
     values = body.model_dump()
     values["default_tags"] = list(dict.fromkeys(values["default_tags"]))
@@ -152,7 +152,7 @@ def render_title(pattern: str, values: dict[str, str]) -> str:
     return "".join(kept)
 
 
-async def _title_values(conn: AsyncConnection, recording: Row, agenda_type: Row) -> dict[str, str]:
+async def title_values(conn: AsyncConnection, recording: Row, agenda_type: Row | dict[str, Any]) -> dict[str, str]:
     """Os marcadores do padrão: `{assunto}` é o título automático, e cada campo, o valor dele."""
     fv = t.field_values.c
     rows = (
@@ -196,7 +196,7 @@ async def apply_type(conn: AsyncConnection, recording: Row, agenda_type: Row | N
             ).scalars()
         )
         if agenda_type["title_pattern"] and "title" not in locked:
-            title = render_title(agenda_type["title_pattern"], await _title_values(conn, recording, agenda_type))
+            title = render_title(agenda_type["title_pattern"], await title_values(conn, recording, agenda_type))
             if title:
                 changes["title"] = title
         if agenda_type["default_tags"] and "tags" not in locked:

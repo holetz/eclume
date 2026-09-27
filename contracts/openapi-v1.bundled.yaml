@@ -53,6 +53,8 @@ tags:
 - name: fields
   description: Campos do usuário (título e tags embutidos, mais os próprios) e as regras com que o agente
     os preenche.
+- name: previews
+  description: Resultado de testar a regra de um campo ou um tipo de agenda em rascunho.
 - name: summaries
   description: Resumos gerados por agente com as instruções de um tipo de agenda.
 - name: admin
@@ -1399,6 +1401,46 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+  /api/v1/agenda-types/preview:
+    post:
+      tags:
+      - agenda-types
+      operationId: previewAgendaType
+      summary: Pré-visualizar um tipo de agenda numa gravação
+      description: 'Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de
+        mesmo nome,
+
+        o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaTypePreviewRequest'
+            examples:
+              pedido:
+                $ref: '#/components/examples/AgendaTypePreviewRequest'
+      responses:
+        '202':
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/agenda-types/{agenda_type_id}:
     parameters:
     - $ref: '#/components/parameters/AgendaTypeId'
@@ -1546,6 +1588,46 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+  /api/v1/fields/preview:
+    post:
+      tags:
+      - fields
+      operationId: previewField
+      summary: Testar a regra de um campo
+      description: 'Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas,
+        ou as 3
+
+        mais recentes) com o provider de `fields`, sem gravar nada.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldPreviewRequest'
+            examples:
+              pedido:
+                $ref: '#/components/examples/FieldPreviewRequest'
+      responses:
+        '202':
+          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/fields/{field_id}:
     parameters:
     - $ref: '#/components/parameters/FieldId'
@@ -1632,6 +1714,39 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/v1/previews/{preview_id}:
+    parameters:
+    - $ref: '#/components/parameters/PreviewId'
+    get:
+      tags:
+      - previews
+      operationId: getPreview
+      summary: Uma pré-visualização
+      description: 'Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: O estado e, pronta, os resultados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+              examples:
+                campo:
+                  $ref: '#/components/examples/PreviewFieldRule'
+                tipo:
+                  $ref: '#/components/examples/PreviewAgendaType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/people:
     get:
       tags:
@@ -2713,6 +2828,13 @@ components:
         format: uuid
     FieldId:
       name: field_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PreviewId:
+      name: preview_id
       in: path
       required: true
       schema:
@@ -4731,6 +4853,132 @@ components:
       properties:
         value:
           $ref: '#/components/schemas/FieldValue'
+    FieldPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - field
+      properties:
+        field:
+          $ref: '#/components/schemas/FieldDraft'
+        recording_ids:
+          description: Gravações transcritas do usuário; sem elas, as 3 mais recentes.
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uuid
+    AgendaTypePreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - agenda_type
+      - recording_id
+      properties:
+        agenda_type:
+          $ref: '#/components/schemas/AgendaTypeDraft'
+        recording_id:
+          description: Uma gravação transcrita do usuário.
+          type: string
+          format: uuid
+    FieldPreviewItem:
+      type: object
+      required:
+      - recording_id
+      - recording_title
+      - value
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        value:
+          $ref: '#/components/schemas/FieldValue'
+    AgendaTypePreviewItem:
+      type: object
+      required:
+      - recording_id
+      - recording_title
+      - detected
+      - detected_type_name
+      - confidence
+      - title
+      - tags
+      - summary_md
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        recording_title:
+          type: string
+        detected:
+          description: A detecção escolheu o rascunho.
+          type: boolean
+        detected_type_name:
+          description: O tipo que a detecção escolheu (o rascunho ou um dos salvos).
+          type: string
+        confidence:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        title:
+          description: O título que o rascunho aplicaria.
+          type: string
+        tags:
+          description: As tags da gravação com as tags padrão do rascunho.
+          type: array
+          items:
+            type: string
+        summary_md:
+          description: O resumo com as instruções do rascunho.
+          type: string
+    Preview:
+      type: object
+      required:
+      - id
+      - kind
+      - status
+      - items
+      - error
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - field_rule
+          - agenda_type
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - done
+          - failed
+        items:
+          description: 'Com `status: done`: um item por gravação testada.'
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/FieldPreviewItem'
+            - $ref: '#/components/schemas/AgendaTypePreviewItem'
+        error:
+          description: 'Com `status: failed`; `no_provider` quando a finalidade não tem provider.'
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
     AgentProviderKind:
       type: string
       enum:
@@ -7266,6 +7514,77 @@ components:
           value: null
           origin: null
           updated_at: null
+    FieldPreviewRequest:
+      summary: Testar a regra do campo Cliente
+      value:
+        field:
+          name: Cliente
+          kind: choice
+          options:
+          - Serra Azul
+          - Vale Verde
+          instructions: A empresa cliente de que a conversa trata; nenhuma, se for interna.
+          auto_fill: true
+        recording_ids:
+        - 01928f3a-1c00-7a00-8000-000000000201
+    AgendaTypePreviewRequest:
+      summary: Pré-visualizar o tipo Mentoria numa gravação
+      value:
+        agenda_type:
+          name: Mentoria
+          title_pattern: Mentoria · {assunto}
+          identify: Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.
+          default_tags:
+          - mentoria
+          summary_instructions: '## Temas
+
+            Um item por tema tratado.
+
+
+            ## Combinados
+
+            Um item por combinado, com prazo quando dito.'
+        recording_id: 01928f3a-1c00-7a00-8000-000000000201
+    PreviewFieldRule:
+      summary: A regra em duas gravações
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000e01
+        kind: field_rule
+        status: done
+        items:
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000201
+          recording_title: Revisão do contrato
+          value: Serra Azul
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000202
+          recording_title: Planejamento interno
+          value: null
+        error: null
+    PreviewAgendaType:
+      summary: O tipo em rascunho numa gravação
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000e02
+        kind: agenda_type
+        status: done
+        items:
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000201
+          recording_title: Conversa com a Ana
+          detected: true
+          detected_type_name: Mentoria
+          confidence: 0.82
+          title: Mentoria · Próximos passos na carreira
+          tags:
+          - mentoria
+          summary_md: '## Temas
+
+
+            - Próximos passos na carreira.
+
+
+            ## Combinados
+
+
+            - Ana revisa o plano até sexta.'
+        error: null
     PersonPage:
       summary: Diretório com três pessoas
       value:

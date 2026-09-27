@@ -11,11 +11,13 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, insert, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 
 from eclume_server.agenda_types import (
     AgendaTypeCreate,
+    AgendaTypeDraft,
     AgendaTypePatch,
     agenda_type_json,
     changes_of,
@@ -28,7 +30,9 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
+from eclume_server.previews import create_preview
 from eclume_server.problems import conflict, invalid_field, not_found
+from eclume_server.routes.previews import check_transcribed
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -70,6 +74,24 @@ async def create_agenda_type(body: AgendaTypeCreate, principal: Writer, ctx: Ctx
     except IntegrityError as exc:
         raise conflict(NAME_TAKEN) from exc
     return agenda_type_json(row)
+
+
+class AgendaTypePreviewRequest(BaseModel):
+    """Schema `AgendaTypePreviewRequest`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agenda_type: AgendaTypeDraft
+    recording_id: UUID
+
+
+@router.post("/agenda-types/preview", status_code=202)
+async def preview_agenda_type(body: AgendaTypePreviewRequest, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Mostra a detecção, o título, as tags e o resumo de um tipo em rascunho numa gravação."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await check_transcribed(conn, [body.recording_id], "recording_id")
+    request = {"agenda_type": create_values(body.agenda_type), "recording_id": str(body.recording_id)}
+    return await create_preview(ctx.queue.pool, principal.user_id, "agenda_type", request)
 
 
 @router.get("/agenda-types/{agenda_type_id}")

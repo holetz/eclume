@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, insert, select, tuple_, update
 
 from eclume_server.agenda_types import next_position
@@ -21,6 +21,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.fields import (
     FieldCreate,
+    FieldDraft,
     FieldPatch,
     check_options,
     field_json,
@@ -31,7 +32,9 @@ from eclume_server.fields import (
     validate_value,
 )
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
+from eclume_server.previews import MAX_RECORDINGS, create_preview
 from eclume_server.problems import conflict, invalid_field, not_found
+from eclume_server.routes.previews import check_transcribed
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
@@ -75,6 +78,26 @@ async def create_field(body: FieldCreate, principal: Writer, ctx: Ctx) -> dict[s
             .one()
         )
     return field_json(row)
+
+
+class FieldPreviewRequest(BaseModel):
+    """Schema `FieldPreviewRequest`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: FieldDraft
+    recording_ids: list[UUID] = Field(default_factory=list, max_length=MAX_RECORDINGS)
+
+
+@router.post("/fields/preview", status_code=202)
+async def preview_field(body: FieldPreviewRequest, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Testa a regra de um campo em rascunho em até 3 gravações transcritas, sem gravar nada."""
+    check_options(body.field.kind, body.field.options)
+    ids = list(dict.fromkeys(body.recording_ids))
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await check_transcribed(conn, ids, "recording_ids")
+    request = {"field": body.field.model_dump(), "recording_ids": [str(value) for value in ids]}
+    return await create_preview(ctx.queue.pool, principal.user_id, "field_rule", request)
 
 
 @router.get("/fields/{field_id}")
