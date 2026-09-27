@@ -149,8 +149,8 @@
   margin-top: var(--space-2);
 }
 
-/* O resumo pode abrir com um título (# Ata ...): no tamanho do h3 do DS, não no do h1. */
-.doc h1 {
+/* O resumo pode abrir com um título (# Ata ...): vira h2 (o h1 da página é o título da gravação). */
+.docTitle {
   font-size: 25px;
   margin: 0 0 var(--space-3);
 }
