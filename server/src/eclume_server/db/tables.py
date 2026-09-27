@@ -109,6 +109,7 @@ recordings = Table(
     Column("capture", JSONB),
     _uuid("agenda_type_id"),
     Column("agenda_type_origin", Text),
+    Column("subject", Text),
     _ts("created_at"),
     _ts("updated_at"),
 )

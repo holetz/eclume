@@ -153,7 +153,11 @@ def render_title(pattern: str, values: dict[str, str]) -> str:
 
 
 async def title_values(conn: AsyncConnection, recording: Row, agenda_type: Row | dict[str, Any]) -> dict[str, str]:
-    """Os marcadores do padrão: `{assunto}` é o título automático, e cada campo, o valor dele."""
+    """Os marcadores do padrão: `{assunto}` é o título automático, e cada campo, o valor dele.
+
+    Sem título automático, o assunto é o guardado antes do primeiro padrão (`subject`), nunca o
+    título já renderizado: reaplicar um padrão não aninha.
+    """
     fv = t.field_values.c
     rows = (
         await conn.execute(
@@ -163,7 +167,7 @@ async def title_values(conn: AsyncConnection, recording: Row, agenda_type: Row |
         )
     ).all()
     values = {"data": recording["recorded_at"].strftime("%d/%m/%Y"), "tipo": agenda_type["name"]}
-    subject = recording["title"]
+    subject = recording["subject"] or recording["title"]
     for key, builtin, value in rows:
         text = ", ".join(value) if isinstance(value, list) else (value or "")
         if builtin == "title":
@@ -199,6 +203,8 @@ async def apply_type(conn: AsyncConnection, recording: Row, agenda_type: Row | N
             title = render_title(agenda_type["title_pattern"], await title_values(conn, recording, agenda_type))
             if title:
                 changes["title"] = title
+                if recording["subject"] is None:
+                    changes["subject"] = recording["title"]
         if agenda_type["default_tags"] and "tags" not in locked:
             changes["tags"] = list(dict.fromkeys([*recording["tags"], *agenda_type["default_tags"]]))
     now = func.now()

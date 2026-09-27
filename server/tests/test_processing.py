@@ -235,3 +235,20 @@ def test_trocar_o_tipo_a_mao_gera_um_resumo_novo(user: Api, services: Services):
     ]
     assert "## Pedidos do cliente" in agents.calls[-1][2]
     assert _step(user.get(f"/api/v1/recordings/{recording['id']}").json(), "summary")["state"] == "done"
+
+
+def test_reaplicar_o_padrao_nao_aninha_o_titulo(user: Api, services: Services):
+    # Sem título automático, o assunto é o título de antes do primeiro padrão (o nome do arquivo).
+    title_field = next(item for item in user.get("/api/v1/fields").json()["items"] if item["builtin"] == "title")
+    user.patch(f"/api/v1/fields/{title_field['id']}", json={"auto_fill": False})
+    types = _types(user)
+    client = types["Conversa com cliente"]
+    user.patch(f"/api/v1/agenda-types/{client['id']}", json={"title_pattern": "Cliente · {assunto}"})
+    recording = _process(user, services, FakeAgents())
+    assert recording["title"] == "Reunião de equipe · reuniao"
+
+    path = f"/api/v1/recordings/{recording['id']}"
+    assert user.patch(path, json={"agenda_type_id": client["id"]}).json()["title"] == "Cliente · reuniao"
+    back = user.patch(path, json={"agenda_type_id": types["Reunião de equipe"]["id"]}).json()
+    assert back["title"] == "Reunião de equipe · reuniao"
+    run_cpu(services.settings)
