@@ -20,6 +20,8 @@ const FieldsPage = named(() => import('../features/organize/FieldsPage'), 'Field
 const HelpCenterPage = named(() => import('../features/help/HelpCenterPage'), 'HelpCenterPage')
 const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
 const McpPage = named(() => import('../features/connect/McpPage'), 'McpPage')
+const MobilePage = named(() => import('../features/connect/MobilePage'), 'MobilePage')
+const PairPage = named(() => import('../features/connect/PairPage'), 'PairPage')
 const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
 const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
 const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchPage')
@@ -40,6 +42,8 @@ export function AppRoutes() {
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
       <Route path="/cadastro" element={page(SignupPage)} />
+      {/* Quem lê o QR com a câmera comum cai aqui, sem sessão. */}
+      <Route path="/parear" element={page(PairPage)} />
       {/* O painel admin fica fora da sessão do usuário: conta, login e guarda próprios. */}
       <Route path="/admin/entrar" element={page(AdminSignInPage)} />
       <Route path="/admin/*" element={page(AdminRoutes)} />
@@ -56,6 +60,7 @@ export function AppRoutes() {
         <Route path="/config/mcp" element={page(McpPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
+        <Route path="/app-movel" element={page(MobilePage)} />
         <Route path="/ajuda" element={page(HelpCenterPage)} />
         <Route path="/ajuda/:slug" element={page(ArticlePage)} />
         <Route path="*" element={<NotFoundPage />} />

@@ -74,3 +74,53 @@
   width: 100%;
   height: auto;
 }
+
+.devices {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.devices h4 {
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mobileGrid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  max-width: 44rem;
+}
+
+@media (max-width: 36rem) {
+  .mobileGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.qrDone {
+  width: 200px;
+}
+
+.codeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pair {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pair h2 {
+  margin: 0;
+}
