@@ -1,13 +1,16 @@
 """Smoke do stack de produção do eclume, pela API pública, só com a biblioteca padrão.
 
-Prova o caminho inteiro: health, SPA, `/downloads/`, login, provider `claude-cli` padrão, upload
-multipart de um áudio, transcrição diarizada na GPU e um resumo gerado pelo `claude -p` do host.
+Prova o caminho inteiro: health, SPA, `/downloads/`, o cadastro aberto com o aviso, a sessão de
+admin (provider `claude-cli` padrão), a sessão de usuário (upload multipart de um áudio,
+transcrição diarizada na GPU e um resumo gerado pelo `claude -p` do host).
 
     ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
       | python3 deploy/smoke_prod.py --ca eclume-root.crt
 
-A senha vem do stdin (ou de `ECLUME_SMOKE_PASSWORD`). Um áudio já enviado volta como
-`deduplicated`, e o smoke confere a transcrição que ele já tem. Runbook:
+A senha vem do stdin (ou de `ECLUME_SMOKE_PASSWORD`) e serve às duas contas com o mesmo e-mail: a
+de admin e a de usuário, que a migration 008 separou com o mesmo hash. Depois de um
+`admin set-password`, a senha do admin vai em `ECLUME_SMOKE_ADMIN_PASSWORD`. Um áudio já enviado
+volta como `deduplicated`, e o smoke confere a transcrição que ele já tem. Runbook:
 docs/project/deploy-producao.md.
 """
 
@@ -36,7 +39,11 @@ FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fix
 
 
 class Api:
-    """Cliente mínimo: cookies da sessão e CSRF double-submit nos métodos mutáveis."""
+    """Cliente mínimo: cookies das sessões e CSRF double-submit nos métodos mutáveis.
+
+    As sessões de usuário e de admin convivem no mesmo pote de cookies: o de admin só viaja para
+    `/api/v1/admin`, e cada área ecoa o próprio cookie de CSRF.
+    """
 
     def __init__(self, base: str, ca: str | None) -> None:
         """Cliente para `base`, confiando em `ca` (ou nas CAs do sistema)."""
@@ -47,8 +54,9 @@ class Api:
             urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.jar)
         )
 
-    def _csrf(self) -> str | None:
-        return next((c.value for c in self.jar if c.name == "eclume_csrf"), None)
+    def _csrf(self, url: str) -> str | None:
+        name = "eclume_admin_csrf" if "/api/v1/admin/" in url else "eclume_csrf"
+        return next((c.value for c in self.jar if c.name == name), None)
 
     def raw(
         self, method: str, url: str, body: bytes | None = None, headers: dict[str, str] | None = None
@@ -56,7 +64,7 @@ class Api:
         """Requisição crua: status, headers (sem caixa: o Caddy manda `Etag`) e corpo, sem lançar em erro."""
         full = url if url.startswith("http") else self.base + url
         request = urllib.request.Request(full, data=body, method=method, headers=headers or {})  # noqa: S310 — URL do próprio stack
-        csrf = self._csrf()
+        csrf = self._csrf(full)
         if method not in {"GET", "HEAD"} and csrf:
             request.add_header("X-CSRF-Token", csrf)
         try:
@@ -107,7 +115,10 @@ def _public_checks(api: Api) -> None:
     status, headers, _ = api.raw("GET", "/downloads/latest.json")
     if status != 200 or "json" not in headers.get("Content-Type", ""):  # noqa: PLR2004
         _fail(f"/downloads/latest.json → {status} {headers.get('Content-Type')}")
-    _step("health, SPA e /downloads/latest.json ok")
+    signup = api.json("GET", "/api/v1/auth/signup")
+    if not signup["open"] or not signup["notice"]["version"]:
+        _fail(f"cadastro fechado ou sem o aviso: {signup}")
+    _step(f"health, SPA, /downloads/latest.json e cadastro aberto (aviso v{signup['notice']['version']}) ok")
 
 
 def _ensure_provider(api: Api) -> str:
@@ -122,7 +133,7 @@ def _ensure_provider(api: Api) -> str:
         {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet", "enabled": True},
         expect=(201,),
     )
-    _step("provider claude-cli cadastrado (o primeiro habilitado vira o padrão da organização)")
+    _step("provider claude-cli cadastrado (o primeiro habilitado vira o padrão da plataforma)")
     return created["id"]
 
 
@@ -213,7 +224,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", default="https://192.168.15.199:8443")
     parser.add_argument("--ca", help="CA raiz do Caddy do eclume (padrão: as CAs do sistema)")
-    parser.add_argument("--email", default="admin@example.com")
+    parser.add_argument("--email", default="admin@example.com", help="e-mail das duas contas")
+    parser.add_argument("--admin-email", help="e-mail da conta de admin (padrão: --email)")
     parser.add_argument("--audio", type=Path, default=FIXTURE)
     parser.add_argument("--timeout", type=int, default=1200, help="espera máxima da transcrição, em segundos")
     args = parser.parse_args()
@@ -223,10 +235,14 @@ def main() -> int:
 
     api = Api(args.url, args.ca)
     _public_checks(api)
+    admin_email = args.admin_email or args.email
+    admin_password = os.environ.get("ECLUME_SMOKE_ADMIN_PASSWORD") or password
+    api.json("POST", "/api/v1/admin/auth/login", {"email": admin_email, "password": admin_password}, expect=(204,))
+    _step(f"sessão de admin ok: {api.json('GET', '/api/v1/admin/me')['email']}")
+    provider_id = _ensure_provider(api)
     api.json("POST", "/api/v1/auth/login", {"email": args.email, "password": password}, expect=(200, 204))
     me = api.json("GET", "/api/v1/me")
-    _step(f"login ok: {me.get('email', args.email)}")
-    provider_id = _ensure_provider(api)
+    _step(f"sessão de usuário ok: {me['user']['email']} (aviso pendente: {me['notice_required']})")
     recording_id = _upload(api, args.audio)
     transcript = _transcript_of(api, recording_id, args.timeout)
     _summarize(api, transcript["id"], provider_id, 600)

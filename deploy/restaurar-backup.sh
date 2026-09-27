@@ -45,9 +45,9 @@ mc() {
     -e "MC_HOST_dst=http://$user:$pass@minio:9000" -v "$snapshot:/snap:ro" --entrypoint mc "$image" "$@"
 }
 psql_() { docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt "$@"; }
+# Só tabelas que existem antes e depois da migration 008 (a conta por usuário tirou `organizations`).
 count_sql="select string_agg(t || '=' || n, ' ' order by t) from (
-  select 'organizations' t, count(*) n from organizations union all
-  select 'users', count(*) from users union all
+  select 'users' t, count(*) n from users union all
   select 'recordings', count(*) from recordings union all
   select 'transcripts', count(*) from transcripts union all
   select 'summaries', count(*) from summaries) c"
