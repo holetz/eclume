@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import ColumnElement, and_, delete, exists, false, func, or_, select, tuple_, update
+from sqlalchemy import ColumnElement, and_, delete, exists, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from eclume_server.agenda_types import apply_type
@@ -20,7 +19,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
-from eclume_server.fields import mark_edited
+from eclume_server.fields import field_filters, mark_edited
 from eclume_server.pagination import Cursor, Limit, decode_cursor, encode_cursor
 from eclume_server.pipeline import current_revision
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
@@ -44,7 +43,6 @@ Writer = Annotated[Principal, Depends(requires("recordings:write"))]
 Status = Literal["uploading", "queued", "processing", "transcribed", "failed"]
 Sort = Literal["created_desc", "recorded_asc", "recorded_desc"]
 Many = Annotated[list[str] | None, Query()]
-FIELD_FILTER = r"^([0-9a-fA-F-]{36}):(.+)$"
 AUDIO_URL_TTL_SECONDS = 3600
 
 
@@ -80,43 +78,6 @@ def _person_filter(people: list[UUID]) -> ColumnElement[bool]:
         .select_from(t.speakers.join(t.transcripts, t.transcripts.c.id == t.speakers.c.transcript_id))
         .where(t.transcripts.c.recording_id == t.recordings.c.id, t.speakers.c.person_id.in_(people))
     )
-
-
-async def _field_filters(conn: AsyncConnection, raw: list[str]) -> list[ColumnElement[bool]]:
-    """Um filtro por campo (`<field_id>:<valor>`): OU entre os valores do mesmo campo.
-
-    Título e tags são embutidos e vivem na gravação; os demais, em `field_values` (texto ou escolha
-    é o valor igual; lista, um dos itens). Um campo que a conta não tem não encontra nada.
-    """
-    wanted: dict[UUID, list[str]] = {}
-    for item in raw:
-        match = re.fullmatch(FIELD_FILTER, item)
-        if match is None:
-            raise invalid_field("field", "use <field_id>:<valor>")
-        try:
-            field_id = UUID(match.group(1))
-        except ValueError as exc:
-            raise invalid_field("field", "field_id inválido") from exc
-        wanted.setdefault(field_id, []).append(match.group(2))
-    builtins = dict(
-        (await conn.execute(select(t.fields.c.id, t.fields.c.builtin).where(t.fields.c.id.in_(wanted)))).all()
-    )
-    r, fv = t.recordings.c, t.field_values.c
-    filters = []
-    for field_id, values in wanted.items():
-        if field_id not in builtins:
-            filters.append(false())
-        elif builtins[field_id] == "title":
-            filters.append(r.title.in_(values))
-        elif builtins[field_id] == "tags":
-            filters.append(r.tags.overlap(values))
-        else:
-            matches = [
-                or_(fv.value == func.to_jsonb(value), fv.value.contains(func.jsonb_build_array(value)))
-                for value in values
-            ]
-            filters.append(exists(select(1).where(fv.recording_id == r.id, fv.field_id == field_id, or_(*matches))))
-    return filters
 
 
 @dataclass(frozen=True)
@@ -185,7 +146,7 @@ async def list_recordings(
         query = query.where(position < after if descending else position > after)
     async with user_tx(ctx.engine, principal.user_id) as conn:
         if field:
-            query = query.where(and_(*await _field_filters(conn, field)))
+            query = query.where(and_(*await field_filters(conn, field)))
         rows = list((await conn.execute(query)).mappings().all())
     has_more = len(rows) > limit
     rows = rows[:limit]

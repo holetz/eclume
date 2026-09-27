@@ -119,6 +119,49 @@ def test_filtros(alice: dict[str, Any], services: Services):
     assert all(hit["rank"] == 0 and hit["highlight"] == hit["segment"]["text"] for hit in spoken)
 
 
+def test_filtro_por_campo_do_usuario(
+    alice: dict[str, Any],
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+):
+    api, first = alice["api"], alice["recording"]
+    second = transcribed(api, services.settings, recorded_at="2026-09-01T10:00:00Z", title="Segunda")
+    client = api.post("/api/v1/fields", json={"name": "Cliente", "kind": "choice", "options": ["A", "B"]}).json()
+    teams = api.post("/api/v1/fields", json={"name": "Equipes", "kind": "list"}).json()
+    base = "/api/v1/recordings"
+    assert api.put(f"{base}/{first['id']}/fields/{client['id']}", json={"value": "A"}).status_code == 200
+    assert api.put(f"{base}/{second['id']}/fields/{client['id']}", json={"value": "B"}).status_code == 200
+    assert api.put(f"{base}/{second['id']}/fields/{teams['id']}", json={"value": ["rh", "ti"]}).status_code == 200
+
+    def recordings(*field: str) -> list[str]:
+        items = api.get("/api/v1/search", params={"q": "turmas", "field": list(field)}).json()["items"]
+        return sorted({hit["transcript"]["recording_id"] for hit in items})
+
+    # OU no mesmo campo, E entre campos; lista vale por item; embutidos (título e tags) também.
+    assert recordings(f"{client['id']}:A") == [first["id"]]
+    assert recordings(f"{client['id']}:A", f"{client['id']}:B") == sorted([first["id"], second["id"]])
+    assert recordings(f"{client['id']}:A", f"{teams['id']}:ti") == []
+    assert recordings(f"{client['id']}:B", f"{teams['id']}:ti") == [second["id"]]
+    title = next(f for f in api.get("/api/v1/fields").json()["items"] if f["builtin"] == "title")
+    tags = next(f for f in api.get("/api/v1/fields").json()["items"] if f["builtin"] == "tags")
+    assert recordings(f"{title['id']}:Segunda") == [second["id"]]
+    assert recordings(f"{tags['id']}:cliente-a") == [first["id"]]
+    # Só `person` também aceita o filtro.
+    person = api.post("/api/v1/people", json={"name": "Mariana Couto"}).json()
+    api.patch(f"/api/v1/transcripts/{second['transcript_id']}/speakers/S1", json={"person_id": person["id"]})
+    spoken = api.get("/api/v1/search", params={"person": person["id"], "field": f"{client['id']}:B"}).json()["items"]
+    assert {hit["transcript"]["recording_id"] for hit in spoken} == {second["id"]}
+    assert api.get("/api/v1/search", params={"q": "turmas", "field": "sem-dois-pontos"}).status_code == 422
+
+    # O campo de outra conta não vaza: o valor dela não encontra nada aqui, e o daqui nada lá.
+    bob = as_user(make_user(name="Bob"))
+    transcribed(bob, services.settings)
+    assert bob.get("/api/v1/search", params={"q": "turmas", "field": f"{client['id']}:A"}).json()["items"] == []
+    bob_client = bob.post("/api/v1/fields", json={"name": "Cliente", "kind": "text"}).json()
+    assert recordings(f"{bob_client['id']}:A") == []
+
+
 def _matches_as(services: Services, account: Account) -> int:
     """Chaves que `eclume_segment_matches` devolve a `eclume_app` no contexto da conta."""
 
