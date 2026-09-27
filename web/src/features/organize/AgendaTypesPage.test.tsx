@@ -70,7 +70,7 @@ describe('tipos de agenda', () => {
     expect(
       within(row('Nota de voz')).getByText('Resumo: Reescreva o que foi dito como texto limpo, em parágrafos cur'),
     ).toBeInTheDocument()
-    expect(row('Reunião de equipe')).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Reunião de equipe')).getByRole('button', { name: 'Reunião de equipe' })).toHaveAttribute('aria-current', 'true')
 
     const panel = screen.getByRole('form', { name: 'Editar Reunião de equipe' })
     expect(within(panel).getByRole('textbox', { name: /^Título da gravação/ })).toHaveValue('Reunião de equipe · {assunto}')
@@ -143,7 +143,7 @@ describe('tipos de agenda', () => {
       default_tags: [],
       summary_instructions: '## Temas',
     })
-    expect(row('Mentoria')).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Mentoria')).getByRole('button', { name: 'Mentoria' })).toHaveAttribute('aria-current', 'true')
   })
 
   it('pede para descartar as alterações antes de trocar de tipo', async () => {

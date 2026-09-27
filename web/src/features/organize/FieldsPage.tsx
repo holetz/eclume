@@ -69,8 +69,13 @@ function FieldRow({ field, selected, onSelect }: { field: Field; selected: boole
   const setAutoFill = useSetAutoFill()
   const origin = field.builtin ? 'Embutido' : 'Seu campo'
   return (
-    <li className={selected ? `list-row ${styles.selected}` : 'list-row'} aria-current={selected || undefined}>
-      <button type="button" className={`list-row-title ${styles.rowButton}`} onClick={onSelect}>
+    <li className={selected ? `list-row ${styles.selected}` : 'list-row'}>
+      <button
+        type="button"
+        className={`list-row-title ${styles.rowButton}`}
+        aria-current={selected || undefined}
+        onClick={onSelect}
+      >
         {field.name}
       </button>
       <span className="list-row-sub">

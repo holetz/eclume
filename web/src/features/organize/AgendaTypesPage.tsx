@@ -77,8 +77,13 @@ export function AgendaTypesPage() {
 
 function AgendaTypeRow({ type, selected, onSelect }: { type: AgendaType; selected: boolean; onSelect: () => void }) {
   return (
-    <li className={selected ? `list-row ${styles.selected}` : 'list-row'} aria-current={selected || undefined}>
-      <button type="button" className={`list-row-title ${styles.rowButton}`} onClick={onSelect}>
+    <li className={selected ? `list-row ${styles.selected}` : 'list-row'}>
+      <button
+        type="button"
+        className={`list-row-title ${styles.rowButton}`}
+        aria-current={selected || undefined}
+        onClick={onSelect}
+      >
         {type.name}
       </button>
       <span className="list-row-sub">{summaryLabel(type.summary_instructions)}</span>

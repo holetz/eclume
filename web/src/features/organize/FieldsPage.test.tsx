@@ -58,7 +58,7 @@ describe('campos e regras', () => {
     expect(within(row('Tags')).getByText('Embutido · lista')).toBeInTheDocument()
     expect(within(row('Cliente')).getByText('Seu campo · escolha')).toBeInTheDocument()
     expect(within(row('Cliente')).getByRole('checkbox', { name: 'Automático: Cliente' })).toBeChecked()
-    expect(row('Título')).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Título')).getByRole('button', { name: 'Título' })).toHaveAttribute('aria-current', 'true')
 
     const panel = screen.getByRole('form', { name: 'Editar Título' })
     expect(within(panel).getByRole('radio', { name: 'Texto' })).toBeDisabled()
@@ -129,7 +129,7 @@ describe('campos e regras', () => {
       instructions: '',
       auto_fill: true,
     })
-    expect(row('Fase do projeto')).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Fase do projeto')).getByRole('button', { name: 'Fase do projeto' })).toHaveAttribute('aria-current', 'true')
   })
 
   it('pede para descartar as alterações antes de trocar de campo', async () => {

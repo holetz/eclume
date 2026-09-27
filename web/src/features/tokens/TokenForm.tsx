@@ -92,13 +92,12 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
         </div>
         {showIndividual && (
           <details className="disclosure">
-            <summary>
-              Escopos individuais
+            <summary>Escopos individuais</summary>
+            <div className={styles.presets}>
+              {/* Fora do summary: um botão dentro dele seria controle interativo aninhado. */}
               <HelpHint subject="os escopos individuais" title="Escopos individuais" article="criar-token">
                 Para integrações que pedem um escopo fora dos grupos, como o importador do lumea.
               </HelpHint>
-            </summary>
-            <div className={styles.presets}>
               <span className="field-hint">Combinações prontas:</span>
               {PRESETS.map((preset) => (
                 <button
