@@ -81,6 +81,14 @@ def summary_json(row: Row) -> dict[str, Any]:
 # --- criação -----------------------------------------------------------------------------------------
 
 
+async def _lock_pair(conn: AsyncConnection, transcript_id: UUID, agenda_type_id: UUID) -> None:
+    """Serializa, até o fim da transação, as gerações do par (transcrição, tipo de agenda)."""
+    await conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
+        {"pair": f"summary:{transcript_id}:{agenda_type_id}"},
+    )
+
+
 async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, tipo, provider e gatilho
     conn: AsyncConnection,
     *,
@@ -96,10 +104,7 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
     tipo entram como instantâneo. O lock do par serializa gerações simultâneas do mesmo tipo.
     """
     s = t.summaries.c
-    await conn.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
-        {"pair": f"summary:{transcript['id']}:{agenda_type['id']}"},
-    )
+    await _lock_pair(conn, transcript["id"], agenda_type["id"])
     version = (
         await conn.execute(
             select(func.coalesce(func.max(s.version), 0) + 1).where(
@@ -142,7 +147,9 @@ async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision
     """Abre o resumo automático da revisão, pelas instruções do tipo de agenda da gravação.
 
     Serve à cadeia do worker (papel de conexão) e à troca manual do tipo (sob a RLS do dono). Sem
-    tipo ou sem provider de `summaries`, a etapa `summary` sai pulada. Devolve o resumo a enfileirar.
+    tipo ou sem provider de `summaries`, a etapa `summary` sai pulada. Já existindo o automático da
+    mesma revisão e do mesmo tipo (etapa repetida, ou o tipo escolhido de novo), nada é criado.
+    Devolve o resumo a enfileirar.
     """
     recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
     transcript = (
@@ -159,6 +166,18 @@ async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision
         )
     if transcript is None or agenda_type is None:
         await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_agenda_type"})
+        return None
+    await _lock_pair(conn, transcript["id"], agenda_type["id"])
+    s = t.summaries.c
+    existing = await conn.execute(
+        select(s.id).where(
+            s.transcript_id == transcript["id"],
+            s.transcript_revision == transcript["revision"],
+            s.agenda_type_id == agenda_type["id"],
+            s.trigger == "automatic",
+        )
+    )
+    if existing.first() is not None:
         return None
     provider = await provider_for(conn, "summaries")
     if provider is None:

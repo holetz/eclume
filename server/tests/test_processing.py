@@ -252,3 +252,18 @@ def test_reaplicar_o_padrao_nao_aninha_o_titulo(user: Api, services: Services):
     back = user.patch(path, json={"agenda_type_id": types["Reunião de equipe"]["id"]}).json()
     assert back["title"] == "Reunião de equipe · reuniao"
     run_cpu(services.settings)
+
+
+def test_o_mesmo_tipo_de_novo_nao_duplica_o_resumo_automatico(user: Api, services: Services):
+    recording = _process(user, services, FakeAgents())
+    detected = recording["agenda_type"]
+    path = f"/api/v1/recordings/{recording['id']}"
+    # Confirmar o tipo detectado (vira `edited`) não gera outro resumo pelo mesmo tipo.
+    same = user.patch(path, json={"agenda_type_id": detected["id"]}).json()
+    assert same["agenda_type"]["origin"] == "edited"
+    client = _types(user)["Conversa com cliente"]
+    user.patch(path, json={"agenda_type_id": client["id"]})
+    user.patch(path, json={"agenda_type_id": client["id"]})
+    run_cpu(services.settings)
+    summaries = user.get(f"/api/v1/transcripts/{recording['transcript_id']}/summaries").json()["items"]
+    assert sorted(s["agenda_type"]["name"] for s in summaries) == ["Conversa com cliente", "Reunião de equipe"]
