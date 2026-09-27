@@ -7,11 +7,14 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 
 from eclume_server.accounts import NOTICE_TEXT, NOTICE_VERSION
 from eclume_server.app import create_app
+from eclume_server.db import tables as t
 from eclume_server_testing.api import Api, agenda_types
 from eclume_server_testing.conformance import CONFORMANCE
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -92,12 +95,26 @@ def test_cadastro_fechado_e_403(services: Services):
 
 
 def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
-    api = as_user(make_user())
-    assert api.get("/api/v1/me").json()["notice_required"] is True
-    # O aceite não bloqueia a API: o PAT do desktop e do lumea segue funcionando.
+    account = make_user()
+    api = as_user(account)
     pat = api.pat("recordings:read")
+
+    async def withdraw(conn: Any) -> None:  # noqa: ANN401
+        # A conta migrada: sem aceite, com o PAT do desktop ou do lumea de antes.
+        await conn.execute(
+            update(t.users).where(t.users.c.id == account.user_id).values(notice_version=None, notice_accepted_at=None)
+        )
+
+    run(services.sql(withdraw))
+    assert api.get("/api/v1/me").json()["notice_required"] is True
+    # A sessão só alcança /me, o aceite e o logout; o PAT segue funcionando.
+    blocked = api.get("/api/v1/recordings")
+    assert (blocked.status_code, blocked.json()["code"]) == (403, "notice_required")
+    assert api.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]}).json()["code"] == (
+        "notice_required"
+    )
     assert pat.get("/api/v1/recordings").status_code == 200
     denied = pat.post("/api/v1/me/notice", json={"notice_version": NOTICE_VERSION})
     assert (denied.status_code, denied.json()["code"]) == (403, "session_required")
@@ -110,3 +127,4 @@ def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
     assert me["notice_required"] is False
     assert me["user"]["notice_version"] == NOTICE_VERSION
     assert pat.get("/api/v1/me").json()["notice_required"] is False
+    assert api.get("/api/v1/recordings").status_code == 200

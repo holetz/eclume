@@ -194,6 +194,15 @@ async def _probe(name: str, check: Callable[[], Awaitable[str | None]], slow_s: 
     return {"name": name, "status": status, "detail": detail, "latency_ms": latency}
 
 
+def connected_assistants(count: int) -> str:
+    """O detalhe do serviço `mcp` na Saúde."""
+    if count == 0:
+        return "nenhum assistente conectado nas últimas 24 h"
+    if count == 1:
+        return "1 assistente conectado nas últimas 24 h"
+    return f"{count} assistentes conectados nas últimas 24 h"
+
+
 async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[dict[str, Any]]:
     """`services`: uma sonda por serviço, em paralelo."""
 
@@ -226,6 +235,15 @@ async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[di
     async def api() -> str:
         return __version__
 
+    async def mcp() -> str:
+        # Sem estado, não há sessão MCP aberta: conectado é o token usado pelo MCP nas últimas 24 h.
+        since = datetime.now(UTC) - FAILURE_WINDOW
+        async with system_tx(ctx.engine) as conn:
+            count = (
+                await conn.execute(select(func.count()).where(t.api_tokens.c.mcp_last_used_at >= since))
+            ).scalar_one()
+        return connected_assistants(count)
+
     probes = await asyncio.gather(
         _probe("api", api),
         _probe("postgres", postgres),
@@ -233,9 +251,9 @@ async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[di
         _probe("storage", storage, slow_s=STORAGE_SLOW_S),
         _probe("gpu_worker", gpu_worker),
         _probe("cpu_worker", cpu_worker),
+        _probe("mcp", mcp),
     )
-    # O servidor MCP chega com a holetz/eclume#35.
-    return [*probes, {"name": "mcp", "status": "absent", "detail": None, "latency_ms": None}]
+    return list(probes)
 
 
 async def admin_health(ctx: AppContext) -> dict[str, Any]:

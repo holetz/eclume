@@ -508,3 +508,26 @@ def render_markdown(transcript: dict[str, Any]) -> str:
         speaker = names.get(segment["speaker_id"], segment["speaker_id"])
         lines.extend(("", f"**{speaker}** [{_hms(segment['start_ms'])}]: {segment['text']}"))
     return "\n".join(lines) + "\n"
+
+
+def transcript_text_window(
+    document: dict[str, Any], start_ms: int = 0, end_ms: int | None = None, max_chars: int = 60_000
+) -> tuple[str, int | None]:
+    """Falas `[mm:ss] Locutor: fala` entre `start_ms` e `end_ms`, até `max_chars` caracteres.
+
+    Devolve o texto e o `start_ms` da primeira fala que ficou de fora pelo teto (`None` sem sobra).
+    """
+    names = {s["id"]: s["person"]["name"] if s["person"] else s["label"] for s in document["speakers"]}
+    lines: list[str] = []
+    size = 0
+    for segment in document["segments"]:
+        if segment["start_ms"] < start_ms or (end_ms is not None and segment["start_ms"] >= end_ms):
+            continue
+        seconds = segment["start_ms"] // 1000
+        line = f"[{seconds // 60:02d}:{seconds % 60:02d}] {names.get(segment['speaker_id'], segment['speaker_id'])}: "
+        line += segment["text"]
+        if lines and size + len(line) + 1 > max_chars:
+            return "\n".join(lines), segment["start_ms"]
+        lines.append(line)
+        size += len(line) + 1
+    return "\n".join(lines), None

@@ -25,6 +25,7 @@ from eclume_server.agenda_types import run_detect
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
+from eclume_server.devices import purge_pairing_codes
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
@@ -215,6 +216,12 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
     return len(rows)
 
 
+async def expire_pairing_codes(ctx: dict[str, Any]) -> int:
+    """Apaga os códigos de pareamento vencidos sem uso."""
+    async with system_tx(ctx["engine"]) as conn:
+        return await purge_pairing_codes(conn)
+
+
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
@@ -241,6 +248,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
+            cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
         ],
