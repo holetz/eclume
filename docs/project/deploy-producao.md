@@ -281,6 +281,24 @@ uv run eclume-server discover --timeout 10
   2 marcadores, a biblioteca do dia com `kind=meeting` e os quatro formatos (TXT 848 B, SRT
   1 022 B, MD 1 118 B, DOCX 37 kB) passaram.
 
+### MCP e pareamento em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 19 resumos, 18 objetos).
+- **Deploy:** de uma exportação com LF, só as imagens `server` e `web`. A 015 aplicou sem erro
+  (tipo e plataforma dos tokens, `recordings:delete` para quem tinha `recordings:write`,
+  `pairing_codes`). O `mdns` subiu na rede do host anunciando `192.168.15.199:8443`, e a
+  conferência achou a impressão digital da CA no descritor. A imagem do server foi a 533 MB com o
+  `mcp` e o `zeroconf`; o disco ficou em 84%.
+- **Smoke:** o SDK `mcp` inicializou, listou as 9 ferramentas, buscou 5 gravações, leu uma
+  (campos e etapas) e a transcrição dela (38 646 caracteres) e teve a exclusão recusada por falta
+  de `recordings:delete`; o código `AED-YA3` virou a credencial de dispositivo da conta, e os dois
+  tokens do smoke foram revogados. Da estação Windows, `eclume-server discover --timeout 10` achou
+  o servidor com a impressão digital `98e209f5…3d97792f`, **sem** a regra 5353/udp no ufw: o
+  `before.rules` padrão do Ubuntu já aceita o mDNS multicast.
+- **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
+  digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
+
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo

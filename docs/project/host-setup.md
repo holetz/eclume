@@ -126,8 +126,10 @@ sudo ufw enable
 ```
 
 O `mdns` roda com `network_mode: host`, então o 5353/udp passa **pelo** ufw (só as portas
-publicadas pelo Docker passam por fora). Sem a regra, `eclume-server discover` numa estação da LAN
-não acha o servidor; o deploy não tem sudo, então ela é um passo manual, feito uma vez.
+publicadas pelo Docker passam por fora). O `before.rules` padrão do Ubuntu já aceita o mDNS
+multicast (`224.0.0.251:5353`), e a descoberta funcionou sem a regra; ela deixa explícito o que o
+eclume precisa, inclusive para consultas unicast. O deploy não tem sudo: é um passo manual, feito
+uma vez.
 
 > **Atenção:** portas publicadas pelo Docker (`ports:` no compose) **passam por fora do ufw**.
 > Postgres, Redis e MinIO não podem ter `ports:` publicadas, ou devem ser ligados a
