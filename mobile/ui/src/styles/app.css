@@ -85,3 +85,25 @@ html.lendo-codigo .viewfinder {
   background: transparent;
 }
 
+
+/* A linha de "Neste celular" é um botão que abre o detalhe. */
+.m-row-botao {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Listas longas rolam dentro da tela, com o topo e os botões fixos. */
+.m-rolagem {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
