@@ -4,13 +4,17 @@
 //! `recording` e passa a `pending` no mesmo momento. Se o processo morrer no meio,
 //! [`recover`] acerta arquivo e linha na abertura seguinte.
 //!
+//! Uma sessão pausada continua lendo as fontes e descarta as amostras: o dispositivo segue aberto
+//! (reabri-lo em segundo plano esbarraria nas restrições do celular), e o tempo de áudio
+//! ([`Progress::position_ms`]) só anda gravando.
+//!
 //! Uma nota por voz passa as amostras mixadas pelo [`SilenceDetector`]: o laço encerra sozinho no
 //! silêncio configurado, ou quando não houve voz, e o [`Progress`] conta por quê.
 
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -19,7 +23,7 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::encode::{OggOpusWriter, DEFAULT_BITRATE};
 use crate::mix::{Mixer, TARGET_RATE};
-use crate::queue::{now_ms, Kind, Queue, QueuedRecording};
+use crate::queue::{now_ms, Kind, Queue, QueuedRecording, Source};
 use crate::vad::{SilenceDetector, VadEvent, METER_BARS};
 use crate::AudioSource;
 
@@ -34,6 +38,10 @@ pub struct RecorderConfig {
     pub dir: PathBuf,
     /// Taxa de bits do Opus, em bits/s.
     pub bitrate: i32,
+    /// A origem gravada na fila (`desktop` ou `mobile`).
+    pub source: Source,
+    /// Ao parar, a gravação espera título e tipo de agenda antes de subir (`details_pending`).
+    pub ask_details: bool,
 }
 
 impl RecorderConfig {
@@ -41,6 +49,8 @@ impl RecorderConfig {
         Self {
             dir: dir.into(),
             bitrate: DEFAULT_BITRATE,
+            source: Source::Desktop,
+            ask_details: false,
         }
     }
 }
@@ -101,6 +111,9 @@ pub struct Progress {
     /// Quanto falta de silêncio para a nota parar; `u64::MAX` quando não conta.
     stops_in_ms: AtomicU64,
     meter: Mutex<[f32; METER_BARS]>,
+    paused: AtomicBool,
+    /// O nível RMS do último trecho mixado, em bits de `f32`.
+    level: AtomicU32,
 }
 
 impl Default for Progress {
@@ -110,16 +123,27 @@ impl Default for Progress {
             reason: AtomicU8::new(0),
             stops_in_ms: AtomicU64::new(u64::MAX),
             meter: Mutex::new([0.0; METER_BARS]),
+            paused: AtomicBool::new(false),
+            level: AtomicU32::new(0),
         }
     }
 }
 
 impl Progress {
-    /// A posição no áudio gravado, em ms: a base dos marcadores, que não se desalinha com um vazio
-    /// de fonte como o relógio se desalinharia.
+    /// O tempo de áudio, em ms: o gravado, sem as pausas. É a base dos marcadores e não se
+    /// desalinha com um vazio de fonte como o relógio se desalinharia.
     pub fn position_ms(&self) -> i64 {
         let samples = self.samples.load(Ordering::Acquire);
         i64::try_from(samples * 1_000 / u64::from(TARGET_RATE)).unwrap_or(i64::MAX)
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Acquire)
+    }
+
+    /// O nível RMS do último trecho gravado, de 0 a 1; 0 pausado.
+    pub fn level(&self) -> f32 {
+        f32::from_bits(self.level.load(Ordering::Acquire))
     }
 
     /// Os últimos níveis da nota, de 0 a 1 (vazio numa reunião).
@@ -154,8 +178,16 @@ impl Progress {
             .compare_exchange(0, code, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    fn record(&self, samples: usize, detector: Option<&SilenceDetector>) {
-        self.samples.fetch_add(samples as u64, Ordering::AcqRel);
+    fn set_level(&self, level: f32) {
+        self.level.store(level.to_bits(), Ordering::Release);
+    }
+
+    fn record(&self, samples: &[f32], detector: Option<&SilenceDetector>) {
+        self.samples
+            .fetch_add(samples.len() as u64, Ordering::AcqRel);
+        if !samples.is_empty() {
+            self.set_level(rms(samples));
+        }
         if let Some(detector) = detector {
             if let Ok(mut meter) = self.meter.lock() {
                 *meter = detector.meter();
@@ -175,6 +207,7 @@ pub struct ActiveRecording {
     part_path: PathBuf,
     final_path: PathBuf,
     started_at: i64,
+    ask_details: bool,
     stop: Arc<AtomicBool>,
     progress: Arc<Progress>,
     worker: JoinHandle<Result<u64>>,
@@ -206,6 +239,9 @@ pub fn start(
     if options.kind != Kind::Meeting {
         queue.set_kind(&id, options.kind)?;
     }
+    if config.source != Source::Desktop {
+        queue.set_source(&id, config.source)?;
+    }
 
     let stop = Arc::new(AtomicBool::new(false));
     let progress = Arc::new(Progress::default());
@@ -231,6 +267,7 @@ pub fn start(
         part_path,
         final_path,
         started_at,
+        ask_details: config.ask_details,
         stop,
         progress,
         worker,
@@ -255,13 +292,33 @@ impl ActiveRecording {
         &self.progress
     }
 
+    /// Pausa (ou retoma) sem fechar as fontes: pausada, as amostras lidas são descartadas.
+    pub fn set_paused(&self, paused: bool) {
+        self.progress.paused.store(paused, Ordering::Release);
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.progress.is_paused()
+    }
+
+    /// O tempo de áudio, em ms (sem as pausas).
+    pub fn audio_ms(&self) -> i64 {
+        self.progress.position_ms()
+    }
+
+    /// O nível RMS do último trecho gravado, de 0 a 1.
+    pub fn level(&self) -> f32 {
+        self.progress.level()
+    }
+
     /// Se a gravação terminou sozinha (fontes acabaram, erro, ou a nota parou no silêncio); o
     /// motivo está em [`Progress::stop_reason`].
     pub fn is_finished(&self) -> bool {
         self.worker.is_finished()
     }
 
-    /// Para a gravação, fecha o arquivo e o entrega à fila como `pending`.
+    /// Para a gravação, fecha o arquivo e o entrega à fila como `pending` (com `details_pending`
+    /// quando a config pede título e tipo ao parar).
     pub fn stop(self, queue: &Queue) -> Result<QueuedRecording> {
         self.stop.store(true, Ordering::Release);
         let samples = self
@@ -280,6 +337,9 @@ impl ActiveRecording {
             duration_ms,
             i64::try_from(bytes)?,
         )?;
+        if self.ask_details {
+            queue.set_details_pending(&self.id)?;
+        }
         log::info!(
             "gravação {} fechada: {duration_ms} ms, {bytes} bytes",
             self.id
@@ -337,9 +397,13 @@ fn record_until_done(
             }
         }
         let ready = mixer.pop_ready();
+        if progress.is_paused() {
+            progress.set_level(0.0);
+            continue;
+        }
         writer.write(&ready)?;
         let event = detector.as_mut().and_then(|d| d.push(&ready));
-        progress.record(ready.len(), detector.as_ref());
+        progress.record(&ready, detector.as_ref());
         if let Some(event) = event {
             progress.finish(match event {
                 VadEvent::Silence => StopReason::Silence,
@@ -375,6 +439,7 @@ pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
         Ok((final_path, i64::try_from(bytes)?))
     })?;
     queue.release_stale_syncing()?;
+    queue.release_details_pending()?;
     for rec in &recovered {
         log::warn!(
             "gravação {} recuperada após encerramento inesperado",
@@ -382,6 +447,12 @@ pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
         );
     }
     Ok(recovered)
+}
+
+/// A raiz da média dos quadrados, de 0 a 1 para amostras em [-1, 1].
+fn rms(samples: &[f32]) -> f32 {
+    let sum: f32 = samples.iter().map(|s| s * s).sum();
+    (sum / samples.len() as f32).sqrt().min(1.0)
 }
 
 fn strip_part(path: &Path) -> PathBuf {
@@ -492,6 +563,65 @@ mod tests {
         assert_eq!(progress.stop_reason(), Some(StopReason::Requested));
         assert_eq!(rec.status, Status::Pending);
         assert!(rec.duration_ms.unwrap() > 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Uma fonte que entrega em tempo real, como um microfone: 10 ms por leitura.
+    struct Paced(SineSource);
+
+    impl AudioSource for Paced {
+        fn sample_rate(&self) -> u32 {
+            self.0.sample_rate()
+        }
+
+        fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+            std::thread::sleep(Duration::from_millis(10));
+            self.0.read(timeout)
+        }
+    }
+
+    #[test]
+    fn session_pausa_descarta_amostras_e_conta_so_o_tempo_de_audio() {
+        let dir = temp_dir("pausa");
+        let queue = Queue::open_in_memory().unwrap();
+        let sources: Vec<Box<dyn AudioSource>> = vec![Box::new(Paced(SineSource::new(
+            16_000,
+            440.0,
+            0.5,
+            Duration::from_secs(30),
+        )))];
+        let config = RecorderConfig {
+            source: Source::Mobile,
+            ask_details: true,
+            ..RecorderConfig::new(&dir)
+        };
+        let active = start(&config, &queue, sources, StartOptions::MEETING).unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        // Um seno de amplitude 0,5 tem RMS de 0,5/√2.
+        let level = active.level();
+        assert!((0.3..0.4).contains(&level), "nível {level}");
+
+        active.set_paused(true);
+        assert!(active.is_paused());
+        std::thread::sleep(Duration::from_millis(30));
+        let paused_at = active.audio_ms();
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(active.audio_ms(), paused_at);
+        assert_eq!(active.level(), 0.0);
+
+        active.set_paused(false);
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(active.audio_ms() > paused_at);
+        let audio_ms = active.audio_ms();
+        let rec = active.stop(&queue).unwrap();
+        // A duração é o tempo de áudio, sem a pausa.
+        let duration = rec.duration_ms.unwrap();
+        assert!(
+            duration >= audio_ms && duration < audio_ms + 200,
+            "{duration} ms"
+        );
+        assert_eq!(rec.source, Source::Mobile);
+        assert!(rec.details_pending);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
