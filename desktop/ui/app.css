@@ -72,3 +72,11 @@
 .row-tight {
   gap: 4px;
 }
+
+.row-meter {
+  gap: var(--space-4);
+}
+
+#politica-opcoes {
+  justify-self: start;
+}

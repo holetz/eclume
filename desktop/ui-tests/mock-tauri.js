@@ -40,6 +40,10 @@
         status: "idle",
         recording_id: null,
         recording_started_at: null,
+        recording_kind: null,
+        note_silence_s: 4,
+        marker_count: 0,
+        last_marker: null,
         recording_auto: false,
         recording_app: null,
         meeting: null,
@@ -70,6 +74,17 @@
         ].map(([app, label, policy]) => ({ app, label, policy })),
         retention_days: 7,
         pat_source: "keyring",
+        shortcuts: [
+          ["record", "Iniciar ou parar a gravação", "Ctrl+Alt+R"],
+          ["note", "Nova nota", "Ctrl+Alt+N"],
+          ["marker", "Adicionar marcador", "Ctrl+Alt+M"],
+        ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
+      },
+      marcadores: [],
+      medidor: {
+        position_ms: 42_000,
+        levels: [0.3, 0.55, 0.8, 0.65, 0.9, 0.45, 0.7, 0.35, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
+        stops_in_ms: 2_400,
       },
       versao: "0.2.0",
     };
@@ -87,6 +102,24 @@
         meeting: { app: "teams", label: "Microsoft Teams" },
       });
       e.recordings.unshift(gravacao("r1", { status: "recording", started_at: agora - 12 * MIN, duration_ms: null }));
+    },
+    nota(e) {
+      Object.assign(e.status, {
+        status: "recording",
+        recording_id: "n1",
+        recording_started_at: agora - 42_000,
+        recording_kind: "note",
+      });
+      e.recordings.unshift(gravacao("n1", { status: "recording", kind: "note", started_at: agora - 42_000, duration_ms: null }));
+    },
+    marcadores(e) {
+      cenarios.gravando(e);
+      e.status.recording_auto = false;
+      e.status.recording_app = null;
+      e.marcadores = [
+        { client_id: "m1", recording_id: "r1", at_ms: 125_000, note: "decisão do orçamento", created_at: agora - 60_000 },
+      ];
+      sincronizarMarcadores(e);
     },
     pergunta(e) {
       e.status.meeting = { app: "zoom", label: "Zoom" };
@@ -109,6 +142,11 @@
       e.status.sync_notice = "Sem PAT: as gravações ficam na fila até você configurar o PAT nas configurações.";
     },
   };
+
+  function sincronizarMarcadores(e) {
+    e.status.marker_count = e.marcadores.length;
+    e.status.last_marker = e.marcadores.at(-1) ?? null;
+  }
 
   const ouvintes = new Map();
   const mock = {
@@ -143,8 +181,45 @@
       }
       return e.status;
     },
-    new_note() {
-      throw "Já há uma gravação em andamento";
+    new_note(e) {
+      if (e.status.recording_kind === "note") {
+        Object.assign(e.status, { status: "idle", recording_id: null, recording_started_at: null, recording_kind: null });
+      } else if (e.status.status === "recording") {
+        throw "Já há uma gravação em andamento";
+      } else {
+        Object.assign(e.status, { status: "recording", recording_id: "nota", recording_started_at: Date.now(), recording_kind: "note" });
+      }
+      return null;
+    },
+    note_meter: (e) => (e.status.recording_kind === "note" ? e.medidor : null),
+    add_marker(e, { note }) {
+      if (e.status.status !== "recording") throw "nenhuma gravação em andamento";
+      const marcador = {
+        client_id: `m${e.marcadores.length + 1}`,
+        recording_id: e.status.recording_id,
+        at_ms: 60_000 * (e.marcadores.length + 1),
+        note: note ?? null,
+        created_at: Date.now(),
+      };
+      e.marcadores.push(marcador);
+      sincronizarMarcadores(e);
+      return marcador;
+    },
+    set_marker_note(e, { clientId, note }) {
+      const marcador = e.marcadores.find((m) => m.client_id === clientId);
+      if (!marcador) throw "marcador não encontrado";
+      marcador.note = note;
+      sincronizarMarcadores(e);
+      return marcador;
+    },
+    save_settings(e, { input }) {
+      e.settings = {
+        ...e.settings,
+        detection_enabled: input.detection_enabled,
+        retention_days: input.retention_days,
+        apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
+      };
+      return e.settings;
     },
   };
 

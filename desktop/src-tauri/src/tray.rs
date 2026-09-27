@@ -4,8 +4,10 @@
 //! inclusive a pergunta de reunião detectada, que ganha dois itens enquanto espera resposta.
 
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use eclume_detect::AppKey;
+use eclume_recorder::Kind;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -148,7 +150,28 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         menu: Mutex::new(handles),
     });
     refresh(app);
+    spawn_note_clock(app.clone());
     Ok(())
+}
+
+/// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre).
+fn spawn_note_clock(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(1));
+        let in_note = app
+            .state::<AppState>()
+            .view()
+            .is_ok_and(|view| view.recording_kind == Some(Kind::Note));
+        if in_note {
+            refresh(&app);
+        }
+    });
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
@@ -197,7 +220,8 @@ pub fn refresh(app: &AppHandle) {
     let Ok(mut menu) = handles.menu.lock() else {
         return;
     };
-    let line = status_line(&view);
+    let now = now_ms();
+    let line = status_line(&view, now);
     let ask = view.pending_ask.map(|a| a.app);
     let recording = view.status == AppStatus::Recording;
     let result = (|| -> tauri::Result<()> {
@@ -209,6 +233,9 @@ pub fn refresh(app: &AppHandle) {
         menu.status.set_text(&line)?;
         menu.toggle.set_text(toggle_label(view.status))?;
         handles.tray.set_icon(Some(icon(view.status)?))?;
+        // O rótulo ao lado do ícone existe no macOS e no AppIndicator do Linux; no Windows, o
+        // tempo da nota vai só na dica, que já traz a linha de status.
+        handles.tray.set_title(note_title(&view, now))?;
         handles
             .tray
             .set_tooltip(Some(format!("{} — {line}", crate::APP_NAME)))?;
@@ -227,11 +254,33 @@ fn toggle_label(status: AppStatus) -> &'static str {
     }
 }
 
-/// A linha de status do menu: o estado, o app e o modo da gravação, a reunião esperando
-/// resposta e quantas gravações faltam sincronizar.
-pub fn status_line(view: &StatusView) -> String {
+/// O tempo corrido de uma gravação: "0:42" ou "1:02:09".
+fn elapsed(ms: i64) -> String {
+    let s = ms.max(0) / 1000;
+    let (h, m, s) = (s / 3600, (s % 3600) / 60, s % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+/// "Nota 0:42" durante uma nota; `None` fora dela.
+pub fn note_title(view: &StatusView, now_ms: i64) -> Option<String> {
+    if view.status != AppStatus::Recording || view.recording_kind != Some(Kind::Note) {
+        return None;
+    }
+    let started = view.recording_started_at.unwrap_or(now_ms);
+    Some(format!("Nota {}", elapsed(now_ms - started)))
+}
+
+/// A linha de status do menu: o estado, o app e o modo da gravação (ou o tempo da nota), a
+/// reunião esperando resposta e quantas gravações faltam sincronizar.
+pub fn status_line(view: &StatusView, now_ms: i64) -> String {
     let mut parts = vec![view.status.label().to_string()];
-    if view.status == AppStatus::Recording {
+    if let Some(title) = note_title(view, now_ms) {
+        parts.push(title);
+    } else if view.status == AppStatus::Recording {
         match (view.recording_app, view.recording_auto) {
             (Some(app), true) => parts.push(format!("{} (automático)", app.label)),
             (Some(app), false) => parts.push(app.label.to_string()),
@@ -294,13 +343,13 @@ mod tests {
 
     #[test]
     fn bandeja_linha_de_status() {
-        assert_eq!(status_line(&view(AppStatus::Idle, 0)), "Ocioso");
+        assert_eq!(status_line(&view(AppStatus::Idle, 0), 0), "Ocioso");
         assert_eq!(
-            status_line(&view(AppStatus::Recording, 1)),
+            status_line(&view(AppStatus::Recording, 1), 0),
             "Gravando · 1 gravação a sincronizar"
         );
         assert_eq!(
-            status_line(&view(AppStatus::Syncing, 3)),
+            status_line(&view(AppStatus::Syncing, 3), 0),
             "Sincronizando · 3 gravações a sincronizar"
         );
         assert_eq!(toggle_label(AppStatus::Recording), "Parar gravação");
@@ -313,22 +362,42 @@ mod tests {
         auto.recording_auto = true;
         auto.recording_app = Some(MeetingView::from(AppKey::Teams));
         assert_eq!(
-            status_line(&auto),
+            status_line(&auto, 0),
             "Gravando · Microsoft Teams (automático)"
         );
         auto.marker_count = 3;
         assert_eq!(
-            status_line(&auto),
+            status_line(&auto, 0),
             "Gravando · Microsoft Teams (automático) · 3 marcadores"
         );
         auto.marker_count = 1;
-        assert!(status_line(&auto).ends_with(" · 1 marcador"));
+        assert!(status_line(&auto, 0).ends_with(" · 1 marcador"));
         let mut asking = view(AppStatus::Idle, 2);
         asking.pending_ask = Some(MeetingView::from(AppKey::Zoom));
         assert_eq!(
-            status_line(&asking),
+            status_line(&asking, 0),
             "Ocioso · reunião no Zoom detectada · 2 gravações a sincronizar"
         );
+    }
+
+    #[test]
+    fn bandeja_mostra_o_tempo_da_nota() {
+        let mut note = view(AppStatus::Recording, 0);
+        note.recording_kind = Some(Kind::Note);
+        note.recording_started_at = Some(1_000);
+        note.marker_count = 2;
+        assert_eq!(note_title(&note, 43_500).as_deref(), Some("Nota 0:42"));
+        assert_eq!(status_line(&note, 43_500), "Gravando · Nota 0:42");
+        assert_eq!(
+            note_title(&note, 1_000 + 3_723_000).as_deref(),
+            Some("Nota 1:02:03")
+        );
+
+        let mut meeting = view(AppStatus::Recording, 0);
+        meeting.recording_kind = Some(Kind::Meeting);
+        meeting.recording_started_at = Some(1_000);
+        assert_eq!(note_title(&meeting, 43_500), None);
+        assert_eq!(note_title(&view(AppStatus::Idle, 0), 43_500), None);
     }
 
     #[test]

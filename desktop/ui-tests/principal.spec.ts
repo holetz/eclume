@@ -83,7 +83,7 @@ test('sem token: aviso do envio, fila vazia e conta desconectada', async ({ abri
 })
 
 test('erro de um comando aparece e some no próximo que dá certo', async ({ abrir }) => {
-  const page = await abrir()
+  const page = await abrir('gravando')
   await page.locator('#nova-nota').click()
   await expect(page.locator('#aviso.alert-error')).toContainText('Já há uma gravação em andamento')
   await page.locator('#gravar').click()

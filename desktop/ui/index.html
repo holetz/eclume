@@ -34,15 +34,46 @@
           </div>
         </div>
         <span class="status-line" id="linha-status" role="status">Carregando…</span>
+        <div class="row row-meter" id="nota" hidden>
+          <div class="meter" id="medidor" aria-hidden="true"></div>
+          <span class="mono tiny" id="nota-silencio"></span>
+        </div>
         <button type="button" class="btn btn-rec btn-rec-lg" id="gravar" aria-pressed="false">
           Iniciar gravação
         </button>
+        <span class="text-muted small" id="gravacao-automatica" hidden
+          >Iniciada automaticamente. Para quando a reunião acabar.</span
+        >
+        <div class="stack-tight" id="marcadores" hidden>
+          <div class="row">
+            <button type="button" class="btn btn-secondary btn-sm" id="marcador">
+              Marcador<kbd id="atalho-marcador"></kbd>
+            </button>
+            <span class="marker-count" id="contagem-marcadores"></span>
+          </div>
+          <div class="field" id="nota-marcador" hidden>
+            <label for="nota-marcador-texto" id="nota-marcador-rotulo"></label>
+            <input class="input" id="nota-marcador-texto" maxlength="500" placeholder="Nota curta (opcional)" />
+          </div>
+        </div>
         <div class="grid-2">
           <button type="button" class="btn btn-secondary" id="nova-nota">
             Nova nota<kbd id="atalho-nota"></kbd>
           </button>
           <button type="button" class="btn btn-secondary" id="importar">Importar arquivo…</button>
         </div>
+      </div>
+
+      <div class="tray-section" id="politica" hidden>
+        <div class="row row-between">
+          <span class="kicker" id="politica-titulo"></span>
+          <a href="#" class="small" id="politica-configuracoes">Mudar nas configurações</a>
+        </div>
+        <span class="seg" role="radiogroup" id="politica-opcoes">
+          <label class="seg-opt"><input type="radio" name="politica" value="auto" />Gravar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ask" />Perguntar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ignore" />Ignorar</label>
+        </span>
       </div>
 
       <div class="tray-section" id="pergunta" hidden>
