@@ -16,8 +16,14 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
-# Vazia desde a holetz/eclume#32: todas as operações do contrato estão implementadas.
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = ()
+_DISPOSITIVOS = "holetz/eclume#35"
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
+    ("GET", "/api/v1/server", _DISPOSITIVOS),
+    ("POST", "/api/v1/devices/login", _DISPOSITIVOS),
+    ("POST", "/api/v1/devices/pairing-codes", _DISPOSITIVOS),
+    ("GET", "/api/v1/devices/pairing-codes/{pairing_code_id}", _DISPOSITIVOS),
+    ("POST", "/api/v1/devices/pair", _DISPOSITIVOS),
+)
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:

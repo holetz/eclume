@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.2.0
+  version: 2.3.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -14,7 +14,11 @@ info:
     \ uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.\n- **Evolução só\
     \ aditiva.** O cliente ignora propriedades que não conhece e tolera valores\n  de enum novos em respostas.\
     \ A 2.0.0 é a única quebra sob `/api/v1` (fim da organização);\n  a próxima mudança incompatível vira\
-    \ `/api/v2`.\n"
+    \ `/api/v2`.\n- **Servidor MCP em `/mcp`** (fora de `/api/v1`, fora deste documento): Model Context\n\
+    \  Protocol em HTTP streamable sem estado, com respostas JSON. Aceita só\n  `Authorization: Bearer\
+    \ eclp_…` (PAT pessoal ou de dispositivo); cada ferramenta exige os\n  escopos da operação equivalente\
+    \ desta API, e a recusa por escopo volta como erro de\n  ferramenta que nomeia o escopo. Sem credencial\
+    \ válida, 401 `unauthorized`. Detalhe em\n  `docs/standards/code/server-mcp-e-dispositivos.md`.\n"
   license:
     name: MIT
     identifier: MIT
@@ -31,7 +35,10 @@ tags:
 - name: auth
   description: Sessão do navegador, cadastro com o aviso de consentimento e usuário corrente.
 - name: tokens
-  description: PATs pessoais. Só com sessão.
+  description: PATs pessoais e credenciais de dispositivo. Só com sessão.
+- name: devices
+  description: 'Ligação do desktop e do celular: login por e-mail e senha ou por código de pareamento,
+    que emitem uma credencial de dispositivo (um token `kind: device`).'
 - name: uploads
   description: Upload resumível em partes (multipart S3) com deduplicação por hash.
 - name: recordings
@@ -113,6 +120,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/auth/logout:
     post:
       tags:
@@ -188,6 +197,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/me:
     get:
       tags:
@@ -244,13 +255,20 @@ paths:
       tags:
       - tokens
       operationId: listTokens
-      summary: Listar os PATs do usuário
+      summary: Listar os tokens do usuário
+      description: PATs pessoais e credenciais de dispositivo. `?kind=device` é a lista de "App móvel"
+        e "App desktop"; `?kind=personal`, a de "Tokens de acesso".
       parameters:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
+      - name: kind
+        in: query
+        description: Só os tokens deste tipo.
+        schema:
+          $ref: '#/components/schemas/TokenKind'
       responses:
         '200':
-          description: PATs, inclusive revogados, do mais novo para o mais antigo.
+          description: Tokens, inclusive revogados, do mais novo para o mais antigo.
           content:
             application/json:
               schema:
@@ -267,7 +285,9 @@ paths:
       - tokens
       operationId: createToken
       summary: Criar um PAT
-      description: O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash.
+      description: 'O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash. Cria
+        sempre `kind: personal`: a credencial de dispositivo só nasce de `POST /devices/login` ou `POST
+        /devices/pair`.'
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -302,7 +322,8 @@ paths:
       tags:
       - tokens
       operationId: revokeToken
-      summary: Revogar um PAT
+      summary: Revogar um token
+      description: Vale para PAT e credencial de dispositivo ("Desvincular" desliga o aparelho).
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -314,6 +335,169 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/server:
+    get:
+      tags:
+      - meta
+      operationId: getServerInfo
+      summary: Descritor público do servidor
+      description: 'Nome, endereço, endereço MCP, impressão digital da CA raiz e versões. É a fonte do
+        anúncio
+
+        mDNS, do link do QR, do pareamento e do endereço embutido no instalador: o app confirma
+
+        aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
+
+        '
+      security: []
+      responses:
+        '200':
+          description: Descritor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfo'
+              examples:
+                producao:
+                  $ref: '#/components/examples/ServerInfo'
+  /api/v1/devices/login:
+    post:
+      tags:
+      - devices
+      operationId: deviceLogin
+      summary: Entrar num aparelho com e-mail e senha
+      description: 'Confere a senha como o login do navegador e emite uma credencial de dispositivo: um
+        token
+
+        `kind: device` com `recordings:read` e `recordings:write`, sem validade e revogável em
+
+        `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
+
+        conta inativa, 401 com a mesma mensagem do login; tentativas demais do mesmo IP, 429
+
+        `rate_limited` com `Retry-After`.
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceLogin'
+            examples:
+              notebook:
+                $ref: '#/components/examples/DeviceLoginRequest'
+      responses:
+        '201':
+          description: Credencial de dispositivo emitida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredential'
+              examples:
+                notebook:
+                  $ref: '#/components/examples/DeviceCredential'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/devices/pairing-codes:
+    post:
+      tags:
+      - devices
+      operationId: createPairingCode
+      summary: Gerar um código de pareamento
+      description: 'Código de 6 caracteres (`K7Q-4MX`), válido por 10 minutos e de uso único, que o app
+        troca
+
+        por uma credencial de dispositivo em `POST /api/v1/devices/pair`. `pair_url` é o conteúdo
+
+        do QR que o celular lê. Um código novo vence os anteriores ainda não usados. Só sessão.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '201':
+          description: Código gerado; `code`, `display` e `pair_url` só voltam aqui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingCode'
+              examples:
+                novo:
+                  $ref: '#/components/examples/PairingCodeCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/devices/pairing-codes/{pairing_code_id}:
+    parameters:
+    - $ref: '#/components/parameters/PairingCodeId'
+    get:
+      tags:
+      - devices
+      operationId: getPairingCode
+      summary: Estado de um código de pareamento
+      description: A web consulta para trocar o QR por "Pareado" e mostrar o aparelho (`token_id`). Só
+        sessão.
+      responses:
+        '200':
+          description: Estado do código, sem o código.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingCode'
+              examples:
+                usado:
+                  $ref: '#/components/examples/PairingCodeUsed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/devices/pair:
+    post:
+      tags:
+      - devices
+      operationId: pairDevice
+      summary: Trocar um código de pareamento por uma credencial de dispositivo
+      description: 'O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
+
+        dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
+
+        vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP, 429
+
+        `rate_limited` com `Retry-After`.
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePair'
+            examples:
+              celular:
+                $ref: '#/components/examples/DevicePairRequest'
+      responses:
+        '201':
+          description: Credencial de dispositivo emitida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredential'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/uploads:
     post:
       tags:
@@ -749,10 +933,12 @@ paths:
       - recordings
       operationId: deleteRecording
       summary: Excluir a gravação, o áudio e a transcrição
+      description: Com PAT, exige `recordings:delete` desde a 2.3.0 (antes, `recordings:write`); a migração
+        concedeu `recordings:delete` a todo token que tinha `recordings:write`.
       security:
       - sessionCookie: []
       - pat:
-        - recordings:write
+        - recordings:delete
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -2749,6 +2935,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/admin/auth/logout:
     post:
       tags:
@@ -3338,6 +3526,13 @@ components:
       schema:
         type: string
         format: uuid
+    PairingCodeId:
+      name: pairing_code_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     TokenId:
       name: token_id
       in: path
@@ -3440,7 +3635,9 @@ components:
               $ref: '#/components/examples/ProblemUnauthorized'
     Forbidden:
       description: 'Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só
-        sessão (`code: session_required`), ou cadastro fechado (`code: signup_closed`).'
+        sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta
+        que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`,
+        `POST /me/notice` e `/auth/*` respondem).'
       content:
         application/problem+json:
           schema:
@@ -3474,8 +3671,15 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     TooManyRequests:
-      description: 'Limite de pedidos em aberto atingido (`code: rate_limited`), como as 3 pré-visualizações
-        em andamento por conta; tente de novo quando algum terminar.'
+      description: 'Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações
+        em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas
+        de credencial (login, cadastro, login de admin e `/devices/*`), com `Retry-After`.'
+      headers:
+        Retry-After:
+          description: Segundos até a janela de tentativas reabrir.
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/problem+json:
           schema:
@@ -3514,7 +3718,11 @@ components:
 
             `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
 
-            aberto). Códigos novos entram de forma aditiva.
+            aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
+
+            vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
+
+            vigor). Códigos novos entram de forma aditiva.
 
             '
           type: string
@@ -3538,11 +3746,15 @@ components:
               message:
                 type: string
     Scope:
-      description: Escopo de PAT.
+      description: Escopo de PAT. `recordings:delete` (2.3.0) exclui gravações. A tela "Conexão MCP" agrupa
+        os escopos em "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar
+        resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) e
+        "Excluir gravações" (`recordings:delete`).
       type: string
       enum:
       - recordings:read
       - recordings:write
+      - recordings:delete
       - transcripts:read
       - transcripts:write
       - people:read
@@ -3821,6 +4033,8 @@ components:
       required:
       - id
       - name
+      - kind
+      - platform
       - scopes
       - prefix
       - created_at
@@ -3832,7 +4046,15 @@ components:
           type: string
           format: uuid
         name:
+          description: 'Com `kind: device`, o nome do aparelho.'
           type: string
+        kind:
+          $ref: '#/components/schemas/TokenKind'
+        platform:
+          description: 'Com `kind: device`, a plataforma do aparelho; `null` num PAT pessoal.'
+          oneOf:
+          - $ref: '#/components/schemas/DevicePlatform'
+          - type: 'null'
         scopes:
           type: array
           items:
@@ -3858,6 +4080,150 @@ components:
           - string
           - 'null'
           format: date-time
+    TokenKind:
+      description: '`personal`, o PAT criado em "Tokens de acesso" ou "Conexão MCP"; `device`, a credencial
+        de um aparelho, emitida pelo login ou pelo pareamento.'
+      type: string
+      enum:
+      - personal
+      - device
+    DevicePlatform:
+      type: string
+      enum:
+      - windows
+      - macos
+      - linux
+      - ios
+      - android
+    ServerInfo:
+      type: object
+      required:
+      - name
+      - url
+      - mcp_url
+      - ca_sha256
+      - version
+      - contract_version
+      properties:
+        name:
+          description: Nome do servidor (`ECLUME_SERVER_NAME`), também a instância no mDNS.
+          type: string
+        url:
+          description: Endereço público (`ECLUME_PUBLIC_URL`).
+          type: string
+          format: uri
+        mcp_url:
+          description: Endereço do servidor MCP, que o assistente recebe.
+          type: string
+          format: uri
+        ca_sha256:
+          description: SHA-256, em hex minúsculo, do DER do certificado raiz servido em `/downloads/eclume-root.crt`;
+            `null` enquanto a raiz não foi publicada.
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+        version:
+          description: Versão do servidor.
+          type: string
+        contract_version:
+          description: Versão deste contrato que o servidor implementa.
+          type: string
+    DeviceLogin:
+      type: object
+      required:
+      - email
+      - password
+      - device_name
+      - platform
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+        device_name:
+          description: Nome do aparelho, que vira o nome do token ("iPhone da Mariana").
+          type: string
+          minLength: 1
+          maxLength: 100
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+    DevicePair:
+      type: object
+      required:
+      - code
+      - device_name
+      - platform
+      properties:
+        code:
+          description: O código de pareamento (`K7Q-4MX` ou `k7q4mx`).
+          type: string
+          minLength: 1
+          maxLength: 32
+        device_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+    DeviceCredential:
+      type: object
+      required:
+      - token
+      - secret
+      - server
+      properties:
+        token:
+          $ref: '#/components/schemas/Token'
+        secret:
+          description: O token completo, que o app guarda. Não é mostrado de novo.
+          type: string
+          pattern: ^eclp_[A-Za-z0-9]{32,}$
+        server:
+          $ref: '#/components/schemas/ServerInfo'
+    PairingCode:
+      type: object
+      required:
+      - id
+      - status
+      - expires_at
+      - token_id
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          description: '`expired` vale também para o código vencido por um código mais novo.'
+          type: string
+          enum:
+          - pending
+          - used
+          - expired
+        expires_at:
+          type: string
+          format: date-time
+        token_id:
+          description: Com `used`, a credencial de dispositivo que o código emitiu.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        code:
+          description: Só na criação. 6 caracteres de `23456789ABCDEFGHJKMNPQRSTVWXYZ`.
+          type: string
+          pattern: ^[2-9A-HJKMNP-TV-Z]{6}$
+        display:
+          description: Só na criação. O código como a tela mostra (`K7Q-4MX`).
+          type: string
+        pair_url:
+          description: 'Só na criação. Conteúdo do QR: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (sem
+            `ca` enquanto a raiz não foi publicada).'
+          type: string
+          format: uri
     TokenCreate:
       type: object
       required:
@@ -7363,16 +7729,20 @@ components:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000702
           name: Desktop — notebook da Mariana
+          kind: device
+          platform: windows
           scopes:
           - recordings:read
           - recordings:write
           prefix: eclp_Qm9x
           created_at: '2026-09-12T10:20:00Z'
           last_used_at: '2026-09-18T14:09:30Z'
-          expires_at: '2027-09-12T10:20:00Z'
+          expires_at: null
           revoked_at: null
         - id: 01928f3a-1c00-7a00-8000-000000000701
           name: lumea — importador
+          kind: personal
+          platform: null
           scopes:
           - transcripts:read
           - people:read
@@ -7389,12 +7759,77 @@ components:
         scopes:
         - transcripts:read
         - people:read
+    ServerInfo:
+      summary: Servidor de produção com a CA publicada
+      value:
+        name: eclume
+        url: https://192.168.15.199:8443
+        mcp_url: https://192.168.15.199:8443/mcp
+        ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
+        version: 0.1.0
+        contract_version: 2.3.0
+    DeviceLoginRequest:
+      summary: Notebook entrando com e-mail e senha
+      value:
+        email: mariana@exemplo.com.br
+        password: correta-cavalo-bateria
+        device_name: Notebook da Mariana
+        platform: windows
+    DevicePairRequest:
+      summary: Celular trocando o código lido no QR
+      value:
+        code: K7Q-4MX
+        device_name: iPhone da Mariana
+        platform: ios
+    DeviceCredential:
+      summary: Credencial do notebook
+      value:
+        token:
+          id: 01928f3a-1c00-7a00-8000-000000000703
+          name: Notebook da Mariana
+          kind: device
+          platform: windows
+          scopes:
+          - recordings:read
+          - recordings:write
+          prefix: eclp_Vb3k
+          created_at: '2026-09-27T14:02:00Z'
+          last_used_at: null
+          expires_at: null
+          revoked_at: null
+        secret: eclp_Vb3kQ8rT2wY6uI1oP4aS7dF0gH3jK9lZ5xC
+        server:
+          name: eclume
+          url: https://192.168.15.199:8443
+          mcp_url: https://192.168.15.199:8443/mcp
+          ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
+          version: 0.1.0
+          contract_version: 2.3.0
+    PairingCodeCreated:
+      summary: Código novo com o link do QR
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000a01
+        status: pending
+        expires_at: '2026-09-27T14:12:00Z'
+        token_id: null
+        code: K7Q4MX
+        display: K7Q-4MX
+        pair_url: https://192.168.15.199:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
+    PairingCodeUsed:
+      summary: Código trocado pelo celular
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000a01
+        status: used
+        expires_at: '2026-09-27T14:12:00Z'
+        token_id: 01928f3a-1c00-7a00-8000-000000000704
     TokenCreated:
       summary: PAT criado, segredo mostrado uma vez
       value:
         token:
           id: 01928f3a-1c00-7a00-8000-000000000701
           name: lumea — importador
+          kind: personal
+          platform: null
           scopes:
           - transcripts:read
           - people:read
