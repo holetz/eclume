@@ -1,11 +1,12 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { ApiError, errorMessage } from '../../api/problem'
+import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
 import { FieldTest } from './FieldTest'
 import styles from './Organize.module.css'
 import {
   cleanDraft,
+  invalidFields,
   KIND_LABELS,
   startFieldPreview,
   useDeleteField,
@@ -27,16 +28,6 @@ function draftOf(field: Field | null): FieldDraft {
 
 function sameDraft(a: FieldDraft, b: FieldDraft): boolean {
   return JSON.stringify(cleanDraft(a)) === JSON.stringify(cleanDraft(b))
-}
-
-/** Os erros 422 do contrato por campo do formulário (`name`, `options`, `field.instructions`…). */
-function invalidFields(error: unknown): Record<string, string> {
-  if (!(error instanceof ApiError) || error.problem?.code !== 'validation_failed') return {}
-  const byField: Record<string, string> = {}
-  for (const { field, message } of error.problem.errors ?? []) {
-    byField[field.replace(/^field\./, '').replace(/\[\d+\]$/, '')] = message
-  }
-  return byField
 }
 
 interface FieldEditorProps {

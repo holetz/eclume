@@ -12,6 +12,7 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, 
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
 const AdminLoginPage = named(() => import('../features/admin/AdminLoginPage'), 'AdminLoginPage')
+const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
@@ -50,6 +51,7 @@ export function AppRoutes() {
         <Route path="/busca" element={page(SearchPage)} />
         <Route path="/colecoes" element={page(CollectionsPage)} />
         <Route path="/config/campos" element={page(FieldsPage)} />
+        <Route path="/config/agendas" element={page(AgendaTypesPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
         <Route path="/ajuda" element={page(HelpCenterPage)} />

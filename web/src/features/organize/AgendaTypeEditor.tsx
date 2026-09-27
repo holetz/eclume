@@ -1,0 +1,250 @@
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { errorMessage } from '../../api/problem'
+import { Dialog } from '../../app/Dialog'
+import { HelpHint } from '../../app/HelpHint'
+import styles from './Organize.module.css'
+import {
+  invalidFields,
+  useDeleteAgendaType,
+  useFields,
+  useSaveAgendaType,
+  type AgendaType,
+  type AgendaTypeDraft,
+} from './queries'
+import { TagInput } from './TagInput'
+
+const EMPTY: AgendaTypeDraft = { name: '', title_pattern: null, identify: '', default_tags: [], summary_instructions: '' }
+
+// Os marcadores que todo padrão de título aceita; os campos do usuário entram pela chave.
+const BASE_MARKERS = ['{assunto}', '{data}', '{tipo}']
+
+function draftOf(type: AgendaType | null): AgendaTypeDraft {
+  if (!type) return EMPTY
+  const { name, title_pattern, identify, default_tags, summary_instructions } = type
+  return { name, title_pattern, identify, default_tags, summary_instructions }
+}
+
+/** O rascunho no formato do contrato: sem espaços nas pontas do nome, e padrão vazio vira `null`. */
+function cleanDraft(draft: AgendaTypeDraft): AgendaTypeDraft {
+  return { ...draft, name: draft.name.trim(), title_pattern: draft.title_pattern?.trim() || null }
+}
+
+interface AgendaTypeEditorProps {
+  /** O tipo salvo, ou `null` para o rascunho de um tipo novo. */
+  type: AgendaType | null
+  onDirtyChange: (dirty: boolean) => void
+  onSaved: (type: AgendaType) => void
+  onDeleted: () => void
+}
+
+export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: AgendaTypeEditorProps) {
+  const id = useId()
+  const initial = draftOf(type)
+  const [draft, setDraft] = useState<AgendaTypeDraft>(initial)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const save = useSaveAgendaType()
+  const fields = useFields()
+  const titleInput = useRef<HTMLInputElement>(null)
+  const errors = invalidFields(save.error)
+  const dirty = JSON.stringify(cleanDraft(draft)) !== JSON.stringify(cleanDraft(initial))
+  const complete = draft.name.trim() !== '' && draft.summary_instructions.trim() !== ''
+  const canSave = dirty && complete && !save.isPending
+  const markers = [
+    ...BASE_MARKERS,
+    ...(fields.data?.items ?? []).filter((field) => !field.builtin).map((field) => `{${field.key}}`),
+  ]
+
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])
+
+  const set = (changes: Partial<AgendaTypeDraft>) => setDraft((current) => ({ ...current, ...changes }))
+
+  /** Insere o marcador na posição do cursor do padrão de título e devolve o foco a ele. */
+  function insertMarker(marker: string) {
+    const input = titleInput.current
+    const value = draft.title_pattern ?? ''
+    const start = input?.selectionStart ?? value.length
+    const end = input?.selectionEnd ?? value.length
+    set({ title_pattern: value.slice(0, start) + marker + value.slice(end) })
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(start + marker.length, start + marker.length)
+    })
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (canSave) save.mutate({ id: type?.id ?? null, draft: cleanDraft(draft) }, { onSuccess: onSaved })
+  }
+
+  const hint = (name: string, text?: string) => {
+    const message = errors[name]
+    if (!message && !text) return null
+    return (
+      <span id={`${id}-${name}-hint`} className={message ? `field-hint ${styles.error}` : 'field-hint'}>
+        {message ?? text}
+      </span>
+    )
+  }
+  const invalid = (name: string) => (errors[name] ? true : undefined)
+
+  return (
+    <form className="panel" onSubmit={submit} aria-label={type ? `Editar ${type.name}` : 'Novo tipo'}>
+      <div className={styles.panelHead}>
+        <h4>{type ? type.name : 'Novo tipo'}</h4>
+        {type && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(true)}>
+            Excluir tipo
+          </button>
+        )}
+      </div>
+
+      <div className={styles.pair}>
+        <div className="field">
+          <label htmlFor={`${id}-name`}>Nome</label>
+          <input
+            id={`${id}-name`}
+            className="input"
+            value={draft.name}
+            required
+            aria-invalid={invalid('name')}
+            aria-describedby={errors.name ? `${id}-name-hint` : undefined}
+            onChange={(event) => set({ name: event.target.value })}
+          />
+          {hint('name')}
+        </div>
+        <div className="field">
+          <div className={styles.labelRow}>
+            <label htmlFor={`${id}-title`}>
+              Título da gravação <span className="text-muted">· substitui a regra do título em Campos e regras</span>
+            </label>
+            <HelpHint subject="como montar o título" title="Como montar o título" article="padrao-de-titulo">
+              Monte o título com os marcadores. Um marcador sem valor some junto com o separador ao lado.
+            </HelpHint>
+          </div>
+          <input
+            ref={titleInput}
+            id={`${id}-title`}
+            className={`input mono ${styles.mono}`}
+            value={draft.title_pattern ?? ''}
+            placeholder="{tipo} · {assunto}"
+            aria-invalid={invalid('title_pattern')}
+            aria-describedby={errors.title_pattern ? `${id}-title_pattern-hint` : undefined}
+            onChange={(event) => set({ title_pattern: event.target.value })}
+          />
+          {hint('title_pattern')}
+        </div>
+      </div>
+      <div className={styles.markers} role="group" aria-label="Marcadores do título">
+        {markers.map((marker) => (
+          <button
+            key={marker}
+            type="button"
+            className={`tag tag-outline mono ${styles.marker}`}
+            aria-label={`Inserir ${marker}`}
+            onClick={() => insertMarker(marker)}
+          >
+            {marker}
+          </button>
+        ))}
+      </div>
+
+      <div className="field">
+        <label htmlFor={`${id}-identify`}>Como identificar</label>
+        <textarea
+          id={`${id}-identify`}
+          className={`input ${styles.identify}`}
+          value={draft.identify ?? ''}
+          aria-invalid={invalid('identify')}
+          aria-describedby={`${id}-identify-hint`}
+          onChange={(event) => set({ identify: event.target.value })}
+        />
+        {hint('identify', 'Depois da transcrição, um agente lê isto e escolhe o tipo.')}
+      </div>
+
+      <div className="field">
+        <label htmlFor={`${id}-tags`}>Tags padrão</label>
+        <TagInput
+          id={`${id}-tags`}
+          value={draft.default_tags ?? []}
+          onChange={(value) => set({ default_tags: value })}
+          listLabel="Tags padrão"
+          itemLabel="tag"
+          invalid={Boolean(errors.default_tags)}
+          describedBy={`${id}-default_tags-hint`}
+        />
+        {hint('default_tags', 'Somadas às tags automáticas.')}
+      </div>
+
+      <div className="field">
+        <label htmlFor={`${id}-instructions`}>Instruções do resumo</label>
+        <textarea
+          id={`${id}-instructions`}
+          className={`input mono ${styles.mono} ${styles.summaryInstructions}`}
+          value={draft.summary_instructions}
+          required
+          aria-invalid={invalid('summary_instructions')}
+          aria-describedby={`${id}-summary_instructions-hint`}
+          onChange={(event) => set({ summary_instructions: event.target.value })}
+        />
+        {hint('summary_instructions', 'Em Markdown. O resumo segue estas instruções.')}
+      </div>
+
+      {save.isError && !Object.keys(errors).length && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(save.error)}
+        </p>
+      )}
+
+      <div className="row">
+        <button type="submit" className="btn btn-primary" disabled={!canSave}>
+          {save.isPending ? 'Salvando…' : 'Salvar'}
+        </button>
+      </div>
+
+      {confirmDelete && type && (
+        <DeleteAgendaTypeDialog type={type} onClose={() => setConfirmDelete(false)} onDeleted={onDeleted} />
+      )}
+    </form>
+  )
+}
+
+function DeleteAgendaTypeDialog({
+  type,
+  onClose,
+  onDeleted,
+}: {
+  type: AgendaType
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const remove = useDeleteAgendaType()
+  return (
+    <Dialog
+      title={`Excluir ${type.name}?`}
+      message="As gravações deste tipo ficam sem tipo. Os resumos já feitos continuam."
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Manter
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={remove.isPending}
+            // A lista recarrega antes do fim do mutate e desmonta este painel: a promessa segue mesmo assim.
+            onClick={() => remove.mutateAsync(type.id).then(onDeleted, () => {})}
+          >
+            Excluir tipo
+          </button>
+        </>
+      }
+    >
+      {remove.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(remove.error)}
+        </p>
+      )}
+    </Dialog>
+  )
+}

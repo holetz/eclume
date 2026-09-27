@@ -122,3 +122,41 @@
   padding: 0;
   list-style: none;
 }
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (max-width: 40rem) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.marker {
+  background: none;
+  cursor: pointer;
+}
+
+.mono {
+  font-size: 13px;
+}
+
+.identify {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.summaryInstructions {
+  min-height: 196px;
+  resize: vertical;
+}

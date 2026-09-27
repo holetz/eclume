@@ -2,7 +2,7 @@
 // sem gravar nada. Poucos por usuário: uma página cobre a tela inteira.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
-import { unwrap } from '../../api/problem'
+import { ApiError, unwrap } from '../../api/problem'
 
 export type Field = Schemas['Field']
 export type FieldDraft = Schemas['FieldDraft']
@@ -16,6 +16,16 @@ export const KIND_LABELS: Record<FieldKind, string> = { text: 'Texto', list: 'Li
 /** O rascunho de um campo no formato do contrato: nome sem espaços nas pontas, e só a Escolha leva opções. */
 export function cleanDraft(draft: FieldDraft): FieldDraft {
   return { ...draft, name: draft.name.trim(), options: draft.kind === 'choice' ? draft.options : [] }
+}
+
+/** Os erros 422 do contrato por campo do formulário (`name`, `options`; `field.name` e `agenda_type.name` nas pré-visualizações). */
+export function invalidFields(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError) || error.problem?.code !== 'validation_failed') return {}
+  const byField: Record<string, string> = {}
+  for (const { field, message } of error.problem.errors ?? []) {
+    byField[field.replace(/^(field|agenda_type)\./, '').replace(/\[\d+\]$/, '')] = message
+  }
+  return byField
 }
 
 export const FIELDS_KEY = ['fields'] as const
