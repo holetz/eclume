@@ -54,7 +54,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           eclume
         </NavLink>
         <nav aria-label="Principal" className={styles.nav}>
-          {navGroups(user.role).map(({ group, items }) => (
+          {Object.values(navGroups(user.role)).flat().map(({ group, items }) => (
             <div key={group} className={styles.group}>
               <h2 className={styles.groupTitle}>{group}</h2>
               <ul>

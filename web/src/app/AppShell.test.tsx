@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
-import { NAV_ITEMS, navGroups } from './nav'
+import { isInMoreSection, NAV_ITEMS, navGroups } from './nav'
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org', role: 'member' }
 
@@ -21,13 +21,44 @@ function renderShell(user = member, onLogout = vi.fn()) {
 }
 
 describe('navegação', () => {
-  it('mostra só as áreas ligadas, e o admin só para admin', () => {
-    const items = NAV_ITEMS.map((i) => (i.adminOnly ? { ...i, enabled: true } : i))
-    const labels = (role: 'admin' | 'member') =>
-      navGroups(role, items).flatMap((g) => g.items.map((i) => i.label))
-    expect(labels('member')).toContain('Pessoas')
-    expect(labels('member')).not.toContain('Painel admin')
-    expect(labels('admin')).toContain('Painel admin')
+  const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
+  const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
+
+  it('agrupa em Gravações, Organizar e Administração, e o resto em Configurações e ajuda', () => {
+    const { main, more } = navGroups('admin')
+    expect(titles(main)).toEqual(['Gravações', 'Organizar', 'Administração'])
+    expect(titles(more)).toEqual(['Minhas configurações'])
+    expect(labels(main)).toEqual(['Biblioteca', 'Busca', 'Importar arquivo', 'Pessoas', 'Coleções', 'Painel admin'])
+    expect(labels(more)).toEqual(['Tokens de acesso', 'App desktop'])
+  })
+
+  it('deixa fora os itens desligados e o admin para quem não é admin', () => {
+    const { main, more } = navGroups('member')
+    expect(titles(main)).toEqual(['Gravações', 'Organizar'])
+    expect(labels([...main, ...more])).not.toContain('Campos e regras')
+    expect(labels([...main, ...more])).not.toContain('Central de ajuda')
+    expect(labels(main)).not.toContain('Painel admin')
+  })
+
+  it('liga as áreas futuras nas rotas do mapa de telas', () => {
+    const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
+    const { main, more } = navGroups('member', all)
+    expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
+    const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
+    expect(routes).toMatchObject({
+      'Campos e regras': '/config/campos',
+      'Tipos de agenda': '/config/agendas',
+      'Conexão MCP': '/config/mcp',
+      'App móvel': '/app-movel',
+      'Central de ajuda': '/ajuda',
+    })
+  })
+
+  it('reconhece as rotas da seção recolhível', () => {
+    expect(isInMoreSection('/tokens')).toBe(true)
+    expect(isInMoreSection('/app-desktop')).toBe(true)
+    expect(isInMoreSection('/pessoas')).toBe(false)
+    expect(isInMoreSection('/')).toBe(false)
   })
 })
 
