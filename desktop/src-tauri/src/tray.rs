@@ -368,6 +368,7 @@ mod tests {
             web_url: String::new(),
             notice: None,
             sync_notice: None,
+            updated: None,
         }
     }
 

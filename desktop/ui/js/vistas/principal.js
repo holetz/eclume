@@ -120,6 +120,33 @@ export function montar(secao, app) {
   const textoMarcador = $("#nota-marcador-texto", secao);
   const politica = $("#politica", secao);
   let configuracoes = null;
+
+  // "Atualizado para X" (frame "After an update"): no topo da janela até a pessoa fechar.
+  const atualizado = el(
+    "div",
+    { class: "alert alert-success", id: "atualizado", role: "status", hidden: true },
+    el("span", { class: "alert-title", id: "atualizado-titulo" }),
+    el("span", { id: "atualizado-notas" }),
+    el(
+      "button",
+      {
+        type: "button",
+        class: "btn btn-ghost btn-sm",
+        id: "atualizado-fechar",
+        on: { click: () => executar("dismiss_update_notice") },
+      },
+      "Entendi",
+    ),
+  );
+  $(".tray-section", secao).prepend(atualizado);
+
+  function desenharAtualizacao(estado) {
+    const novo = estado.updated;
+    atualizado.hidden = !novo;
+    if (!novo) return;
+    $("#atualizado-titulo", atualizado).textContent = `Atualizado para ${novo.version}`;
+    $("#atualizado-notas", atualizado).textContent = novo.notes ?? "";
+  }
   /** O erro do último comando da janela; some no próximo que der certo. */
   let erro = null;
   /** O marcador cuja nota o campo mostra. */
@@ -339,6 +366,7 @@ export function montar(secao, app) {
       }
 
       desenharAviso(estado);
+      desenharAtualizacao(estado);
       desenharFila(gravacoes, agora);
     },
   };

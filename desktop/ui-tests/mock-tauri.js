@@ -52,6 +52,7 @@
         web_url: "https://192.168.15.199:8443",
         notice: null,
         sync_notice: null,
+        updated: null,
       },
       recordings: [
         gravacao("a", { started_at: hoje(9, 0), duration_ms: 54 * MIN }),
@@ -172,6 +173,9 @@
         gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
         gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
       ];
+    },
+    atualizado(e) {
+      e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };
     },
     atalhoEmUso(e) {
       Object.assign(e.settings.shortcuts[1], { registration: "in_use", problem: "Em uso por outro app" });
@@ -299,6 +303,10 @@
     },
     storage_info: (e) => e.armazenamento,
     open_help: () => null,
+    dismiss_update_notice(e) {
+      e.status.updated = null;
+      return null;
+    },
     open_log_dir: () => null,
     list_input_devices: (e) => e.microfones,
     mic_test(e) {

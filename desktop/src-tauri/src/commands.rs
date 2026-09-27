@@ -238,6 +238,14 @@ pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResul
     )
 }
 
+/// Fecha o aviso "Atualizado para X".
+#[tauri::command]
+pub fn dismiss_update_notice(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    let result = state.dismiss_update_notice();
+    crate::refresh_ui(&app);
+    to_js(result)
+}
+
 #[tauri::command]
 pub fn sync_now(app: AppHandle) -> CommandResult<()> {
     to_js(crate::sync::sync_now(&app))

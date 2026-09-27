@@ -19,8 +19,11 @@ use eclume_sync::{PatSource, PatStore, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::capture::{AudioChoice, OpenedSources};
-use crate::config::{self, Config};
+use crate::config::{self, Config, PendingUpdate};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
+
+/// A versão deste build.
+pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Versão que vai no `capture.client_version` e no `User-Agent`.
 pub const CLIENT_VERSION: &str = concat!("eclume-desktop/", env!("CARGO_PKG_VERSION"));
@@ -153,6 +156,8 @@ pub struct StatusView {
     pub notice: Option<String>,
     /// O que impede o sync (PAT ausente) ou o último erro dele.
     pub sync_notice: Option<String>,
+    /// "Atualizado para X", até a pessoa fechar o aviso.
+    pub updated: Option<PendingUpdate>,
 }
 
 /// A política de um app, como a tela de configurações a mostra.
@@ -260,6 +265,8 @@ struct Inner {
     /// O pedido de cancelamento da importação em curso, se houver uma.
     importing: Option<Arc<AtomicBool>>,
     mic_test: Option<MicTest>,
+    /// A atualização a notificar nesta abertura (sai uma vez).
+    update_to_notify: Option<PendingUpdate>,
 }
 
 impl Inner {
@@ -329,7 +336,11 @@ impl AppState {
         let queue = Queue::open(&data_dir.join("queue.sqlite"))?;
         let recovered = session::recover(&queue)?;
         let config_path = config_dir.join("config.json");
-        let config = Config::load(&config_path);
+        let mut config = Config::load(&config_path);
+        let just_updated = config.open_version(CURRENT_VERSION);
+        if let Err(err) = config.save(&config_path) {
+            log::warn!("falha ao registrar a versão aberta: {err:#}");
+        }
         let state = Self::new(
             queue,
             RecorderConfig::new(data_dir.join("gravacoes")),
@@ -337,6 +348,7 @@ impl AppState {
             config,
             PatStore::new(config_dir),
         );
+        state.inner()?.update_to_notify = just_updated;
         if !recovered.is_empty() {
             state.inner()?.notice = Some(format!(
                 "{} gravação(ões) interrompida(s) recuperada(s)",
@@ -370,6 +382,7 @@ impl AppState {
                 shortcut_registrations: Registrations::new(),
                 importing: None,
                 mic_test: None,
+                update_to_notify: None,
             }),
         }
     }
@@ -434,6 +447,7 @@ impl AppState {
                 .effective_web_url(std::env::var(config::WEB_URL_ENV).ok()),
             notice: inner.notice.clone(),
             sync_notice: inner.sync_notice.clone(),
+            updated: inner.config.update_notice(CURRENT_VERSION).cloned(),
         })
     }
 
@@ -706,6 +720,29 @@ impl AppState {
             .as_ref()
             .filter(|t| t.running.load(Ordering::Relaxed))
             .and_then(|t| t.levels.lock().ok().map(|levels| *levels)))
+    }
+
+    /// A atualização a notificar nesta abertura; `None` depois da primeira chamada.
+    pub fn take_update_notification(&self) -> Result<Option<PendingUpdate>> {
+        Ok(self.inner()?.update_to_notify.take())
+    }
+
+    /// Guarda a versão e as notas antes de o updater instalar.
+    pub fn record_pending_update(&self, version: &str, notes: Option<String>) -> Result<()> {
+        let mut inner = self.inner()?;
+        inner.config.pending_update = Some(PendingUpdate {
+            version: version.to_string(),
+            notes: notes.filter(|n| !n.trim().is_empty()),
+        });
+        inner.config.save(&self.config_path)
+    }
+
+    /// Fecha o aviso "Atualizado para X".
+    pub fn dismiss_update_notice(&self) -> Result<()> {
+        let mut inner = self.inner()?;
+        inner.config.pending_update = None;
+        inner.config.last_version = Some(CURRENT_VERSION.to_string());
+        inner.config.save(&self.config_path)
     }
 
     /// Os atalhos globais da config.
@@ -1501,6 +1538,59 @@ mod tests {
         assert!(heard, "o medidor devia subir com o tom");
         std::thread::sleep(Duration::from_millis(600));
         assert!(state.mic_test_meter().unwrap().is_none());
+    }
+
+    #[test]
+    fn atualizado_para_x_ate_fechar_e_notificado_uma_vez() {
+        let dir =
+            std::env::temp_dir().join(format!("eclume-state-atualizado-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let config_dir = dir.join("config");
+        Config {
+            last_version: Some("0.0.9".into()),
+            pending_update: Some(PendingUpdate {
+                version: CURRENT_VERSION.into(),
+                notes: Some("Nova nota e Importar arquivo".into()),
+            }),
+            ..Config::default()
+        }
+        .save(&config_dir.join("config.json"))
+        .unwrap();
+
+        let state = AppState::open(&dir.join("dados"), &config_dir).unwrap();
+        let updated = state.view().unwrap().updated.unwrap();
+        assert_eq!(updated.version, CURRENT_VERSION);
+        assert_eq!(
+            updated.notes.as_deref(),
+            Some("Nova nota e Importar arquivo")
+        );
+        assert!(state.take_update_notification().unwrap().is_some());
+        assert!(state.take_update_notification().unwrap().is_none());
+        drop(state);
+
+        // Reaberto sem fechar o aviso: ele segue na janela, sem notificar de novo.
+        let state = AppState::open(&dir.join("dados"), &config_dir).unwrap();
+        assert!(state.view().unwrap().updated.is_some());
+        assert!(state.take_update_notification().unwrap().is_none());
+        state.dismiss_update_notice().unwrap();
+        assert!(state.view().unwrap().updated.is_none());
+        let saved = Config::load(&config_dir.join("config.json"));
+        assert_eq!(saved.pending_update, None);
+        assert_eq!(saved.last_version.as_deref(), Some(CURRENT_VERSION));
+
+        state
+            .record_pending_update("9.9.9", Some("  ".into()))
+            .unwrap();
+        let saved = Config::load(&config_dir.join("config.json"));
+        assert_eq!(
+            saved.pending_update,
+            Some(PendingUpdate {
+                version: "9.9.9".into(),
+                notes: None
+            })
+        );
+        drop(state);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

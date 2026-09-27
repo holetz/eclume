@@ -89,3 +89,21 @@ test('erro de um comando aparece e some no próximo que dá certo', async ({ abr
   await page.locator('#gravar').click()
   await expect(page.locator('#aviso')).toBeHidden()
 })
+
+test('depois de uma atualização: "Atualizado para X" com as notas até fechar', async ({ abrir }) => {
+  const page = await abrir('atualizado')
+  const aviso = page.locator('#atualizado')
+  await expect(aviso).toBeVisible()
+  await expect(aviso).toHaveClass(/alert-success/)
+  await expect(page.locator('#atualizado-titulo')).toHaveText('Atualizado para 0.2.0')
+  await expect(page.locator('#atualizado-notas')).toHaveText('Nova nota, Importar arquivo e entrar com e-mail e senha')
+  await page.locator('#atualizado-fechar').click()
+  await expect(aviso).toBeHidden()
+  expect((await chamadas(page)).map((c) => c.comando)).toContain('dismiss_update_notice')
+})
+
+test('sem atualização, nada de aviso', async ({ abrir }) => {
+  const page = await abrir()
+  await expect(page.locator('#linha-status')).not.toHaveText('Carregando…')
+  await expect(page.locator('#atualizado')).toBeHidden()
+})

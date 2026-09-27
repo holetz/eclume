@@ -192,8 +192,18 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
             log::info!("dados em {}", data_dir.display());
+            let updated = state.take_update_notification()?;
             app.manage(state);
             tray::build(app.handle())?;
+            if let Some(update) = updated {
+                notify::info(
+                    &format!("eclume atualizado para {}", update.version),
+                    update
+                        .notes
+                        .as_deref()
+                        .unwrap_or("Veja as novidades na janela do eclume."),
+                );
+            }
             shortcuts::init(app.handle());
             // No macOS, o app vive na barra de menus, sem ícone no Dock.
             #[cfg(target_os = "macos")]
@@ -241,6 +251,7 @@ pub fn run() {
             commands::save_settings,
             commands::answer_meeting,
             commands::sync_now,
+            commands::dismiss_update_notice,
             commands::storage_info,
             commands::list_input_devices,
             commands::mic_test,

@@ -54,6 +54,22 @@ pub struct Config {
     /// Gravar também o áudio do sistema nas reuniões.
     #[serde(default = "default_system_audio")]
     pub system_audio: bool,
+    /// A versão que abriu por último; `null` antes da primeira abertura.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_version: Option<String>,
+    /// A versão que o updater instalou, com as notas, guardada antes de instalar; some quando a
+    /// pessoa fecha o aviso "Atualizado para X".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_update: Option<PendingUpdate>,
+}
+
+/// Uma atualização instalada pelo updater: a versão e as notas do release (`body` do
+/// `latest.json`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingUpdate {
+    pub version: String,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 fn default_system_audio() -> bool {
@@ -84,11 +100,34 @@ impl Default for Config {
             shortcuts: Shortcuts::default(),
             mic: None,
             system_audio: true,
+            last_version: None,
+            pending_update: None,
         }
     }
 }
 
 impl Config {
+    /// O aviso "Atualizado para X" da janela: a atualização guardada é a desta versão.
+    pub fn update_notice(&self, current: &str) -> Option<&PendingUpdate> {
+        self.pending_update
+            .as_ref()
+            .filter(|update| update.version == current)
+    }
+
+    /// Registra a abertura de `current`. Devolve a atualização quando esta é a primeira abertura
+    /// depois de o updater instalá-la (para a notificação sair uma vez só); na primeira
+    /// instalação, sem `last_version`, não há aviso.
+    pub fn open_version(&mut self, current: &str) -> Option<PendingUpdate> {
+        let previous = self.last_version.replace(current.to_string());
+        let just_updated = previous.as_deref().is_some_and(|v| v != current);
+        if previous.is_none() {
+            self.pending_update = None;
+        }
+        just_updated
+            .then(|| self.update_notice(current).cloned())
+            .flatten()
+    }
+
     /// Lê o arquivo; ausente ou inválido cai no padrão (inválido fica registrado no log).
     pub fn load(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
@@ -275,6 +314,35 @@ mod tests {
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
         assert!(format!("{err:#}").contains("CA extra"), "{err:#}");
+    }
+
+    #[test]
+    fn aviso_de_atualizacao_uma_vez_e_ate_fechar() {
+        let pending = PendingUpdate {
+            version: "0.2.0".into(),
+            notes: Some("Nova nota".into()),
+        };
+        // Primeira instalação: nada a avisar.
+        let mut fresh = Config::default();
+        assert_eq!(fresh.open_version("0.2.0"), None);
+        assert_eq!(fresh.last_version.as_deref(), Some("0.2.0"));
+
+        let mut config = Config {
+            last_version: Some("0.1.2".into()),
+            pending_update: Some(pending.clone()),
+            ..Config::default()
+        };
+        assert_eq!(config.open_version("0.2.0"), Some(pending.clone()));
+        assert_eq!(config.update_notice("0.2.0"), Some(&pending));
+        // Reabrir não notifica de novo, mas o aviso da janela fica até ser fechado.
+        assert_eq!(config.open_version("0.2.0"), None);
+        assert_eq!(config.update_notice("0.2.0"), Some(&pending));
+        // Uma atualização guardada que não chegou a instalar não vira aviso.
+        assert_eq!(config.update_notice("0.1.2"), None);
+
+        let text = serde_json::to_string(&config).unwrap();
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.pending_update, Some(pending));
     }
 
     #[test]
