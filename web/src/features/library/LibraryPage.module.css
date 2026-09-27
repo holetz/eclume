@@ -14,6 +14,20 @@
   margin-bottom: var(--space-4);
 }
 
+.band {
+  margin-bottom: var(--space-4);
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .status {
   margin: 0 0 var(--space-3);
   font-size: 14px;

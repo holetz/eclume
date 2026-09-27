@@ -1,12 +1,12 @@
 import { lazy, Suspense, type ComponentType } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { NotFoundPage } from './NotFoundPage'
 import { RequireSession } from './RequireSession'
 
 // A biblioteca e o login vão no bundle inicial; as outras áreas carregam sob demanda, cada uma no
-// seu chunk (o conversor de mídia do import e o react-markdown dos resumos são os mais pesados).
+// seu chunk (o react-markdown dos resumos é o mais pesado; o conversor do import carrega com o modal).
 const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })))
 
@@ -14,7 +14,6 @@ const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminR
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
-const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
 const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
 const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
 const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchPage')
@@ -41,7 +40,8 @@ export function AppRoutes() {
       <Route element={<RequireSession />}>
         <Route index element={<LibraryPage />} />
         <Route path="/gravacoes/:id" element={page(RecordingPage)} />
-        <Route path="/importar" element={page(ImportPage)} />
+        {/* Importar é o modal da biblioteca; a rota antiga abre o modal. */}
+        <Route path="/importar" element={<Navigate to="/?importar=1" replace />} />
         <Route path="/pessoas" element={page(PeoplePage)} />
         <Route path="/pessoas/:id" element={page(PersonPage)} />
         <Route path="/busca" element={page(SearchPage)} />

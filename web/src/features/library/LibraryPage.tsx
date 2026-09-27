@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
-import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { PageHead } from '../../app/PageHead'
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
+import { useImportContext } from '../import/importContext'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
 import { CalendarMonth } from './CalendarMonth'
 import { CalendarWeek } from './CalendarWeek'
@@ -22,6 +23,7 @@ import {
 } from './filters'
 import { FilterGroups, LibraryFilters } from './LibraryFilters'
 import styles from './LibraryPage.module.css'
+import type { ImportItem } from '../import/useImportQueue'
 import { useLibraryList, useLibraryRange } from './queries'
 import { RecordingList } from './RecordingList'
 
@@ -30,6 +32,9 @@ const VIEWS: { value: LibraryView; label: string }[] = [
   { value: 'semana', label: 'Semana' },
   { value: 'lista', label: 'Lista' },
 ]
+
+// O modal (e o conversor de mídia que ele puxa) carrega só quando abre.
+const ImportDialog = lazy(() => import('../import/ImportDialog').then((module) => ({ default: module.ImportDialog })))
 
 const NARROW = '(max-width: 56rem)'
 
@@ -72,6 +77,8 @@ export function LibraryPage() {
     if (params.size > 0) writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params))
   }, [params])
 
+  const importQueue = useImportContext()
+  const importing = params.get('importar') === '1'
   const view = readView(params) ?? (narrow ? 'lista' : 'semana')
   const day = parseDayKey(params.get('data')) ?? new Date()
   const filters = readFilters(params)
@@ -119,12 +126,14 @@ export function LibraryPage() {
                 <Search size={16} aria-hidden />
                 Buscar
               </Link>
-              <Link to="/importar" className="btn btn-primary">
+              <button type="button" className="btn btn-primary" onClick={() => update({ importar: '1' })}>
                 Importar arquivos
-              </Link>
+              </button>
             </>
           }
         />
+
+        <ImportBand items={importQueue.items} onOpen={() => update({ importar: '1' })} />
 
         <div className={`toolbar ${styles.toolbar}`}>
           <span className="toolbar-title" aria-live="polite">
@@ -190,7 +199,7 @@ export function LibraryPage() {
         )}
 
         {emptyLibrary ? (
-          <EmptyLibrary />
+          <EmptyLibrary onImport={() => update({ importar: '1' })} />
         ) : (
           <>
             {view === 'semana' && <CalendarWeek days={week.days} recordings={items} busy={range.isPending} />}
@@ -231,6 +240,11 @@ export function LibraryPage() {
           onChange={changeFilters}
         />
       )}
+      {importing && (
+        <Suspense fallback={null}>
+          <ImportDialog onClose={() => update({ importar: null })} />
+        </Suspense>
+      )}
       {narrow && filtersOpen && (
         <Dialog
           title="Filtros"
@@ -257,7 +271,24 @@ export function LibraryPage() {
   )
 }
 
-function EmptyLibrary() {
+/** A faixa da fila de importação, enquanto há arquivo convertendo ou subindo. */
+function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void }) {
+  const active = items.filter((item) => item.state.kind !== 'canceled')
+  const current = active.findIndex((item) => item.state.kind === 'converting' || item.state.kind === 'uploading')
+  if (current === -1) return null
+  return (
+    <div className={`alert alert-info ${styles.band}`} role="status">
+      <span>
+        Enviando {current + 1} de {active.length} {active.length === 1 ? 'arquivo' : 'arquivos'} ·{' '}
+        <button type="button" className={styles.linkButton} onClick={onOpen}>
+          Abrir
+        </button>
+      </span>
+    </div>
+  )
+}
+
+function EmptyLibrary({ onImport }: { onImport: () => void }) {
   return (
     <div className={`card ${styles.empty}`}>
       <h2>Nenhuma gravação ainda</h2>
@@ -265,9 +296,9 @@ function EmptyLibrary() {
         Importe um arquivo de áudio ou vídeo, ou instale o <Link to="/app-desktop">app desktop</Link> para gravar
         reuniões automaticamente.
       </p>
-      <Link to="/importar" className="btn btn-primary">
+      <button type="button" className="btn btn-primary" onClick={onImport}>
         Importar arquivos
-      </Link>
+      </button>
     </div>
   )
 }
