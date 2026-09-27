@@ -5664,6 +5664,8 @@ components:
       - models_loaded
       - recent_failures
       - checked_at
+      - steps
+      - services
       properties:
         queue:
           type: object
@@ -5733,6 +5735,12 @@ components:
                 - 'null'
                 minimum: 0
         recent_failures:
+          description: 'As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais
+            antiga,
+
+            sem o conteúdo das gravações.
+
+            '
           type: array
           items:
             type: object
@@ -5745,8 +5753,21 @@ components:
             - failed_at
             properties:
               job_id:
-                type: string
+                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                type:
+                - string
+                - 'null'
                 format: uuid
+              step:
+                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                type: string
+                enum:
+                - received
+                - preprocessing
+                - transcription
+                - fields
+                - agenda_type
+                - summary
               recording_id:
                 type: string
                 format: uuid
@@ -5768,6 +5789,83 @@ components:
         checked_at:
           type: string
           format: date-time
+        steps:
+          description: 'Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas
+            (feitas ou
+
+            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+
+            '
+          type: array
+          items:
+            type: object
+            required:
+            - step
+            - runs
+            - median_ms
+            - failures
+            properties:
+              step:
+                type: string
+                enum:
+                - preprocessing
+                - transcription
+                - fields
+                - agenda_type
+                - summary
+              runs:
+                type: integer
+                minimum: 0
+              median_ms:
+                type:
+                - integer
+                - 'null'
+                minimum: 0
+              failures:
+                type: integer
+                minimum: 0
+        services:
+          description: 'Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded`
+            (lento),
+
+            `down` ou `absent` (ainda não existe na plataforma).
+
+            '
+          type: array
+          items:
+            type: object
+            required:
+            - name
+            - status
+            - detail
+            - latency_ms
+            properties:
+              name:
+                type: string
+                enum:
+                - api
+                - postgres
+                - redis
+                - storage
+                - gpu_worker
+                - cpu_worker
+                - mcp
+              status:
+                type: string
+                enum:
+                - healthy
+                - degraded
+                - down
+                - absent
+              detail:
+                type:
+                - string
+                - 'null'
+              latency_ms:
+                type:
+                - integer
+                - 'null'
+                minimum: 0
         worker:
           description: Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
             nenhum worker publicou nos últimos 45 s.
@@ -7884,7 +7982,15 @@ components:
           kind: diarization
           loaded_at: '2026-09-19T13:42:30Z'
           vram_mb: 980
-        recent_failures: []
+        recent_failures:
+        - job_id: null
+          recording_id: 01928f3a-1c00-7a00-8000-000000000302
+          step: summary
+          stage: null
+          code: provider_unavailable
+          message: O provider não respondeu.
+          failed_at: '2026-09-19T11:20:00Z'
+          retryable: false
         checked_at: '2026-09-19T13:43:00Z'
         worker:
           online: true
@@ -7919,6 +8025,56 @@ components:
           queued_at: '2026-09-19T13:41:30Z'
           started_at: null
           updated_at: null
+        steps:
+        - step: preprocessing
+          runs: 14
+          median_ms: 6200
+          failures: 0
+        - step: transcription
+          runs: 14
+          median_ms: 92000
+          failures: 1
+        - step: fields
+          runs: 13
+          median_ms: 8400
+          failures: 0
+        - step: agenda_type
+          runs: 13
+          median_ms: 3100
+          failures: 0
+        - step: summary
+          runs: 12
+          median_ms: 24500
+          failures: 1
+        services:
+        - name: api
+          status: healthy
+          detail: 0.1.0
+          latency_ms: 0
+        - name: postgres
+          status: healthy
+          detail: RLS ativa
+          latency_ms: 4
+        - name: redis
+          status: healthy
+          detail: null
+          latency_ms: 1
+        - name: storage
+          status: healthy
+          detail: null
+          latency_ms: 18
+        - name: gpu_worker
+          status: healthy
+          detail: whisperx-local
+          latency_ms: 0
+        - name: cpu_worker
+          status: healthy
+          detail: null
+          latency_ms: 1
+        - name: mcp
+          status: absent
+          detail: null
+          latency_ms: null
     SpeakerSuggestionRejected:
       summary: Locutor 2 sem a sugestão recusada
       value:

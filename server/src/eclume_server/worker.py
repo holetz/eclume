@@ -191,6 +191,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
         ],
         "queue_name": DEFAULT_QUEUE,
+        # A chave de health-check do arq (`eclume:default:health-check`) é a sonda da Saúde.
+        "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
         "on_shutdown": shutdown,
@@ -207,6 +209,7 @@ class WorkerSettings:
     functions = _FROM_ENV["functions"]
     cron_jobs = _FROM_ENV["cron_jobs"]
     queue_name = _FROM_ENV["queue_name"]
+    health_check_interval = _FROM_ENV["health_check_interval"]
     redis_settings = _FROM_ENV["redis_settings"]
     on_startup = _FROM_ENV["on_startup"]
     on_shutdown = _FROM_ENV["on_shutdown"]

@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Painel admin no server — conta de admin, configuração, segredos, usuários e saúde
-description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings, merge por campo, validação e entrega ao worker pelas options do transcribe), segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar e desativar, a saúde montada das filas arq, do heartbeat do worker GPU e dos jobs da plataforma, e o CLI de contas de admin.
+description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings com o pré-processamento, o idioma automático e a regra identificação ⇒ separação; merge por campo, validação e entrega ao worker pelas options do transcribe), os tipos de agenda padrão, segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar e desativar, a saúde com as filas, o worker GPU, as etapas do pipeline e as sondas dos serviços, e o CLI de contas de admin.
 resource: server/src/eclume_server/settings_admin.py, server/src/eclume_server/health.py, server/src/eclume_server/accounts.py, server/src/eclume_server/cli.py, server/src/eclume_server/routes/admin*.py, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, worker-gpu/src/eclume_worker/health.py, worker-gpu/src/eclume_worker/secrets.py
 tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33
 maintainer: holetz
 ---
 
@@ -55,11 +55,14 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
 ## Configuração em runtime (`/admin/settings`)
 
 - **Fonte única:** `platform_settings`, **uma linha** (`id boolean PRIMARY KEY DEFAULT true
-  CHECK (id)`), com os blocos `asr`, `diarization`, `summarization` (`default_provider_id`,
-  `auto_summarize`) e `voice_identification` (`enabled`, `suggestion_threshold`), mais
-  `updated_at` e `updated_by` (FK para `admins`). Os padrões moram só na migration 008.
+  CHECK (id)`), com os blocos `asr`, `diarization`, `voice_identification` (`enabled`,
+  `suggestion_threshold`) e `preprocessing`, mais `updated_at` e `updated_by` (FK para `admins`).
+  Os padrões moram nas migrations 008 e 011. O bloco `summarization` saiu na 011: o resumo
+  automático segue o tipo de agenda e o provider de `summaries`
+  ([processamento automático](processamento-automatico.md)).
   `eclume_app` lê a linha (o liga-desliga da voz e o resumo precisam); só o admin escreve.
-- O `PATCH` mescla **campo a campo** dentro de cada bloco, grava `updated_at` e `updated_by` e
+- O `PATCH` mescla **campo a campo** dentro de cada bloco (e, no `preprocessing`, dentro de cada
+  etapa), grava `updated_at` e `updated_by` e
   devolve a configuração resultante, com `updated_by` apontando a conta de admin (`{id, name}`).
 - **Validação (422 `validation_failed`, campo `bloco.campo`):** campo desconhecido é recusado
   (inclusive os que saíram, como `summarization.default_template_id` e
@@ -68,8 +71,15 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   16xx dá NaN nele ([worker-gpu.md](/docs/project/worker-gpu.md)); `diarization.model` só
   `pyannote/speaker-diarization-community-1`, o único pipeline que a engine carrega;
   `min_speakers ≤ max_speakers`; `endpoint_url` obrigatória com `engine: openai-compatible`;
-  `default_provider_id` precisa ser provider **habilitado**. As regras entre campos valem sobre o
-  estado mesclado, não só sobre o que foi enviado.
+  `voice_identification.enabled` exige `diarization.enabled` (a impressão é por locutor). As
+  regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
+- **Idioma automático:** `asr.default_language: "auto"` manda `options.language = null`, e a
+  engine detecta o idioma de cada gravação (o idioma da gravação, quando dito, vence).
+- **Bloco `preprocessing`:** `denoise` (`enabled`, `method` `rnnoise`/`afftdn`, `strength` 0–1),
+  `loudnorm` (`target_lufs` −30 a −10, `true_peak_db` −9 a 0, `lra` 1–20), `trim_silence`
+  (`min_silence_s` 1–30, `threshold_db` −80 a −20) e `split_channels` (`enabled`). A conversão
+  para 16 kHz mono não tem chave. Vai inteiro ao worker em `options.preprocess`; a ordem e o
+  tratamento estão no [contrato de jobs](../api/jobs-transcricao.md#pré-processamento).
 - **Vale para os próximos jobs.** O worker não lê o banco: `transcribe_options` monta as
   `options` do `transcribe` a partir de `platform_settings` num lugar só (`recordings.insert_job`),
   usado pelo upload completo, pela retranscrição e pela retentativa. Transcrições prontas não mudam.
@@ -77,6 +87,14 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   mesma transação do `PATCH`, os `speaker_embeddings` e as sugestões pendentes de toda a
   plataforma, e depois enfileira o `purge_embedding_objects`. As regras estão em
   [identificacao-por-voz.md](identificacao-por-voz.md).
+
+## Tipos de agenda padrão (`/admin/default-agenda-types`)
+
+`default_agenda_types` é da plataforma (sem dono nem RLS; só o papel de conexão e a sessão de
+admin): nome, padrão de título, como identificar, tags padrão, instruções de resumo, `position` e
+`include_for_new_users`. Os marcados são copiados para cada conta no cadastro
+(`eclume_seed_user_defaults`); mudar ou excluir um padrão não mexe nas cópias que as contas já
+têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
 
 ## Segredos (`/admin/secrets`)
 
@@ -112,9 +130,29 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   `arq:in-progress:<id>`, `queued` = o resto. São números da instância, sem ids nem conteúdo.
 - **Jobs e falhas da plataforma**, lidos com o papel de conexão: `running_jobs` são os
   `transcription_jobs` `queued`/`running` com etapa, progresso e o `updated_at` do hash de
-  progresso; `recent_failures` são os últimos 20 `failed` em 24 h, com `retryable` (a falha
-  passageira do [job morto](../api/jobs-transcricao.md#job-morto), falta de VRAM, S3). O título da
-  gravação nunca sai: `recording_title` é sempre o rótulo fixo "Gravação de usuário".
+  progresso; `recent_failures` são as últimas 20 etapas do pipeline `failed` em 24 h (todas as
+  etapas), com `step`, e `job_id` e `retryable` só no pré-processamento e na transcrição, que são
+  do job que o admin retenta (a falha passageira do [job morto](../api/jobs-transcricao.md#job-morto),
+  falta de VRAM, S3). O título da gravação nunca sai: `recording_title` é sempre o rótulo fixo
+  "Gravação de usuário".
+- **Etapas (`steps`):** para cada etapa do pipeline fora o recebido, nas últimas 24 h, as
+  execuções concluídas (`done` e `failed`), a mediana de `duration_ms` das feitas e as falhas, num
+  `SELECT` só de `pipeline_steps` com o papel de conexão. Só números; as cinco etapas aparecem
+  sempre, zeradas quando não rodaram.
+- **Serviços (`services`):** uma sonda por serviço, em paralelo, com teto de 2 s cada —
+  `healthy`, `degraded`, `down` ou `absent`:
+
+  | Serviço | Sonda |
+  |---|---|
+  | `api` | a versão do server |
+  | `postgres` | a RLS forçada (`relforcerowsecurity`) em todas as tabelas do usuário: detail "RLS ativa" |
+  | `redis` | `PING` |
+  | `storage` | `head_bucket`; acima de 1 s, `degraded` |
+  | `gpu_worker` | o heartbeat `eclume:gpu:health` |
+  | `cpu_worker` | a chave `eclume:default:health-check` do arq, renovada a cada 15 s (`health_check_interval`) |
+  | `mcp` | `absent` até holetz/eclume#35 |
+
+  A cota do bucket não aparece: a API S3 não a expõe.
 
 ## Retentativa (`POST /admin/jobs/{job_id}/retry`)
 

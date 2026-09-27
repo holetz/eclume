@@ -4955,7 +4955,7 @@ components:
           format: date-time
     AdminHealth:
       type: object
-      required: [queue, gpu, models_loaded, recent_failures, checked_at]
+      required: [queue, gpu, models_loaded, recent_failures, checked_at, steps, services]
       properties:
         queue:
           type: object
@@ -5007,14 +5007,22 @@ components:
                 type: [integer, "null"]
                 minimum: 0
         recent_failures:
+          description: |
+            As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
+            sem o conteúdo das gravações.
           type: array
           items:
             type: object
             required: [job_id, recording_id, stage, code, message, failed_at]
             properties:
               job_id:
-                type: string
+                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                type: [string, "null"]
                 format: uuid
+              step:
+                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                type: string
+                enum: [received, preprocessing, transcription, fields, agenda_type, summary]
               recording_id:
                 type: string
                 format: uuid
@@ -5033,6 +5041,47 @@ components:
         checked_at:
           type: string
           format: date-time
+        steps:
+          description: |
+            Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
+            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+          type: array
+          items:
+            type: object
+            required: [step, runs, median_ms, failures]
+            properties:
+              step:
+                type: string
+                enum: [preprocessing, transcription, fields, agenda_type, summary]
+              runs:
+                type: integer
+                minimum: 0
+              median_ms:
+                type: [integer, "null"]
+                minimum: 0
+              failures:
+                type: integer
+                minimum: 0
+        services:
+          description: |
+            Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
+            `down` ou `absent` (ainda não existe na plataforma).
+          type: array
+          items:
+            type: object
+            required: [name, status, detail, latency_ms]
+            properties:
+              name:
+                type: string
+                enum: [api, postgres, redis, storage, gpu_worker, cpu_worker, mcp]
+              status:
+                type: string
+                enum: [healthy, degraded, down, absent]
+              detail:
+                type: [string, "null"]
+              latency_ms:
+                type: [integer, "null"]
+                minimum: 0
         worker:
           description: >-
             Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
