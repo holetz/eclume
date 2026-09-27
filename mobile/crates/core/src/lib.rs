@@ -2,6 +2,9 @@
 //! comandos Tauri) e o sistema (pela ponte JNI do plugin Android), porque a Activity pode morrer e
 //! voltar enquanto o serviço grava. Arquitetura em docs/standards/code/mobile-app.md.
 
+pub mod conexao;
+pub mod config;
+
 /// O prefixo do `client_version` e do user agent do app Android.
 pub const CLIENT_PREFIX: &str = "eclume-android";
 
