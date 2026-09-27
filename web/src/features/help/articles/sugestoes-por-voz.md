@@ -2,7 +2,7 @@
 titulo: Como funcionam as sugestões por voz
 topico: transcricao
 paginas: [pessoas, pessoa, gravacao]
-relacionados: []
+relacionados: [ligar-locutor-a-pessoa, esquecer-a-voz, corrigir-transcricao]
 termos: [impressão de voz, biometria, LGPD, limiar, identificação por voz]
 ordem: 2
 atualizado: 2026-09-27
