@@ -1,5 +1,5 @@
-// Ponta a ponta contra o backend real (deploy/e2e-real.sh): cadastro, login, import com conversão
-// no navegador, transcrição concluída pelo worker e o resumo automático gerado pelo `claude -p`.
+// Ponta a ponta contra o backend real (deploy/e2e-real.sh): cadastro, login, import pelo modal (data
+// confirmada, conversão no navegador), transcrição concluída pelo worker e o resumo automático gerado pelo `claude -p`.
 // Nada é simulado: cookies, CSRF, URLs de parte assinadas, fila, worker e agente são os de verdade.
 // O admin vem do CLI (`eclume-server admin create`); o usuário nasce pelo cadastro aberto.
 import { readFileSync } from 'node:fs'
@@ -60,30 +60,41 @@ test('cadastro, login, import com conversão, transcrição e resumo contra o ba
   await page.getByRole('button', { name: 'Entrar' }).click()
   await expect(page.getByRole('navigation', { name: 'Principal' })).toBeVisible()
 
-  // Import: o WAV vira Opus no navegador e sobe em partes pelas URLs assinadas.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Importar arquivo' }).click()
-  await page.getByLabel('Escolher arquivo').setInputFiles({
+  // Import pelo modal da biblioteca: o WAV não traz data, então a pessoa confirma o início da
+  // gravação; o arquivo vira Opus no navegador e sobe em partes pelas URLs assinadas.
+  await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
+  await page.getByRole('button', { name: 'Importar arquivos' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Importar arquivos' })
+  await dialog.getByLabel(/Solte áudio ou vídeo aqui/).setInputFiles({
     name: 'duas-vozes.wav',
     mimeType: 'audio/wav',
     buffer: readFileSync(AUDIO),
   })
-  await expect(page.getByLabel('Título da gravação')).toHaveValue('duas-vozes')
-  await page.getByRole('button', { name: 'Converter e enviar' }).click()
-  await expect(page.getByText('Arquivo enviado. A transcrição entrou na fila.')).toBeVisible({ timeout: 120_000 })
-  // O servidor guardou o Opus convertido, bem menor que o WAV escolhido.
+  const date = dialog.getByLabel('Início da gravação de duas-vozes.wav')
+  await expect(dialog.getByText('Sem data no arquivo · usando a data de modificação, confira')).toBeVisible()
+  await date.fill('2026-09-21T09:30')
+  await expect(dialog.getByText('Editada por você')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Enviar 1 arquivo' }).click()
+  await expect(dialog.getByText(/Enviado ·/)).toBeVisible({ timeout: 120_000 })
+  // O servidor guardou o Opus convertido, bem menor que o WAV escolhido, na data confirmada.
   const listed = await request.get('/api/v1/recordings', { params: { limit: 1 } })
   const [recording] = (await listed.json()).items
   expect(recording.content_type).toMatch(/^audio\/ogg/)
   expect(recording.size_bytes).toBeLessThan(readFileSync(AUDIO).length / 5)
+  expect(recording.recorded_at_source).toBe('user')
+  expect(new Date(recording.recorded_at).getTime()).toBe(new Date(2026, 8, 21, 9, 30).getTime())
 
-  // Transcrição: o worker de verdade processa, e a página acompanha até as falas aparecerem.
-  await page.getByRole('link', { name: 'Acompanhar a gravação' }).click()
-  await expect(page.getByRole('heading', { name: 'duas-vozes' })).toBeVisible()
+  // Transcrição: o worker de verdade processa, e a página acompanha até a transcrição aparecer.
+  await dialog.getByRole('link', { name: 'Abrir' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'duas-vozes' })).toBeVisible()
+  const summaryLine = page.locator('details.disclosure > summary')
+  await expect(summaryLine).toBeVisible({ timeout: 6 * 60_000 })
+  await summaryLine.click()
   const falas = page.getByRole('list', { name: 'Falas' })
-  await expect(falas.getByRole('listitem').first()).toBeVisible({ timeout: 6 * 60_000 })
-  expect(await falas.getByRole('listitem').count()).toBeGreaterThan(0)
+  await expect(falas.getByRole('listitem').first()).toBeVisible()
 
   // Resumo automático pelo tipo de agenda detectado, gerado pelo `claude -p` do host depois da ingestão.
-  const resumos = page.getByRole('list', { name: 'Resumos gerados' })
-  await expect(resumos.getByText('Pronto')).toBeVisible({ timeout: 3 * 60_000 })
+  const resumo = page.getByRole('region', { name: 'Resumo', exact: true })
+  await expect(resumo.locator('.doc')).toBeVisible({ timeout: 3 * 60_000 })
+  await expect(resumo.getByText(/Do tipo de agenda · versão \d+/)).toBeVisible()
 })
