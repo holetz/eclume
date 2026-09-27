@@ -14,6 +14,8 @@ PAT_PREFIX = "eclp_"
 _PAT_BODY_LENGTH = 40
 _PAT_VISIBLE = len(PAT_PREFIX) + 4
 _ALPHABET = string.ascii_letters + string.digits
+PAIRING_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
+PAIRING_LENGTH = 6
 _hasher = PasswordHasher()
 # Hash de uma senha qualquer: o login de e-mail inexistente gasta o mesmo tempo que o de um existente.
 _DUMMY_HASH = _hasher.hash("eclume-dummy-password")
@@ -46,6 +48,16 @@ def new_pat() -> tuple[str, str]:
     """Novo PAT: (segredo `eclp_...`, prefixo visível)."""
     secret = PAT_PREFIX + "".join(secrets.choice(_ALPHABET) for _ in range(_PAT_BODY_LENGTH))
     return secret, secret[:_PAT_VISIBLE]
+
+
+def new_pairing_code() -> str:
+    """Código de pareamento: 6 caracteres sem os ambíguos (0/1/I/L/O/U), 30^6 combinações."""
+    return "".join(secrets.choice(PAIRING_ALPHABET) for _ in range(PAIRING_LENGTH))
+
+
+def normalize_pairing_code(raw: str) -> str:
+    """O código como o app o digitou: maiúsculas, sem hífen nem espaço."""
+    return "".join(raw.split()).replace("-", "").upper()
 
 
 def new_session_token() -> str:
