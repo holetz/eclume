@@ -12,20 +12,19 @@ docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-autom
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from arq import Retry, cron
 from arq.connections import RedisSettings
 from arq.worker import func
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from eclume_server.agenda_types import run_detect
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
-from eclume_server.devices import purge_pairing_codes
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
@@ -40,9 +39,13 @@ from eclume_server.voice import platform_voice
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from sqlalchemy.ext.asyncio import AsyncConnection
+
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
+# Códigos de pareamento vencidos sem uso somem depois disso (cron `expire_pairing_codes`).
+PAIRING_RETENTION = timedelta(days=1)
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -216,8 +219,19 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
     return len(rows)
 
 
+async def purge_pairing_codes(conn: AsyncConnection, now: datetime | None = None) -> int:
+    """Apaga os códigos de pareamento vencidos sem uso há mais de `PAIRING_RETENTION`.
+
+    Fica aqui, e não em `devices.py`, porque aquele importa `routes` e o worker não carrega a API.
+    """
+    cutoff = (now or datetime.now(UTC)) - PAIRING_RETENTION
+    codes = t.pairing_codes
+    result = await conn.execute(delete(codes).where(codes.c.used_at.is_(None), codes.c.expires_at < cutoff))
+    return result.rowcount
+
+
 async def expire_pairing_codes(ctx: dict[str, Any]) -> int:
-    """Apaga os códigos de pareamento vencidos sem uso."""
+    """Cron: os códigos vencidos sem uso somem; os usados ficam com o `token_id`."""
     async with system_tx(ctx["engine"]) as conn:
         return await purge_pairing_codes(conn)
 

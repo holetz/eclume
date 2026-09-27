@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from eclume_server.db import tables as t
@@ -25,8 +25,6 @@ if TYPE_CHECKING:
     from eclume_server.serialize import Row
 
 PAIRING_TTL = timedelta(minutes=10)
-# Códigos vencidos sem uso somem depois disso (o cron do worker); os usados ficam com o token.
-PAIRING_RETENTION = timedelta(days=1)
 
 # Upload, marcadores e status das próprias gravações; sem validade, revogável na web.
 DEVICE_SCOPES = ("recordings:read", "recordings:write")
@@ -57,14 +55,6 @@ async def issue_credential(
         .one()
     )
     return {"token": token_json(row), "secret": secret, "server": server}
-
-
-async def purge_pairing_codes(conn: AsyncConnection, now: datetime | None = None) -> int:
-    """Apaga os códigos que venceram sem uso há mais de `PAIRING_RETENTION` (papel do servidor)."""
-    cutoff = (now or datetime.now(UTC)) - PAIRING_RETENTION
-    codes = t.pairing_codes
-    result = await conn.execute(delete(codes).where(codes.c.used_at.is_(None), codes.c.expires_at < cutoff))
-    return result.rowcount
 
 
 def _code_hmac(secret_key: str, code: str) -> str:
