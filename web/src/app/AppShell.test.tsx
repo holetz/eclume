@@ -7,18 +7,23 @@ import { isInMoreSection, NAV_ITEMS, navGroups } from './nav'
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org', role: 'member' }
 
-function renderShell(user = member, onLogout = vi.fn()) {
+const admin: ShellUser = { ...member, role: 'admin' }
+
+function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
   render(
-    <MemoryRouter initialEntries={['/tokens']}>
+    <MemoryRouter initialEntries={[at]}>
       <Routes>
         <Route element={<AppShell user={user} onLogout={onLogout} />}>
           <Route path="/tokens" element={<h1>Tokens</h1>} />
+          <Route path="/pessoas" element={<h1>Pessoas</h1>} />
         </Route>
       </Routes>
     </MemoryRouter>,
   )
   return onLogout
 }
+
+const more = () => screen.getByText('Configurações e ajuda').closest('details')!
 
 describe('navegação', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
@@ -65,23 +70,58 @@ describe('navegação', () => {
 describe('AppShell', () => {
   afterEach(() => document.documentElement.removeAttribute('data-theme'))
 
-  it('marca a página corrente, tem skip link e sai', async () => {
+  it('mostra os grupos na ordem, com Administração só para admin', () => {
+    renderShell(admin)
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    // O <details> também tem o papel group; os grupos de links são os rotulados pelo título.
+    const titles = within(nav)
+      .getAllByRole('group')
+      .filter((group) => group.hasAttribute('aria-labelledby'))
+      .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
+    expect(titles).toEqual(['Gravações', 'Organizar', 'Administração', 'Minhas configurações'])
+    expect(within(nav).getByText('Configurações e ajuda').tagName).toBe('SUMMARY')
+    expect(within(nav).queryByRole('link', { name: 'Campos e regras' })).not.toBeInTheDocument()
+  })
+
+  it('não mostra Administração a quem não é admin', () => {
+    renderShell()
+    expect(screen.queryByRole('group', { name: 'Administração' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Painel admin' })).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Gravações' })).toBeInTheDocument()
+  })
+
+  it('marca a página corrente, tem skip link, mostra o usuário e sai', async () => {
     const onLogout = renderShell()
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Tokens de acesso' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('link', { name: 'Pular para o conteúdo' })).toHaveAttribute('href', '#conteudo')
     expect(screen.getByText('Mariana Couto')).toBeInTheDocument()
+    expect(screen.getByText('mariana@exemplo.org')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Sair' }))
     expect(onLogout).toHaveBeenCalled()
   })
 
-  it('troca o tema e lembra a escolha', async () => {
+  it('abre "Configurações e ajuda" sozinha quando a rota está nela', () => {
+    renderShell(member, vi.fn(), '/tokens')
+    expect(more()).toHaveAttribute('open')
+  })
+
+  it('deixa "Configurações e ajuda" fechada fora dela e abre pelo resumo', async () => {
+    renderShell(member, vi.fn(), '/pessoas')
+    expect(more()).not.toHaveAttribute('open')
+    await userEvent.click(screen.getByText('Configurações e ajuda'))
+    expect(more()).toHaveAttribute('open')
+  })
+
+  it('troca o tema pelo controle segmentado e lembra a escolha', async () => {
     renderShell()
-    await userEvent.selectOptions(screen.getByLabelText('Tema'), 'dark')
+    const theme = screen.getByRole('radiogroup', { name: 'Tema' })
+    await userEvent.click(within(theme).getByRole('radio', { name: 'Escuro' }))
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     expect(localStorage.getItem('eclume-tema')).toBe('dark')
-    await userEvent.selectOptions(screen.getByLabelText('Tema'), 'system')
+    await userEvent.click(within(theme).getByRole('radio', { name: 'Sistema' }))
+    expect(within(theme).getByRole('radio', { name: 'Sistema' })).toBeChecked()
     expect(document.documentElement).toHaveAttribute('data-theme', 'light')
     expect(localStorage.getItem('eclume-tema')).toBeNull()
   })
@@ -92,5 +132,7 @@ describe('AppShell', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'false')
   })
 })

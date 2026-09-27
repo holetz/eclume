@@ -73,6 +73,13 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
+/** Clica num item da navegação principal, abrindo "Configurações e ajuda" quando ele está recolhido. */
+async function navTo(page: Page, name: string) {
+  const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name })
+  if (!(await link.isVisible())) await page.getByText('Configurações e ajuda').click()
+  await link.click()
+}
+
 async function login(page: Page, shot?: string) {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
@@ -109,7 +116,7 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   await screenshot(page, '3-transcricao')
 
   // Import: conversão real no navegador e upload create → PUT → complete.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Importar arquivo' }).click()
+  await navTo(page, 'Importar arquivo')
   await page.getByLabel('Escolher arquivo').setInputFiles({ name: 'reuniao.wav', mimeType: 'audio/wav', buffer: wav(3) })
   await expect(page.getByText(/Duração 3 s/)).toBeVisible()
   await expect(page.getByLabel('Título da gravação')).toHaveValue('reuniao')
@@ -125,21 +132,21 @@ test('login, biblioteca, transcrição, import e token contra o mock', async ({ 
   )
 
   // Token: o segredo aparece uma vez.
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Tokens de acesso' }).click()
+  await navTo(page, 'Tokens de acesso')
   await expect(page.getByRole('table').getByRole('row')).toHaveCount(3)
   await page.getByRole('button', { name: 'lumea', exact: true }).click()
   await page.getByRole('button', { name: 'Criar token' }).click()
   await expect(page.getByLabel('Token', { exact: true })).toHaveValue(/^eclp_[A-Za-z0-9]{32,}$/)
   await screenshot(page, '5-tokens')
 
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'App desktop' }).click()
+  await navTo(page, 'App desktop')
   await expect(page.getByRole('heading', { name: 'App desktop' })).toBeVisible()
   await screenshot(page, '6-desktop')
 })
 
 test('painel admin contra o mock', async ({ page }) => {
   await login(page)
-  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Painel admin' }).click()
+  await navTo(page, 'Painel admin')
   const tabs = page.getByRole('navigation', { name: 'Seções da administração' })
 
   // Transcrição: a configuração do exemplo, salva de volta.
