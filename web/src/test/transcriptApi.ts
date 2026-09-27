@@ -1,7 +1,10 @@
 import { fixtures } from './fixtures'
 import { mockFetch } from './http'
 
-/** API da página de gravação transcrita (3 locutores), com rotas extras ou substitutas. */
+/**
+ * API da página de gravação transcrita (3 locutores): transcrição, resumo com versões, campos,
+ * marcadores e chat, com rotas extras ou substitutas.
+ */
 export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
@@ -11,6 +14,12 @@ export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
     'GET /api/v1/transcripts/:id/summaries': () => fixtures.summaryPage(),
     'GET /api/v1/collections': () => fixtures.collectionPage(),
     'GET /api/v1/people': () => fixtures.personPage(),
+    'GET /api/v1/recordings/:id/summary': () => fixtures.summaryState(),
+    'GET /api/v1/recordings/:id/summary/chat': () => fixtures.summaryChatPage(),
+    'GET /api/v1/recordings/:id/fields': () => fixtures.recordingFieldValues(),
+    'GET /api/v1/recordings/:id/markers': () => fixtures.markerPage(),
+    'GET /api/v1/fields': () => fixtures.fieldPage(),
+    'GET /api/v1/tags': () => fixtures.tagList(),
     ...extra,
   })
 }

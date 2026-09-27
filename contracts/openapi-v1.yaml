@@ -639,6 +639,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordingPage"
               examples:
+                semana:
+                  $ref: "#/components/examples/RecordingWeekPage"
                 biblioteca:
                   $ref: "#/components/examples/RecordingPage"
         "401":
@@ -930,6 +932,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SummaryChatPage"
+              examples:
+                conversa:
+                  $ref: "#/components/examples/SummaryChatPage"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -970,6 +975,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SummaryChatExchange"
+              examples:
+                na_fila:
+                  $ref: "#/components/examples/SummaryChatExchangeQueued"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -6108,6 +6116,9 @@ components:
     RecordingPage:
       summary: Uma gravação transcrita e uma em processamento
       externalValue: ./fixtures/recording-page.json
+    RecordingWeekPage:
+      summary: Semana de 21/09/2026, com notas, falha, sobreposição e resumo em andamento
+      externalValue: ./fixtures/recording-week-page.json
     RecordingPatchRequest:
       summary: Tags, coleção e metadados
       externalValue: ./fixtures/recording-patch-request.json
@@ -6153,6 +6164,12 @@ components:
     SummaryChatRequest:
       summary: Pedir quem falou do orçamento
       externalValue: ./fixtures/summary-chat-request.json
+    SummaryChatPage:
+      summary: Um pedido e a resposta que leu a transcrição
+      externalValue: ./fixtures/summary-chat-page.json
+    SummaryChatExchangeQueued:
+      summary: Pedido gravado e resposta na fila
+      externalValue: ./fixtures/summary-chat-message-queued.json
     SummaryChatMessageDone:
       summary: Resposta que leu um trecho e mudou o resumo
       externalValue: ./fixtures/summary-chat-message-done.json
