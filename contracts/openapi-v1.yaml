@@ -513,6 +513,8 @@ paths:
             examples:
               desktop:
                 $ref: "#/components/examples/UploadCreateRequest"
+              celular:
+                $ref: "#/components/examples/UploadCreateMobile"
       responses:
         "200":
           description: Deduplicado. Já existe gravação com este hash.
@@ -3951,12 +3953,12 @@ components:
           $ref: "#/components/schemas/NextCursor"
 
     Source:
-      description: Origem do áudio.
+      description: Origem do áudio. `desktop` e `mobile` são os apps que gravam.
       type: string
-      enum: [desktop, upload, api]
+      enum: [desktop, mobile, upload, api]
 
     Capture:
-      description: Contexto da captura, preenchido pelo app desktop.
+      description: Contexto da captura, preenchido pelo app que gravou (desktop ou celular).
       type: object
       properties:
         meeting_app:
@@ -3966,7 +3968,7 @@ components:
         device_name:
           type: [string, "null"]
         client_version:
-          description: Versão do app que gravou (`eclume-desktop/0.3.0`).
+          description: Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`).
           type: [string, "null"]
 
     RecordingMetadata:
@@ -4005,8 +4007,8 @@ components:
         recorded_at_source:
           description: |
             De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
-            `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
-            `recorded_at`, `upload`.
+            `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
+            sem `recorded_at`, `upload`.
           $ref: "#/components/schemas/RecordedAtSource"
         kind:
           $ref: "#/components/schemas/RecordingKind"
@@ -6433,6 +6435,9 @@ components:
     UploadCreateRequest:
       summary: Gravação do desktop, 18 MB em Opus
       externalValue: ./fixtures/upload-create-request.json
+    UploadCreateMobile:
+      summary: Gravação do celular com marcadores e tipo de agenda escolhido ao parar
+      externalValue: ./fixtures/upload-create-mobile.json
     UploadCreated:
       summary: Upload em 3 partes, URLs das partes emitidas
       externalValue: ./fixtures/upload-created.json

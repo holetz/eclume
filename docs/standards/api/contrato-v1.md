@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41
 maintainer: holetz
 ---
 
@@ -90,6 +90,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`. O navegador sobe o áudio já convertido
   ([formato-audio-upload.md](../code/formato-audio-upload.md)): `audio/ogg; codecs=opus` e o
   `sha256` em hex minúsculo que a biblioteca de conversão devolve.
+- **Origem do áudio** (`source`): `desktop` e `mobile` são os apps que gravam, `upload` é o import
+  pela web e `api` é o PAT. Sem `recorded_at_source`, um upload com `recorded_at` vindo de
+  `desktop` ou `mobile` fica com `capture` (o relógio do app que gravou); de outra origem, `user`;
+  sem `recorded_at`, `upload`.
 - **Transcrição** no schema de `contracts/transcript.schema.json`: segmentos
   `{id, speaker_id, start_ms, end_ms, text}` (palavras só com `?include=words`), locutores
   `{id, label, person, suggestions}`, `content_hash` do áudio e `revision`, que sobe a cada edição.

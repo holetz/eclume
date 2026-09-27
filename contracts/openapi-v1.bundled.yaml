@@ -543,6 +543,8 @@ paths:
             examples:
               desktop:
                 $ref: '#/components/examples/UploadCreateRequest'
+              celular:
+                $ref: '#/components/examples/UploadCreateMobile'
       responses:
         '200':
           description: Deduplicado. Já existe gravação com este hash.
@@ -4279,14 +4281,15 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     Source:
-      description: Origem do áudio.
+      description: Origem do áudio. `desktop` e `mobile` são os apps que gravam.
       type: string
       enum:
       - desktop
+      - mobile
       - upload
       - api
     Capture:
-      description: Contexto da captura, preenchido pelo app desktop.
+      description: Contexto da captura, preenchido pelo app que gravou (desktop ou celular).
       type: object
       properties:
         meeting_app:
@@ -4305,7 +4308,7 @@ components:
           - string
           - 'null'
         client_version:
-          description: Versão do app que gravou (`eclume-desktop/0.3.0`).
+          description: Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`).
           type:
           - string
           - 'null'
@@ -4349,9 +4352,9 @@ components:
         recorded_at_source:
           description: 'De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
 
-            `source: desktop`, `capture`; com `recorded_at` e outra origem, `user`; sem
+            `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
 
-            `recorded_at`, `upload`.
+            sem `recorded_at`, `upload`.
 
             '
           $ref: '#/components/schemas/RecordedAtSource'
@@ -7876,6 +7879,27 @@ components:
         - client_id: 01928f3a-1c00-7a00-8000-000000000c02
           at_ms: 131500
           note: null
+    UploadCreateMobile:
+      summary: Gravação do celular com marcadores e tipo de agenda escolhido ao parar
+      value:
+        filename: 2026-09-26 10-42 celular.ogg
+        content_type: audio/ogg; codecs=opus
+        size_bytes: 12960000
+        sha256: 5b1f0c7a2e9d4c3b8a6f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b
+        title: Visita ao cliente
+        recorded_at: '2026-09-26T13:42:00Z'
+        kind: meeting
+        agenda_type_id: 01928f3a-1c00-7a00-8000-0000000000a1
+        duration_ms: 4320000
+        source: mobile
+        capture:
+          meeting_app: null
+          device_name: Pixel 8
+          client_version: eclume-android/0.1.0
+        markers:
+        - client_id: 01928f3a-1c00-7a00-8000-000000000d01
+          at_ms: 2530000
+          note: Prazo da proposta
     UploadCreated:
       summary: Upload em 3 partes, URLs das partes emitidas
       value:
