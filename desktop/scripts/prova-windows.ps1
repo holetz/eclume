@@ -59,8 +59,12 @@ function Esperar([scriptblock]$condicao, [int]$segundos, [string]$descricao) {
     throw "tempo esgotado: $descricao"
 }
 
-# JSON de um texto para dentro de uma expressão JS.
-function Js([string]$texto) { return ($texto | ConvertTo-Json -Compress) }
+# Um texto dentro de uma expressão JS, em base64: o PowerShell 5.1 estraga aspas duplas nos
+# argumentos de programas nativos, então a expressão não leva nenhuma.
+function Js([string]$texto) {
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($texto))
+    return "new TextDecoder().decode(Uint8Array.from(atob('$b64'), (c) => c.charCodeAt(0)))"
+}
 
 Passo "1. instalador $Versao de $Servidor/downloads"
 $lista = (& curl.exe -sk --ssl-no-revoke "$Servidor/downloads/instaladores.json") -join "`n" | ConvertFrom-Json

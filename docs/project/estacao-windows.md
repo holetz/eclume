@@ -117,11 +117,14 @@ executável cujo **nome** contenha "eclume": rode o simulador de reunião com ou
 `powershell -NoProfile -File desktop/scripts/prova-windows.ps1` faz a prova de ponta a ponta nesta
 estação: baixa e instala o NSIS de `/downloads`, abre o app com a porta 9229, captura a primeira
 execução (com o servidor embutido), entra com a conta de teste (`ECLUME_PROVA_EMAIL` e
-`ECLUME_PROVA_SENHA`), grava uma nota pelo atalho `Ctrl+Alt+N` falando o WAV de prova pelos
-alto-falantes, e confere pela API (`desktop/scripts/prova_nota.py`) que a nota chegou à
+`ECLUME_PROVA_SENHA`), grava uma nota pelo atalho `Ctrl+Alt+N` falando um texto pela voz do
+Windows nos alto-falantes, e confere pela API (`desktop/scripts/prova_nota.py`) que a nota chegou à
 biblioteca com `kind=note`, `eclume-desktop/<versão>` e `transcribed`. A nota só para sozinha
 com voz no microfone: com o microfone mudo, ela é descartada ("não ouvimos voz") e a prova fica
-pendente de uma pessoa falar.
+pendente de uma pessoa falar. O atalho sintetizado (`keybd_event`) só chega ao app com a sessão
+**desbloqueada**: com a tela bloqueada, a entrada vai para a tela de logon e o atalho não dispara.
+A prova troca a credencial do app instalado pela da conta de teste; depois dela, "Sair" e entre
+de novo com a conta de uso.
 
 ## 6. Binários Windows cruzados no host
 
