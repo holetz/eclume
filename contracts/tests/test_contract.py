@@ -219,7 +219,9 @@ def test_operacoes_declaram_401_e_escopos_conhecidos(source_spec: dict[str, Any]
         if path == "/api/v1/admin/auth/login":
             assert security == [], f"{method.upper()} {path} deve ser público"
         elif path.startswith("/api/v1/admin/"):
-            assert security == [{"adminSessionCookie": []}], f"{method.upper()} {path} deve aceitar só a sessão de admin"
+            assert security == [{"adminSessionCookie": []}], (
+                f"{method.upper()} {path} deve aceitar só a sessão de admin"
+            )
         elif path.startswith("/api/v1/tokens"):
             assert security == [{"sessionCookie": []}], f"{method.upper()} {path} deve aceitar só sessão"
         else:

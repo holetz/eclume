@@ -20,8 +20,12 @@ def migration_files() -> list[Path]:
     return sorted(MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
 
 
-async def migrate(engine: AsyncEngine) -> list[str]:
-    """Aplica, cada uma na sua transação, as migrations ainda não aplicadas; devolve as aplicadas."""
+async def migrate(engine: AsyncEngine, until: str | None = None) -> list[str]:
+    """Aplica, cada uma na sua transação, as migrations ainda não aplicadas; devolve as aplicadas.
+
+    Com `until` (a versão, como `007_purga_de_embeddings`), para nela: os testes de uma migration
+    semeiam o banco no formato da anterior.
+    """
     applied_now: list[str] = []
     async with engine.connect() as conn:
         await conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _LOCK_KEY})
@@ -40,6 +44,8 @@ async def migrate(engine: AsyncEngine) -> list[str]:
             await conn.commit()
             for path in migration_files():
                 version = path.stem
+                if until is not None and version > until:
+                    break
                 if version in done:
                     continue
                 # SQL com vários comandos e blocos `DO $$`: vai pelo protocolo simples do asyncpg.
