@@ -2,7 +2,7 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-27
 audience: both
@@ -215,6 +215,20 @@ dispositivo e confere o estado `used`. Revoga o que criou. A descoberta se prova
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   | uv run python deploy/smoke_mcp.py --ca /tmp/eclume-root.crt
 uv run eclume-server discover --timeout 10
+```
+
+**Prova do web** (`bash deploy/prova-web-prod.sh`, `web/e2e-prod/prova.spec.ts`, no Chrome da
+estação ou com `E2E_CHANNEL=msedge`): entra pela tela com a conta do smoke (a senha é lida no host),
+cria um campo temporário, testa a regra nas últimas gravações e o exclui; gera o código de vínculo
+em App desktop e confere que a contagem começa entre 9:55 e 10:00 e desce; lê o QR de App móvel no
+próprio navegador (SVG → `<canvas>` → `jsqr`) e confere o `pair_url` com o código da tela; confere o
+endereço MCP contra `GET /api/v1/server`, cria um token só de leitura e o revoga em Tokens de
+acesso; busca "token" na central e abre o artigo; e abre a gaveta de ajuda em Pessoas. Termina
+com `OK`, sem erro de página, e deixa os screenshots em `web/test-results/prod/`. Os códigos de
+vínculo gerados vencem sozinhos em 10 minutos.
+
+```bash
+bash deploy/prova-web-prod.sh
 ```
 
 ### Primeiro deploy (2026-09-25)
