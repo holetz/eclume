@@ -75,6 +75,8 @@ const LIMITE_DO_APK: u64 = 256 * 1024 * 1024;
 struct CaPendente {
     url: String,
     raiz: RootCa,
+    /// O código de um QR sem `ca`: trocado pela credencial só depois de "Confiar".
+    codigo: Option<String>,
 }
 
 /// Em que ponto a ligação está: a UI escolhe a tela por ele.
@@ -182,7 +184,11 @@ impl Conexao {
     pub fn conectar_descoberto(&mut self, url: &str, ca_anunciada: Option<&str>) -> Result<()> {
         let url = normalizar_endereco(url)?;
         let raiz = pin::fetch_root(self.transportes.inseguro().as_ref(), &url, ca_anunciada)?;
-        self.pendente = Some(CaPendente { url, raiz });
+        self.pendente = Some(CaPendente {
+            url,
+            raiz,
+            codigo: None,
+        });
         Ok(())
     }
 
@@ -190,7 +196,11 @@ impl Conexao {
     pub fn conectar_endereco(&mut self, texto: &str) -> Result<()> {
         let url = normalizar_endereco(texto)?;
         let raiz = pin::fetch_root(self.transportes.inseguro().as_ref(), &url, None)?;
-        self.pendente = Some(CaPendente { url, raiz });
+        self.pendente = Some(CaPendente {
+            url,
+            raiz,
+            codigo: None,
+        });
         Ok(())
     }
 
@@ -198,23 +208,47 @@ impl Conexao {
         self.pendente = None;
     }
 
-    /// "Confiar": fixa a raiz conferida, confirma pelo descritor e grava o servidor na config.
-    pub fn confiar_ca(&mut self, config: &mut Config) -> Result<()> {
+    /// "Confiar": fixa a raiz conferida, confirma pelo descritor e grava o servidor na config. Se
+    /// a conferência veio de um QR sem `ca`, troca o código dele pela credencial. Devolve se pareou.
+    pub fn confiar_ca(&mut self, config: &mut Config) -> Result<bool> {
         let pendente = self
             .pendente
             .take()
             .context("não há certificado esperando conferência")?;
-        self.fixar(&pendente.url, &pendente.raiz, config)
+        self.fixar(&pendente.url, &pendente.raiz, config)?;
+        let Some(codigo) = pendente.codigo else {
+            return Ok(false);
+        };
+        self.trocar_codigo(config, &pendente.url, &codigo)?;
+        Ok(true)
     }
 
     fn fixar(&mut self, url: &str, raiz: &RootCa, config: &mut Config) -> Result<()> {
         std::fs::create_dir_all(&self.dirs.dados)
             .with_context(|| format!("falha ao criar {}", self.dirs.dados.display()))?;
+        // A raiz nova só substitui a do servidor atual depois de o descritor confirmá-la: uma
+        // conferência que falha não deixa o servidor pareado com a CA de outro.
         let ca = self.dirs.ca();
-        std::fs::write(&ca, &raiz.pem)
+        let provisoria = ca.with_extension("pem.novo");
+        std::fs::write(&provisoria, &raiz.pem)
+            .with_context(|| format!("falha ao gravar {}", provisoria.display()))?;
+        let conferida = self
+            .transportes
+            .fixado(&provisoria, REQUEST_TIMEOUT)
+            .and_then(|transporte| Devices::new(transporte, url)?.server_info())
+            .and_then(|info| {
+                pin::confirm(&info, &raiz.sha256)?;
+                Ok(info)
+            });
+        let info = match conferida {
+            Ok(info) => info,
+            Err(err) => {
+                let _ = std::fs::remove_file(&provisoria);
+                return Err(err);
+            }
+        };
+        std::fs::rename(&provisoria, &ca)
             .with_context(|| format!("falha ao gravar {}", ca.display()))?;
-        let info = Devices::new(self.transporte(REQUEST_TIMEOUT)?, url)?.server_info()?;
-        pin::confirm(&info, &raiz.sha256)?;
         if config
             .servidor
             .as_ref()
@@ -244,17 +278,31 @@ impl Conexao {
     }
 
     /// Lê o `pair_url` do QR da web: fixa a CA pela impressão digital do próprio QR e troca o
-    /// código pela credencial, sem senha.
-    pub fn parear(&mut self, config: &mut Config, texto_do_qr: &str) -> Result<()> {
+    /// código pela credencial, sem senha. Devolve se pareou: um QR sem `ca` (a raiz ainda não
+    /// publicada) não dispensa a conferência, e o código espera o "Confiar".
+    pub fn parear(&mut self, config: &mut Config, texto_do_qr: &str) -> Result<bool> {
         let par = eclume_sync::devices::parse_pair_url(texto_do_qr)?;
         let raiz = pin::fetch_root(
             self.transportes.inseguro().as_ref(),
             &par.url,
             par.ca_sha256.as_deref(),
         )?;
+        if par.ca_sha256.is_none() {
+            self.pendente = Some(CaPendente {
+                url: par.url,
+                raiz,
+                codigo: Some(par.code),
+            });
+            return Ok(false);
+        }
         self.fixar(&par.url, &raiz, config)?;
-        let devices = Devices::new(self.transporte(REQUEST_TIMEOUT)?, &par.url)?;
-        let credencial = devices.pair(&par.code, &config.device_name)?;
+        self.trocar_codigo(config, &par.url, &par.code)?;
+        Ok(true)
+    }
+
+    fn trocar_codigo(&mut self, config: &Config, url: &str, codigo: &str) -> Result<()> {
+        let devices = Devices::new(self.transporte(REQUEST_TIMEOUT)?, url)?;
+        let credencial = devices.pair(codigo, &config.device_name)?;
         self.guardar(&credencial)
     }
 

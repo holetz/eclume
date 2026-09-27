@@ -232,6 +232,21 @@ fn trancar(fila: &Mutex<Queue>) -> Result<std::sync::MutexGuard<'_, Queue>> {
         .map_err(|_| anyhow!("a fila ficou envenenada por um pânico"))
 }
 
+/// O contexto do erro de uma leitura autenticada que o servidor recusou com 401.
+#[derive(Debug)]
+pub struct CredencialRecusada;
+
+impl std::fmt::Display for CredencialRecusada {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("o servidor recusou a credencial deste aparelho")
+    }
+}
+
+/// Se o erro veio de um 401 numa leitura autenticada (a credencial foi revogada).
+pub fn recusou_credencial(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<CredencialRecusada>().is_some()
+}
+
 /// Uma leitura autenticada da API (`GET /api/v1<caminho>`).
 fn get_json<T: serde::de::DeserializeOwned>(
     transporte: &dyn Transport,
@@ -243,6 +258,9 @@ fn get_json<T: serde::de::DeserializeOwned>(
     let url = format!("{}/api/v1{caminho}", servidor.url.trim_end_matches('/'));
     let resposta = transporte
         .send(HttpRequest::new("GET", url).header("Authorization", format!("Bearer {token}")))?;
+    if resposta.status == 401 {
+        return Err(api_error(o_que, &resposta).context(CredencialRecusada));
+    }
     if !resposta.is_success() {
         return Err(api_error(o_que, &resposta));
     }

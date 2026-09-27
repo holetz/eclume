@@ -52,6 +52,8 @@ class Descoberta(context: Context) {
             Thread.sleep(segundos.coerceIn(1, 30) * 1000L)
         } finally {
             runCatching { nsd.stopServiceDiscovery(ouvinte) }
+            // Cada procura cria uma Descoberta: a thread do executor sai com ela.
+            executor.shutdown()
         }
         return achados.values.toList()
     }

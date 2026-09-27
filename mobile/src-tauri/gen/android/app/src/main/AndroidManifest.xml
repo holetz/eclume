@@ -4,13 +4,12 @@
     <!-- Declarada à frente do targetSdk 37 (Android 17), que pede acesso à rede local. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
-    <!-- AndroidTV support -->
-    <uses-feature android:name="android.software.leanback" android:required="false" />
-
-    <!-- Sem backup: o token do aparelho e as gravações não saem do celular por backup. -->
+    <!-- Sem backup nem transferência entre aparelhos (Android 12+): o token, a CA fixada, a fila e
+         as gravações não saem do celular. -->
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -25,8 +24,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- AndroidTV support -->
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 

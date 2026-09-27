@@ -3508,9 +3508,11 @@ components:
 
         aos escopos concedidos. Os escopos exigidos por operação estão no requisito de segurança
 
-        (`pat: [escopo, ...]`, todos obrigatórios). Nenhum escopo implica outro. Faltando
+        (`pat: [escopo, ...]`, todos obrigatórios; vários requisitos `pat` são alternativas, e
 
-        escopo, a resposta é 403 com `code: insufficient_scope` e `required_scopes`.
+        basta um). Nenhum escopo implica outro. Faltando escopo, a resposta é 403 com
+
+        `code: insufficient_scope` e `required_scopes`.
 
         '
   parameters:
@@ -3766,7 +3768,12 @@ components:
             '
           type: string
         required_scopes:
-          description: Com `insufficient_scope`, os escopos que faltaram.
+          description: 'Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos
+            `pat`
+
+            alternativos, as alternativas (basta um deles).
+
+            '
           type: array
           items:
             $ref: '#/components/schemas/Scope'

@@ -1651,7 +1651,10 @@ export interface components {
              *     vigor). Códigos novos entram de forma aditiva.
              */
             code: string;
-            /** @description Com `insufficient_scope`, os escopos que faltaram. */
+            /**
+             * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
+             *     alternativos, as alternativas (basta um deles).
+             */
             required_scopes?: components["schemas"]["Scope"][];
             /** @description Com `validation_failed`, um item por campo inválido. */
             errors?: {

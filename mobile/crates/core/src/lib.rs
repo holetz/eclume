@@ -259,7 +259,10 @@ impl Core {
     }
 
     pub fn confiar_ca(&mut self) -> Result<()> {
-        self.conexao.confiar_ca(&mut self.config)
+        if self.conexao.confiar_ca(&mut self.config)? {
+            self.rede.recuperou_credencial();
+        }
+        Ok(())
     }
 
     pub fn cancelar_ca(&mut self) {
@@ -273,8 +276,9 @@ impl Core {
     }
 
     pub fn parear(&mut self, texto_do_qr: &str) -> Result<()> {
-        self.conexao.parear(&mut self.config, texto_do_qr)?;
-        self.rede.recuperou_credencial();
+        if self.conexao.parear(&mut self.config, texto_do_qr)? {
+            self.rede.recuperou_credencial();
+        }
         Ok(())
     }
 
@@ -381,8 +385,7 @@ impl Core {
     /// Depois do sync: o 401 leva a Entrar, e a retenção apaga o que venceu.
     pub fn concluir_sync(&mut self, credencial_recusada: bool) -> Result<()> {
         if credencial_recusada {
-            self.conexao.perdeu_credencial()?;
-            self.rede.perdeu_credencial();
+            self.perdeu_credencial()?;
         }
         if self.config.excluir_sincronizadas {
             sync::reter(&self.fila, now_ms(), self.config.reter_dias)?;
@@ -391,6 +394,13 @@ impl Core {
     }
 
     /// A leitura dos tipos de agenda, na rede do eclume.
+    /// O servidor recusou a credencial (401 em qualquer chamada autenticada): volta a Entrar.
+    pub fn perdeu_credencial(&mut self) -> Result<()> {
+        self.conexao.perdeu_credencial()?;
+        self.rede.perdeu_credencial();
+        Ok(())
+    }
+
     pub fn preparar_tipos(&self) -> Result<Option<PlanoDeLeitura>> {
         if !self.rede.na_rede() {
             return Ok(None);
@@ -715,10 +725,18 @@ impl PlanoDeSync {
 // --- o núcleo do processo --------------------------------------------------------------------
 
 static NUCLEO: OnceLock<Mutex<Core>> = OnceLock::new();
+/// Serializa a abertura: a tela e o WorkManager abrindo juntos rodariam a recuperação duas vezes.
+static ABRINDO: Mutex<()> = Mutex::new(());
 
 /// Abre o núcleo do processo na primeira chamada; as seguintes devolvem o mesmo (a Activity que
 /// volta, o WorkManager).
 pub fn iniciar(dirs: Dirs, versao: &str) -> Result<&'static Mutex<Core>> {
+    if let Some(nucleo) = NUCLEO.get() {
+        return Ok(nucleo);
+    }
+    let _vez = ABRINDO
+        .lock()
+        .unwrap_or_else(|envenenada| envenenada.into_inner());
     if let Some(nucleo) = NUCLEO.get() {
         return Ok(nucleo);
     }
@@ -764,6 +782,13 @@ pub fn sondar(nucleo: &Mutex<Core>, forcar: bool) -> Result<Sondagem> {
     })
 }
 
+/// O ciclo do `SyncWorker`. O WorkManager só o roda em rede não medida (`UNMETERED`), e o processo
+/// aberto só para ele não tem a tela que avisaria o Wi-Fi: sem isso, a sonda nunca rodaria.
+pub fn ciclo_do_worker(nucleo: &Mutex<Core>) -> Result<Option<eclume_recorder::SyncReport>> {
+    trancar(nucleo)?.mudou_rede(true);
+    ciclo(nucleo, false)
+}
+
 /// Um ciclo: sonda, atualiza os tipos de agenda e sincroniza (`agora`: "Sincronizar agora", que
 /// sobe mesmo com o sync automático desligado). Bloqueia até o sync terminar.
 pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder::SyncReport>> {
@@ -779,7 +804,7 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
         if let Some(plano) = plano {
             match plano.tipos() {
                 Ok(tipos) => trancar(nucleo)?.guardar_tipos(tipos)?,
-                Err(err) => log::warn!("{err:#}"),
+                Err(err) => leitura_falhou(nucleo, &err)?,
             }
         }
     }
@@ -792,6 +817,15 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
     let (relatorio, recusada) = plano.executar()?;
     trancar(nucleo)?.concluir_sync(recusada)?;
     Ok(Some(relatorio))
+}
+
+/// Uma leitura autenticada que falhou: com 401, a credencial caiu; o resto só vai ao log.
+fn leitura_falhou(nucleo: &Mutex<Core>, err: &anyhow::Error) -> Result<()> {
+    log::warn!("{err:#}");
+    if sync::recusou_credencial(err) {
+        trancar(nucleo)?.perdeu_credencial()?;
+    }
+    Ok(())
 }
 
 /// Lê o `movel.json` (uma vez por dia, ou já com `forcar`) e devolve a versão nova, se houver.
@@ -819,7 +853,7 @@ pub fn detalhe(nucleo: &Mutex<Core>, id: &str) -> Result<DetalheLocal> {
     if let Some((plano, remoto)) = plano {
         match plano.etapas(&remoto) {
             Ok(etapas) => trancar(nucleo)?.guardar_etapas(id, etapas),
-            Err(err) => log::warn!("{err:#}"),
+            Err(err) => leitura_falhou(nucleo, &err)?,
         }
     }
     trancar(nucleo)?.gravacao(id)

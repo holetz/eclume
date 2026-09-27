@@ -174,11 +174,51 @@ fn ca_trocada_no_servidor_e_recusada_ao_confiar() {
         ),
     );
     let mut config = Config::default();
-    let mut conexao = Conexao::new(dirs, Arc::new(TransportesFalsos(roteiro)));
+    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro)));
     conexao.conectar_endereco(URL).unwrap();
     let erro = conexao.confiar_ca(&mut config).unwrap_err();
     assert!(format!("{erro:#}").contains("mudou"), "{erro:#}");
     assert_eq!(config.servidor, None);
+    // A raiz recusada não fica no lugar da CA fixada (nem a provisória).
+    assert!(!dirs.ca().exists());
+    assert!(!dirs.ca().with_extension("pem.novo").exists());
+}
+
+#[test]
+fn qr_sem_ca_espera_a_conferencia_antes_do_codigo() {
+    let (dirs, _guard) = dirs_temp("qr-sem-ca");
+    let roteiro = Roteiro::default();
+    roteiro.responde(
+        "GET",
+        "/downloads/eclume-root.crt",
+        comum::texto(200, CA_PEM),
+    );
+    servidor_ok(&roteiro);
+    roteiro.responde("POST", "/api/v1/devices/pair", credencial());
+    let mut config = Config {
+        device_name: "Pixel 8".into(),
+        ..Config::default()
+    };
+    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro.clone())));
+    let pareou = conexao
+        .parear(&mut config, &format!("{URL}/parear?codigo=K7Q4MX"))
+        .unwrap();
+    assert!(!pareou);
+    assert!(matches!(
+        conexao.estado(&config),
+        EstadoConexao::ConfirmarCa { .. }
+    ));
+    assert!(roteiro.pedido("POST", "/api/v1/devices/pair").is_none());
+    assert!(!dirs.ca().exists());
+
+    assert!(conexao.confiar_ca(&mut config).unwrap());
+    assert!(matches!(
+        conexao.estado(&config),
+        EstadoConexao::Conectado { .. }
+    ));
+    let par = roteiro.pedido("POST", "/api/v1/devices/pair").unwrap();
+    let corpo: serde_json::Value = serde_json::from_slice(&par.body).unwrap();
+    assert_eq!(corpo["code"], "K7Q4MX");
 }
 
 #[test]

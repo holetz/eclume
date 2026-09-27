@@ -35,28 +35,39 @@ fn com_nucleo<R: Runtime, T>(
     resultado
 }
 
+/// Como [`com_nucleo`], numa thread de bloqueio: os comandos que falam com o servidor (baixar a CA,
+/// `/server`, login, pareamento) não podem prender a thread principal (ANR) com um endereço mudo.
+async fn com_nucleo_na_rede<R: Runtime, T: Send + 'static>(
+    app: AppHandle<R>,
+    f: impl FnOnce(&mut Core) -> anyhow::Result<T> + Send + 'static,
+) -> Resultado<T> {
+    tauri::async_runtime::spawn_blocking(move || com_nucleo(&app, f))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
 #[tauri::command]
 pub fn estado() -> Resultado<EstadoApp> {
     trancar(nucleo()?).map_err(texto)?.estado().map_err(texto)
 }
 
 #[tauri::command]
-pub fn conectar_descoberto<R: Runtime>(
+pub async fn conectar_descoberto<R: Runtime>(
     app: AppHandle<R>,
     url: String,
     ca: Option<String>,
 ) -> Resultado<()> {
-    com_nucleo(&app, |c| c.conectar_descoberto(&url, ca.as_deref()))
+    com_nucleo_na_rede(app, move |c| c.conectar_descoberto(&url, ca.as_deref())).await
 }
 
 #[tauri::command]
-pub fn conectar_endereco<R: Runtime>(app: AppHandle<R>, endereco: String) -> Resultado<()> {
-    com_nucleo(&app, |c| c.conectar_endereco(&endereco))
+pub async fn conectar_endereco<R: Runtime>(app: AppHandle<R>, endereco: String) -> Resultado<()> {
+    com_nucleo_na_rede(app, move |c| c.conectar_endereco(&endereco)).await
 }
 
 #[tauri::command]
-pub fn confiar_ca<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo(&app, Core::confiar_ca)
+pub async fn confiar_ca<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
+    com_nucleo_na_rede(app, Core::confiar_ca).await
 }
 
 #[tauri::command]
@@ -68,15 +79,15 @@ pub fn cancelar_ca<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
 }
 
 #[tauri::command]
-pub fn entrar<R: Runtime>(app: AppHandle<R>, email: String, senha: String) -> Resultado<()> {
-    com_nucleo(&app, |c| c.entrar(&email, &senha))?;
+pub async fn entrar<R: Runtime>(app: AppHandle<R>, email: String, senha: String) -> Resultado<()> {
+    com_nucleo_na_rede(app.clone(), move |c| c.entrar(&email, &senha)).await?;
     eventos::ciclo_em_segundo_plano(&app, true);
     Ok(())
 }
 
 #[tauri::command]
-pub fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> Resultado<()> {
-    com_nucleo(&app, |c| c.parear(&texto))?;
+pub async fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> Resultado<()> {
+    com_nucleo_na_rede(app.clone(), move |c| c.parear(&texto)).await?;
     eventos::ciclo_em_segundo_plano(&app, true);
     Ok(())
 }

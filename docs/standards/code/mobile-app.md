@@ -46,8 +46,11 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   esperar a rede.
 - **Pastas:** tudo vive na pasta de dados do app (`app_data_dir` do Tauri, o `dataDir` do
   Android): `eclume/` com `config.json`, `ca.pem`, `queue.sqlite` e `gravacoes/`, e `no_backup/` (o
-  `noBackupFilesDir`) com o `device-token` 0600. O manifesto tem `android:allowBackup="false"`. O
-  `SyncWorker` abre o núcleo com a mesma pasta (`context.dataDir`).
+  `noBackupFilesDir`) com o `device-token` 0600 (arquivo privado do app, sem cifra pelo Android
+  Keystore). O manifesto tem `android:allowBackup="false"` e `dataExtractionRules` que excluem
+  tudo do backup na nuvem e da transferência entre aparelhos (Android 12+). O `SyncWorker` abre o
+  núcleo com a mesma pasta (`context.dataDir`); a abertura é serializada, para a tela e o worker
+  não rodarem a recuperação duas vezes.
 
 ## Conexão e credencial
 
@@ -57,18 +60,24 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
      pessoa confere a impressão digital antes de mandar e-mail e senha, porque o TXT não é
      autenticado;
   2. **QR** da web (`pair_url`, lido por `parse_pair_url`): a impressão digital vem da tela
-     autenticada da web, e o pareamento termina sem senha e sem conferência;
+     autenticada da web, e o pareamento termina sem senha e sem conferência. Um QR **sem `ca`**
+     (a raiz ainda não publicada) não dispensa nada: vai à conferência, e o código só é trocado
+     depois de "Confiar";
   3. **Endereço digitado** (sem esquema vira `https://`): TOFU, com a impressão em blocos de 4
      (`3F9A 12C4 …`) para conferir com a web antes de "Confiar".
 - Fixada a raiz, o transporte é `TrustMode::Pinned` (só o `ca.pem`), e o `GET /api/v1/server` já
-  fixado confirma o `ca_sha256` antes de gravar o servidor na config. Trocar de servidor apaga a
+  fixado confirma o `ca_sha256` antes de gravar o servidor na config. A raiz nova vai para
+  `ca.pem.novo` e só substitui o `ca.pem` depois dessa confirmação.
+- Os comandos que falam com o servidor para conectar (`conectar_*`, `confiar_ca`, `entrar`,
+  `parear`) são `async` e rodam numa thread de bloqueio, nunca na thread principal. Trocar de servidor apaga a
   credencial do anterior.
 - **Credencial:** `POST /devices/login` ou `POST /devices/pair` com `device_name` = `Build.MODEL`
   (o nome que a web lista e que os marcadores levam) e `platform: android`. O segredo `eclp_` vai
   para o `PatStore` sem chaveiro (o arquivo privado). As recusas viram texto no crate de sync,
   inclusive o 403 `notice_required` ("Aceite o aviso … na web e entre de novo aqui").
-- **401** em qualquer chamada autenticada (notado pelo transporte durante o sync) apaga o token e
-  leva à tela Entrar, sem mexer nas gravações locais.
+- **401** em qualquer chamada autenticada (notado pelo transporte durante o sync, e pelas leituras
+  de tipos de agenda e etapas, marcadas com `CredencialRecusada`) apaga o token e leva à tela
+  Entrar, sem mexer nas gravações locais.
 - **"Sair e esquecer o servidor"** apaga o token, a CA e o servidor da config; as gravações
   aguardando ficam e sobem no próximo servidor pareado. A tela lembra de desvincular o aparelho na
   web: um token de dispositivo não se revoga sozinho.
@@ -93,7 +102,9 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
 - Os **tipos de agenda** da folha ficam em cache na config e são relidos quando a sonda roda
   (`GET /agenda-types`, que desde a 2.4.0 aceita o `recordings:read` da credencial de dispositivo).
 - **Em segundo plano**, o `SyncWorker` do WorkManager (periódico de 15 min e um único ao ganhar
-  Wi‑Fi, só `UNMETERED`) chama `syncPendentes` pela ponte, que faz a sonda antes de subir.
+  Wi‑Fi, só `UNMETERED`) chama `syncPendentes` pela ponte (`ciclo_do_worker`), que parte do
+  Wi‑Fi não medido que o WorkManager garante (o processo aberto só para ele não tem a tela que o
+  avisaria) e faz a sonda antes de subir.
 
 ## Sessão de gravação
 
@@ -135,8 +146,8 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Manifesto** (app e plugin): `RECORD_AUDIO`, `FOREGROUND_SERVICE`,
   `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE`,
   `INTERNET`, `REQUEST_INSTALL_PACKAGES`, `CAMERA` (do leitor de QR) e `ACCESS_LOCAL_NETWORK`,
-  declarada à frente do `targetSdk 37`; `network_security_config` sem texto claro fora do servidor
-  de desenvolvimento. `minSdk 26`, `targetSdk`/`compileSdk 36`.
+  declarada à frente do `targetSdk 37`; `network_security_config` sem texto claro (o HTTP do
+  servidor de desenvolvimento só em `src/debug`); `FileProvider` só com o `cache-path`. `minSdk 26`, `targetSdk`/`compileSdk 36`.
 - **Câmera:** o `tauri-plugin-barcode-scanner` oficial (`windowed`, QR), com a permissão numa
   capability só do celular (`capabilities/movel.json`, `platforms: android, iOS`). O texto lido
   não é confiável: `parse_pair_url` o valida antes de qualquer rede.

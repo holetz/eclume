@@ -332,13 +332,11 @@ fn atualizacao_pelo_movel_json_confere_o_apk() {
     assert!(!dirs.sem_backup.exists());
 }
 
-/// Um ciclo inteiro pelo núcleo (sonda, tipos, atualização, sync) não pode travar a si mesmo: a
-/// rede roda fora da trava do núcleo.
-#[test]
-fn ciclo_completo_nao_trava_o_nucleo() {
-    use eclume_mobile_core::{ciclo, trancar, Core};
+/// Um núcleo conectado e com credencial, sobre um roteiro com a sonda e os tipos de agenda.
+fn nucleo_conectado(nome: &str) -> (Arc<Mutex<eclume_mobile_core::Core>>, Roteiro, comum::Limpa) {
+    use eclume_mobile_core::{trancar, Core};
 
-    let (dirs, _guard) = dirs_temp("ciclo");
+    let (dirs, guard) = dirs_temp(nome);
     let roteiro = Roteiro::default();
     roteiro.responde(
         "GET",
@@ -371,18 +369,33 @@ fn ciclo_completo_nao_trava_o_nucleo() {
         ),
     );
     roteiro.responde("GET", "/downloads/movel.json", comum::texto(404, ""));
-    let nucleo = std::sync::Arc::new(std::sync::Mutex::new(
-        Core::abrir(dirs, "0.1.0", Arc::new(comum::TransportesFalsos(roteiro))).unwrap(),
+    let nucleo = Arc::new(Mutex::new(
+        Core::abrir(
+            dirs,
+            "0.1.0",
+            Arc::new(comum::TransportesFalsos(roteiro.clone())),
+        )
+        .unwrap(),
     ));
     {
         let mut core = trancar(&nucleo).unwrap();
         core.conectar_endereco(URL).unwrap();
         core.confiar_ca().unwrap();
         core.entrar("ana@eclume.test", "senha").unwrap();
-        core.mudou_rede(true);
     }
+    (nucleo, roteiro, guard)
+}
+
+/// Um ciclo inteiro pelo núcleo (sonda, tipos, atualização, sync) não pode travar a si mesmo: a
+/// rede roda fora da trava do núcleo.
+#[test]
+fn ciclo_completo_nao_trava_o_nucleo() {
+    use eclume_mobile_core::{ciclo, trancar};
+
+    let (nucleo, _roteiro, _guard) = nucleo_conectado("ciclo");
+    trancar(&nucleo).unwrap().mudou_rede(true);
     let (fim, recebe) = std::sync::mpsc::channel();
-    let n = std::sync::Arc::clone(&nucleo);
+    let n = Arc::clone(&nucleo);
     std::thread::spawn(move || {
         let _ = fim.send(
             ciclo(&n, true)
@@ -397,4 +410,43 @@ fn ciclo_completo_nao_trava_o_nucleo() {
     let core = trancar(&nucleo).unwrap();
     assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
     assert_eq!(core.config().tipos_de_agenda[0].nome, "Reunião");
+}
+
+/// O processo aberto só para o `SyncWorker` não tem a tela para avisar o Wi-Fi: o ciclo do worker
+/// parte da rede não medida que o WorkManager garante, e a sonda roda.
+#[test]
+fn ciclo_do_worker_sonda_sem_a_tela() {
+    use eclume_mobile_core::{ciclo, ciclo_do_worker, trancar};
+
+    let (nucleo, _roteiro, _guard) = nucleo_conectado("worker");
+    assert_eq!(ciclo(&nucleo, false).unwrap().map(|_| ()), None);
+    ciclo_do_worker(&nucleo).unwrap();
+    let core = trancar(&nucleo).unwrap();
+    assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
+    assert_eq!(core.config().tipos_de_agenda[0].nome, "Reunião");
+}
+
+/// Um 401 numa leitura autenticada (os tipos de agenda), sem nada para subir, também leva a Entrar.
+#[test]
+fn credencial_revogada_na_leitura_volta_a_entrar() {
+    use eclume_mobile_core::conexao::EstadoConexao;
+    use eclume_mobile_core::{ciclo, trancar};
+
+    let (nucleo, roteiro, _guard) = nucleo_conectado("revogada");
+    roteiro.responde(
+        "GET",
+        "/api/v1/agenda-types",
+        json(
+            401,
+            serde_json::json!({"title": "Não autenticado", "status": 401}),
+        ),
+    );
+    trancar(&nucleo).unwrap().mudou_rede(true);
+    assert_eq!(ciclo(&nucleo, false).unwrap().map(|_| ()), None);
+    let core = trancar(&nucleo).unwrap();
+    assert_eq!(core.estado().unwrap().rede, EstadoRede::SemCredencial);
+    assert!(matches!(
+        core.estado().unwrap().conexao,
+        EstadoConexao::SemCredencial { .. }
+    ));
 }

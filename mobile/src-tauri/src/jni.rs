@@ -82,7 +82,7 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sy
 ) -> jstring {
     let base = texto(&mut env, &base);
     let resposta = core::iniciar(crate::dirs_de(std::path::Path::new(&base)), crate::VERSAO)
-        .and_then(|nucleo| core::ciclo(nucleo, false))
+        .and_then(core::ciclo_do_worker)
         .map(|relatorio| match relatorio {
             Some(r) => json!({ "na_rede": true, "sincronizadas": r.synced, "falhas": r.failed }),
             None => json!({ "na_rede": false }),

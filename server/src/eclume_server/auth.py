@@ -168,7 +168,7 @@ def requires_any(*scopes: str) -> Callable[[Request, AppContext], Awaitable[Prin
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
         principal = await authenticated(request, ctx)
         if principal.method == "pat" and not any(scope in principal.scopes for scope in scopes):
-            raise insufficient_scope(list(scopes))
+            raise insufficient_scope(list(scopes), any_of=True)
         return principal
 
     return dependency
