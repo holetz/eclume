@@ -17,12 +17,7 @@ if TYPE_CHECKING:
     from fastapi.responses import JSONResponse
 
 _GRAVACAO = "holetz/eclume#34"
-NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (
-    ("GET", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
-    ("POST", "/api/v1/recordings/{recording_id}/summary/chat", _GRAVACAO),
-    ("GET", "/api/v1/summary-chat-messages/{message_id}", _GRAVACAO),
-    ("GET", "/api/v1/recordings/{recording_id}/export", _GRAVACAO),
-)
+NOT_IMPLEMENTED: tuple[tuple[str, str, str], ...] = (("GET", "/api/v1/recordings/{recording_id}/export", _GRAVACAO),)
 
 
 def _handler(owner: str) -> Callable[[], Awaitable[JSONResponse]]:

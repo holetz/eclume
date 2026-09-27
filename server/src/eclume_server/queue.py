@@ -48,6 +48,11 @@ def summarize_job_id(summary_id: UUID | str) -> str:
     return f"summarize:{summary_id}"
 
 
+def summary_chat_job_id(message_id: UUID | str) -> str:
+    """`_job_id` do `summary_chat`: um por resposta do chat."""
+    return f"summary_chat:{message_id}"
+
+
 def progress_key(recording_id: UUID | str) -> str:
     """Hash de progresso que o worker GPU grava."""
     return f"eclume:progress:{recording_id}"
@@ -128,6 +133,12 @@ class Queue:
     async def enqueue_summarize(self, summary_id: UUID) -> None:
         """Enfileira `summarize` no worker CPU; um job por resumo."""
         await enqueue_summary(self.pool, summary_id)
+
+    async def enqueue_summary_chat(self, message_id: UUID) -> None:
+        """Enfileira `summary_chat` no worker CPU; um job por resposta do chat."""
+        await self.pool.enqueue_job(
+            "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=DEFAULT_QUEUE
+        )
 
     async def enqueue_purge_embedding_objects(self) -> None:
         """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""
