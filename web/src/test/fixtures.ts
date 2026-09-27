@@ -11,6 +11,8 @@ import collectionPage from '../../../contracts/fixtures/collection-page.json'
 import defaultAgendaTypePage from '../../../contracts/fixtures/default-agenda-type-page.json'
 import fieldPage from '../../../contracts/fixtures/field-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
+import pairingCodeCreated from '../../../contracts/fixtures/pairing-code-created.json'
+import pairingCodeUsed from '../../../contracts/fixtures/pairing-code-used.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
 import person from '../../../contracts/fixtures/person.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
@@ -20,6 +22,7 @@ import recordingPage from '../../../contracts/fixtures/recording-page.json'
 import recordingQueued from '../../../contracts/fixtures/recording-queued.json'
 import recordingTranscribed from '../../../contracts/fixtures/recording-transcribed.json'
 import secretList from '../../../contracts/fixtures/secret-list.json'
+import serverInfo from '../../../contracts/fixtures/server-info.json'
 import signupInfo from '../../../contracts/fixtures/signup-info.json'
 import signupRequest from '../../../contracts/fixtures/signup-request.json'
 import searchPage from '../../../contracts/fixtures/search-page.json'
@@ -66,6 +69,9 @@ export const fixtures = {
   previewAgendaType: fresh<Schemas['Preview']>(previewAgendaType),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),
   tokenCreated: fresh<Schemas['TokenCreated']>(tokenCreated),
+  serverInfo: fresh<Schemas['ServerInfo']>(serverInfo),
+  pairingCodeCreated: fresh<Schemas['PairingCode']>(pairingCodeCreated),
+  pairingCodeUsed: fresh<Schemas['PairingCode']>(pairingCodeUsed),
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),
   uploadDeduplicated: fresh<Schemas['Upload']>(uploadDeduplicated),
   uploadInProgress: fresh<Schemas['Upload']>(uploadInProgress),
