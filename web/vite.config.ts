@@ -16,6 +16,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Telas inteiras (gravação, biblioteca) sobre jsdom passam de 5 s com a suíte toda em paralelo.
+    testTimeout: 15_000,
     // Os testes de navegador rodam só por `npm run test:browser` (vitest.browser.config.ts).
     exclude: [...configDefaults.exclude, '**/*.browser.test.ts', 'e2e/**', 'e2e-real/**', 'e2e-prod/**'],
   },
