@@ -49,7 +49,7 @@ impl HttpUploader {
         Ok(Self::from_client(client, queue, &config.client_version))
     }
 
-    /// Sobre um cliente já montado (transporte próprio, nos testes).
+    /// Sobre um cliente já montado (transporte próprio: a CA fixada do celular, ou os testes).
     pub fn from_client(client: Client, queue: Arc<Mutex<Queue>>, client_version: &str) -> Self {
         Self {
             client,
@@ -57,6 +57,12 @@ impl HttpUploader {
             client_version: client_version.to_string(),
             device_name: Some(crate::device_name()),
         }
+    }
+
+    /// Troca o `capture.device_name` (no celular, o modelo do aparelho).
+    pub fn with_device_name(mut self, device_name: impl Into<String>) -> Self {
+        self.device_name = Some(device_name.into());
+        self
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, Queue>> {
@@ -80,12 +86,14 @@ impl HttpUploader {
                 .unwrap_or_else(|| CONTENT_TYPE.to_string()),
             size_bytes: size,
             sha256,
+            title: recording.title.clone(),
             recorded_at: Utc
                 .timestamp_millis_opt(recording.started_at)
                 .single()
                 .map(|at| at.to_rfc3339_opts(SecondsFormat::Secs, true)),
             recorded_at_source: recording.recorded_at_source,
             kind: recording.kind,
+            agenda_type_id: recording.agenda_type_id.clone(),
             markers: markers
                 .iter()
                 .map(|marker| MarkerInput {
@@ -301,9 +309,42 @@ mod tests {
         assert_eq!(json["source"], "desktop");
         assert_eq!(json["capture"]["meeting_app"], "meet");
         assert_eq!(json["capture"]["client_version"], "eclume-desktop/0.1.0");
+        assert!(json.get("title").is_none());
+        assert!(json.get("agenda_type_id").is_none());
         let manual = uploader.create_request(&recording(None), &[], 10, "ab".into());
         let json = serde_json::to_value(&manual).unwrap();
         assert!(json["capture"].get("meeting_app").is_none());
+    }
+
+    #[test]
+    fn pedido_do_celular_leva_origem_titulo_tipo_e_aparelho() {
+        let queue = recorded_queue();
+        queue.set_source("g1", Source::Mobile).unwrap();
+        queue
+            .save_details(
+                "g1",
+                Some("Visita ao cliente"),
+                Some("7c0e2f7a-1b2c-4d5e-8f90-a1b2c3d4e5f6"),
+            )
+            .unwrap();
+        let marcador = queue.add_marker("g1", 42_000, Some("prazo")).unwrap();
+        let uploader = uploader().with_device_name("Pixel 8");
+        let create = uploader.create_request(
+            &queue.get("g1").unwrap().unwrap(),
+            &queue.markers("g1").unwrap(),
+            10,
+            "ab".into(),
+        );
+        let json = serde_json::to_value(&create).unwrap();
+        assert_eq!(json["source"], "mobile");
+        assert_eq!(json["recorded_at_source"], "capture");
+        assert_eq!(json["title"], "Visita ao cliente");
+        assert_eq!(
+            json["agenda_type_id"],
+            "7c0e2f7a-1b2c-4d5e-8f90-a1b2c3d4e5f6"
+        );
+        assert_eq!(json["markers"][0]["client_id"], marcador.client_id);
+        assert_eq!(json["capture"]["device_name"], "Pixel 8");
     }
 
     #[test]

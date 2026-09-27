@@ -5,7 +5,7 @@
 use eclume_recorder::{Kind, RecordedAtSource, Source};
 use serde::{Deserialize, Serialize};
 
-/// Contexto da captura, preenchido pelo desktop.
+/// Contexto da captura, preenchido pelo app que gravou (desktop ou celular).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Capture {
     /// `teams`, `meet`, `zoom`, `other` ou nada (gravação manual).
@@ -32,10 +32,16 @@ pub struct UploadCreate {
     pub content_type: String,
     pub size_bytes: u64,
     pub sha256: String,
+    /// Título escolhido ao parar; sem valor, o servidor deriva do nome do arquivo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recorded_at: Option<String>,
     pub recorded_at_source: RecordedAtSource,
     pub kind: Kind,
+    /// Tipo de agenda escolhido ao parar: dispensa a detecção no servidor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agenda_type_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub markers: Vec<MarkerInput>,
     #[serde(skip_serializing_if = "Option::is_none")]

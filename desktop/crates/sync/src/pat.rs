@@ -36,14 +36,17 @@ pub trait SecretBackend: Send + Sync {
 }
 
 /// O chaveiro do SO.
+#[cfg(feature = "os-keyring")]
 pub struct OsKeyring;
 
+#[cfg(feature = "os-keyring")]
 impl OsKeyring {
     fn entry() -> Result<keyring::Entry> {
         keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).context("chaveiro do SO indisponível")
     }
 }
 
+#[cfg(feature = "os-keyring")]
 impl SecretBackend for OsKeyring {
     fn get(&self) -> Result<Option<String>> {
         match Self::entry()?.get_password() {
@@ -67,6 +70,23 @@ impl SecretBackend for OsKeyring {
     }
 }
 
+/// Sem chaveiro (build sem `os-keyring`): nada guardado aqui, e o `PatStore` usa o arquivo.
+pub struct NoKeyring;
+
+impl SecretBackend for NoKeyring {
+    fn get(&self) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    fn set(&self, _secret: &str) -> Result<()> {
+        bail!("sem chaveiro do SO neste build")
+    }
+
+    fn delete(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// Lê, grava e apaga o PAT.
 pub struct PatStore {
     file: PathBuf,
@@ -75,11 +95,16 @@ pub struct PatStore {
 }
 
 impl PatStore {
-    /// O cofre real: chaveiro do SO, arquivo em `config_dir` e a variável `ECLUME_PAT`.
+    /// O cofre real: chaveiro do SO (com `os-keyring`), arquivo em `config_dir` e a variável
+    /// `ECLUME_PAT`.
     pub fn new(config_dir: &Path) -> Self {
+        #[cfg(feature = "os-keyring")]
+        let keyring: Box<dyn SecretBackend> = Box::new(OsKeyring);
+        #[cfg(not(feature = "os-keyring"))]
+        let keyring: Box<dyn SecretBackend> = Box::new(NoKeyring);
         Self::with_backend(
             config_dir.join(PAT_FILE),
-            Box::new(OsKeyring),
+            keyring,
             std::env::var(PAT_ENV).ok(),
         )
     }
