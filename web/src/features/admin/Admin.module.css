@@ -244,3 +244,22 @@
   max-height: 8rem;
   overflow: auto;
 }
+
+/* Usuários: a busca na largura do DS e o contador à direita da barra. */
+.search {
+  max-width: 320px;
+}
+
+.count {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.small {
+  font-size: 12px;
+}
+
+/* Abaixo de 56rem, a tabela rola dentro do contêiner, e a página não rola na horizontal. */
+.scroll {
+  overflow-x: auto;
+}

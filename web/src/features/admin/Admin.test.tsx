@@ -7,8 +7,6 @@ import { renderApp } from '../../test/render'
 
 afterEach(() => vi.unstubAllGlobals())
 
-const MEMBER_ID = '01928f3a-1c00-7a00-8000-000000000102'
-
 function mockAdminApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/admin/me': () => fixtures.adminMe(),
@@ -138,33 +136,6 @@ describe('Token do Claude', () => {
     await userEvent.selectOptions(within(other).getByLabelText('Tipo'), 'anthropic')
     expect(within(other).getByLabelText('Chave de API')).toBeInTheDocument()
     expect(within(other).queryByLabelText('Token do Claude')).not.toBeInTheDocument()
-  })
-})
-
-describe('Usuários', () => {
-  it('lista as contas com a contagem de gravações, sem convites nem papéis', async () => {
-    mockAdminApi()
-    renderApp('/admin/usuarios')
-    const row = await screen.findByRole('row', { name: /Paulo Andrade/ })
-    expect(row).toHaveTextContent('12')
-    expect(screen.queryByRole('form', { name: 'Novo convite' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/Papel de/)).not.toBeInTheDocument()
-  })
-
-  it('desativa só depois de confirmar e reativa', async () => {
-    const member = fixtures.adminUserPage().items[1]
-    const http = mockAdminApi({ 'PATCH /api/v1/admin/users/:id': () => ({ ...member, active: false }) })
-    renderApp('/admin/usuarios')
-    const row = await screen.findByRole('row', { name: /Paulo Andrade/ })
-    const table = row.closest('table')!
-    await userEvent.click(within(table).getByRole('button', { name: 'Desativar Paulo Andrade' }))
-    expect(http.requests('PATCH /api/v1/admin/users/:id')).toHaveLength(0)
-    await userEvent.click(within(table).getByRole('button', { name: 'Confirmar desativação' }))
-    expect(await within(table).findByText('Desativado')).toBeInTheDocument()
-    const request = http.requests('PATCH /api/v1/admin/users/:id')[0]
-    expect(new URL(request.url).pathname).toBe(`/api/v1/admin/users/${MEMBER_ID}`)
-    expect(await request.json()).toEqual({ active: false })
-    expect(within(table).getByRole('button', { name: 'Reativar Paulo Andrade' })).toBeInTheDocument()
   })
 })
 

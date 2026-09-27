@@ -78,3 +78,16 @@ export function optionalInt(value: string): number | null {
   const trimmed = value.trim()
   return trimmed === '' ? null : Number.parseInt(trimmed, 10)
 }
+
+const shortDateParts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+
+/** "02 set 2026": a data curta das tabelas do painel. */
+export function formatShortDate(iso: string): string {
+  const parts = Object.fromEntries(shortDateParts.formatToParts(new Date(iso)).map((part) => [part.type, part.value]))
+  return `${parts.day} ${parts.month.replace('.', '')} ${parts.year}`
+}
+
+/** Compara sem acento e sem caixa. */
+export function foldText(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+}

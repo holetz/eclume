@@ -10,8 +10,6 @@ export const USERS_KEY = ['admin', 'users'] as const
 export const HEALTH_KEY = ['admin', 'health'] as const
 
 export const HEALTH_REFRESH_MS = 10_000
-// As listas do painel são curtas (uma instalação): uma página grande basta.
-const PAGE = { params: { query: { limit: 200 } } } as const
 
 export function useAdminSettings() {
   return useQuery({ queryKey: SETTINGS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/settings')) })
@@ -36,8 +34,38 @@ export function useSecrets() {
   return useQuery({ queryKey: SECRETS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/secrets')) })
 }
 
-export function useUsers() {
-  return useQuery({ queryKey: USERS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/users', PAGE)) })
+// A busca de usuários filtra a lista já carregada: o contrato não tem `q`, e são poucas contas.
+const MAX_USER_PAGES = 20
+
+/** Todas as contas de usuário, seguindo `next_cursor` até o fim (com teto de páginas). */
+export function useAllUsers() {
+  return useQuery({
+    queryKey: USERS_KEY,
+    queryFn: async () => {
+      const users: Schemas['AdminUser'][] = []
+      let cursor: string | undefined
+      for (let page = 0; page < MAX_USER_PAGES; page++) {
+        const data = await unwrap(api.GET('/api/v1/admin/users', { params: { query: { limit: 200, cursor } } }))
+        users.push(...data.items)
+        if (!data.next_cursor) break
+        cursor = data.next_cursor
+      }
+      return users
+    },
+  })
+}
+
+/** Ativa ou desativa uma conta e troca a linha no cache pela resposta. */
+export function useSetUserActive() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      unwrap(api.PATCH('/api/v1/admin/users/{user_id}', { params: { path: { user_id: id } }, body: { active } })),
+    onSuccess: (updated) =>
+      queryClient.setQueryData<Schemas['AdminUser'][]>(USERS_KEY, (users) =>
+        users?.map((user) => (user.id === updated.id ? updated : user)),
+      ),
+  })
 }
 
 /** Retenta o job que falhou (a revisão seguinte da gravação); a Saúde se atualiza em seguida. */
