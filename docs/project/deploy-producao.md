@@ -170,8 +170,14 @@ O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA, `/downl
 e o cadastro aberto com o aviso, entra pela sessão de admin (garante o provider) e pela de
 usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
 quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
-multipart. Depois espera a transcrição com 2 locutores e um resumo `done`, e imprime `OK`. Um
-áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já existe.
+multipart. Depois espera a transcrição com 2 locutores e um resumo `done`. Sobre essa gravação,
+prova a gravação centrada no resumo (holetz/eclume#34): edita o resumo à mão (versão `manual`),
+pede ao chat "Diga quem fala primeiro na reunião e acrescente isso no início do resumo" e espera a
+resposta `done` com `reads` não vazio e uma versão `chat` (o tempo do chat sai no log), volta à
+gerada, grava 2 marcadores, acha a gravação na biblioteca do dia dela com `kind=meeting` e baixa
+os quatro formatos de exportação conferindo o `Content-Type` e a assinatura `PK` do DOCX. No fim,
+imprime `OK`. Um áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já
+existe; cada rodada acrescenta versões e marcadores à mesma gravação.
 
 **Processamento automático** (`--pipeline`): retranscreve uma gravação e espera as seis etapas do
 pipeline `done` (recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo), com a
@@ -222,6 +228,20 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   "Reunião de equipe" (padrão de título e tags padrão aplicados) e o resumo automático saiu pelas
   instruções do tipo, pelo `claude-cli`. Numa gravação sem fala, a cadeia também fechou: nenhum
   campo preenchido e o resumo dizendo que não havia fala.
+
+### Gravação centrada no resumo em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 15 resumos, 18 objetos).
+- **Deploy:** feito de uma exportação com LF (`git -c core.autocrlf=false archive`), só as imagens
+  `server` e `web` (o worker GPU não mudou). A 014 aplicou sem erro: as versões dos resumos
+  renumeradas por transcrição, as gravações do desktop com `recorded_at_source: capture`, e as
+  tabelas do chat e dos marcadores. Os scripts em `/srv/eclume/bin/` ficaram sem CRLF. A imagem
+  do server foi de 507 MB para 522 MB com o `python-docx` (e o `lxml`); o disco ficou em 84%.
+- **Smoke:** a edição à mão virou versão `manual`; o chat leu a transcrição (`read_transcript`
+  de 00:00:00 a 00:00:30) e criou a versão `chat` em 14 s pelo `claude-cli`; voltar à gerada, os
+  2 marcadores, a biblioteca do dia com `kind=meeting` e os quatro formatos (TXT 848 B, SRT
+  1 022 B, MD 1 118 B, DOCX 37 kB) passaram.
 
 ## CA raiz nos clientes
 

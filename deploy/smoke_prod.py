@@ -2,7 +2,9 @@
 
 Prova o caminho inteiro: health, SPA, `/downloads/`, o cadastro aberto com o aviso, a sessão de
 admin (provider `claude-cli`), a sessão de usuário (upload multipart de um áudio, transcrição
-diarizada na GPU e um resumo gerado pelo `claude -p` do host).
+diarizada na GPU e um resumo gerado pelo `claude -p` do host) e a gravação centrada no resumo
+(holetz/eclume#34): edição à mão, chat de ajuste que lê a transcrição, volta à gerada, marcadores,
+biblioteca pelo intervalo do dia e os quatro formatos de exportação.
 
     ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
       | python3 deploy/smoke_prod.py --ca eclume-root.crt
@@ -32,7 +34,10 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -223,6 +228,93 @@ def _summarize(api: Api, transcript_id: str, provider_id: str, timeout_s: int) -
     _step(f"resumo '{agenda_type['name']}' pelo {result['model']}: {first[:100]}")
 
 
+EXPORTS = {
+    "txt": "text/plain",
+    "srt": "application/x-subrip",
+    "md": "text/markdown",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def _edit_and_chat(api: Api, recording_id: str, timeout_s: int) -> None:
+    """Edição à mão (versão `manual`), chat que lê a transcrição (versão `chat`) e volta à gerada."""
+    url = f"/api/v1/recordings/{recording_id}/summary"
+    current = api.json("GET", url)["current"]
+    edited = api.json(
+        "PUT",
+        url,
+        {"content_md": current["content_md"] + "\n\n_Revisado no smoke._", "base_version": current["version"]},
+    )
+    if edited["origin"] != "manual":
+        _fail(f"a edição não virou versão manual: {edited}")
+    _step(f"resumo editado à mão: versão {edited['version']} ({edited['origin']})")
+
+    request = "Diga quem fala primeiro na reunião e acrescente isso no início do resumo."
+    exchange = api.json("POST", f"{url}/chat", {"message": request}, expect=(202,))
+    started = time.monotonic()
+
+    def answered() -> dict[str, Any] | None:
+        reply = api.json("GET", f"/api/v1/summary-chat-messages/{exchange['reply']['id']}")
+        if reply["status"] == "failed":
+            _fail(f"o chat falhou: {reply['error']}")
+        return reply if reply["status"] == "done" else None
+
+    reply = _wait("a resposta do chat", answered, timeout_s, interval_s=2)
+    if not reply["reads"]:
+        _fail(f"o chat respondeu sem ler a transcrição: {reply['content']}")
+    if reply["summary_id"] is None:
+        _fail(f"o chat não criou a versão chat: {reply['error'] or reply['content']}")
+    state = api.json("GET", url)
+    if state["current"]["origin"] != "chat":
+        _fail(f"a versão atual não é a do chat: {state['current']['origin']}")
+    _step(f"chat em {time.monotonic() - started:.0f} s, leituras {reply['reads']}: {reply['content'][:100]}")
+
+    reverted = api.json("POST", f"{url}/revert", expect=(201,))
+    if reverted["restored_from_id"] != state["generated"]["id"]:
+        _fail(f"voltar à gerada não restaurou a gerada: {reverted}")
+    _step(f"de volta à gerada: versão {reverted['version']} ({api.json('GET', url)['version_count']} guardadas)")
+
+
+def _markers_and_library(api: Api, recording: dict[str, Any]) -> None:
+    """Dois marcadores e a gravação na biblioteca do dia dela, só reuniões."""
+    markers = [{"client_id": str(uuid.uuid4()), "at_ms": at_ms, "note": "smoke"} for at_ms in (1000, 3000)]
+    page = api.json(
+        "POST", f"/api/v1/recordings/{recording['id']}/markers", {"markers": markers, "device_name": "smoke"}
+    )
+    if len(page["items"]) < 2:  # noqa: PLR2004
+        _fail(f"os marcadores não foram gravados: {page}")
+    count = api.json("GET", f"/api/v1/recordings/{recording['id']}")["marker_count"]
+    _step(f"marcadores gravados: {count} na gravação")
+
+    day = datetime.fromisoformat(recording["recorded_at"]).replace(hour=0, minute=0, second=0, microsecond=0)
+    query = urllib.parse.urlencode(
+        {
+            "from": day.isoformat(),
+            "to": (day + timedelta(days=1)).isoformat(),
+            "kind": "meeting",
+            "sort": "recorded_asc",
+            "limit": 200,
+        }
+    )
+    listed = api.json("GET", f"/api/v1/recordings?{query}")["items"]
+    if recording["id"] not in {item["id"] for item in listed}:
+        _fail(f"a gravação não apareceu na biblioteca de {day.date()}")
+    _step(f"biblioteca de {day.date()} com kind=meeting: {len(listed)} gravação(ões)")
+
+
+def _exports(api: Api, recording_id: str) -> None:
+    """Os quatro formatos, com o Content-Type certo; o DOCX abre como zip (`PK`)."""
+    sizes = []
+    for export_format, media in EXPORTS.items():
+        status, headers, body = api.raw("GET", f"/api/v1/recordings/{recording_id}/export?format={export_format}")
+        if status != 200 or not (headers.get("Content-Type") or "").startswith(media):  # noqa: PLR2004
+            _fail(f"export {export_format} → {status} {headers.get('Content-Type')}: {body[:200]!r}")
+        if export_format == "docx" and body[:2] != b"PK":
+            _fail("o DOCX não é um arquivo Office (zip)")
+        sizes.append(f"{export_format} {len(body)} B")
+    _step(f"exportação: {', '.join(sizes)}")
+
+
 PIPELINE = ("received", "preprocessing", "transcription", "fields", "agenda_type", "summary")
 
 
@@ -290,6 +382,9 @@ def main() -> int:
         recording_id = _upload(api, args.audio)
         transcript = _transcript_of(api, recording_id, args.timeout)
         _summarize(api, transcript["id"], provider_id, 600)
+        _edit_and_chat(api, recording_id, 600)
+        _markers_and_library(api, api.json("GET", f"/api/v1/recordings/{recording_id}"))
+        _exports(api, recording_id)
     print("OK")  # noqa: T201
     return 0
 
