@@ -4,10 +4,10 @@ title: Runbook do host GPU
 description: Como preparar o servidor 192.168.15.199 (Ubuntu 24.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context.
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
-timestamp: 2026-09-25
+timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#1, holetz/eclume#28
+source: holetz/eclume#1, holetz/eclume#28, holetz/eclume#41
 maintainer: holetz
 ---
 
@@ -222,3 +222,32 @@ Avisos da primeira instalação, detalhados para o usuário em
   com `sudo apt install ./eclume_<versão>_amd64.deb`.
 - **Todos:** o updater e o sync só confiam no servidor depois que a CA raiz do Caddy é instalada
   no cliente (passo 10).
+
+## Ambiente Android (build e emulador do app móvel)
+
+O app móvel ([mobile/](../../mobile/README.md)) compila e roda o emulador no host, que tem KVM.
+Tudo fica em `~/`, sem sudo, pelo script idempotente
+[mobile/scripts/android-sdk.sh](../../mobile/scripts/android-sdk.sh):
+
+```bash
+ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
+```
+
+- **O que instala:** as command-line tools 22.0 do Android em `~/android-sdk` (SHA-256 conferido), um
+  JDK 21 portátil em `~/jdk-21` (o OpenJDK do Ubuntu no host só tem o runtime, sem `javac`), os
+  pacotes `platform-tools`, `platforms;android-36`, `build-tools;36.0.0`, `ndk;28.2.13676358`,
+  `emulator` e `system-images;android-35;google_apis;x86_64`, os quatro alvos `rustup` Android e o
+  AVD `eclume-35` (Pixel 6, 2 GB de RAM).
+- **Ambiente:** `~/.config/eclume/android-env.sh` exporta `JAVA_HOME`, `ANDROID_HOME`, `NDK_HOME` e
+  o `PATH`. Todo comando de build Android começa com
+  `source ~/.config/eclume/android-env.sh`, também pelo `remote-run`.
+- **Disco:** o script recusa instalar se o disco passar de 88 % (o deploy recusa acima de 90 %). O
+  SDK ocupa ~7 GB, o JDK ~350 MB e o AVD ~250 MB (cresce com o uso). Para liberar espaço, use
+  `docker builder prune -af` e apague os `~/build/*/target` do eclume já mesclados; nunca apague
+  imagens de outros projetos.
+- **Segunda execução:** só confere e imprime "nada a fazer".
+- **KVM:** o `/dev/kvm` dá leitura e escrita ao `holetz` por ACL; sem isso, o script avisa e o
+  emulador fica sem aceleração.
+- **Command-line tools fixadas na 22.0:** a 23 troca o `sdkmanager` pelo `android sdk` e muda a
+  saída do `--list_installed` (`ndk/28…` no lugar de `ndk;28…`). A 22 ainda avisa que o
+  `sdkmanager` está obsoleto; o aviso é esperado.
