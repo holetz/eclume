@@ -5,6 +5,7 @@ import adminHealth from '../../../contracts/fixtures/admin-health.json'
 import adminMe from '../../../contracts/fixtures/admin-me.json'
 import adminSettings from '../../../contracts/fixtures/admin-settings.json'
 import adminUserPage from '../../../contracts/fixtures/admin-user-page.json'
+import agendaTypePage from '../../../contracts/fixtures/agenda-type-page.json'
 import agentProviderPage from '../../../contracts/fixtures/agent-provider-page.json'
 import collectionPage from '../../../contracts/fixtures/collection-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
@@ -22,7 +23,6 @@ import speakerLinked from '../../../contracts/fixtures/speaker-linked.json'
 import summaryDone from '../../../contracts/fixtures/summary-done.json'
 import summaryPage from '../../../contracts/fixtures/summary-page.json'
 import summaryQueued from '../../../contracts/fixtures/summary-queued.json'
-import summaryTemplatePage from '../../../contracts/fixtures/summary-template-page.json'
 import tagList from '../../../contracts/fixtures/tag-list.json'
 import tokenCreated from '../../../contracts/fixtures/token-created.json'
 import tokenPage from '../../../contracts/fixtures/token-page.json'
@@ -56,7 +56,7 @@ export const fixtures = {
   summaryPage: fresh<Schemas['SummaryPage']>(summaryPage),
   summaryQueued: fresh<Schemas['Summary']>(summaryQueued),
   summaryDone: fresh<Schemas['Summary']>(summaryDone),
-  summaryTemplatePage: fresh<Schemas['SummaryTemplatePage']>(summaryTemplatePage),
+  agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),
   tokenCreated: fresh<Schemas['TokenCreated']>(tokenCreated),
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),

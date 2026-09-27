@@ -1,0 +1,12 @@
+{
+  "agenda_type": {
+    "name": "Mentoria",
+    "title_pattern": "Mentoria · {assunto}",
+    "identify": "Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.",
+    "default_tags": [
+      "mentoria"
+    ],
+    "summary_instructions": "## Temas\nUm item por tema tratado.\n\n## Combinados\nUm item por combinado, com prazo quando dito."
+  },
+  "recording_id": "01928f3a-1c00-7a00-8000-000000000201"
+}

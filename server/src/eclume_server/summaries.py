@@ -1,4 +1,4 @@
-"""Resumos: configuração da plataforma, templates, criação versionada e o job `summarize`.
+"""Resumos: configuração da plataforma, criação versionada pelo tipo de agenda e o job `summarize`.
 
 Contrato e decisões em docs/standards/code/server-agentes.md.
 """
@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from arq import Retry
-from sqlalchemy import func, insert, select, text, update
+from sqlalchemy import any_, func, insert, literal, select, text, update
 
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents.base import GPU_BUSY, PROVIDER_NOT_CONFIGURED, PROVIDER_TIMEOUT
@@ -20,11 +21,12 @@ from eclume_server.crypto import SecretDecryptError, decrypt
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
+from eclume_server.pipeline import set_step
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -37,46 +39,33 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# --- configuração da plataforma (bloco `summarization` de `platform_settings`) ------------------------
+# --- providers por finalidade --------------------------------------------------------------------
 
 # Colunas de `agent_providers` que `eclume_app` lê: a chave de API fica só para o papel de conexão.
 PROVIDER_PUBLIC = [column for column in t.agent_providers.c if column.name != "api_key_encrypted"]
+PURPOSES = ("summaries", "fields", "chat", "agenda_detection")
 
 
-async def get_summarization(conn: AsyncConnection) -> dict[str, Any]:
-    """Bloco `summarization`: `default_provider_id` e `auto_summarize` (legível sob a RLS)."""
-    value = (await conn.execute(select(t.platform_settings.c.summarization))).scalar()
-    return dict(value or {})
+async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
+    """O provider habilitado que declara a finalidade (há no máximo um), sem a chave de API.
 
-
-async def set_summarization(conn: AsyncConnection, admin_id: UUID | None, **changes: Any) -> None:  # noqa: ANN401
-    """Muda campos do bloco `summarization` (papel de conexão, pelas rotas de admin)."""
-    current = await get_summarization(conn)
-    await conn.execute(
-        update(t.platform_settings).values(
-            summarization={**current, **changes}, updated_at=func.now(), updated_by=admin_id
-        )
+    O banco garante um por finalidade (migration 013); a ordem é a do cadastro de todo modo.
+    """
+    c = t.agent_providers.c
+    query = (
+        select(*PROVIDER_PUBLIC)
+        .where(c.enabled, literal(purpose) == any_(c.used_for))
+        .order_by(c.created_at, c.id)
+        .limit(1)
     )
+    return (await conn.execute(query)).mappings().first()
 
 
 # --- formas JSON ------------------------------------------------------------------------------------
 
 
-def template_json(row: Row) -> dict[str, Any]:
-    """Schema `SummaryTemplate`."""
-    return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "description": row["description"],
-        "instructions": row["instructions"],
-        "is_default": row["is_default"],
-        "created_at": iso(row["created_at"]),
-        "updated_at": iso(row["updated_at"]),
-    }
-
-
 def summary_json(row: Row) -> dict[str, Any]:
-    """Schema `Summary`, com template e provider em instantâneo."""
+    """Schema `Summary`, com tipo de agenda e provider em instantâneo."""
     error = None
     if row["error_code"]:
         error = {"code": row["error_code"], "message": row["error_message"] or ""}
@@ -84,7 +73,7 @@ def summary_json(row: Row) -> dict[str, Any]:
         "id": str(row["id"]),
         "transcript_id": str(row["transcript_id"]),
         "transcript_revision": row["transcript_revision"],
-        "template": {"id": str(row["template_id"]), "name": row["template_name"]},
+        "agenda_type": {"id": str(row["agenda_type_id"]), "name": row["agenda_type_name"]},
         "version": row["version"],
         "status": row["status"],
         "trigger": row["trigger"],
@@ -100,29 +89,34 @@ def summary_json(row: Row) -> dict[str, Any]:
 # --- criação -----------------------------------------------------------------------------------------
 
 
-async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, template, provider e gatilho
+async def _lock_pair(conn: AsyncConnection, transcript_id: UUID, agenda_type_id: UUID) -> None:
+    """Serializa, até o fim da transação, as gerações do par (transcrição, tipo de agenda)."""
+    await conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
+        {"pair": f"summary:{transcript_id}:{agenda_type_id}"},
+    )
+
+
+async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, tipo, provider e gatilho
     conn: AsyncConnection,
     *,
     transcript: Row,
-    template: Row,
+    agenda_type: Row,
     provider: Row,
     trigger: str,
     created_by: UUID,
 ) -> Row:
-    """Insere um resumo `queued` com a próxima `version` do par (transcrição, template).
+    """Insere um resumo `queued` com a próxima `version` do par (transcrição, tipo de agenda).
 
-    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão).
-    O lock do par serializa gerações simultâneas do mesmo template.
+    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão). As instruções do
+    tipo entram como instantâneo. O lock do par serializa gerações simultâneas do mesmo tipo.
     """
     s = t.summaries.c
-    await conn.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:pair, 0))"),
-        {"pair": f"summary:{transcript['id']}:{template['id']}"},
-    )
+    await _lock_pair(conn, transcript["id"], agenda_type["id"])
     version = (
         await conn.execute(
             select(func.coalesce(func.max(s.version), 0) + 1).where(
-                s.transcript_id == transcript["id"], s.template_id == template["id"]
+                s.transcript_id == transcript["id"], s.agenda_type_id == agenda_type["id"]
             )
         )
     ).scalar_one()
@@ -134,9 +128,9 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
                     owner_id=transcript["owner_id"],
                     transcript_id=transcript["id"],
                     transcript_revision=transcript["revision"],
-                    template_id=template["id"],
-                    template_name=template["name"],
-                    instructions=template["instructions"],
+                    agenda_type_id=agenda_type["id"],
+                    agenda_type_name=agenda_type["name"],
+                    instructions=agenda_type["summary_instructions"],
                     version=version,
                     status="queued",
                     trigger=trigger,
@@ -157,71 +151,76 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
 # --- resumo automático ---------------------------------------------------------------------------
 
 
-async def auto_summarize(conn: AsyncConnection, recording_id: UUID) -> UUID | None:
-    """Cria o resumo automático da transcrição recém-ingerida, se a plataforma pede.
+async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision: int) -> UUID | None:
+    """Abre o resumo automático da revisão, pelas instruções do tipo de agenda da gravação.
 
-    Roda com o papel de conexão, na transação do `ingest_transcript`. O template é o padrão do dono
-    (`is_default`); sem ele, não há resumo automático. O provider é o padrão da plataforma. Um resumo
-    automático por revisão da transcrição.
+    Serve à cadeia do worker (papel de conexão) e à troca manual do tipo (sob a RLS do dono). Sem
+    tipo ou sem provider de `summaries`, a etapa `summary` sai pulada. Já existindo o automático da
+    mesma revisão e do mesmo tipo (etapa repetida, ou o tipo escolhido de novo), nada é criado.
+    Devolve o resumo a enfileirar.
     """
+    recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
     transcript = (
         (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
         .mappings()
         .first()
     )
-    if transcript is None:
-        return None
-    settings = await get_summarization(conn)
-    if not settings.get("auto_summarize") or not settings.get("default_provider_id"):
-        return None
-    provider = (
-        (
-            await conn.execute(
-                select(t.agent_providers).where(
-                    t.agent_providers.c.id == settings["default_provider_id"], t.agent_providers.c.enabled
-                )
-            )
+    agenda_type = None
+    if recording["agenda_type_id"] is not None:
+        agenda_type = (
+            (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == recording["agenda_type_id"])))
+            .mappings()
+            .first()
         )
-        .mappings()
-        .first()
-    )
-    if provider is None:
-        log.warning("resumo automático sem provider padrão habilitado na plataforma")
+    if transcript is None or agenda_type is None:
+        await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_agenda_type"})
         return None
-    templates = t.summary_templates.c
-    template = (
-        (
-            await conn.execute(
-                select(t.summary_templates).where(templates.owner_id == transcript["owner_id"], templates.is_default)
-            )
-        )
-        .mappings()
-        .first()
-    )
-    if template is None:
-        log.info("resumo automático de %s: o dono %s não tem template padrão", recording_id, transcript["owner_id"])
-        return None
+    await _lock_pair(conn, transcript["id"], agenda_type["id"])
     s = t.summaries.c
-    already = (
-        await conn.execute(
-            select(s.id).where(
-                s.transcript_id == transcript["id"],
-                s.transcript_revision == transcript["revision"],
-                s.trigger == "automatic",
-            )
+    existing = await conn.execute(
+        select(s.id).where(
+            s.transcript_id == transcript["id"],
+            s.transcript_revision == transcript["revision"],
+            s.agenda_type_id == agenda_type["id"],
+            s.trigger == "automatic",
         )
-    ).first()
-    if already is not None:
+    )
+    if existing.first() is not None:
+        return None
+    provider = await provider_for(conn, "summaries")
+    if provider is None:
+        await set_step(conn, recording, revision, "summary", "skipped", detail={"reason": "no_provider"})
         return None
     row = await create_summary(
         conn,
         transcript=transcript,
-        template=template,
+        agenda_type=agenda_type,
         provider=provider,
         trigger="automatic",
-        created_by=transcript["owner_id"],
+        created_by=recording["owner_id"],
     )
+    await set_step(conn, recording, revision, "summary", "active", detail={"summary_id": str(row["id"])})
     return row["id"]
+
+
+async def _finish_step(
+    conn: AsyncConnection, summary_id: UUID, state: str, error: tuple[str, str] | None, reason: str | None = None
+) -> None:
+    """Fecha a etapa `summary` da revisão cujo resumo automático é este (se é); `reason` se pulada."""
+    ps = t.pipeline_steps.c
+    values: dict[str, Any] = {
+        "state": state,
+        "finished_at": func.now(),
+        "error_code": error[0] if error else None,
+        "error_message": error[1] if error else None,
+    }
+    if reason is not None:
+        values["detail"] = ps.detail.op("||")(func.jsonb_build_object("reason", reason))
+    await conn.execute(
+        update(t.pipeline_steps)
+        .where(ps.step == "summary", ps.state == "active", ps.detail["summary_id"].astext == str(summary_id))
+        .values(**values)
+    )
 
 
 # --- o job `summarize` ---------------------------------------------------------------------------
@@ -249,7 +248,8 @@ def provider_config(settings: Settings, row: Row, platform_key_encrypted: str | 
     )
 
 
-async def _transcript_text(conn: AsyncConnection, transcript_id: UUID) -> TranscriptText:
+async def transcript_text(conn: AsyncConnection, transcript_id: UUID) -> TranscriptText:
+    """A transcrição pronta para o prompt (título, data, participantes e falas com tempo)."""
     head = (
         (
             await conn.execute(
@@ -303,8 +303,110 @@ async def _fail(engine: AsyncEngine, summary_id: UUID, code: str, message: str, 
         attempts=attempts,
         completed_at=func.now(),
     )
+    async with system_tx(engine) as conn:
+        await _finish_step(conn, summary_id, "failed", (code, message))
     log.warning("resumo %s falhou: %s — %s", summary_id, code, message)
     return f"falhou: {code}"
+
+
+async def load_provider(conn: AsyncConnection, provider_id: UUID) -> tuple[Row | None, str | None]:
+    """O provider com a chave cifrada (papel de conexão) e o segredo da plataforma que ele usa.
+
+    Só o `anthropic` sem chave própria usa um: o `anthropic_api_key`.
+    """
+    row = (
+        (await conn.execute(select(t.agent_providers).where(t.agent_providers.c.id == provider_id))).mappings().first()
+    )
+    platform_key = None
+    if row is not None and row["kind"] == "anthropic" and not row["api_key_encrypted"]:
+        platform_key = await secret_encrypted(conn, ANTHROPIC_API_KEY)
+    return row, platform_key
+
+
+def next_try(ctx: dict[str, Any], exc: ProviderError, *, attempts: int, waited_s: float, options: dict) -> float | None:
+    """Em quantos segundos tentar de novo, ou `None` (falha definitiva).
+
+    As regras de todo job de agente (resumo, campos, detecção): falha passageira retenta até
+    `MAX_ATTEMPTS`, e a GPU ocupada (Ollama) adia sem gastar tentativa até `ollama_wait_s`.
+    """
+    if exc.code == GPU_BUSY:
+        wait = options.get("ollama_wait_s", OLLAMA_WAIT_S)
+        if isinstance(wait, int | float) and waited_s < wait:
+            return ctx.get("gpu_retry_s", GPU_RETRY_S)
+        return None
+    if exc.retryable and attempts < MAX_ATTEMPTS:
+        delays = ctx.get("retry_delays", RETRY_DELAYS_S)
+        return delays[min(attempts, len(delays)) - 1]
+    return None
+
+
+@dataclass(frozen=True)
+class AgentStep:
+    """Uma etapa do pipeline feita por agente: a gravação, a revisão, a etapa e o estado anterior."""
+
+    recording: Row
+    revision: int
+    step: str
+    started_at: datetime | None
+    detail: dict[str, Any]
+
+
+async def call_agent_step[T](
+    ctx: dict[str, Any],
+    step: AgentStep,
+    provider: tuple[Row, str | None],
+    call: Callable[[Provider], Awaitable[T]],
+) -> T | str:
+    """Chama o agente de uma etapa: o resultado, ou o desfecho da falha, já gravado na etapa.
+
+    Falha passageira volta à fila (`arq.Retry`, com as tentativas na `detail` da etapa); a definitiva
+    deixa a etapa `failed`, e quem chamou segue a cadeia. `provider` é o par de `load_provider`.
+    """
+    engine: AsyncEngine = ctx["engine"]
+    try:
+        config = provider_config(ctx["settings"], *provider)
+    except SecretDecryptError:
+        error = (PROVIDER_NOT_CONFIGURED, "A chave de API do provider não abre com a chave de cifra atual.")
+        async with system_tx(engine) as conn:
+            await set_step(conn, step.recording, step.revision, step.step, "failed", error=error)
+        return f"falhou: {error[0]}"
+    try:
+        async with asyncio.timeout(JOB_TIMEOUT_S):
+            return await call(provider_factory(ctx)(config))
+    except ProviderError as exc:
+        attempts = step.detail.get("attempts", 0) + (exc.code != GPU_BUSY)
+        waited = (datetime.now(UTC) - (step.started_at or datetime.now(UTC))).total_seconds()
+        defer = next_try(ctx, exc, attempts=attempts, waited_s=waited, options=config.options)
+        detail = {**step.detail, "attempts": attempts}
+        state, error = ("active", None) if defer is not None else ("failed", (exc.code, exc.message))
+        async with system_tx(engine) as conn:
+            await set_step(
+                conn,
+                step.recording,
+                step.revision,
+                step.step,
+                state,
+                error=error,
+                detail=detail,
+                started_at=step.started_at,
+            )
+        if defer is not None:
+            # Fora da transação: o `Retry` dentro dela desfaria a contagem das tentativas.
+            raise Retry(defer=defer) from exc
+        return f"falhou: {exc.code}"
+    except TimeoutError:
+        error = (PROVIDER_TIMEOUT, f"A etapa passou de {JOB_TIMEOUT_S // 60} min.")
+    except Exception as exc:
+        log.exception("etapa %s de %s: falha inesperada", step.step, step.recording["id"])
+        error = (INTERNAL_ERROR, type(exc).__name__)
+    async with system_tx(engine) as conn:
+        await set_step(conn, step.recording, step.revision, step.step, "failed", error=error)
+    return f"falhou: {error[0]}"
+
+
+def provider_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider]:
+    """A fábrica de providers do worker (`ctx["provider_factory"]` nos testes)."""
+    return ctx.get("provider_factory") or _default_factory(ctx)
 
 
 def _default_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider]:
@@ -329,19 +431,13 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             .first()
         )
         if summary is None:
+            # Apagado antes de gerar: a etapa do resumo automático não fica `active` para sempre.
+            await _finish_step(conn, summary_id, "skipped", None, reason="summary_deleted")
             return "resumo apagado"
         if summary["status"] not in {"queued", "running"}:
             return f"resumo já {summary['status']}"
-        provider_row = (
-            (await conn.execute(select(t.agent_providers).where(t.agent_providers.c.id == summary["provider_id"])))
-            .mappings()
-            .first()
-        )
-        # O provider `anthropic` sem chave própria usa o segredo `anthropic_api_key` da plataforma.
-        platform_key = None
-        if provider_row is not None and provider_row["kind"] == "anthropic" and not provider_row["api_key_encrypted"]:
-            platform_key = await secret_encrypted(conn, ANTHROPIC_API_KEY)
-        transcript = await _transcript_text(conn, summary["transcript_id"])
+        provider_row, platform_key = await load_provider(conn, summary["provider_id"])
+        transcript = await transcript_text(conn, summary["transcript_id"])
         await conn.execute(
             update(t.summaries)
             .where(t.summaries.c.id == summary_id)
@@ -357,7 +453,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     except SecretDecryptError:
         message = "A chave de API do provider não abre com a chave de cifra atual; cadastre-a de novo."
         return await _fail(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)
-    factory = ctx.get("provider_factory") or _default_factory(ctx)
+    factory = provider_factory(ctx)
     try:
         async with asyncio.timeout(JOB_TIMEOUT_S):
             completion = await summarize(factory(config), transcript, summary["instructions"])
@@ -380,6 +476,8 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
         error_message=None,
         completed_at=func.now(),
     )
+    async with system_tx(engine) as conn:
+        await _finish_step(conn, summary_id, "done", None)
     return "done"
 
 
@@ -389,17 +487,14 @@ async def _on_error(
     """Adia (fila da GPU), retenta (falha passageira) ou falha de vez."""
     engine: AsyncEngine = ctx["engine"]
     summary_id = summary["id"]
-    if exc.code == GPU_BUSY:
-        wait = config.options.get("ollama_wait_s", OLLAMA_WAIT_S)
-        waited = (datetime.now(UTC) - summary["created_at"]).total_seconds()
-        if isinstance(wait, int | float) and waited < wait:
-            # Esperar a GPU não é uma tentativa: o provider nem foi chamado.
-            await _update_open(engine, summary_id, status="queued")
-            raise Retry(defer=ctx.get("gpu_retry_s", GPU_RETRY_S))
-        return await _fail(engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts)
-    if exc.retryable and attempts < MAX_ATTEMPTS:
-        delays = ctx.get("retry_delays", RETRY_DELAYS_S)
-        await _update_open(engine, summary_id, status="queued", attempts=attempts)
+    waited = (datetime.now(UTC) - summary["created_at"]).total_seconds()
+    defer = next_try(ctx, exc, attempts=attempts, waited_s=waited, options=config.options)
+    if defer is not None:
+        # Esperar a GPU não é uma tentativa: o provider nem foi chamado.
+        spent = attempts if exc.code != GPU_BUSY else summary["attempts"]
+        await _update_open(engine, summary_id, status="queued", attempts=spent)
         log.info("resumo %s: tentativa %d falhou (%s), nova tentativa", summary_id, attempts, exc.code)
-        raise Retry(defer=delays[min(attempts, len(delays)) - 1])
+        raise Retry(defer=defer)
+    if exc.code == GPU_BUSY:
+        return await _fail(engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts)
     return await _fail(engine, summary_id, exc.code, exc.message, attempts)

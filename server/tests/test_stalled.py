@@ -134,6 +134,8 @@ def test_job_sumido_da_fila_vira_job_lost_recuperavel_e_retranscreve(
     assert body["status"] == "failed"
     assert body["job"]["error"]["code"] == "job_lost"
     assert body["job"]["error"]["retryable"] is True
+    transcription = next(step for step in body["pipeline"] if step["step"] == "transcription")
+    assert (transcription["state"], transcription["error"]["code"]) == ("failed", "job_lost")
     retried = api.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
     assert retried.status_code == 202
     assert retried.json()["status"] == "queued"

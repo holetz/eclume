@@ -103,14 +103,13 @@ describe('Transcrição', () => {
     await userEvent.clear(model)
     await userEvent.type(model, 'large-v3')
     await userEvent.type(screen.getByLabelText('Máximo de locutores'), '4')
-    await userEvent.click(screen.getByRole('checkbox', { name: /Resumir automaticamente/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }))
     expect(await screen.findByText('Configuração salva.')).toBeInTheDocument()
 
     const sent = await body(http, 'PATCH /api/v1/admin/settings')
     expect(sent.asr).toMatchObject({ engine: 'whisperx-local', model: 'large-v3', batch_size: null, default_language: 'pt' })
     expect(sent.diarization).toEqual({ enabled: true, min_speakers: null, max_speakers: 4 })
-    expect(sent.summarization).toEqual({ auto_summarize: true })
+    expect(sent).not.toHaveProperty('summarization')
   })
 
   it('pede o endereço para o motor remoto e mostra o erro do servidor', async () => {
@@ -129,18 +128,15 @@ describe('Transcrição', () => {
 })
 
 describe('Agentes', () => {
-  it('lista os providers e troca o padrão', async () => {
-    const http = mockAdminApi({ 'PATCH /api/v1/admin/settings': () => fixtures.adminSettings() })
+  it('lista os providers e para que cada um serve', async () => {
+    mockAdminApi()
     renderApp('/admin/agentes')
     const table = await screen.findByRole('table')
     expect(within(table).getByRole('rowheader', { name: /DeepSeek/ })).toBeInTheDocument()
     expect(within(table).getAllByText('Guardada').length).toBeGreaterThan(0)
-    const select = screen.getByLabelText('Provider padrão')
-    expect(select).toHaveValue('01928f3a-1c00-7a00-8000-000000000b01')
-    await userEvent.selectOptions(select, '01928f3a-1c00-7a00-8000-000000000b02')
-    expect(await body(http, 'PATCH /api/v1/admin/settings')).toEqual({
-      summarization: { default_provider_id: '01928f3a-1c00-7a00-8000-000000000b02' },
-    })
+    expect(within(table).getByText('Resumos, Campos, Chat')).toBeInTheDocument()
+    expect(within(table).getByText('Detecção do tipo')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Provider padrão')).not.toBeInTheDocument()
   })
 
   it('cadastra com endereço e edita apagando a chave', async () => {

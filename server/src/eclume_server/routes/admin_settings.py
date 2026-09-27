@@ -11,7 +11,7 @@ from eclume_server.auth import Admin
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.settings_admin import BLOCKS, AdminSettingsPatch, changes_of, settings_json, validate_merged
+from eclume_server.settings_admin import AdminSettingsPatch, changes_of, merge, settings_json, validate_merged
 from eclume_server.voice import purge_embeddings, voice_settings
 
 if TYPE_CHECKING:
@@ -46,10 +46,10 @@ async def update_admin_settings(body: AdminSettingsPatch, admin: Admin, ctx: Ctx
     changes = changes_of(body)
     async with system_tx(ctx.engine) as conn:
         current = await _read(conn, lock=True)
-        merged = {block: {**current[block], **changes.get(block, {})} for block in BLOCKS}
+        merged = merge(current, changes)
         voice_before = voice_settings(current["voice_identification"])
         merged["voice_identification"] = voice_settings(merged["voice_identification"])
-        await validate_merged(conn, merged)
+        validate_merged(merged, changes)
         turned_off = voice_before["enabled"] and not merged["voice_identification"]["enabled"]
         if turned_off:
             # LGPD: desligada, nenhuma impressão de voz por gravação fica guardada na plataforma.

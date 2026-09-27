@@ -1,0 +1,41 @@
+{
+  "items": [
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d01",
+      "key": "titulo",
+      "name": "Título",
+      "kind": "text",
+      "builtin": "title",
+      "options": [],
+      "instructions": "Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data nem nomes de pessoas.",
+      "auto_fill": true,
+      "position": 1
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d02",
+      "key": "tags",
+      "name": "Tags",
+      "kind": "list",
+      "builtin": "tags",
+      "options": [],
+      "instructions": "De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.",
+      "auto_fill": true,
+      "position": 2
+    },
+    {
+      "id": "01928f3a-1c00-7a00-8000-000000000d03",
+      "key": "cliente",
+      "name": "Cliente",
+      "kind": "choice",
+      "builtin": null,
+      "options": [
+        "Serra Azul",
+        "Vale Verde"
+      ],
+      "instructions": "A empresa cliente de que a conversa trata; nenhuma, se for interna.",
+      "auto_fill": true,
+      "position": 3
+    }
+  ],
+  "next_cursor": null
+}

@@ -57,6 +57,15 @@ def decode_position(cursor: str, size: int) -> list[str]:
     return values
 
 
+def decode_ordered_position(cursor: str) -> tuple[int, UUID]:
+    """Posição `(position, id)` das listas na ordem escolhida pelo usuário."""
+    position, row_id = decode_position(cursor, 2)
+    try:
+        return int(position), UUID(row_id)
+    except ValueError as exc:
+        raise invalid_field("cursor", "cursor inválido") from exc
+
+
 def decode_named_position(cursor: str) -> tuple[str, UUID]:
     """Posição `(nome ordenável, id)` das listas em ordem alfabética."""
     name, row_id = decode_position(cursor, 2)

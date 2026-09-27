@@ -7,8 +7,9 @@ rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso
 dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
 toda gravação; `voices=` troca as vozes de uma rodada.
 
-`FakeAgents` substitui a fábrica de providers do job `summarize`: nenhum teste chama um LLM de
-verdade, e cada chamada fica registrada.
+`FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`,
+`detect_agenda_type`):
+nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +25,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
+from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
 from eclume_server.worker import worker_settings
@@ -82,8 +85,9 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
     await redis.hset(progress_key(recording_id), mapping={"stage": "upload", "pct": "100", "updated_at": "agora"})
     await redis.expire(progress_key(recording_id), 86400)
     if ctx.get("fail"):
+        code, message = ctx.get("failure") or ("gpu_oom", "CUDA out of memory")
         await redis.enqueue_job(
-            "transcription_failed", recording_id, "gpu_oom", "CUDA out of memory", _queue_name=DEFAULT_QUEUE
+            "transcription_failed", recording_id, code, message, ctx.get("fail_stage", "asr"), _queue_name=DEFAULT_QUEUE
         )
         return "falhou"
     await storage.sha256(audio_key)  # o áudio existe e é legível
@@ -96,8 +100,26 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
         vectors = ctx.get("voices") or DEFAULT_VOICES
         document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL, "dimension": EMBEDDING_DIMS}
         await storage.put_bytes(embeddings_key, json.dumps(document).encode(), "application/json")
+    # O job começou no worker há pouco, antes da ingestão.
+    info = dict(ENGINE_INFO) | {"started_at": (datetime.now(UTC) - timedelta(seconds=5)).isoformat()}
+    if "preprocess" in options:
+        # O pré-processamento feito como a configuração pediu; `preprocess_fallback` simula a queda.
+        failed = ctx.get("preprocess_fallback", False)
+        steps = [
+            {"step": name, "state": ("failed" if failed else "done") if block.get("enabled") else "skipped"}
+            | ({"error": "arnndn: modelo inválido"} if failed and block.get("enabled") else {})
+            for name, block in options["preprocess"].items()
+        ]
+        info["preprocess"] = {
+            "steps": steps,
+            "ms": 1500,
+            "offset_ms": 0,
+            "channels": 1,
+            "split": False,
+            "fallback": failed,
+        }
     await redis.enqueue_job(
-        "ingest_transcript", recording_id, transcript_key, embeddings_key, ENGINE_INFO, _queue_name=DEFAULT_QUEUE
+        "ingest_transcript", recording_id, transcript_key, embeddings_key, info, _queue_name=DEFAULT_QUEUE
     )
     ctx["calls"].append((recording_id, audio_key, options))
     return "ok"
@@ -108,11 +130,19 @@ async def _gpu_startup(ctx: dict[str, Any]) -> None:
 
 
 def run_gpu(
-    settings: Settings, *, fail: bool = False, voices: dict[str, list[float]] | None = None
+    settings: Settings,
+    *,
+    fail: bool = False,
+    voices: dict[str, list[float]] | None = None,
+    **behavior: Any,  # noqa: ANN401
 ) -> list[tuple[str, str, dict[str, Any]]]:
-    """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas."""
+    """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas.
+
+    `behavior` ajusta o fake: `fail_stage` e `failure` (código, mensagem) na falha, e
+    `preprocess_fallback` para a cadeia do pré-processamento caída para só o formato.
+    """
     calls: list[tuple[str, str, dict[str, Any]]] = []
-    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices}
+    ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices, **behavior}
     run(
         _drain(
             [func(fake_transcribe, name="transcribe")],
@@ -126,12 +156,28 @@ def run_gpu(
     return calls
 
 
+def purpose_of(system: str) -> str:
+    """A finalidade da chamada, pelo prompt de sistema: `fields`, `agenda_detection` ou `summaries`."""
+    return {FIELDS_SYSTEM: "fields", DETECT_SYSTEM: "agenda_detection"}.get(system, "summaries")
+
+
 @dataclass
 class FakeAgents:
-    """Fábrica de providers falsos: devolve Markdown determinístico ou os erros programados, em ordem."""
+    """Fábrica de providers falsos, com respostas por finalidade e erros programados, em ordem.
+
+    `replies[finalidade]` é a fila de respostas daquela finalidade; vazia, vale o padrão: Markdown
+    determinístico no resumo, `{}` (nada encontrado) nos campos e o primeiro tipo (`T1`) na detecção.
+    Os `errors` valem para qualquer
+    chamada, antes das respostas.
+    """
 
     errors: list[ProviderError] = field(default_factory=list)
+    replies: dict[str, list[str]] = field(default_factory=dict)
     calls: list[tuple[ProviderConfig, str, str]] = field(default_factory=list)
+
+    def of(self, purpose: str) -> list[tuple[ProviderConfig, str, str]]:
+        """As chamadas de uma finalidade."""
+        return [call for call in self.calls if purpose_of(call[1]) == purpose]
 
     def __call__(self, config: ProviderConfig) -> _FakeAgent:
         """O provider falso de `config`."""
@@ -147,7 +193,17 @@ class _FakeAgent:
         self.agents.calls.append((self.config, system, prompt))
         if self.agents.errors:
             raise self.agents.errors.pop(0)
-        return Completion(text=f"# Resumo\n\n- gerado por {self.config.name}", model=f"{self.config.model}-fake")
+        purpose = purpose_of(system)
+        queued = self.agents.replies.get(purpose)
+        if queued:
+            text = queued.pop(0)
+        elif purpose == "fields":
+            text = "{}"
+        elif purpose == "agenda_detection":
+            text = '{"tipo": "T1", "confianca": 0.9, "motivo": "o primeiro tipo"}'
+        else:
+            text = f"# Resumo\n\n- gerado por {self.config.name}"
+        return Completion(text=text, model=f"{self.config.model}-fake")
 
 
 def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:

@@ -30,7 +30,18 @@
       "vram_mb": 980
     }
   ],
-  "recent_failures": [],
+  "recent_failures": [
+    {
+      "job_id": null,
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000302",
+      "step": "summary",
+      "stage": null,
+      "code": "provider_unavailable",
+      "message": "O provider não respondeu.",
+      "failed_at": "2026-09-19T11:20:00Z",
+      "retryable": false
+    }
+  ],
   "checked_at": "2026-09-19T13:43:00Z",
   "worker": {
     "online": true,
@@ -74,6 +85,82 @@
       "queued_at": "2026-09-19T13:41:30Z",
       "started_at": null,
       "updated_at": null
+    }
+  ],
+  "steps": [
+    {
+      "step": "preprocessing",
+      "runs": 14,
+      "median_ms": 6200,
+      "failures": 0
+    },
+    {
+      "step": "transcription",
+      "runs": 14,
+      "median_ms": 92000,
+      "failures": 1
+    },
+    {
+      "step": "fields",
+      "runs": 13,
+      "median_ms": 8400,
+      "failures": 0
+    },
+    {
+      "step": "agenda_type",
+      "runs": 13,
+      "median_ms": 3100,
+      "failures": 0
+    },
+    {
+      "step": "summary",
+      "runs": 12,
+      "median_ms": 24500,
+      "failures": 1
+    }
+  ],
+  "services": [
+    {
+      "name": "api",
+      "status": "healthy",
+      "detail": "0.1.0",
+      "latency_ms": 0
+    },
+    {
+      "name": "postgres",
+      "status": "healthy",
+      "detail": "RLS ativa",
+      "latency_ms": 4
+    },
+    {
+      "name": "redis",
+      "status": "healthy",
+      "detail": null,
+      "latency_ms": 1
+    },
+    {
+      "name": "storage",
+      "status": "healthy",
+      "detail": null,
+      "latency_ms": 18
+    },
+    {
+      "name": "gpu_worker",
+      "status": "healthy",
+      "detail": "whisperx-local",
+      "latency_ms": 0
+    },
+    {
+      "name": "cpu_worker",
+      "status": "healthy",
+      "detail": null,
+      "latency_ms": 1
+    },
+    {
+      "name": "mcp",
+      "status": "absent",
+      "detail": null,
+      "latency_ms": null
     }
   ]
 }

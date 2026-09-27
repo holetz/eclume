@@ -48,9 +48,9 @@ def _segment_speakers(result: EngineResult, mapping: dict[str | None, str]) -> l
     return ids
 
 
-def _word(word: Word) -> dict[str, Any]:
-    start = None if word.start is None else _ms(word.start)
-    end = None if word.end is None else _ms(word.end)
+def _word(word: Word, offset_ms: int) -> dict[str, Any]:
+    start = None if word.start is None else _ms(word.start) + offset_ms
+    end = None if word.end is None else _ms(word.end) + offset_ms
     if start is not None and end is not None:
         end = max(end, start)
     out: dict[str, Any] = {"text": word.text, "start_ms": start, "end_ms": end}
@@ -67,15 +67,23 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
     content_hash: str,
     language: str,
     now: datetime,
+    offset_ms: int = 0,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
-    """Transcrição no schema do contrato, com locutores `Locutor N` e `person: null`."""
+    """Transcrição no schema do contrato, com locutores `Locutor N` e `person: null`.
+
+    `offset_ms` é o silêncio que o pré-processamento cortou do início: somado a todo tempo de
+    segmento e palavra, as marcas voltam a ser as do áudio original, que o usuário ouve.
+    `duration_ms` é a duração desse original; sem ela, a do áudio tratado mais o deslocamento (o
+    silêncio cortado do fim fica de fora).
+    """
     mapping = speaker_map(result)
     speaker_ids = _segment_speakers(result, mapping)
     talk_ms = dict.fromkeys(mapping.values(), 0)
     segments: list[dict[str, Any]] = []
     for index, (segment, speaker_id) in enumerate(zip(result.segments, speaker_ids, strict=True), start=1):
-        start_ms = _ms(segment.start)
-        end_ms = max(_ms(segment.end), start_ms)
+        start_ms = _ms(segment.start) + offset_ms
+        end_ms = max(_ms(segment.end) + offset_ms, start_ms)
         talk_ms[speaker_id] += end_ms - start_ms
         out: dict[str, Any] = {
             "id": f"seg-{index:04d}",
@@ -87,7 +95,7 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
         if segment.confidence is not None:
             out["confidence"] = round(min(1.0, max(0.0, segment.confidence)), 4)
         if segment.words:
-            out["words"] = [_word(w) for w in segment.words]
+            out["words"] = [_word(w, offset_ms) for w in segment.words]
         segments.append(out)
 
     speakers = [
@@ -102,7 +110,7 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
         "title": f"Gravação {recording_id}",
         "language": language,
         "recorded_at": timestamp,
-        "duration_ms": _ms(result.duration_s),
+        "duration_ms": duration_ms if duration_ms is not None else _ms(result.duration_s) + offset_ms,
         "source": PROVISIONAL_SOURCE,
         "content_hash": content_hash,
         "revision": revision,

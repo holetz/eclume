@@ -38,7 +38,8 @@ class EngineError(Exception):
 class EngineOptions:
     """Opções de um job de transcrição, vindas de `options` do job `transcribe`."""
 
-    language: str = "pt"
+    # `None`: a engine detecta o idioma e o devolve em `EngineResult.language`.
+    language: str | None = "pt"
     model: str | None = None
     compute_type: str | None = None
     diarize: bool = True
@@ -59,8 +60,9 @@ class EngineOptions:
             value = options.get(key)
             return None if value is None else int(value)
 
+        # `language: null` pede a detecção; sem a chave (job antigo), vale o português.
         return cls(
-            language=options.get("language") or "pt",
+            language=options.get("language", "pt") or None,
             model=options.get("model") or None,
             compute_type=options.get("compute_type") or None,
             diarize=bool(options.get("diarize", True)),
@@ -103,6 +105,7 @@ class EngineResult:
     engine: str
     model: str
     compute_type: str
+    # O idioma pedido, ou o detectado quando o job pediu a detecção.
     language: str
     duration_s: float
     segments: list[Segment]

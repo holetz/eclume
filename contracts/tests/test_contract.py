@@ -145,7 +145,7 @@ def test_schema_da_transcricao_e_2020_12_valido(transcript_schema: dict[str, Any
 
 
 def test_versoes_do_contrato_sao_v1(source_spec: dict[str, Any], transcript: dict[str, Any]) -> None:
-    # A 2.0.0 (fim da organização) segue sob /api/v1; a próxima quebra vai para /api/v2.
+    # A linha 2.x do redesign segue sob /api/v1; depois dele, a próxima quebra vai para /api/v2.
     assert re.fullmatch(r"2\.\d+\.\d+", source_spec["info"]["version"])
     assert transcript["schema_version"].startswith("1.")
     assert all(path.startswith("/api/v1/") for path in source_spec["paths"])

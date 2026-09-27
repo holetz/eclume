@@ -42,6 +42,8 @@ class WorkerConfig:
     # As mesmas do server: abrem o token do HF que chega cifrado nas `options` do job.
     encryption_key: str | None = None
     secret_key: str | None = None
+    # Modelo do RNNoise (`arnndn`) do pré-processamento; sem ele, a redução de ruído usa `afftdn`.
+    rnnoise_model: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> WorkerConfig:
@@ -73,4 +75,5 @@ class WorkerConfig:
             remote_model=get("ECLUME_REMOTE_MODEL"),
             encryption_key=get("ECLUME_ENCRYPTION_KEY"),
             secret_key=get("ECLUME_SECRET_KEY"),
+            rnnoise_model=get("ECLUME_RNNOISE_MODEL"),
         )
