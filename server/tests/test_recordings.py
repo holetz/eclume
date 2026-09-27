@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import redis
+from sqlalchemy import text
 
 from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.fakes import transcribed
+from eclume_server_testing.fakes import run_cpu, transcribed
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -154,6 +157,65 @@ def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Calla
     assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
     assert api.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
+
+
+def _count(services: Services, sql: str, **params: Any) -> int:  # noqa: ANN401
+    async def go(conn: Any) -> int:  # noqa: ANN401
+        return (await conn.execute(text(sql), params)).scalar_one()
+
+    return run(services.sql(go))
+
+
+def test_excluir_leva_resumo_chat_marcadores_e_audio(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    api = as_user(account)
+    recording = transcribed(api, services.settings, markers=[{"client_id": str(uuid4()), "at_ms": 1000}])
+    rid, tid = recording["id"], recording["transcript_id"]
+    admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
+    types = api.get("/api/v1/agenda-types").json()["items"]
+    done = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
+    assert done.status_code == 202, done.text
+    run_cpu(services.settings)
+    # Um resumo ainda na fila quando a gravação sai, e um pedido de ajuste já feito.
+    queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
+    assert queued.status_code == 202, queued.text
+
+    async def chat(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text(
+                "INSERT INTO summary_chat_messages (owner_id, recording_id, transcript_id, role, content, status)"
+                " VALUES (:o, :r, :t, 'user', 'Encurte', 'done')"
+            ),
+            {"o": account.user_id, "r": rid, "t": tid},
+        )
+
+    run(services.sql(chat))
+    counts = {
+        "summaries": "SELECT count(*) FROM summaries WHERE transcript_id = :t",
+        "chat": "SELECT count(*) FROM summary_chat_messages WHERE recording_id = :r",
+        "markers": "SELECT count(*) FROM markers WHERE recording_id = :r",
+    }
+    assert {name: _count(services, sql, t=tid, r=rid) for name, sql in counts.items()} == {
+        "summaries": 2,
+        "chat": 1,
+        "markers": 1,
+    }
+    key = f"users/{account.user_id}/recordings/{rid}/audio"
+    s3 = services.s3()
+    assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
+
+    assert api.delete(f"/api/v1/recordings/{rid}").status_code == 204
+    assert {name: _count(services, sql, t=tid, r=rid) for name, sql in counts.items()} == {
+        "summaries": 0,
+        "chat": 0,
+        "markers": 0,
+    }
+    assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
+    # O resumo que estava na fila encontra a gravação apagada e não faz nada.
+    agents = run_cpu(services.settings)
+    assert agents.calls == []
 
 
 def test_audio_redireciona_para_url_assinada_com_range(

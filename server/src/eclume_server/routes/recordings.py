@@ -264,7 +264,10 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
 
 @router.delete("/recordings/{recording_id}", status_code=204)
 async def delete_recording(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui a gravação, a transcrição e o áudio."""
+    """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
+
+    As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
+    """
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await get_visible(conn, recording_id)
         await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
