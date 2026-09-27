@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { usePageTitle } from '../../app/usePageTitle'
+import { ChatPanel } from './ChatPanel'
 import { FieldsPanel } from './FieldsPanel'
 import { MarkerBar } from './MarkerBar'
 import { useMarkers } from './markers'
@@ -120,12 +121,12 @@ export function RecordingPage() {
         )}
         {changingType && <ChangeTypeDialog recording={data} onClose={() => setChangingType(false)} />}
       </div>
-      <aside className={`chat ${styles.chat}`} aria-label="Ajustar o resumo">
-        <div className="chat-head">
-          <strong>Ajustar o resumo</strong>
-          <span className="text-muted">Trabalha sobre o resumo. Só lê a transcrição quando o pedido precisa.</span>
-        </div>
-      </aside>
+      <ChatPanel
+        recordingId={data.id}
+        hasTranscript={data.transcript_id !== null}
+        hasSummary={Boolean(summary.data?.current)}
+        className={styles.chat}
+      />
     </div>
   )
 }

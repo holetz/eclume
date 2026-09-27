@@ -271,3 +271,28 @@
   justify-self: start;
   margin-top: 4px;
 }
+
+.chatSub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.chatError {
+  color: var(--color-danger);
+}
+
+/* "Trabalhando..." com os pontos em passos, como o piscar do DS. */
+.working::after {
+  content: '...';
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  vertical-align: bottom;
+  animation: working-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes working-dots {
+  to {
+    width: 1.2em;
+  }
+}
