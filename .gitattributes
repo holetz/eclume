@@ -1,0 +1,6 @@
+# Scripts rodam no host Linux: fim de linha LF mesmo em checkout no Windows.
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+*.Caddyfile text eol=lf

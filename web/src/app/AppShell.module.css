@@ -1,22 +1,6 @@
-/* Só o que o Design System (.shell, .sidebar, .nav-group, .sidebar-footer, .main) não tem: a
-   barra lateral fixa na altura da tela e, em tela estreita, a barra superior com o menu compacto. */
-.shell {
-  grid-template-areas: 'sidebar main';
-}
-
-.topbar {
-  display: none;
-}
-
-.sidebar {
-  grid-area: sidebar;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-}
-
-/* A navegação ocupa o espaço livre e leva "Configurações e ajuda" para baixo, junto do rodapé. */
+/* Só o que o Design System (.nav-group, .sidebar-footer) não tem dentro da barra lateral do app; a
+   moldura (barra fixa e menu compacto) é do ShellFrame. A navegação ocupa o espaço livre e leva
+   "Configurações e ajuda" para baixo, junto do rodapé. */
 .nav {
   flex: 1;
   display: flex;
@@ -52,61 +36,4 @@
 
 .seg > label {
   flex: 1;
-}
-
-.main {
-  grid-area: main;
-}
-
-.main:focus {
-  outline: none;
-}
-
-@media (max-width: 56rem) {
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      'topbar'
-      'main';
-  }
-
-  .topbar {
-    grid-area: topbar;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 3.25rem;
-    padding: var(--space-2) var(--space-4);
-    background: var(--color-bg);
-    border-bottom: 2px solid var(--color-divider);
-  }
-
-  .brandSide {
-    display: none;
-  }
-
-  .sidebar {
-    display: none;
-    position: fixed;
-    top: 3.25rem;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9;
-    height: auto;
-    background: var(--color-bg);
-    border-right: none;
-  }
-
-  .sidebar[data-open='true'] {
-    display: flex;
-  }
-
-  .main {
-    padding: var(--space-6) var(--space-4) var(--space-8);
-  }
 }

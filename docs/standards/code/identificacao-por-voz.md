@@ -2,7 +2,7 @@
 type: standard
 title: Identificação de pessoas pela voz
 description: Como o eclume sugere quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão que nunca liga sozinha, retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
-resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/VoicePage.tsx, web/src/features/transcript/SpeakersPanel.tsx
+resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
 timestamp: 2026-09-27
 audience: both
@@ -131,4 +131,4 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   com Aceitar e Recusar.
 - **Pessoa** (`VoiceSection`): se a identificação por voz está ligada, as amostras e "Esquecer a
   voz".
-- **Admin** (`/admin/voz`): liga-desliga e limiar em %.
+- **Admin** (`/admin/locutores`, seção Identificação): liga-desliga (depende da separação e pede confirmação ao desligar) e limiar de 0,50 a 0,99.
