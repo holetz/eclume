@@ -109,10 +109,20 @@ dele. O prefixo segue `eclp_`, que o `PatStore` do desktop valida.
   espaço) e marcado como usado num `UPDATE … WHERE used_at IS NULL AND expires_at > now()
   RETURNING` só de conta ativa; emite a credencial do dono e grava o `token_id` no código.
   Inválido, vencido ou usado → 401 `invalid_pairing_code`. `pairing_codes` tem RLS pelo dono; a
-  troca, sem conta ainda, roda com o papel de conexão.
-- **Limite de tentativas** (`ratelimit.attempts`): as rotas de credencial contam por IP numa
-  janela fixa de 1 minuto no Redis (`ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE`, 10). Com 30⁶
-  combinações e poucos códigos vivos, o chute não chega a um código em 10 minutos.
+  troca, sem conta ainda, roda com o papel de conexão. O cron `expire_pairing_codes` do worker
+  (de hora em hora) apaga os códigos vencidos sem uso há mais de um dia; os usados ficam, com o
+  `token_id`.
+- **Aviso no login de dispositivo:** conta que ainda não aceitou o aviso em vigor não ganha
+  credencial nova por `POST /devices/login` (**403** `notice_required`; aceita na web e entra de
+  novo). As credenciais já emitidas seguem valendo, como todo PAT. O código de pareamento nasce
+  numa sessão, que já exige o aceite.
+- **Limite de tentativas** (`ratelimit.py`): as rotas de credencial contam por IP numa janela
+  fixa de 1 minuto no Redis (`ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE`, 10). Os logins por senha
+  contam também por conta (`count_login`, `eclume:rl:user_email:<e-mail>`, comum a
+  `/auth/login` e `/devices/login`; o admin tem a sua), e a troca de código tem ainda um teto
+  global de seis vezes o limite por IP (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os
+  chutes. Com 30⁶ combinações e no máximo 600 trocas em 10 minutos, o chute não chega a um
+  código vivo.
 
 ## Descritor do servidor
 
@@ -130,7 +140,9 @@ do QR, do pareamento e do endereço embutido no instalador.
   host `<nome>.local.`, endereço e porta lidos de `ECLUME_PUBLIC_URL` (um nome é resolvido para
   IPv4). Nunca os IPs das interfaces: na rede do host, as bridges do Docker também são
   interfaces. O TXT tem `url` (a URL pública), `ca` (o `ca_sha256`, vazio sem CA), `v` (versão do
-  contrato) e `name`.
+  contrato) e `name`. O TXT **não é autenticado**: qualquer máquina da LAN pode anunciar um
+  `_eclume._tcp` com outra CA. Ele é uma dica de endereço; o app mostra a impressão digital e
+  pede confirmação antes de fixar uma CA que só o mDNS trouxe (ver abaixo).
 - **`eclume-server announce`** registra com `zeroconf.asyncio` só na interface do endereço
   público, relê o PEM a cada 60 s e atualiza o TXT quando a CA muda (inclusive quando ela é
   publicada depois); ao parar, manda os goodbyes. Sem `ECLUME_PUBLIC_URL`, recusa.
@@ -150,8 +162,9 @@ O Caddy `tls internal` troca o certificado folha a cada ~12 h e o intermediário
 não envia a raiz na cadeia; a raiz vale 10 anos e vive no volume `caddy-data`. Por isso os apps
 fixam a **raiz**, nunca o folha, sem instalar a CA no sistema:
 
-1. obter `url` e `ca_sha256` — do instalador (endereço embutido no build), do TXT do mDNS ou do
-   QR (`pair_url`);
+1. obter `url` e `ca_sha256` — do instalador (endereço embutido no build), do QR (`pair_url`,
+   que sai da web autenticada) ou do TXT do mDNS (não autenticado: antes de mandar a senha, a
+   pessoa confirma a impressão digital, como no endereço digitado);
 2. baixar `<url>/downloads/eclume-root.crt` numa conexão sem verificação;
 3. conferir o SHA-256 do DER; divergiu, descartar e parar;
 4. gravar o PEM e usá-lo como `ca_path` (raízes do SO + esta), o caminho que o `transport.rs` e o

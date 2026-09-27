@@ -18,7 +18,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import unauthorized
-from eclume_server.ratelimit import attempts
+from eclume_server.ratelimit import attempts, count_login
 from eclume_server.routes.auth import LoginRequest
 from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
 
@@ -29,6 +29,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 @router.post("/auth/login", status_code=204)
 async def admin_login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]) -> Response:
     """Abre a sessão de admin: `eclume_admin_session` (HttpOnly, só no painel) e `eclume_admin_csrf`."""
+    await count_login(ctx, "admin", body.email)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
         query = select(t.admins).where(func.lower(t.admins.c.email) == body.email.lower())

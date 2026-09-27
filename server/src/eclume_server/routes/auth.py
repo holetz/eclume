@@ -24,7 +24,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
-from eclume_server.ratelimit import attempts
+from eclume_server.ratelimit import attempts, count_login
 from eclume_server.security import new_session_token, sha256_hex
 from eclume_server.serialize import user_json
 
@@ -89,6 +89,7 @@ async def health() -> dict[str, str]:
 @router.post("/auth/login", status_code=204)
 async def login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]) -> Response:
     """Abre sessão e define `eclume_session` (HttpOnly) e `eclume_csrf` (legível)."""
+    await count_login(ctx, "user", body.email)
     async with system_tx(ctx.engine) as conn:
         user_id = await password_login(conn, body.email, body.password)
         if user_id is None:

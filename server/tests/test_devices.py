@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -11,6 +13,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from eclume_server.app import create_app
+from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR
+from eclume_server.worker import purge_pairing_codes
 from eclume_server_testing.api import PASSWORD, Api
 from eclume_server_testing.conformance import CONFORMANCE
 from eclume_server_testing.harness import run
@@ -107,6 +111,43 @@ def test_tentativas_demais_do_mesmo_ip_sao_429(limited: TestClient, path: str, b
     assert limited.post(other, json={}).status_code == 422
 
 
+def test_login_conta_por_conta_no_navegador_e_no_aparelho(limited: TestClient):
+    email = "alvo@exemplo.com.br"
+    browser = {"email": email, "password": "p"}
+    device = browser | {"device_name": "d", "platform": "ios"}
+    # Duas por rota: nenhuma janela por IP enche, mas a da conta sim.
+    statuses = [
+        limited.post(path, json=body).status_code
+        for path, body in [
+            ("/api/v1/auth/login", browser),
+            ("/api/v1/devices/login", device),
+            ("/api/v1/auth/login", browser),
+        ]
+    ]
+    assert statuses == [401, 401, 401]
+    blocked = limited.post("/api/v1/devices/login", json=device)
+    assert (blocked.status_code, blocked.json()["code"]) == (429, "rate_limited")
+    # Outra conta, mesmo IP, segue na própria janela; o admin conta à parte.
+    assert (
+        limited.post("/api/v1/auth/login", json={"email": "outra@exemplo.com.br", "password": "p"}).status_code == 401
+    )
+    assert limited.post("/api/v1/admin/auth/login", json=browser).status_code == 401
+
+
+def test_troca_de_codigo_tem_teto_global(limited: TestClient, services: Services):
+    store = redis.Redis.from_url(services.settings.redis_url)
+    store.set("eclume:rl:devices_pair:*", 3 * PAIR_GLOBAL_FACTOR, ex=60)
+    blocked = limited.post("/api/v1/devices/pair", json={"code": "ZZZZZZ", "device_name": "d", "platform": "ios"})
+    assert (blocked.status_code, blocked.json()["code"]) == (429, "rate_limited")
+
+
+def test_login_de_dispositivo_exige_o_aviso_aceito(client: TestClient, make_user: Callable[..., Account]):
+    account = make_user(notice_version=None)
+    client.cookies.clear()
+    response = client.post("/api/v1/devices/login", json=_login(account))
+    assert (response.status_code, response.json()["code"]) == (403, "notice_required")
+
+
 def _pair(code: str, **changes: Any) -> dict[str, Any]:  # noqa: ANN401
     return {"code": code, "device_name": "iPhone da Mariana", "platform": "ios"} | changes
 
@@ -163,6 +204,11 @@ def test_codigo_vencido_novo_ou_de_outra_conta(
     # Só sessão.
     pat = session.pat("recordings:read")
     assert pat.post("/api/v1/devices/pairing-codes").json()["code"] == "session_required"
+    # O cron apaga os vencidos sem uso há mais de um dia; o vencido de agora fica.
+    _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '2 days' WHERE id = :id", id=first["id"])
+    assert run(services.sql(purge_pairing_codes)) >= 1
+    left = _sql(services, "SELECT id FROM pairing_codes WHERE id IN (:a, :b)", a=first["id"], b=second["id"])
+    assert [str(row[0]) for row in left] == [second["id"]]
 
 
 def _sql(services: Services, sql: str, **params: Any) -> Any:  # noqa: ANN401
@@ -171,3 +217,11 @@ def _sql(services: Services, sql: str, **params: Any) -> Any:  # noqa: ANN401
         return result.all() if result.returns_rows else None
 
     return run(services.sql(go))
+
+
+def test_worker_importa_sozinho():
+    """O worker sobe com `arq eclume_server.worker.WorkerSettings`, sem a API carregada antes."""
+    result = subprocess.run(
+        [sys.executable, "-c", "import eclume_server.worker"], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
