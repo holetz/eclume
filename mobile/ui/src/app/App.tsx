@@ -3,6 +3,7 @@ import { usePonte } from '../ponte/ponte'
 import type { EstadoApp } from '../ponte/tipos'
 import { Endereco } from '../telas/Endereco'
 import { Entrar } from '../telas/Entrar'
+import { Gravando } from '../telas/Gravando'
 import { Inicio } from '../telas/Inicio'
 import { LerCodigo } from '../telas/LerCodigo'
 import { Servidor } from '../telas/Servidor'
@@ -40,6 +41,7 @@ function Tela({ estado, rota, ir }: { estado: EstadoApp; rota: string; ir: (rota
       if (rota === '/ler-codigo') return <LerCodigo ir={ir} voltarPara="/entrar" />
       return <Entrar servidor={conexao.servidor} ir={ir} />
     case 'conectado':
+      if (estado.sessao || estado.folha) return <Gravando estado={estado} />
       return <Inicio estado={estado} ir={ir} />
   }
 }

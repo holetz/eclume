@@ -107,3 +107,19 @@ html.lendo-codigo .viewfinder {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* A faixa escura sob os botões da gravação, como no DS. */
+.m-rodape {
+  height: max(28px, var(--safe-bottom));
+  flex: none;
+  background: var(--color-text);
+}
+
+.m-app:has(.m-rodape) {
+  padding-bottom: 0;
+}
+
+.rotulo-do-campo {
+  font-size: 13px;
+  font-weight: 600;
+}
