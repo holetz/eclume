@@ -36,6 +36,23 @@ function mockCollections() {
 }
 
 describe('coleções', () => {
+  it('é aberta por "Gerenciar coleções" no filtro da biblioteca, com o cabeçalho do DS', async () => {
+    mockCollections()
+    mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/collections': () => fixtures.collectionPage(),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    renderApp('/?visao=semana&data=2026-09-21')
+    await userEvent.click(await screen.findByRole('link', { name: 'Gerenciar coleções' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
+    expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
+    expect(screen.getByText(/Coleção agrupa gravações; tag marca assuntos\. As duas convivem/)).toBeInTheDocument()
+  })
+
   it('lista com contagem e leva às gravações da coleção', async () => {
     mockCollections()
     renderApp('/colecoes')
