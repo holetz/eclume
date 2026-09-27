@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -135,7 +136,16 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     return model, vectors
 
 
-RECORDING_GONE = "gravação inexistente"
+@dataclass(frozen=True)
+class Ingested:
+    """O desfecho da ingestão: a linha do log e se a transcrição foi gravada agora.
+
+    Só o que foi gravado segue para a cadeia por agente; `gone` diz que a gravação foi excluída.
+    """
+
+    message: str
+    persisted: bool = False
+    gone: bool = False
 
 
 async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
@@ -146,10 +156,11 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     transcript_key: str,
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
-) -> str:
+) -> Ingested:
     """Persiste a transcrição do job em aberto; idempotente por `(recording_id, revision)`.
 
-    Roda com o papel de conexão (worker CPU). Devolve o que aconteceu, para o log.
+    Roda com o papel de conexão (worker CPU). Job já concluído ou falho (pelo reaper, por exemplo)
+    não é gravado de novo.
     """
     recording = (
         (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
@@ -157,7 +168,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if recording is None:
-        return RECORDING_GONE
+        return Ingested("gravação inexistente", gone=True)
     job = (
         (
             await conn.execute(
@@ -172,7 +183,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .first()
     )
     if job is None or job["state"] not in {"queued", "running"}:
-        return "sem job em aberto (já ingerido?)"
+        return Ingested("sem job em aberto (já ingerido ou falho)")
 
     raw = await storage.read_json(transcript_key)
     speakers, segments, mapping = normalize_raw(raw)
@@ -253,7 +264,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             updated_at=now,
         )
     )
-    return f"transcrição {transcript_id} gravada (revisão do job {job['revision']})"
+    return Ingested(f"transcrição {transcript_id} gravada (revisão do job {job['revision']})", persisted=True)
 
 
 async def fail(

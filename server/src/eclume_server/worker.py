@@ -30,7 +30,7 @@ from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, st
 from eclume_server.stalled import reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import run_summary, start_auto_summary
-from eclume_server.transcripts import RECORDING_GONE, fail, ingest
+from eclume_server.transcripts import fail, ingest
 from eclume_server.voice import platform_voice
 
 log = logging.getLogger("eclume_server.worker")
@@ -60,7 +60,7 @@ async def ingest_transcript(
 ) -> str:
     """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`."""
     async with system_tx(ctx["engine"]) as conn:
-        result = await ingest(
+        outcome = await ingest(
             conn,
             ctx["storage"],
             UUID(recording_id),
@@ -70,14 +70,14 @@ async def ingest_transcript(
         )
         revision = await current_revision(conn, UUID(recording_id))
     await ctx["redis"].delete(progress_key(recording_id))
-    if result == RECORDING_GONE:
+    if outcome.gone:
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
-    else:
-        # A cadeia por agente começa pelos campos; o `_job_id` impede a segunda ingestão de repeti-la.
+    elif outcome.persisted:
+        # A cadeia por agente começa pelos campos, só quando esta ingestão gravou a transcrição.
         await _enqueue_step(ctx, "fill_fields", recording_id, revision)
-    log.info("ingest_transcript %s: %s", recording_id, result)
-    return result
+    log.info("ingest_transcript %s: %s", recording_id, outcome.message)
+    return outcome.message
 
 
 async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:

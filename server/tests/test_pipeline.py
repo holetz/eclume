@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
 
+from eclume_server.db.session import make_engine
 from eclume_server.queue import Queue, progress_key
-from eclume_server.transcripts import render_markdown
+from eclume_server.storage import Storage
+from eclume_server.transcripts import fail, render_markdown
+from eclume_server.worker import ingest_transcript
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import ENGINE_INFO, contract_transcript, run_cpu, run_gpu
 from eclume_server_testing.harness import run
@@ -137,6 +141,63 @@ def test_ingestao_idempotente_e_retranscricao_sobe_revisao(
     assert after["revision"] == 2
     assert after["updated_at"] > transcript["updated_at"]
     assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+
+class _EnqueueSpy:
+    """O Redis do `ingest_transcript` chamado direto: registra o que ele enfileiraria."""
+
+    def __init__(self) -> None:
+        self.jobs: list[str] = []
+
+    async def delete(self, *keys: str) -> None:
+        pass
+
+    async def enqueue_job(self, name: str, *_args: object, **_kwargs: object) -> None:
+        self.jobs.append(name)
+
+
+def _ingest_directly(services: Services, recording_id: str) -> list[str]:
+    """Roda `ingest_transcript` fora do arq (sem a deduplicação por `_job_id`); devolve o enfileirado."""
+
+    async def go() -> list[str]:
+        engine = make_engine(services.settings.database_url)
+        redis = _EnqueueSpy()
+        ctx = {"engine": engine, "storage": Storage(services.settings), "redis": redis}
+        try:
+            key = f"recordings/{recording_id}/transcript.raw.json"
+            await ingest_transcript(ctx, recording_id, key, None, ENGINE_INFO)
+        finally:
+            await engine.dispose()
+        return redis.jobs
+
+    return run(go())
+
+
+def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    # Ingestão repetida depois da cadeia inteira: nada muda e nada entra na fila.
+    done = upload_file(api, audio_bytes(3100))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert _ingest_directly(services, done["id"]) == []
+
+    # Job já falho pelo reaper quando a ingestão chega: a transcrição não é gravada e a cadeia não começa.
+    reaped = upload_file(api, audio_bytes(3200))
+    run_gpu(services.settings)
+    run(services.sql(lambda conn: fail(conn, UUID(reaped["id"]), "job_lost", "sem worker")))
+    assert _ingest_directly(services, reaped["id"]) == []
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{reaped['id']}").json()
+    assert body["status"] == "failed"
+    assert _states(body)["fields"] == "pending"
+
+    # A ingestão que grava abre a cadeia pelos campos.
+    fresh = upload_file(api, audio_bytes(3300))
+    run_gpu(services.settings)
+    assert _ingest_directly(services, fresh["id"]) == ["fill_fields"]
+    run_cpu(services.settings)
 
 
 def test_falha_do_worker_gpu_marca_job_e_gravacao(
