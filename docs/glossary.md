@@ -53,13 +53,14 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - **OKF** — Open Knowledge Format: o formato do bundle `docs/`, com homes fixas e frontmatter por doc.
 - [origem do valor](standards/code/processamento-automatico.md) — De onde veio o valor de um campo: `auto` (o agente), `edited` (o usuário escreveu) ou `accepted` (o usuário aceitou o automático); os dois últimos o automático não sobrescreve.
 - [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
+- [painel de administração](standards/code/frontend-web.md) — App à parte dentro do web (`/admin/entrar`, `/admin/*`), com login, sessão e moldura próprios, onde a conta de admin configura a plataforma sem ver conteúdo de usuário.
 - **PAT** — Personal Access Token: token pessoal com escopo, guardado como hash, usado pelo lumea e pelo desktop para acessar a API.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `contracts/`, `deploy/`.
 - [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.
 - [regra de preenchimento](standards/code/processamento-automatico.md) — O "como identificar" de um campo: a instrução que o agente segue para preenchê-lo a partir da transcrição.
 - [RLS](standards/code/server-nucleo.md) — Row-Level Security do Postgres: as políticas por dono (`app.user_id`) que isolam os dados do eclume sob o papel `eclume_app`.
-- [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel admin, só de escrita: a API nunca o devolve.
+- [segredo da plataforma](standards/code/server-admin.md) — Valor sensível (`hf_token`, `anthropic_api_key`) de `platform_secrets`, gravado cifrado pelo painel de administração, só de escrita: a API nunca o devolve; o token do Hugging Face fica em Locutores, e a chave da Anthropic, em Agentes.
 - **spec** — Unidade de trabalho do ciclo Quenching, guardada como issue do GitHub e conduzida por `develop` → `execute` → `conclude`.
 - [sugestão por voz](standards/code/identificacao-por-voz.md) — Pessoa proposta para um locutor sem pessoa quando a voz passa do limiar da plataforma; nunca liga sozinha, só vira vínculo quando alguém aceita.
 - [tipo de agenda](standards/code/processamento-automatico.md) — Categoria de gravação do usuário (reunião de equipe, 1:1…) com como identificar, padrão de título, tags padrão e as instruções do resumo; o agente detecta o tipo depois da transcrição.

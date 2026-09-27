@@ -8,6 +8,7 @@ import adminUserPage from '../../../contracts/fixtures/admin-user-page.json'
 import agendaTypePage from '../../../contracts/fixtures/agenda-type-page.json'
 import agentProviderPage from '../../../contracts/fixtures/agent-provider-page.json'
 import collectionPage from '../../../contracts/fixtures/collection-page.json'
+import defaultAgendaTypePage from '../../../contracts/fixtures/default-agenda-type-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import partUrls from '../../../contracts/fixtures/part-urls.json'
 import person from '../../../contracts/fixtures/person.json'
@@ -67,6 +68,7 @@ export const fixtures = {
   adminHealth: fresh<Schemas['AdminHealth']>(adminHealth),
   agentProviderPage: fresh<Schemas['AgentProviderPage']>(agentProviderPage),
   secretList: fresh<Schemas['SecretList']>(secretList),
+  defaultAgendaTypePage: fresh<Schemas['DefaultAgendaTypePage']>(defaultAgendaTypePage),
   adminMe: fresh<Schemas['AdminAccount']>(adminMe),
   adminUserPage: fresh<Schemas['AdminUserPage']>(adminUserPage),
   person: fresh<Schemas['Person']>(person),

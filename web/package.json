@@ -12,6 +12,7 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
     "fixtures": "bash scripts/media-fixtures.sh",
     "preview": "vite preview",
     "gen:api": "openapi-typescript ../contracts/openapi-v1.bundled.yaml -o src/api/schema.gen.ts"

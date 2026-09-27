@@ -11,7 +11,7 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, 
   lazy(() => load().then((module) => ({ default: module[name] })))
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
-const AdminLoginPage = named(() => import('../features/admin/AdminLoginPage'), 'AdminLoginPage')
+const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
 const ImportPage = named(() => import('../features/import/ImportPage'), 'ImportPage')
@@ -36,7 +36,7 @@ export function AppRoutes() {
       <Route path="/entrar" element={<LoginPage />} />
       <Route path="/cadastro" element={page(SignupPage)} />
       {/* O painel admin fica fora da sessão do usuário: conta, login e guarda próprios. */}
-      <Route path="/admin/entrar" element={page(AdminLoginPage)} />
+      <Route path="/admin/entrar" element={page(AdminSignInPage)} />
       <Route path="/admin/*" element={page(AdminRoutes)} />
       <Route element={<RequireSession />}>
         <Route index element={<LibraryPage />} />

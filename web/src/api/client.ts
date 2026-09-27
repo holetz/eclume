@@ -12,6 +12,7 @@ export const CSRF_HEADER = 'X-CSRF-Token'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const LOGIN_PATH = '/api/v1/auth/login'
 const ADMIN_PREFIX = '/api/v1/admin/'
+const ADMIN_LOGIN_PATH = '/api/v1/admin/auth/login'
 
 /** A requisição é do painel admin (sessão de admin), e não da sessão do usuário. */
 export function isAdminUrl(url: string): boolean {
@@ -41,18 +42,31 @@ export const csrfMiddleware: Middleware = {
 }
 
 const unauthorizedListeners = new Set<() => void>()
+const adminUnauthorizedListeners = new Set<() => void>()
+
+function subscribe(listeners: Set<() => void>, listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 /** Avisa quando a API responde 401 à sessão do usuário (ausente ou expirada), fora do próprio login. */
 export function onUnauthorized(listener: () => void): () => void {
-  unauthorizedListeners.add(listener)
-  return () => unauthorizedListeners.delete(listener)
+  return subscribe(unauthorizedListeners, listener)
+}
+
+/** Avisa quando o painel admin recebe 401 (sessão de admin ausente ou expirada), fora do login do admin. */
+export function onAdminUnauthorized(listener: () => void): () => void {
+  return subscribe(adminUnauthorizedListeners, listener)
 }
 
 export const unauthorizedMiddleware: Middleware = {
   onResponse({ response, schemaPath }) {
-    // Um 401 do painel admin é da sessão de admin: a guarda do painel cuida dele.
-    if (response.status === 401 && schemaPath !== LOGIN_PATH && !schemaPath.startsWith(ADMIN_PREFIX)) {
-      for (const listener of unauthorizedListeners) listener()
+    if (response.status !== 401) return response
+    // Um 401 do painel admin é da sessão de admin, e só a guarda do painel o ouve.
+    const admin = schemaPath.startsWith(ADMIN_PREFIX)
+    const login = admin ? ADMIN_LOGIN_PATH : LOGIN_PATH
+    if (schemaPath !== login) {
+      for (const listener of admin ? adminUnauthorizedListeners : unauthorizedListeners) listener()
     }
     return response
   },

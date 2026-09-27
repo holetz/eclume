@@ -7,7 +7,7 @@ tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-09-27
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#39
 maintainer: holetz
 ---
 
@@ -123,7 +123,8 @@ host.
 ### Admin, contas e provider
 
 Não há organização: cada conta de usuário é isolada pela RLS do dono, e o painel é da
-**plataforma**. A **conta de admin** (`admins`) é separada das contas de usuário, com login e
+**plataforma**. O **painel de administração** fica em
+**`https://192.168.15.199:8443/admin/entrar`**: não há link para ele no app do usuário. A **conta de admin** (`admins`) é separada das contas de usuário, com login e
 sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
 ([server-admin.md](../standards/code/server-admin.md)).
 
@@ -183,6 +184,17 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt --pipeline --recording <id de uma gravação real>
 ```
 
+**Painel de administração no navegador** (`npm --prefix web run test:e2e:prod`, só leitura, no
+Chrome da estação): entra com a conta de admin, percorre as sete telas com os dados reais, espera a
+segunda leitura da Saúde em até 17 s, confere `/admin/voz` → Locutores, que a sessão de admin dá
+401 em `GET /api/v1/me` e que o logout fecha a sessão. Os screenshots ficam em
+`web/test-results/prod/`. O padrão é o Google Chrome; numa estação sem ele, `E2E_CHANNEL=msedge`
+usa o Edge.
+
+```bash
+ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com   ECLUME_ADMIN_PASSWORD="$(ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password)"   npm --prefix web run test:e2e:prod
+```
+
 ### Primeiro deploy (2026-09-25)
 
 - **Tempo:** o deploy do zero levou ~6,5 min, quase tudo no build do worker GPU (7,98 GB). As
@@ -222,6 +234,16 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   "Reunião de equipe" (padrão de título e tags padrão aplicados) e o resumo automático saiu pelas
   instruções do tipo, pelo `claude-cli`. Numa gravação sem fala, a cadeia também fechou: nenhum
   campo preenchido e o resumo dizendo que não havia fala.
+
+### Painel de administração em produção (2026-09-27)
+
+- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
+  7 transcrições, 15 resumos, 18 objetos).
+- **Deploy:** nenhuma migration (schema em dia); os scripts em `/srv/eclume/bin/` ficaram com LF.
+- **Navegador:** o `test:e2e:prod` passou em 18 s no Edge da estação (sem Chrome instalado):
+  as sete telas com os dados reais, as cinco etapas e a API saudável na Saúde, a segunda leitura
+  em 15 s, `/admin/voz` → Locutores, 401 em `GET /api/v1/me` com a sessão de admin e o logout. O
+  MCP aparece "Ausente" até a holetz/eclume#35.
 
 ## CA raiz nos clientes
 
@@ -299,7 +321,7 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
 - **E2E do web contra o backend real** num stack efêmero, sem tocar a produção:
   `remote-run . 'bash deploy/e2e-real.sh'` ([frontend-web.md](../standards/code/frontend-web.md)).
-- **Token do Hugging Face:** grave em Administração → Segredos (vence o arquivo) ou troque
+- **Token do Hugging Face:** grave em Administração → Locutores (vence o arquivo) ou troque
   `/srv/eclume/secrets/hf_token` (600). O worker relê a cada job, sem reiniciar
   ([worker-gpu.md](worker-gpu.md)).
 - **Instaladores do desktop:** `deploy/publicar-desktop.sh` grava em `/srv/eclume/downloads/`,
