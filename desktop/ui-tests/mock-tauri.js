@@ -45,6 +45,7 @@
         recording_started_at: null,
         recording_kind: null,
         note_silence_s: 4,
+        theme: "system",
         marker_count: 0,
         last_marker: null,
         recording_auto: false,
@@ -91,6 +92,7 @@
         mic: null,
         system_source: "follow",
         language: null,
+        theme: "system",
         note_silence_s: 4,
       },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
@@ -352,11 +354,13 @@
         system_source: systemSource,
         note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
         language: input.language === undefined ? e.settings.language : input.language || null,
+        theme: input.theme ?? e.settings.theme,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
           : e.settings.shortcuts,
         apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
       };
+      e.status.theme = e.settings.theme;
       return e.settings;
     },
     system_shortcuts(e, { install }) {

@@ -370,6 +370,8 @@ export function montar(secao, app) {
     if (sistema.options.length) sistema.value = config.system_source;
     desenharBotoesDeTeste();
     $("#idioma", secao).value = config.language ?? "";
+    const tema = config.theme ?? "system";
+    for (const opcao of secao.querySelectorAll('input[name="tema"]')) opcao.checked = opcao.value === tema;
     const silencio = String(config.note_silence_s ?? 0);
     for (const opcao of secao.querySelectorAll('input[name="silencio"]')) opcao.checked = opcao.value === silencio;
     desenharAtalhos();
@@ -435,6 +437,12 @@ export function montar(secao, app) {
     salvar({ system_source: sistema.value });
   });
   $("#idioma", secao).addEventListener("change", (evento) => salvar({ language: evento.target.value }));
+  for (const opcao of secao.querySelectorAll('input[name="tema"]')) {
+    opcao.addEventListener("change", () => {
+      app.definirTema(opcao.value);
+      salvar({ theme: opcao.value });
+    });
+  }
   for (const opcao of secao.querySelectorAll('input[name="silencio"]')) {
     opcao.addEventListener("change", () => salvar({ note_silence_s: Number(opcao.value) }));
   }
