@@ -22,6 +22,7 @@ const app = {
   fila: [],
   ir,
   voltar: () => ir("principal"),
+  importarArquivo,
   atualizar,
   definirTema,
 };
@@ -80,8 +81,24 @@ function aoTeclar(evento) {
     return;
   }
   if (!(evento.ctrlKey || evento.metaKey) || evento.altKey) return;
-  const destino = { o: "importar", ",": "configuracoes", "/": "atalhos" }[evento.key.toLowerCase()];
+  const tecla = evento.key.toLowerCase();
+  if (tecla === "o") {
+    evento.preventDefault();
+    importarArquivo();
+    return;
+  }
+  const destino = { ",": "configuracoes", "/": "atalhos" }[tecla];
   if (destino && ir(destino)) evento.preventDefault();
+}
+
+/** "Importar arquivo…": o seletor de arquivos do sistema e, escolhido um, a vista de importação. */
+async function importarArquivo() {
+  try {
+    const caminho = await invoke("pick_import_file");
+    if (caminho) ir("importar", { path: caminho });
+  } catch (erro) {
+    console.error(erro);
+  }
 }
 
 registrar("principal", principal);

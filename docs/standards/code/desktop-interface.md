@@ -71,7 +71,7 @@ Na ordem do `index.html`:
 |---|---|---|
 | `principal` | Main window, Voice note, Automatic recording, After an update | linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
 | `primeira-execucao` | First run | servidores conhecidos, conferência da impressão digital, e-mail e senha, e em "Avançado" o código de pareamento e o endereço |
-| `importar` | Import file | a área de soltar, a data lida do arquivo com a origem e o progresso da conversão |
+| `importar` | Import file | a data lida do arquivo escolhido com a origem e o progresso da conversão; a área de soltar recebe um arquivo arrastado ou abre o seletor de novo |
 | `configuracoes` | Settings · Meetings, Audio, Storage, Server | as quatro abas |
 | `atalhos` | — (menu de ajuda) | a folha com os atalhos globais e os da janela |
 
@@ -110,7 +110,9 @@ Na ordem do `index.html`:
   Numa sessão Wayland o app começa em `system` e passa a `portal` quando o portal responde. O
   botão e a bandeja valem em todos os modos.
 - **Da janela**, por `keydown` no JS: `Ctrl/⌘+O` importar, `Ctrl/⌘+,` configurações,
-  `Ctrl/⌘+/` atalhos e `Esc` volta à principal.
+  `Ctrl/⌘+/` atalhos e `Esc` volta à principal. "Importar arquivo…" e `Ctrl/⌘+O` abrem direto o
+  seletor de arquivos do sistema (`tauri-plugin-dialog`); escolhido um arquivo, a vista
+  `importar` abre com ele, e desistir deixa a janela onde estava.
 
 ## Janela no Linux
 
