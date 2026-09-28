@@ -142,7 +142,7 @@ test('Servidor com o PAT antigo: segue conectado e oferece entrar com e-mail e s
   await expect(page.locator('[data-vista="principal"]')).toBeVisible()
 })
 
-test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salvam na hora', async ({ abrir }) => {
+test('Áudio: microfone por nome, saída do sistema e parada por silêncio salvam na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="audio"]').click()
@@ -151,17 +151,23 @@ test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salva
     'Padrão do sistema · Microfone embutido',
     'Microfone embutido',
     'Jabra Evolve2 65',
+    'Nenhum',
   ])
   await expect(page.locator('#microfone')).toHaveValue('')
-  await expect(page.locator('#audio-sistema')).toBeChecked()
+  await expect(page.locator('#audio-sistema option')).toHaveText([
+    'Seguir a saída em uso',
+    'Alto-falantes embutidos',
+    'Jabra Evolve2 65',
+    'Nenhum',
+  ])
+  await expect(page.locator('#audio-sistema')).toHaveValue('follow')
   await expect(page.locator('input[name="silencio"][value="4"]')).toBeChecked()
 
   await page.locator('#microfone').selectOption('Jabra Evolve2 65')
   await expect.poll(async () => (await ultimaEntrada(page)).mic).toBe('Jabra Evolve2 65')
 
-  await page.locator('.switch', { hasText: 'Gravar também o áudio do sistema' }).click()
-  await expect(page.locator('#audio-sistema')).not.toBeChecked()
-  expect((await ultimaEntrada(page)).system_audio).toBe(false)
+  await page.locator('#audio-sistema').selectOption('bluez_output.jabra')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('bluez_output.jabra')
 
   await page.locator('#silencio .seg-opt', { hasText: 'Nunca' }).click()
   await expect(page.locator('input[name="silencio"][value="0"]')).toBeChecked()
@@ -170,16 +176,61 @@ test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salva
   await expect.poll(async () => (await ultimaEntrada(page)).note_silence_s).toBe(8)
 })
 
-test('Áudio: o teste de nível mostra o medidor e volta ao fim', async ({ abrir }) => {
+test('Áudio: "Nenhum" em cada fonte desliga o teste dela, e as duas em "Nenhum" são recusadas', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#testar-mic')).toBeEnabled()
+  await expect(page.locator('#testar-sistema')).toBeEnabled()
+
+  await page.locator('#audio-sistema').selectOption('none')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('none')
+  await expect(page.locator('#testar-sistema')).toBeDisabled()
+  await expect(page.locator('#testar-mic')).toBeEnabled()
+
+  await page.locator('#microfone').selectOption('none')
+  await expect(page.locator('#config-aviso')).toContainText('Escolha ao menos uma fonte de áudio')
+  await expect(page.locator('#microfone')).toHaveValue('')
+
+  await page.locator('#audio-sistema').selectOption('follow')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('follow')
+  await page.locator('#microfone').selectOption('none')
+  await expect.poll(async () => (await ultimaEntrada(page)).mic).toBe('none')
+  await expect(page.locator('#testar-mic')).toBeDisabled()
+  await expect(page.locator('#testar-sistema')).toBeEnabled()
+})
+
+test('Áudio: o teste do microfone mostra o medidor, vira "Parar" e volta ao fim', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="audio"]').click()
   await expect(page.locator('#medidor-teste i')).toHaveCount(16)
-  await page.locator('#testar-nivel').click()
-  await expect(page.locator('#testar-nivel')).toHaveText('Ouvindo…')
+  await page.locator('#testar-mic').click()
+  await expect(page.locator('#testar-mic')).toHaveText('Parar')
+  await expect(page.locator('#testar-sistema')).toHaveText('Toque algo para testar')
   await expect(page.locator('#medidor-teste i:not([data-quiet])')).toHaveCount(6)
-  await expect(page.locator('#testar-nivel')).toHaveText('Fale para testar o nível')
+  await expect(page.locator('#testar-mic')).toHaveText('Fale para testar')
   await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
+  expect((await chamadas(page)).filter((c) => c.comando === 'source_test')).toEqual([
+    { comando: 'source_test', args: { source: 'mic' } },
+  ])
+})
+
+test('Áudio: o teste do sistema para antes do fim com "Parar"', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await page.locator('#testar-sistema').click()
+  await expect(page.locator('#testar-sistema')).toHaveText('Parar')
+  await expect(page.locator('#medidor-teste i:not([data-quiet])')).toHaveCount(6)
+  await page.locator('#testar-sistema').click()
+  await expect(page.locator('#testar-sistema')).toHaveText('Toque algo para testar')
+  await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
+  const testes = (await chamadas(page)).filter((c) => ['source_test', 'source_test_stop'].includes(c.comando))
+  expect(testes).toEqual([
+    { comando: 'source_test', args: { source: 'system' } },
+    { comando: 'source_test_stop', args: null },
+  ])
 })
 
 test('Áudio no Wayland sem portal: cria e remove os atalhos do GNOME', async ({ abrir }) => {

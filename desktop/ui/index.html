@@ -296,18 +296,19 @@
             <label for="microfone">Microfone</label>
             <select class="input" id="microfone"></select>
           </div>
-          <div class="row row-meter">
-            <div class="meter meter-accent" id="medidor-teste" aria-hidden="true"></div>
-            <button type="button" class="btn btn-ghost btn-sm" id="testar-nivel">Fale para testar o nível</button>
+          <div class="field">
+            <label for="audio-sistema">Áudio do sistema</label>
+            <select class="input" id="audio-sistema"></select>
           </div>
-          <label class="switch"
-            ><input type="checkbox" id="audio-sistema" /><span class="track"></span>Gravar também o áudio do
-            sistema</label
-          >
           <span class="text-muted small"
             >Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um
-            arquivo só.</span
+            arquivo só; "Nenhum" deixa uma delas de fora.</span
           >
+          <div class="row row-meter">
+            <div class="meter meter-accent" id="medidor-teste" aria-hidden="true"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="testar-mic" data-fonte="mic">Fale para testar</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="testar-sistema" data-fonte="system">Toque algo para testar</button>
+          </div>
         </div>
         <div class="tray-section">
           <span class="kicker">Atalhos em qualquer lugar do computador</span>

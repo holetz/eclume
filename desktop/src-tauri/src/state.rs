@@ -221,8 +221,6 @@ pub struct SettingsView {
     pub mic: Option<String>,
     /// `"follow"`, o id de uma saída ou `"none"`.
     pub system_source: String,
-    /// O áudio do sistema ligado, para a aba Áudio de antes da escolha da origem.
-    pub system_audio: bool,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
 }
@@ -255,20 +253,17 @@ pub struct SettingsInput {
     /// `"follow"` (ou `""`), o id de uma saída ou `"none"`; ausente mantém a de hoje.
     #[serde(default)]
     pub system_source: Option<String>,
-    /// O liga/desliga de antes da escolha da origem: `true` segue a saída em uso e `false` é
-    /// `"none"`. Vale quando `system_source` está ausente.
-    #[serde(default)]
-    pub system_audio: Option<bool>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
 }
 
-/// Quanto dura o teste de nível do microfone.
-pub const MIC_TEST: Duration = Duration::from_secs(10);
+/// Quanto dura, no máximo, o teste de nível de uma fonte.
+pub const SOURCE_TEST: Duration = Duration::from_secs(10);
 
-/// O teste de nível em curso: o medidor, sem gravar nada.
-struct MicTest {
+/// O teste de nível em curso: o medidor, sem gravar nada. `running` desliga quando o teste acaba
+/// ou quando a janela pede para parar.
+struct SourceTest {
     levels: Arc<Mutex<[f32; METER_BARS]>>,
     running: Arc<AtomicBool>,
 }
@@ -290,7 +285,7 @@ struct Inner {
     shortcut_mode: ShortcutMode,
     /// O pedido de cancelamento da importação em curso, se houver uma.
     importing: Option<Arc<AtomicBool>>,
-    mic_test: Option<MicTest>,
+    source_test: Option<SourceTest>,
     /// A atualização a notificar nesta abertura (sai uma vez).
     update_to_notify: Option<PendingUpdate>,
     /// Há credencial guardada (PAT ou de dispositivo); lido na abertura e a cada mudança, para a
@@ -320,17 +315,18 @@ pub struct AppState {
     inner: Mutex<Inner>,
 }
 
-/// Lê o microfone por `duration` e publica o medidor em `levels`.
-fn run_mic_test(
+/// Lê a fonte por até `duration`, ou até `running` desligar, e publica o medidor em `levels`.
+fn run_source_test(
     open: impl FnOnce() -> Result<Box<dyn AudioSource>>,
     duration: Duration,
     levels: &Mutex<[f32; METER_BARS]>,
+    running: &AtomicBool,
 ) -> Result<()> {
     let mut source = open()?;
     let mut mixer = Mixer::new(&[source.sample_rate()])?;
     let mut detector = SilenceDetector::new(None);
     let deadline = std::time::Instant::now() + duration;
-    while std::time::Instant::now() < deadline {
+    while running.load(Ordering::Relaxed) && std::time::Instant::now() < deadline {
         let Some(samples) = source.read(Duration::from_millis(50)) else {
             break;
         };
@@ -416,7 +412,7 @@ impl AppState {
                 shortcut_registrations: Registrations::new(),
                 shortcut_mode: ShortcutMode::default(),
                 importing: None,
-                mic_test: None,
+                source_test: None,
                 update_to_notify: None,
                 has_token,
                 prepared: None,
@@ -725,41 +721,46 @@ impl AppState {
         Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
-    /// "Fale para testar o nível": abre o microfone por `duration`, numa thread, e alimenta o
-    /// medidor do detector de silêncio, sem gravar. Um teste em curso segue valendo.
-    pub fn start_mic_test(
+    /// "Fale para testar" ou "Toque algo para testar": abre a fonte por até `duration`, numa
+    /// thread, e alimenta o medidor do detector de silêncio, sem gravar. Um teste por vez: o que
+    /// estiver em curso para.
+    pub fn start_source_test(
         &self,
         open: impl FnOnce() -> Result<Box<dyn AudioSource>> + Send + 'static,
         duration: Duration,
     ) -> Result<()> {
         let mut inner = self.inner()?;
-        if inner
-            .mic_test
-            .as_ref()
-            .is_some_and(|t| t.running.load(Ordering::Relaxed))
-        {
-            return Ok(());
+        if let Some(test) = &inner.source_test {
+            test.running.store(false, Ordering::Relaxed);
         }
         let levels = Arc::new(Mutex::new([0.0; METER_BARS]));
         let running = Arc::new(AtomicBool::new(true));
-        inner.mic_test = Some(MicTest {
+        inner.source_test = Some(SourceTest {
             levels: Arc::clone(&levels),
             running: Arc::clone(&running),
         });
         std::thread::spawn(move || {
-            if let Err(err) = run_mic_test(open, duration, &levels) {
-                log::warn!("teste de nível do microfone: {err:#}");
+            if let Err(err) = run_source_test(open, duration, &levels, &running) {
+                log::warn!("teste de nível: {err:#}");
             }
             running.store(false, Ordering::Relaxed);
         });
         Ok(())
     }
 
+    /// "Parar": encerra o teste de nível em curso na hora; sem teste, não faz nada.
+    pub fn stop_source_test(&self) -> Result<()> {
+        if let Some(test) = self.inner()?.source_test.take() {
+            test.running.store(false, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
     /// O medidor do teste de nível; `None` quando não há teste em curso.
-    pub fn mic_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
+    pub fn source_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
         let inner = self.inner()?;
         Ok(inner
-            .mic_test
+            .source_test
             .as_ref()
             .filter(|t| t.running.load(Ordering::Relaxed))
             .and_then(|t| t.levels.lock().ok().map(|levels| *levels)))
@@ -929,7 +930,6 @@ impl AppState {
             account: config.account.clone(),
             mic: config.mic.clone(),
             system_source: config.system_source.clone(),
-            system_audio: config.system_source != config::SOURCE_NONE,
             note_silence_s: config.note_silence_s,
             shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
@@ -961,17 +961,7 @@ impl AppState {
         if let Some(mic) = input.mic {
             next.mic = non_empty(Some(mic));
         }
-        let system_source = input.system_source.or_else(|| {
-            input.system_audio.map(|on| {
-                if on {
-                    config::SYSTEM_FOLLOW
-                } else {
-                    config::SOURCE_NONE
-                }
-                .to_string()
-            })
-        });
-        if let Some(source) = system_source {
+        if let Some(source) = input.system_source {
             next.system_source =
                 non_empty(Some(source)).unwrap_or_else(|| config::SYSTEM_FOLLOW.to_string());
         }
@@ -1208,7 +1198,6 @@ mod tests {
             shortcuts: None,
             mic: None,
             system_source: None,
-            system_audio: None,
             note_silence_s: None,
         }
     }
@@ -1672,13 +1661,12 @@ mod tests {
         assert_eq!(state.audio_choice().unwrap(), AudioChoice::default());
         let mut input = settings_input(&state);
         input.mic = Some("Jabra Evolve2 65".into());
-        input.system_audio = Some(false);
+        input.system_source = Some(config::SOURCE_NONE.into());
         input.note_silence_s = Some(8);
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic.as_deref(), Some("Jabra Evolve2 65"));
         assert_eq!(view.system_source, config::SOURCE_NONE);
-        assert!(!view.system_audio);
         assert_eq!(view.note_silence_s, Some(8));
         assert_eq!(
             state.audio_choice().unwrap().mic.device(),
@@ -1705,7 +1693,6 @@ mod tests {
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.system_source, "alsa_output.usb");
-        assert!(view.system_audio);
         let mut input = settings_input(&state);
         input.mic = Some(config::SOURCE_NONE.into());
         input.system_source = Some(config::SOURCE_NONE.into());
@@ -1722,9 +1709,9 @@ mod tests {
     }
 
     #[test]
-    fn teste_de_nivel_mostra_o_medidor_e_acaba_sozinho() {
+    fn teste_de_nivel_mostra_o_medidor_acaba_sozinho_e_para_na_hora() {
         let (state, _dir) = state("teste-nivel");
-        assert!(state.mic_test_meter().unwrap().is_none());
+        assert!(state.source_test_meter().unwrap().is_none());
         /// Um tom que chega no ritmo do relógio, como um microfone de verdade.
         struct Paced(SineSource);
         impl AudioSource for Paced {
@@ -1745,11 +1732,11 @@ mod tests {
             ))))
         };
         state
-            .start_mic_test(open, Duration::from_millis(400))
+            .start_source_test(open, Duration::from_millis(400))
             .unwrap();
         let mut heard = false;
         for _ in 0..200 {
-            match state.mic_test_meter().unwrap() {
+            match state.source_test_meter().unwrap() {
                 Some(levels) => heard |= levels.iter().any(|&l| l > 0.5),
                 None if heard => break,
                 None => {}
@@ -1758,7 +1745,46 @@ mod tests {
         }
         assert!(heard, "o medidor devia subir com o tom");
         std::thread::sleep(Duration::from_millis(600));
-        assert!(state.mic_test_meter().unwrap().is_none());
+        assert!(state.source_test_meter().unwrap().is_none());
+
+        // "Parar" encerra antes do fim e libera a fonte logo.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let open = move || -> Result<Box<dyn AudioSource>> {
+            Ok(Box::new(Notify(
+                Paced(SineSource::new(48_000, 440.0, 0.5, Duration::from_secs(60))),
+                tx,
+            )))
+        };
+        /// Avisa quando a fonte é descartada, isto é, quando o teste largou o dispositivo.
+        struct Notify(Paced, std::sync::mpsc::Sender<()>);
+        impl AudioSource for Notify {
+            fn sample_rate(&self) -> u32 {
+                self.0.sample_rate()
+            }
+            fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+                self.0.read(timeout)
+            }
+        }
+        impl Drop for Notify {
+            fn drop(&mut self) {
+                let _ = self.1.send(());
+            }
+        }
+        state.start_source_test(open, SOURCE_TEST).unwrap();
+        for _ in 0..200 {
+            if state
+                .source_test_meter()
+                .unwrap()
+                .is_some_and(|levels| levels.iter().any(|&l| l > 0.5))
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        state.stop_source_test().unwrap();
+        assert!(state.source_test_meter().unwrap().is_none());
+        rx.recv_timeout(Duration::from_secs(1))
+            .expect("parar devia fechar a fonte em bem menos que os 10 s");
     }
 
     #[test]

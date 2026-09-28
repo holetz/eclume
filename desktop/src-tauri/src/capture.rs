@@ -88,6 +88,26 @@ fn open_chosen_system(system: &SourceChoice, missing: &mut Vec<String>) -> Resul
     Ok(source)
 }
 
+/// A fonte que o teste de nível da aba Áudio ouve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TestSource {
+    Mic,
+    System,
+}
+
+/// Abre a fonte do teste de nível conforme a escolha; "Nenhum" não tem o que testar.
+pub fn open_test_source(choice: &AudioChoice, test: TestSource) -> Result<Box<dyn AudioSource>> {
+    match test {
+        TestSource::Mic if choice.mic == SourceChoice::Off => bail!("Nenhum microfone escolhido"),
+        TestSource::System if choice.system == SourceChoice::Off => {
+            bail!("Nenhuma saída de áudio escolhida")
+        }
+        TestSource::Mic => Ok(Box::new(MicSource::open_named(choice.mic.device())?)),
+        TestSource::System => Ok(Box::new(SystemSource::open_target(choice.system.device())?)),
+    }
+}
+
 /// Abre só o microfone, para a nota por voz: o áudio do sistema traria música e notificações.
 pub fn open_mic(choice: &AudioChoice) -> Result<OpenedSources> {
     if choice.mic == SourceChoice::Off {
@@ -151,6 +171,20 @@ mod tests {
         let choice = AudioChoice::from_config(&config);
         assert_eq!(choice.mic.device(), Some("Jabra Evolve2 65"));
         assert_eq!(choice.system, SourceChoice::Off);
+    }
+
+    #[test]
+    fn teste_de_fonte_em_nenhum_e_recusado() {
+        let choice = AudioChoice {
+            mic: SourceChoice::Off,
+            system: SourceChoice::Off,
+        };
+        let err = open_test_source(&choice, TestSource::Mic).err().unwrap();
+        assert_eq!(err.to_string(), "Nenhum microfone escolhido");
+        let err = open_test_source(&choice, TestSource::System).err().unwrap();
+        assert_eq!(err.to_string(), "Nenhuma saída de áudio escolhida");
+        let test: TestSource = serde_json::from_str(r#""system""#).unwrap();
+        assert_eq!(test, TestSource::System);
     }
 
     #[test]

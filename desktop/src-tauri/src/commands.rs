@@ -4,6 +4,7 @@ use eclume_recorder::{Marker, QueuedRecording};
 use tauri::{AppHandle, State};
 
 use crate::account::{Login, PreparedServer, RealNet, ServerChoice};
+use crate::capture::TestSource;
 use crate::import::ImportPreview;
 
 use crate::state::{
@@ -242,30 +243,31 @@ pub fn list_output_devices() -> CommandResult<OutputDevices> {
     }))
 }
 
-/// "Fale para testar o nível": 10 s de medidor com o microfone escolhido.
+/// "Fale para testar" (`mic`) ou "Toque algo para testar" (`system`): até 10 s de medidor com a
+/// fonte escolhida na aba Áudio. Um teste por vez.
 #[tauri::command(async)]
-pub fn mic_test(state: State<'_, AppState>) -> CommandResult<()> {
+pub fn source_test(state: State<'_, AppState>, source: TestSource) -> CommandResult<()> {
     let choice = state.audio_choice();
     to_js(choice.and_then(|choice| {
-        state.start_mic_test(
-            move || {
-                if choice.mic == crate::capture::SourceChoice::Off {
-                    anyhow::bail!("Nenhum microfone escolhido");
-                }
-                let mic = eclume_audio_capture::MicSource::open_named(choice.mic.device())?;
-                Ok(Box::new(mic) as Box<dyn eclume_recorder::AudioSource>)
-            },
-            crate::state::MIC_TEST,
+        state.start_source_test(
+            move || crate::capture::open_test_source(&choice, source),
+            crate::state::SOURCE_TEST,
         )
     }))
 }
 
+/// "Parar": encerra o teste de nível na hora.
+#[tauri::command]
+pub fn source_test_stop(state: State<'_, AppState>) -> CommandResult<()> {
+    to_js(state.stop_source_test())
+}
+
 /// O medidor do teste de nível (`null` quando acabou), que a janela consulta a cada 100 ms.
 #[tauri::command]
-pub fn mic_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec<f32>>> {
+pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec<f32>>> {
     to_js(
         state
-            .mic_test_meter()
+            .source_test_meter()
             .map(|m| m.map(|levels| levels.to_vec())),
     )
 }

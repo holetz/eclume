@@ -89,10 +89,17 @@
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
         shortcut_mode: { mode: "global" },
         mic: null,
-        system_audio: true,
+        system_source: "follow",
         note_silence_s: 4,
       },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
+      saidas: {
+        default: "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        devices: [
+          { id: "alsa_output.pci-0000_00_1f.3.analog-stereo", name: "Alto-falantes embutidos" },
+          { id: "bluez_output.jabra", name: "Jabra Evolve2 65" },
+        ],
+      },
       testeDeNivel: 0,
       marcadores: [],
       armazenamento: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
@@ -327,6 +334,10 @@
     save_settings(e, { input }) {
       if (!/^https?:\/\/\S+$/.test(input.web_url)) throw "endereço inválido: use http:// ou https:// seguido do host";
       if (input.retention_days != null && input.retention_days > 3650) throw "retenção acima de 3650 dias";
+      const mic = input.mic === undefined ? e.settings.mic : input.mic || null;
+      const systemSource =
+        input.system_source === undefined ? e.settings.system_source : input.system_source || "follow";
+      if (mic === "none" && systemSource === "none") throw "Escolha ao menos uma fonte de áudio";
       e.ultimaEntrada = input;
       e.settings = {
         ...e.settings,
@@ -336,8 +347,8 @@
         detection_enabled: input.detection_enabled,
         retention_days: input.retention_days,
         pat_source: input.clear_pat ? null : input.pat ? "keyring" : e.settings.pat_source,
-        mic: input.mic === undefined ? e.settings.mic : input.mic || null,
-        system_audio: input.system_audio ?? e.settings.system_audio,
+        mic,
+        system_source: systemSource,
         note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
@@ -365,11 +376,16 @@
     },
     open_log_dir: () => null,
     list_input_devices: (e) => e.microfones,
-    mic_test(e) {
+    list_output_devices: (e) => e.saidas,
+    source_test(e) {
       e.testeDeNivel = 10;
       return null;
     },
-    mic_test_meter(e) {
+    source_test_stop(e) {
+      e.testeDeNivel = 0;
+      return null;
+    },
+    source_test_meter(e) {
       if (e.testeDeNivel <= 0) return null;
       e.testeDeNivel -= 1;
       return [0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05];

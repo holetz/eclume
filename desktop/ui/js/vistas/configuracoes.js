@@ -1,5 +1,5 @@
 // Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Áudio
-// (microfone, áudio do sistema, teste de nível, atalhos globais e parada por silêncio),
+// (microfone, áudio do sistema, teste de nível de cada fonte, atalhos globais e parada por silêncio),
 // Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor (a conta
 // com "Sair", o endereço e, em "Avançado", a API e a CA extra). As abas salvam a cada mudança,
 // menos o Servidor, que salva pelo botão.
@@ -17,6 +17,15 @@ const APPS = {
   navegador: ["Navegador", "Microfone em uso, reunião não reconhecida"],
   outro: ["Outro app", "Ditado, gravadores de voz, jogos"],
 };
+
+/** O rótulo do botão de teste de cada fonte, fora do teste (durante, é "Parar"). */
+const TESTES = {
+  mic: "Fale para testar",
+  system: "Toque algo para testar",
+};
+
+/** "Nenhum" no microfone ou no áudio do sistema. */
+const NENHUM = "none";
 
 const POLITICAS = [
   ["auto", "Gravar"],
@@ -99,6 +108,8 @@ export function montar(secao, app) {
   const aviso = $("#config-aviso", secao);
   const dias = $("#retencao-dias", secao);
   const microfone = $("#microfone", secao);
+  const sistema = $("#audio-sistema", secao);
+  const botoesDeTeste = [...secao.querySelectorAll("[data-fonte]")];
   const barrasDoTeste = Array.from({ length: 16 }, () => el("i", { "data-quiet": true }));
   trocar($("#medidor-teste", secao), barrasDoTeste);
   let config = null;
@@ -107,6 +118,8 @@ export function montar(secao, app) {
   /** O atalho sendo capturado ("record", "note" ou "marker"). */
   let capturando = null;
   let consultaDoTeste = null;
+  /** A fonte em teste ("mic" ou "system"); `null` sem teste. */
+  let testando = null;
 
   function mostrarAviso(texto, tom = "alert-error") {
     aviso.hidden = !texto;
@@ -119,7 +132,10 @@ export function montar(secao, app) {
     for (const painel of paineis) painel.hidden = painel.dataset.painel !== nome;
     mostrarAviso(null);
     if (nome === "armazenamento") lerArmazenamento();
-    if (nome === "audio") lerMicrofones();
+    if (nome === "audio") {
+      lerMicrofones();
+      lerSaidas();
+    }
   }
 
   async function salvar(mudancas, sucesso) {
@@ -264,11 +280,30 @@ export function montar(secao, app) {
       const escolhido = config?.mic ?? "";
       const opcoes = [el("option", { value: "" }, lista.default ? `Padrão do sistema · ${lista.default}` : "Padrão do sistema")];
       for (const nome of lista.names) opcoes.push(el("option", { value: nome }, nome));
-      if (escolhido && !lista.names.includes(escolhido)) {
+      if (escolhido && escolhido !== NENHUM && !lista.names.includes(escolhido)) {
         opcoes.push(el("option", { value: escolhido }, `${escolhido} (desconectado)`));
       }
+      opcoes.push(el("option", { value: NENHUM }, "Nenhum"));
       trocar(microfone, opcoes);
       microfone.value = escolhido;
+    } catch (falha) {
+      mostrarAviso(String(falha));
+    }
+  }
+
+  async function lerSaidas() {
+    try {
+      const lista = await app.invoke("list_output_devices");
+      const escolhido = config?.system_source ?? "follow";
+      const ids = lista.devices.map((saida) => saida.id);
+      const opcoes = [el("option", { value: "follow" }, "Seguir a saída em uso")];
+      for (const saida of lista.devices) opcoes.push(el("option", { value: saida.id }, saida.name));
+      if (escolhido !== "follow" && escolhido !== NENHUM && !ids.includes(escolhido)) {
+        opcoes.push(el("option", { value: escolhido }, `${escolhido} (desconectada)`));
+      }
+      opcoes.push(el("option", { value: NENHUM }, "Nenhum"));
+      trocar(sistema, opcoes);
+      sistema.value = escolhido;
     } catch (falha) {
       mostrarAviso(String(falha));
     }
@@ -281,24 +316,48 @@ export function montar(secao, app) {
     });
   }
 
+  /** Cada botão de teste: "Parar" na fonte em teste, desabilitado na fonte em "Nenhum". */
+  function desenharBotoesDeTeste() {
+    const desligada = { mic: config?.mic === NENHUM, system: config?.system_source === NENHUM };
+    for (const botao of botoesDeTeste) {
+      const fonte = botao.dataset.fonte;
+      botao.textContent = testando === fonte ? "Parar" : TESTES[fonte];
+      botao.disabled = desligada[fonte] && testando !== fonte;
+    }
+  }
+
+  /** O teste acabou (sozinho ou parado): some o medidor e os botões voltam. */
   function pararTeste() {
     clearInterval(consultaDoTeste);
     consultaDoTeste = null;
-    $("#testar-nivel", secao).textContent = "Fale para testar o nível";
+    testando = null;
+    desenharBotoesDeTeste();
     desenharTeste(barrasDoTeste.map(() => 0));
   }
 
-  async function testarNivel() {
+  /** "Parar": encerra o teste no app, que larga o dispositivo na hora. */
+  function encerrarTeste() {
+    app.invoke("source_test_stop").catch(() => null);
+    pararTeste();
+  }
+
+  async function testar(fonte) {
+    if (testando === fonte) {
+      encerrarTeste();
+      return;
+    }
     try {
-      await app.invoke("mic_test");
+      await app.invoke("source_test", { source: fonte });
     } catch (falha) {
       mostrarAviso(String(falha));
       return;
     }
-    $("#testar-nivel", secao).textContent = "Ouvindo…";
+    testando = fonte;
+    desenharBotoesDeTeste();
     clearInterval(consultaDoTeste);
     consultaDoTeste = setInterval(async () => {
-      const niveis = await app.invoke("mic_test_meter").catch(() => null);
+      const niveis = await app.invoke("source_test_meter").catch(() => null);
+      if (!testando) return;
       if (niveis) desenharTeste(niveis);
       else pararTeste();
     }, 100);
@@ -306,7 +365,10 @@ export function montar(secao, app) {
 
   function desenhar() {
     if (!config) return;
-    $("#audio-sistema", secao).checked = config.system_audio;
+    // Uma escolha recusada (as duas fontes em "Nenhum") volta ao que está salvo.
+    if (microfone.options.length) microfone.value = config.mic ?? "";
+    if (sistema.options.length) sistema.value = config.system_source;
+    desenharBotoesDeTeste();
     const silencio = String(config.note_silence_s ?? 0);
     for (const opcao of secao.querySelectorAll('input[name="silencio"]')) opcao.checked = opcao.value === silencio;
     desenharAtalhos();
@@ -362,12 +424,19 @@ export function montar(secao, app) {
 
   for (const aba of abas) aba.addEventListener("click", () => abrirAba(aba.dataset.aba));
   window.addEventListener("keydown", aoTeclar, true);
-  microfone.addEventListener("change", () => salvar({ mic: microfone.value }));
-  $("#audio-sistema", secao).addEventListener("change", (evento) => salvar({ system_audio: evento.target.checked }));
+  // Trocar a fonte encerra o teste, que ouvia a escolha anterior.
+  microfone.addEventListener("change", () => {
+    if (testando) encerrarTeste();
+    salvar({ mic: microfone.value });
+  });
+  sistema.addEventListener("change", () => {
+    if (testando) encerrarTeste();
+    salvar({ system_source: sistema.value });
+  });
   for (const opcao of secao.querySelectorAll('input[name="silencio"]')) {
     opcao.addEventListener("change", () => salvar({ note_silence_s: Number(opcao.value) }));
   }
-  $("#testar-nivel", secao).addEventListener("click", testarNivel);
+  for (const botao of botoesDeTeste) botao.addEventListener("click", () => testar(botao.dataset.fonte));
   $("#atalhos-gnome", secao).addEventListener("click", atalhosDoGnome);
   $("#config-voltar", secao).addEventListener("click", () => app.voltar());
 
@@ -459,7 +528,7 @@ export function montar(secao, app) {
   return {
     sair() {
       capturando = null;
-      if (consultaDoTeste) pararTeste();
+      if (testando) encerrarTeste();
     },
 
     async entrar(params) {
