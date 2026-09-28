@@ -294,6 +294,32 @@ def test_embedding_nao_finito_de_worker_antigo_nao_derruba_a_ingestao(
     assert _embedded_speakers(services, recording["id"]) == ["S1", "S3"]
 
 
+@pytest.mark.usefixtures("platform")
+def test_ingestao_que_falha_vira_falha_recuperavel(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    # Qualquer erro na ingestão desfaz a transação; a gravação não pode ficar presa na fila.
+    api = as_user(make_user())
+    run(services.sql(_voice_on))
+    recording = upload_file(api, audio_bytes(3500))
+    run_gpu(services.settings, voices=dict(DEFAULT_VOICES) | {"S2": ["não é número"]})
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "failed"
+    assert body["transcript_id"] is None
+    assert body["job"]["state"] == "failed"
+    assert body["job"]["error"]["code"] == "ingest_failed"
+    assert body["job"]["error"]["retryable"] is True
+    transcription = next(step for step in body["pipeline"] if step["step"] == "transcription")
+    assert (transcription["state"], transcription["error"]["code"]) == ("failed", "ingest_failed")
+
+    # Retranscrever com um worker que grava embeddings válidos resolve.
+    assert api.post(f"/api/v1/recordings/{recording['id']}/retranscribe").status_code == 202
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+
 def _states(body: dict) -> dict[str, str]:
     return {step["step"]: step["state"] for step in body["pipeline"]}
 
