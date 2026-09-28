@@ -508,6 +508,7 @@ mod tests {
             agenda_type_id: None,
             markers: Vec::new(),
             duration_ms: Some(1_000),
+            language: None,
             source: Source::Desktop,
             capture: Capture {
                 meeting_app: Some("teams".into()),

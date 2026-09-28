@@ -35,6 +35,7 @@ pub struct HttpUploader {
     queue: Arc<Mutex<Queue>>,
     client_version: String,
     device_name: Option<String>,
+    language: Option<String>,
 }
 
 impl HttpUploader {
@@ -56,12 +57,19 @@ impl HttpUploader {
             queue,
             client_version: client_version.to_string(),
             device_name: Some(crate::device_name()),
+            language: None,
         }
     }
 
     /// Troca o `capture.device_name` (no celular, o modelo do aparelho).
     pub fn with_device_name(mut self, device_name: impl Into<String>) -> Self {
         self.device_name = Some(device_name.into());
+        self
+    }
+
+    /// O idioma da transcrição que os próximos uploads pedem; `None` deixa o do servidor.
+    pub fn with_language(mut self, language: Option<String>) -> Self {
+        self.language = language;
         self
     }
 
@@ -103,6 +111,7 @@ impl HttpUploader {
                 })
                 .collect(),
             duration_ms: recording.duration_ms.and_then(|ms| u64::try_from(ms).ok()),
+            language: self.language.clone(),
             source: recording.source,
             capture: Capture {
                 meeting_app: recording.meeting_app.clone(),
@@ -345,6 +354,18 @@ mod tests {
         );
         assert_eq!(json["markers"][0]["client_id"], marcador.client_id);
         assert_eq!(json["capture"]["device_name"], "Pixel 8");
+        assert!(
+            json.get("language").is_none(),
+            "sem idioma, vale o do servidor"
+        );
+
+        let create = uploader().with_language(Some("es".into())).create_request(
+            &queue.get("g1").unwrap().unwrap(),
+            &[],
+            10,
+            "ab".into(),
+        );
+        assert_eq!(serde_json::to_value(&create).unwrap()["language"], "es");
     }
 
     #[test]
