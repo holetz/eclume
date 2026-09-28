@@ -139,6 +139,8 @@ pub struct StatusView {
     pub recording_kind: Option<Kind>,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
+    /// `system`, `light` ou `dark`: a janela aplica sem abrir as configurações.
+    pub theme: String,
     /// A gravação em curso foi iniciada pela detecção.
     pub recording_auto: bool,
     /// App da reunião da gravação em curso.
@@ -223,6 +225,10 @@ pub struct SettingsView {
     pub system_source: String,
     /// Idioma da transcrição; `None` é o padrão do servidor.
     pub language: Option<String>,
+    /// `system`, `light` ou `dark`.
+    pub theme: String,
+    /// Avisar quando o resumo automático fica pronto.
+    pub notify_summary: bool,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
 }
@@ -258,6 +264,12 @@ pub struct SettingsInput {
     /// `pt`, `es`, `en`, ou `""` para o padrão do servidor; ausente mantém o de hoje.
     #[serde(default)]
     pub language: Option<String>,
+    /// `system`, `light` ou `dark`; ausente mantém o de hoje.
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// Ausente mantém o de hoje.
+    #[serde(default)]
+    pub notify_summary: Option<bool>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
@@ -478,6 +490,7 @@ impl AppState {
             recording_started_at: inner.active.as_ref().map(ActiveRecording::started_at),
             recording_kind: inner.active.as_ref().map(ActiveRecording::kind),
             note_silence_s: inner.config.note_silence_s,
+            theme: inner.config.theme.clone(),
             recording_auto: origin.is_some_and(|o| o.auto),
             recording_app: origin.and_then(|o| o.app).map(MeetingView::from),
             meeting: inner.auto.meeting().map(MeetingView::from),
@@ -941,6 +954,8 @@ impl AppState {
             mic: config.mic.clone(),
             system_source: config.system_source.clone(),
             language: config.language.clone(),
+            theme: config.theme.clone(),
+            notify_summary: config.notify_summary,
             note_silence_s: config.note_silence_s,
             shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
@@ -978,6 +993,12 @@ impl AppState {
         }
         if let Some(language) = input.language {
             next.language = non_empty(Some(language));
+        }
+        if let Some(theme) = input.theme {
+            next.theme = theme;
+        }
+        if let Some(notify) = input.notify_summary {
+            next.notify_summary = notify;
         }
         if let Some(seconds) = input.note_silence_s {
             next.note_silence_s = (seconds > 0).then_some(seconds);
@@ -1213,6 +1234,8 @@ mod tests {
             mic: None,
             system_source: None,
             language: None,
+            theme: None,
+            notify_summary: None,
             note_silence_s: None,
         }
     }
@@ -1685,6 +1708,7 @@ mod tests {
         assert_eq!(view.system_source, config::SOURCE_NONE);
         assert_eq!(view.note_silence_s, Some(8));
         assert_eq!(view.language.as_deref(), Some("en"));
+        assert_eq!(state.view().unwrap().theme, "system");
         assert_eq!(state.language().unwrap().as_deref(), Some("en"));
         assert_eq!(
             state.audio_choice().unwrap().mic.device(),

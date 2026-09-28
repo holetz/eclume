@@ -387,6 +387,7 @@ mod tests {
             recording_started_at: None,
             recording_kind: None,
             note_silence_s: Some(4),
+            theme: "system".into(),
             marker_count: 0,
             last_marker: None,
             recording_auto: false,

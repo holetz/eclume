@@ -25,6 +25,17 @@ pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
 /// A parada por silêncio padrão da nota, em segundos.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
 /// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
+/// Os temas da janela; `system` acompanha o `prefers-color-scheme`.
+pub const THEMES: [&str; 3] = ["system", "light", "dark"];
+
+fn default_theme() -> String {
+    THEMES[0].to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// Os idiomas de transcrição que a aba Áudio oferece, além do automático (o padrão do servidor).
 pub const LANGUAGES: [&str; 3] = ["pt", "es", "en"];
 
@@ -114,6 +125,12 @@ pub struct Config {
     /// Idioma da transcrição (`pt`, `es` ou `en`); `null` deixa o padrão do servidor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// Tema da janela: `system` (acompanha o sistema), `light` ou `dark`.
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// Avisar quando o resumo automático de uma gravação enviada fica pronto.
+    #[serde(default = "default_true")]
+    pub notify_summary: bool,
     /// O microfone pelo nome; `null` é o padrão do sistema e `"none"`, nenhum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mic: Option<String>,
@@ -189,6 +206,8 @@ impl Default for Config {
             note_silence_s: default_note_silence(),
             shortcuts: Shortcuts::default(),
             language: None,
+            theme: default_theme(),
+            notify_summary: true,
             mic: None,
             system_source: default_system_source(),
             last_version: None,
@@ -285,6 +304,9 @@ impl Config {
                 bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
             }
         }
+        if !THEMES.contains(&self.theme.as_str()) {
+            bail!("tema: use system, light ou dark");
+        }
         if let Some(language) = &self.language {
             if !LANGUAGES.contains(&language.as_str()) {
                 bail!("idioma da transcrição: use pt, es ou en, ou Automático");
@@ -317,6 +339,24 @@ pub fn validate_web_url(url: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tema_e_aviso_de_resumo_tem_padrao_e_o_tema_e_fechado() {
+        let config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.theme, "system");
+        assert!(config.notify_summary);
+        let mut config = Config {
+            theme: "dark".into(),
+            notify_summary: false,
+            ..Config::default()
+        };
+        config.validate().unwrap();
+        let json = serde_json::to_string(&config).unwrap();
+        let lido: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!((lido.theme.as_str(), lido.notify_summary), ("dark", false));
+        config.theme = "sepia".into();
+        assert!(config.validate().is_err());
+    }
 
     #[test]
     fn idioma_da_transcricao_e_opcional_e_fechado() {
