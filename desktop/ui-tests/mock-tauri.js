@@ -87,6 +87,7 @@
           ["note", "Nova nota", "Ctrl+Alt+N"],
           ["marker", "Adicionar marcador", "Ctrl+Alt+M"],
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
+        shortcut_mode: { mode: "global" },
         mic: null,
         system_audio: true,
         note_silence_s: 4,
@@ -195,6 +196,20 @@
     },
     atualizado(e) {
       e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };
+    },
+    wayland(e) {
+      e.settings.shortcut_mode = {
+        mode: "system",
+        gnome: true,
+        commands: [
+          ["record", "--alternar-gravacao"],
+          ["note", "--nova-nota"],
+          ["marker", "--marcador"],
+        ].map(([action, flag]) => ({ action, command: `/usr/bin/eclume-desktop ${flag}` })),
+      };
+      for (const atalho of e.settings.shortcuts) {
+        Object.assign(atalho, { registration: "system", problem: "Crie o atalho no sistema" });
+      }
     },
     atalhoEmUso(e) {
       Object.assign(e.settings.shortcuts[1], { registration: "in_use", problem: "Em uso por outro app" });
@@ -329,6 +344,17 @@
           : e.settings.shortcuts,
         apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
       };
+      return e.settings;
+    },
+    system_shortcuts(e, { install }) {
+      for (const atalho of e.settings.shortcuts) {
+        Object.assign(
+          atalho,
+          install
+            ? { registration: "registered", problem: null }
+            : { registration: "system", problem: "Crie o atalho no sistema" },
+        );
+      }
       return e.settings;
     },
     storage_info: (e) => e.armazenamento,

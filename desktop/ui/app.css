@@ -157,6 +157,12 @@
   color: var(--color-warning);
 }
 
+/* O comando da CLI que o atalho do sistema chama (Wayland fora do GNOME), numa linha própria. */
+.atalho-comando {
+  grid-column: 1 / -1;
+  user-select: all;
+}
+
 /* O menu de ajuda fica ancorado no ícone de ajuda, sobre a janela. */
 .tray-window {
   position: relative;

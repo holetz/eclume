@@ -182,6 +182,30 @@ test('Áudio: o teste de nível mostra o medidor e volta ao fim', async ({ abrir
   await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
 })
 
+test('Áudio no Wayland sem portal: cria e remove os atalhos do GNOME', async ({ abrir }) => {
+  const page = await abrir('wayland')
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#atalhos-modo')).toHaveText(
+    'Nesta sessão (Wayland), o eclume não ouve o teclado sozinho: crie os atalhos no GNOME.',
+  )
+  const linhas = page.locator('#atalhos .list-row')
+  await expect(linhas.locator('.list-row-sub')).toHaveText(Array(3).fill('Crie o atalho no sistema'))
+  await expect(linhas.locator('.atalho-comando')).toHaveCount(0)
+
+  await page.locator('#atalhos-gnome', { hasText: 'Criar atalhos no GNOME' }).click()
+  await expect(page.locator('#config-aviso')).toContainText('Atalhos criados no GNOME.')
+  await expect(linhas.locator('.list-row-sub')).toHaveText(Array(3).fill('Funciona com o eclume em segundo plano'))
+  await expect(page.locator('#atalhos-modo')).toHaveText('Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume.')
+  expect((await chamadas(page)).filter((c) => c.comando === 'system_shortcuts')).toEqual([
+    { comando: 'system_shortcuts', args: { install: true } },
+  ])
+
+  await page.locator('#atalhos-gnome', { hasText: 'Remover atalhos do GNOME' }).click()
+  await expect(page.locator('#config-aviso')).toContainText('Atalhos removidos do GNOME.')
+  await expect(page.locator('#atalhos-gnome')).toHaveText('Criar atalhos no GNOME')
+})
+
 test('Áudio: atalhos com o estado do registro e troca pela próxima combinação', async ({ abrir }) => {
   const page = await abrir('atalhoEmUso')
   await page.locator('#abrir-configuracoes').click()
@@ -189,6 +213,8 @@ test('Áudio: atalhos com o estado do registro e troca pela próxima combinaçã
   await expect(page.locator('#microfone')).toHaveValue('Headset antigo')
   await expect(page.locator('#microfone option:checked')).toHaveText('Headset antigo (desconectado)')
 
+  await expect(page.locator('#atalhos-modo')).toBeHidden()
+  await expect(page.locator('#atalhos-gnome')).toBeHidden()
   const linhas = page.locator('#atalhos .list-row')
   await expect(linhas.locator('.list-row-title')).toHaveText(['Iniciar ou parar a gravação', 'Nova nota', 'Adicionar marcador'])
   await expect(linhas.locator('kbd')).toHaveText(['Ctrl+Alt+R', 'Ctrl+Alt+N', 'Ctrl+Alt+M'])

@@ -47,6 +47,19 @@ export function combinacao(evento) {
   return [...partes, tecla].join("+");
 }
 
+/**
+ * A linha que explica como os atalhos chegam ao app nesta sessão; `null` no modo global, que é o
+ * de sempre. `criados`: todos os atalhos do GNOME já existem.
+ */
+export function textoDoModo(modo, criados) {
+  if (modo.mode === "portal") return "Pelo portal de atalhos do sistema. Se ele pedir, confirme as combinações.";
+  if (modo.mode !== "system") return null;
+  if (!modo.gnome) return "Nesta sessão (Wayland), crie no sistema um atalho para cada comando abaixo.";
+  return criados
+    ? "Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume."
+    : "Nesta sessão (Wayland), o eclume não ouve o teclado sozinho: crie os atalhos no GNOME.";
+}
+
 /** "Conectado · último envio 10:38", do resultado de `test_connection`. */
 export function textoDaConexao(teste) {
   if (!teste.last_upload_at) return "Conectado · nenhum envio ainda";
@@ -160,6 +173,8 @@ export function montar(secao, app) {
 
   function linhaDoAtalho(atalho) {
     const emCaptura = capturando === atalho.action;
+    const modo = config?.shortcut_mode ?? { mode: "global" };
+    const comando = modo.mode === "system" && !modo.gnome ? modo.commands.find((c) => c.action === atalho.action) : null;
     return el(
       "div",
       { class: "list-row", dataset: { atalho: atalho.action } },
@@ -169,6 +184,7 @@ export function montar(secao, app) {
         { class: "list-row-sub", "data-problema": Boolean(atalho.problem) },
         atalho.problem ?? "Funciona com o eclume em segundo plano",
       ),
+      comando ? el("code", { class: "code-block atalho-comando" }, comando.command) : null,
       el(
         "span",
         { class: "list-row-actions" },
@@ -196,7 +212,29 @@ export function montar(secao, app) {
   }
 
   function desenharAtalhos() {
-    trocar($("#atalhos", secao), (config?.shortcuts ?? []).map(linhaDoAtalho));
+    const modo = config?.shortcut_mode ?? { mode: "global" };
+    const atalhos = config?.shortcuts ?? [];
+    const criados = atalhos.length > 0 && atalhos.every((a) => a.registration === "registered");
+    const texto = textoDoModo(modo, criados);
+    const linha = $("#atalhos-modo", secao);
+    linha.hidden = !texto;
+    linha.textContent = texto ?? "";
+    const gnome = $("#atalhos-gnome", secao);
+    gnome.hidden = !(modo.mode === "system" && modo.gnome);
+    gnome.textContent = criados ? "Remover atalhos do GNOME" : "Criar atalhos no GNOME";
+    gnome.dataset.criar = String(!criados);
+    trocar($("#atalhos", secao), atalhos.map(linhaDoAtalho));
+  }
+
+  async function atalhosDoGnome() {
+    const criar = $("#atalhos-gnome", secao).dataset.criar === "true";
+    try {
+      config = await app.invoke("system_shortcuts", { install: criar });
+      mostrarAviso(criar ? "Atalhos criados no GNOME." : "Atalhos removidos do GNOME.", "alert-success");
+    } catch (falha) {
+      mostrarAviso(String(falha));
+    }
+    desenhar();
   }
 
   /** Captura a próxima combinação da janela antes das teclas da janela (Esc, Ctrl+O...). */
@@ -330,6 +368,7 @@ export function montar(secao, app) {
     opcao.addEventListener("change", () => salvar({ note_silence_s: Number(opcao.value) }));
   }
   $("#testar-nivel", secao).addEventListener("click", testarNivel);
+  $("#atalhos-gnome", secao).addEventListener("click", atalhosDoGnome);
   $("#config-voltar", secao).addEventListener("click", () => app.voltar());
 
   $("#detectar", secao).addEventListener("change", (evento) => salvar({ detection_enabled: evento.target.checked }));

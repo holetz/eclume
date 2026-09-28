@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::account::{self, Login, Net, PreparedServer, SignedIn};
 use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Account, Config, Connection, PendingUpdate};
-use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
+use crate::shortcuts::{Registration, Registrations, ShortcutAction, ShortcutMode, Shortcuts};
 
 /// A versão deste build.
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -215,6 +215,8 @@ pub struct SettingsView {
     pub connection: Connection,
     pub account: Option<Account>,
     pub shortcuts: Vec<ShortcutView>,
+    /// Global, portal ou sistema (com os comandos da CLI).
+    pub shortcut_mode: ShortcutMode,
     /// O microfone escolhido; `None` é o padrão do sistema.
     pub mic: Option<String>,
     pub system_audio: bool,
@@ -276,6 +278,8 @@ struct Inner {
     sync_notice: Option<String>,
     /// Como ficou o registro de cada atalho global.
     shortcut_registrations: Registrations,
+    /// Como os atalhos chegam ao app nesta sessão.
+    shortcut_mode: ShortcutMode,
     /// O pedido de cancelamento da importação em curso, se houver uma.
     importing: Option<Arc<AtomicBool>>,
     mic_test: Option<MicTest>,
@@ -402,6 +406,7 @@ impl AppState {
                 notice: None,
                 sync_notice: None,
                 shortcut_registrations: Registrations::new(),
+                shortcut_mode: ShortcutMode::default(),
                 importing: None,
                 mic_test: None,
                 update_to_notify: None,
@@ -784,9 +789,15 @@ impl AppState {
         Ok(self.inner()?.config.shortcuts.clone())
     }
 
-    /// Guarda como ficou o registro dos atalhos, para a aba Áudio.
-    pub fn set_shortcut_registrations(&self, registrations: Registrations) -> Result<()> {
-        self.inner()?.shortcut_registrations = registrations;
+    /// Guarda o modo dos atalhos e como ficou o registro de cada um, para a aba Áudio.
+    pub fn set_shortcuts_state(
+        &self,
+        mode: ShortcutMode,
+        registrations: Registrations,
+    ) -> Result<()> {
+        let mut inner = self.inner()?;
+        inner.shortcut_mode = mode;
+        inner.shortcut_registrations = registrations;
         Ok(())
     }
 
@@ -915,6 +926,7 @@ impl AppState {
             mic: config.mic.clone(),
             system_audio: config.system_audio,
             note_silence_s: config.note_silence_s,
+            shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
                 .into_iter()
                 .map(|action| {
@@ -1503,11 +1515,14 @@ mod tests {
         assert_eq!(state.shortcuts().unwrap().note, Shortcuts::default().note);
 
         state
-            .set_shortcut_registrations(Registrations::from([
-                (ShortcutAction::Record, Registration::Registered),
-                (ShortcutAction::Note, Registration::InUse),
-                (ShortcutAction::Marker, Registration::Unavailable),
-            ]))
+            .set_shortcuts_state(
+                ShortcutMode::Global,
+                Registrations::from([
+                    (ShortcutAction::Record, Registration::Registered),
+                    (ShortcutAction::Note, Registration::InUse),
+                    (ShortcutAction::Marker, Registration::Unavailable),
+                ]),
+            )
             .unwrap();
         let problems: Vec<_> = state
             .settings()

@@ -214,7 +214,8 @@ pub fn run() {
             }
             shortcuts::init(app.handle());
             // Aberto por um atalho do sistema sem instância rodando: faz a ação já.
-            if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>()) {
+            if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>())
+            {
                 shortcuts::run(app.handle(), action);
             }
             // No macOS, o app vive na barra de menus, sem ícone no Dock.
@@ -248,6 +249,7 @@ pub fn run() {
             commands::status,
             commands::recordings,
             commands::toggle_recording,
+            commands::system_shortcuts,
             commands::new_note,
             commands::note_meter,
             commands::add_marker,

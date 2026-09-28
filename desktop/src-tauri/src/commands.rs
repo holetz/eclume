@@ -171,6 +171,24 @@ pub fn save_settings(
     to_js(result.and_then(|_| state.settings()))
 }
 
+/// "Criar atalhos no GNOME" (`install`) ou removê-los, no modo `sistema` do Wayland.
+#[tauri::command(async)]
+pub fn system_shortcuts(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    install: bool,
+) -> CommandResult<SettingsView> {
+    let result = if install {
+        state
+            .shortcuts()
+            .and_then(|shortcuts| crate::shortcuts::install_system(&shortcuts))
+    } else {
+        crate::shortcuts::remove_system()
+    };
+    crate::shortcuts::register(&app);
+    to_js(result.and_then(|()| state.settings()))
+}
+
 /// Resposta da janela à pergunta de reunião detectada.
 #[tauri::command]
 pub fn answer_meeting(app: AppHandle, record: bool) {
