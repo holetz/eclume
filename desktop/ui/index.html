@@ -381,15 +381,14 @@
             ><input type="radio" name="retencao" value="apagar" /><span class="dot"></span
             ><strong>Apagar a cópia local</strong><small>Libera espaço na hora</small></label
           >
-          <label class="choice"
+          <label class="choice choice-dias"
             ><input type="radio" name="retencao" value="dias" /><span class="dot"></span
-            ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small></label
+            ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small
+            ><span class="choice-dias-campo"
+              ><input class="input mono input-dias" id="retencao-dias" type="number" min="1" max="3650"
+                aria-label="Dias" /><span class="text-muted small">dias</span></span
+            ></label
           >
-          <div class="row row-indent">
-            <input class="input mono input-dias" id="retencao-dias" type="number" min="1" max="3650"
-              aria-label="Dias" />
-            <span class="text-muted small">dias</span>
-          </div>
           <label class="choice"
             ><input type="radio" name="retencao" value="sempre" /><span class="dot"></span
             ><strong>Manter para sempre</strong><small>Nada é apagado deste computador</small></label
