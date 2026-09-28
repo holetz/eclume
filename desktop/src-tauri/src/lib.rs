@@ -133,6 +133,27 @@ fn init_logging(dir: &Path) {
         Err(err) => eprintln!("log só no stderr: falha ao abrir {}: {err}", dir.display()),
     }
     let _ = builder.try_init();
+    std::panic::set_hook(Box::new(log_panic));
+}
+
+/// Um panic vai para o log com a thread, o local e o backtrace: o padrão só escreve no stderr, que
+/// o app aberto pelo menu do sistema não guarda em lugar nenhum que a pessoa ache.
+fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
+    let thread = std::thread::current();
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("(sem mensagem)");
+    let location = info
+        .location()
+        .map_or_else(String::new, |at| format!(" em {at}"));
+    log::error!(
+        "panic na thread {}{location}: {message}\n{}",
+        thread.name().unwrap_or("sem nome"),
+        std::backtrace::Backtrace::force_capture()
+    );
 }
 
 /// Abre o log para acréscimo, girando para `.1` o que passou de `max_bytes`.
@@ -200,7 +221,12 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
-            log::info!("dados em {}", data_dir.display());
+            log::info!(
+                "eclume {} ({}) com dados em {}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                data_dir.display()
+            );
             let updated = state.take_update_notification()?;
             app.manage(state);
             tray::build(app.handle())?;

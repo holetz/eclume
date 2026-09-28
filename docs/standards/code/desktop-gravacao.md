@@ -202,3 +202,6 @@ Implementados pela spec `desktop-deteccao-e-sync`; o detalhe está em
   `~/.local/share/io.github.holetz.eclume/logs` no Linux, `~/Library/Logs/io.github.holetz.eclume`
   no macOS). Acima de 5 MB, o arquivo vira `eclume.log.1` na próxima abertura. No Windows o release
   não tem console, então o arquivo é o único registro de falhas de captura, sync e atualização.
+  A primeira linha de cada abertura traz a versão e o SO. Um panic vai para o mesmo log (hook
+  próprio) com a thread, o local e o backtrace: o hook padrão só escreve no stderr, que o app
+  aberto pelo menu do sistema não guarda onde a pessoa ache.
