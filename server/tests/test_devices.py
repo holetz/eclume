@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import re
+import secrets
 import subprocess
 import sys
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import pytest
 import redis
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from eclume_server.app import create_app
+from eclume_server.db.migrate import migrate
 from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR
 from eclume_server.worker import purge_pairing_codes
 from eclume_server_testing.api import PASSWORD, Api
 from eclume_server_testing.conformance import CONFORMANCE
-from eclume_server_testing.harness import run
+from eclume_server_testing.harness import DATABASE_URL, run
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -53,7 +57,7 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     credential = response.json()
     token = credential["token"]
     assert (token["name"], token["kind"], token["platform"]) == ("Notebook da Mariana", "device", "windows")
-    assert token["scopes"] == ["recordings:read", "recordings:write"]
+    assert token["scopes"] == ["recordings:read", "recordings:write", "summaries:read"]
     assert token["expires_at"] is None
     assert credential["server"]["url"] == "https://testserver"
     assert credential["server"]["mcp_url"] == "https://testserver/mcp"
@@ -62,6 +66,8 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     me = device.get("/api/v1/me").json()
     assert me["auth"] == {"method": "pat", "scopes": token["scopes"], "token_id": token["id"]}
     assert device.get("/api/v1/recordings").status_code == 200
+    # O escopo `summaries:read` passa (o aviso com "Copiar" do desktop): 404 da gravação, não 403.
+    assert device.get(f"/api/v1/recordings/{uuid4()}/summary").status_code == 404
 
     # Aparece em "App móvel" e "App desktop", e desvincular desliga o aparelho.
     session = as_user(account)
@@ -225,3 +231,44 @@ def test_worker_importa_sozinho():
         [sys.executable, "-c", "import eclume_server.worker"], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_migration_017_da_summaries_read_aos_dispositivos_ja_emitidos(services: Services):
+    del services  # só pela checagem dos serviços de teste
+    database = f"eclume_mig017_{secrets.token_hex(4)}"
+    target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
+    user = uuid4()
+    seed = f"""
+INSERT INTO users (id, email, name, password_hash) VALUES ('{user}', 'u@exemplo.com.br', 'U', 'h');
+INSERT INTO api_tokens (user_id, name, token_hash, prefix, scopes, kind, platform) VALUES
+    ('{user}', 'notebook', 'h1', 'eclp_a', ARRAY['recordings:read', 'recordings:write'], 'device', 'linux'),
+    ('{user}', 'lumea', 'h2', 'eclp_b', ARRAY['transcripts:read'], 'personal', NULL);
+"""  # noqa: S608
+
+    async def admin(statement: str) -> None:
+        engine = create_async_engine(DATABASE_URL, isolation_level="AUTOCOMMIT")
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text(statement))
+        finally:
+            await engine.dispose()
+
+    async def check() -> list[tuple[str, list[str]]]:
+        await admin(f'CREATE DATABASE "{database}"')
+        engine = create_async_engine(target)
+        try:
+            await migrate(engine, until="016_origem_mobile")
+            async with engine.connect() as conn:
+                await (await conn.get_raw_connection()).driver_connection.execute(seed)
+            assert await migrate(engine, until="017_dispositivo_le_resumo") == ["017_dispositivo_le_resumo"]
+            async with engine.connect() as conn:
+                rows = await conn.execute(text("SELECT name, scopes FROM api_tokens ORDER BY name"))
+                return [tuple(row) for row in rows]
+        finally:
+            await engine.dispose()
+            await admin(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
+
+    assert run(check()) == [
+        ("lumea", ["transcripts:read"]),
+        ("notebook", ["recordings:read", "recordings:write", "summaries:read"]),
+    ]
