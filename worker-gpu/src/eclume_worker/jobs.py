@@ -81,6 +81,9 @@ class EngineRegistry:
         self._key: tuple[str, str | None] | None = None
         self._engine: Engine | None = None
         self._last_used = clock()
+        # A engine continua no registro depois da descarga ociosa (recarrega no próximo job); isto
+        # diz se os modelos dela já foram descarregados desde o último uso.
+        self._unloaded = False
 
     def resolve_name(self, options: dict[str, Any]) -> str:
         """`ECLUME_ENGINE` força a engine do processo; senão vale `options.engine`."""
@@ -150,15 +153,21 @@ class EngineRegistry:
                 return self._get(name, base_url, hf_token).transcribe(audio_path, options, progress)
             finally:
                 self._last_used = self.clock()
+                self._unloaded = False
 
     def unload_if_idle(self, idle_seconds: float) -> bool:
-        """Descarrega se nenhum job usou a engine há `idle_seconds`; não bloqueia um job em curso."""
+        """Descarrega se nenhum job usou a engine há `idle_seconds`; não bloqueia um job em curso.
+
+        Devolve `True` só na descarga de fato: já descarregada desde o último uso, não há o que
+        descarregar de novo (nem o que logar a cada volta do laço ocioso).
+        """
         if not self._lock.acquire(blocking=False):
             return False
         try:
-            if self._engine is None or self.clock() - self._last_used < idle_seconds:
+            if self._engine is None or self._unloaded or self.clock() - self._last_used < idle_seconds:
                 return False
             self._engine.unload()
+            self._unloaded = True
             return True
         finally:
             self._lock.release()
