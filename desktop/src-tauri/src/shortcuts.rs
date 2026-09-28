@@ -39,6 +39,15 @@ impl ShortcutAction {
         }
     }
 
+    /// O id estável do atalho (o do portal e o da config).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Record => "record",
+            Self::Note => "note",
+            Self::Marker => "marker",
+        }
+    }
+
     /// A flag de linha de comando que faz a ação na instância aberta (`eclume-desktop --nova-nota`),
     /// para o atalho do sistema onde o app não registra atalho global.
     pub fn cli_flag(self) -> &'static str {
@@ -146,6 +155,28 @@ impl Registration {
 /// O registro de cada atalho.
 pub type Registrations = BTreeMap<ShortcutAction, Registration>;
 
+/// A combinação no formato da especificação "shortcuts" do XDG, que o portal pede como gatilho
+/// preferido: `Ctrl+Alt+R` vira `CTRL+ALT+r`.
+pub fn xdg_trigger(text: &str) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for part in text.split('+').map(str::trim) {
+        let modifier = match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => Some("CTRL"),
+            "alt" | "option" => Some("ALT"),
+            "shift" => Some("SHIFT"),
+            "super" | "cmd" | "command" | "meta" => Some("LOGO"),
+            _ => None,
+        };
+        parts.push(match modifier {
+            Some(name) => name.to_string(),
+            None if part.chars().count() == 1 => part.to_lowercase(),
+            None if part.is_empty() => return None,
+            None => part.to_string(),
+        });
+    }
+    Some(parts.join("+"))
+}
+
 /// Numa sessão Wayland, o `global-hotkey` só ouve janelas X11: o atalho não vale no sistema.
 fn wayland_session(session_type: Option<&str>, wayland_display: bool, display: bool) -> bool {
     session_type.is_some_and(|t| t.eq_ignore_ascii_case("wayland")) || (wayland_display && !display)
@@ -179,16 +210,27 @@ pub fn register(app: &AppHandle) {
             return;
         }
     };
-    let registrations = match app.try_state::<GlobalShortcut<Wry>>() {
-        Some(_) => register_with_plugin(app, &shortcuts),
-        None => ShortcutAction::ALL
-            .into_iter()
-            .map(|action| (action, Registration::Unavailable))
-            .collect(),
+    let registrations = if is_wayland() {
+        // O portal responde depois (e pode pedir confirmação à pessoa): até lá, indisponível.
+        #[cfg(target_os = "linux")]
+        portal::spawn(app.clone(), shortcuts);
+        all(Registration::Unavailable)
+    } else {
+        match app.try_state::<GlobalShortcut<Wry>>() {
+            Some(_) => register_with_plugin(app, &shortcuts),
+            None => all(Registration::Unavailable),
+        }
     };
     if let Err(err) = state.set_shortcut_registrations(registrations) {
         log::error!("{err:#}");
     }
+}
+
+fn all(registration: Registration) -> Registrations {
+    ShortcutAction::ALL
+        .into_iter()
+        .map(|action| (action, registration))
+        .collect()
 }
 
 fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations {
@@ -196,7 +238,6 @@ fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations
     if let Err(err) = plugin.unregister_all() {
         log::warn!("falha ao soltar os atalhos anteriores: {err}");
     }
-    let wayland = is_wayland();
     ShortcutAction::ALL
         .into_iter()
         .map(|action| {
@@ -210,7 +251,6 @@ fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations
                     })
                     .map_err(|err| anyhow!("{err}"))
             }) {
-                Ok(()) if wayland => Registration::Unavailable,
                 Ok(()) => Registration::Registered,
                 Err(err) => {
                     log::warn!("atalho {text} não registrado: {err:#}");
@@ -233,6 +273,74 @@ pub(crate) fn run(app: &AppHandle, action: ShortcutAction) {
             });
         }
         ShortcutAction::Marker => crate::add_marker(app),
+    }
+}
+
+/// Os atalhos pelo portal `org.freedesktop.portal.GlobalShortcuts`, numa sessão que vive enquanto
+/// o app escuta. Registrar de novo (a config mudou) troca a sessão.
+#[cfg(target_os = "linux")]
+mod portal {
+    use std::sync::Mutex;
+
+    use anyhow::Result;
+    use ashpd::desktop::global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut};
+    use ashpd::desktop::CreateSessionOptions;
+    use futures_util::StreamExt;
+    use tauri::async_runtime::JoinHandle;
+    use tauri::{AppHandle, Manager};
+
+    use super::{all, run, xdg_trigger, Registration, ShortcutAction, Shortcuts};
+    use crate::state::AppState;
+
+    static LISTENER: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+
+    pub fn spawn(app: AppHandle, shortcuts: Shortcuts) {
+        let task = tauri::async_runtime::spawn(async move {
+            if let Err(err) = listen(&app, &shortcuts).await {
+                log::info!("portal de atalhos globais indisponível: {err:#}");
+            }
+        });
+        let previous = LISTENER.lock().ok().and_then(|mut slot| slot.replace(task));
+        if let Some(previous) = previous {
+            previous.abort();
+        }
+    }
+
+    async fn listen(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
+        let proxy = GlobalShortcuts::new().await?;
+        let session = proxy.create_session(CreateSessionOptions::default()).await?;
+        let triggers: Vec<Option<String>> = ShortcutAction::ALL
+            .iter()
+            .map(|action| xdg_trigger(shortcuts.get(*action)))
+            .collect();
+        let wanted: Vec<NewShortcut> = ShortcutAction::ALL
+            .iter()
+            .zip(&triggers)
+            .map(|(action, trigger)| {
+                NewShortcut::new(action.id(), action.label()).preferred_trigger(trigger.as_deref())
+            })
+            .collect();
+        proxy
+            .bind_shortcuts(&session, &wanted, None, BindShortcutsOptions::default())
+            .await?
+            .response()?;
+        let mut activated = proxy.receive_activated().await?;
+        app.state::<AppState>()
+            .set_shortcut_registrations(all(Registration::Registered))?;
+        crate::refresh_ui(app);
+        while let Some(event) = activated.next().await {
+            // O sinal chega de todas as sessões do app; só vale a desta escuta.
+            if event.session_handle().as_str() != session.path().as_str() {
+                continue;
+            }
+            if let Some(action) = ShortcutAction::ALL
+                .into_iter()
+                .find(|action| action.id() == event.shortcut_id())
+            {
+                run(app, action);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -303,6 +411,16 @@ mod tests {
             serde_json::to_string(&Registration::InUse).unwrap(),
             "\"in_use\""
         );
+    }
+
+    #[test]
+    fn gatilho_do_portal_segue_a_especificacao_do_xdg() {
+        assert_eq!(xdg_trigger("Ctrl+Alt+R").as_deref(), Some("CTRL+ALT+r"));
+        assert_eq!(xdg_trigger("Cmd+Shift+K").as_deref(), Some("LOGO+SHIFT+k"));
+        assert_eq!(xdg_trigger("ctrl+shift+F9").as_deref(), Some("CTRL+SHIFT+F9"));
+        assert_eq!(xdg_trigger("Ctrl+Alt+"), None);
+        let ids: Vec<_> = ShortcutAction::ALL.iter().map(|a| a.id()).collect();
+        assert_eq!(ids, ["record", "note", "marker"]);
     }
 
     #[test]
