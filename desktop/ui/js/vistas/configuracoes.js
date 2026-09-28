@@ -243,14 +243,19 @@ export function montar(secao, app) {
   }
 
   async function atalhosDoGnome() {
-    const criar = $("#atalhos-gnome", secao).dataset.criar === "true";
+    const botao = $("#atalhos-gnome", secao);
+    const criar = botao.dataset.criar === "true";
+    botao.disabled = true;
+    botao.textContent = criar ? "Criando atalhos…" : "Removendo atalhos…";
     try {
       config = await app.invoke("system_shortcuts", { install: criar });
       mostrarAviso(criar ? "Atalhos criados no GNOME." : "Atalhos removidos do GNOME.", "alert-success");
     } catch (falha) {
       mostrarAviso(String(falha));
     }
+    botao.disabled = false;
     desenhar();
+    aviso.scrollIntoView({ block: "nearest" });
   }
 
   /** Captura a próxima combinação da janela antes das teclas da janela (Esc, Ctrl+O...). */
