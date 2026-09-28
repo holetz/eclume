@@ -4,7 +4,7 @@ title: Contrato de jobs de transcrição (server ↔ worker GPU)
 description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
 source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33
@@ -134,6 +134,14 @@ com consentimento, gravando as sugestões acima do limiar
 ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
 da gravação para `transcribed`.
 
+- **Embedding não finito.** A ingestão também descarta o vetor com NaN ou infinito (worker antigo,
+  arquivo já no bucket): o pgvector o recusaria e desfaria a ingestão inteira.
+- **Ingestão que falha.** Qualquer exceção desfaz a transação inteira (nem transcrição nem etapas
+  do worker GPU ficam). Numa transação nova, `ingest_transcript` marca o job e a gravação com o
+  `fail()` de sempre, código `ingest_failed` (recuperável), e loga a exceção; o job do arq
+  termina sem relevantar, porque o arq não retentaria e o estado final já está no banco.
+  Retranscrever resolve.
+
 ## Idempotência
 
 Reprocessar a mesma `revision` sobrescreve os artefatos; `ingest_transcript` é idempotente por
@@ -150,7 +158,8 @@ de progresso e o heartbeat:
 | Situação | Veredito |
 |---|---|
 | no arq `queued`/`deferred` (fila atrasada) | nada — fila não é falha |
-| arq `complete` com sucesso (a ingestão pode estar na fila `eclume:default`) | nada |
+| arq `complete` com sucesso há até `ECLUME_JOB_STALL_SECONDS` (a ingestão pode estar na fila `eclume:default`) | nada |
+| arq `complete` com sucesso há mais de `ECLUME_JOB_STALL_SECONDS` e o job ainda aberto no banco (a ingestão se perdeu) | `ingest_failed` |
 | arq `complete` com falha (o retry do arq encerrou o job de um worker morto) | `worker_lost` |
 | sumido do arq (`not_found`) e sem hash de progresso | `job_lost` |
 | progresso sem escrita há mais de `ECLUME_JOB_STALL_SECONDS` (1800 s), mesmo com worker vivo | `job_stalled` |
@@ -162,13 +171,17 @@ de progresso e o heartbeat:
   progresso nem heartbeat.
 - **Falha recuperável.** O veredito vai pelo mesmo `fail()` do `transcription_failed` (job e
   gravação `failed`, hash apagado), com mensagem em pt-BR. `worker_lost`, `job_lost`,
-  `job_stalled`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e `upload_failed` saem com
-  `Job.error.retryable = true` (contrato 1.4.0).
+  `job_stalled`, `ingest_failed`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e
+  `upload_failed` saem com `Job.error.retryable = true` (contrato 1.4.0; `ingest_failed` desde a
+  2.5.0). A ingestão que falha
+  com exceção marca `ingest_failed` sozinha ([O server ingere](#o-server-ingere)); o reaper
+  cobre a que nunca chegou a rodar.
 - **Retentar é explícito.** O dono retranscreve (`POST /recordings/{id}/retranscribe`); o admin
   retenta a gravação de qualquer usuário por `POST /admin/jobs/{job_id}/retry`
   ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
   configuração atual. Não há retentativa automática: repetiria um OOM ou um áudio ruim em laço.
-- **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela.
+- **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela; a ingestão que falha em
+  `server/tests/test_pipeline.py`.
 
 ## Dev sem GPU
 
@@ -220,7 +233,9 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
 - **Embeddings.** O arquivo é sempre gravado, com chaves nos ids do raw:
   `{"embedding_model": "pyannote/wespeaker-voxceleb-resnet34-LM", "dimension": 256,
   "speaker_embeddings": {"S1": [...]}}`. Sem diarização, `speaker_embeddings` é `{}`, e
-  `embedding_model` e `dimension` são `null`.
+  `embedding_model` e `dimension` são `null`. Vetor com qualquer componente não finito (NaN ou
+  infinito — o pyannote o produz para fala curta demais) fica de fora: o locutor segue no raw, só
+  sem embedding. Não é erro.
 - **Diarização degradada.** Sem token do Hugging Face, ou sem acesso ao modelo gated (termos não
   aceitos), o worker transcreve com um locutor e avisa em `engine_info.warnings`
   (`diarization_skipped_no_token`, `diarization_skipped_no_access`). Qualquer outro erro da
