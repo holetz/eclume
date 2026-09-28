@@ -4,10 +4,10 @@ title: Gravação no app desktop
 description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41
+source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -20,13 +20,28 @@ sintético; a captura real vive em `eclume-audio-capture` (`desktop/crates/audio
 ## Fontes
 
 - Duas fontes por gravação: o **mic** (`cpal`) e o **áudio do sistema** (loopback) —
-  PipeWire seguindo o sink em uso, com fallback para o monitor do Pulse, no Linux; WASAPI loopback
-  seguindo o endpoint em uso no Windows; Core Audio process tap no macOS (14.2+).
-- **Escolha em Configurações · Áudio.** O microfone vai por nome (`config.json` → `mic`; nulo é o
-  padrão do sistema): `list_input_devices()` lista os nomes e `MicSource::open_named` abre o
-  escolhido, caindo no padrão, com aviso, quando ele sumiu. `system_audio` (padrão ligado) decide
-  se a reunião leva também o áudio do sistema. "Fale para testar o nível" (`mic_test`) abre o
-  microfone por até 10 s só para o medidor, sem gravar.
+  PipeWire no monitor de um sink, com fallback para o monitor do Pulse, no Linux; WASAPI loopback
+  num endpoint no Windows; Core Audio process tap no macOS (14.2+).
+- **Escolha em Configurações · Áudio**, cada fonte com "Nenhum":
+
+| Fonte | `config.json` | Valores |
+|---|---|---|
+| Microfone | `mic` | `null` (padrão do sistema), o nome do dispositivo, ou `"none"` |
+| Áudio do sistema | `system_source` | `"follow"` (padrão: seguir a saída em uso), o id de uma saída, ou `"none"` |
+
+  `list_input_devices()` lista os microfones e `MicSource::open_named` abre o escolhido;
+  `list_output_devices()` lista as saídas (Linux: o nome do sink, com a descrição como rótulo;
+  Windows: os endpoints ativos; macOS: vazia, o tap segue a saída em uso e ignora um id com
+  aviso) e `SystemSource::open_target` abre a escolhida. Uma escolha que sumiu cai no padrão, com
+  aviso na janela (`fell_back`). O booleano antigo `system_audio` ainda é lido (`false` vira
+  `"none"`) e não é mais gravado. As duas fontes em Nenhum são recusadas ("Escolha ao menos uma
+  fonte de áudio"); com o microfone em Nenhum, "Nova nota" e o atalho respondem "A nota precisa
+  de um microfone".
+- **Teste por fonte.** "Fale para testar" (microfone) e "Toque algo para testar" (sistema) abrem a
+  fonte por até 10 s só para o medidor, sem gravar (`source_test`, `source_test_meter`); um teste
+  por vez, e começar outro encerra o atual. O botão vira "Parar" (`source_test_stop`), que fecha a
+  fonte na hora, e fica desabilitado com a fonte em Nenhum. Trocar a fonte ou sair das
+  configurações também para o teste.
 - Toda fonte implementa `AudioSource`: `sample_rate()` e `read(timeout)`, que devolve amostras mono
   `f32` na taxa nativa — `Some(vec![])` quando o prazo vence sem amostras, `None` quando a fonte
   acabou. A taxa pode mudar no meio da gravação e é relida a cada leitura.
@@ -65,9 +80,10 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 | Parâmetro | Valor |
 |---|---|
 | Nível | RMS do quadro em dBFS |
-| Piso de ruído | desce na hora para um quadro mais baixo e sobe 0,5 dB/s (um ventilador ligado no meio não vira voz) |
-| Voz | `nível > max(piso + 12 dB, −55 dBFS)`, mantida por 300 ms (hangover) |
-| `Silence` | o silêncio passou do configurado (2, 4 ou 8 s; padrão 4 s), e só depois de ter havido voz |
+| Piso de ruído | o percentil 20 dos níveis dos últimos 3 s (150 quadros, só os anteriores ao quadro); um ventilador ligado no meio vira piso em cerca de 1 s. Silêncio digital (abaixo de −90 dBFS) entra na janela mas nunca vira piso: quando o percentil cai nele, valem só os limites absolutos, para as pausas zeradas de um supressor de ruído não levarem o piso até a própria fala |
+| Voz | entra com `nível > max(piso + 12 dB, −55 dBFS)` e se mantém com `nível > max(piso + 8 dB, −58 dBFS)` (histerese) |
+| Voz sustentada | o quadro atual é voz e pelo menos 5 dos últimos 10 também (100 ms em 200 ms): só ela zera o silêncio, renova o hangover de 300 ms e conta como voz ouvida. Um clique, uma tecla ou uma porta batendo não reiniciam a contagem |
+| `Silence` | o silêncio passou do configurado (2, 4 ou 8 s; padrão 4 s), e só depois de ter havido voz sustentada |
 | `NoSpeech` | nenhuma voz nos primeiros 10 s |
 | Medidor | os últimos 16 níveis, de −60 a 0 dBFS mapeados para 0 a 1 |
 
