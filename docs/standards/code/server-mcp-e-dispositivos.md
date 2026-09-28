@@ -2,12 +2,12 @@
 type: standard
 title: Servidor MCP e ligação de dispositivos
 description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas e o descritor público /server com a impressão digital da CA raiz.
-resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql
+resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql
 tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#35
+source: holetz/eclume#35, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -90,9 +90,11 @@ dele. O prefixo segue `eclp_`, que o `PatStore` do desktop valida.
 
 - **É um token `kind: device`** com `platform`, nome = nome do aparelho, escopos
   `recordings:read` e `recordings:write` (upload, marcadores, status das próprias gravações e a
-  lista dos tipos de agenda, que `GET /agenda-types` aceita com `recordings:read` desde a 2.4.0;
-  o dispositivo não ganha `summaries:read`, então não lê resumos nem o resto de `/agenda-types`) e
-  sem validade. Aparece em `GET /tokens?kind=device` ("App móvel", "App desktop"), e
+  lista dos tipos de agenda, que `GET /agenda-types` aceita com `recordings:read` desde a 2.4.0)
+  e, desde a 2.6.0, `summaries:read` — o app desktop lê o resumo pronto das gravações que enviou
+  para avisar com "Copiar". A migration `017_dispositivo_le_resumo` estendeu os tokens já
+  emitidos. Com ele o dispositivo também lê o resto de `/agenda-types`; escrever resumos e tipos
+  de agenda segue pedindo `summaries:write`, que ele não tem. Sem validade. Aparece em `GET /tokens?kind=device` ("App móvel", "App desktop"), e
   `DELETE /tokens/{id}` ("Desvincular") desliga o aparelho. `POST /tokens` nunca cria um.
 - **Login** (`POST /devices/login`, público): e-mail, senha, `device_name` e `platform`; a senha
   passa por `accounts.password_login`, o mesmo caminho de tempo constante do `/auth/login`, com a
