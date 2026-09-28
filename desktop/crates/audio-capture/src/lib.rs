@@ -5,7 +5,8 @@
 //! - [`MicSource`]: o dispositivo de entrada escolhido ou o padrão, por `cpal`
 //!   ([`list_input_devices`] lista os nomes);
 //! - [`SystemSource`]: o áudio que o sistema está tocando (loopback), por plataforma —
-//!   PipeWire/Pulse no Linux, WASAPI no Windows, Core Audio tap no macOS.
+//!   PipeWire/Pulse no Linux, WASAPI no Windows, Core Audio tap no macOS; segue a saída em uso
+//!   ou uma saída escolhida ([`list_output_devices`] lista os ids).
 //!
 //! Quem consome as fontes só conhece o trait [`AudioSource`]; sem a feature `backends`, o crate
 //! expõe apenas o trait e o anel ([`ring`]), sem nenhuma dependência de sistema. A feature `mic`
@@ -23,7 +24,7 @@ mod system;
 #[cfg(feature = "mic")]
 pub use mic::{InputDevices, MicSource, list_input_devices};
 #[cfg(feature = "backends")]
-pub use system::SystemSource;
+pub use system::{OutputDevice, OutputDevices, SystemSource, list_output_devices};
 
 /// Uma fonte de áudio mono que o gravador lê por puxada.
 pub trait AudioSource: Send {
