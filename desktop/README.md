@@ -62,7 +62,9 @@ bandeja) e ficam em `config.json` no diretório de config do app — a credencia
 SO. Sem tocar no arquivo, `ECLUME_WEB_URL`, `ECLUME_API_URL` e `ECLUME_PAT` sobrepõem servidor,
 API e credencial (dev e testes).
 
-Os ícones do bundle são gerados de `src-tauri/icons/icon.svg` (os da bandeja, `tray-*.png`, não):
+Os ícones da bandeja (`tray-*.png`, um por estado) saem da marca por
+`uv run --with pillow python scripts/icones_bandeja.py`. Os do bundle são gerados de
+`src-tauri/icons/icon.svg`:
 
 ```bash
 npx @tauri-apps/cli@2 icon src-tauri/icons/icon.svg -o /tmp/icones
