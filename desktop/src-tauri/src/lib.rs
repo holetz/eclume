@@ -184,6 +184,13 @@ fn spawn_reaper(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Primeiro plugin: a segunda instância entrega os argumentos à primeira e sai.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            match shortcuts::action_from_args(&argv) {
+                Some(action) => shortcuts::run(app, action),
+                None => show_window(app),
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -206,6 +213,10 @@ pub fn run() {
                 );
             }
             shortcuts::init(app.handle());
+            // Aberto por um atalho do sistema sem instância rodando: faz a ação já.
+            if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>()) {
+                shortcuts::run(app.handle(), action);
+            }
             // No macOS, o app vive na barra de menus, sem ícone no Dock.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);

@@ -38,6 +38,25 @@ impl ShortcutAction {
             Self::Marker => "Adicionar marcador",
         }
     }
+
+    /// A flag de linha de comando que faz a ação na instância aberta (`eclume-desktop --nova-nota`),
+    /// para o atalho do sistema onde o app não registra atalho global.
+    pub fn cli_flag(self) -> &'static str {
+        match self {
+            Self::Record => "--alternar-gravacao",
+            Self::Note => "--nova-nota",
+            Self::Marker => "--marcador",
+        }
+    }
+}
+
+/// A ação pedida na linha de comando (o primeiro argumento é o executável).
+pub fn action_from_args<S: AsRef<str>>(args: &[S]) -> Option<ShortcutAction> {
+    args.iter().skip(1).find_map(|arg| {
+        ShortcutAction::ALL
+            .into_iter()
+            .find(|action| action.cli_flag() == arg.as_ref())
+    })
 }
 
 /// As combinações dos três atalhos, no formato do `global-hotkey` (`Ctrl+Alt+R`, `Cmd+Shift+N`).
@@ -203,7 +222,7 @@ fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations
         .collect()
 }
 
-fn run(app: &AppHandle, action: ShortcutAction) {
+pub(crate) fn run(app: &AppHandle, action: ShortcutAction) {
     match action {
         ShortcutAction::Record => crate::spawn_toggle_recording(app),
         ShortcutAction::Note => {
@@ -284,6 +303,25 @@ mod tests {
             serde_json::to_string(&Registration::InUse).unwrap(),
             "\"in_use\""
         );
+    }
+
+    #[test]
+    fn flag_de_linha_de_comando_vira_acao() {
+        assert_eq!(
+            action_from_args(&["eclume-desktop", "--nova-nota"]),
+            Some(ShortcutAction::Note)
+        );
+        assert_eq!(
+            action_from_args(&["/usr/bin/eclume-desktop", "--x", "--marcador"]),
+            Some(ShortcutAction::Marker)
+        );
+        assert_eq!(
+            action_from_args(&["eclume-desktop", "--alternar-gravacao"]),
+            Some(ShortcutAction::Record)
+        );
+        // O executável nunca conta, e sem flag conhecida a instância só mostra a janela.
+        assert_eq!(action_from_args(&["--nova-nota"]), None);
+        assert_eq!(action_from_args(&["eclume-desktop"]), None);
     }
 
     #[test]
