@@ -239,3 +239,34 @@ def test_job_encerrado_pelo_arq_sem_callback_vira_worker_lost(
     assert _sweep(services, now + LATER, recording["id"]) is None
     assert _sweep(services, now + LATER + AFTER_GRACE, recording["id"]) == "worker_lost"
     assert _state(api, recording["id"])["job"]["error"]["retryable"] is True
+
+
+async def _done_without_ingest(_ctx: dict[str, Any], *_args: Any) -> str:  # noqa: ANN401
+    return "ok"
+
+
+def test_transcricao_pronta_sem_ingestao_alem_do_teto_vira_ingest_failed(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = _recording(api)
+    # O `transcribe` termina com sucesso, mas a ingestão que ele enfileiraria nunca chega.
+    run(
+        _drain(
+            [func(_done_without_ingest, name="transcribe")],
+            queue_name=GPU_QUEUE,
+            redis_settings=RedisSettings.from_dsn(services.settings.redis_url),
+            max_jobs=1,
+        )
+    )
+    now = datetime.now(UTC)
+    # Dentro do teto, a ingestão ainda pode estar na fila `eclume:default`.
+    assert _sweep(services, now + LATER, recording["id"]) is None
+    assert _sweep(services, now + LATER + AFTER_GRACE, recording["id"]) is None
+    late = now + timedelta(seconds=services.settings.job_stall_seconds) + LATER
+    assert _sweep(services, late, recording["id"]) is None
+    assert _sweep(services, late + AFTER_GRACE, recording["id"]) == "ingest_failed"
+    body = _state(api, recording["id"])
+    assert body["status"] == "failed"
+    assert body["job"]["error"]["code"] == "ingest_failed"
+    assert body["job"]["error"]["retryable"] is True

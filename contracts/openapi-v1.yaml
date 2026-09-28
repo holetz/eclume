@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.4.0
+  version: 2.5.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -4247,14 +4247,17 @@ components:
                     `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a
                     1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job
                     sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto),
-                    detectados pelo server.
+                    detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou
+                    pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou
+                    nunca chegou); recuperável.
                   type: string
                 message:
                   type: string
                 retryable:
                   description: >-
-                    A falha é passageira (worker perdido, job sumido ou parado, falta de VRAM):
-                    retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
+                    A falha é passageira (worker perdido, job sumido ou parado, ingestão falha,
+                    falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry`
+                    tende a resolver.
                     Ausente em servidores anteriores à 1.4.0.
                   type: boolean
             - type: "null"

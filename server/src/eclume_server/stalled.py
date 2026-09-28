@@ -4,7 +4,8 @@ Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, re
 enfileira `transcription_failed`, e a gravação ficaria `processing` para sempre. O cron
 `reap_stalled_jobs` do worker CPU cruza três sinais por job em aberto — o estado no arq, o hash de
 progresso e o heartbeat do worker GPU — e marca como falha **recuperável** o que não tem mais quem
-o termine. Regras em docs/standards/api/jobs-transcricao.md §Job morto.
+o termine — inclusive o `transcribe` concluído cuja ingestão nunca chegou (`ingest_failed`).
+Regras em docs/standards/api/jobs-transcricao.md §Job morto.
 
 Nada é marcado na primeira vez que parece morto: a suspeita fica registrada no Redis e só vira
 falha se continuar igual depois da graça (`job_grace_seconds`), o que cobre o worker que acabou
@@ -17,7 +18,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from arq.jobs import Job, JobStatus
+from arq.jobs import Job, JobResult, JobStatus
 from sqlalchemy import select
 
 from eclume_server.db import tables as t
@@ -38,14 +39,27 @@ log = logging.getLogger(__name__)
 WORKER_LOST = "worker_lost"
 JOB_LOST = "job_lost"
 JOB_STALLED = "job_stalled"
+# A transcrição ficou pronta no worker GPU, mas a ingestão no worker CPU falhou ou nunca aconteceu.
+INGEST_FAILED = "ingest_failed"
+INGEST_FAILED_MESSAGE = "A transcrição ficou pronta, mas não foi possível gravá-la. Tente de novo."
 # Falhas passageiras: retentar (retranscrever ou `POST /admin/jobs/{id}/retry`) tende a resolver.
 RETRYABLE_CODES = frozenset(
-    {WORKER_LOST, JOB_LOST, JOB_STALLED, "gpu_oom", "out_of_memory", "audio_download_failed", "upload_failed"}
+    {
+        WORKER_LOST,
+        JOB_LOST,
+        JOB_STALLED,
+        INGEST_FAILED,
+        "gpu_oom",
+        "out_of_memory",
+        "audio_download_failed",
+        "upload_failed",
+    }
 )
 _MESSAGES = {
     WORKER_LOST: "O worker de transcrição parou no meio do job. Tente de novo.",
     JOB_LOST: "O job de transcrição sumiu da fila sem resposta. Tente de novo.",
     JOB_STALLED: "A transcrição ficou parada, sem progresso, além do tempo máximo. Tente de novo.",
+    INGEST_FAILED: INGEST_FAILED_MESSAGE,
 }
 _SUSPECT_PREFIX = "eclume:reaper:suspect:"
 
@@ -72,6 +86,20 @@ def _decode(values: dict[Any, Any]) -> dict[str, str]:
     }
 
 
+def _diagnose_complete(result: JobResult | None, *, now: datetime, settings: Settings) -> str | None:
+    """O `transcribe` terminou no arq, mas o job segue em aberto no banco."""
+    if result is None:
+        return None
+    # Falha no arq: o worker morreu e o retry do arq (max_tries=1) encerrou o job sem
+    # `transcription_failed`.
+    if not result.success:
+        return WORKER_LOST
+    # Sucesso: a ingestão pode estar na fila `eclume:default`; passado o teto, não está mais (a
+    # que falha já marca `ingest_failed` sozinha; isto cobre a que se perdeu).
+    finished = result.finish_time if result.finish_time.tzinfo else result.finish_time.replace(tzinfo=UTC)
+    return INGEST_FAILED if now - finished > timedelta(seconds=settings.job_stall_seconds) else None
+
+
 async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram explícitos, para o teste
     redis: ArqRedis,
     job_id: str,
@@ -87,10 +115,7 @@ async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram exp
     if status in {JobStatus.queued, JobStatus.deferred}:
         return None  # fila atrasada não é falha
     if status == JobStatus.complete:
-        result = await job.result_info()
-        # Sucesso: a ingestão pode estar na fila `eclume:default`. Falha no arq: o worker morreu e
-        # o retry do arq (max_tries=1) encerrou o job sem `transcription_failed`.
-        return WORKER_LOST if result is not None and not result.success else None
+        return _diagnose_complete(await job.result_info(), now=now, settings=settings)
 
     progress = _decode(await redis.hgetall(progress_key(recording_id)))
     if status == JobStatus.not_found and not progress:

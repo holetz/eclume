@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -86,7 +87,12 @@ def normalize_raw(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[
 
 
 def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, list[float]]]:  # noqa: ANN401
-    """`(modelo, {S<n>: vetor})` do `speaker_embeddings.json`."""
+    """`(modelo, {S<n>: vetor})` do `speaker_embeddings.json`.
+
+    Vetor com componente não finito (NaN ou infinito, de fala curta demais) fica de fora: o
+    pgvector o recusaria e desfaria a ingestão inteira. Worker novo já não o grava; isto cobre
+    worker antigo e JSON já no bucket.
+    """
     if not isinstance(document, dict):
         return "unknown", {}
     vectors = document.get("speaker_embeddings", document)
@@ -94,7 +100,11 @@ def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, 
     result = {}
     for original, vector in vectors.items():
         if isinstance(vector, list) and vector and original in mapping:
-            result[mapping[original]] = [float(x) for x in vector]
+            values = [float(x) for x in vector]
+            if all(math.isfinite(x) for x in values):
+                result[mapping[original]] = values
+            else:
+                log.warning("embedding do locutor %s com valor não finito descartado", original)
     return model, result
 
 

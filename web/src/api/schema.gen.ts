@@ -2031,10 +2031,10 @@ export interface components {
             progress: number;
             attempts: number;
             error: {
-                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. */
+                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. */
                 code: string;
                 message: string;
-                /** @description A falha é passageira (worker perdido, job sumido ou parado, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
+                /** @description A falha é passageira (worker perdido, job sumido ou parado, ingestão falha, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
                 retryable?: boolean;
             } | null;
             /** Format: date-time */

@@ -291,6 +291,27 @@ def test_descarga_ociosa(tmp_path: Path):
     assert factory.created[0].unloads == 1
 
 
+def test_descarga_ociosa_so_uma_vez_por_uso(tmp_path: Path):
+    # O laço ocioso volta a cada 30 s: já descarregada, a engine não é descarregada (nem logada) de novo.
+    agora = [0.0]
+    factory = Factory()
+    registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None, clock=lambda: agora[0])
+    audio = tmp_path / "a.ogg"
+    audio.write_bytes(b"OggS-audio")
+    registry.run("cpu", audio, EngineOptions(), lambda _s, _p: None)
+    agora[0] = 400.0
+    assert registry.unload_if_idle(300) is True
+    for passo in (430.0, 460.0, 10_000.0):
+        agora[0] = passo
+        assert registry.unload_if_idle(300) is False
+    assert factory.created[0].unloads == 1
+    # Um novo uso rearma a descarga.
+    registry.run("cpu", audio, EngineOptions(), lambda _s, _p: None)
+    agora[0] = 10_400.0
+    assert registry.unload_if_idle(300) is True
+    assert factory.created[0].unloads == 2
+
+
 def test_troca_de_engine_descarrega_a_anterior(tmp_path: Path):
     factory = Factory()
     registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None)

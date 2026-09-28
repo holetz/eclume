@@ -127,6 +127,24 @@ def test_embeddings_vazios_sem_diarizacao():
     }
 
 
+@pytest.mark.parametrize("ruim", [float("nan"), float("inf"), float("-inf")])
+def test_embedding_nao_finito_fica_de_fora(ruim: float):
+    # Fala curta demais: o pyannote devolve NaN (desvio-padrão com zero graus de liberdade), e o
+    # pgvector recusaria a ingestão inteira. O locutor segue no transcript, só sem embedding.
+    result = resultado()
+    result.speaker_embeddings["SPEAKER_00"] = [0.1, ruim, 0.3]
+    emb = build_embeddings(result)
+    assert emb["speaker_embeddings"] == {"S1": [0.4, 0.5, 0.6]}
+    assert emb["dimension"] == 3
+    assert [s["id"] for s in montar(result)["speakers"]] == ["S1", "S2"]
+
+
+def test_so_embeddings_nao_finitos_fica_sem_modelo():
+    result = resultado()
+    result.speaker_embeddings = {"SPEAKER_01": [float("nan")] * 3}
+    assert build_embeddings(result) == {"embedding_model": None, "dimension": None, "speaker_embeddings": {}}
+
+
 @pytest.mark.parametrize("diarizado", [True, False])
 def test_mapa_de_locutores_cobre_todo_segmento(*, diarizado: bool):
     mapa = speaker_map(resultado(diarizado=diarizado))

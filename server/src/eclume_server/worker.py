@@ -29,7 +29,7 @@ from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
 from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
-from eclume_server.stalled import reap
+from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
 from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
@@ -68,17 +68,30 @@ async def ingest_transcript(
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
 ) -> str:
-    """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`."""
-    async with system_tx(ctx["engine"]) as conn:
-        outcome = await ingest(
-            conn,
-            ctx["storage"],
-            UUID(recording_id),
-            transcript_key=transcript_key,
-            embeddings_key=embeddings_key,
-            engine_info=engine_info,
-        )
-        revision = await current_revision(conn, UUID(recording_id))
+    """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`.
+
+    Uma ingestão que falha desfaz a transação inteira; numa transação nova, o job e a gravação
+    viram falha recuperável `ingest_failed`, para a gravação não ficar presa na fila. O arq não
+    retenta: a falha fica no log e no job, e retranscrever é o caminho.
+    """
+    try:
+        async with system_tx(ctx["engine"]) as conn:
+            outcome = await ingest(
+                conn,
+                ctx["storage"],
+                UUID(recording_id),
+                transcript_key=transcript_key,
+                embeddings_key=embeddings_key,
+                engine_info=engine_info,
+            )
+            revision = await current_revision(conn, UUID(recording_id))
+    except Exception:
+        log.exception("ingest_transcript %s: a ingestão falhou", recording_id)
+        async with system_tx(ctx["engine"]) as conn:
+            result = await fail(conn, UUID(recording_id), INGEST_FAILED, INGEST_FAILED_MESSAGE)
+        await ctx["redis"].delete(progress_key(recording_id))
+        log.info("ingest_transcript %s: %s", recording_id, result)
+        return f"falhou: {INGEST_FAILED}"
     await ctx["redis"].delete(progress_key(recording_id))
     if outcome.gone:
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.

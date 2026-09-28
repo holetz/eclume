@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.4.0
+  version: 2.5.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -4667,14 +4667,15 @@ components:
                 description: '`hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde
                   a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu
                   da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo
-                  server.'
+                  server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas
+                  o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável.'
                 type: string
               message:
                 type: string
               retryable:
-                description: 'A falha é passageira (worker perdido, job sumido ou parado, falta de VRAM):
-                  retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente
-                  em servidores anteriores à 1.4.0.'
+                description: 'A falha é passageira (worker perdido, job sumido ou parado, ingestão falha,
+                  falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
+                  Ausente em servidores anteriores à 1.4.0.'
                 type: boolean
           - type: 'null'
         queued_at:
@@ -7818,7 +7819,7 @@ components:
         mcp_url: https://192.168.15.199:8443/mcp
         ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
         version: 0.1.0
-        contract_version: 2.4.0
+        contract_version: 2.5.0
     DeviceLoginRequest:
       summary: Notebook entrando com e-mail e senha
       value:
@@ -7855,7 +7856,7 @@ components:
           mcp_url: https://192.168.15.199:8443/mcp
           ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
           version: 0.1.0
-          contract_version: 2.4.0
+          contract_version: 2.5.0
     PairingCodeCreated:
       summary: Código novo com o link do QR
       value:

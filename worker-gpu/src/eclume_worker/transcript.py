@@ -7,6 +7,7 @@ só para o arquivo validar; o server os sobrescreve na ingestão (docs/standards
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -131,13 +132,17 @@ def build_embeddings(result: EngineResult) -> dict[str, Any]:
     """`speaker_embeddings.json`: vetores por id de locutor do transcript (`S<n>`).
 
     Rótulos da diarização sem nenhuma fala no transcript ficam de fora: não há locutor para eles.
+    Vetor com componente não finito (NaN ou infinito, o que o pyannote produz para fala curta
+    demais) também fica: o locutor segue sem embedding, e o pgvector recusaria a ingestão inteira.
     """
     mapping = speaker_map(result)
-    vectors = {
-        mapping[label]: [float(x) for x in vector]
-        for label, vector in result.speaker_embeddings.items()
-        if label in mapping
-    }
+    vectors = {}
+    for label, vector in result.speaker_embeddings.items():
+        if label not in mapping:
+            continue
+        values = [float(x) for x in vector]
+        if all(math.isfinite(x) for x in values):
+            vectors[mapping[label]] = values
     dimension = len(next(iter(vectors.values()))) if vectors else None
     return {
         "embedding_model": result.embedding_model if vectors else None,
