@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, a conta, o protocolo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa com "Copiar" quando o resumo automático de uma gravação enviada fica pronto — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de resumo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -92,7 +92,9 @@ decisão do usuário, então `auto` nunca é padrão.
 1. `POST /api/v1/uploads` com `filename`, `content_type`, `size_bytes`, `sha256` hex,
    `recorded_at`, `recorded_at_source`, `kind`, `duration_ms`, `source`, `markers` (omitido quando
    vazio), `title` e `agenda_type_id` (os dois só quando a linha os tem: o celular os escolhe ao
-   parar) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
+   parar), `language` (só com o idioma da transcrição escolhido na aba Áudio — `pt`, `es` ou
+   `en`, pelo `HttpUploader::with_language`; sem ele vale o padrão do servidor, e o celular não o
+   manda) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
    ([desktop-gravacao.md](desktop-gravacao.md)):
 
 | Gravação | `filename` | `kind` | `source` | `recorded_at_source` | `content_type` |
@@ -127,6 +129,26 @@ decisão do usuário, então `auto` nunca é padrão.
   retenção. Sem credencial, nada sobe e a janela diz "Entre para enviar 2 gravações". Depois de
   uma falha com a CA fixada, o laço confere se a CA do servidor mudou (abaixo).
 - Transporte `ureq` 3 com rustls (ring): sem `reqwest`, que traria `aws-lc-rs` por padrão.
+
+## Aviso de resumo pronto
+
+- Depois de cada volta do laço, no máximo a cada 60 s e com "Avisar quando o resumo ficar
+  pronto" ligado (`notify_summary`, padrão ligado), o app pergunta
+  `GET /api/v1/recordings/{remote_id}/summary` das gravações `synced` há menos de 24 h que ainda
+  não estão em `resumos-avisados.json` (no diretório de dados, cada id com o instante; um id
+  sai depois de 7 dias). A credencial de dispositivo lê resumos desde o contrato 2.6.0
+  ([server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#credencial-de-dispositivo)).
+- `Client::summary` traduz o `SummaryState`: o atual com `status: done` e `content_md` é
+  **pronto**; `409 transcript_missing`, uma geração em andamento ou nenhuma ainda é **esperar**;
+  `404` ou a geração que falhou é **desistir**. Pronto avisa e registra; desistir só registra;
+  uma falha de rede para a volta, e a próxima tenta de novo.
+- A notificação é "Resumo pronto · <título> · copie para compartilhar" (o título da fila, ou
+  "Reunião"/"Nota"), com **Copiar** — o Markdown do resumo na área de transferência
+  (`tauri-plugin-clipboard-manager`, só no Rust) — e **Abrir**, a gravação em
+  `<web_url>/gravacoes/<id>`. As ações usam o mesmo caminho da pergunta de reunião: D-Bus no
+  Linux, toast com botões no Windows, e no macOS o botão principal e o de fechar.
+- Sem o arquivo (a primeira abertura da versão que traz o aviso), as gravações já enviadas
+  entram como avisadas: a atualização não dispara avisos de resumos antigos.
 
 ## Conta e credencial
 

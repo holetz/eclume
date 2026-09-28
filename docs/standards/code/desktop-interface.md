@@ -1,7 +1,7 @@
 ---
 type: standard
 title: Interface do app desktop no Design System
-description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema pelo sistema, CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
+description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-09-28
@@ -75,8 +75,11 @@ Na ordem do `index.html`:
 | `configuracoes` | Settings · Meetings, Audio, Storage, Server | as quatro abas |
 | `atalhos` | — (menu de ajuda) | a folha com os atalhos globais e os da janela |
 
-- **Tema.** `data-theme` em `<html>` segue `prefers-color-scheme`, como o readme do DS pede, e
-  acompanha a troca do sistema com o app aberto.
+- **Tema.** "Aparência", na aba Reuniões, escolhe Sistema (o padrão), Claro ou Escuro
+  (`theme` na config, que o `status` também traz). Em Sistema, `data-theme` em `<html>` segue
+  `prefers-color-scheme`, como o readme do DS pede, e acompanha a troca do sistema com o app
+  aberto; Claro e Escuro vencem o sistema. O DS só tem o escuro sob `data-theme="dark"`, então o
+  atributo é sempre gravado.
 
 ## Atalhos
 

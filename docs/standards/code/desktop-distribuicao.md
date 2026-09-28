@@ -2,12 +2,12 @@
 type: standard
 title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
-resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
+resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -84,7 +84,12 @@ tag desktop-v0.1.0 ──► desktop-release.yml ──► GitHub Release (priva
   `NSMicrophoneUsageDescription` e `NSAudioCaptureUsageDescription`, sem os quais o macOS nega o
   microfone e o process tap.
 - Os ícones do bundle são gerados de `desktop/src-tauri/icons/icon.svg` por `tauri icon`, e só
-  entram os que o `bundle.icon` lista; os `tray-*.png` da bandeja são à parte.
+  entram os que o `bundle.icon` lista.
+- Os da bandeja, `tray-{idle,recording,note,syncing}.png` (64 × 64), saem da mesma marca por
+  `uv run --with pillow python desktop/scripts/icones_bandeja.py`: o quadrado laranja com as
+  cinco barras brancas; na reunião o quadrado vai na cor de gravação do DS, e a nota e o envio
+  ganham um ponto de estado. O `tray.rs` troca o ícone só quando o estado muda — no Linux cada
+  troca grava um PNG e recarrega o AppIndicator —, e nunca pelo nível do áudio.
 
 ## Manifestos
 
