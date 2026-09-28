@@ -93,6 +93,7 @@
         system_source: "follow",
         language: null,
         theme: "system",
+        notify_summary: true,
         note_silence_s: 4,
       },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
@@ -355,6 +356,7 @@
         note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
         language: input.language === undefined ? e.settings.language : input.language || null,
         theme: input.theme ?? e.settings.theme,
+        notify_summary: input.notify_summary ?? e.settings.notify_summary,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
           : e.settings.shortcuts,

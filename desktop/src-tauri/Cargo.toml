@@ -34,6 +34,8 @@ tauri-plugin-global-shortcut = "2"
 # está aberta.
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
+# "Copiar" do aviso de resumo pronto: o Markdown do resumo na área de transferência.
+tauri-plugin-clipboard-manager = "2"
 # Fixado no minor: `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor.
 tauri-plugin-updater = "2.12"
 # O mesmo `reqwest` do updater (sem features próprias): a CA extra entra no cliente dele.

@@ -13,6 +13,6 @@ pub mod uploader;
 
 pub use devices::{device_name, parse_pair_url, platform, Devices, PairUrl};
 pub use pat::{PatSource, PatStore};
-pub use protocol::{Client, RetryPolicy, Uploaded, PAT_PREFIX};
+pub use protocol::{Client, RetryPolicy, SummaryPoll, Uploaded, PAT_PREFIX};
 pub use transport::{HttpRequest, HttpResponse, Transport, TrustMode, UreqTransport};
 pub use uploader::{HttpUploader, UploaderConfig};

@@ -739,6 +739,11 @@ impl AppState {
         Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
+    /// Se o sync avisa quando o resumo de uma gravação enviada fica pronto.
+    pub fn notify_summary(&self) -> Result<bool> {
+        Ok(self.inner()?.config.notify_summary)
+    }
+
     /// O idioma da transcrição que os uploads pedem; `None` deixa o do servidor.
     pub fn language(&self) -> Result<Option<String>> {
         Ok(self.inner()?.config.language.clone())

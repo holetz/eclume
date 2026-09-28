@@ -1,20 +1,33 @@
 //! Laço de sync: a cada 30 s, ou quando cutucado (gravação encerrada, configurações salvas,
 //! "Sincronizar agora"), devolve à fila as falhas cujo backoff venceu, sobe as `pending` pelo
 //! `HttpUploader` e aplica a retenção — o arquivo local só sai depois da confirmação do servidor.
+//! Depois, no máximo a cada minuto, pergunta ao servidor pelo resumo das gravações enviadas nas
+//! últimas 24 h e avisa quando ele fica pronto.
 
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use eclume_recorder::{now_ms, sync_pending, Queue, Status};
-use eclume_sync::HttpUploader;
+use eclume_recorder::{now_ms, sync_pending, Kind, Queue, QueuedRecording, Status};
+use eclume_sync::{Client, HttpUploader, SummaryPoll};
 use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(30);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+/// Intervalo mínimo entre duas perguntas ao servidor pelos resumos.
+const SUMMARY_EVERY_MS: i64 = 60 * 1000;
+/// As gravações já avisadas (ou que não terão resumo), com o instante, no diretório de dados.
+const NOTIFIED_FILE: &str = "resumos-avisados.json";
+/// Quanto tempo um id fica no arquivo: bem além da janela de 24 h em que ele é consultado.
+const NOTIFIED_KEEP_MS: i64 = 7 * DAY_MS;
+
+static LAST_SUMMARY_CHECK: AtomicI64 = AtomicI64::new(0);
 
 /// Sem credencial, as gravações esperam o próximo login.
 fn sign_in_to_send(pending: u32) -> String {
@@ -112,6 +125,100 @@ fn run_once(app: &AppHandle) -> Result<()> {
     // Retenção lida antes de travar a fila: a ordem dos locks é sempre estado → fila.
     let retention_days = state.retention_days()?;
     apply_retention(&*lock(state.queue())?, retention_days, now_ms())?;
+    if let Err(err) = check_summaries(app, &state) {
+        log::info!("resumos: {err:#}");
+    }
+    Ok(())
+}
+
+/// Avisa o resumo pronto das gravações enviadas nas últimas 24 h. Sem o arquivo de avisados
+/// (a primeira abertura desta versão), as gravações já enviadas contam como avisadas: a
+/// atualização não dispara uma rajada de avisos antigos.
+fn check_summaries(app: &AppHandle, state: &AppState) -> Result<()> {
+    let now = now_ms();
+    if !state.notify_summary()?
+        || now - LAST_SUMMARY_CHECK.load(Ordering::Relaxed) < SUMMARY_EVERY_MS
+    {
+        return Ok(());
+    }
+    LAST_SUMMARY_CHECK.store(now, Ordering::Relaxed);
+    let path = state.data_dir().join(NOTIFIED_FILE);
+    let synced = lock(state.queue())?.by_status(Status::Synced)?;
+    let Some(mut notified) = load_notified(&path) else {
+        let seeded = summary_candidates(&synced, &BTreeMap::new(), now)
+            .into_iter()
+            .map(|(id, _)| (id, now))
+            .collect();
+        return save_notified(&path, &seeded);
+    };
+    let candidates = summary_candidates(&synced, &notified, now);
+    if !candidates.is_empty() {
+        let Some(config) = state.uploader_config()? else {
+            return Ok(());
+        };
+        let client = Client::from_config(&config)?;
+        let web_url = state.web_url()?;
+        for (remote_id, title) in candidates {
+            match client.summary(&remote_id) {
+                Ok(SummaryPoll::Ready(markdown)) => {
+                    let url = recording_url(&web_url, &remote_id);
+                    crate::notify::summary_ready(app, &title, markdown, url);
+                    notified.insert(remote_id, now);
+                }
+                Ok(SummaryPoll::Gone) => {
+                    notified.insert(remote_id, now);
+                }
+                Ok(SummaryPoll::Waiting) => {}
+                // Servidor fora: a próxima volta tenta de novo.
+                Err(err) => {
+                    log::info!("resumo de {remote_id}: {err:#}");
+                    break;
+                }
+            }
+        }
+    }
+    notified.retain(|_, at| now - *at < NOTIFIED_KEEP_MS);
+    save_notified(&path, &notified)
+}
+
+/// As gravações enviadas nas últimas 24 h ainda não avisadas: `(id no servidor, título)`.
+fn summary_candidates(
+    synced: &[QueuedRecording],
+    notified: &BTreeMap<String, i64>,
+    now: i64,
+) -> Vec<(String, String)> {
+    synced
+        .iter()
+        .filter(|rec| rec.synced_at.is_some_and(|at| now - at < DAY_MS))
+        .filter_map(|rec| {
+            let id = rec.remote_id.clone()?;
+            (!notified.contains_key(&id)).then(|| {
+                let title = rec.title.clone().unwrap_or_else(|| {
+                    match rec.kind {
+                        Kind::Note => "Nota",
+                        Kind::Meeting => "Reunião",
+                    }
+                    .to_string()
+                });
+                (id, title)
+            })
+        })
+        .collect()
+}
+
+/// A página da gravação no eclume web.
+fn recording_url(web_url: &str, remote_id: &str) -> String {
+    format!("{}/gravacoes/{remote_id}", web_url.trim_end_matches('/'))
+}
+
+/// `None` quando o arquivo não existe; um arquivo ilegível recomeça vazio.
+fn load_notified(path: &Path) -> Option<BTreeMap<String, i64>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    Some(serde_json::from_str(&text).unwrap_or_default())
+}
+
+fn save_notified(path: &Path, notified: &BTreeMap<String, i64>) -> Result<()> {
+    std::fs::write(path, serde_json::to_vec(notified)?)?;
     Ok(())
 }
 
@@ -206,6 +313,47 @@ mod tests {
             "gravação não confirmada nunca sai do disco"
         );
         assert!(queue.get("a").unwrap().unwrap().purged_at.is_some());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn resumo_so_das_enviadas_nas_ultimas_24_h_e_ainda_nao_avisadas() {
+        let dir = std::env::temp_dir().join(format!("eclume-resumos-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut queue = Queue::open_in_memory().unwrap();
+        synced(&mut queue, "a", &dir.join("a.ogg"));
+        synced(&mut queue, "b", &dir.join("b.ogg"));
+        queue.set_kind("b", Kind::Note).unwrap();
+        let recs = queue.by_status(Status::Synced).unwrap();
+        let now = now_ms();
+
+        let mut ids = summary_candidates(&recs, &BTreeMap::new(), now);
+        ids.sort();
+        assert_eq!(
+            ids,
+            [
+                ("srv-a".into(), "Reunião".into()),
+                ("srv-b".into(), "Nota".into())
+            ]
+        );
+        let avisados = BTreeMap::from([("srv-a".to_string(), now)]);
+        assert_eq!(summary_candidates(&recs, &avisados, now).len(), 1);
+        assert!(summary_candidates(&recs, &BTreeMap::new(), now + DAY_MS).is_empty());
+
+        let path = dir.join(NOTIFIED_FILE);
+        assert_eq!(
+            load_notified(&path),
+            None,
+            "sem arquivo, a primeira abertura"
+        );
+        save_notified(&path, &avisados).unwrap();
+        assert_eq!(load_notified(&path), Some(avisados));
+        std::fs::write(&path, b"lixo").unwrap();
+        assert_eq!(load_notified(&path), Some(BTreeMap::new()));
+        assert_eq!(
+            recording_url("https://192.168.15.199:8443/", "srv-a"),
+            "https://192.168.15.199:8443/gravacoes/srv-a"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -178,6 +178,39 @@ impl Client {
         self.call_json("falha ao ler a conta", request)
     }
 
+    /// Monta o cliente real (TLS com a CA extra, a versão no `User-Agent`) a partir da config do
+    /// uploader: o mesmo que sobe as gravações lê o resumo delas.
+    pub fn from_config(config: &crate::uploader::UploaderConfig) -> Result<Self> {
+        let transport = crate::transport::UreqTransport::new(
+            config.ca_path.as_deref(),
+            &config.client_version,
+        )?;
+        Self::new(
+            Arc::new(transport),
+            &config.api_url,
+            &config.pat,
+            RetryPolicy::default(),
+        )
+    }
+
+    /// O resumo de uma gravação enviada: `GET /api/v1/recordings/{id}/summary`, para o aviso de
+    /// resumo pronto (a credencial de dispositivo tem `summaries:read` desde o contrato 2.6.0).
+    pub fn summary(&self, recording_id: &str) -> Result<SummaryPoll> {
+        let url = self.endpoint(&format!("/recordings/{recording_id}/summary"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            // A gravação saiu do servidor: não há o que avisar.
+            404 => Ok(SummaryPoll::Gone),
+            // Sem transcrição ainda.
+            409 => Ok(SummaryPoll::Waiting),
+            _ if response.is_success() => {
+                let state: SummaryState = parse("falha ao ler o resumo", &response)?;
+                Ok(state.poll())
+            }
+            _ => Err(api_error("falha ao ler o resumo", &response)),
+        }
+    }
+
     fn get_upload(&self, upload_id: &str) -> Result<Option<Upload>> {
         let url = self.endpoint(&format!("/uploads/{upload_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -353,6 +386,50 @@ fn finished(upload: Upload) -> Result<Uploaded> {
         recording_id,
         deduplicated: upload.status == api::status::DEDUPLICATED,
     })
+}
+
+/// O que o aviso de resumo pronto faz com uma gravação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SummaryPoll {
+    /// O resumo atual ficou pronto: o Markdown dele.
+    Ready(String),
+    /// Ainda transcrevendo ou resumindo: perguntar de novo depois.
+    Waiting,
+    /// Não vai haver resumo para avisar (gravação apagada ou geração que falhou).
+    Gone,
+}
+
+/// A parte do `SummaryState` que o aviso lê.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct SummaryState {
+    #[serde(default)]
+    pub current: Option<SummaryVersion>,
+    #[serde(default)]
+    pub pending: Option<SummaryVersion>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct SummaryVersion {
+    pub status: String,
+    #[serde(default)]
+    pub content_md: Option<String>,
+}
+
+impl SummaryState {
+    pub fn poll(self) -> SummaryPoll {
+        let failed = |version: &Option<SummaryVersion>| {
+            version.as_ref().is_some_and(|v| v.status == "failed")
+        };
+        match self.current {
+            Some(SummaryVersion {
+                status,
+                content_md: Some(markdown),
+            }) if status == "done" && !markdown.trim().is_empty() => SummaryPoll::Ready(markdown),
+            _ if failed(&self.pending) => SummaryPoll::Gone,
+            current if self.pending.is_none() && failed(&current) => SummaryPoll::Gone,
+            _ => SummaryPoll::Waiting,
+        }
+    }
 }
 
 /// Um endereço de servidor: `http://` ou `https://` seguido do host.
@@ -599,6 +676,56 @@ mod tests {
                 {"part_number": 3, "etag": "\"e3\""}
             ]})
         );
+    }
+
+    #[test]
+    fn resumo_pronto_espera_ou_desiste() {
+        let versao = |status: &str, md: Option<&str>| serde_json::json!({"status": status, "content_md": md, "version": 1});
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/recordings/r1/summary",
+                json(
+                    200,
+                    serde_json::json!({
+                        "current": versao("done", Some("# Ata\n\n- decisão")),
+                        "generated": null, "pending": null, "version_count": 1
+                    }),
+                ),
+            )
+            .expect(
+                "GET /api/v1/recordings/r2/summary",
+                json(
+                    200,
+                    serde_json::json!({
+                        "current": null, "generated": null,
+                        "pending": versao("running", None), "version_count": 0
+                    }),
+                ),
+            )
+            .expect(
+                "GET /api/v1/recordings/r3/summary",
+                json(
+                    200,
+                    serde_json::json!({
+                        "current": null, "generated": null,
+                        "pending": versao("failed", None), "version_count": 0
+                    }),
+                ),
+            )
+            .expect("GET /api/v1/recordings/r4/summary", status(409))
+            .expect("GET /api/v1/recordings/r5/summary", status(404));
+        let (client, script, _) = make_client(script);
+        assert_eq!(
+            client.summary("r1").unwrap(),
+            SummaryPoll::Ready("# Ata\n\n- decisão".into())
+        );
+        assert_eq!(client.summary("r2").unwrap(), SummaryPoll::Waiting);
+        assert_eq!(client.summary("r3").unwrap(), SummaryPoll::Gone);
+        assert_eq!(client.summary("r4").unwrap(), SummaryPoll::Waiting);
+        assert_eq!(client.summary("r5").unwrap(), SummaryPoll::Gone);
+        assert!(script.seen().iter().all(|request| request
+            .headers
+            .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
     }
 
     #[test]

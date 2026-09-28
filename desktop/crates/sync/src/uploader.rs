@@ -12,8 +12,7 @@ use eclume_recorder::{Kind, Marker, Queue, QueuedRecording, Source, Uploader};
 use sha2::{Digest, Sha256};
 
 use crate::api::{Capture, MarkerInput, UploadCreate};
-use crate::protocol::{Client, RetryPolicy};
-use crate::transport::UreqTransport;
+use crate::protocol::Client;
 
 /// Tipo do arquivo que o desktop grava (Ogg/Opus mono 16 kHz), o de uma linha sem `content_type`.
 pub const CONTENT_TYPE: &str = "audio/ogg; codecs=opus";
@@ -40,13 +39,7 @@ pub struct HttpUploader {
 
 impl HttpUploader {
     pub fn new(config: &UploaderConfig, queue: Arc<Mutex<Queue>>) -> Result<Self> {
-        let transport = UreqTransport::new(config.ca_path.as_deref(), &config.client_version)?;
-        let client = Client::new(
-            Arc::new(transport),
-            &config.api_url,
-            &config.pat,
-            RetryPolicy::default(),
-        )?;
+        let client = Client::from_config(config)?;
         Ok(Self::from_client(client, queue, &config.client_version))
     }
 
@@ -212,6 +205,8 @@ mod tests {
     use eclume_recorder::{NewImport, RecordedAtSource};
 
     use super::*;
+    use crate::protocol::RetryPolicy;
+    use crate::transport::UreqTransport;
 
     fn recording(meeting_app: Option<&str>) -> QueuedRecording {
         let queue = recorded_queue();
