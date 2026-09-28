@@ -212,6 +212,36 @@ pub fn list_input_devices() -> CommandResult<MicDevices> {
     )
 }
 
+/// As saídas de áudio do sistema, para a aba Áudio.
+#[derive(serde::Serialize)]
+pub struct OutputDevices {
+    pub default: Option<String>,
+    pub devices: Vec<OutputDevice>,
+}
+
+#[derive(serde::Serialize)]
+pub struct OutputDevice {
+    pub id: String,
+    pub name: String,
+}
+
+#[tauri::command(async)]
+pub fn list_output_devices() -> CommandResult<OutputDevices> {
+    to_js(eclume_audio_capture::list_output_devices().map(|devices| {
+        OutputDevices {
+            default: devices.default,
+            devices: devices
+                .devices
+                .into_iter()
+                .map(|device| OutputDevice {
+                    id: device.id,
+                    name: device.name,
+                })
+                .collect(),
+        }
+    }))
+}
+
 /// "Fale para testar o nível": 10 s de medidor com o microfone escolhido.
 #[tauri::command(async)]
 pub fn mic_test(state: State<'_, AppState>) -> CommandResult<()> {
@@ -219,7 +249,10 @@ pub fn mic_test(state: State<'_, AppState>) -> CommandResult<()> {
     to_js(choice.and_then(|choice| {
         state.start_mic_test(
             move || {
-                let mic = eclume_audio_capture::MicSource::open_named(choice.mic.as_deref())?;
+                if choice.mic == crate::capture::SourceChoice::Off {
+                    anyhow::bail!("Nenhum microfone escolhido");
+                }
+                let mic = eclume_audio_capture::MicSource::open_named(choice.mic.device())?;
                 Ok(Box::new(mic) as Box<dyn eclume_recorder::AudioSource>)
             },
             crate::state::MIC_TEST,

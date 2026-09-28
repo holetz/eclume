@@ -268,6 +268,7 @@ pub fn run() {
             commands::dismiss_update_notice,
             commands::storage_info,
             commands::list_input_devices,
+            commands::list_output_devices,
             commands::mic_test,
             commands::mic_test_meter,
             commands::open_data_dir,

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use eclume_detect::DetectionConfig;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::shortcuts::Shortcuts;
 
@@ -24,6 +24,10 @@ pub const MAX_RETENTION_DAYS: u32 = 3650;
 pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
 /// A parada por silêncio padrão da nota, em segundos.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
+/// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
+pub const SOURCE_NONE: &str = "none";
+/// O áudio do sistema seguindo a saída em uso, o padrão.
+pub const SYSTEM_FOLLOW: &str = "follow";
 
 /// O servidor embutido no instalador pelo release por servidor (`desktop-release.yml` passa as
 /// variáveis do repositório ao `tauri build`): a primeira execução o mostra como "Veio com este
@@ -104,12 +108,17 @@ pub struct Config {
     /// Atalhos globais de gravar, nova nota e marcador.
     #[serde(default)]
     pub shortcuts: Shortcuts,
-    /// O microfone pelo nome; `null` é o padrão do sistema.
+    /// O microfone pelo nome; `null` é o padrão do sistema e `"none"`, nenhum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mic: Option<String>,
-    /// Gravar também o áudio do sistema nas reuniões.
-    #[serde(default = "default_system_audio")]
-    pub system_audio: bool,
+    /// O áudio do sistema nas reuniões: `"follow"` segue a saída em uso, o id de uma saída a
+    /// fixa e `"none"` não grava. Lê também o `system_audio` booleano da versão anterior.
+    #[serde(
+        default = "default_system_source",
+        alias = "system_audio",
+        deserialize_with = "system_source_or_legacy"
+    )]
+    pub system_source: String,
     /// A versão que abriu por último; `null` antes da primeira abertura.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_version: Option<String>,
@@ -128,8 +137,25 @@ pub struct PendingUpdate {
     pub notes: Option<String>,
 }
 
-fn default_system_audio() -> bool {
-    true
+fn default_system_source() -> String {
+    SYSTEM_FOLLOW.to_string()
+}
+
+/// O `system_source` de agora ou o `system_audio` antigo: `true` seguia a saída em uso.
+fn system_source_or_legacy<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<String, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Field {
+        Legacy(bool),
+        Source(String),
+    }
+    Ok(match Field::deserialize(deserializer)? {
+        Field::Legacy(true) => default_system_source(),
+        Field::Legacy(false) => SOURCE_NONE.to_string(),
+        Field::Source(source) => source,
+    })
 }
 
 /// O servidor embutido, ou o padrão de um build sem servidor.
@@ -157,7 +183,7 @@ impl Default for Config {
             note_silence_s: default_note_silence(),
             shortcuts: Shortcuts::default(),
             mic: None,
-            system_audio: true,
+            system_source: default_system_source(),
             last_version: None,
             pending_update: None,
         }
@@ -251,6 +277,9 @@ impl Config {
             if !NOTE_SILENCE_CHOICES.contains(&seconds) {
                 bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
             }
+        }
+        if self.mic.as_deref() == Some(SOURCE_NONE) && self.system_source == SOURCE_NONE {
+            bail!("Escolha ao menos uma fonte de áudio");
         }
         self.shortcuts.validate()
     }
@@ -397,11 +426,27 @@ mod tests {
         assert_eq!(config.note_silence_s, Some(DEFAULT_NOTE_SILENCE_S));
         assert_eq!(config.shortcuts, Shortcuts::default());
         assert_eq!(config.mic, None);
-        assert!(config.system_audio);
+        assert_eq!(config.system_source, SYSTEM_FOLLOW);
         let keep: Config =
             serde_json::from_str(r#"{"retention_days": null, "note_silence_s": null}"#).unwrap();
         assert_eq!(keep.retention_days, None);
         assert_eq!(keep.note_silence_s, None);
+    }
+
+    #[test]
+    fn audio_do_sistema_da_versao_anterior_vira_origem() {
+        let off: Config = serde_json::from_str(r#"{"system_audio": false}"#).unwrap();
+        assert_eq!(off.system_source, SOURCE_NONE);
+        let on: Config = serde_json::from_str(r#"{"system_audio": true}"#).unwrap();
+        assert_eq!(on.system_source, SYSTEM_FOLLOW);
+        // Gravar de novo troca o booleano pela origem.
+        let text = serde_json::to_string(&off).unwrap();
+        assert!(!text.contains("system_audio"), "{text}");
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.system_source, SOURCE_NONE);
+        let chosen: Config =
+            serde_json::from_str(r#"{"system_source": "alsa_output.usb"}"#).unwrap();
+        assert_eq!(chosen.system_source, "alsa_output.usb");
     }
 
     #[test]
@@ -437,6 +482,12 @@ mod tests {
         config.shortcuts.marker = config.shortcuts.note.clone();
         assert!(config.validate().is_err());
         config.shortcuts = Shortcuts::default();
+        config.mic = Some(SOURCE_NONE.into());
+        config.validate().unwrap();
+        config.system_source = SOURCE_NONE.into();
+        let err = config.validate().unwrap_err();
+        assert_eq!(err.to_string(), "Escolha ao menos uma fonte de áudio");
+        config.mic = None;
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
         assert!(format!("{err:#}").contains("CA extra"), "{err:#}");

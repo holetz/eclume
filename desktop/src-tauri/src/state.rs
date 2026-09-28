@@ -217,8 +217,11 @@ pub struct SettingsView {
     pub shortcuts: Vec<ShortcutView>,
     /// Global, portal ou sistema (com os comandos da CLI).
     pub shortcut_mode: ShortcutMode,
-    /// O microfone escolhido; `None` é o padrão do sistema.
+    /// O microfone escolhido; `None` é o padrão do sistema e `"none"`, nenhum.
     pub mic: Option<String>,
+    /// `"follow"`, o id de uma saída ou `"none"`.
+    pub system_source: String,
+    /// O áudio do sistema ligado, para a aba Áudio de antes da escolha da origem.
     pub system_audio: bool,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
@@ -245,10 +248,15 @@ pub struct SettingsInput {
     /// Atalhos novos; ausente mantém os de hoje.
     #[serde(default)]
     pub shortcuts: Option<Shortcuts>,
-    /// O microfone pelo nome, `""` para o padrão do sistema; ausente mantém o de hoje.
+    /// O microfone pelo nome, `""` para o padrão do sistema e `"none"` para nenhum; ausente
+    /// mantém o de hoje.
     #[serde(default)]
     pub mic: Option<String>,
-    /// Ausente mantém o de hoje.
+    /// `"follow"` (ou `""`), o id de uma saída ou `"none"`; ausente mantém a de hoje.
+    #[serde(default)]
+    pub system_source: Option<String>,
+    /// O liga/desliga de antes da escolha da origem: `true` segue a saída em uso e `false` é
+    /// `"none"`. Vale quando `system_source` está ausente.
     #[serde(default)]
     pub system_audio: Option<bool>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
@@ -714,11 +722,7 @@ impl AppState {
 
     /// O microfone e as fontes que a aba Áudio escolheu.
     pub fn audio_choice(&self) -> Result<AudioChoice> {
-        let inner = self.inner()?;
-        Ok(AudioChoice {
-            mic: inner.config.mic.clone(),
-            system_audio: inner.config.system_audio,
-        })
+        Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
     /// "Fale para testar o nível": abre o microfone por `duration`, numa thread, e alimenta o
@@ -924,7 +928,8 @@ impl AppState {
             connection: connection(&inner),
             account: config.account.clone(),
             mic: config.mic.clone(),
-            system_audio: config.system_audio,
+            system_source: config.system_source.clone(),
+            system_audio: config.system_source != config::SOURCE_NONE,
             note_silence_s: config.note_silence_s,
             shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
@@ -956,8 +961,19 @@ impl AppState {
         if let Some(mic) = input.mic {
             next.mic = non_empty(Some(mic));
         }
-        if let Some(system_audio) = input.system_audio {
-            next.system_audio = system_audio;
+        let system_source = input.system_source.or_else(|| {
+            input.system_audio.map(|on| {
+                if on {
+                    config::SYSTEM_FOLLOW
+                } else {
+                    config::SOURCE_NONE
+                }
+                .to_string()
+            })
+        });
+        if let Some(source) = system_source {
+            next.system_source =
+                non_empty(Some(source)).unwrap_or_else(|| config::SYSTEM_FOLLOW.to_string());
         }
         if let Some(seconds) = input.note_silence_s {
             next.note_silence_s = (seconds > 0).then_some(seconds);
@@ -1136,6 +1152,7 @@ mod tests {
     use eclume_recorder::Status;
 
     use super::*;
+    use crate::capture::SourceChoice;
 
     /// Chaveiro indisponível: o PAT vai ao arquivo, como numa sessão sem Secret Service.
     struct NoKeyring;
@@ -1190,6 +1207,7 @@ mod tests {
             clear_pat: false,
             shortcuts: None,
             mic: None,
+            system_source: None,
             system_audio: None,
             note_silence_s: None,
         }
@@ -1651,13 +1669,7 @@ mod tests {
     #[test]
     fn audio_escolhe_microfone_sistema_e_silencio() {
         let (state, dir) = state("audio");
-        assert_eq!(
-            state.audio_choice().unwrap(),
-            AudioChoice {
-                mic: None,
-                system_audio: true
-            }
-        );
+        assert_eq!(state.audio_choice().unwrap(), AudioChoice::default());
         let mut input = settings_input(&state);
         input.mic = Some("Jabra Evolve2 65".into());
         input.system_audio = Some(false);
@@ -1665,10 +1677,11 @@ mod tests {
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic.as_deref(), Some("Jabra Evolve2 65"));
+        assert_eq!(view.system_source, config::SOURCE_NONE);
         assert!(!view.system_audio);
         assert_eq!(view.note_silence_s, Some(8));
         assert_eq!(
-            state.audio_choice().unwrap().mic.as_deref(),
+            state.audio_choice().unwrap().mic.device(),
             Some("Jabra Evolve2 65")
         );
 
@@ -1685,6 +1698,26 @@ mod tests {
         let mut bad = settings_input(&state);
         bad.note_silence_s = Some(5);
         assert!(state.save_settings(bad).is_err());
+
+        // Uma saída escolhida, depois "Nenhum" nas duas fontes, que a config recusa.
+        let mut input = settings_input(&state);
+        input.system_source = Some("alsa_output.usb".into());
+        state.save_settings(input).unwrap();
+        let view = state.settings().unwrap();
+        assert_eq!(view.system_source, "alsa_output.usb");
+        assert!(view.system_audio);
+        let mut input = settings_input(&state);
+        input.mic = Some(config::SOURCE_NONE.into());
+        input.system_source = Some(config::SOURCE_NONE.into());
+        let err = state.save_settings(input).unwrap_err();
+        assert_eq!(err.to_string(), "Escolha ao menos uma fonte de áudio");
+        let mut input = settings_input(&state);
+        input.mic = Some(config::SOURCE_NONE.into());
+        input.system_source = Some(String::new());
+        state.save_settings(input).unwrap();
+        let choice = state.audio_choice().unwrap();
+        assert_eq!(choice.mic, SourceChoice::Off);
+        assert_eq!(choice.system, SourceChoice::Auto);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

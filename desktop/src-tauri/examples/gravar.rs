@@ -28,10 +28,7 @@ fn main() -> Result<()> {
         .map_or_else(|| std::env::temp_dir().join("eclume-gravar"), PathBuf::from);
 
     let queue = Queue::open(&dir.join("queue.sqlite"))?;
-    let opened = open_sources(&AudioChoice {
-        mic: None,
-        system_audio: true,
-    })?;
+    let opened = open_sources(&AudioChoice::default())?;
     for reason in &opened.missing {
         eprintln!("aviso: gravando sem {reason}");
     }
