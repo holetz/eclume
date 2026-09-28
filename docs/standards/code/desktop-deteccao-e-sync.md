@@ -167,6 +167,12 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   Manager no Windows, Keychain no macOS). Sem chaveiro (sessão sem Secret Service), vai para `pat`
   no diretório de config com permissão 0600, e a janela avisa; quando o chaveiro volta, o próximo
   salvamento apaga o arquivo. O segredo nunca volta à janela.
+- **Cada acesso ao chaveiro roda numa thread própria.** O Secret Service do `keyring` faz
+  `block_on` por dentro e dá panic numa thread que já roda um runtime Tokio (um comando `async` do
+  Tauri, o updater); o panic ainda envenena o mutex global do cofre, e todo acesso seguinte dá
+  panic também, derrubando o app na próxima leitura das configurações. Na thread própria o
+  `block_on` funciona, e um panic que sobrar vira erro (e o `PatStore` cai no arquivo). Quem só
+  precisa da CA fixada (o updater) a lê da config, sem passar pelo chaveiro.
 - `config.json` ganha `account: {email, token_id, server_name}`. `Config::connection(tem
   credencial)` decide a janela: sem credencial, `first_run`; credencial sem `account`,
   `personal_token`; com as duas, `account`.

@@ -934,6 +934,11 @@ impl AppState {
         Ok(self.view()?.web_url)
     }
 
+    /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].
+    pub fn ca_path(&self) -> Result<Option<PathBuf>> {
+        Ok(self.inner()?.config.ca_path.clone())
+    }
+
     pub fn settings(&self) -> Result<SettingsView> {
         let pat_source = self.pat.load()?.map(|(_, source)| source);
         let inner = self.inner()?;
