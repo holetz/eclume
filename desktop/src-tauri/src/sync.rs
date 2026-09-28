@@ -84,7 +84,8 @@ fn run_once(app: &AppHandle) -> Result<()> {
             None if state.pinned_ca_changed()? => {}
             None => state.set_sync_notice(Some(sign_in_to_send(pending)))?,
             Some(config) => {
-                let uploader = HttpUploader::new(&config, state.shared_queue());
+                let uploader = HttpUploader::new(&config, state.shared_queue())
+                    .map(|uploader| uploader.with_language(state.language().ok().flatten()));
                 let notice = match uploader {
                     Ok(uploader) => {
                         state.set_syncing(true)?;

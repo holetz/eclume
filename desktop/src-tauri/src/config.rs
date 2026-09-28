@@ -25,6 +25,9 @@ pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
 /// A parada por silêncio padrão da nota, em segundos.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
 /// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
+/// Os idiomas de transcrição que a aba Áudio oferece, além do automático (o padrão do servidor).
+pub const LANGUAGES: [&str; 3] = ["pt", "es", "en"];
+
 pub const SOURCE_NONE: &str = "none";
 /// O áudio do sistema seguindo a saída em uso, o padrão.
 pub const SYSTEM_FOLLOW: &str = "follow";
@@ -108,6 +111,9 @@ pub struct Config {
     /// Atalhos globais de gravar, nova nota e marcador.
     #[serde(default)]
     pub shortcuts: Shortcuts,
+    /// Idioma da transcrição (`pt`, `es` ou `en`); `null` deixa o padrão do servidor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     /// O microfone pelo nome; `null` é o padrão do sistema e `"none"`, nenhum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mic: Option<String>,
@@ -182,6 +188,7 @@ impl Default for Config {
             retention_days: default_retention_days(),
             note_silence_s: default_note_silence(),
             shortcuts: Shortcuts::default(),
+            language: None,
             mic: None,
             system_source: default_system_source(),
             last_version: None,
@@ -278,6 +285,11 @@ impl Config {
                 bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
             }
         }
+        if let Some(language) = &self.language {
+            if !LANGUAGES.contains(&language.as_str()) {
+                bail!("idioma da transcrição: use pt, es ou en, ou Automático");
+            }
+        }
         if self.mic.as_deref() == Some(SOURCE_NONE) && self.system_source == SOURCE_NONE {
             bail!("Escolha ao menos uma fonte de áudio");
         }
@@ -305,6 +317,20 @@ pub fn validate_web_url(url: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idioma_da_transcricao_e_opcional_e_fechado() {
+        let config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.language, None);
+        assert!(!serde_json::to_string(&config).unwrap().contains("language"));
+        let mut config = Config {
+            language: Some("es".into()),
+            ..Config::default()
+        };
+        config.validate().unwrap();
+        config.language = Some("fr".into());
+        assert!(config.validate().is_err());
+    }
 
     #[test]
     fn config_padrao_aponta_para_o_servidor_embutido_ou_o_host() {

@@ -221,6 +221,8 @@ pub struct SettingsView {
     pub mic: Option<String>,
     /// `"follow"`, o id de uma saída ou `"none"`.
     pub system_source: String,
+    /// Idioma da transcrição; `None` é o padrão do servidor.
+    pub language: Option<String>,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
 }
@@ -253,6 +255,9 @@ pub struct SettingsInput {
     /// `"follow"` (ou `""`), o id de uma saída ou `"none"`; ausente mantém a de hoje.
     #[serde(default)]
     pub system_source: Option<String>,
+    /// `pt`, `es`, `en`, ou `""` para o padrão do servidor; ausente mantém o de hoje.
+    #[serde(default)]
+    pub language: Option<String>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
@@ -721,6 +726,11 @@ impl AppState {
         Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
+    /// O idioma da transcrição que os uploads pedem; `None` deixa o do servidor.
+    pub fn language(&self) -> Result<Option<String>> {
+        Ok(self.inner()?.config.language.clone())
+    }
+
     /// "Fale para testar" ou "Toque algo para testar": abre a fonte por até `duration`, numa
     /// thread, e alimenta o medidor do detector de silêncio, sem gravar. Um teste por vez: o que
     /// estiver em curso para.
@@ -930,6 +940,7 @@ impl AppState {
             account: config.account.clone(),
             mic: config.mic.clone(),
             system_source: config.system_source.clone(),
+            language: config.language.clone(),
             note_silence_s: config.note_silence_s,
             shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
@@ -964,6 +975,9 @@ impl AppState {
         if let Some(source) = input.system_source {
             next.system_source =
                 non_empty(Some(source)).unwrap_or_else(|| config::SYSTEM_FOLLOW.to_string());
+        }
+        if let Some(language) = input.language {
+            next.language = non_empty(Some(language));
         }
         if let Some(seconds) = input.note_silence_s {
             next.note_silence_s = (seconds > 0).then_some(seconds);
@@ -1198,6 +1212,7 @@ mod tests {
             shortcuts: None,
             mic: None,
             system_source: None,
+            language: None,
             note_silence_s: None,
         }
     }
@@ -1663,11 +1678,14 @@ mod tests {
         input.mic = Some("Jabra Evolve2 65".into());
         input.system_source = Some(config::SOURCE_NONE.into());
         input.note_silence_s = Some(8);
+        input.language = Some("en".into());
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic.as_deref(), Some("Jabra Evolve2 65"));
         assert_eq!(view.system_source, config::SOURCE_NONE);
         assert_eq!(view.note_silence_s, Some(8));
+        assert_eq!(view.language.as_deref(), Some("en"));
+        assert_eq!(state.language().unwrap().as_deref(), Some("en"));
         assert_eq!(
             state.audio_choice().unwrap().mic.device(),
             Some("Jabra Evolve2 65")
@@ -1679,9 +1697,11 @@ mod tests {
         let mut input = settings_input(&state);
         input.mic = Some(String::new());
         input.note_silence_s = Some(0);
+        input.language = Some(String::new());
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic, None);
+        assert_eq!(view.language, None);
         assert_eq!(view.note_silence_s, None);
         let mut bad = settings_input(&state);
         bad.note_silence_s = Some(5);

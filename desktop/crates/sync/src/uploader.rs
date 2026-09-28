@@ -359,7 +359,7 @@ mod tests {
             "sem idioma, vale o do servidor"
         );
 
-        let create = uploader().with_language(Some("es".into())).create_request(
+        let create = uploader.with_language(Some("es".into())).create_request(
             &queue.get("g1").unwrap().unwrap(),
             &[],
             10,

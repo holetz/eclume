@@ -90,6 +90,7 @@
         shortcut_mode: { mode: "global" },
         mic: null,
         system_source: "follow",
+        language: null,
         note_silence_s: 4,
       },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
@@ -350,6 +351,7 @@
         mic,
         system_source: systemSource,
         note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
+        language: input.language === undefined ? e.settings.language : input.language || null,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
           : e.settings.shortcuts,
