@@ -15,7 +15,7 @@ from eclume_server.storage import Storage
 from eclume_server.transcripts import fail, render_markdown
 from eclume_server.worker import ingest_transcript
 from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.fakes import ENGINE_INFO, contract_transcript, run_cpu, run_gpu
+from eclume_server_testing.fakes import DEFAULT_VOICES, ENGINE_INFO, contract_transcript, run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -256,6 +256,42 @@ def test_embeddings_so_com_a_voz_ligada_na_plataforma(
 
     rows = run(services.sql(count))
     assert [(r[0], r[1], r[3]) for r in rows] == [(with_opt_in["id"], f"S{i}", 256) for i in (1, 2, 3)]
+
+
+async def _voice_on(conn):  # noqa: ANN001, ANN202
+    await conn.execute(
+        text("UPDATE platform_settings SET voice_identification = jsonb_set(voice_identification, '{enabled}', 'true')")
+    )
+
+
+def _embedded_speakers(services: Services, recording_id: str) -> list[str]:
+    async def go(conn):  # noqa: ANN001, ANN202
+        rows = await conn.execute(
+            text(
+                "SELECT e.speaker_id FROM speaker_embeddings e JOIN transcripts t ON t.id = e.transcript_id"
+                " WHERE t.recording_id = :recording ORDER BY e.speaker_id"
+            ),
+            {"recording": UUID(recording_id)},
+        )
+        return [row[0] for row in rows]
+
+    return run(services.sql(go))
+
+
+@pytest.mark.usefixtures("platform")
+def test_embedding_nao_finito_de_worker_antigo_nao_derruba_a_ingestao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    # Fala curta demais: o pyannote gera NaN, e um worker antigo o grava no `speaker_embeddings.json`.
+    api = as_user(make_user())
+    run(services.sql(_voice_on))
+    recording = upload_file(api, audio_bytes(3400))
+    voices = dict(DEFAULT_VOICES) | {"S2": [float("nan")] * 256}
+    run_gpu(services.settings, voices=voices)
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "transcribed"
+    assert _embedded_speakers(services, recording["id"]) == ["S1", "S3"]
 
 
 def _states(body: dict) -> dict[str, str]:
