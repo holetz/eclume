@@ -702,17 +702,17 @@ mod tests {
 
         let progress = active.progress();
         assert_eq!(progress.stop_reason(), Some(StopReason::Silence));
-        // Fala até 1 s (última rajada até 0,9 s), 300 ms de hangover e 2 s de silêncio.
+        // Fala até 1 s (última rajada até 0,9 s) e 2 s de silêncio desde ela.
         let position = progress.position_ms();
         assert!(
-            (3_100..=3_400).contains(&position),
+            (2_800..=3_100).contains(&position),
             "parou em {position} ms"
         );
         assert_eq!(progress.stops_in_ms(), None);
         let rec = active.stop(&queue).unwrap();
         assert_eq!(rec.kind, Kind::Note);
         let duration = rec.duration_ms.unwrap();
-        assert!((3_000..=3_500).contains(&duration), "{duration} ms");
+        assert!((2_700..=3_200).contains(&duration), "{duration} ms");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -766,9 +766,9 @@ mod tests {
         )
         .unwrap();
         wait_finished(&active);
-        // A fala acaba em 0,5 s, o hangover em 0,8 s e a fonte em 2 s: faltavam uns 6,8 s.
+        // A fala acaba em 0,5 s e a fonte em 2 s: faltavam uns 6,5 s.
         let left = active.progress().stops_in_ms().unwrap();
-        assert!((6_600..=7_000).contains(&left), "faltavam {left} ms");
+        assert!((6_300..=6_700).contains(&left), "faltavam {left} ms");
         active.stop(&queue).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }

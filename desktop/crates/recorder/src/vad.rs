@@ -9,9 +9,12 @@
 //! vira voz acima de
 //! `max(piso + 12 dB, −55 dBFS)` e se mantém voz acima de `max(piso + 8 dB, −58 dBFS)`. Só a voz
 //! sustentada (5 dos últimos 10 quadros) conta: um clique, uma tecla ou uma porta batendo não
-//! zeram o silêncio. A voz sustentada se mantém por 300 ms depois do último quadro de voz. Com um
-//! locutor só, perto do microfone, energia com piso adaptativo basta; um VAD treinado traria
-//! dependência nativa.
+//! zeram o silêncio. Depois da primeira fala, só zera o silêncio o que chega perto dela: a voz
+//! sustentada até 25 dB abaixo do pico recente da fala (que cai 2,5 dB/s). Uma respiração, um
+//! "hum" distante ou o ruído de uma cadeira ficam de fora. O silêncio conta desde o último quadro
+//! de voz sustentada, e a nota para exatamente no tempo configurado; a contagem regressiva só
+//! aparece depois de 300 ms sem voz, para não piscar entre as sílabas. Com um locutor só, perto
+//! do microfone, energia com piso adaptativo basta; um VAD treinado traria dependência nativa.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -42,8 +45,12 @@ const DIGITAL_SILENCE_DBFS: f32 = -90.0;
 /// Voz sustentada: ao menos `SUSTAINED_FRAMES` quadros de voz nos últimos `SUSTAIN_WINDOW`.
 const SUSTAINED_FRAMES: u32 = 5;
 const SUSTAIN_WINDOW: u32 = 10;
-/// A voz se mantém por este tempo depois do último quadro de voz.
-const HANGOVER_MS: u64 = 300;
+/// A contagem regressiva só aparece depois deste tempo sem voz.
+const COUNTDOWN_AFTER_MS: u64 = 300;
+/// Depois da primeira fala, a voz que zera o silêncio fica a no máximo isto abaixo do pico dela.
+const SPEECH_GATE_DB: f32 = 25.0;
+/// Quanto o pico da fala cai por quadro (2,5 dB/s), para acompanhar quem passa a falar mais baixo.
+const SPEECH_PEAK_DECAY_DB: f32 = 0.05;
 /// Sem voz nenhuma neste tempo, a nota é descartada.
 const NO_SPEECH_MS: u64 = 10_000;
 /// Nível do quadro de silêncio digital (RMS zero).
@@ -73,7 +80,8 @@ pub struct SilenceDetector {
     voiced: bool,
     /// Um bit por quadro recente, o mais novo no bit 0: foi voz.
     recent_voiced: u32,
-    hangover_ms: u64,
+    /// O pico recente da fala sustentada, em dBFS, caindo [`SPEECH_PEAK_DECAY_DB`] por quadro.
+    speech_peak: f32,
     heard_voice: bool,
     silence_ms: u64,
     elapsed_ms: u64,
@@ -90,7 +98,7 @@ impl SilenceDetector {
             floor_history: VecDeque::with_capacity(FLOOR_FRAMES),
             voiced: false,
             recent_voiced: 0,
-            hangover_ms: 0,
+            speech_peak: f32::NEG_INFINITY,
             heard_voice: false,
             silence_ms: 0,
             elapsed_ms: 0,
@@ -142,14 +150,15 @@ impl SilenceDetector {
         };
         let window = (1 << SUSTAIN_WINDOW) - 1;
         self.recent_voiced = ((self.recent_voiced << 1) | u32::from(self.voiced)) & window;
-        let sustained = self.voiced && self.recent_voiced.count_ones() >= SUSTAINED_FRAMES;
+        self.speech_peak -= SPEECH_PEAK_DECAY_DB;
+        let sustained = self.voiced
+            && self.recent_voiced.count_ones() >= SUSTAINED_FRAMES
+            && (!self.heard_voice || level >= self.speech_peak - SPEECH_GATE_DB);
 
         if sustained {
             self.heard_voice = true;
-            self.hangover_ms = HANGOVER_MS;
+            self.speech_peak = self.speech_peak.max(level);
             self.silence_ms = 0;
-        } else if self.hangover_ms > 0 {
-            self.hangover_ms = self.hangover_ms.saturating_sub(FRAME_MS);
         } else {
             self.silence_ms += FRAME_MS;
         }
@@ -197,7 +206,7 @@ impl SilenceDetector {
     /// `None` fora disso ou com "Nunca".
     pub fn stops_in_ms(&self) -> Option<u64> {
         let stop_after = self.stop_after_ms?;
-        (self.heard_voice && self.silence_ms > 0 && self.event.is_none())
+        (self.heard_voice && self.silence_ms > COUNTDOWN_AFTER_MS && self.event.is_none())
             .then(|| stop_after.saturating_sub(self.silence_ms))
     }
 
@@ -277,8 +286,8 @@ mod tests {
 
         let (event, at) = feed(&mut detector, &noise.samples(10_000, 0.002)).unwrap();
         assert_eq!(event, VadEvent::Silence);
-        // A última rajada acaba 100 ms antes do fim da fala: 200 ms de hangover restantes + 4 s.
-        assert!((4_180..=4_220).contains(&at), "parou em {at} ms");
+        // A última rajada acaba 100 ms antes do fim da fala: 4 s depois dela.
+        assert!((3_880..=3_920).contains(&at), "parou em {at} ms");
         assert_eq!(detector.event(), Some(VadEvent::Silence));
         assert_eq!(detector.stops_in_ms(), None);
     }
@@ -290,7 +299,7 @@ mod tests {
         feed(&mut detector, &speech(&mut noise, 2_000));
         assert_eq!(feed(&mut detector, &noise.samples(2_300, 0.002)), None);
         let left = detector.stops_in_ms().unwrap();
-        assert!((1_900..=2_100).contains(&left), "faltam {left} ms");
+        assert!((1_600..=1_800).contains(&left), "faltam {left} ms");
         // Voltou a falar: o silêncio zera.
         feed(&mut detector, &speech(&mut noise, 500));
         assert_eq!(detector.silence_ms(), 0);
@@ -369,7 +378,7 @@ mod tests {
         let (event, at) = feed(&mut detector, &clicks).unwrap();
         assert_eq!(event, VadEvent::Silence);
         // O mesmo instante de sem os cliques (ver `para_depois_do_silencio_configurado`).
-        assert!((4_180..=4_220).contains(&at), "parou em {at} ms");
+        assert!((3_880..=3_920).contains(&at), "parou em {at} ms");
     }
 
     #[test]
@@ -392,7 +401,22 @@ mod tests {
         let door = noise_with_bursts(&mut noise, 10_000, 2_000, 20_000, 60);
         let (event, at) = feed(&mut detector, &door).unwrap();
         assert_eq!(event, VadEvent::Silence);
-        assert!((4_180..=4_220).contains(&at), "parou em {at} ms");
+        assert!((3_880..=3_920).contains(&at), "parou em {at} ms");
+    }
+
+    #[test]
+    fn respiracao_depois_da_fala_nao_zera_o_silencio() {
+        let mut noise = Noise(12);
+        let mut detector = SilenceDetector::new(Some(Duration::from_secs(4)));
+        feed(&mut detector, &speech(&mut noise, 3_000));
+        // Uma respiração de 200 ms 1,5 s depois: ~14 dB acima do fundo (vira voz sustentada),
+        // mas ~30 dB abaixo da fala, como na nota real que levou 5,8 s para parar em vez de 4.
+        let mut quiet = noise.samples(10_000, 0.002);
+        let breath = noise.samples(200, 0.0097);
+        quiet[RATE * 3 / 2..RATE * 17 / 10].copy_from_slice(&breath);
+        let (event, at) = feed(&mut detector, &quiet).unwrap();
+        assert_eq!(event, VadEvent::Silence);
+        assert!((3_880..=3_920).contains(&at), "parou em {at} ms");
     }
 
     #[test]
@@ -451,8 +475,8 @@ mod tests {
         assert!(detector.heard_voice());
         let (event, at) = feed(&mut detector, &vec![0.0; RATE * 5]).unwrap();
         assert_eq!(event, VadEvent::Silence);
-        // A última rajada acaba em 2 s, junto com o trecho: 300 ms de hangover + 2 s.
-        assert!((2_280..=2_320).contains(&at), "parou em {at} ms");
+        // A última rajada acaba em 2 s, junto com o trecho: 2 s depois dela.
+        assert!((1_980..=2_020).contains(&at), "parou em {at} ms");
     }
 
     #[test]
