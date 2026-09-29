@@ -443,3 +443,35 @@ def test_cada_finalidade_tem_um_provider_so(team: dict[str, Any], services: Serv
     admin.patch(f"{url}/{ollama['id']}", json={"enabled": False})
     missing = owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={"agenda_type_id": ata["id"]})
     assert missing.json()["errors"][0]["field"] == "provider_id"
+
+
+def test_resumo_novo_move_o_updated_at_da_gravacao(team: dict[str, Any], services: Services):
+    """O `?since=` do desktop só vê um resumo refeito se a gravação e a transcrição avançam."""
+    owner: Api = team["member"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    one_on_one = _types(services, team["member_account"])["1:1"]
+    transcript_id = _transcribed(owner, services, agenda_type_id=one_on_one["id"])
+    recording_id = owner.get(f"/api/v1/transcripts/{transcript_id}").json()["recording_id"]
+
+    def stamp() -> str:
+        return owner.get(f"/api/v1/recordings/{recording_id}").json()["updated_at"]
+
+    def listed_since(since: str) -> list[str]:
+        items = owner.get("/api/v1/recordings", params={"since": since}).json()["items"]
+        return [item["id"] for item in items]
+
+    after_generation = stamp()
+    assert recording_id in listed_since(after_generation)
+
+    # Uma edição à mão cria a versão 2: a gravação reaparece a partir do carimbo anterior.
+    url = f"/api/v1/recordings/{recording_id}/summary"
+    assert owner.put(url, json={"content_md": "# Editado", "base_version": 1}).status_code == 200
+    after_edit = stamp()
+    assert after_edit > after_generation
+    transcripts = owner.get("/api/v1/transcripts", params={"since": after_generation}).json()["items"]
+    assert [item["id"] for item in transcripts] == [transcript_id]
+
+    # Uma geração que termina também move o carimbo.
+    assert owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={}).status_code == 202
+    run_cpu(services.settings)
+    assert stamp() > after_edit
