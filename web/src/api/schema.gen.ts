@@ -1154,6 +1154,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/base-chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Perguntar sobre a base de gravações
+         * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
+         *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
+         *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
+         *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429.
+         */
+        post: operations["askBaseChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/base-chat/{chat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chat_id: components["parameters"]["BaseChatId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma pergunta e a resposta
+         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
+         *     que o agente de fato consultou e em que a resposta se apoia.
+         */
+        get: operations["getBaseChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/people": {
         parameters: {
             query?: never;
@@ -2601,6 +2647,39 @@ export interface components {
                 message: string;
             } | null;
         };
+        BaseChatRequest: {
+            message: string;
+            /** @description As últimas mensagens da conversa, em ordem; o server não guarda o histórico. */
+            history?: components["schemas"]["BaseChatTurn"][];
+        };
+        BaseChatTurn: {
+            /** @enum {string} */
+            role: "user" | "assistant";
+            content: string;
+        };
+        BaseChatSource: {
+            /** Format: uuid */
+            recording_id: string;
+            title: string;
+        };
+        BaseChat: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description Com `status: done`: a resposta em Markdown. */
+            answer: string | null;
+            /** @description As gravações consultadas em que a resposta se apoia. */
+            sources: components["schemas"]["BaseChatSource"][];
+            /** @description Quantas consultas à base o agente fez. */
+            queries: number;
+            model: string | null;
+            /** @description Com `status: failed`; `no_provider` quando a finalidade `chat` não tem provider. */
+            error: {
+                code: string;
+                message: string;
+            } | null;
+        };
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
         /**
@@ -3362,6 +3441,7 @@ export interface components {
         AgendaTypeId: string;
         FieldId: string;
         PreviewId: string;
+        BaseChatId: string;
         PersonId: string;
         CollectionId: string;
         UserId: string;
@@ -5299,6 +5379,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Preview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    askBaseChat: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BaseChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Pergunta na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseChat"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getBaseChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chat_id: components["parameters"]["BaseChatId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O estado e, pronta, a resposta com as fontes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseChat"];
                 };
             };
             401: components["responses"]["Unauthorized"];

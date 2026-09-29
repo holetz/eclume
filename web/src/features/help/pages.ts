@@ -5,6 +5,7 @@ export const HELP_PAGES = {
   biblioteca: 'Biblioteca',
   gravacao: 'Gravação',
   busca: 'Busca',
+  perguntas: 'Perguntas',
   pessoas: 'Pessoas',
   pessoa: 'Pessoa',
   colecoes: 'Coleções',

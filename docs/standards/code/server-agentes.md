@@ -201,6 +201,28 @@ dito**.
   Ollama depende da fila da GPU que só o worker consulta, e uma chamada leva de segundos a
   minutos; o ciclo 202 + consulta já existe no cliente para o resumo.
 
+## Chat sobre a base
+
+Uma tela de perguntas sobre o conjunto das gravações do usuário (`POST /base-chat`, `GET
+/base-chat/{id}`), com o provider marcado para `chat`. O harness (`agents/base_chat.py`) usa o
+mesmo protocolo de texto do chat de ajuste: uma ação JSON por chamada, sobre `Provider.complete`.
+
+- **Ações:** `search_summaries` e `read_summary` (os resumos primeiro), `search_transcripts` e
+  `read_transcript` (só quando o resumo não basta; até 15 minutos por leitura) e `reply` (`message`
+  em Markdown e `sources`, os ids das gravações em que se apoia). Até 8 consultas; depois, a próxima
+  ação tem de ser `reply`, senão `chat_tool_limit`. Saída que não é ação válida recebe uma correção;
+  a segunda é `provider_bad_output`.
+- **Fontes verificadas pelo server:** `sources` só mantém ids que apareceram nos resultados devolvidos
+  ao agente, com o título do banco; um id inventado some.
+- **Dado, não instrução:** resumos, falas e resultados voltam em `<ferramenta>` delimitados, e o
+  `system` manda ignorar pedidos dentro deles. O agente não tem ferramenta de escrita.
+- **Busca sem migration:** os resumos são buscados por `websearch_to_tsquery('eclume_pt')` sobre título,
+  tags e a versão atual concluída, calculado na consulta; as falas usam a busca de `GET /search`.
+  Cada consulta abre uma transação do dono (`user_tx`), então a RLS vale como em qualquer rota.
+- **Assíncrono pelo Redis** (`base_chat.py`, como as pré-visualizações): `eclume:basechat:{id}`, 1 h,
+  até 2 em aberto por conta (429), job `base_chat` no worker CPU sem nova tentativa e com o teto de
+  5 minutos do chat de ajuste. O histórico da conversa é do cliente, que reenvia as últimas 10 mensagens.
+
 ## O job `summarize`
 
 Função arq do worker CPU com `timeout` de 30 min e `max_tries` alto: quem conta as tentativas é

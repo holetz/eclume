@@ -54,6 +54,11 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   vários, a operação declara um requisito `pat` por escopo e a rota usa `requires_any` (desde a
   2.4.0, `GET /agenda-types` aceita `summaries:read` ou `recordings:read`, para a credencial de
   dispositivo escolher o tipo ao parar). Sessão tem todas as permissões do usuário.
+- **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
+  mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
+  ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
+  conta tem até 2 perguntas em aberto (429 `rate_limited`). A resposta traz `sources`, só as
+  gravações que o agente consultou. É aditivo: nenhuma rota existente mudou.
 - **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
