@@ -44,7 +44,9 @@ tokio = { version = "1", features = ["time", "sync", "macros"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Portal `GlobalShortcuts` do Wayland (KDE, GNOME 48+): o `global-hotkey` só ouve janelas X11.
-ashpd = { version = "0.13", default-features = false, features = ["global_shortcuts", "tokio"] }
+# `async-io`, nunca `tokio`: com `tokio`, o `zbus::block_on` (chaveiro, notificações) passa a usar
+# um runtime Tokio próprio e dá panic quando chamado de uma thread Tokio (comando `async`).
+ashpd = { version = "0.13", default-features = false, features = ["global_shortcuts", "async-io"] }
 futures-util = { version = "0.3", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
