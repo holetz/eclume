@@ -177,6 +177,10 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   panic também, derrubando o app na próxima leitura das configurações. Na thread própria o
   `block_on` funciona, e um panic que sobrar vira erro (e o `PatStore` cai no arquivo). Quem só
   precisa da CA fixada (o updater) a lê da config, sem passar pelo chaveiro.
+- **Nenhuma dependência liga o zbus ao Tokio.** O `ashpd` (portal de atalhos no Wayland) entra
+  com a feature `async-io`, nunca `tokio`: com `tokio`, o `zbus::block_on` do chaveiro e das
+  notificações passa a criar um runtime Tokio próprio e dá o mesmo panic quando chamado de uma
+  thread Tokio. Uma dependência nova que use o zbus segue a mesma regra.
 - `config.json` ganha `account: {email, token_id, server_name}`. `Config::connection(tem
   credencial)` decide a janela: sem credencial, `first_run`; credencial sem `account`,
   `personal_token`; com as duas, `account`.
