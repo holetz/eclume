@@ -133,15 +133,19 @@ decisão do usuário, então `auto` nunca é padrão.
 ## Aviso de resumo pronto
 
 - Depois de cada volta do laço, no máximo a cada 60 s e com "Avisar quando o resumo ficar
-  pronto" ligado (`notify_summary`, padrão ligado), o app pergunta
-  `GET /api/v1/recordings/{remote_id}/summary` das gravações `synced` há menos de 24 h que ainda
+  pronto" ligado (`notify_summary`, padrão ligado), o app pergunta pelas gravações `synced` há
+  menos de 24 h que ainda
   não estão em `resumos-avisados.json` (no diretório de dados, cada id com o instante; um id
   sai depois de 7 dias). A credencial de dispositivo lê resumos desde o contrato 2.6.0
   ([server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#credencial-de-dispositivo)).
-- `Client::summary` traduz o `SummaryState`: o atual com `status: done` e `content_md` é
-  **pronto**; `409 transcript_missing`, uma geração em andamento ou nenhuma ainda é **esperar**;
-  `404` ou a geração que falhou é **desistir**. Pronto avisa e registra; desistir só registra;
-  uma falha de rede para a volta, e a próxima tenta de novo.
+- `Client::summary` lê primeiro a etapa `summary` do `pipeline` em `GET /recordings/{id}`:
+  `failed` ou `skipped` (sem provedor, sem tipo de pauta) ou `404` é **desistir**; `pending` ou
+  `active` é **esperar**, sem pedir o resumo. Só com ela `done` lê
+  `GET /recordings/{id}/summary`: o atual com `status: done` e `content_md` é **pronto**, e
+  `409 transcript_missing` ou uma geração nova em andamento é **esperar**. O `SummaryState` não
+  basta sozinho: o servidor só manda `pending` enquanto a geração está na fila ou rodando, e um
+  resumo pulado ou que falhou apareceria como "esperar" por 24 h. Pronto avisa e registra;
+  desistir só registra; uma falha de rede para a volta, e a próxima tenta de novo.
 - A notificação é "Resumo pronto · <título> · copie para compartilhar" (o título da fila, ou
   "Reunião"/"Nota"), com **Copiar** — o Markdown do resumo na área de transferência
   (`tauri-plugin-clipboard-manager`, só no Rust) — e **Abrir**, a gravação em
