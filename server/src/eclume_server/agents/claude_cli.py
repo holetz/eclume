@@ -27,6 +27,7 @@ from eclume_server.agents.base import (
     Completion,
     ProviderConfig,
     ProviderError,
+    with_context,
 )
 
 if TYPE_CHECKING:
@@ -140,7 +141,7 @@ class ClaudeCliProvider:
             self.env.pop(API_KEY_ENV if token else OAUTH_TOKEN_ENV, None)
             self.env[OAUTH_TOKEN_ENV if token else API_KEY_ENV] = config.api_key
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Roda `claude -p` e devolve o `result` do JSON."""
         if missing_credentials(self.env):
             raise ProviderError(
@@ -165,7 +166,9 @@ class ClaudeCliProvider:
                     PROVIDER_NOT_CONFIGURED, f"Não foi possível executar {self.claude_bin}: {exc}"
                 ) from exc
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(prompt.encode()), self.config.timeout_s)
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(with_context(context, prompt).encode()), self.config.timeout_s
+                )
             except TimeoutError as exc:
                 proc.kill()
                 await proc.wait()

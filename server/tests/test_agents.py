@@ -14,13 +14,14 @@ import pytest
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents import base as codes
 from eclume_server.agents.anthropic_api import AnthropicProvider
-from eclume_server.agents.base import Completion
+from eclume_server.agents.base import Completion, with_context
 from eclume_server.agents.claude_cli import ClaudeCliProvider, claude_command
 from eclume_server.agents.extraction import FIELDS_SYSTEM, FieldSpec, clean, extract_fields, merge, parse_object
 from eclume_server.agents.ollama import OllamaProvider
 from eclume_server.agents.openai_compat import OpenAICompatibleProvider
 from eclume_server.agents.prompting import (
     MAP_SYSTEM,
+    SHARED_SYSTEM,
     SYSTEM,
     TranscriptText,
     estimate_tokens,
@@ -335,6 +336,23 @@ def test_anthropic_em_streaming():
     assert "temperature" not in seen["body"]
 
 
+def test_anthropic_marca_o_contexto_para_o_cache_de_prompt():
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        bodies.append(json.loads(request.content))
+        return httpx2.Response(200, text=_sse("ok"), headers={"content-type": "text/event-stream"})
+
+    provider = _anthropic(handler)
+    run(provider.complete("sistema", "tarefa", context="transcrição"))
+    run(provider.complete("sistema", "tarefa"))
+    assert bodies[0]["messages"][0]["content"] == [
+        {"type": "text", "text": "transcrição", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "tarefa"},
+    ]
+    assert bodies[1]["messages"][0]["content"] == "tarefa"
+
+
 def test_anthropic_recusa_e_erros():
     refused = _anthropic(
         lambda _: httpx2.Response(200, text=_sse("", "refusal"), headers={"content-type": "text/event-stream"})
@@ -367,9 +385,9 @@ class FakeProvider:
         )
         self.calls: list[tuple[str, str]] = []
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Registra a chamada."""
-        self.calls.append((system, prompt))
+        self.calls.append((system, with_context(context, prompt)))
         return Completion(text=f"notas {len(self.calls)}", model="fake")
 
 
@@ -400,8 +418,10 @@ def test_transcricao_curta_em_uma_chamada():
     assert completion.text == "notas 1"
     assert len(provider.calls) == 1
     system, prompt = provider.calls[0]
-    assert system == SYSTEM
+    assert system == SHARED_SYSTEM
+    assert SYSTEM in prompt
     assert "Faça uma ata." in prompt
+    assert prompt.index("<transcricao>") < prompt.index("Faça uma ata.")
     assert "<transcricao>" in prompt
     assert "[00:00:07] Mariana" in prompt
 
@@ -415,7 +435,7 @@ def test_transcricao_longa_por_map_reduce():
     assert len(maps) >= 3
     # O reduce final aplica o template sobre as notas, em ordem.
     system, prompt = provider.calls[-1]
-    assert system == SYSTEM
+    assert system == SHARED_SYSTEM
     assert "Faça uma ata." in prompt
     assert prompt.index("### Parte 1 ") < prompt.index("### Parte 2 ")
     # Nenhuma chamada passou do orçamento de entrada.
@@ -448,9 +468,9 @@ class ScriptedProvider(FakeProvider):
         super().__init__(context_window)
         self.replies = replies
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Registra e responde o próximo texto."""
-        self.calls.append((system, prompt))
+        self.calls.append((system, with_context(context, prompt)))
         return Completion(text=self.replies.pop(0), model="fake")
 
 
@@ -484,13 +504,33 @@ def test_mescla_das_secoes():
     assert merge(TITULO, [None, None]) is None
 
 
+def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
+    seen: list[tuple[str, str, str]] = []
+
+    class Spy(FakeProvider):
+        async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
+            seen.append((system, prompt, context))
+            return Completion(text='{"titulo": "Kickoff"}', model="fake")
+
+    provider = Spy(context_window=100_000)
+    transcript = _transcript(10)
+    run(extract_fields(provider, [TITULO], [], transcript))
+    run(summarize(provider, transcript, "Faça uma ata."))
+    (fields_call, summary_call) = seen
+    assert fields_call[0] == summary_call[0] == SHARED_SYSTEM
+    assert fields_call[2] == summary_call[2] != ""
+    assert transcript.text() in fields_call[2]
+    assert "<transcricao>" not in fields_call[1]
+
+
 def test_extracao_curta_numa_chamada_e_longa_por_secoes():
     provider = ScriptedProvider(100_000, ['{"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}'])
     values, completion = run(extract_fields(provider, [TITULO, CLIENTE, PENDENCIAS], ["interno"], _transcript(10)))
     assert values == {"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}
     assert completion.model == "fake"
     ((system, prompt),) = provider.calls
-    assert system == FIELDS_SYSTEM
+    assert system == SHARED_SYSTEM
+    assert FIELDS_SYSTEM in prompt
     assert "## Tags que o usuário já usa\n\ninterno" in prompt
     assert '"cliente": "uma das opções" ou null' in prompt
 

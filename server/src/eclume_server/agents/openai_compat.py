@@ -18,6 +18,7 @@ from eclume_server.agents.base import (
     Completion,
     ProviderConfig,
     ProviderError,
+    with_context,
 )
 
 _UNAUTHORIZED = {401, 403}
@@ -77,13 +78,16 @@ class OpenAICompatibleProvider:
         self.config = config
         self.transport = transport
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Uma conversa de duas mensagens (sistema e usuário)."""
         if not self.config.base_url:
             raise ProviderError(PROVIDER_NOT_CONFIGURED, "O provider openai-compatible precisa de base_url.")
         body: dict[str, Any] = {
             "model": self.config.model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": with_context(context, prompt)},
+            ],
             "max_tokens": self.config.max_output_tokens,
             "stream": False,
         }
