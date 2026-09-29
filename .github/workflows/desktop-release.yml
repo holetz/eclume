@@ -44,6 +44,9 @@ jobs:
       matriz: ${{ steps.plano.outputs.matriz }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
       - id: plano
         env:
           EVENTO: ${{ github.event_name }}
@@ -156,6 +159,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
       - uses: actions/download-artifact@v8
         with:
           pattern: desktop-*
