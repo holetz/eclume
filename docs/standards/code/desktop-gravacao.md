@@ -82,7 +82,7 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 | Nível | RMS do quadro em dBFS |
 | Piso de ruído | o percentil 20 dos níveis dos últimos 3 s (150 quadros, só os anteriores ao quadro); um ventilador ligado no meio vira piso em cerca de 1 s. Silêncio digital (abaixo de −90 dBFS) entra na janela mas nunca vira piso: quando o percentil cai nele, valem só os limites absolutos, para as pausas zeradas de um supressor de ruído não levarem o piso até a própria fala |
 | Voz | entra com `nível > max(piso + 12 dB, −55 dBFS)` e se mantém com `nível > max(piso + 8 dB, −58 dBFS)` (histerese) |
-| Voz sustentada | o quadro atual é voz e pelo menos 5 dos últimos 10 também (100 ms em 200 ms): só ela zera o silêncio e conta como voz ouvida. Um clique, uma tecla ou uma porta batendo não reiniciam a contagem |
+| Voz sustentada | o quadro atual é voz, e pelo menos 5 dos últimos 10, o atual incluído, também (100 ms em 200 ms): só ela zera o silêncio e conta como voz ouvida. Um clique, uma tecla ou uma porta batendo não reiniciam a contagem |
 | Gate da fala | depois da primeira voz sustentada, só zera o silêncio o quadro a no máximo 25 dB abaixo do pico recente da fala (o pico cai 2,5 dB/s). Uma respiração, um "hum" distante ou uma cadeira ficam de fora: numa nota real, uma respiração 30 dB abaixo da fala segurava a parada por 1,8 s a mais |
 | `Silence` | o silêncio, contado desde o último quadro de voz sustentada, passou do configurado (2, 4 ou 8 s; padrão 4 s), e só depois de ter havido voz sustentada. A contagem regressiva da janela só aparece depois de 300 ms sem voz, para não piscar entre as sílabas |
 | `NoSpeech` | nenhuma voz nos primeiros 10 s |
