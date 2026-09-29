@@ -1,12 +1,14 @@
-import { useId, useState, type SyntheticEvent } from 'react'
-import { Link, Outlet, useLocation } from 'react-router'
+import { useId } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { CircleHelp, LogOut, Settings } from 'lucide-react'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
 import { ImportProvider } from '../features/import/ImportProvider'
+import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
-import { isInMoreSection, isItemActive, navGroups, type NavGroupEntry } from './nav'
+import { MenuButton, type MenuEntry } from './MenuButton'
+import { isItemActive, navGroups, type NavGroupEntry } from './nav'
 import { ShellFrame } from './ShellFrame'
-import { applyThemePreference, readThemePreference, type ThemePreference } from './theme'
 
 export interface ShellUser {
   name: string
@@ -18,12 +20,6 @@ interface AppShellProps {
   onLogout: () => void
   loggingOut?: boolean
 }
-
-const THEMES: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'Sistema' },
-  { value: 'light', label: 'Claro' },
-  { value: 'dark', label: 'Escuro' },
-]
 
 function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
   const baseId = useId()
@@ -47,71 +43,73 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
   ))
 }
 
-export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) {
-  const [theme, setTheme] = useState<ThemePreference>(readThemePreference)
+/**
+ * A conta no cabeçalho: nome e e-mail, e os botões de ajuda, de configurações e de sair. Ajuda e
+ * configurações abrem menus com os itens da seção `header` do nav; escolher um item navega sem mexer
+ * na barra lateral.
+ */
+function Account({ user, onLogout, loggingOut }: AppShellProps) {
+  const help = useHelp()
+  const navigate = useNavigate()
   const { pathname } = useLocation()
-  // "Configurações e ajuda" abre sozinha numa rota dela; fora isso, guarda a escolha da pessoa.
-  const [moreOpen, setMoreOpen] = useState(false)
-  const [moreClosedAt, setMoreClosedAt] = useState<string | null>(null)
-  const inMore = isInMoreSection(pathname)
-  const moreShown = moreOpen || (inMore && moreClosedAt !== pathname)
-  const themeId = useId()
-  const { main, more } = navGroups()
+  const { header } = navGroups()
+  const itemsOf = (group: string): MenuEntry[] =>
+    (header.find((entry) => entry.group === group)?.items ?? []).map((item) => ({
+      key: item.to,
+      label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
+      onSelect: () => navigate(item.to),
+    }))
+  const helpItems: MenuEntry[] = [
+    { key: 'pagina', label: 'Ajuda desta página', kbd: '?', onSelect: () => help?.openHelp() },
+    ...itemsOf('Ajuda'),
+  ]
 
-  function changeTheme(value: ThemePreference) {
-    setTheme(value)
-    applyThemePreference(value)
-  }
+  return (
+    <div className={styles.account}>
+      <div className={styles.user}>
+        <strong>{user.name}</strong>
+        <span className="text-muted">{user.email}</span>
+      </div>
+      <div className={styles.actions}>
+        <MenuButton className="btn btn-secondary btn-icon" buttonLabel="Ajuda" label="Ajuda" items={helpItems}>
+          <CircleHelp size={16} aria-hidden="true" />
+        </MenuButton>
+        <MenuButton
+          className="btn btn-secondary btn-icon"
+          buttonLabel="Configurações"
+          label="Minhas configurações"
+          items={itemsOf('Minhas configurações')}
+        >
+          <Settings size={16} aria-hidden="true" />
+        </MenuButton>
+        <span className={styles.bar} aria-hidden="true" />
+        <button
+          type="button"
+          className="btn btn-secondary btn-icon"
+          aria-label={loggingOut ? 'Saindo…' : 'Sair'}
+          title="Sair"
+          onClick={onLogout}
+          disabled={loggingOut}
+        >
+          <LogOut size={16} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
-  function toggleMore(event: SyntheticEvent<HTMLDetailsElement>) {
-    const open = event.currentTarget.open
-    if (open === moreShown) return
-    setMoreOpen(open)
-    setMoreClosedAt(open ? null : pathname)
-  }
+export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) {
+  const { main } = navGroups()
 
   return (
     <HelpProvider>
       <ShellFrame
         brand={<Brand to="/" />}
+        account={<Account user={user} onLogout={onLogout} loggingOut={loggingOut} />}
         sidebar={
-          <>
-            <nav aria-label="Principal" className={styles.nav}>
-              <NavGroups groups={main} />
-              {more.length > 0 && (
-                <details className="nav-more" open={moreShown} onToggle={toggleMore}>
-                  <summary>Configurações e ajuda</summary>
-                  <NavGroups groups={more} />
-                </details>
-              )}
-            </nav>
-            <div className={`sidebar-footer ${styles.footer}`}>
-              <div className={styles.user}>
-                <strong>{user.name}</strong>
-                <span className="text-muted">{user.email}</span>
-              </div>
-              <div className={styles.theme}>
-                <span id={themeId}>Tema</span>
-                <div className={`seg ${styles.seg}`} role="radiogroup" aria-labelledby={themeId}>
-                  {THEMES.map((option) => (
-                    <label key={option.value} className="seg-opt">
-                      <input
-                        type="radio"
-                        name={themeId}
-                        value={option.value}
-                        checked={theme === option.value}
-                        onChange={() => changeTheme(option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <button type="button" className="btn btn-secondary" onClick={onLogout} disabled={loggingOut}>
-                {loggingOut ? 'Saindo…' : 'Sair'}
-              </button>
-            </div>
-          </>
+          <nav aria-label="Principal" className={styles.nav}>
+            <NavGroups groups={main} />
+          </nav>
         }
       >
         <ImportProvider>

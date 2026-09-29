@@ -4,6 +4,10 @@
 export const STORAGE_KEYS = {
   filtersCollapsed: 'eclume-biblioteca-filtros-recolhidos',
   lastLibrary: 'eclume-biblioteca-ultima',
+  libraryOpening: 'eclume-biblioteca-abertura',
+  workHours: 'eclume-expediente',
+  density: 'eclume-densidade',
+  motion: 'eclume-movimento',
 } as const
 
 export function readStored(key: string): string | null {

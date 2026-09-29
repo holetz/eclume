@@ -8,7 +8,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   align-items: start;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--shell-header, 0px));
 }
 
 .content {
@@ -89,11 +89,11 @@
   align-items: start;
 }
 
-/* O chat acompanha a rolagem na altura da tela. */
+/* O chat acompanha a rolagem na altura da tela, abaixo do cabeçalho do shell. */
 .chat:global(.chat) {
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--shell-header, 0px);
+  height: calc(100vh - var(--shell-header, 0px));
 }
 
 @media (max-width: 72rem) {

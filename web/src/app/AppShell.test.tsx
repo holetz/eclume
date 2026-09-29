@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
-import { isInMoreSection, isItemActive, NAV_ITEMS, navGroups } from './nav'
+import { isItemActive, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
 import { createQueryClient } from './queryClient'
@@ -29,14 +29,12 @@ function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
   return onLogout
 }
 
-const more = () => screen.getByText('Configurações e ajuda').closest('details')!
-
 describe('navegação', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
   const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
 
-  it('agrupa em Gravações e Organizar, e o resto em Configurações e ajuda', () => {
-    const { main, more } = navGroups()
+  it('agrupa em Gravações e Organizar, e o resto nos menus do cabeçalho', () => {
+    const { main, header: more } = navGroups()
     expect(titles(main)).toEqual(['Gravações', 'Organizar'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem.
@@ -44,12 +42,12 @@ describe('navegação', () => {
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
     expect(labels(main).slice(0, 5)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Campos e regras'])
-    expect(labels(more)).toEqual(enabled('more'))
-    expect(labels(more)).toEqual(expect.arrayContaining(['Tokens de acesso', 'App desktop', 'Central de ajuda']))
+    expect(labels(more)).toEqual(enabled('header'))
+    expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
 
   it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
-    const { main, more } = navGroups()
+    const { main, header: more } = navGroups()
     const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos e regras' }))
     expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos e regras')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
@@ -57,12 +55,13 @@ describe('navegação', () => {
 
   it('liga as áreas futuras nas rotas do mapa de telas', () => {
     const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
-    const { main, more } = navGroups(all)
+    const { main, header: more } = navGroups(all)
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
     expect(routes).toMatchObject({
       'Campos e regras': '/config/campos',
       'Tipos de agenda': '/config/agendas',
+      'Ambiente': '/config/ambiente',
       'Conexão MCP': '/config/mcp',
       'App móvel': '/app-movel',
       'Central de ajuda': '/ajuda',
@@ -79,13 +78,6 @@ describe('navegação', () => {
     expect(isItemActive(people, '/pessoasx')).toBe(false)
   })
 
-  it('reconhece as rotas da seção recolhível', () => {
-    expect(isInMoreSection('/tokens')).toBe(true)
-    expect(isInMoreSection('/app-desktop')).toBe(true)
-    expect(isInMoreSection('/ajuda/criar-token')).toBe(true)
-    expect(isInMoreSection('/pessoas')).toBe(false)
-    expect(isInMoreSection('/')).toBe(false)
-  })
 })
 
 describe('AppShell', () => {
@@ -99,8 +91,9 @@ describe('AppShell', () => {
       .getAllByRole('group')
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
-    expect(titles).toEqual(['Gravações', 'Organizar', 'Minhas configurações', 'Ajuda'])
-    expect(within(nav).getByText('Configurações e ajuda').tagName).toBe('SUMMARY')
+    // Configurações e ajuda saíram da barra lateral: moram nos menus do cabeçalho.
+    expect(titles).toEqual(['Gravações', 'Organizar'])
+    expect(within(nav).queryByText('Configurações e ajuda')).not.toBeInTheDocument()
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
       expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
     }
@@ -112,16 +105,18 @@ describe('AppShell', () => {
     expect(screen.getByRole('group', { name: 'Gravações' })).toBeInTheDocument()
   })
 
-  it('marca a página corrente, tem skip link, mostra o usuário e sai', async () => {
-    const onLogout = renderShell()
+  it('marca a página corrente, tem skip link, mostra o usuário no cabeçalho e sai', async () => {
+    const onLogout = renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
-    expect(within(nav).getByRole('link', { name: 'Tokens de acesso' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Pessoas' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current')
     expect(within(nav).queryByRole('link', { name: 'Importar arquivo' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pular para o conteúdo' })).toHaveAttribute('href', '#conteudo')
-    expect(screen.getByText('Mariana Couto')).toBeInTheDocument()
-    expect(screen.getByText('mariana@exemplo.org')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Sair' }))
+    const header = screen.getByRole('banner')
+    expect(within(header).getByRole('link', { name: 'eclume' })).toHaveAttribute('href', '/')
+    expect(within(header).getByText('Mariana Couto')).toBeInTheDocument()
+    expect(within(header).getByText('mariana@exemplo.org')).toBeInTheDocument()
+    await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
     expect(onLogout).toHaveBeenCalled()
   })
 
@@ -131,28 +126,33 @@ describe('AppShell', () => {
     expect(within(nav).getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('abre "Configurações e ajuda" sozinha quando a rota está nela', () => {
-    renderShell(member, vi.fn(), '/tokens')
-    expect(more()).toHaveAttribute('open')
-  })
-
-  it('deixa "Configurações e ajuda" fechada fora dela e abre pelo resumo', async () => {
+  it('a engrenagem abre Minhas configurações e navega sem mexer na barra lateral', async () => {
     renderShell(member, vi.fn(), '/pessoas')
-    expect(more()).not.toHaveAttribute('open')
-    await userEvent.click(screen.getByText('Configurações e ajuda'))
-    expect(more()).toHaveAttribute('open')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Configurações' }))
+    const menu = screen.getByRole('menu', { name: 'Minhas configurações' })
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Ambiente',
+      'Conexão MCP',
+      'Tokens de acesso',
+      'App desktop',
+      'App móvel',
+    ])
+    await user.click(within(menu).getByRole('menuitem', { name: 'Tokens de acesso' }))
+    expect(await screen.findByRole('heading', { name: 'Tokens' })).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    expect(within(nav).queryByRole('link', { name: 'Tokens de acesso' })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
-  it('troca o tema pelo controle segmentado e lembra a escolha', async () => {
+  it('o botão de ajuda abre a ajuda da página ou leva à central', async () => {
     renderShell()
-    const theme = screen.getByRole('radiogroup', { name: 'Tema' })
-    await userEvent.click(within(theme).getByRole('radio', { name: 'Escuro' }))
-    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
-    expect(localStorage.getItem('eclume-tema')).toBe('dark')
-    await userEvent.click(within(theme).getByRole('radio', { name: 'Sistema' }))
-    expect(within(theme).getByRole('radio', { name: 'Sistema' })).toBeChecked()
-    expect(document.documentElement).toHaveAttribute('data-theme', 'light')
-    expect(localStorage.getItem('eclume-tema')).toBeNull()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Ajuda' }))
+    const menu = screen.getByRole('menu', { name: 'Ajuda' })
+    expect(within(menu).getByRole('menuitem', { name: /Central de ajuda/ })).toBeInTheDocument()
+    await user.click(within(menu).getByRole('menuitem', { name: /Ajuda desta página/ }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   it('abre e fecha o menu compacto', async () => {

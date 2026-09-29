@@ -15,6 +15,7 @@ const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'),
 const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
+const EnvironmentPage = named(() => import('../features/environment/EnvironmentPage'), 'EnvironmentPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
 const FieldsPage = named(() => import('../features/organize/FieldsPage'), 'FieldsPage')
 const HelpCenterPage = named(() => import('../features/help/HelpCenterPage'), 'HelpCenterPage')
@@ -58,6 +59,7 @@ export function AppRoutes() {
         <Route path="/config/campos" element={page(FieldsPage)} />
         <Route path="/config/agendas" element={page(AgendaTypesPage)} />
         <Route path="/config/mcp" element={page(McpPage)} />
+        <Route path="/config/ambiente" element={page(EnvironmentPage)} />
         <Route path="/tokens" element={page(TokensPage)} />
         <Route path="/app-desktop" element={page(DesktopPage)} />
         <Route path="/app-movel" element={page(MobilePage)} />

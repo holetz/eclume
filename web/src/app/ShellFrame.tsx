@@ -4,18 +4,24 @@ import { useLocation } from 'react-router'
 import styles from './ShellFrame.module.css'
 
 interface ShellFrameProps {
-  /** A marca, no topo da barra lateral e, em tela estreita, na barra superior. */
+  /** A marca: no cabeçalho, ou no topo da barra lateral quando não há cabeçalho. */
   brand: ReactNode
   /** O resto da barra lateral: navegação e rodapé. */
   sidebar: ReactNode
+  /**
+   * A conta, à direita de um cabeçalho estreito em qualquer largura (o app do usuário). Sem ela
+   * (o painel admin), a marca fica na barra lateral e o cabeçalho só aparece em tela estreita.
+   */
+  account?: ReactNode
   children: ReactNode
 }
 
 /**
  * A moldura `.shell` do Design System, comum ao app e ao painel admin: barra lateral fixa e, abaixo
- * de 56rem, a barra superior com a marca e o botão Menu, que abre a barra lateral por cima.
+ * de 56rem, o botão Menu no cabeçalho, que abre a barra lateral por cima. A altura do cabeçalho fixo
+ * fica em `--shell-header`, para as telas que grudam elementos no topo.
  */
-export function ShellFrame({ brand, sidebar, children }: ShellFrameProps) {
+export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProps) {
   const { pathname } = useLocation()
   // O menu compacto vale para a rota em que foi aberto: navegar o fecha.
   const [menuOpenAt, setMenuOpenAt] = useState<string | null>(null)
@@ -23,15 +29,16 @@ export function ShellFrame({ brand, sidebar, children }: ShellFrameProps) {
   const navId = useId()
 
   return (
-    <div className={`shell ${styles.shell}`}>
+    <div className={`shell ${styles.shell}`} data-header={account ? '' : undefined}>
       <a className="skip-link" href="#conteudo">
         Pular para o conteúdo
       </a>
       <header className={styles.topbar}>
         {brand}
+        {account && <div className={styles.account}>{account}</div>}
         <button
           type="button"
-          className="btn btn-secondary"
+          className={`btn btn-secondary ${styles.menuButton}`}
           aria-expanded={menuOpen}
           aria-controls={navId}
           onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
@@ -41,7 +48,7 @@ export function ShellFrame({ brand, sidebar, children }: ShellFrameProps) {
         </button>
       </header>
       <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
-        <div className={styles.brandSide}>{brand}</div>
+        {!account && <div className={styles.brandSide}>{brand}</div>}
         {sidebar}
       </aside>
       <main id="conteudo" tabIndex={-1} className={`main ${styles.main}`}>

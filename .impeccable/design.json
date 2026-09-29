@@ -1,0 +1,498 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-28T22:08:27Z",
+  "title": "Design System: eclume",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "canonical": "#F7F5F2",
+        "displayName": "Background",
+        "tonalRamp": [
+          "#4A4A49",
+          "#7C7A79",
+          "#ADACA9",
+          "#DEDCDA",
+          "#F8F6F3",
+          "#F9F8F6",
+          "#FBFAF8",
+          "#FEFEFE"
+        ]
+      },
+      "surface": {
+        "canonical": "#ECE8E2",
+        "displayName": "Surface",
+        "tonalRamp": [
+          "#474644",
+          "#767471",
+          "#A5A29E",
+          "#D4D1CB",
+          "#EEEAE5",
+          "#F2EFEB",
+          "#F6F4F0",
+          "#FDFDFC"
+        ]
+      },
+      "on-surface": {
+        "canonical": "#262420",
+        "displayName": "On Surface",
+        "tonalRamp": [
+          "#0B0B0A",
+          "#131210",
+          "#1B1916",
+          "#22201D",
+          "#3C3A36",
+          "#676663",
+          "#929290",
+          "#E9E9E9"
+        ]
+      },
+      "text-muted": {
+        "canonical": "#625B52",
+        "displayName": "Text Muted",
+        "tonalRamp": [
+          "#1D1B19",
+          "#312E29",
+          "#454039",
+          "#58524A",
+          "#726B63",
+          "#918C86",
+          "#B0ADA8",
+          "#EFEFEE"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Nogueira",
+        "tonalRamp": [
+          "#F4EFE8",
+          "#E9E1D4",
+          "#D6C8B5",
+          "#B9A48A",
+          "#94795C",
+          "#6F5A44",
+          "#5E4C39",
+          "#4D3E2F",
+          "#3A2F24",
+          "#251E17"
+        ],
+        "canonical": "#6F5A44"
+      },
+      "on-primary": {
+        "canonical": "#F7F5F2",
+        "displayName": "On Primary",
+        "tonalRamp": [
+          "#4A4A49",
+          "#7C7A79",
+          "#ADACA9",
+          "#DEDCDA",
+          "#F8F6F3",
+          "#F9F8F6",
+          "#FBFAF8",
+          "#FEFEFE"
+        ]
+      },
+      "accent-ink": {
+        "canonical": "#5E4C39",
+        "displayName": "Accent Ink",
+        "tonalRamp": [
+          "#1C1711",
+          "#2F261C",
+          "#423528",
+          "#554433",
+          "#6E5E4D",
+          "#8E8274",
+          "#AEA69C",
+          "#EFEDEB"
+        ]
+      },
+      "recording": {
+        "role": "accent",
+        "displayName": "Terracota",
+        "tonalRamp": [
+          "#FBEFEB",
+          "#F5D9D1",
+          "#EBB7A9",
+          "#E0735A",
+          "#C9533A",
+          "#B8432C",
+          "#A33A26",
+          "#74291B",
+          "#461A12"
+        ],
+        "canonical": "#B8432C"
+      },
+      "neutral": {
+        "role": "neutral",
+        "displayName": "Linho",
+        "tonalRamp": [
+          "#F7F5F2",
+          "#ECE8E2",
+          "#D8D3CB",
+          "#BAB3A9",
+          "#9A9288",
+          "#7C746A",
+          "#625B52",
+          "#45403A",
+          "#2D2A26"
+        ],
+        "canonical": "#9A9288"
+      },
+      "success": {
+        "canonical": "#56663A",
+        "displayName": "Success",
+        "tonalRamp": [
+          "#1A1F11",
+          "#2B331D",
+          "#3C4729",
+          "#4D5C34",
+          "#67754E",
+          "#899475",
+          "#AAB29C",
+          "#EEF0EB"
+        ]
+      },
+      "warning": {
+        "canonical": "#936419",
+        "displayName": "Warning",
+        "tonalRamp": [
+          "#2C1E08",
+          "#4A320C",
+          "#674612",
+          "#845A16",
+          "#9E7430",
+          "#B3925E",
+          "#C9B28C",
+          "#F4F0E8"
+        ]
+      },
+      "danger": {
+        "canonical": "#A33A26",
+        "displayName": "Danger",
+        "tonalRamp": [
+          "#31110B",
+          "#521D13",
+          "#72291B",
+          "#933422",
+          "#AC4E3C",
+          "#BF7567",
+          "#D19C92",
+          "#F6EBE9"
+        ]
+      },
+      "highlight": {
+        "canonical": "#E9E1D4",
+        "displayName": "Highlight",
+        "tonalRamp": [
+          "#464440",
+          "#74706A",
+          "#A39E94",
+          "#D2CABF",
+          "#EBE4D8",
+          "#F0EAE1",
+          "#F4F0EA",
+          "#FDFCFB"
+        ]
+      },
+      "divider": {
+        "canonical": "rgb(38 36 32 / 0.32)",
+        "displayName": "Divider",
+        "tonalRamp": [
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)",
+          "rgb(38 36 32 / 0.32)"
+        ]
+      },
+      "dark-background": {
+        "canonical": "#1E1C19",
+        "displayName": "Dark Background",
+        "tonalRamp": [
+          "#090808",
+          "#0F0E0C",
+          "#151412",
+          "#1B1916",
+          "#353330",
+          "#62605E",
+          "#8E8E8C",
+          "#E8E8E8"
+        ]
+      },
+      "dark-surface": {
+        "canonical": "#292622",
+        "displayName": "Dark Surface",
+        "tonalRamp": [
+          "#0C0B0A",
+          "#141311",
+          "#1D1B18",
+          "#25221F",
+          "#3E3C38",
+          "#696764",
+          "#949290",
+          "#EAE9E9"
+        ]
+      },
+      "dark-on-surface": {
+        "canonical": "#ECE8E2",
+        "displayName": "Dark On Surface",
+        "tonalRamp": [
+          "#474644",
+          "#767471",
+          "#A5A29E",
+          "#D4D1CB",
+          "#EEEAE5",
+          "#F2EFEB",
+          "#F6F4F0",
+          "#FDFDFC"
+        ]
+      },
+      "dark-text-muted": {
+        "canonical": "#B3ACA2",
+        "displayName": "Dark Text Muted",
+        "tonalRamp": [
+          "#363431",
+          "#5A5651",
+          "#7D7871",
+          "#A19B92",
+          "#BBB4AB",
+          "#CAC5BE",
+          "#D9D6D0",
+          "#F7F7F6"
+        ]
+      },
+      "dark-primary": {
+        "canonical": "#B9A48A",
+        "displayName": "Dark Primary",
+        "tonalRamp": [
+          "#383129",
+          "#5C5245",
+          "#827361",
+          "#A6947C",
+          "#C0AD96",
+          "#CEBFAD",
+          "#DCD2C4",
+          "#F8F6F3"
+        ]
+      },
+      "dark-recording": {
+        "canonical": "#E0735A",
+        "displayName": "Dark Recording",
+        "tonalRamp": [
+          "#43221B",
+          "#703A2D",
+          "#9D503F",
+          "#CA6851",
+          "#E3816B",
+          "#E99D8C",
+          "#F0B9AC",
+          "#FCF1EE"
+        ]
+      },
+      "dark-danger": {
+        "canonical": "#F08A73",
+        "displayName": "Dark Danger",
+        "tonalRamp": [
+          "#482922",
+          "#78453A",
+          "#A86150",
+          "#D87C68",
+          "#F29681",
+          "#F4AD9D",
+          "#F8C4B9",
+          "#FEF3F1"
+        ]
+      },
+      "secondary": {
+        "canonical": "#E9E1D4",
+        "displayName": "Secondary",
+        "tonalRamp": [
+          "#464440",
+          "#74706A",
+          "#A39E94",
+          "#D2CABF",
+          "#EBE4D8",
+          "#F0EAE1",
+          "#F4F0EA",
+          "#FDFCFB"
+        ]
+      },
+      "on-secondary": {
+        "canonical": "#3A2F24",
+        "displayName": "On Secondary",
+        "tonalRamp": [
+          "#110E0B",
+          "#1D1812",
+          "#292119",
+          "#342A20",
+          "#4E443A",
+          "#756D66",
+          "#9C9792",
+          "#EBEAE9"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Título da página, um por tela."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "h2."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h3 e títulos de seção."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texto corrido e transcrição."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Campos, rádios e listas."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Botões."
+      },
+      "nav": {
+        "displayName": "Nav",
+        "purpose": "Itens de navegação."
+      },
+      "kicker": {
+        "displayName": "Kicker",
+        "purpose": "Kicker e badge em caixa alta."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Tempos e números tabulares."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sm",
+        "value": "0px 1px 2px 0px rgb(45 42 38 / 0.14)",
+        "purpose": "Elevação baixa."
+      },
+      {
+        "name": "md",
+        "value": "0px 3px 10px 0px rgb(45 42 38 / 0.16)",
+        "purpose": "Menus e popovers."
+      },
+      {
+        "name": "lg",
+        "value": "0px 12px 32px 0px rgb(45 42 38 / 0.22)",
+        "purpose": "Diálogos e gaveta."
+      },
+      {
+        "name": "ambient-low",
+        "value": "0px 3px 10px 0px rgb(45 42 38 / 0.16)",
+        "purpose": "Separação difusa das mídias: a sombra média."
+      }
+    ],
+    "motion": [
+      {
+        "name": "standard",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms",
+        "purpose": "Transição de estado sem mola; o web não anima além de indicadores de progresso."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single high-salience action.",
+      "html": "<button class=\"ds-button\">Continue</button>",
+      "css": ".ds-button { background: #6F5A44; color: #F7F5F2; font: inherit; font-weight: 800; padding: 8px 16px; border: 0; border-radius: 0px; cursor: pointer; transition: 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms; } .ds-button:hover { background: #E9E1D4; color: #3A2F24; } .ds-button:active { transform: translateY(1px); } .ds-button:focus-visible { outline: 1px solid #6F5A44; outline-offset: 4px; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A quiet text field with an explicit label.",
+      "html": "<label class=\"ds-field\">Name<input value=\"Ada\"></label>",
+      "css": ".ds-field { display: grid; gap: 4px; color: #262420; } .ds-field input { padding: 8px 12px; background: #ECE8E2; color: inherit; border: 1px solid currentColor; border-radius: 0px; transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms; } .ds-field input:hover { border-color: #6F5A44; } .ds-field input:focus-visible { outline: 1px solid #6F5A44; outline-offset: 4px; }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "A compact landmark with one active destination.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Primary\"><a aria-current=\"page\" href=\"#\">Overview</a><a href=\"#\">Evidence</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 16px; padding: 12px 16px; background: #ECE8E2; } .ds-nav a { color: #262420; transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms; } .ds-nav a:hover, .ds-nav [aria-current] { color: #6F5A44; } .ds-nav a:focus-visible { outline: 1px solid #6F5A44; outline-offset: 4px; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Short categorical metadata, never a primary action.",
+      "html": "<span class=\"ds-chip\">Verified</span>",
+      "css": ".ds-chip { display: inline-flex; padding: 4px 8px; color: #3A2F24; background: #E9E1D4; border-radius: 0px; font-weight: 800; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A grouped unit with restrained depth.",
+      "html": "<article class=\"ds-card\"><h3>Finding</h3><p>Evidence and consequence stay together.</p></article>",
+      "css": ".ds-card { padding: 16px; color: #262420; background: #ECE8E2; border-radius: 0px; box-shadow: 0px 3px 10px 0px rgb(45 42 38 / 0.16); }"
+    },
+    {
+      "name": "Eyebrow",
+      "kind": "custom",
+      "refersTo": "eyebrow",
+      "description": "Editorial pre-heading for context, not decoration.",
+      "html": "<p class=\"ds-eyebrow\">Section 01</p>",
+      "css": ".ds-eyebrow { margin: 0 0 8px; color: #6F5A44; font-size: 14px; font-weight: 800; letter-spacing: 0px; text-transform: uppercase; }"
+    },
+    {
+      "name": "Rule",
+      "kind": "custom",
+      "refersTo": "rule",
+      "description": "A single structural thread between editorial blocks.",
+      "html": "<hr class=\"ds-rule\">",
+      "css": ".ds-rule { width: 100%; border: 0; border-top: 2px solid #6F5A44; }"
+    },
+    {
+      "name": "Frame",
+      "kind": "custom",
+      "refersTo": "frame",
+      "description": "The bounded editorial canvas used by documents and decks.",
+      "html": "<section class=\"ds-frame\"><p>Deliberate content.</p></section>",
+      "css": ".ds-frame { max-width: 1040px; margin-inline: auto; padding: 24px 16px; color: #262420; background: #ECE8E2; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Norte: \"o arquivo de trabalho de uma instituição\".** O eclume é uma ferramenta que se usa por",
+    "overview": "**Norte: \"o arquivo de trabalho de uma instituição\".** O eclume é uma ferramenta que se usa por\nhoras para ler, revisar e reencontrar reuniões. A interface parece papel de linho bem organizado:\ntinta escura, fios retos de 2px separando a estrutura, nenhuma curva, e a cor gasta só no que\nsignifica algo.\n\n- **Sóbrio:** a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.\n- **Estrutural:** fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);\n  sombras só separam camadas que flutuam.\n- **Honesto no estado:** a terracota aparece quando algo grava ou falha, e em nenhum outro lugar.",
+    "keyCharacteristics": [
+      "Sóbrio:: a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.",
+      "Estrutural:: fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);",
+      "Honesto no estado:: a terracota aparece quando algo grava ou falha, e em nenhum outro lugar."
+    ],
+    "rules": [],
+    "dos": [
+      "**Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS",
+      "**Do** usar fios de 2px para estrutura e manter o raio zero.",
+      "**Do** reservar a terracota para gravação e falha.",
+      "**Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.",
+      "**Do** preservar pares de frente e fundo acessíveis e a ordem semântica dos títulos.",
+      "**Do** inspecionar o HTML, o deck ou o PDF de verdade depois de renderizar."
+    ],
+    "donts": [
+      "**Don't** editar `web/src/styles/eclume.css`: ele é cópia fiel e só muda pelo sync.",
+      "**Don't** arredondar cantos, usar pílulas ou introduzir um segundo acento de cor.",
+      "**Don't** carregar fontes ou ícones de CDN: o servidor é auto-hospedado.",
+      "**Don't** copiar cor, tamanho de tipo, raio ou espaçamento para uma primitiva de mídia.",
+      "**Don't** usar um asset sem licença e papel registrados.",
+      "**Don't** tratar a projeção com perdas do `DESIGN.md` como a fonte DTCG inteira."
+    ]
+  }
+}

@@ -169,17 +169,6 @@ export function eventBox(recording: Pick<Recording, 'recorded_at' | 'duration_ms
   return { s, d: Math.max(MIN_HOURS, Math.min(hours, 24 - s)) }
 }
 
-/** A faixa de horas da grade: 8–18 por padrão, estendida para caber todos os eventos, dentro de 0–24. */
-export function hourRange(boxes: EventBox[]): { start: number; end: number } {
-  let start = 8
-  let end = 18
-  for (const { s, d } of boxes) {
-    start = Math.min(start, Math.floor(s))
-    end = Math.max(end, Math.ceil(s + d))
-  }
-  return { start: Math.max(0, start), end: Math.min(24, end) }
-}
-
 export type Laned<T> = T & { lane: number; lanes: number }
 
 /**

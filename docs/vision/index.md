@@ -7,5 +7,7 @@ Para onde o eclume vai (estado-alvo, "o quê e por quê"), **sem cronograma**: u
 spec no workspace do Quenching (hoje, as filhas do épico `holetz/eclume#1`); o que **já virou
 realidade** é destilado em [standards/](../standards/index.md).
 
-Nenhum doc de visão foi escrito ainda: a direção atual está no `## Proposal` e no `## Design` do
-épico `holetz/eclume#1`.
+A direção de construção está no `## Proposal` e no `## Design` do épico `holetz/eclume#1`.
+
+- [product.md](product.md) — o registro do produto: usuários, propósito, posicionamento e
+  compromissos de marca, projetado no `PRODUCT.md` da raiz.

@@ -1,9 +1,9 @@
-// Navegação do shell em duas seções: a principal e a recolhível "Configurações e ajuda". As áreas
-// de outras specs já estão previstas e desligadas: para ligá-las, a spec dona muda `enabled` e
-// registra a rota em routes.tsx. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem
-// conta e login próprios (/admin/entrar).
+// Navegação do shell em duas seções: a principal, na barra lateral, e a do cabeçalho, nos menus da
+// engrenagem (Minhas configurações) e da ajuda. As áreas de outras specs já estão previstas e
+// desligadas: para ligá-las, a spec dona muda `enabled` e registra a rota em routes.tsx. As rotas
+// seguem o mapa de telas v6. O painel admin não entra: ele tem conta e login próprios (/admin/entrar).
 export type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
-export type NavSection = 'main' | 'more'
+export type NavSection = 'main' | 'header'
 
 export interface NavItem {
   to: string
@@ -23,11 +23,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos e regras', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'more', enabled: true },
-  { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'more', enabled: true },
-  { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'more', enabled: true },
-  { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', section: 'more', enabled: true },
-  { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'more', enabled: true },
+  { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', section: 'header', enabled: true },
+  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'header', enabled: true },
+  { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'header', enabled: true },
+  { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'header', enabled: true },
+  { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', section: 'header', enabled: true },
+  { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'header', enabled: true },
 ]
 
 export interface NavGroupEntry {
@@ -37,7 +38,7 @@ export interface NavGroupEntry {
 
 /** Itens ligados, agrupados na ordem da lista e separados por seção; grupos vazios somem. */
 export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSection, NavGroupEntry[]> {
-  const sections: Record<NavSection, Map<NavGroup, NavItem[]>> = { main: new Map(), more: new Map() }
+  const sections: Record<NavSection, Map<NavGroup, NavItem[]>> = { main: new Map(), header: new Map() }
   for (const item of items) {
     if (!item.enabled) continue
     const groups = sections[item.section]
@@ -45,7 +46,7 @@ export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSect
   }
   const entries = (groups: Map<NavGroup, NavItem[]>) =>
     [...groups].map(([group, list]) => ({ group, items: list }))
-  return { main: entries(sections.main), more: entries(sections.more) }
+  return { main: entries(sections.main), header: entries(sections.header) }
 }
 
 /** Se o item está aceso na rota: a própria rota (a raiz só nela mesma), as filhas e os `matches`. */
@@ -53,9 +54,4 @@ export function isItemActive(item: NavItem, pathname: string): boolean {
   if (item.matches?.some((prefix) => pathname.startsWith(prefix))) return true
   if (item.to === '/') return pathname === '/'
   return pathname === item.to || pathname.startsWith(`${item.to}/`)
-}
-
-/** Se a rota atual pertence a um item da seção recolhível. */
-export function isInMoreSection(pathname: string, items: readonly NavItem[] = NAV_ITEMS): boolean {
-  return items.some((item) => item.section === 'more' && item.enabled && isItemActive(item, pathname))
 }

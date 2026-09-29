@@ -18,13 +18,15 @@ interface MenuButtonProps {
   className?: string
   /** Rótulo acessível do menu; sem ele, o menu é rotulado pelo botão. */
   label?: string
+  /** Nome do botão quando o conteúdo é só um ícone (vira também a dica do mouse). */
+  buttonLabel?: string
 }
 
 /**
  * Botão que abre um `.menu` do DS, com o teclado do padrão ARIA de menu: setas, Home/End, Enter ou
  * Espaço e Esc; o clique fora fecha. O item focado leva `data-active`.
  */
-export function MenuButton({ children, items, className = 'btn btn-secondary', label }: MenuButtonProps) {
+export function MenuButton({ children, items, className = 'btn btn-secondary', label, buttonLabel }: MenuButtonProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -107,6 +109,8 @@ export function MenuButton({ children, items, className = 'btn btn-secondary', l
         id={buttonId}
         type="button"
         className={className}
+        aria-label={buttonLabel}
+        title={buttonLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}

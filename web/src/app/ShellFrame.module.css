@@ -1,6 +1,8 @@
 /* Só o que o Design System (.shell, .sidebar, .main) não tem: a barra lateral fixa na altura da
-   tela e, em tela estreita, a barra superior com o menu compacto. Vale para o app e o painel admin. */
+   tela, o cabeçalho estreito do app (marca e conta) e, em tela estreita, o menu compacto. Vale para o
+   app e o painel admin; o admin não tem conta no cabeçalho e segue com a marca na barra lateral. */
 .shell {
+  --shell-header: 0px;
   grid-template-areas: 'sidebar main';
 }
 
@@ -11,8 +13,8 @@
 .sidebar {
   grid-area: sidebar;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--shell-header);
+  height: calc(100vh - var(--shell-header));
   overflow-y: auto;
 }
 
@@ -24,8 +26,47 @@
   outline: none;
 }
 
+/* O cabeçalho estreito em qualquer largura: marca à esquerda, conta à direita. */
+.shell[data-header] {
+  --shell-header: 3.25rem;
+  grid-template-rows: var(--shell-header) 1fr;
+  grid-template-areas:
+    'topbar topbar'
+    'sidebar main';
+}
+
+.topbar {
+  grid-area: topbar;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  align-items: center;
+  gap: var(--space-4);
+  height: 3.25rem;
+  padding: 0 var(--space-4);
+  background: var(--color-bg);
+  border-bottom: 2px solid var(--color-divider);
+}
+
+.shell[data-header] > .topbar {
+  display: flex;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.menuButton {
+  display: none;
+}
+
 @media (max-width: 56rem) {
-  .shell {
+  .shell,
+  .shell[data-header] {
+    --shell-header: 3.25rem;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
     grid-template-areas:
@@ -33,18 +74,14 @@
       'main';
   }
 
-  .topbar {
-    grid-area: topbar;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+  .topbar,
+  .shell[data-header] > .topbar {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    min-height: 3.25rem;
-    padding: var(--space-2) var(--space-4);
-    background: var(--color-bg);
-    border-bottom: 2px solid var(--color-divider);
+  }
+
+  .menuButton {
+    display: inline-flex;
   }
 
   .brandSide {

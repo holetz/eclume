@@ -1,3 +1,8 @@
+# quenching-arbiters-start
+# quenching-arbiters-sha256 fccb35099c170d92851df624a40b8d1de18ea322a51a54ff67d772f01afdc868
+# quenching-arbiters-data {"artifact":"pyproject.toml","entries":[{"arbiter":"proof","key":"tool.pytest"}]}
+# quenching-arbiters-end
+
 # Raiz do workspace uv do eclume. Os pacotes Python vivem nos pilares da raiz:
 # `engines` (interface de engine), `server` (API) e `worker-gpu` (worker de ASR).
 # Esta raiz não é um pacote — só declara o workspace, a config compartilhada de
