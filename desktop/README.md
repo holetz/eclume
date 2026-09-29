@@ -7,8 +7,9 @@ guarda a fila local e a sobe ao servidor com upload resumível, e fica na bandej
 primeira execução, a pessoa entra com e-mail e senha no servidor embutido no instalador (ou achado
 na rede por mDNS), com a CA fixada pela impressão digital.
 
-Os instaladores (Windows, Linux e macOS) saem do workflow `desktop-release` e o app se atualiza
-sozinho pelo updater do Tauri; o processo está em
+Os instaladores saem do host, por `bash deploy/release-desktop.sh` (Linux; Windows com
+`--windows`; macOS fora enquanto o repositório for privado), ou do workflow `desktop-release` à
+mão, e o app se atualiza sozinho pelo updater do Tauri; o processo está em
 [docs/standards/code/desktop-distribuicao.md](../docs/standards/code/desktop-distribuicao.md) e o
 passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).
 
@@ -66,7 +67,7 @@ cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example sinais -
 ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test --manifest-path desktop/Cargo.toml -p eclume-sync --test mock
 # a janela num Chromium, com o Tauri simulado (capturas em ui-tests/capturas/)
 npm --prefix desktop/ui-tests ci && npm --prefix desktop/ui-tests test
-# um build com o servidor embutido, como o desktop-release faz
+# um build com o servidor embutido, como o release faz
 ECLUME_SERVER_URL=https://192.168.15.199:8443 ECLUME_SERVER_CA_SHA256=<sha256> cargo build --manifest-path desktop/Cargo.toml -p eclume-desktop
 ```
 
