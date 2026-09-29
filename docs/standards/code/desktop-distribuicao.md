@@ -1,58 +1,94 @@
 ---
 type: standard
 title: Distribuição do app desktop
-description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
-resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
+description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, release no host pelo deploy/release-desktop.sh (Linux; Windows opcional por compilação cruzada; macOS fora enquanto o repositório for privado) e o workflow desktop-release como alternativa manual, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
+resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-27
+timestamp: 2026-09-29
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#60
 maintainer: holetz
 ---
 
 # Distribuição do app desktop
 
-O app desktop sai em instaladores para Windows, Linux e macOS **sem assinatura de código** (não
-há certificado) e se atualiza sozinho pelo updater do Tauri, cujo pacote é assinado com uma
+O app desktop sai em instaladores **sem assinatura de código** (não há certificado) e se atualiza sozinho pelo updater do Tauri, cujo pacote é assinado com uma
 **chave minisign própria**. Como o repositório é privado, os clientes nunca baixam do GitHub:
 baixam do próprio servidor eclume, em `https://192.168.15.199:8443/downloads/`.
 
+Enquanto o repositório for privado, os minutos do GitHub Actions têm cota, e o release sai **do
+host**, sem Actions. Plataformas:
+
+| Plataforma | Estado |
+|---|---|
+| Linux | sai em todo release (AppImage e deb) |
+| Windows | **opcional e desligado por padrão** (`--windows` no host, `windows: true` no workflow) |
+| macOS | **fora** até o repositório ficar público (o minuto de macOS custa 10×) |
+
+Uma plataforma fora do release some do `latest.json`, e os clientes dela ficam na versão que têm.
+
 ```
-tag desktop-v0.1.0 ──► desktop-release.yml ──► GitHub Release (privado)
-                        │ build Windows / Linux / macOS universal     │
-                        │ assina os pacotes do updater (.sig)         │ gh release download
-                        └ latest.json, instaladores.json, SHA256SUMS  ▼
-                                               deploy/publicar-desktop.sh (no host)
-                                                              │
-                                   /srv/eclume/downloads/ ◄───┘ ──► Caddy /downloads/ ──► app e página
+deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ──► GitHub Release (privado)
+   git archive do commit                   │ build Linux (+ Windows)          │ desktop-v<versão>
+                                           │ assina com a chave do host (.sig) │ gh release download
+                                           └ latest.json, instaladores.json,   ▼
+                                             SHA256SUMS      deploy/publicar-desktop.sh (no host)
+                                                                               │
+                                   /srv/eclume/downloads/ ◄────────────────────┘ ──► Caddy /downloads/
 ```
 
 ## Versão e tag
 
 - A versão publicada é o campo `version` de `desktop/src-tauri/tauri.conf.json`. O `version` do
   workspace cargo (`desktop/Cargo.toml`) acompanha por convenção, mas o release não o lê.
-- A tag é `desktop-v<versão>`. O workflow **recusa** uma tag que não bate com o `tauri.conf.json`.
-- Lançar uma versão: subir o `version`, fazer merge em `main` e
-  `git tag -a desktop-v<versão> -m "eclume desktop <versão>" && git push origin desktop-v<versão>`.
+- A tag é `desktop-v<versão>`, criada pelo próprio release (`gh release create --target <commit>`),
+  nunca à mão: ela não dispara workflow nenhum.
+- Lançar uma versão: subir o `version`, fazer merge em `main`, publicar a `main` e rodar
+  `bash deploy/release-desktop.sh --publicar --notas "<notas>"`.
 
-## Workflow `desktop-release.yml`
+## Release no host — `deploy/release-desktop.sh`
 
-- Dispara **só** por tag `desktop-v*` ou `workflow_dispatch`, nunca em PR/push: com o repo
-  privado, o minuto de macOS custa 10× e o de Windows 2×. No dispatch, `publicar: false` (padrão)
-  é ensaio — os artefatos ficam no run — e `macos: false` pula o job mais caro.
+- Roda **na estação** e opera o host pelo contexto Docker (`gpu-host`) e por SSH, como o
+  `deploy/deploy.sh`. `--plan` só mostra versão, tag, commit, alvos, pastas, disco e os
+  impedimentos, sem escrever.
+- O código vai **do commit**, não da árvore de trabalho: `git archive HEAD` segue para
+  `~/eclume-build/release/src` no host, recriada a cada release. Com `--publicar`, o script recusa
+  árvore suja, commit que o GitHub não tem e tag que já existe. Sem `--publicar` é **ensaio**: os
+  artefatos ficam em `~/eclume-build/release/dist-<versão>/` no host e nada é publicado.
+- O build roda no contêiner de `desktop/build.Dockerfile` (`eclume-desktop-build:24.04`) com
+  `--cpus 2`, `CARGO_BUILD_JOBS=2` e `nice`, como o uid 1000; `target/` (`target-linux`,
+  `target-windows`) e o registry do cargo (`~/eclume-build/cargo-registry`) persistem no host
+  para os builds seguintes serem incrementais. O script recusa começar com o disco do host em
+  `ECLUME_DISK_LIMIT` (90%) ou mais, e uma trava (`~/eclume-build/release/.trava`) impede dois
+  releases ao mesmo tempo.
+- **Windows** (`--windows`): compilação cruzada no contêiner de `desktop/build-windows.Dockerfile`
+  (`nsis`, `lld`/`llvm` 18, o target `x86_64-pc-windows-msvc` e o `cargo-xwin`), com
+  `tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis`. Sai só o
+  NSIS: o MSI exige o WiX, que só roda no Windows. O primeiro `--windows` ainda não rodou; ele é o
+  que prova a imagem e o libopus compilado cruzado.
+- Os manifestos saem no host, por `manifestos_release.py` (com `desktop/INSTALACAO.md` copiado), e
+  o `SHA256SUMS` é conferido antes de publicar. `--publicar` cria o GitHub Release pelo `gh` do
+  host; `--notas` vira o `notes` do `latest.json` e o texto do aviso "Atualizado para X" (vazio,
+  `eclume desktop <versão>`).
+
+## Workflow `desktop-release.yml` — a alternativa
+
+- Dispara **só** por `workflow_dispatch`: a tag que o release no host cria não o dispara. Faz o
+  mesmo release no GitHub Actions — Linux sempre; Windows (`nsis,msi`, em `windows-latest`) com
+  a entrada `windows: true`, desligada por padrão porque o minuto custa 2×. `publicar: false`
+  (padrão) é ensaio — os artefatos ficam no run.
 - A CLI do Tauri roda por `npx @tauri-apps/cli@2 build --ci --bundles <lista>`, sem
   `tauri-action`: o `latest.json` dela apontaria para URLs privadas do GitHub.
-- A entrada `notas` do dispatch vira o `notes` do `latest.json` e o texto do aviso "Atualizado
-  para X" (vazia, `eclume desktop <versão>`). O release da 0.2.0 passa "Nova nota, Importar
-  arquivo e entrar com e-mail e senha".
+- `desktop-plataformas.yml` (à mão) faz só o `cargo check` em `windows-latest`.
 
 ## Servidor embutido no instalador
 
 - O release é por servidor (os manifestos já têm URLs absolutas deste host), então o build
-  embute o endereço e a impressão digital da CA raiz: o passo de build recebe
-  `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` das **variáveis do repositório** (gravadas pela
-  holetz/eclume#35, ao lado de `ECLUME_DOWNLOADS_URL`).
+  embute o endereço e a impressão digital da CA raiz: o build recebe `ECLUME_SERVER_URL` e
+  `ECLUME_SERVER_CA_SHA256` das **variáveis do repositório** (gravadas pela holetz/eclume#35, ao
+  lado de `ECLUME_DOWNLOADS_URL`); o `release-desktop.sh` as lê por `gh variable get` e aceita
+  override pelo ambiente.
 - O app os lê por `option_env!` (`config::embedded_server`), com
   `cargo:rerun-if-env-changed` no `build.rs`. Variável vazia ou endereço inválido não embutem
   nada; um build local, sem elas, não tem servidor embutido.
@@ -61,21 +97,20 @@ tag desktop-v0.1.0 ──► desktop-release.yml ──► GitHub Release (priva
   ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)). O `web_url` padrão de uma config
   nova é o embutido; o `https://192.168.15.199:8443` só vale num build sem servidor embutido.
 
-| Job | Runner | Saída |
+| Plataforma | Onde compila | Saída |
 |---|---|---|
-| Windows | `windows-latest` | `eclume_<v>_x64-setup.exe` (NSIS, por usuário, sem admin) e `eclume_<v>_x64_pt-BR.msi` (WiX), com `.sig` |
-| Linux | `ubuntu-24.04` (o `libspa` do crate `pipewire` não compila com o PipeWire 0.3.48 do 22.04; o AppImage exige glibc 2.39+) | `eclume_<v>_amd64.AppImage` e `eclume_<v>_amd64.deb`, com `.sig` |
-| macOS | `macos-latest`, `--target universal-apple-darwin` | `eclume_<v>_universal.dmg` e `eclume_<v>_universal.app.tar.gz` (+ `.sig`), um só para Intel e Apple Silicon |
+| Linux | Ubuntu 24.04 (o `libspa` do crate `pipewire` não compila com o PipeWire 0.3.48 do 22.04; o AppImage exige glibc 2.39+) | `eclume_<v>_amd64.AppImage` e `eclume_<v>_amd64.deb`, com `.sig` |
+| Windows (opcional) | host: cruzado com `cargo-xwin`; Actions: `windows-latest` | `eclume_<v>_x64-setup.exe` (NSIS, por usuário, sem admin), com `.sig`; o `eclume_<v>_x64_pt-BR.msi` (WiX) só pelo Actions |
+| macOS (fora) | `macos-latest`, `--target universal-apple-darwin`, quando voltar | `eclume_<v>_universal.dmg` e `eclume_<v>_universal.app.tar.gz` (+ `.sig`), um só para Intel e Apple Silicon |
 
-- O AppImage é gerado com `APPIMAGE_EXTRACT_AND_RUN=1` (sem FUSE no runner) e `NO_STRIP=true`
-  (o `strip` do linuxdeploy falha em binários com `.relr.dyn`).
-- O job `release` junta os artefatos, copia `desktop/INSTALACAO.md`, roda
-  `desktop/scripts/manifestos_release.py` e cria o GitHub Release `desktop-v<versão>` com tudo.
+- O AppImage é gerado com `APPIMAGE_EXTRACT_AND_RUN=1` (sem FUSE no contêiner nem no runner) e
+  `NO_STRIP=true` (o `strip` do linuxdeploy falha em binários com `.relr.dyn`).
 
 ## Bundle
 
 - `bundle.createUpdaterArtifacts: true` assina cada pacote com `TAURI_SIGNING_PRIVATE_KEY` e
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (secrets do GitHub).
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (no host, lidas da cópia em `/srv/eclume/secrets`; no
+  Actions, dos secrets).
 - O `.deb` declara as libs de áudio que o binário liga dinamicamente (`libasound2`,
   `libpulse0`, `libpipewire-0.3-0`, com a alternativa `t64` do Ubuntu 24.04); o TLS é rustls,
   sem `libssl`.
@@ -147,10 +182,11 @@ recentes. O Caddy do eclume serve a pasta em `/downloads/`.
 
 ## Chave do updater
 
-- A privada e a senha vivem nos secrets `TAURI_SIGNING_PRIVATE_KEY` e
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` e, como cópia de segurança, em
-  `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` no host (`chmod 600`).
-  **Nunca** no repositório.
+- A privada e a senha vivem em `/srv/eclume/secrets/tauri-updater.key` e
+  `tauri-updater.key.password` no host (`chmod 600`, do uid 1000) e nos secrets
+  `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` do workflow. O release no host
+  as monta **só leitura** no contêiner do build; elas nunca passam pela estação. **Nunca** no
+  repositório.
 - A pública fica em `plugins.updater.pubkey` do `tauri.conf.json`.
 - Trocar a chave invalida a atualização automática de todo cliente instalado: a versão com a
   chave nova precisa ser instalada à mão.
