@@ -25,6 +25,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError, with_context
+from eclume_server.agents.base_chat import BASE_CHAT_SYSTEM
 from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
@@ -164,7 +165,9 @@ def purpose_of(system: str, prompt: str) -> str:
     """
     if FIELDS_SYSTEM in prompt:
         return "fields"
-    return {DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat"}.get(system, "summaries")
+    return {DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat", BASE_CHAT_SYSTEM: "base_chat"}.get(
+        system, "summaries"
+    )
 
 
 @dataclass
@@ -210,6 +213,8 @@ class _FakeAgent:
             text = "{}"
         elif purpose == "agenda_detection":
             text = '{"tipo": "T1", "confianca": 0.9, "motivo": "o primeiro tipo"}'
+        elif purpose == "base_chat":
+            text = '{"action": "reply", "message": "Pronto.", "sources": []}'
         elif purpose == "chat":
             text = '{"action": "reply", "message": "Pronto.", "summary_md": null}'
         else:

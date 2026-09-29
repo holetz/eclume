@@ -1,0 +1,14 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000f01",
+  "status": "done",
+  "answer": "Ficou combinado um orçamento de **R$ 40 mil** para o programa de lideranças, com prazo em março.",
+  "sources": [
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000201",
+      "title": "Kickoff Serra Azul"
+    }
+  ],
+  "queries": 2,
+  "model": "claude-sonnet-5-5",
+  "error": null
+}

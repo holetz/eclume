@@ -22,6 +22,7 @@ from arq.worker import func
 from sqlalchemy import delete, select, update
 
 from eclume_server.agenda_types import run_detect
+from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
@@ -211,6 +212,13 @@ async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
     return result
 
 
+async def base_chat(ctx: dict[str, Any], chat_id: str) -> str:
+    """Responde uma pergunta do chat sobre a base (docs/standards/code/server-agentes.md)."""
+    result = await run_base_chat_job(ctx, chat_id)
+    log.info("base_chat %s: %s", chat_id, result)
+    return result
+
+
 async def expire_uploads(ctx: dict[str, Any]) -> int:
     """Aborta os uploads em andamento que passaram do prazo."""
     now = datetime.now(UTC)
@@ -272,6 +280,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
             # nova tentativa só (contada em `summary_chat_messages.attempts`).
             func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
+            # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
+            func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
