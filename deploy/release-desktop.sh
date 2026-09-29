@@ -12,8 +12,8 @@
 #   --windows   inclui o instalador NSIS do Windows (compilação cruzada; desligado por padrão).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
 #   --notas     notas do release, que o app mostra no aviso "Atualizado para X".
-# Variáveis: ECLUME_SERVER_URL e ECLUME_SERVER_CA_SHA256 (padrão: as variáveis do repositório),
-# ECLUME_DOWNLOADS_URL, ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
+# Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
+# do repositório), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -22,7 +22,6 @@ CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
 REPO=holetz/eclume
 SECRETS=/srv/eclume/secrets
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
-DOWNLOADS_URL="${ECLUME_DOWNLOADS_URL:-https://192.168.15.199:8443/downloads}"
 PLAN_ONLY=0
 WINDOWS=0
 PUBLICAR=0
@@ -61,6 +60,8 @@ ALVOS=(linux)
 [[ "$WINDOWS" -eq 0 ]] || ALVOS+=(windows)
 SERVER_URL="${ECLUME_SERVER_URL:-$(gh variable get ECLUME_SERVER_URL -R "$REPO")}"
 SERVER_CA="${ECLUME_SERVER_CA_SHA256:-$(gh variable get ECLUME_SERVER_CA_SHA256 -R "$REPO")}"
+# Como no workflow: a variável do repositório, se existir, ou o /downloads do host de produção.
+DOWNLOADS_URL="${ECLUME_DOWNLOADS_URL:-$(gh variable get ECLUME_DOWNLOADS_URL -R "$REPO" 2>/dev/null || echo https://192.168.15.199:8443/downloads)}"
 
 # shellcheck disable=SC2016 # o $HOME é o do host
 BASE="$(host 'echo "$HOME"')/eclume-build/release"
