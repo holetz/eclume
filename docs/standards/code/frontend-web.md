@@ -58,7 +58,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/parear`, `/gravacoes/:id`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
-  `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
+  `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
   `/?importar=1` (o modal). Os parâmetros também são pt-BR:
   - biblioteca (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (qualquer dia do período),
@@ -77,16 +77,22 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `group`, `section`
-  (`main` ou `more`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a
-  Biblioteca fica marcada em `/gravacoes/`), e `navGroups()` devolve as duas seções. A principal
-  tem Gravações (Biblioteca, Busca; importar é o modal da biblioteca), Organizar (Pessoas,
-  Coleções, Campos e regras, Tipos de agenda); a recolhível **Configurações e ajuda** (um
-  `<details class="nav-more">`) tem Minhas configurações (Conexão MCP, Tokens de acesso, App
-  desktop, App móvel) e Ajuda (Central de ajuda). Ela abre sozinha quando a rota atual é dela e,
-  fora isso, guarda a escolha enquanto a página vive. Uma área nova entra desligada, com a rota do
-  mapa de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`;
-  cada grupo é um `role="group"` rotulado pelo título. Não há item "Painel admin": a conta de
-  usuário não tem papel, e o painel se abre pelo endereço `/admin/entrar`, com conta própria.
+  (`main` ou `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a
+  Biblioteca fica marcada em `/gravacoes/`), e `navGroups()` devolve as duas seções. A principal,
+  na barra lateral, tem Gravações (Biblioteca, Busca; importar é o modal da biblioteca) e
+  Organizar (Pessoas, Coleções, Campos e regras, Tipos de agenda); a `header` vai para os menus do
+  cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App desktop, App móvel)
+  e Ajuda (Central de ajuda). Uma área nova entra desligada, com a rota do mapa de telas v6, e
+  ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`; cada
+  grupo é um `role="group"` rotulado pelo título. Não há item "Painel admin": a conta de usuário
+  não tem papel, e o painel se abre pelo endereço `/admin/entrar`, com conta própria.
+- **Cabeçalho do shell** (`ShellFrame` com `account`): uma faixa de 3,25rem (`--shell-header`),
+  fixa no topo em qualquer largura, com a marca à esquerda e a conta à direita: nome e e-mail, o
+  menu **Ajuda** ("Ajuda desta página", que abre a gaveta, e "Central de ajuda"), o menu
+  **Configurações** (Minhas configurações) e, depois de uma barra de 2px, **Sair**. Escolher um
+  item navega sem mexer na barra lateral, que só tem a navegação principal. Abaixo de 56rem, o
+  nome e o e-mail somem e o botão Menu abre a barra lateral por cima. Telas que grudam elementos no
+  topo (os filtros da biblioteca, o chat da gravação) usam `top: var(--shell-header)`.
 - **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
   shell, o botão Ajuda); ele também dá o título da aba. Rota desconhecida mostra
   `NotFoundPage` dentro do shell, com o link de volta à biblioteca.
@@ -115,7 +121,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
     do DS, campo da marca em tinta), sem cadastro nem "esqueci a senha": conta e senha de admin
     ficam no CLI (`eclume-server admin create` e `admin set-password`).
   - **Moldura** `AdminShell`, sobre o `ShellFrame` que também serve ao `AppShell` (barra lateral
-    fixa e menu compacto abaixo de 56rem): marca, selo "Admin", o grupo "Plataforma" e, no
+    fixa e menu compacto abaixo de 56rem; sem `account`, sem o cabeçalho do app): marca, selo "Admin", o grupo "Plataforma" e, no
     rodapé, o nome e o e-mail do admin com "Sair". A barra vem de `ADMIN_SECTIONS`
     (`sections.ts`), na ordem Usuários (`/admin/usuarios`), Pré-processamento de áudio
     (`/admin/audio`), Transcrição (`/admin/transcricao`), Locutores (`/admin/locutores`), Agentes
@@ -170,7 +176,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - A base visual é o Design System do eclume ([web-design-system.md](web-design-system.md)):
   tokens e classes do `eclume.css`, fontes Archivo e IBM Plex Mono servidas pelo build, ícones
   Lucide e tema por `data-theme` no `<html>` ("Do sistema" resolve `prefers-color-scheme`; a
-  escolha explícita fica no `localStorage`). Cor nova entra como token no DS.
+  escolha explícita fica no `localStorage`). Cor nova entra como token no DS. A tela Ambiente
+  acrescenta `data-density="compact"` (a escala `--space-3` a `--space-8` apertada no `app.css`) e
+  `data-motion="reduce"` (as mesmas regras do `prefers-reduced-motion`), aplicados no boot pelo
+  `applyEnvironment()`.
 - As telas de acesso usam o `AuthLayout` (`.auth` do DS: campo da marca e formulário alinhado à
   esquerda); o resto fica no `AppShell` (`.shell`, `.sidebar`, `.main`), com a barra superior e o
   menu compacto abaixo de 56rem.
@@ -190,9 +199,16 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   de lado dentro do próprio contêiner (`min-width: 720px`).
 - **Posição por hora e duração** (`calendar.ts`, datas locais do navegador): a semana vai de
   segunda 00:00 à segunda seguinte; cada gravação ganha `--s` (hora de início local) e `--d`
-  (duração em horas, 0,1 para nota ou duração nula, cortada na meia-noite). A faixa de horas é
-  8–18, estendida para caber tudo, com `--cal-hour: 54px`. Gravações sobrepostas no mesmo dia
-  dividem a coluna em faixas (`lanes()`, guloso por início), que o DS não trata.
+  (duração em horas, 0,1 para nota ou duração nula, cortada na meia-noite). A grade mostra o dia
+  inteiro (0–24, com rótulo também em 24:00) e rola por dentro, com a altura que sobra na janela e
+  o cabeçalho dos dias fixo. O expediente (`readWorkHours()`, 8–18 ou o da tela Ambiente) tem fundo de superfície e rótulos
+  na tinta principal, e a semana abre sempre com o zoom enquadrando ele; o resto do dia fica a um
+  pan ou zoom out. Gravações sobrepostas no mesmo dia dividem a coluna
+  em faixas (`lanes()`, guloso por início), que o DS não trata.
+- **Zoom da semana**: os botões do canto sobre as horas e Ctrl + roda sobre a grade mudam
+  `--cal-hour` em passos de 1,25×, mantendo parada a hora sob o cursor (ou no meio, pelos botões).
+  O mínimo é o dia inteiro na altura da grade, o máximo 480px por hora. No mês, as semanas dividem
+  a altura da tela por igual (mínimo de 96px por célula).
 - **Estado em palavra** (`recordingState()`, de `status` e do `pipeline`): falhou (régua de
   perigo), em andamento com a etapa corrente ("Resumindo", "Transcrevendo", "Na fila"...) ou pronta
   (com "Sem resumo" quando a etapa do resumo falhou). Nota por voz tem a régua pontilhada;
@@ -331,6 +347,14 @@ desce; abaixo de 56rem, os campos também):
 
 ## Minhas configurações
 
+- **Ambiente** (`/config/ambiente`, `features/environment/`, chave de ajuda `ambiente`) guarda as
+  preferências deste navegador no `localStorage` (`app/preferences.ts`), sem conta nem servidor:
+  tema (`theme.ts`), densidade (confortável ou compacta), movimento (seguir o sistema ou reduzir),
+  expediente (início e fim em horas cheias, padrão 8–18, com o fim sempre depois do início), a
+  visão em que a biblioteca abre sem parâmetros (última usada, semana, mês ou lista) e a lista de
+  atalhos de teclado. "Restaurar os padrões" apaga tudo e volta o tema ao do sistema. Cada valor
+  padrão apaga a própria chave em vez de gravá-la.
+
 - **Grupos de escopo** (`tokens/scopes.ts`) são a escolha principal de um token: Buscar e ler
   gravações (`recordings:read`, `transcripts:read`), Ler e editar resumos (`summaries:*`), Editar
   campos e tags (`recordings:write`) e Excluir gravações (`recordings:delete`). Os escopos soltos
@@ -411,7 +435,7 @@ Depois de recarregar, o import recomeça pela conversão.
   eclume-mock-<spec> -f deploy/docker-compose.mock.yml up -d`, com `E2E_PORT` próprio); `E2E_SCREENSHOTS=1` salva telas claro e escuro em
   `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado
   (`msedge` na estação Windows, que não tem Chrome). O helper `navTo()`
-  abre "Configurações e ajuda" quando o link está recolhido. `e2e/visual.spec.ts`,
+  usa a barra lateral ou, para configurações e ajuda, os menus do cabeçalho. `e2e/visual.spec.ts`,
   `e2e/visual-organizar.spec.ts` e `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
   ([web-design-system.md](web-design-system.md)); com `ECLUME_DS_DIR`, salvam também os quadros
   de `examples/*.html` para a comparação lado a lado.

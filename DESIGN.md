@@ -1,0 +1,273 @@
+---
+# GERADO por `cq design build` a partir de /.design/tokens.json. Não edite aqui.
+# Run `/impeccable document` to propose changes, then `cq design import` to fold them into the source.
+version: "alpha"
+name: "eclume"
+description: "Linho e nogueira do ecossistema Jane: Archivo, raio zero, fios de 2px, terracota só para gravação e falha. Valores espelham o styles.css do repositório eclume-design (copiado em web/src/styles/eclume.css)."
+colors:
+  background: "#F7F5F2"
+  surface: "#ECE8E2"
+  on-surface: "#262420"
+  text-muted: "#625B52"
+  primary: "#6F5A44"
+  on-primary: "#F7F5F2"
+  accent-ink: "#5E4C39"
+  recording: "#B8432C"
+  neutral: "#9A9288"
+  success: "#56663A"
+  warning: "#936419"
+  danger: "#A33A26"
+  highlight: "#E9E1D4"
+  divider: "rgb(38 36 32 / 0.32)"
+  dark-background: "#1E1C19"
+  dark-surface: "#292622"
+  dark-on-surface: "#ECE8E2"
+  dark-text-muted: "#B3ACA2"
+  dark-primary: "#B9A48A"
+  dark-recording: "#E0735A"
+  dark-danger: "#F08A73"
+  secondary: "#E9E1D4"
+  on-secondary: "#3A2F24"
+typography:
+  display:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "42px"
+    fontWeight: 800
+    lineHeight: 1.12
+    letterSpacing: "-0.63px"
+  headline:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "32px"
+    fontWeight: 800
+    lineHeight: 1.12
+    letterSpacing: "-0.48px"
+  title:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "25px"
+    fontWeight: 800
+    lineHeight: 1.12
+    letterSpacing: "-0.375px"
+  body:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "0px"
+  control:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.4
+    letterSpacing: "0px"
+  label:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 800
+    lineHeight: 1.2
+    letterSpacing: "0px"
+  nav:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.2
+    letterSpacing: "0px"
+  kicker:
+    fontFamily: "Archivo, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "1.1px"
+  mono:
+    fontFamily: "IBM Plex Mono, ui-monospace, Menlo, monospace"
+    fontSize: "13px"
+    fontWeight: 500
+    lineHeight: 1.3
+    letterSpacing: "0px"
+rounded:
+  none: "0px"
+  sm: "0px"
+  md: "0px"
+  full: "0px"
+spacing:
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "24px"
+  2xl: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.sm} {spacing.md}"
+    height: "{sizes.control}"
+  button-secondary:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.on-surface}"
+    typography: "{typography.label}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.sm} {spacing.md}"
+    height: "{sizes.control}"
+  input:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface}"
+    typography: "{typography.control}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.xs} {spacing.sm}"
+    height: "{sizes.control}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.sm}"
+  badge:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.text-muted}"
+    typography: "{typography.kicker}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.xs} {spacing.sm}"
+  navigation:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.on-surface}"
+    typography: "{typography.nav}"
+    padding: "{spacing.sm} {spacing.md}"
+---
+
+# Design System: eclume
+
+## Overview
+
+**Norte: "o arquivo de trabalho de uma instituição".** O eclume é uma ferramenta que se usa por
+horas para ler, revisar e reencontrar reuniões. A interface parece papel de linho bem organizado:
+tinta escura, fios retos de 2px separando a estrutura, nenhuma curva, e a cor gasta só no que
+significa algo.
+
+- **Sóbrio:** a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.
+- **Estrutural:** fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);
+  sombras só separam camadas que flutuam.
+- **Honesto no estado:** a terracota aparece quando algo grava ou falha, e em nenhum outro lugar.
+
+## Colors
+
+O fundo de linho (`background`) e a superfície um tom abaixo (`surface`) carregam a leitura; a
+tinta (`on-surface`) é quase preta e quente, e o texto secundário (`text-muted`) é o linho 700.
+
+- **Nogueira (`primary`)** é o único acento de ação: botão primário, link, foco e item de
+  navegação ativo. `accent-ink` é a nogueira escura para kickers.
+- **Terracota (`recording`)** é semântica, não decorativa: gravação em curso e falha. Nunca vira
+  um segundo acento de variedade.
+- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção.
+- Os locutores têm seis cores próprias em OKLCH (`--speaker-1` a `--speaker-6` no CSS), de mesma
+  luminosidade, que não competem com a nogueira.
+- **Tema escuro** (`data-theme="dark"`): os tokens `dark-*` trocam fundo, superfície, tinta,
+  nogueira clara e terracota clara. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
+
+**Regra do acento único.** Um bloco tem no máximo um acento; a terracota só entra quando o estado
+de gravação ou falha estiver presente.
+
+## Typography
+
+Archivo é a voz única: 800 com tracking levemente negativo nos títulos (h1 42px, h2 32px, h3
+25px), 400 a 15px com entrelinha 1,55 no texto corrido e nas transcrições, 800 a 14px nos botões.
+Kickers e badges usam 11px, peso 600, caixa alta e tracking largo. IBM Plex Mono 500 com números
+tabulares marca tempos, durações e contadores. As fontes vêm do build (`@fontsource`), sem CDN.
+
+## Layout
+
+Grade de espaçamento em 4px (4, 8, 12, 16, 24, 32). O shell tem barra lateral de 240px e o conteúdo
+usa a largura toda ao lado dela (o `--content-width` de 1040px do DS não vale no web); texto corrido
+fica em 68ch; a página abre com `.page-head`, título e ações sobre um fio de 2px. A densidade é
+de ferramenta: listas e tabelas compactas, com o respiro reservado para a leitura da transcrição.
+
+## Elevation & Depth
+
+A estrutura é plana e desenhada por fios. Sombras (`sm`, `md`, `lg`) só para o que flutua: menus,
+popovers, diálogos e a gaveta de ajuda. No escuro, a sombra vira um contorno de 1px mais a queda.
+
+## Shapes
+
+Raio zero em tudo: botões, campos, cartões, tags, badges e diálogos. O badge marca o estado com um
+quadrado de 6px, não com um ponto. Ícones Lucide com ponta e junção retas
+(`stroke-linecap: square`).
+
+## Components
+
+O vocabulário vem do `eclume-design`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
+transparente), `.input` em campos, `select` e `textarea`, `.card`, `.badge` e `.tag`, `.nav` e
+`.sidebar`, `.page-head`, `.kicker`, `.hr`. O web acrescenta só o que o DS não tem, em `app.css`.
+
+A marca de verdade é a do web (`web/src/app/Brand.tsx` e `web/public/favicon.svg`). O lockup em
+`/.design/assets/lockup.svg` é o genérico do pacote e fica só até a marca do eclume ser exportada
+para lá.
+
+### button-primary
+- **backgroundColor:** {colors.primary}
+- **textColor:** {colors.on-primary}
+- **typography:** {typography.label}
+- **rounded:** {rounded.none}
+- **padding:** {spacing.sm} {spacing.md}
+- **height:** {sizes.control}
+
+### button-secondary
+- **backgroundColor:** {colors.background}
+- **textColor:** {colors.on-surface}
+- **typography:** {typography.label}
+- **rounded:** {rounded.none}
+- **padding:** {spacing.sm} {spacing.md}
+- **height:** {sizes.control}
+
+### input
+- **backgroundColor:** {colors.surface}
+- **textColor:** {colors.on-surface}
+- **typography:** {typography.control}
+- **rounded:** {rounded.none}
+- **padding:** {spacing.xs} {spacing.sm}
+- **height:** {sizes.control}
+
+### card
+- **backgroundColor:** {colors.surface}
+- **textColor:** {colors.on-surface}
+- **rounded:** {rounded.none}
+- **padding:** {spacing.sm}
+
+### badge
+- **backgroundColor:** {colors.background}
+- **textColor:** {colors.text-muted}
+- **typography:** {typography.kicker}
+- **rounded:** {rounded.none}
+- **padding:** {spacing.xs} {spacing.sm}
+
+### navigation
+- **backgroundColor:** {colors.background}
+- **textColor:** {colors.on-surface}
+- **typography:** {typography.nav}
+- **padding:** {spacing.sm} {spacing.md}
+
+## Do's and Don'ts
+
+### Do
+
+- **Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS
+  Module da tela.
+- **Do** usar fios de 2px para estrutura e manter o raio zero.
+- **Do** reservar a terracota para gravação e falha.
+
+### Don't
+
+- **Don't** editar `web/src/styles/eclume.css`: ele é cópia fiel e só muda pelo sync.
+- **Don't** arredondar cantos, usar pílulas ou introduzir um segundo acento de cor.
+- **Don't** carregar fontes ou ícones de CDN: o servidor é auto-hospedado.
+
+### Do
+
+- **Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.
+- **Do** preservar pares de frente e fundo acessíveis e a ordem semântica dos títulos.
+- **Do** inspecionar o HTML, o deck ou o PDF de verdade depois de renderizar.
+
+### Don't
+
+- **Don't** copiar cor, tamanho de tipo, raio ou espaçamento para uma primitiva de mídia.
+- **Don't** usar um asset sem licença e papel registrados.
+- **Don't** tratar a projeção com perdas do `DESIGN.md` como a fonte DTCG inteira.

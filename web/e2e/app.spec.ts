@@ -54,11 +54,13 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
-/** Clica num item da navegação principal, abrindo "Configurações e ajuda" quando ele está recolhido. */
+/** Vai a uma tela: pela barra lateral ou, para configurações e ajuda, pelos menus do cabeçalho. */
 async function navTo(page: Page, name: string) {
-  const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name })
-  if (!(await link.isVisible())) await page.getByText('Configurações e ajuda').click()
-  await link.click()
+  const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name, exact: true })
+  if (await link.count()) return link.click()
+  const menu = name === 'Central de ajuda' ? 'Ajuda' : 'Configurações'
+  await page.getByRole('banner').getByRole('button', { name: menu, exact: true }).click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
 async function login(page: Page, shot?: string) {

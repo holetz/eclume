@@ -1,6 +1,5 @@
-/* Só o que o Design System (.nav-group, .sidebar-footer) não tem dentro da barra lateral do app; a
-   moldura (barra fixa e menu compacto) é do ShellFrame. A navegação ocupa o espaço livre e leva
-   "Configurações e ajuda" para baixo, junto do rodapé. */
+/* Só o que o Design System (.nav-group) não tem no app: a navegação na barra lateral e a conta no
+   cabeçalho do ShellFrame (nome e e-mail, ajuda, configurações e sair). */
 .nav {
   flex: 1;
   display: flex;
@@ -8,32 +7,53 @@
   gap: var(--space-6);
 }
 
-.footer {
-  margin-top: calc(var(--space-3) - var(--space-6));
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .user {
   display: grid;
   min-width: 0;
+  text-align: right;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
-.user > span {
+.user > * {
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.theme {
-  display: grid;
-  gap: var(--space-1);
+.user > span {
   font-size: 12px;
-  color: var(--color-text-muted);
 }
 
-.seg {
+.actions {
   display: flex;
-  color: var(--color-text);
+  align-items: center;
+  gap: 6px;
+  flex: none;
 }
 
-.seg > label {
-  flex: 1;
+.actions :global(.btn-icon) {
+  width: 32px;
+  height: 32px;
+}
+
+.bar {
+  width: 2px;
+  height: 20px;
+  margin-inline: 4px;
+  background: var(--color-divider);
+}
+
+/* Em tela estreita o cabeçalho divide espaço com o Menu: ficam só os botões. */
+@media (max-width: 56rem) {
+  .user {
+    display: none;
+  }
 }

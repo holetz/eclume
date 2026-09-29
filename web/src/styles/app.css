@@ -136,6 +136,23 @@ svg.lucide {
   }
 }
 
+/* Ambiente: "Reduzir movimento" vale como o prefers-reduced-motion do sistema. */
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Ambiente: a densidade compacta aperta a escala de espaço do DS; tipo e controles não mudam. */
+:root[data-density='compact'] {
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-6: 16px;
+  --space-8: 24px;
+}
+
 /* O diálogo fica acima da barra lateral aberta em tela estreita e rola quando não cabe. */
 .dialog-backdrop {
   z-index: 50;
@@ -159,10 +176,15 @@ svg.lucide {
   z-index: 20;
 }
 
-/* Telas de largura total (a biblioteca com o painel de filtros, a gravação com o chat): o .main do
-   shell cede a largura e o respiro, e a tela cuida dos seus. */
-.main:has(> .bleed) {
+/* O conteúdo usa a largura toda da área ao lado da barra: o DS limita o .main a --content-width,
+   mas o eclume é ferramenta de trabalho em desktop. Texto corrido mantém a própria medida (68ch). */
+.main {
   max-width: none;
+}
+
+/* Telas de largura total (a biblioteca com o painel de filtros, a gravação com o chat): o .main do
+   shell cede também o respiro, e a tela cuida do seu. */
+.main:has(> .bleed) {
   padding: 0;
 }
 

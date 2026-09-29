@@ -40,11 +40,13 @@ async function freshPairingCodes(page: Page) {
   })
 }
 
-/** Clica num item da navegação, abrindo "Configurações e ajuda" quando ele está recolhido. */
+/** Vai a uma tela: pela barra lateral ou, para configurações e ajuda, pelos menus do cabeçalho. */
 async function navTo(page: Page, name: string) {
   const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name, exact: true })
-  if (!(await link.isVisible())) await page.getByText('Configurações e ajuda').click()
-  await link.click()
+  if (await link.count()) return link.click()
+  const menu = name === 'Central de ajuda' ? 'Ajuda' : 'Configurações'
+  await page.getByRole('banner').getByRole('button', { name: menu, exact: true }).click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
 test('campos e regras: lista, painel e testar a regra', async ({ page }) => {

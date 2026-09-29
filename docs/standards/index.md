@@ -13,6 +13,7 @@ derivado (o escopo do repositório que ele governa).
 * [agents/](agents/index.md) — o idioma declarado e o contrato de conduta dos agentes
 * [api/](api/index.md) — o contrato de API v1, suas convenções e a regra de evolução só aditiva
 * [code/](code/index.md) — layout do monorepo, toolchains e comandos de cada pilar
+* [design/](design/index.md) — a marca do eclume e o portão de produção de artefatos
 
 ## Current docs
 
@@ -50,4 +51,9 @@ derivado (o escopo do repositório que ele governa).
 | [server-nucleo.md](code/server-nucleo.md) | Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled). |
 | [web-central-de-ajuda.md](code/web-central-de-ajuda.md) | A ajuda do web do eclume mora no próprio build — artigos Markdown com cabeçalho em web/src/features/help/articles, seis tópicos, chaves de página que ligam cada tela aos artigos dela, busca local sem acento, gaveta por página e dicas em linha — escrita em pt-BR para o produto por usuário, com termos do produto antigo recusados por teste e a regra de revisar os artigos de uma tela quando ela muda. |
 | [web-design-system.md](code/web-design-system.md) | O web do eclume usa o Design System do eclume (o repositório eclume-design) como base visual única — eclume.css copiado fiel do styles.css, app.css só com o que o DS não tem, fontes Archivo e IBM Plex Mono servidas pelo build, ícones Lucide com ponta quadrada e tema escuro por data-theme — e este é o jeito de sincronizar, o mapa dos tokens antigos e as classes de produto. |
+### design/
+| Doc | Covers |
+| --- | --- |
+| [brand.md](design/brand.md) | A identidade visual do eclume — linho e nogueira do ecossistema Jane, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md. |
+| [production.md](design/production.md) | O portão para produzir um artefato com a marca do eclume a partir de uma fonte única de tokens, em web, Typst e PDF. |
 <!-- END GENERATED -->

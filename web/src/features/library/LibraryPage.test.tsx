@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
@@ -82,8 +82,15 @@ describe('biblioteca na semana', () => {
     expect(saturday.querySelector('.cal-now')).not.toBeNull()
     expect(document.querySelectorAll('.cal-now')).toHaveLength(1)
 
-    // Faixa de horas padrão, 8–18.
-    expect(document.querySelectorAll('.cal-hours span')).toHaveLength(10)
+    // O dia inteiro na grade, com rótulo também na meia-noite do fim.
+    const hours = document.querySelectorAll('.cal-hours span')
+    expect(hours).toHaveLength(25)
+    expect(hours[0]).toHaveTextContent('00:00')
+    expect(hours[24]).toHaveTextContent('24:00')
+    // O expediente (8–18) destacado.
+    const work = [...document.querySelectorAll('.cal-hours span[data-work]')].map((span) => span.textContent)
+    expect(work).toEqual(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'])
+    expect((document.querySelector('.cal-week') as HTMLElement).style.getPropertyValue('--cal-start')).toBe('0')
 
     const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
     expect(query.get('from')).toBe('2026-09-21T03:00:00.000Z')
@@ -109,6 +116,48 @@ describe('biblioteca na semana', () => {
     const froms = http.requests('GET /api/v1/recordings').map((r) => new URL(r.url).searchParams.get('from'))
     expect(froms).toContain('2026-09-28T03:00:00.000Z')
     expect(froms).toContain('2026-09-14T03:00:00.000Z')
+  })
+
+  it('dá zoom na semana pelos botões e por Ctrl + roda, sem passar do dia inteiro na tela', async () => {
+    saturdayMorning()
+    mockLibrary()
+    renderApp(WEEK)
+    await screen.findByRole('list', { name: 'segunda, 21 de setembro' })
+    const user = userEvent.setup()
+    const week = document.querySelector('.cal-week') as HTMLElement
+    const hourPx = () => parseFloat(week.style.getPropertyValue('--cal-hour'))
+    const zoomOut = screen.getByRole('button', { name: 'Diminuir o zoom' })
+
+    // Abre enquadrando a faixa de trabalho (8–18): cabe mais que o dia inteiro.
+    const initial = hourPx()
+    await user.click(screen.getByRole('button', { name: 'Aumentar o zoom' }))
+    expect(hourPx()).toBeGreaterThan(initial)
+
+    fireEvent.wheel(week, { deltaY: 100, ctrlKey: true })
+    expect(hourPx()).toBeCloseTo(initial)
+    // A roda sem Ctrl só rola.
+    fireEvent.wheel(week, { deltaY: 100 })
+    expect(hourPx()).toBeCloseTo(initial)
+
+    // O mínimo é o dia inteiro na altura da semana: dali o botão de diminuir desliga.
+    for (let i = 0; i < 10 && !(zoomOut as HTMLButtonElement).disabled; i++) await user.click(zoomOut)
+    expect(zoomOut).toBeDisabled()
+    expect(hourPx() * 24).toBeCloseTo(initial * 10)
+  })
+
+  it('segue o expediente e a visão de abertura escolhidos na tela Ambiente', async () => {
+    saturdayMorning()
+    mockLibrary()
+    localStorage.setItem('eclume-expediente', '7-20')
+    localStorage.setItem('eclume-biblioteca-abertura', 'semana')
+    localStorage.setItem('eclume-biblioteca-ultima', 'visao=lista')
+    renderApp('/')
+
+    expect(await screen.findByRole('radio', { name: 'Semana' })).toBeChecked()
+    await screen.findByRole('list', { name: 'segunda, 21 de setembro' })
+    const work = [...document.querySelectorAll('.cal-hours span[data-work]')].map((span) => span.textContent)
+    expect(work[0]).toBe('07:00')
+    expect(work.at(-1)).toBe('20:00')
   })
 
   it('mostra o carregamento, o erro com nova tentativa e o período vazio', async () => {

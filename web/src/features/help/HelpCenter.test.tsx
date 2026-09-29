@@ -34,7 +34,9 @@ describe('central de ajuda', () => {
     expect(within(faq).getByText('Quem vê minhas gravações?')).toBeInTheDocument()
     expect(screen.getByText('Ainda com dúvida? Fale com quem administra este servidor.')).toBeInTheDocument()
     // A central está ligada na navegação.
-    expect(screen.getByRole('link', { name: 'Central de ajuda' })).toHaveAttribute('aria-current', 'page')
+    // A central mora no menu de ajuda do cabeçalho; a barra lateral não acende nada.
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    expect(within(nav).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
   it('lista um tópico inteiro por ?topico=', async () => {
