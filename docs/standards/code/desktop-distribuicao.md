@@ -2,7 +2,7 @@
 type: standard
 title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, workflow desktop-release com matriz Windows/Linux/macOS universal, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
-resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
+resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, .github/workflows/desktop-release.yml, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-09-28
 audience: both
@@ -89,7 +89,10 @@ tag desktop-v0.1.0 ──► desktop-release.yml ──► GitHub Release (priva
   `uv run --with pillow python desktop/scripts/icones_bandeja.py`: o quadrado laranja com as
   cinco barras brancas; na reunião o quadrado vai na cor de gravação do DS, e a nota e o envio
   ganham um ponto de estado. O `tray.rs` troca o ícone só quando o estado muda — no Linux cada
-  troca grava um PNG e recarrega o AppIndicator —, e nunca pelo nível do áudio.
+  troca grava um PNG e recarrega o AppIndicator —, e nunca pelo nível do áudio. No GNOME, a
+  extensão do AppIndicator às vezes lê o PNG temporário (`/run/user/<uid>/tray-icon/`) depois
+  que o `tray-icon` já o trocou pelo seguinte e registra "Failed to recognize image format": uma
+  corrida do crate, cujo único efeito é o ícone daquela troca não aparecer.
 
 ## Manifestos
 

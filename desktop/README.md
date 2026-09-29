@@ -38,7 +38,21 @@ regra de vendorização, em [docs/standards/code/monorepo.md](../docs/standards/
 
 No Linux, o build exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
 `libxdo-dev`, `libssl-dev`, `build-essential`, `libasound2-dev`, `libpipewire-0.3-dev`,
-`libpulse-dev`, `clang` e `cmake`.
+`libpulse-dev`, `clang` e `cmake`. Sem elas (ou sem sudo), o `build.Dockerfile` monta o mesmo
+ambiente da CI num contêiner; o `cargo` e a CLI do Tauri rodam dentro dele, com o repositório
+montado. O build do desktop é pesado: numa estação que também roda IDE e navegador, limite a CPU
+(`--cpus 2`, `CARGO_BUILD_JOBS=2`) ou rode num host à parte.
+
+```bash
+docker build -t eclume-desktop-build -f desktop/build.Dockerfile desktop
+docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/src" -w /src eclume-desktop-build \
+  cargo test --manifest-path desktop/Cargo.toml --workspace
+# o .deb, sem os artefatos assinados do updater
+docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/src" -w /src/desktop/src-tauri eclume-desktop-build \
+  npx --yes @tauri-apps/cli@2 build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
 
 ```bash
 cargo check --manifest-path desktop/Cargo.toml --workspace
