@@ -216,6 +216,33 @@ mod tests {
     }
 
     #[test]
+    fn chamada_do_whatsapp_tem_politica_propria() {
+        let mut auto = AutoRecorder::default();
+        assert_eq!(
+            auto.on_event(
+                &started("whatsapp"),
+                &DetectionConfig::default(),
+                Recording::Idle
+            ),
+            Action::Ask(AppKey::Whatsapp)
+        );
+        auto.on_event(
+            &MeetingEvent::Ended,
+            &DetectionConfig::default(),
+            Recording::Idle,
+        );
+        let config = config(&[(AppKey::Whatsapp, Policy::Auto)]);
+        assert_eq!(
+            auto.on_event(&started("whatsapp"), &config, Recording::Idle),
+            Action::Start(AppKey::Whatsapp)
+        );
+        assert_eq!(
+            auto.on_event(&MeetingEvent::Ended, &config, Recording::Auto),
+            Action::Stop
+        );
+    }
+
+    #[test]
     fn gravacao_manual_nunca_e_parada_nem_substituida() {
         let config = config(&[(AppKey::Teams, Policy::Auto)]);
         let mut auto = AutoRecorder::default();

@@ -57,6 +57,7 @@ pub enum AppKey {
     Meet,
     Webex,
     Slack,
+    Whatsapp,
     /// Navegador usando o mic, sem título de janela que diga qual reunião.
     Navegador,
     /// Mic em uso por um app que não é de reunião conhecido.
@@ -64,12 +65,13 @@ pub enum AppKey {
 }
 
 impl AppKey {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Teams,
         Self::Zoom,
         Self::Meet,
         Self::Webex,
         Self::Slack,
+        Self::Whatsapp,
         Self::Navegador,
         Self::Outro,
     ];
@@ -81,6 +83,7 @@ impl AppKey {
             Self::Meet => "meet",
             Self::Webex => "webex",
             Self::Slack => "slack",
+            Self::Whatsapp => "whatsapp",
             Self::Navegador => "navegador",
             Self::Outro => "outro",
         }
@@ -98,6 +101,7 @@ impl AppKey {
             Self::Meet => "Google Meet",
             Self::Webex => "Webex",
             Self::Slack => "Slack",
+            Self::Whatsapp => "WhatsApp",
             Self::Navegador => "navegador",
             Self::Outro => "outro app",
         }
@@ -109,19 +113,20 @@ impl AppKey {
             Self::Teams => "teams",
             Self::Meet => "meet",
             Self::Zoom => "zoom",
-            Self::Webex | Self::Slack | Self::Navegador | Self::Outro => "other",
+            Self::Webex | Self::Slack | Self::Whatsapp | Self::Navegador | Self::Outro => "other",
         }
     }
 }
 
 /// Apps de reunião com cliente próprio, pelo trecho do binário, nome ou bundle id
-/// (`ms-teams.exe`, `MSTeams_8wekyb3d8bbwe`, `teams-for-linux`, `ZOOM VoiceEngine`, `us.zoom.xos`,
+/// (`WhatsApp.exe`, `net.whatsapp.WhatsApp`, `ms-teams.exe`, `MSTeams_8wekyb3d8bbwe`, `teams-for-linux`, `ZOOM VoiceEngine`, `us.zoom.xos`,
 /// `CptHost` do Zoom, `CiscoCollabHost` do Webex).
-const NATIVE_APPS: [(AppKey, &[&str]); 4] = [
+const NATIVE_APPS: [(AppKey, &[&str]); 5] = [
     (AppKey::Teams, &["teams"]),
     (AppKey::Zoom, &["zoom", "cpthost", "aomhost"]),
     (AppKey::Webex, &["webex", "ciscocollabhost"]),
     (AppKey::Slack, &["slack"]),
+    (AppKey::Whatsapp, &["whatsapp"]),
 ];
 
 /// Navegadores, pelo trecho do binário ou nome (`chrome`, `msedge`, o processo GPU do WebKit
@@ -141,7 +146,7 @@ const BROWSERS: [&str; 11] = [
 ];
 
 /// Títulos de janela que identificam a reunião aberta num navegador, em ordem de prioridade.
-const BROWSER_TITLES: [(AppKey, &[&str]); 4] = [
+const BROWSER_TITLES: [(AppKey, &[&str]); 5] = [
     (AppKey::Meet, &["meet.google.com", "google meet", "meet - "]),
     (AppKey::Teams, &["microsoft teams"]),
     (
@@ -149,6 +154,8 @@ const BROWSER_TITLES: [(AppKey, &[&str]); 4] = [
         &["zoom meeting", "zoom workplace", "app.zoom.us"],
     ),
     (AppKey::Webex, &["webex"]),
+    // Por último: só vale se nenhuma reunião de verdade estiver aberta em outra aba.
+    (AppKey::Whatsapp, &["whatsapp"]),
 ];
 
 /// Processos que só existem com uma reunião em andamento, para o caso em que o SO diz que o mic
@@ -265,6 +272,13 @@ mod tests {
             ("us.zoom.xos", "zoom.us", AppKey::Zoom),
             ("CiscoCollabHost", "", AppKey::Webex),
             ("slack", "Slack", AppKey::Slack),
+            ("WhatsApp.exe", "WhatsApp", AppKey::Whatsapp),
+            (
+                "5319275A.WhatsAppDesktop_cv1g1gvanyjgm",
+                "",
+                AppKey::Whatsapp,
+            ),
+            ("net.whatsapp.WhatsApp", "WhatsApp", AppKey::Whatsapp),
         ] {
             assert_eq!(classify(&mic(&[(id, name)])), Some(expected), "{id}");
         }
@@ -284,6 +298,19 @@ mod tests {
         snapshot.window_titles = vec!["Chat | Microsoft Teams - Microsoft Edge".into()];
         snapshot.mic_users = vec![AudioClient::new("msedge", "Microsoft Edge")];
         assert_eq!(classify(&snapshot), Some(AppKey::Teams));
+    }
+
+    #[test]
+    fn whatsapp_web_pelo_titulo_e_reuniao_de_verdade_ganha() {
+        let mut snapshot = mic(&[("chrome", "Google Chrome")]);
+        snapshot.window_titles = vec!["(2) WhatsApp Web - Google Chrome".into()];
+        assert_eq!(classify(&snapshot), Some(AppKey::Whatsapp));
+        snapshot
+            .window_titles
+            .push("Meet - abc-defg-hij - Google Chrome".into());
+        assert_eq!(classify(&snapshot), Some(AppKey::Meet));
+        assert_eq!(AppKey::Whatsapp.meeting_app(), "other");
+        assert_eq!(AppKey::Whatsapp.label(), "WhatsApp");
     }
 
     #[test]

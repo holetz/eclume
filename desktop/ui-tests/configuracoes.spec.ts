@@ -7,26 +7,28 @@ async function ultimaEntrada(page: Page): Promise<Entrada> {
   return page.evaluate(() => (window as unknown as { __mock: { estado: { ultimaEntrada: Entrada } } }).__mock.estado.ultimaEntrada)
 }
 
-test('Ctrl+, abre Reuniões com os 7 apps, o subtítulo do DS e a política de cada um', async ({ abrir }) => {
+test('Ctrl+, abre Reuniões com os 8 apps, o subtítulo do DS e a política de cada um', async ({ abrir }) => {
   const page = await abrir()
   await page.keyboard.press('Control+,')
   await expect(page.locator('[data-vista="configuracoes"]')).toBeVisible()
   await expect(page.locator('[data-aba="reunioes"]')).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator('#detectar')).toBeChecked()
   const linhas = page.locator('#apps .list-row')
-  await expect(linhas).toHaveCount(7)
+  await expect(linhas).toHaveCount(8)
   await expect(linhas.locator('.list-row-title')).toHaveText([
     'Microsoft Teams',
     'Zoom',
     'Google Meet',
     'Webex',
     'Slack',
+    'WhatsApp',
     'Navegador',
     'Outro app',
   ])
   await expect(linhas.nth(4).locator('.list-row-sub')).toHaveText('Chamadas')
-  await expect(linhas.nth(5).locator('.list-row-sub')).toHaveText('Microfone em uso, reunião não reconhecida')
-  await expect(linhas.nth(6).locator('input[value="ignore"]')).toBeChecked()
+  await expect(linhas.nth(5).locator('.list-row-sub')).toHaveText('App ou aba do WhatsApp Web')
+  await expect(linhas.nth(6).locator('.list-row-sub')).toHaveText('Microfone em uso, reunião não reconhecida')
+  await expect(linhas.nth(7).locator('input[value="ignore"]')).toBeChecked()
   await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Perguntar', 'Ignorar'])
 })
 
@@ -60,6 +62,7 @@ test('mudar a política, desligar a detecção e restaurar os padrões salvam na
     meet: 'ask',
     webex: 'ask',
     slack: 'ask',
+    whatsapp: 'ask',
     navegador: 'ask',
     outro: 'ignore',
   })
