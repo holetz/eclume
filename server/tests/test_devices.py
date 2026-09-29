@@ -57,7 +57,7 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     credential = response.json()
     token = credential["token"]
     assert (token["name"], token["kind"], token["platform"]) == ("Notebook da Mariana", "device", "windows")
-    assert token["scopes"] == ["recordings:read", "recordings:write", "summaries:read"]
+    assert token["scopes"] == ["recordings:read", "recordings:write", "transcripts:read", "summaries:read"]
     assert token["expires_at"] is None
     assert credential["server"]["url"] == "https://testserver"
     assert credential["server"]["mcp_url"] == "https://testserver/mcp"
@@ -68,6 +68,8 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     assert device.get("/api/v1/recordings").status_code == 200
     # O escopo `summaries:read` passa (o aviso com "Copiar" do desktop): 404 da gravação, não 403.
     assert device.get(f"/api/v1/recordings/{uuid4()}/summary").status_code == 404
+    # `transcripts:read` passa (a pasta sincronizada do desktop): a lista responde 200, não 403.
+    assert device.get("/api/v1/transcripts").status_code == 200
 
     # Aparece em "App móvel" e "App desktop", e desvincular desliga o aparelho.
     session = as_user(account)
@@ -271,4 +273,45 @@ INSERT INTO api_tokens (user_id, name, token_hash, prefix, scopes, kind, platfor
     assert run(check()) == [
         ("lumea", ["transcripts:read"]),
         ("notebook", ["recordings:read", "recordings:write", "summaries:read"]),
+    ]
+
+
+def test_migration_018_da_transcripts_read_aos_dispositivos_ja_emitidos(services: Services):
+    del services  # só pela checagem dos serviços de teste
+    database = f"eclume_mig018_{secrets.token_hex(4)}"
+    target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
+    user = uuid4()
+    seed = f"""
+INSERT INTO users (id, email, name, password_hash) VALUES ('{user}', 'u@exemplo.com.br', 'U', 'h');
+INSERT INTO api_tokens (user_id, name, token_hash, prefix, scopes, kind, platform) VALUES
+    ('{user}', 'notebook', 'h1', 'eclp_a', ARRAY['recordings:read', 'summaries:read'], 'device', 'linux'),
+    ('{user}', 'lumea', 'h2', 'eclp_b', ARRAY['recordings:read'], 'personal', NULL);
+"""  # noqa: S608
+
+    async def admin(statement: str) -> None:
+        engine = create_async_engine(DATABASE_URL, isolation_level="AUTOCOMMIT")
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text(statement))
+        finally:
+            await engine.dispose()
+
+    async def check() -> list[tuple[str, list[str]]]:
+        await admin(f'CREATE DATABASE "{database}"')
+        engine = create_async_engine(target)
+        try:
+            await migrate(engine, until="017_dispositivo_le_resumo")
+            async with engine.connect() as conn:
+                await (await conn.get_raw_connection()).driver_connection.execute(seed)
+            assert await migrate(engine, until="018_dispositivo_le_transcricao") == ["018_dispositivo_le_transcricao"]
+            async with engine.connect() as conn:
+                rows = await conn.execute(text("SELECT name, scopes FROM api_tokens ORDER BY name"))
+                return [tuple(row) for row in rows]
+        finally:
+            await engine.dispose()
+            await admin(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
+
+    assert run(check()) == [
+        ("lumea", ["recordings:read"]),
+        ("notebook", ["recordings:read", "summaries:read", "transcripts:read"]),
     ]
