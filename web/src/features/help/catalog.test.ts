@@ -32,6 +32,7 @@ const FORBIDDEN: RegExp[] = [
 const APP_ROUTES = [
   /^\/$/,
   /^\/busca$/,
+  /^\/perguntas$/,
   /^\/pessoas$/,
   /^\/colecoes$/,
   /^\/config\/(campos|agendas|mcp)$/,

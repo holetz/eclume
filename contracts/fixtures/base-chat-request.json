@@ -1,0 +1,13 @@
+{
+  "message": "Qual orçamento ficou combinado com a Serra Azul?",
+  "history": [
+    {
+      "role": "user",
+      "content": "Quais reuniões tive esta semana com clientes?"
+    },
+    {
+      "role": "assistant",
+      "content": "Duas: o kickoff da Serra Azul e a revisão do contrato da Vale Verde."
+    }
+  ]
+}

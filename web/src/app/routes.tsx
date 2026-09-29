@@ -14,6 +14,7 @@ const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminR
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
 const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
+const ChatPage = named(() => import('../features/chat/ChatPage'), 'ChatPage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const EnvironmentPage = named(() => import('../features/environment/EnvironmentPage'), 'EnvironmentPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
@@ -55,6 +56,7 @@ export function AppRoutes() {
         <Route path="/pessoas" element={page(PeoplePage)} />
         <Route path="/pessoas/:id" element={page(PersonPage)} />
         <Route path="/busca" element={page(SearchPage)} />
+        <Route path="/perguntas" element={page(ChatPage)} />
         <Route path="/colecoes" element={page(CollectionsPage)} />
         <Route path="/config/campos" element={page(FieldsPage)} />
         <Route path="/config/agendas" element={page(AgendaTypesPage)} />
