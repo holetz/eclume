@@ -177,8 +177,15 @@ test('biblioteca, gravação e busca seguem as classes do DS', async ({ page }) 
   await page.goto(WEEK)
   await applyScheme(page, 'light')
   await expect(page.locator('.cal-event')).toHaveCount(10)
-  // A semana do DS: 54px por hora, blocos na superfície com a régua de cima, nota pontilhada.
-  expect(await style(page, '.cal-week', '--cal-hour')).toBe('54px')
+  // A semana abre com o expediente (8–18) enchendo a grade: a hora é a altura visível dividida por 10.
+  // Blocos na superfície com a régua de cima, nota pontilhada.
+  const fit = await page.evaluate(() => {
+    const box = document.querySelector('.cal-week')!.parentElement!
+    const head = (document.querySelector('.cal-head') as HTMLElement).offsetHeight
+    const hour = parseFloat(getComputedStyle(document.querySelector('.cal-week')!).getPropertyValue('--cal-hour'))
+    return { hour, expected: (box.clientHeight - head) / 10 }
+  })
+  expect(fit.hour).toBeCloseTo(fit.expected, 0)
   expect(await style(page, '.cal-event', 'background-color')).toBe('rgb(236, 232, 226)')
   expect(await style(page, '.cal-event[data-kind="note"]', 'border-top-style')).toBe('dotted')
   expect(await style(page, '.with-filters', 'grid-template-columns')).toMatch(/ 280px$/)

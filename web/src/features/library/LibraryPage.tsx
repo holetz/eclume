@@ -7,6 +7,7 @@ import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
+import { readLibraryOpening } from '../../app/preferences'
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
 import { useImportContext } from '../import/importContext'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
@@ -70,11 +71,17 @@ export function LibraryPage() {
   const narrow = useNarrow()
   const [collapsed, setCollapsed] = useState(() => readStored(STORAGE_KEYS.filtersCollapsed) === '1')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  // A biblioteca aberta sem parâmetros volta à última visão e aos últimos filtros.
-  const [restoring] = useState(() => params.size === 0 && Boolean(readStored(STORAGE_KEYS.lastLibrary)))
+  // A biblioteca aberta sem parâmetros volta à última visão e aos últimos filtros, ou abre na visão
+  // escolhida na tela Ambiente.
+  const [opening] = useState(readLibraryOpening)
+  const [restoring] = useState(
+    () => params.size === 0 && (opening !== 'ultima' || Boolean(readStored(STORAGE_KEYS.lastLibrary))),
+  )
   useEffect(() => {
-    if (restoring) setParams(new URLSearchParams(readStored(STORAGE_KEYS.lastLibrary) ?? ''), { replace: true })
-  }, [restoring, setParams])
+    if (!restoring) return
+    const next = opening === 'ultima' ? (readStored(STORAGE_KEYS.lastLibrary) ?? '') : { visao: opening }
+    setParams(new URLSearchParams(next), { replace: true })
+  }, [restoring, opening, setParams])
   useEffect(() => {
     if (params.size > 0) writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params))
   }, [params])
@@ -128,7 +135,7 @@ export function LibraryPage() {
 
   return (
     <div className={`bleed ${narrow ? '' : 'with-filters'} ${styles.layout}`} data-collapsed={(!narrow && collapsed) || undefined}>
-      <div className={styles.content}>
+      <div className={`${styles.content} ${view === 'lista' ? '' : styles.fill}`}>
         <PageHead
           kicker="Gravações"
           title="Biblioteca"

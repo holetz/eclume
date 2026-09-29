@@ -56,6 +56,9 @@ shell deixava de valer no build de produção:
 ## Classes de produto (`app.css`)
 
 - `:root{color-scheme:light}` (o escuro do DS já declara o seu).
+- `.main{max-width:none}`: o conteúdo usa a largura toda ao lado da barra, sem o
+  `--content-width` do DS; texto corrido mantém a própria medida (`68ch`). Telas `.bleed` tiram
+  também o respiro do `.main`.
 - `.field` em grid, `.field-hint` (texto de ajuda do campo, 12px, `--color-text-muted`, com 4px
   acima dentro de `.field`) e `.field-label` (o rótulo de 12px do DS para `<legend>` e rótulos
   que não são `<label>` filho de `.field`). No DS, `.hint` é o botão `?` de 18px.

@@ -20,7 +20,7 @@ export function CalendarMonth({ cells, recordings, onOpenWeek, busy = false }: C
   const from = `${location.pathname}${location.search}`
   const today = new Date()
   return (
-    <div className="cal-month" aria-busy={busy || undefined}>
+    <div className={`cal-month ${styles.month}`} aria-busy={busy || undefined}>
       {cells.slice(0, 7).map((cell) => (
         <span key={cell.date.toISOString()} className="cal-dow">
           {weekdayShort(cell.date)}

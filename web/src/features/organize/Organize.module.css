@@ -140,12 +140,25 @@
 .pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-3);
+  column-gap: var(--space-3);
+}
+
+/* Rótulo, campo e dica dividem as linhas entre os dois lados: um rótulo mais alto (com o "?" ou
+   quebrado em duas linhas) não desce o campo vizinho. */
+.pair > :global(.field) {
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+}
+
+.pair > :global(.field) > :first-child {
+  align-self: end;
 }
 
 @media (max-width: 40rem) {
   .pair {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-3);
   }
 }
 

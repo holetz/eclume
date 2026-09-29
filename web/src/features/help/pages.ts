@@ -14,6 +14,7 @@ export const HELP_PAGES = {
   tokens: 'Tokens de acesso',
   'app-desktop': 'App desktop',
   'app-movel': 'App móvel',
+  ambiente: 'Ambiente',
   ajuda: 'Central de ajuda',
 } as const
 

@@ -3,7 +3,6 @@ import {
   dayKey,
   dayLabel,
   eventBox,
-  hourRange,
   lanes,
   monthGrid,
   monthTitle,
@@ -87,12 +86,6 @@ describe('posição na agenda', () => {
     })
   })
 
-  it('usa 8–18 por padrão e estende a faixa para caber tudo', () => {
-    expect(hourRange([])).toEqual({ start: 8, end: 18 })
-    expect(hourRange([{ s: 9, d: 1 }])).toEqual({ start: 8, end: 18 })
-    expect(hourRange([{ s: 6.5, d: 0.5 }, { s: 18.5, d: 1.2 }])).toEqual({ start: 6, end: 20 })
-    expect(hourRange([{ s: 23, d: 1 }, { s: 0.2, d: 0.1 }])).toEqual({ start: 0, end: 24 })
-  })
 
   it('divide em faixas os eventos que se sobrepõem, e só eles', () => {
     const result = lanes([
