@@ -179,6 +179,13 @@ no cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de n
 e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
 O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
 `ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
+Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
+de documentação (`docs/`, `.design/`, `.impeccable/`, `.claude/`, os `.md` da raiz) não dispara o
+workflow, e o job `mudancas` (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo
+de que ele depende, foi tocado: o `python` e o `web` também rodam com `contracts/`, o `desktop` com
+`web/src/styles/eclume.css` e o `mobile` com `desktop/crates/`. Mudar o `ci.yml` ou disparar o
+workflow à mão roda todos os jobs; cada job tem `timeout-minutes`. Ao criar uma dependência nova
+entre pilares, acrescente o caminho ao filtro do job que a consome.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
 `.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
 demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de
