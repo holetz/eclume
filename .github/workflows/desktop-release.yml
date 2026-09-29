@@ -1,27 +1,27 @@
-# Release do app desktop do eclume: gera os instaladores de Windows, Linux e macOS, assina os
-# pacotes do updater com a chave minisign (secrets TAURI_SIGNING_*), monta latest.json,
-# instaladores.json e SHA256SUMS e publica um GitHub Release (privado, como o repo). Os clientes
-# baixam do servidor eclume, não do GitHub: deploy/publicar-desktop.sh copia o release para
-# /srv/eclume/downloads no host. Contrato: docs/standards/code/desktop-distribuicao.md.
+# Release do app desktop do eclume pelo GitHub Actions: gera os instaladores de Linux e, se
+# pedido, Windows, assina os pacotes do updater com a chave minisign (secrets TAURI_SIGNING_*),
+# monta latest.json, instaladores.json e SHA256SUMS e publica um GitHub Release (privado, como o
+# repo). Os clientes baixam do servidor eclume, não do GitHub: deploy/publicar-desktop.sh copia o
+# release para /srv/eclume/downloads no host. Contrato: docs/standards/code/desktop-distribuicao.md.
 #
-# Só roda por tag `desktop-v<versão>` ou à mão, nunca em PR/push: com o repo privado, o minuto de
-# macOS custa 10× e o de Windows 2×. No dispatch, `publicar: false` é ensaio (os artefatos ficam
-# no run) e `macos: false` pula o job mais caro.
+# O caminho principal é o release no host (deploy/release-desktop.sh), que não gasta minutos de
+# Actions. Este workflow é a alternativa e só roda à mão: a tag desktop-v* que o release no host
+# cria não o dispara. Com o repo privado, o minuto de Windows custa 2× (entrada `windows`,
+# desligada por padrão) e o macOS fica fora até o repositório ficar público. No dispatch,
+# `publicar: false` é ensaio (os artefatos ficam no run).
 name: desktop-release
 
 on:
-  push:
-    tags: ["desktop-v*"]
   workflow_dispatch:
     inputs:
       publicar:
         description: "Criar a tag desktop-v<versão do tauri.conf.json> e publicar o release"
         type: boolean
         default: false
-      macos:
-        description: "Incluir o macOS (10× o custo do Linux)"
+      windows:
+        description: "Incluir o Windows (2× o custo do Linux)"
         type: boolean
-        default: true
+        default: false
       notas:
         description: "Notas do release, que o app mostra no aviso \"Atualizado para X\""
         type: string
@@ -49,29 +49,16 @@ jobs:
           python-version-file: .python-version
       - id: plano
         env:
-          EVENTO: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
           PUBLICAR: ${{ inputs.publicar }}
-          MACOS: ${{ inputs.macos }}
+          WINDOWS: ${{ inputs.windows }}
         run: |
           versao=$(python3 -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")
           tag="desktop-v$versao"
-          if [ "$EVENTO" = push ]; then
-            if [ "$REF_NAME" != "$tag" ]; then
-              echo "::error::a tag $REF_NAME não bate com a versão $versao do tauri.conf.json"
-              exit 1
-            fi
-            PUBLICAR=true
-            MACOS=true
-          fi
-          matriz=$(MACOS="$MACOS" python3 - <<'EOF'
+          matriz=$(WINDOWS="$WINDOWS" python3 - <<'EOF'
           import json, os
-          alvos = [
-              {"plataforma": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb", "alvo": ""},
-              {"plataforma": "windows", "os": "windows-latest", "bundles": "nsis,msi", "alvo": ""},
-          ]
-          if os.environ["MACOS"] == "true":
-              alvos.append({"plataforma": "macos", "os": "macos-latest", "bundles": "app,dmg", "alvo": "universal-apple-darwin"})
+          alvos = [{"plataforma": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb"}]
+          if os.environ["WINDOWS"] == "true":
+              alvos.append({"plataforma": "windows", "os": "windows-latest", "bundles": "nsis,msi"})
           print(json.dumps({"include": alvos}))
           EOF
           )
@@ -106,8 +93,6 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.plataforma == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
@@ -124,25 +109,15 @@ jobs:
           # linuxdeploy sem FUSE e sem o strip que falha em binários com .relr.dyn.
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: |
-          args=(build --ci --bundles "${{ matrix.bundles }}")
-          if [ -n "${{ matrix.alvo }}" ]; then args+=(--target "${{ matrix.alvo }}"); fi
-          npx --yes @tauri-apps/cli@2 "${args[@]}"
+        run: npx --yes @tauri-apps/cli@2 build --ci --bundles "${{ matrix.bundles }}"
       - name: Juntar os artefatos
-        env:
-          VERSAO: ${{ needs.plano.outputs.versao }}
         run: |
-          if [ -n "${{ matrix.alvo }}" ]; then bundle="desktop/target/${{ matrix.alvo }}/release/bundle"; else bundle=desktop/target/release/bundle; fi
+          bundle=desktop/target/release/bundle
           mkdir -p saida
           shopt -s nullglob
           for f in "$bundle"/appimage/*.AppImage* "$bundle"/deb/*.deb* "$bundle"/nsis/*-setup.exe* \
-                   "$bundle"/msi/*.msi* "$bundle"/dmg/*.dmg; do
+                   "$bundle"/msi/*.msi*; do
             cp "$f" saida/
-          done
-          # O pacote do updater do macOS sai sem versão no nome (eclume.app.tar.gz).
-          for f in "$bundle"/macos/*.app.tar.gz*; do
-            nome=$(basename "$f")
-            cp "$f" "saida/${nome/.app.tar.gz/_${VERSAO}_universal.app.tar.gz}"
           done
           ls -la saida
           test -n "$(ls saida)"
