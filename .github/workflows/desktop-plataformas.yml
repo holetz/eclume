@@ -1,7 +1,8 @@
-# Verificação sob demanda do app desktop em Windows e macOS: só `cargo check`, disparado à mão
+# Verificação sob demanda do app desktop no Windows: só `cargo check`, disparado à mão
 # (`gh workflow run desktop-plataformas.yml`). Não roda em PR nem em push: com o repositório
-# privado, o minuto de macOS custa 10× e o de Windows 2×. O job Linux do `ci.yml` segue sendo a
-# prova de cada PR; o build completo com instaladores é o `desktop-release.yml`.
+# privado, o minuto de Windows custa 2×, e o macOS (10×) fica fora até o repositório ficar
+# público. O job Linux do `ci.yml` segue sendo a prova de cada PR; os instaladores saem do
+# `deploy/release-desktop.sh` ou do `desktop-release.yml`.
 name: desktop-plataformas
 
 on:
@@ -19,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

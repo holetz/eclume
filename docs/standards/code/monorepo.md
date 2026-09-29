@@ -187,7 +187,8 @@ de que ele depende, foi tocado: o `python` e o `web` também rodam com `contract
 workflow à mão roda todos os jobs; cada job tem `timeout-minutes`. Ao criar uma dependência nova
 entre pilares, acrescente o caminho ao filtro do job que a consome.
 macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
-`.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop nas duas plataformas sob
-demanda (`gh workflow run desktop-plataformas.yml`). Os instaladores do desktop saem de
-`.github/workflows/desktop-release.yml`, só por tag `desktop-v<versão>` ou à mão; o processo está
-em [desktop-distribuicao.md](desktop-distribuicao.md).
+`.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop no Windows sob demanda
+(`gh workflow run desktop-plataformas.yml`), e o macOS fica fora até o repositório ficar público.
+Os instaladores do desktop saem do host, por `deploy/release-desktop.sh`, sem gastar minutos de
+Actions; o `.github/workflows/desktop-release.yml` é a alternativa, só à mão. O processo está em
+[desktop-distribuicao.md](desktop-distribuicao.md).

@@ -7,8 +7,9 @@ guarda a fila local e a sobe ao servidor com upload resumível, e fica na bandej
 primeira execução, a pessoa entra com e-mail e senha no servidor embutido no instalador (ou achado
 na rede por mDNS), com a CA fixada pela impressão digital.
 
-Os instaladores (Windows, Linux e macOS) saem do workflow `desktop-release` e o app se atualiza
-sozinho pelo updater do Tauri; o processo está em
+Os instaladores saem do host, por `bash deploy/release-desktop.sh` (Linux; Windows com
+`--windows`; macOS fora enquanto o repositório for privado), ou do workflow `desktop-release` à
+mão, e o app se atualiza sozinho pelo updater do Tauri; o processo está em
 [docs/standards/code/desktop-distribuicao.md](../docs/standards/code/desktop-distribuicao.md) e o
 passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).
 
@@ -38,7 +39,21 @@ regra de vendorização, em [docs/standards/code/monorepo.md](../docs/standards/
 
 No Linux, o build exige `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
 `libxdo-dev`, `libssl-dev`, `build-essential`, `libasound2-dev`, `libpipewire-0.3-dev`,
-`libpulse-dev`, `clang` e `cmake`.
+`libpulse-dev`, `clang` e `cmake`. Sem elas (ou sem sudo), o `build.Dockerfile` monta o mesmo
+ambiente da CI num contêiner; o `cargo` e a CLI do Tauri rodam dentro dele, com o repositório
+montado. O build do desktop é pesado: numa estação que também roda IDE e navegador, limite a CPU
+(`--cpus 2`, `CARGO_BUILD_JOBS=2`) ou rode num host à parte.
+
+```bash
+docker build -t eclume-desktop-build -f desktop/build.Dockerfile desktop
+docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/src" -w /src eclume-desktop-build \
+  cargo test --manifest-path desktop/Cargo.toml --workspace
+# o .deb, sem os artefatos assinados do updater
+docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/src" -w /src/desktop/src-tauri eclume-desktop-build \
+  npx --yes @tauri-apps/cli@2 build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
 
 ```bash
 cargo check --manifest-path desktop/Cargo.toml --workspace
@@ -52,7 +67,7 @@ cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example sinais -
 ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test --manifest-path desktop/Cargo.toml -p eclume-sync --test mock
 # a janela num Chromium, com o Tauri simulado (capturas em ui-tests/capturas/)
 npm --prefix desktop/ui-tests ci && npm --prefix desktop/ui-tests test
-# um build com o servidor embutido, como o desktop-release faz
+# um build com o servidor embutido, como o release faz
 ECLUME_SERVER_URL=https://192.168.15.199:8443 ECLUME_SERVER_CA_SHA256=<sha256> cargo build --manifest-path desktop/Cargo.toml -p eclume-desktop
 ```
 
