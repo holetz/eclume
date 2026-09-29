@@ -47,11 +47,14 @@ O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook
   `smoke_mcp.py`: prova o servidor MCP com o SDK `mcp` e o pareamento de um aparelho.
 - `backup.sh` e `restaurar-backup.sh`: instalados em `/srv/eclume/bin/` pelo deploy; o backup
   roda no cron do host.
-- `publicar-desktop.sh`: publica um release do desktop em `/srv/eclume/downloads/`.
+- `release-desktop.sh`: compila o app desktop no host (contêiner com CPU limitada), assina com a
+  chave do updater do host e, com `--publicar`, cria o GitHub Release `desktop-v<versão>`;
+  `publicar-desktop.sh`: publica esse release em `/srv/eclume/downloads/`.
 
 ```bash
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
+bash deploy/release-desktop.sh --plan
 bash deploy/bootstrap-admin.sh
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --ca eclume-root.crt
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | uv run python deploy/smoke_mcp.py --ca eclume-root.crt

@@ -1,12 +1,31 @@
 # CI do eclume: lint e teste dos pilares e do contrato v1 em Linux a cada PR e a cada push em main.
 # macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os instaladores do desktop saem
 # do `desktop-release.yml`, só por tag `desktop-v*` ou à mão.
+#
+# Economia de minutos: mudança só de documentação não dispara a CI (`paths-ignore`), e o job
+# `mudancas` liga só os jobs dos pilares tocados. Cada job cobra ao menos 1 minuto; os filtros
+# seguem as dependências entre pilares (o server e o web leem o contrato, o desktop lê o CSS do
+# web, o mobile compila `desktop/crates`). Mexer neste arquivo roda tudo; `workflow_dispatch` também.
 name: ci
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - ".design/**"
+      - ".impeccable/**"
+      - ".claude/**"
+      - "*.md"
+      - "LICENSE"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - ".design/**"
+      - ".impeccable/**"
+      - ".claude/**"
+      - "*.md"
+      - "LICENSE"
   workflow_dispatch:
 
 concurrency:
@@ -17,8 +36,72 @@ permissions:
   contents: read
 
 jobs:
-  python:
+  mudancas:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.python == 'true' }}
+      contracts: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.contracts == 'true' }}
+      web: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.web == 'true' }}
+      web-browser: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.web-browser == 'true' }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.desktop == 'true' }}
+      mobile: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.mobile == 'true' }}
+    steps:
+      # No PR a lista de arquivos vem da API; no push em main o filtro compara com o commit
+      # anterior ao push e precisa do checkout.
+      - if: github.event_name == 'push'
+        uses: actions/checkout@v7
+      - if: github.event_name != 'workflow_dispatch'
+        id: filtro
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
+          filters: |
+            ci: &ci
+              - ".github/workflows/ci.yml"
+            uv: &uv
+              - "pyproject.toml"
+              - "uv.lock"
+              - ".python-version"
+            python:
+              - *ci
+              - *uv
+              - "engines/**"
+              - "server/**"
+              - "worker-gpu/**"
+              - "contracts/**"
+              - "deploy/docker-compose.test.yml"
+            contracts:
+              - *ci
+              - *uv
+              - "contracts/**"
+              - "deploy/docker-compose.mock.yml"
+            web:
+              - *ci
+              - "web/**"
+              - "contracts/**"
+            web-browser:
+              - *ci
+              - "web/**"
+              - "contracts/**"
+              - "deploy/docker-compose.mock.yml"
+            desktop:
+              - *ci
+              - "desktop/**"
+              - "web/src/styles/eclume.css"
+            mobile:
+              - *ci
+              - "mobile/**"
+              - "desktop/crates/**"
+
+  python:
+    needs: mudancas
+    if: needs.mudancas.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -37,7 +120,10 @@ jobs:
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml logs
 
   contracts:
+    needs: mudancas
+    if: needs.mudancas.outputs.contracts == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -54,7 +140,10 @@ jobs:
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   web:
+    needs: mudancas
+    if: needs.mudancas.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -75,7 +164,10 @@ jobs:
   # contra o mock do contrato. Os dois usam o Google Chrome que já vem no runner (canal `chrome`,
   # com os decoders proprietários), sem baixar navegador.
   web-browser:
+    needs: mudancas
+    if: needs.mudancas.outputs.web-browser == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: web
@@ -105,7 +197,10 @@ jobs:
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   desktop:
+    needs: mudancas
+    if: needs.mudancas.outputs.desktop == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - name: Dependências de sistema do Tauri 2 e da captura de áudio
@@ -136,7 +231,10 @@ jobs:
       - run: npm --prefix desktop/ui-tests test
 
   mobile:
+    needs: mudancas
+    if: needs.mudancas.outputs.mobile == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - name: Dependências de sistema do Tauri 2 e do microfone

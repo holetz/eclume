@@ -2,12 +2,12 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-09-27
+timestamp: 2026-09-29
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60
 maintainer: holetz
 ---
 
@@ -480,9 +480,9 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz ou o endereço exige
   atualizar as variáveis e soltar um release novo
   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
-  Publicar é
-  `gh workflow run desktop-release.yml -f publicar=true -f macos=true -f notas="<texto>"` e,
-  com o run verde, `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`
+  Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
+  Actions; `--plan` antes mostra o que sairia) e, com o release criado,
+  `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`
   a partir de um checkout com LF (num Windows com `core.autocrlf`, o script sai com CRLF e o
   `bash` recusa o `set -o pipefail`).
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
