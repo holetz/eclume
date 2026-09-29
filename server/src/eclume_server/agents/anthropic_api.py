@@ -26,6 +26,16 @@ if TYPE_CHECKING:
 _SERVER_ERROR = 500
 
 
+def _content(context: str, prompt: str) -> str | list[dict[str, Any]]:
+    """A mensagem do usuário; o contexto vira um bloco à parte, marcado para o cache de prompt."""
+    if not context:
+        return prompt
+    return [
+        {"type": "text", "text": context, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": prompt},
+    ]
+
+
 def _status_error(exc: anthropic.APIStatusError) -> ProviderError:
     message = f"API da Anthropic respondeu {exc.status_code}: {exc.message}"
     if exc.status_code >= _SERVER_ERROR:
@@ -59,13 +69,13 @@ class AnthropicProvider:
             http_client=self._http_client,
         )
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Uma mensagem com o prompt; recusa e erros da API viram `ProviderError`."""
         params: dict[str, Any] = {
             "model": self.config.model,
             "max_tokens": self.config.max_output_tokens,
             "system": system,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": _content(context, prompt)}],
         }
         if self.config.temperature is not None:
             params["temperature"] = self.config.temperature

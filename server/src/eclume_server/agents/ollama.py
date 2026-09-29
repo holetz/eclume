@@ -17,6 +17,7 @@ from eclume_server.agents.base import (
     Completion,
     ProviderConfig,
     ProviderError,
+    with_context,
 )
 from eclume_server.agents.openai_compat import post_json
 
@@ -41,7 +42,7 @@ class OllamaProvider:
         self.gpu_idle = gpu_idle
         self.transport = transport
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
         """Uma conversa, com o modelo descarregado logo depois."""
         if not self.config.base_url:
             raise ProviderError(PROVIDER_NOT_CONFIGURED, "O provider ollama precisa de base_url.")
@@ -52,7 +53,10 @@ class OllamaProvider:
             options["temperature"] = self.config.temperature
         body = {
             "model": self.config.model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": with_context(context, prompt)},
+            ],
             "stream": False,
             "keep_alive": 0,
             "options": options,

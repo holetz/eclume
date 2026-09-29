@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 from arq.connections import RedisSettings
 from arq.worker import Worker, func
 
-from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
+from eclume_server.agents.base import Completion, ProviderConfig, ProviderError, with_context
 from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
@@ -157,9 +157,14 @@ def run_gpu(
     return calls
 
 
-def purpose_of(system: str) -> str:
-    """A finalidade da chamada, pelo prompt de sistema: `fields`, `agenda_detection`, `chat` ou `summaries`."""
-    return {FIELDS_SYSTEM: "fields", DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat"}.get(system, "summaries")
+def purpose_of(system: str, prompt: str) -> str:
+    """A finalidade da chamada: `fields`, `agenda_detection`, `chat` ou `summaries`.
+
+    Os campos e o resumo compartilham o `system`; as regras dos campos vão no prompt.
+    """
+    if FIELDS_SYSTEM in prompt:
+        return "fields"
+    return {DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat"}.get(system, "summaries")
 
 
 @dataclass
@@ -180,7 +185,7 @@ class FakeAgents:
 
     def of(self, purpose: str) -> list[tuple[ProviderConfig, str, str]]:
         """As chamadas de uma finalidade."""
-        return [call for call in self.calls if purpose_of(call[1]) == purpose]
+        return [call for call in self.calls if purpose_of(call[1], call[2]) == purpose]
 
     def __call__(self, config: ProviderConfig) -> _FakeAgent:
         """O provider falso de `config`."""
@@ -192,11 +197,12 @@ class _FakeAgent:
     agents: FakeAgents
     config: ProviderConfig
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
+        prompt = with_context(context, prompt)
         self.agents.calls.append((self.config, system, prompt))
         if self.agents.errors:
             raise self.agents.errors.pop(0)
-        purpose = purpose_of(system)
+        purpose = purpose_of(system, prompt)
         queued = self.agents.replies.get(purpose)
         if queued:
             text = queued.pop(0)

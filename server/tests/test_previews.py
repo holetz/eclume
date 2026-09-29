@@ -61,7 +61,7 @@ def test_testar_a_regra_de_um_campo(user: Api, services: Services):
         (second["id"], "Serra Azul"),
         (first["id"], None),
     ]
-    assert all(system == FIELDS_SYSTEM for _, system, _ in agents.calls)
+    assert all(FIELDS_SYSTEM in prompt for _, _, prompt in agents.calls)
     assert "- campo (escolha, opções: Serra Azul | Vale Verde): A empresa." in agents.calls[0][2]
     # Nada foi gravado: o campo não existe e a gravação não mudou.
     assert "cliente" not in {f["key"] for f in user.get("/api/v1/fields").json()["items"]}

@@ -21,7 +21,7 @@ isolamento seguem o [núcleo do server](server-nucleo.md); o job roda na fila `e
 
 ## Providers
 
-Uma interface só — `Provider.complete(system, prompt) -> Completion(text, model)` — em
+Uma interface só — `Provider.complete(system, prompt, *, context="") -> Completion(text, model)` — em
 `eclume_server/agents/`. `options` do provider ajusta `context_window`, `max_tokens`, `timeout_s`
 e `temperature` (só enviada quando definida); sem elas valem os padrões por tipo.
 
@@ -32,6 +32,12 @@ e `temperature` (só enviada quando definida); sem elas valem os padrões por ti
 | `openai-compatible` | `POST {base_url}/chat/completions` (DeepSeek, Groq, OpenRouter, Ollama `/v1`) | 32 000 |
 | `ollama` | `POST {base_url}/api/chat` com `keep_alive: 0` | 8 192 |
 
+- **`context` é o bloco cacheável.** É o material que várias chamadas da mesma gravação repetem
+  (a transcrição, `prompting.transcript_block`) e vai antes do `prompt` na mensagem do usuário. O
+  `anthropic` o manda como bloco próprio com `cache_control: ephemeral`; os demais o juntam ao prompt
+  (`with_context`), e o `claude -p` cacheia o prefixo sozinho. O cache é por prefixo, então o
+  preenchimento de campos e o resumo usam o mesmo `system` (`SHARED_SYSTEM`) e o mesmo bloco; as
+  regras de cada tarefa (`FIELDS_SYSTEM`, `SYSTEM`) vão na mensagem, depois da transcrição.
 - **`claude-cli` não tem ferramenta nenhuma.** A linha de comando é montada num lugar só
   (`claude_command`): `--output-format json --tools "" --system-prompt <s> --no-session-persistence
   --setting-sources "" --strict-mcp-config --disable-slash-commands --permission-mode dontAsk`,
@@ -231,7 +237,7 @@ inode antigo, e o container passa a renovar com um refresh token já rotacionado
   `httpx2.MockTransport` no SDK da Anthropic e um executável `claude` falso.
 - O job e as rotas rodam com o worker CPU real e `FakeAgents`
   (`eclume_server_testing/fakes.py`), que o `run_cpu` injeta sempre: nenhum teste chama um LLM.
-  A finalidade de cada chamada sai do prompt de sistema; `replies["chat"]` é o roteiro do chat,
+  A finalidade de cada chamada sai do prompt de sistema, ou das regras de campos no prompt (`FIELDS_SYSTEM`), já que campos e resumo compartilham o `system`; `replies["chat"]` é o roteiro do chat,
   uma resposta por chamada (consultas e a resposta final).
 - O protocolo do chat é provado sem banco (`test_chat_protocol.py`), com um provider roteirizado.
 - O teste real, marcado `slow`, roda o `claude -p` do host sobre a transcrição de fixture: o
