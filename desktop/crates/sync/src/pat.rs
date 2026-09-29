@@ -46,27 +46,45 @@ impl OsKeyring {
     }
 }
 
+/// Roda `op` numa thread própria. O Secret Service do `keyring` faz `block_on` por dentro e dá
+/// panic numa thread que já roda um runtime Tokio (um comando `async` do Tauri, o updater); o
+/// panic ainda envenena o mutex global do cofre, e todo acesso seguinte dá panic também. Numa
+/// thread sem runtime o `block_on` funciona, e um panic que sobrar vira erro.
+#[cfg(feature = "os-keyring")]
+fn isolated<T: Send>(op: impl FnOnce() -> Result<T> + Send) -> Result<T> {
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("eclume-keyring".into())
+            .spawn_scoped(scope, op)
+            .context("falha ao abrir a thread do chaveiro")?
+            .join()
+            .unwrap_or_else(|_| bail!("o chaveiro do SO falhou (panic)"))
+    })
+}
+
 #[cfg(feature = "os-keyring")]
 impl SecretBackend for OsKeyring {
     fn get(&self) -> Result<Option<String>> {
-        match Self::entry()?.get_password() {
+        isolated(|| match Self::entry()?.get_password() {
             Ok(secret) => Ok(Some(secret)),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(err) => Err(err).context("falha ao ler o chaveiro do SO"),
-        }
+        })
     }
 
     fn set(&self, secret: &str) -> Result<()> {
-        Self::entry()?
-            .set_password(secret)
-            .context("falha ao gravar no chaveiro do SO")
+        isolated(|| {
+            Self::entry()?
+                .set_password(secret)
+                .context("falha ao gravar no chaveiro do SO")
+        })
     }
 
     fn delete(&self) -> Result<()> {
-        match Self::entry()?.delete_credential() {
+        isolated(|| match Self::entry()?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(err) => Err(err).context("falha ao apagar do chaveiro do SO"),
-        }
+        })
     }
 }
 
@@ -320,5 +338,15 @@ mod tests {
         );
         assert!(store.save("ghp_token").is_err());
         assert!(store.save("eclp_").is_err());
+    }
+
+    #[cfg(feature = "os-keyring")]
+    #[test]
+    fn chaveiro_roda_em_thread_propria_e_panic_vira_erro() {
+        // Fora da thread do chamador, o `block_on` do Secret Service não vê o runtime dele.
+        let name = isolated(|| Ok(std::thread::current().name().map(str::to_owned))).unwrap();
+        assert_eq!(name.as_deref(), Some("eclume-keyring"));
+        let err = isolated::<()>(|| panic!("cofre envenenado")).unwrap_err();
+        assert_eq!(err.to_string(), "o chaveiro do SO falhou (panic)");
     }
 }

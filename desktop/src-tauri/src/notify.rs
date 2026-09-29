@@ -1,16 +1,29 @@
 //! Notificações nativas, com os textos do frame "Notifications" do DS. A pergunta "gravar esta
-//! reunião?" leva as ações Gravar e Agora não onde o
+//! reunião?" leva as ações Gravar e Agora não, e o resumo pronto, Copiar e Abrir, onde o
 //! SO deixa responder pela notificação — Linux (D-Bus, `notify-rust`), Windows (toast com botões,
 //! `tauri-winrt-notification`) e macOS (`mac-notification-sys`) —, e a mesma pergunta fica na
 //! bandeja e na janela, porque o SO pode suprimir a notificação (modo foco, não perturbe).
 
+use std::sync::Arc;
+
 use eclume_detect::AppKey;
 use tauri::AppHandle;
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_opener::OpenerExt;
 
 const ACTION_RECORD: &str = "gravar";
 const ACTION_IGNORE: &str = "ignorar";
 const LABEL_RECORD: &str = "Gravar";
 const LABEL_IGNORE: &str = "Agora não";
+const ACTION_COPY: &str = "copiar";
+const ACTION_OPEN: &str = "abrir";
+const LABEL_COPY: &str = "Copiar";
+const LABEL_OPEN: &str = "Abrir";
+
+/// Duas ações `(id, rótulo)`: a principal e a outra.
+type Actions = [(&'static str, &'static str); 2];
+/// O que fazer com a ação escolhida (o id dela).
+type OnAction = Arc<dyn Fn(&AppHandle, &str) + Send + Sync>;
 
 /// O que o app avisa por notificação.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,7 +119,47 @@ pub fn short_duration(ms: i64) -> String {
 /// Pergunta se grava a reunião detectada (a pergunta também fica na bandeja e na janela).
 pub fn ask(app: &AppHandle, key: AppKey) {
     let (title, body) = Notice::Detected(key).text();
-    ask_native(app.clone(), title, body);
+    with_actions(
+        app.clone(),
+        title,
+        body,
+        [(ACTION_RECORD, LABEL_RECORD), (ACTION_IGNORE, LABEL_IGNORE)],
+        Arc::new(respond),
+    );
+}
+
+/// Título e corpo do aviso de resumo pronto.
+pub fn summary_text(recording_title: &str) -> (String, String) {
+    (
+        "Resumo pronto".into(),
+        format!("{recording_title} · copie para compartilhar"),
+    )
+}
+
+/// O resumo automático de uma gravação enviada ficou pronto: "Copiar" põe o Markdown na área de
+/// transferência e "Abrir" mostra a gravação no eclume web.
+pub fn summary_ready(app: &AppHandle, recording_title: &str, markdown: String, url: String) {
+    let (title, body) = summary_text(recording_title);
+    let on_action: OnAction = Arc::new(move |app, action| match action {
+        ACTION_COPY => {
+            if let Err(err) = app.clipboard().write_text(markdown.clone()) {
+                log::warn!("falha ao copiar o resumo: {err}");
+            }
+        }
+        ACTION_OPEN => {
+            if let Err(err) = app.opener().open_url(&url, None::<&str>) {
+                log::warn!("falha ao abrir {url}: {err}");
+            }
+        }
+        _ => {}
+    });
+    with_actions(
+        app.clone(),
+        title,
+        body,
+        [(ACTION_COPY, LABEL_COPY), (ACTION_OPEN, LABEL_OPEN)],
+        on_action,
+    );
 }
 
 fn respond(app: &AppHandle, action: &str) {
@@ -118,25 +171,26 @@ fn respond(app: &AppHandle, action: &str) {
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
-fn ask_native(app: AppHandle, title: String, body: String) {
+fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, on: OnAction) {
     std::thread::spawn(move || {
-        let shown = notify_rust::Notification::new()
+        let mut notification = notify_rust::Notification::new();
+        notification
             .appname(crate::APP_NAME)
             .summary(&title)
             .body(&body)
-            .action(ACTION_RECORD, LABEL_RECORD)
-            .action(ACTION_IGNORE, LABEL_IGNORE)
-            .timeout(notify_rust::Timeout::Never)
-            .show();
-        match shown {
-            Ok(handle) => handle.wait_for_action(|action| respond(&app, action)),
+            .timeout(notify_rust::Timeout::Never);
+        for (id, label) in actions {
+            notification.action(id, label);
+        }
+        match notification.show() {
+            Ok(handle) => handle.wait_for_action(|action| on(&app, action)),
             Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
         }
     });
 }
 
 #[cfg(target_os = "windows")]
-fn ask_native(app: AppHandle, title: String, body: String) {
+fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, on: OnAction) {
     use tauri_winrt_notification::{Duration, Toast};
 
     // Instalado, o toast usa o AUMID do app; em dev, o do PowerShell, que sempre existe.
@@ -146,15 +200,16 @@ fn ask_native(app: AppHandle, title: String, body: String) {
         app.config().identifier.clone()
     };
     let handle = app.clone();
+    let [(first, first_label), (second, second_label)] = actions;
     let shown = Toast::new(&app_id)
         .title(&title)
         .text1(&body)
         .duration(Duration::Long)
-        .add_button(LABEL_RECORD, ACTION_RECORD)
-        .add_button(LABEL_IGNORE, ACTION_IGNORE)
+        .add_button(first_label, first)
+        .add_button(second_label, second)
         .on_activated(move |action| {
             if let Some(action) = action {
-                respond(&handle, &action);
+                on(&handle, &action);
             }
             Ok(())
         })
@@ -165,21 +220,22 @@ fn ask_native(app: AppHandle, title: String, body: String) {
 }
 
 #[cfg(target_os = "macos")]
-fn ask_native(app: AppHandle, title: String, body: String) {
+fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, on: OnAction) {
     use mac_notification_sys::{MainButton, Notification, NotificationResponse};
 
     std::thread::spawn(move || {
         // Só vale uma vez por processo; as seguintes devolvem "já definido".
         let _ = mac_notification_sys::set_application(&app.config().identifier);
+        let [(first, first_label), (second, second_label)] = actions;
         let response = Notification::new()
             .title(&title)
             .message(&body)
-            .main_button(MainButton::SingleAction(LABEL_RECORD))
-            .close_button(LABEL_IGNORE)
+            .main_button(MainButton::SingleAction(first_label))
+            .close_button(second_label)
             .send();
         match response {
-            Ok(NotificationResponse::ActionButton(_)) => respond(&app, ACTION_RECORD),
-            Ok(NotificationResponse::CloseButton(_)) => respond(&app, ACTION_IGNORE),
+            Ok(NotificationResponse::ActionButton(_)) => on(&app, first),
+            Ok(NotificationResponse::CloseButton(_)) => on(&app, second),
             Ok(_) => {}
             Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
         }
@@ -187,7 +243,7 @@ fn ask_native(app: AppHandle, title: String, body: String) {
 }
 
 #[cfg(not(any(unix, target_os = "windows")))]
-fn ask_native(_app: AppHandle, title: String, body: String) {
+fn with_actions(_app: AppHandle, title: String, body: String, _actions: Actions, _on: OnAction) {
     info(&title, &body);
 }
 
@@ -222,6 +278,12 @@ mod tests {
             "Nota descartada · não ouvimos voz"
         );
         assert_eq!((LABEL_RECORD, LABEL_IGNORE), ("Gravar", "Agora não"));
+        let (title, body) = summary_text("Kickoff do programa");
+        assert_eq!(
+            format!("{title} · {body}"),
+            "Resumo pronto · Kickoff do programa · copie para compartilhar"
+        );
+        assert_eq!((LABEL_COPY, LABEL_OPEN), ("Copiar", "Abrir"));
     }
 
     #[test]

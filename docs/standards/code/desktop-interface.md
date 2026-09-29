@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Interface do app desktop no Design System
-description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema pelo sistema, CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais e da janela, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
+description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#40
+source: holetz/eclume#40, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -71,18 +71,20 @@ Na ordem do `index.html`:
 |---|---|---|
 | `principal` | Main window, Voice note, Automatic recording, After an update | linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
 | `primeira-execucao` | First run | servidores conhecidos, conferência da impressão digital, e-mail e senha, e em "Avançado" o código de pareamento e o endereço |
-| `importar` | Import file | a área de soltar, a data lida do arquivo com a origem e o progresso da conversão |
+| `importar` | Import file | a data lida do arquivo escolhido com a origem e o progresso da conversão; a área de soltar recebe um arquivo arrastado ou abre o seletor de novo |
 | `configuracoes` | Settings · Meetings, Audio, Storage, Server | as quatro abas |
 | `atalhos` | — (menu de ajuda) | a folha com os atalhos globais e os da janela |
 
-- **Tema.** `data-theme` em `<html>` segue `prefers-color-scheme`, como o readme do DS pede, e
-  acompanha a troca do sistema com o app aberto.
+- **Tema.** "Aparência", na aba Reuniões, escolhe Sistema (o padrão), Claro ou Escuro
+  (`theme` na config, que o `status` também traz). Em Sistema, `data-theme` em `<html>` segue
+  `prefers-color-scheme`, como o readme do DS pede, e acompanha a troca do sistema com o app
+  aberto; Claro e Escuro vencem o sistema. O DS só tem o escuro sob `data-theme="dark"`, então o
+  atributo é sempre gravado.
 
 ## Atalhos
 
-- **Globais**, registrados no Rust pelo `tauri-plugin-global-shortcut` (`shortcuts.rs`, sem
-  permissão de JS): alternar a gravação, nova nota (que também para a nota em curso) e marcador
-  (só com gravação ativa).
+- **Globais**, registrados no Rust (`shortcuts.rs`, sem permissão de JS): alternar a gravação,
+  nova nota (que também para a nota em curso) e marcador (só com gravação ativa).
 
 | SO | Gravar | Nova nota | Marcador |
 |---|---|---|---|
@@ -95,11 +97,30 @@ Na ordem do `index.html`:
   Mac, `⌘⇧M` é o mudo do Teams.
 - Os atalhos ficam em `config.json` (`shortcuts: {record, note, marker}`) e mudam em Áudio →
   "Alterar", que captura a próxima combinação na janela. O texto é validado por
-  `Shortcut::from_str` ao salvar. Uma falha de registro (atalho de outro app, ou Wayland, onde o
-  `global-hotkey` só funciona com X11) aparece na aba como "Em uso por outro app" ou
-  "Indisponível nesta sessão"; o botão e a bandeja continuam valendo.
+  `Shortcut::from_str` ao salvar.
+- **Três modos por sessão**, que a aba Áudio explica numa linha (`ShortcutMode` no
+  `SettingsView`):
+
+| Modo | Quando | Como o atalho chega |
+|---|---|---|
+| `global` | X11, Windows, macOS | `tauri-plugin-global-shortcut`; falha de registro vira "Em uso por outro app" (outro app tem a combinação) ou "Indisponível nesta sessão" (o plugin não subiu) |
+| `portal` | Wayland com `org.freedesktop.portal.GlobalShortcuts` (KDE, GNOME 48+) | `ashpd`: uma sessão com os três atalhos, o gatilho preferido no formato do XDG (`CTRL+ALT+r`) e o sinal `Activated`; o sistema pode pedir confirmação. Registrar de novo fecha a sessão anterior |
+| `system` | Wayland sem o portal (GNOME 46) | o atalho é do sistema e chama `eclume-desktop --alternar-gravacao`, `--nova-nota` ou `--marcador`; a instância única (`tauri-plugin-single-instance`) entrega a flag à instância aberta, e sem instância o app abre e faz a ação. No GNOME, "Criar atalhos no GNOME" grava custom-keybindings em `…/custom-keybindings/eclume-<ação>/` (nome "eclume · …", combinação no formato do GTK, `<Control><Alt>n`); criar de novo só regrava, remover não toca nos atalhos da pessoa, e com eles criados cada registro os regrava com as combinações e o executável de agora (o AppImage, quando é por ele). Fora do GNOME, a aba mostra o comando de cada ação. Sem o atalho do sistema, a linha diz "Crie o atalho no sistema" |
+
+  Numa sessão Wayland o app começa em `system` e passa a `portal` quando o portal responde. O
+  botão e a bandeja valem em todos os modos.
 - **Da janela**, por `keydown` no JS: `Ctrl/⌘+O` importar, `Ctrl/⌘+,` configurações,
-  `Ctrl/⌘+/` atalhos e `Esc` volta à principal.
+  `Ctrl/⌘+/` atalhos e `Esc` volta à principal. "Importar arquivo…" e `Ctrl/⌘+O` abrem direto o
+  seletor de arquivos do sistema (`tauri-plugin-dialog`); escolhido um arquivo, a vista
+  `importar` abre com ele, e desistir deixa a janela onde estava.
+
+## Janela no Linux
+
+- A barra de título é a nativa. No Wayland, o tao até a 0.35 cobria a HeaderBar do GTK com um
+  `EventBox` acima dos botões, e minimizar e fechar não recebiam o clique até a janela ser
+  realocada (tauri-apps/tauri#13440); por isso o `Cargo.toml` fixa o Tauri em 2.12 ou mais, que
+  traz o tao 0.37 com a correção. Não há barra de título própria em nenhum sistema.
+- Fechar esconde a janela (o app segue na bandeja), como nos outros sistemas.
 
 ## Ajuda e atualização
 

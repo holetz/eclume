@@ -16,15 +16,12 @@ async function pedido(page: Page) {
   return page.evaluate(() => (window as unknown as { __mock: Mock }).__mock.estado.importacao.pedido)
 }
 
-test('Importar arquivo… abre a vista, escolhe e mostra nome, duração e data lida do arquivo', async ({ abrir }) => {
+test('Importar arquivo… abre o seletor do sistema e a vista mostra nome, duração e data lida do arquivo', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#importar').click()
   await expect(page.locator('[data-vista="importar"]')).toBeVisible()
+  expect((await chamadas(page)).map((c) => c.comando)).toContain('pick_import_file')
   await expect(page.locator('[data-vista="principal"]')).toBeHidden()
-  await expect(page.locator('#importar-alvo')).toContainText('Solte o áudio ou o vídeo aqui')
-  await expect(page.locator('#importar-arquivo')).toBeHidden()
-
-  await page.locator('#importar-escolher').click()
   await expect(page.locator('#importar-nome')).toHaveText('kickoff-guion.m4a · 47:12')
   await expect(page.locator('#importar-data')).toHaveValue('2026-09-19T14:02')
   await expect(page.locator('#importar-origem')).toHaveText('Gravado em · lida do arquivo. Mude se estiver errada.')
@@ -72,6 +69,15 @@ test('arquivo sem áudio e falha na conversão aparecem como erro', async ({ abr
   await expect(page.locator('#importar-erro')).toContainText('disco cheio')
   await expect(page.locator('#importar-confirmar')).toBeEnabled()
   await expect(page.locator('#importar-andamento')).toBeHidden()
+})
+
+test('desistir no seletor do sistema fica na janela principal', async ({ abrir }) => {
+  const page = await abrir()
+  await ajustar(page, { escolhido: null })
+  await page.locator('#importar').click()
+  await expect.poll(async () => (await chamadas(page)).map((c) => c.comando)).toContain('pick_import_file')
+  await expect(page.locator('[data-vista="principal"]')).toBeVisible()
+  await expect(page.locator('[data-vista="importar"]')).toBeHidden()
 })
 
 test('Ctrl+O abre a importação e Esc volta', async ({ abrir }) => {

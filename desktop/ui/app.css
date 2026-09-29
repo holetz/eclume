@@ -117,12 +117,25 @@
   padding-top: var(--space-3);
 }
 
-.row-indent {
-  padding-left: 32px;
+/* "Manter por alguns dias": o campo dos dias fica dentro da própria escolha, à direita. */
+.choice-dias {
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
-.input-dias {
+.choice-dias-campo {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* O DS esconde todo input da `.choice` (é o rádio); o dos dias aparece. */
+.choice .input-dias {
+  position: static;
+  opacity: 1;
   width: 88px;
+  height: auto;
 }
 
 /* A seção do aviso só ocupa espaço quando há aviso. */
@@ -155,6 +168,12 @@
 
 .list-row-sub[data-problema] {
   color: var(--color-warning);
+}
+
+/* O comando da CLI que o atalho do sistema chama (Wayland fora do GNOME), numa linha própria. */
+.atalho-comando {
+  grid-column: 1 / -1;
+  user-select: all;
 }
 
 /* O menu de ajuda fica ancorado no ícone de ajuda, sobre a janela. */

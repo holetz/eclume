@@ -123,3 +123,21 @@ for (const vista of VISTAS) {
     }
   }
 }
+
+test('o tema escolhido vence o do sistema e volta a segui-lo em "Sistema"', async ({ abrir, page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('input[name="tema"][value="system"]')).toBeChecked()
+  await page.locator('#tema .seg-opt', { hasText: 'Escuro' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  // A próxima consulta do estado não desfaz a escolha, e o sistema trocar não a vence.
+  await page.waitForTimeout(1_200)
+  await page.emulateMedia({ colorScheme: 'light' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.locator('#tema .seg-opt', { hasText: 'Claro' }).click()
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.locator('#tema .seg-opt', { hasText: 'Sistema' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})

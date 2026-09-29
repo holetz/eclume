@@ -133,6 +133,27 @@ fn init_logging(dir: &Path) {
         Err(err) => eprintln!("log só no stderr: falha ao abrir {}: {err}", dir.display()),
     }
     let _ = builder.try_init();
+    std::panic::set_hook(Box::new(log_panic));
+}
+
+/// Um panic vai para o log com a thread, o local e o backtrace: o padrão só escreve no stderr, que
+/// o app aberto pelo menu do sistema não guarda em lugar nenhum que a pessoa ache.
+fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
+    let thread = std::thread::current();
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("(sem mensagem)");
+    let location = info
+        .location()
+        .map_or_else(String::new, |at| format!(" em {at}"));
+    log::error!(
+        "panic na thread {}{location}: {message}\n{}",
+        thread.name().unwrap_or("sem nome"),
+        std::backtrace::Backtrace::force_capture()
+    );
 }
 
 /// Abre o log para acréscimo, girando para `.1` o que passou de `max_bytes`.
@@ -184,15 +205,28 @@ fn spawn_reaper(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Primeiro plugin: a segunda instância entrega os argumentos à primeira e sai.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            match shortcuts::action_from_args(&argv) {
+                Some(action) => shortcuts::run(app, action),
+                None => show_window(app),
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             init_logging(&app.path().app_log_dir()?);
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
-            log::info!("dados em {}", data_dir.display());
+            log::info!(
+                "eclume {} ({}) com dados em {}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                data_dir.display()
+            );
             let updated = state.take_update_notification()?;
             app.manage(state);
             tray::build(app.handle())?;
@@ -206,6 +240,11 @@ pub fn run() {
                 );
             }
             shortcuts::init(app.handle());
+            // Aberto por um atalho do sistema sem instância rodando: faz a ação já.
+            if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>())
+            {
+                shortcuts::run(app.handle(), action);
+            }
             // No macOS, o app vive na barra de menus, sem ícone no Dock.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -237,6 +276,7 @@ pub fn run() {
             commands::status,
             commands::recordings,
             commands::toggle_recording,
+            commands::system_shortcuts,
             commands::new_note,
             commands::note_meter,
             commands::add_marker,
@@ -255,8 +295,10 @@ pub fn run() {
             commands::dismiss_update_notice,
             commands::storage_info,
             commands::list_input_devices,
-            commands::mic_test,
-            commands::mic_test_meter,
+            commands::list_output_devices,
+            commands::source_test,
+            commands::source_test_stop,
+            commands::source_test_meter,
             commands::open_data_dir,
             commands::discover_servers,
             commands::prepare_server,

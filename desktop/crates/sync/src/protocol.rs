@@ -178,6 +178,55 @@ impl Client {
         self.call_json("falha ao ler a conta", request)
     }
 
+    /// Monta o cliente real (TLS com a CA extra, a versão no `User-Agent`) a partir da config do
+    /// uploader: o mesmo que sobe as gravações lê o resumo delas.
+    pub fn from_config(config: &crate::uploader::UploaderConfig) -> Result<Self> {
+        let transport = crate::transport::UreqTransport::new(
+            config.ca_path.as_deref(),
+            &config.client_version,
+        )?;
+        Self::new(
+            Arc::new(transport),
+            &config.api_url,
+            &config.pat,
+            RetryPolicy::default(),
+        )
+    }
+
+    /// O resumo de uma gravação enviada: `GET /api/v1/recordings/{id}/summary`, para o aviso de
+    /// resumo pronto (a credencial de dispositivo tem `summaries:read` desde o contrato 2.6.0).
+    /// Primeiro a etapa `summary` da gravação (`GET /recordings/{id}`): pulada ou falha, não há o
+    /// que avisar; pendente ou em curso, espera sem ler o resumo. Só com ela `done` lê o resumo.
+    pub fn summary(&self, recording_id: &str) -> Result<SummaryPoll> {
+        let url = self.endpoint(&format!("/recordings/{recording_id}"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            404 => return Ok(SummaryPoll::Gone),
+            _ if response.is_success() => {
+                let recording: RecordingPipeline = parse("falha ao ler a gravação", &response)?;
+                match recording.summary_step() {
+                    Some("failed" | "skipped") => return Ok(SummaryPoll::Gone),
+                    Some("done") => {}
+                    _ => return Ok(SummaryPoll::Waiting),
+                }
+            }
+            _ => return Err(api_error("falha ao ler a gravação", &response)),
+        }
+        let url = self.endpoint(&format!("/recordings/{recording_id}/summary"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            // A gravação saiu do servidor: não há o que avisar.
+            404 => Ok(SummaryPoll::Gone),
+            // Sem transcrição ainda.
+            409 => Ok(SummaryPoll::Waiting),
+            _ if response.is_success() => {
+                let state: SummaryState = parse("falha ao ler o resumo", &response)?;
+                Ok(state.poll())
+            }
+            _ => Err(api_error("falha ao ler o resumo", &response)),
+        }
+    }
+
     fn get_upload(&self, upload_id: &str) -> Result<Option<Upload>> {
         let url = self.endpoint(&format!("/uploads/{upload_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -355,6 +404,69 @@ fn finished(upload: Upload) -> Result<Uploaded> {
     })
 }
 
+/// O que o aviso de resumo pronto faz com uma gravação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SummaryPoll {
+    /// O resumo atual ficou pronto: o Markdown dele.
+    Ready(String),
+    /// Ainda transcrevendo ou resumindo: perguntar de novo depois.
+    Waiting,
+    /// Não vai haver resumo para avisar (gravação apagada, etapa pulada ou que falhou).
+    Gone,
+}
+
+/// A parte da `Recording` que o aviso lê: o estado da etapa `summary` do pipeline.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+struct RecordingPipeline {
+    #[serde(default)]
+    pipeline: Vec<PipelineStep>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct PipelineStep {
+    step: String,
+    state: String,
+}
+
+impl RecordingPipeline {
+    fn summary_step(&self) -> Option<&str> {
+        self.pipeline
+            .iter()
+            .find(|step| step.step == "summary")
+            .map(|step| step.state.as_str())
+    }
+}
+
+/// A parte do `SummaryState` que o aviso lê.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct SummaryState {
+    #[serde(default)]
+    pub current: Option<SummaryVersion>,
+    #[serde(default)]
+    pub pending: Option<SummaryVersion>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct SummaryVersion {
+    pub status: String,
+    #[serde(default)]
+    pub content_md: Option<String>,
+}
+
+impl SummaryState {
+    /// Com a etapa `summary` já `done`: pronto com o Markdown da versão atual; sem ela (uma
+    /// geração nova em curso), espera.
+    pub fn poll(self) -> SummaryPoll {
+        match self.current {
+            Some(SummaryVersion {
+                status,
+                content_md: Some(markdown),
+            }) if status == "done" && !markdown.trim().is_empty() => SummaryPoll::Ready(markdown),
+            _ => SummaryPoll::Waiting,
+        }
+    }
+}
+
 /// Um endereço de servidor: `http://` ou `https://` seguido do host.
 pub fn parse_base(url: &str) -> Result<Url> {
     let base = Url::parse(url.trim()).with_context(|| format!("endereço inválido: {url}"))?;
@@ -508,6 +620,7 @@ mod tests {
             agenda_type_id: None,
             markers: Vec::new(),
             duration_ms: Some(1_000),
+            language: None,
             source: Source::Desktop,
             capture: Capture {
                 meeting_app: Some("teams".into()),
@@ -598,6 +711,74 @@ mod tests {
                 {"part_number": 3, "etag": "\"e3\""}
             ]})
         );
+    }
+
+    #[test]
+    fn resumo_pronto_espera_ou_desiste() {
+        let versao = |status: &str, md: Option<&str>| serde_json::json!({"status": status, "content_md": md, "version": 1});
+        let gravacao = |resumo: &str| {
+            let etapas: Vec<_> = [
+                "received",
+                "preprocessing",
+                "transcription",
+                "fields",
+                "agenda_type",
+                "summary",
+            ]
+            .iter()
+            .map(|step| {
+                let state = if *step == "summary" { resumo } else { "done" };
+                serde_json::json!({"step": step, "state": state})
+            })
+            .collect();
+            json(200, serde_json::json!({"id": "r", "pipeline": etapas}))
+        };
+        let script = Script::default()
+            .expect("GET /api/v1/recordings/r1", gravacao("done"))
+            .expect(
+                "GET /api/v1/recordings/r1/summary",
+                json(
+                    200,
+                    serde_json::json!({
+                        "current": versao("done", Some("# Ata\n\n- decisão")),
+                        "generated": null, "pending": null, "version_count": 1
+                    }),
+                ),
+            )
+            .expect("GET /api/v1/recordings/r2", gravacao("active"))
+            .expect("GET /api/v1/recordings/r3", gravacao("failed"))
+            .expect("GET /api/v1/recordings/r4", gravacao("skipped"))
+            .expect("GET /api/v1/recordings/r5", gravacao("pending"))
+            .expect("GET /api/v1/recordings/r6", status(404))
+            .expect("GET /api/v1/recordings/r7", gravacao("done"))
+            .expect(
+                "GET /api/v1/recordings/r7/summary",
+                json(
+                    200,
+                    serde_json::json!({
+                        "current": null, "generated": null,
+                        "pending": versao("running", None), "version_count": 1
+                    }),
+                ),
+            );
+        let (client, script, _) = make_client(script);
+        assert_eq!(
+            client.summary("r1").unwrap(),
+            SummaryPoll::Ready("# Ata\n\n- decisão".into())
+        );
+        assert_eq!(client.summary("r2").unwrap(), SummaryPoll::Waiting);
+        assert_eq!(client.summary("r3").unwrap(), SummaryPoll::Gone);
+        // Sem provedor ou sem tipo de pauta, o resumo é pulado: nada a esperar por 24 h.
+        assert_eq!(client.summary("r4").unwrap(), SummaryPoll::Gone);
+        assert_eq!(client.summary("r5").unwrap(), SummaryPoll::Waiting);
+        assert_eq!(client.summary("r6").unwrap(), SummaryPoll::Gone);
+        assert_eq!(client.summary("r7").unwrap(), SummaryPoll::Waiting);
+        let seen = script.seen();
+        // Enquanto a etapa não fica `done`, o resumo nem é pedido.
+        assert_eq!(seen.len(), 9);
+        assert!(seen.iter().all(|request| request
+            .headers
+            .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
     }
 
     #[test]

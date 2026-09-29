@@ -1,9 +1,9 @@
 // Adaptado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/audio-actual/src/speaker/windows.rs
 // (MIT, Copyright (c) 2023-present Fastrepl, Inc.; ver VENDOR.md e LICENSE neste crate).
 // Mudanças: anel próprio (`RingWriter`) no lugar do leitor assíncrono, downmix por média,
-// `tracing` → `log`, mensagens em pt-BR.
+// `tracing` → `log`, mensagens em pt-BR, listagem dos endpoints e loopback num endpoint escolhido.
 
-//! Windows: WASAPI loopback do endpoint de saída em uso.
+//! Windows: WASAPI loopback do endpoint de saída em uso ou de um escolhido pelo id.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ use wasapi::{
     SessionState, StreamMode, WaveFormat, initialize_mta,
 };
 
+use super::{OutputDevice, OutputDevices};
 use crate::ring::{self, RingSource, RingWriter};
 
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;
@@ -26,7 +27,41 @@ const ENDPOINT_POLL_INTERVAL: Duration = Duration::from_secs(2);
 // leituras seguidas evita que um som avulso do sistema faça a captura pular de endpoint.
 const ENDPOINT_SWITCH_CONFIRMATIONS: u8 = 2;
 
-pub(super) fn open() -> Result<RingSource> {
+pub(super) fn list_output_devices() -> Result<OutputDevices> {
+    // O COM é por thread e a thread de quem chama pode já estar num apartamento STA.
+    thread::Builder::new()
+        .name("eclume-lista-saidas".into())
+        .spawn(|| -> Result<OutputDevices> {
+            initialize_mta()
+                .ok()
+                .context("falha ao inicializar o apartamento COM do WASAPI")?;
+            let enumerator = DeviceEnumerator::new()
+                .context("falha ao criar o enumerador de dispositivos WASAPI")?;
+            let default = enumerator
+                .get_default_device(&Direction::Render)
+                .and_then(|device| device.get_id())
+                .ok();
+            let collection = enumerator
+                .get_device_collection(&Direction::Render)
+                .context("falha ao listar as saídas de áudio")?;
+            let devices = collection
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter_map(|device| {
+                    let id = device.get_id().ok()?;
+                    let name = device.get_friendlyname().unwrap_or_else(|_| id.clone());
+                    Some(OutputDevice { id, name })
+                })
+                .collect();
+            Ok(OutputDevices { default, devices })
+        })
+        .context("falha ao criar a thread da lista de saídas")?
+        .join()
+        .map_err(|_| anyhow::anyhow!("a thread da lista de saídas entrou em pânico"))?
+}
+
+pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
+    let target = target.map(str::to_string);
     let (writer, source) = ring::channel(ring::DEFAULT_CAPACITY, DEFAULT_SAMPLE_RATE);
     let closer = writer.closer();
     let running = Arc::new(AtomicBool::new(true));
@@ -37,7 +72,8 @@ pub(super) fn open() -> Result<RingSource> {
         thread::Builder::new()
             .name("eclume-system-wasapi".into())
             .spawn(move || {
-                if let Err(err) = capture_audio_loop(writer, &running, &init_tx) {
+                if let Err(err) = capture_audio_loop(writer, target.as_deref(), &running, &init_tx)
+                {
                     log::error!("falha no loop de captura WASAPI: {err:#}");
                 }
                 closer.close();
@@ -45,8 +81,8 @@ pub(super) fn open() -> Result<RingSource> {
             .context("falha ao criar a thread do WASAPI")?
     };
 
-    match init_rx.recv_timeout(INIT_TIMEOUT) {
-        Ok(Ok(())) => {}
+    let fell_back = match init_rx.recv_timeout(INIT_TIMEOUT) {
+        Ok(Ok(fell_back)) => fell_back,
         Ok(Err(err)) => {
             running.store(false, Ordering::Release);
             let _ = capture_thread.join();
@@ -57,12 +93,13 @@ pub(super) fn open() -> Result<RingSource> {
             let _ = capture_thread.join();
             anyhow::bail!("tempo esgotado ao iniciar o loopback WASAPI");
         }
-    }
+    };
 
-    Ok(source.on_stop(move || {
+    let source = source.on_stop(move || {
         running.store(false, Ordering::Release);
         let _ = capture_thread.join();
-    }))
+    });
+    Ok((source, fell_back))
 }
 
 #[derive(Clone, Copy)]
@@ -122,8 +159,9 @@ impl EndpointFollower {
 
 fn capture_audio_loop(
     mut writer: RingWriter,
+    target: Option<&str>,
     running: &AtomicBool,
-    init_tx: &std::sync::mpsc::Sender<Result<()>>,
+    init_tx: &std::sync::mpsc::Sender<Result<bool>>,
 ) -> Result<()> {
     let setup_result = (|| -> Result<_> {
         initialize_mta()
@@ -131,12 +169,25 @@ fn capture_audio_loop(
             .context("falha ao inicializar o apartamento COM do WASAPI")?;
         let enumerator = DeviceEnumerator::new()
             .context("falha ao criar o enumerador de dispositivos WASAPI")?;
-        let device = open_render_device(&enumerator)?;
+        let chosen = target.and_then(|id| find_render_device(&enumerator, id));
+        let fell_back = target.is_some() && chosen.is_none();
+        if fell_back {
+            log::warn!(
+                "saída {:?} não encontrada; seguindo a saída em uso",
+                target.unwrap_or_default()
+            );
+        }
+        // Com uma saída escolhida (e presente), a captura fica nela e não segue a em uso.
+        let follow = chosen.is_none();
+        let device = match chosen {
+            Some(device) => device,
+            None => open_render_device(&enumerator)?,
+        };
         let capture = open_loopback_capture(device)?;
-        Ok((enumerator, capture))
+        Ok((enumerator, capture, follow, fell_back))
     })();
 
-    let (enumerator, mut capture) = match setup_result {
+    let (enumerator, mut capture, follow, fell_back) = match setup_result {
         Ok(values) => values,
         Err(err) => {
             let _ = init_tx.send(Err(anyhow::anyhow!(err.to_string())));
@@ -152,14 +203,14 @@ fn capture_audio_loop(
         capture.format.sample_rate,
         capture.device_name
     );
-    let _ = init_tx.send(Ok(()));
+    let _ = init_tx.send(Ok(fell_back));
 
     let mut follower = EndpointFollower::new(capture.device_id.clone());
     let mut next_endpoint_poll = Instant::now() + ENDPOINT_POLL_INTERVAL;
     let mut temp_queue = VecDeque::new();
 
     while running.load(Ordering::Acquire) {
-        if Instant::now() >= next_endpoint_poll {
+        if follow && Instant::now() >= next_endpoint_poll {
             next_endpoint_poll = Instant::now() + ENDPOINT_POLL_INTERVAL;
             if let Some(device) = poll_render_endpoint_switch(&enumerator, &mut follower) {
                 match open_loopback_capture(device) {
@@ -295,6 +346,15 @@ fn drain_packets(capture_client: &AudioCaptureClient, queue: &mut VecDeque<u8>) 
             }
         }
     }
+}
+
+// Só endpoints ativos: um desconectado ou desabilitado conta como sumido.
+fn find_render_device(enumerator: &DeviceEnumerator, id: &str) -> Option<Device> {
+    let collection = enumerator.get_device_collection(&Direction::Render).ok()?;
+    collection
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|device| device.get_id().is_ok_and(|device_id| device_id == id))
 }
 
 fn open_render_device(enumerator: &DeviceEnumerator) -> Result<Device> {

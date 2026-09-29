@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use cidre::core_audio::aggregate_device_keys as agg_keys;
 use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
 
+use super::OutputDevices;
 use crate::ring::{self, RingSource, RingWriter};
 
 const TAP_DEVICE_NAME: &str = "eclume-tap-sistema";
@@ -29,7 +30,20 @@ struct Running {
 // Os handles do Core Audio só são tocados no descarte, e o callback de IO usa apenas o `Ctx`.
 unsafe impl Send for Running {}
 
-pub(super) fn open() -> Result<RingSource> {
+// O tap global pega o que toca na saída em uso; escolher uma saída pediria um tap por dispositivo,
+// que o eclume ainda não tem.
+pub(super) fn list_output_devices() -> Result<OutputDevices> {
+    Ok(OutputDevices::default())
+}
+
+pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
+    if let Some(target) = target {
+        log::warn!("saída {target:?} ignorada: no macOS a captura segue a saída em uso");
+    }
+    Ok((open_tap()?, false))
+}
+
+fn open_tap() -> Result<RingSource> {
     let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
     let tap = tap_desc
         .create_process_tap()

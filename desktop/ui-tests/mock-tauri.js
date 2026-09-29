@@ -45,6 +45,7 @@
         recording_started_at: null,
         recording_kind: null,
         note_silence_s: 4,
+        theme: "system",
         marker_count: 0,
         last_marker: null,
         recording_auto: false,
@@ -87,11 +88,22 @@
           ["note", "Nova nota", "Ctrl+Alt+N"],
           ["marker", "Adicionar marcador", "Ctrl+Alt+M"],
         ].map(([action, label, keys]) => ({ action, label, keys, registration: "registered", problem: null })),
+        shortcut_mode: { mode: "global" },
         mic: null,
-        system_audio: true,
+        system_source: "follow",
+        language: null,
+        theme: "system",
+        notify_summary: true,
         note_silence_s: 4,
       },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
+      saidas: {
+        default: "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        devices: [
+          { id: "alsa_output.pci-0000_00_1f.3.analog-stereo", name: "Alto-falantes embutidos" },
+          { id: "bluez_output.jabra", name: "Jabra Evolve2 65" },
+        ],
+      },
       testeDeNivel: 0,
       marcadores: [],
       armazenamento: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
@@ -195,6 +207,20 @@
     },
     atualizado(e) {
       e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };
+    },
+    wayland(e) {
+      e.settings.shortcut_mode = {
+        mode: "system",
+        gnome: true,
+        commands: [
+          ["record", "--alternar-gravacao"],
+          ["note", "--nova-nota"],
+          ["marker", "--marcador"],
+        ].map(([action, flag]) => ({ action, command: `/usr/bin/eclume-desktop ${flag}` })),
+      };
+      for (const atalho of e.settings.shortcuts) {
+        Object.assign(atalho, { registration: "system", problem: "Crie o atalho no sistema" });
+      }
     },
     atalhoEmUso(e) {
       Object.assign(e.settings.shortcuts[1], { registration: "in_use", problem: "Em uso por outro app" });
@@ -312,6 +338,10 @@
     save_settings(e, { input }) {
       if (!/^https?:\/\/\S+$/.test(input.web_url)) throw "endereço inválido: use http:// ou https:// seguido do host";
       if (input.retention_days != null && input.retention_days > 3650) throw "retenção acima de 3650 dias";
+      const mic = input.mic === undefined ? e.settings.mic : input.mic || null;
+      const systemSource =
+        input.system_source === undefined ? e.settings.system_source : input.system_source || "follow";
+      if (mic === "none" && systemSource === "none") throw "Escolha ao menos uma fonte de áudio";
       e.ultimaEntrada = input;
       e.settings = {
         ...e.settings,
@@ -321,14 +351,29 @@
         detection_enabled: input.detection_enabled,
         retention_days: input.retention_days,
         pat_source: input.clear_pat ? null : input.pat ? "keyring" : e.settings.pat_source,
-        mic: input.mic === undefined ? e.settings.mic : input.mic || null,
-        system_audio: input.system_audio ?? e.settings.system_audio,
+        mic,
+        system_source: systemSource,
         note_silence_s: input.note_silence_s === undefined ? e.settings.note_silence_s : input.note_silence_s || null,
+        language: input.language === undefined ? e.settings.language : input.language || null,
+        theme: input.theme ?? e.settings.theme,
+        notify_summary: input.notify_summary ?? e.settings.notify_summary,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
           : e.settings.shortcuts,
         apps: e.settings.apps.map((a) => ({ ...a, policy: input.policies?.[a.app] ?? a.policy })),
       };
+      e.status.theme = e.settings.theme;
+      return e.settings;
+    },
+    system_shortcuts(e, { install }) {
+      for (const atalho of e.settings.shortcuts) {
+        Object.assign(
+          atalho,
+          install
+            ? { registration: "registered", problem: null }
+            : { registration: "system", problem: "Crie o atalho no sistema" },
+        );
+      }
       return e.settings;
     },
     storage_info: (e) => e.armazenamento,
@@ -339,11 +384,16 @@
     },
     open_log_dir: () => null,
     list_input_devices: (e) => e.microfones,
-    mic_test(e) {
+    list_output_devices: (e) => e.saidas,
+    source_test(e) {
       e.testeDeNivel = 10;
       return null;
     },
-    mic_test_meter(e) {
+    source_test_stop(e) {
+      e.testeDeNivel = 0;
+      return null;
+    },
+    source_test_meter(e) {
       if (e.testeDeNivel <= 0) return null;
       e.testeDeNivel -= 1;
       return [0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05];

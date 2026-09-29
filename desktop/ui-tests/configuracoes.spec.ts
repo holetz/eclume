@@ -30,6 +30,15 @@ test('Ctrl+, abre Reuniões com os 7 apps, o subtítulo do DS e a política de c
   await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Perguntar', 'Ignorar'])
 })
 
+test('Reuniões: o aviso de resumo pronto vem ligado e desliga na hora', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('#avisar-resumo')).toBeChecked()
+  await page.locator('label.switch', { hasText: 'Avisar quando o resumo ficar pronto' }).click()
+  await expect(page.locator('#avisar-resumo')).not.toBeChecked()
+  expect((await ultimaEntrada(page)).notify_summary).toBe(false)
+})
+
 test('mudar a política, desligar a detecção e restaurar os padrões salvam na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
@@ -142,7 +151,7 @@ test('Servidor com o PAT antigo: segue conectado e oferece entrar com e-mail e s
   await expect(page.locator('[data-vista="principal"]')).toBeVisible()
 })
 
-test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salvam na hora', async ({ abrir }) => {
+test('Áudio: microfone por nome, saída do sistema e parada por silêncio salvam na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="audio"]').click()
@@ -151,35 +160,118 @@ test('Áudio: microfone por nome, áudio do sistema e parada por silêncio salva
     'Padrão do sistema · Microfone embutido',
     'Microfone embutido',
     'Jabra Evolve2 65',
+    'Nenhum',
   ])
   await expect(page.locator('#microfone')).toHaveValue('')
-  await expect(page.locator('#audio-sistema')).toBeChecked()
+  await expect(page.locator('#audio-sistema option')).toHaveText([
+    'Seguir a saída em uso',
+    'Alto-falantes embutidos',
+    'Jabra Evolve2 65',
+    'Nenhum',
+  ])
+  await expect(page.locator('#audio-sistema')).toHaveValue('follow')
   await expect(page.locator('input[name="silencio"][value="4"]')).toBeChecked()
 
   await page.locator('#microfone').selectOption('Jabra Evolve2 65')
   await expect.poll(async () => (await ultimaEntrada(page)).mic).toBe('Jabra Evolve2 65')
 
-  await page.locator('.switch', { hasText: 'Gravar também o áudio do sistema' }).click()
-  await expect(page.locator('#audio-sistema')).not.toBeChecked()
-  expect((await ultimaEntrada(page)).system_audio).toBe(false)
+  await page.locator('#audio-sistema').selectOption('bluez_output.jabra')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('bluez_output.jabra')
 
   await page.locator('#silencio .seg-opt', { hasText: 'Nunca' }).click()
   await expect(page.locator('input[name="silencio"][value="0"]')).toBeChecked()
   expect((await ultimaEntrada(page)).note_silence_s).toBe(0)
   await page.locator('#silencio .seg-opt', { hasText: '8 s' }).click()
   await expect.poll(async () => (await ultimaEntrada(page)).note_silence_s).toBe(8)
+
+  await expect(page.locator('#idioma')).toHaveValue('')
+  await expect(page.locator('#idioma option')).toHaveText(['Automático (padrão do servidor)', 'Português', 'Español', 'English'])
+  await page.locator('#idioma').selectOption('es')
+  await expect.poll(async () => (await ultimaEntrada(page)).language).toBe('es')
+  await expect(page.locator('#idioma')).toHaveValue('es')
+  await page.locator('#idioma').selectOption('')
+  await expect.poll(async () => (await ultimaEntrada(page)).language).toBe('')
 })
 
-test('Áudio: o teste de nível mostra o medidor e volta ao fim', async ({ abrir }) => {
+test('Áudio: "Nenhum" em cada fonte desliga o teste dela, e as duas em "Nenhum" são recusadas', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#testar-mic')).toBeEnabled()
+  await expect(page.locator('#testar-sistema')).toBeEnabled()
+
+  await page.locator('#audio-sistema').selectOption('none')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('none')
+  await expect(page.locator('#testar-sistema')).toBeDisabled()
+  await expect(page.locator('#testar-mic')).toBeEnabled()
+
+  await page.locator('#microfone').selectOption('none')
+  await expect(page.locator('#config-aviso')).toContainText('Escolha ao menos uma fonte de áudio')
+  await expect(page.locator('#microfone')).toHaveValue('')
+
+  await page.locator('#audio-sistema').selectOption('follow')
+  await expect.poll(async () => (await ultimaEntrada(page)).system_source).toBe('follow')
+  await page.locator('#microfone').selectOption('none')
+  await expect.poll(async () => (await ultimaEntrada(page)).mic).toBe('none')
+  await expect(page.locator('#testar-mic')).toBeDisabled()
+  await expect(page.locator('#testar-sistema')).toBeEnabled()
+})
+
+test('Áudio: o teste do microfone mostra o medidor, vira "Parar" e volta ao fim', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="audio"]').click()
   await expect(page.locator('#medidor-teste i')).toHaveCount(16)
-  await page.locator('#testar-nivel').click()
-  await expect(page.locator('#testar-nivel')).toHaveText('Ouvindo…')
+  await page.locator('#testar-mic').click()
+  await expect(page.locator('#testar-mic')).toHaveText('Parar')
+  await expect(page.locator('#testar-sistema')).toHaveText('Toque algo para testar')
   await expect(page.locator('#medidor-teste i:not([data-quiet])')).toHaveCount(6)
-  await expect(page.locator('#testar-nivel')).toHaveText('Fale para testar o nível')
+  await expect(page.locator('#testar-mic')).toHaveText('Fale para testar')
   await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
+  expect((await chamadas(page)).filter((c) => c.comando === 'source_test')).toEqual([
+    { comando: 'source_test', args: { source: 'mic' } },
+  ])
+})
+
+test('Áudio: o teste do sistema para antes do fim com "Parar"', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await page.locator('#testar-sistema').click()
+  await expect(page.locator('#testar-sistema')).toHaveText('Parar')
+  await expect(page.locator('#medidor-teste i:not([data-quiet])')).toHaveCount(6)
+  await page.locator('#testar-sistema').click()
+  await expect(page.locator('#testar-sistema')).toHaveText('Toque algo para testar')
+  await expect(page.locator('#medidor-teste i[data-quiet]')).toHaveCount(16)
+  const testes = (await chamadas(page)).filter((c) => ['source_test', 'source_test_stop'].includes(c.comando))
+  expect(testes).toEqual([
+    { comando: 'source_test', args: { source: 'system' } },
+    { comando: 'source_test_stop', args: null },
+  ])
+})
+
+test('Áudio no Wayland sem portal: cria e remove os atalhos do GNOME', async ({ abrir }) => {
+  const page = await abrir('wayland')
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="audio"]').click()
+  await expect(page.locator('#atalhos-modo')).toHaveText(
+    'Nesta sessão (Wayland), o eclume não ouve o teclado sozinho: crie os atalhos no GNOME.',
+  )
+  const linhas = page.locator('#atalhos .list-row')
+  await expect(linhas.locator('.list-row-sub')).toHaveText(Array(3).fill('Crie o atalho no sistema'))
+  await expect(linhas.locator('.atalho-comando')).toHaveCount(0)
+
+  await page.locator('#atalhos-gnome', { hasText: 'Criar atalhos no GNOME' }).click()
+  await expect(page.locator('#config-aviso')).toContainText('Atalhos criados no GNOME.')
+  await expect(linhas.locator('.list-row-sub')).toHaveText(Array(3).fill('Funciona com o eclume em segundo plano'))
+  await expect(page.locator('#atalhos-modo')).toHaveText('Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume.')
+  expect((await chamadas(page)).filter((c) => c.comando === 'system_shortcuts')).toEqual([
+    { comando: 'system_shortcuts', args: { install: true } },
+  ])
+
+  await page.locator('#atalhos-gnome', { hasText: 'Remover atalhos do GNOME' }).click()
+  await expect(page.locator('#config-aviso')).toContainText('Atalhos removidos do GNOME.')
+  await expect(page.locator('#atalhos-gnome')).toHaveText('Criar atalhos no GNOME')
 })
 
 test('Áudio: atalhos com o estado do registro e troca pela próxima combinação', async ({ abrir }) => {
@@ -189,6 +281,8 @@ test('Áudio: atalhos com o estado do registro e troca pela próxima combinaçã
   await expect(page.locator('#microfone')).toHaveValue('Headset antigo')
   await expect(page.locator('#microfone option:checked')).toHaveText('Headset antigo (desconectado)')
 
+  await expect(page.locator('#atalhos-modo')).toBeHidden()
+  await expect(page.locator('#atalhos-gnome')).toBeHidden()
   const linhas = page.locator('#atalhos .list-row')
   await expect(linhas.locator('.list-row-title')).toHaveText(['Iniciar ou parar a gravação', 'Nova nota', 'Adicionar marcador'])
   await expect(linhas.locator('kbd')).toHaveText(['Ctrl+Alt+R', 'Ctrl+Alt+N', 'Ctrl+Alt+M'])

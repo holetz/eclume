@@ -49,7 +49,7 @@ async fn check_and_install(app: &AppHandle) -> Result<bool> {
     let state = app.state::<AppState>();
     let url = endpoint(&state.web_url()?)?;
     let mut builder = app.updater_builder().endpoints(vec![url.clone()])?;
-    match extra_roots(state.settings()?.ca_path.as_deref()) {
+    match extra_roots(state.ca_path()?.as_deref()) {
         Ok(roots) if !roots.is_empty() => {
             builder = builder.configure_client(move |client| client.tls_certs_merge(roots.clone()));
         }

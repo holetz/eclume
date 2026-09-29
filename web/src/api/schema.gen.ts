@@ -208,8 +208,9 @@ export interface paths {
         /**
          * Entrar num aparelho com e-mail e senha
          * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
-         *     `kind: device` com `recordings:read` e `recordings:write`, sem validade e revogável em
-         *     `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
+         *     `kind: device` com `recordings:read`, `recordings:write` e, desde a 2.6.0,
+         *     `summaries:read` (o aviso de resumo pronto do app, com "Copiar"), sem validade e revogável
+         *     em `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
          *     conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
          *     vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
          *     IP ou para a mesma conta (a janela da conta é comum com `POST /auth/login`), 429

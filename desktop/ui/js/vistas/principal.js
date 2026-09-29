@@ -248,7 +248,7 @@ export function montar(secao, app) {
     app.ir("configuracoes", { aba: "reunioes" });
   });
   $("#nova-nota", secao).addEventListener("click", () => executar("new_note"));
-  $("#importar", secao).addEventListener("click", () => app.ir("importar"));
+  $("#importar", secao).addEventListener("click", () => app.importarArquivo());
   $("#abrir-configuracoes", secao).addEventListener("click", () => app.ir("configuracoes"));
   $("#pergunta-gravar", secao).addEventListener("click", () => executar("answer_meeting", { record: true }));
   $("#pergunta-agora-nao", secao).addEventListener("click", () => executar("answer_meeting", { record: false }));

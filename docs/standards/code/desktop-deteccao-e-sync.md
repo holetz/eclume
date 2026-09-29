@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1, só apagando o arquivo local depois da confirmação — estes são os sinais, a máquina de estados, a conta, o protocolo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa com "Copiar" quando o resumo automático de uma gravação enviada fica pronto — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de resumo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-09-27
+timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
 maintainer: holetz
 ---
 
@@ -92,7 +92,9 @@ decisão do usuário, então `auto` nunca é padrão.
 1. `POST /api/v1/uploads` com `filename`, `content_type`, `size_bytes`, `sha256` hex,
    `recorded_at`, `recorded_at_source`, `kind`, `duration_ms`, `source`, `markers` (omitido quando
    vazio), `title` e `agenda_type_id` (os dois só quando a linha os tem: o celular os escolhe ao
-   parar) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
+   parar), `language` (só com o idioma da transcrição escolhido na aba Áudio — `pt`, `es` ou
+   `en`, pelo `HttpUploader::with_language`; sem ele vale o padrão do servidor, e o celular não o
+   manda) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
    ([desktop-gravacao.md](desktop-gravacao.md)):
 
 | Gravação | `filename` | `kind` | `source` | `recorded_at_source` | `content_type` |
@@ -128,6 +130,30 @@ decisão do usuário, então `auto` nunca é padrão.
   uma falha com a CA fixada, o laço confere se a CA do servidor mudou (abaixo).
 - Transporte `ureq` 3 com rustls (ring): sem `reqwest`, que traria `aws-lc-rs` por padrão.
 
+## Aviso de resumo pronto
+
+- Depois de cada volta do laço, no máximo a cada 60 s e com "Avisar quando o resumo ficar
+  pronto" ligado (`notify_summary`, padrão ligado), o app pergunta pelas gravações `synced` há
+  menos de 24 h que ainda
+  não estão em `resumos-avisados.json` (no diretório de dados, cada id com o instante; um id
+  sai depois de 7 dias). A credencial de dispositivo lê resumos desde o contrato 2.6.0
+  ([server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#credencial-de-dispositivo)).
+- `Client::summary` lê primeiro a etapa `summary` do `pipeline` em `GET /recordings/{id}`:
+  `failed` ou `skipped` (sem provedor, sem tipo de pauta) ou `404` é **desistir**; `pending` ou
+  `active` é **esperar**, sem pedir o resumo. Só com ela `done` lê
+  `GET /recordings/{id}/summary`: o atual com `status: done` e `content_md` é **pronto**, e
+  `409 transcript_missing` ou uma geração nova em andamento é **esperar**. O `SummaryState` não
+  basta sozinho: o servidor só manda `pending` enquanto a geração está na fila ou rodando, e um
+  resumo pulado ou que falhou apareceria como "esperar" por 24 h. Pronto avisa e registra;
+  desistir só registra; uma falha de rede para a volta, e a próxima tenta de novo.
+- A notificação é "Resumo pronto · <título> · copie para compartilhar" (o título da fila, ou
+  "Reunião"/"Nota"), com **Copiar** — o Markdown do resumo na área de transferência
+  (`tauri-plugin-clipboard-manager`, só no Rust) — e **Abrir**, a gravação em
+  `<web_url>/gravacoes/<id>`. As ações usam o mesmo caminho da pergunta de reunião: D-Bus no
+  Linux, toast com botões no Windows, e no macOS o botão principal e o de fechar.
+- Sem o arquivo (a primeira abertura da versão que traz o aviso), as gravações já enviadas
+  entram como avisadas: a atualização não dispara avisos de resumos antigos.
+
 ## Conta e credencial
 
 O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md).
@@ -145,6 +171,16 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   Manager no Windows, Keychain no macOS). Sem chaveiro (sessão sem Secret Service), vai para `pat`
   no diretório de config com permissão 0600, e a janela avisa; quando o chaveiro volta, o próximo
   salvamento apaga o arquivo. O segredo nunca volta à janela.
+- **Cada acesso ao chaveiro roda numa thread própria.** O Secret Service do `keyring` faz
+  `block_on` por dentro e dá panic numa thread que já roda um runtime Tokio (um comando `async` do
+  Tauri, o updater); o panic ainda envenena o mutex global do cofre, e todo acesso seguinte dá
+  panic também, derrubando o app na próxima leitura das configurações. Na thread própria o
+  `block_on` funciona, e um panic que sobrar vira erro (e o `PatStore` cai no arquivo). Quem só
+  precisa da CA fixada (o updater) a lê da config, sem passar pelo chaveiro.
+- **Nenhuma dependência liga o zbus ao Tokio.** O `ashpd` (portal de atalhos no Wayland) entra
+  com a feature `async-io`, nunca `tokio`: com `tokio`, o `zbus::block_on` do chaveiro e das
+  notificações passa a criar um runtime Tokio próprio e dá o mesmo panic quando chamado de uma
+  thread Tokio. Uma dependência nova que use o zbus segue a mesma regra.
 - `config.json` ganha `account: {email, token_id, server_name}`. `Config::connection(tem
   credencial)` decide a janela: sem credencial, `first_run`; credencial sem `account`,
   `personal_token`; com as duas, `account`.

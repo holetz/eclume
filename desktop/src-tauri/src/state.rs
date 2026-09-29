@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::account::{self, Login, Net, PreparedServer, SignedIn};
 use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Account, Config, Connection, PendingUpdate};
-use crate::shortcuts::{Registration, Registrations, ShortcutAction, Shortcuts};
+use crate::shortcuts::{Registration, Registrations, ShortcutAction, ShortcutMode, Shortcuts};
 
 /// A versão deste build.
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -139,6 +139,8 @@ pub struct StatusView {
     pub recording_kind: Option<Kind>,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
+    /// `system`, `light` ou `dark`: a janela aplica sem abrir as configurações.
+    pub theme: String,
     /// A gravação em curso foi iniciada pela detecção.
     pub recording_auto: bool,
     /// App da reunião da gravação em curso.
@@ -215,9 +217,18 @@ pub struct SettingsView {
     pub connection: Connection,
     pub account: Option<Account>,
     pub shortcuts: Vec<ShortcutView>,
-    /// O microfone escolhido; `None` é o padrão do sistema.
+    /// Global, portal ou sistema (com os comandos da CLI).
+    pub shortcut_mode: ShortcutMode,
+    /// O microfone escolhido; `None` é o padrão do sistema e `"none"`, nenhum.
     pub mic: Option<String>,
-    pub system_audio: bool,
+    /// `"follow"`, o id de uma saída ou `"none"`.
+    pub system_source: String,
+    /// Idioma da transcrição; `None` é o padrão do servidor.
+    pub language: Option<String>,
+    /// `system`, `light` ou `dark`.
+    pub theme: String,
+    /// Avisar quando o resumo automático fica pronto.
+    pub notify_summary: bool,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
 }
@@ -243,22 +254,33 @@ pub struct SettingsInput {
     /// Atalhos novos; ausente mantém os de hoje.
     #[serde(default)]
     pub shortcuts: Option<Shortcuts>,
-    /// O microfone pelo nome, `""` para o padrão do sistema; ausente mantém o de hoje.
+    /// O microfone pelo nome, `""` para o padrão do sistema e `"none"` para nenhum; ausente
+    /// mantém o de hoje.
     #[serde(default)]
     pub mic: Option<String>,
+    /// `"follow"` (ou `""`), o id de uma saída ou `"none"`; ausente mantém a de hoje.
+    #[serde(default)]
+    pub system_source: Option<String>,
+    /// `pt`, `es`, `en`, ou `""` para o padrão do servidor; ausente mantém o de hoje.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// `system`, `light` ou `dark`; ausente mantém o de hoje.
+    #[serde(default)]
+    pub theme: Option<String>,
     /// Ausente mantém o de hoje.
     #[serde(default)]
-    pub system_audio: Option<bool>,
+    pub notify_summary: Option<bool>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
 }
 
-/// Quanto dura o teste de nível do microfone.
-pub const MIC_TEST: Duration = Duration::from_secs(10);
+/// Quanto dura, no máximo, o teste de nível de uma fonte.
+pub const SOURCE_TEST: Duration = Duration::from_secs(10);
 
-/// O teste de nível em curso: o medidor, sem gravar nada.
-struct MicTest {
+/// O teste de nível em curso: o medidor, sem gravar nada. `running` desliga quando o teste acaba
+/// ou quando a janela pede para parar.
+struct SourceTest {
     levels: Arc<Mutex<[f32; METER_BARS]>>,
     running: Arc<AtomicBool>,
 }
@@ -276,9 +298,11 @@ struct Inner {
     sync_notice: Option<String>,
     /// Como ficou o registro de cada atalho global.
     shortcut_registrations: Registrations,
+    /// Como os atalhos chegam ao app nesta sessão.
+    shortcut_mode: ShortcutMode,
     /// O pedido de cancelamento da importação em curso, se houver uma.
     importing: Option<Arc<AtomicBool>>,
-    mic_test: Option<MicTest>,
+    source_test: Option<SourceTest>,
     /// A atualização a notificar nesta abertura (sai uma vez).
     update_to_notify: Option<PendingUpdate>,
     /// Há credencial guardada (PAT ou de dispositivo); lido na abertura e a cada mudança, para a
@@ -308,17 +332,18 @@ pub struct AppState {
     inner: Mutex<Inner>,
 }
 
-/// Lê o microfone por `duration` e publica o medidor em `levels`.
-fn run_mic_test(
+/// Lê a fonte por até `duration`, ou até `running` desligar, e publica o medidor em `levels`.
+fn run_source_test(
     open: impl FnOnce() -> Result<Box<dyn AudioSource>>,
     duration: Duration,
     levels: &Mutex<[f32; METER_BARS]>,
+    running: &AtomicBool,
 ) -> Result<()> {
     let mut source = open()?;
     let mut mixer = Mixer::new(&[source.sample_rate()])?;
     let mut detector = SilenceDetector::new(None);
     let deadline = std::time::Instant::now() + duration;
-    while std::time::Instant::now() < deadline {
+    while running.load(Ordering::Relaxed) && std::time::Instant::now() < deadline {
         let Some(samples) = source.read(Duration::from_millis(50)) else {
             break;
         };
@@ -402,8 +427,9 @@ impl AppState {
                 notice: None,
                 sync_notice: None,
                 shortcut_registrations: Registrations::new(),
+                shortcut_mode: ShortcutMode::default(),
                 importing: None,
-                mic_test: None,
+                source_test: None,
                 update_to_notify: None,
                 has_token,
                 prepared: None,
@@ -464,6 +490,7 @@ impl AppState {
             recording_started_at: inner.active.as_ref().map(ActiveRecording::started_at),
             recording_kind: inner.active.as_ref().map(ActiveRecording::kind),
             note_silence_s: inner.config.note_silence_s,
+            theme: inner.config.theme.clone(),
             recording_auto: origin.is_some_and(|o| o.auto),
             recording_app: origin.and_then(|o| o.app).map(MeetingView::from),
             meeting: inner.auto.meeting().map(MeetingView::from),
@@ -709,48 +736,59 @@ impl AppState {
 
     /// O microfone e as fontes que a aba Áudio escolheu.
     pub fn audio_choice(&self) -> Result<AudioChoice> {
-        let inner = self.inner()?;
-        Ok(AudioChoice {
-            mic: inner.config.mic.clone(),
-            system_audio: inner.config.system_audio,
-        })
+        Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
-    /// "Fale para testar o nível": abre o microfone por `duration`, numa thread, e alimenta o
-    /// medidor do detector de silêncio, sem gravar. Um teste em curso segue valendo.
-    pub fn start_mic_test(
+    /// Se o sync avisa quando o resumo de uma gravação enviada fica pronto.
+    pub fn notify_summary(&self) -> Result<bool> {
+        Ok(self.inner()?.config.notify_summary)
+    }
+
+    /// O idioma da transcrição que os uploads pedem; `None` deixa o do servidor.
+    pub fn language(&self) -> Result<Option<String>> {
+        Ok(self.inner()?.config.language.clone())
+    }
+
+    /// "Fale para testar" ou "Toque algo para testar": abre a fonte por até `duration`, numa
+    /// thread, e alimenta o medidor do detector de silêncio, sem gravar. Um teste por vez: o que
+    /// estiver em curso para.
+    pub fn start_source_test(
         &self,
         open: impl FnOnce() -> Result<Box<dyn AudioSource>> + Send + 'static,
         duration: Duration,
     ) -> Result<()> {
         let mut inner = self.inner()?;
-        if inner
-            .mic_test
-            .as_ref()
-            .is_some_and(|t| t.running.load(Ordering::Relaxed))
-        {
-            return Ok(());
+        if let Some(test) = &inner.source_test {
+            test.running.store(false, Ordering::Relaxed);
         }
         let levels = Arc::new(Mutex::new([0.0; METER_BARS]));
         let running = Arc::new(AtomicBool::new(true));
-        inner.mic_test = Some(MicTest {
+        inner.source_test = Some(SourceTest {
             levels: Arc::clone(&levels),
             running: Arc::clone(&running),
         });
         std::thread::spawn(move || {
-            if let Err(err) = run_mic_test(open, duration, &levels) {
-                log::warn!("teste de nível do microfone: {err:#}");
+            if let Err(err) = run_source_test(open, duration, &levels, &running) {
+                log::warn!("teste de nível: {err:#}");
             }
             running.store(false, Ordering::Relaxed);
         });
         Ok(())
     }
 
+    /// "Parar": encerra o teste de nível em curso na hora; sem teste, não faz nada.
+    pub fn stop_source_test(&self) -> Result<()> {
+        if let Some(test) = self.inner()?.source_test.take() {
+            test.running.store(false, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
     /// O medidor do teste de nível; `None` quando não há teste em curso.
-    pub fn mic_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
+    pub fn source_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
         let inner = self.inner()?;
         Ok(inner
-            .mic_test
+            .source_test
             .as_ref()
             .filter(|t| t.running.load(Ordering::Relaxed))
             .and_then(|t| t.levels.lock().ok().map(|levels| *levels)))
@@ -784,9 +822,15 @@ impl AppState {
         Ok(self.inner()?.config.shortcuts.clone())
     }
 
-    /// Guarda como ficou o registro dos atalhos, para a aba Áudio.
-    pub fn set_shortcut_registrations(&self, registrations: Registrations) -> Result<()> {
-        self.inner()?.shortcut_registrations = registrations;
+    /// Guarda o modo dos atalhos e como ficou o registro de cada um, para a aba Áudio.
+    pub fn set_shortcuts_state(
+        &self,
+        mode: ShortcutMode,
+        registrations: Registrations,
+    ) -> Result<()> {
+        let mut inner = self.inner()?;
+        inner.shortcut_mode = mode;
+        inner.shortcut_registrations = registrations;
         Ok(())
     }
 
@@ -890,6 +934,11 @@ impl AppState {
         Ok(self.view()?.web_url)
     }
 
+    /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].
+    pub fn ca_path(&self) -> Result<Option<PathBuf>> {
+        Ok(self.inner()?.config.ca_path.clone())
+    }
+
     pub fn settings(&self) -> Result<SettingsView> {
         let pat_source = self.pat.load()?.map(|(_, source)| source);
         let inner = self.inner()?;
@@ -913,8 +962,12 @@ impl AppState {
             connection: connection(&inner),
             account: config.account.clone(),
             mic: config.mic.clone(),
-            system_audio: config.system_audio,
+            system_source: config.system_source.clone(),
+            language: config.language.clone(),
+            theme: config.theme.clone(),
+            notify_summary: config.notify_summary,
             note_silence_s: config.note_silence_s,
+            shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
                 .into_iter()
                 .map(|action| {
@@ -944,8 +997,18 @@ impl AppState {
         if let Some(mic) = input.mic {
             next.mic = non_empty(Some(mic));
         }
-        if let Some(system_audio) = input.system_audio {
-            next.system_audio = system_audio;
+        if let Some(source) = input.system_source {
+            next.system_source =
+                non_empty(Some(source)).unwrap_or_else(|| config::SYSTEM_FOLLOW.to_string());
+        }
+        if let Some(language) = input.language {
+            next.language = non_empty(Some(language));
+        }
+        if let Some(theme) = input.theme {
+            next.theme = theme;
+        }
+        if let Some(notify) = input.notify_summary {
+            next.notify_summary = notify;
         }
         if let Some(seconds) = input.note_silence_s {
             next.note_silence_s = (seconds > 0).then_some(seconds);
@@ -1124,6 +1187,7 @@ mod tests {
     use eclume_recorder::Status;
 
     use super::*;
+    use crate::capture::SourceChoice;
 
     /// Chaveiro indisponível: o PAT vai ao arquivo, como numa sessão sem Secret Service.
     struct NoKeyring;
@@ -1178,7 +1242,10 @@ mod tests {
             clear_pat: false,
             shortcuts: None,
             mic: None,
-            system_audio: None,
+            system_source: None,
+            language: None,
+            theme: None,
+            notify_summary: None,
             note_silence_s: None,
         }
     }
@@ -1503,11 +1570,14 @@ mod tests {
         assert_eq!(state.shortcuts().unwrap().note, Shortcuts::default().note);
 
         state
-            .set_shortcut_registrations(Registrations::from([
-                (ShortcutAction::Record, Registration::Registered),
-                (ShortcutAction::Note, Registration::InUse),
-                (ShortcutAction::Marker, Registration::Unavailable),
-            ]))
+            .set_shortcuts_state(
+                ShortcutMode::Global,
+                Registrations::from([
+                    (ShortcutAction::Record, Registration::Registered),
+                    (ShortcutAction::Note, Registration::InUse),
+                    (ShortcutAction::Marker, Registration::Unavailable),
+                ]),
+            )
             .unwrap();
         let problems: Vec<_> = state
             .settings()
@@ -1636,24 +1706,22 @@ mod tests {
     #[test]
     fn audio_escolhe_microfone_sistema_e_silencio() {
         let (state, dir) = state("audio");
-        assert_eq!(
-            state.audio_choice().unwrap(),
-            AudioChoice {
-                mic: None,
-                system_audio: true
-            }
-        );
+        assert_eq!(state.audio_choice().unwrap(), AudioChoice::default());
         let mut input = settings_input(&state);
         input.mic = Some("Jabra Evolve2 65".into());
-        input.system_audio = Some(false);
+        input.system_source = Some(config::SOURCE_NONE.into());
         input.note_silence_s = Some(8);
+        input.language = Some("en".into());
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic.as_deref(), Some("Jabra Evolve2 65"));
-        assert!(!view.system_audio);
+        assert_eq!(view.system_source, config::SOURCE_NONE);
         assert_eq!(view.note_silence_s, Some(8));
+        assert_eq!(view.language.as_deref(), Some("en"));
+        assert_eq!(state.view().unwrap().theme, "system");
+        assert_eq!(state.language().unwrap().as_deref(), Some("en"));
         assert_eq!(
-            state.audio_choice().unwrap().mic.as_deref(),
+            state.audio_choice().unwrap().mic.device(),
             Some("Jabra Evolve2 65")
         );
 
@@ -1663,20 +1731,41 @@ mod tests {
         let mut input = settings_input(&state);
         input.mic = Some(String::new());
         input.note_silence_s = Some(0);
+        input.language = Some(String::new());
         state.save_settings(input).unwrap();
         let view = state.settings().unwrap();
         assert_eq!(view.mic, None);
+        assert_eq!(view.language, None);
         assert_eq!(view.note_silence_s, None);
         let mut bad = settings_input(&state);
         bad.note_silence_s = Some(5);
         assert!(state.save_settings(bad).is_err());
+
+        // Uma saída escolhida, depois "Nenhum" nas duas fontes, que a config recusa.
+        let mut input = settings_input(&state);
+        input.system_source = Some("alsa_output.usb".into());
+        state.save_settings(input).unwrap();
+        let view = state.settings().unwrap();
+        assert_eq!(view.system_source, "alsa_output.usb");
+        let mut input = settings_input(&state);
+        input.mic = Some(config::SOURCE_NONE.into());
+        input.system_source = Some(config::SOURCE_NONE.into());
+        let err = state.save_settings(input).unwrap_err();
+        assert_eq!(err.to_string(), "Escolha ao menos uma fonte de áudio");
+        let mut input = settings_input(&state);
+        input.mic = Some(config::SOURCE_NONE.into());
+        input.system_source = Some(String::new());
+        state.save_settings(input).unwrap();
+        let choice = state.audio_choice().unwrap();
+        assert_eq!(choice.mic, SourceChoice::Off);
+        assert_eq!(choice.system, SourceChoice::Auto);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn teste_de_nivel_mostra_o_medidor_e_acaba_sozinho() {
+    fn teste_de_nivel_mostra_o_medidor_acaba_sozinho_e_para_na_hora() {
         let (state, _dir) = state("teste-nivel");
-        assert!(state.mic_test_meter().unwrap().is_none());
+        assert!(state.source_test_meter().unwrap().is_none());
         /// Um tom que chega no ritmo do relógio, como um microfone de verdade.
         struct Paced(SineSource);
         impl AudioSource for Paced {
@@ -1697,11 +1786,11 @@ mod tests {
             ))))
         };
         state
-            .start_mic_test(open, Duration::from_millis(400))
+            .start_source_test(open, Duration::from_millis(400))
             .unwrap();
         let mut heard = false;
         for _ in 0..200 {
-            match state.mic_test_meter().unwrap() {
+            match state.source_test_meter().unwrap() {
                 Some(levels) => heard |= levels.iter().any(|&l| l > 0.5),
                 None if heard => break,
                 None => {}
@@ -1710,7 +1799,46 @@ mod tests {
         }
         assert!(heard, "o medidor devia subir com o tom");
         std::thread::sleep(Duration::from_millis(600));
-        assert!(state.mic_test_meter().unwrap().is_none());
+        assert!(state.source_test_meter().unwrap().is_none());
+
+        // "Parar" encerra antes do fim e libera a fonte logo.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let open = move || -> Result<Box<dyn AudioSource>> {
+            Ok(Box::new(Notify(
+                Paced(SineSource::new(48_000, 440.0, 0.5, Duration::from_secs(60))),
+                tx,
+            )))
+        };
+        /// Avisa quando a fonte é descartada, isto é, quando o teste largou o dispositivo.
+        struct Notify(Paced, std::sync::mpsc::Sender<()>);
+        impl AudioSource for Notify {
+            fn sample_rate(&self) -> u32 {
+                self.0.sample_rate()
+            }
+            fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+                self.0.read(timeout)
+            }
+        }
+        impl Drop for Notify {
+            fn drop(&mut self) {
+                let _ = self.1.send(());
+            }
+        }
+        state.start_source_test(open, SOURCE_TEST).unwrap();
+        for _ in 0..200 {
+            if state
+                .source_test_meter()
+                .unwrap()
+                .is_some_and(|levels| levels.iter().any(|&l| l > 0.5))
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        state.stop_source_test().unwrap();
+        assert!(state.source_test_meter().unwrap().is_none());
+        rx.recv_timeout(Duration::from_secs(1))
+            .expect("parar devia fechar a fonte em bem menos que os 10 s");
     }
 
     #[test]

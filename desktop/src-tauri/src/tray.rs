@@ -38,6 +38,8 @@ struct MenuHandles {
     recording: bool,
     /// Os atalhos mostrados como acelerador.
     shortcuts: Shortcuts,
+    /// O ícone mostrado agora: trocar grava um PNG no Linux, então só troca quando muda.
+    icon: Option<TrayIconState>,
 }
 
 struct TrayHandles {
@@ -155,6 +157,7 @@ fn build_menu(
             ask,
             recording,
             shortcuts: shortcuts.clone(),
+            icon: None,
         },
     ))
 }
@@ -164,7 +167,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
     let (menu, handles) = build_menu(app, None, false, &shortcuts)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(icon(AppStatus::Idle)?)
+        .icon(icon(TrayIconState::Idle)?)
         .tooltip(crate::APP_NAME)
         .menu(&menu)
         .show_menu_on_left_click(true)
@@ -262,7 +265,11 @@ pub fn refresh(app: &AppHandle) {
         }
         menu.status.set_text(&line)?;
         menu.toggle.set_text(toggle_label(view.status))?;
-        handles.tray.set_icon(Some(icon(view.status)?))?;
+        let state = TrayIconState::of(&view);
+        if menu.icon != Some(state) {
+            handles.tray.set_icon(Some(icon(state)?))?;
+            menu.icon = Some(state);
+        }
         // O rótulo ao lado do ícone existe no macOS e no AppIndicator do Linux; no Windows, o
         // tempo da nota vai só na dica, que já traz a linha de status.
         handles.tray.set_title(note_title(&view, now))?;
@@ -333,11 +340,36 @@ pub fn status_line(view: &StatusView, now_ms: i64) -> String {
     parts.join(" · ")
 }
 
-fn icon(status: AppStatus) -> tauri::Result<Image<'static>> {
-    Image::from_bytes(match status {
-        AppStatus::Idle => include_bytes!("../icons/tray-idle.png"),
-        AppStatus::Recording => include_bytes!("../icons/tray-recording.png"),
-        AppStatus::Syncing => include_bytes!("../icons/tray-syncing.png"),
+/// O estado que o ícone da bandeja mostra: a marca, com a reunião e a nota distintas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrayIconState {
+    Idle,
+    Meeting,
+    Note,
+    Syncing,
+}
+
+impl TrayIconState {
+    #[cfg(test)]
+    const ALL: [Self; 4] = [Self::Idle, Self::Meeting, Self::Note, Self::Syncing];
+
+    fn of(view: &StatusView) -> Self {
+        match view.status {
+            AppStatus::Idle => Self::Idle,
+            AppStatus::Syncing => Self::Syncing,
+            AppStatus::Recording if view.recording_kind == Some(Kind::Note) => Self::Note,
+            AppStatus::Recording => Self::Meeting,
+        }
+    }
+}
+
+/// Os PNG saem de `desktop/scripts/icones_bandeja.py`, a partir da marca.
+fn icon(state: TrayIconState) -> tauri::Result<Image<'static>> {
+    Image::from_bytes(match state {
+        TrayIconState::Idle => include_bytes!("../icons/tray-idle.png"),
+        TrayIconState::Meeting => include_bytes!("../icons/tray-recording.png"),
+        TrayIconState::Note => include_bytes!("../icons/tray-note.png"),
+        TrayIconState::Syncing => include_bytes!("../icons/tray-syncing.png"),
     })
 }
 
@@ -355,6 +387,7 @@ mod tests {
             recording_started_at: None,
             recording_kind: None,
             note_silence_s: Some(4),
+            theme: "system".into(),
             marker_count: 0,
             last_marker: None,
             recording_auto: false,
@@ -496,9 +529,25 @@ mod tests {
     }
 
     #[test]
+    fn icone_distingue_reuniao_de_nota() {
+        assert_eq!(
+            TrayIconState::of(&view(AppStatus::Idle, 0)),
+            TrayIconState::Idle
+        );
+        assert_eq!(
+            TrayIconState::of(&view(AppStatus::Syncing, 1)),
+            TrayIconState::Syncing
+        );
+        let mut reuniao = view(AppStatus::Recording, 0);
+        assert_eq!(TrayIconState::of(&reuniao), TrayIconState::Meeting);
+        reuniao.recording_kind = Some(Kind::Note);
+        assert_eq!(TrayIconState::of(&reuniao), TrayIconState::Note);
+    }
+
+    #[test]
     fn bandeja_icones_decodificam() {
-        for status in [AppStatus::Idle, AppStatus::Recording, AppStatus::Syncing] {
-            let image = icon(status).unwrap();
+        for state in TrayIconState::ALL {
+            let image = icon(state).unwrap();
             assert_eq!((image.width(), image.height()), (64, 64));
         }
     }

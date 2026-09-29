@@ -3,55 +3,138 @@
 use anyhow::{bail, Context, Result};
 use eclume_audio_capture::{AudioSource, MicSource, SystemSource};
 
+use crate::config::{Config, SOURCE_NONE, SYSTEM_FOLLOW};
+
 /// As fontes abertas e as que faltaram (com o motivo).
 pub struct OpenedSources {
     pub sources: Vec<Box<dyn AudioSource>>,
     pub missing: Vec<String>,
 }
 
+/// Uma fonte da aba Áudio.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SourceChoice {
+    /// "Nenhum": a fonte fica de fora.
+    Off,
+    /// O padrão do sistema (mic) ou a saída em uso (sistema).
+    #[default]
+    Auto,
+    /// Um dispositivo pelo nome (mic) ou pelo id (saída).
+    Device(String),
+}
+
+impl SourceChoice {
+    /// Um valor da config que não é o automático: `"none"` ou um dispositivo.
+    fn chosen(value: &str) -> Self {
+        match value {
+            SOURCE_NONE => Self::Off,
+            device => Self::Device(device.to_string()),
+        }
+    }
+
+    /// O dispositivo escolhido; `None` no automático.
+    pub fn device(&self) -> Option<&str> {
+        match self {
+            Self::Device(device) => Some(device),
+            Self::Off | Self::Auto => None,
+        }
+    }
+}
+
 /// O que a aba Áudio escolheu.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AudioChoice {
-    /// O microfone pelo nome; `None` é o padrão do sistema.
-    pub mic: Option<String>,
-    /// Gravar também o áudio do sistema (reuniões; a nota nunca grava).
-    pub system_audio: bool,
+    pub mic: SourceChoice,
+    /// O áudio do sistema (reuniões; a nota nunca grava).
+    pub system: SourceChoice,
 }
 
-/// Abre o microfone escolhido; o aviso de quando ele sumiu vai em `missing`.
-fn open_chosen_mic(choice: &AudioChoice, missing: &mut Vec<String>) -> Result<MicSource> {
-    let mic = MicSource::open_named(choice.mic.as_deref())?;
-    if mic.fell_back() {
+impl AudioChoice {
+    pub fn from_config(config: &Config) -> Self {
+        Self {
+            mic: config
+                .mic
+                .as_deref()
+                .map_or(SourceChoice::Auto, SourceChoice::chosen),
+            system: match config.system_source.as_str() {
+                SYSTEM_FOLLOW => SourceChoice::Auto,
+                source => SourceChoice::chosen(source),
+            },
+        }
+    }
+}
+
+/// Abre o microfone escolhido (ligado); o aviso de quando ele sumiu vai em `missing`.
+fn open_chosen_mic(mic: &SourceChoice, missing: &mut Vec<String>) -> Result<MicSource> {
+    let source = MicSource::open_named(mic.device())?;
+    if source.fell_back() {
         missing.push(format!(
             "o microfone {} (usando o padrão do sistema)",
-            choice.mic.as_deref().unwrap_or_default()
+            mic.device().unwrap_or_default()
         ));
     }
-    Ok(mic)
+    Ok(source)
+}
+
+/// Abre a origem escolhida do áudio do sistema (ligada); a saída que sumiu vira aviso.
+fn open_chosen_system(system: &SourceChoice, missing: &mut Vec<String>) -> Result<SystemSource> {
+    let source = SystemSource::open_target(system.device())?;
+    if source.fell_back() {
+        missing.push(format!(
+            "a saída {} (seguindo a saída em uso)",
+            system.device().unwrap_or_default()
+        ));
+    }
+    Ok(source)
+}
+
+/// A fonte que o teste de nível da aba Áudio ouve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TestSource {
+    Mic,
+    System,
+}
+
+/// Abre a fonte do teste de nível conforme a escolha; "Nenhum" não tem o que testar.
+pub fn open_test_source(choice: &AudioChoice, test: TestSource) -> Result<Box<dyn AudioSource>> {
+    match test {
+        TestSource::Mic if choice.mic == SourceChoice::Off => bail!("Nenhum microfone escolhido"),
+        TestSource::System if choice.system == SourceChoice::Off => {
+            bail!("Nenhuma saída de áudio escolhida")
+        }
+        TestSource::Mic => Ok(Box::new(MicSource::open_named(choice.mic.device())?)),
+        TestSource::System => Ok(Box::new(SystemSource::open_target(choice.system.device())?)),
+    }
 }
 
 /// Abre só o microfone, para a nota por voz: o áudio do sistema traria música e notificações.
 pub fn open_mic(choice: &AudioChoice) -> Result<OpenedSources> {
+    if choice.mic == SourceChoice::Off {
+        bail!("A nota precisa de um microfone");
+    }
     let mut missing = Vec::new();
-    let mic = open_chosen_mic(choice, &mut missing).context("falha ao abrir o microfone")?;
+    let mic = open_chosen_mic(&choice.mic, &mut missing).context("falha ao abrir o microfone")?;
     Ok(OpenedSources {
         sources: vec![Box::new(mic)],
         missing,
     })
 }
 
-/// Abre o mic e, se escolhido, o áudio do sistema. Grava com o que abrir: uma fonte que falha
-/// vira aviso, e só é erro quando nenhuma abre.
+/// Abre as fontes que não são "Nenhum". Grava com o que abrir: uma fonte que falha vira aviso, e
+/// só é erro quando nenhuma abre.
 pub fn open_sources(choice: &AudioChoice) -> Result<OpenedSources> {
     let mut sources: Vec<Box<dyn AudioSource>> = Vec::with_capacity(2);
     let mut missing = Vec::new();
 
-    match open_chosen_mic(choice, &mut missing) {
-        Ok(mic) => sources.push(Box::new(mic)),
-        Err(err) => missing.push(format!("mic: {err:#}")),
+    if choice.mic != SourceChoice::Off {
+        match open_chosen_mic(&choice.mic, &mut missing) {
+            Ok(mic) => sources.push(Box::new(mic)),
+            Err(err) => missing.push(format!("mic: {err:#}")),
+        }
     }
-    if choice.system_audio {
-        match SystemSource::open() {
+    if choice.system != SourceChoice::Off {
+        match open_chosen_system(&choice.system, &mut missing) {
             Ok(system) => sources.push(Box::new(system)),
             Err(err) => missing.push(format!("áudio do sistema: {err:#}")),
         }
@@ -64,4 +147,53 @@ pub fn open_sources(choice: &AudioChoice) -> Result<OpenedSources> {
         log::warn!("gravando sem {reason}");
     }
     Ok(OpenedSources { sources, missing })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escolha_de_audio_vem_da_config() {
+        let mut config = Config::default();
+        assert_eq!(AudioChoice::from_config(&config), AudioChoice::default());
+        config.mic = Some(SOURCE_NONE.into());
+        config.system_source = "alsa_output.usb".into();
+        assert_eq!(
+            AudioChoice::from_config(&config),
+            AudioChoice {
+                mic: SourceChoice::Off,
+                system: SourceChoice::Device("alsa_output.usb".into()),
+            }
+        );
+        config.mic = Some("Jabra Evolve2 65".into());
+        config.system_source = SOURCE_NONE.into();
+        let choice = AudioChoice::from_config(&config);
+        assert_eq!(choice.mic.device(), Some("Jabra Evolve2 65"));
+        assert_eq!(choice.system, SourceChoice::Off);
+    }
+
+    #[test]
+    fn teste_de_fonte_em_nenhum_e_recusado() {
+        let choice = AudioChoice {
+            mic: SourceChoice::Off,
+            system: SourceChoice::Off,
+        };
+        let err = open_test_source(&choice, TestSource::Mic).err().unwrap();
+        assert_eq!(err.to_string(), "Nenhum microfone escolhido");
+        let err = open_test_source(&choice, TestSource::System).err().unwrap();
+        assert_eq!(err.to_string(), "Nenhuma saída de áudio escolhida");
+        let test: TestSource = serde_json::from_str(r#""system""#).unwrap();
+        assert_eq!(test, TestSource::System);
+    }
+
+    #[test]
+    fn nota_sem_microfone_e_recusada() {
+        let choice = AudioChoice {
+            mic: SourceChoice::Off,
+            system: SourceChoice::Auto,
+        };
+        let err = open_mic(&choice).err().unwrap();
+        assert_eq!(format!("{err:#}"), "A nota precisa de um microfone");
+    }
 }

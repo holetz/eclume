@@ -1,9 +1,10 @@
 // Adaptado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/audio-actual/src/speaker/linux.rs
 // (MIT, Copyright (c) 2023-present Fastrepl, Inc.; ver VENDOR.md e LICENSE neste crate).
 // Mudanças: anel próprio (`RingWriter`) no lugar do leitor assíncrono, downmix por média,
-// `tracing` → `log`, mensagens em pt-BR.
+// `tracing` → `log`, mensagens em pt-BR, listagem dos sinks e captura de um sink escolhido.
 
-//! Linux: PipeWire capturando o monitor do sink em uso, com fallback para o monitor do Pulse.
+//! Linux: PipeWire capturando o monitor do sink em uso (ou do escolhido), com fallback para o
+//! monitor do Pulse.
 
 use std::sync::Arc;
 use std::sync::Once;
@@ -21,23 +22,57 @@ use pulse::stream::{FlagSet as StreamFlagSet, Stream as PaStream};
 use pw::properties::properties;
 use pw::spa::utils::Direction;
 
+use super::{OutputDevice, OutputDevices};
 use crate::ring::{self, RingSource, RingWriter};
 
 const DEFAULT_SAMPLE_RATE: u32 = 48_000;
 const INIT_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(super) fn open() -> Result<RingSource> {
-    match try_pipewire() {
-        Ok(source) => Ok(source),
+pub(super) fn list_output_devices() -> Result<OutputDevices> {
+    with_pulse_context("eclume-lista-saidas", |mainloop, context| {
+        let sinks = query_sink_targets(mainloop, context);
+        output_devices(sinks, get_default_sink_name(mainloop, context))
+    })
+    .context("falha ao consultar as saídas de áudio no PipeWire/PulseAudio")
+}
+
+fn output_devices(sinks: Vec<SinkTarget>, default: Option<String>) -> OutputDevices {
+    let devices = sinks
+        .into_iter()
+        .map(|sink| OutputDevice {
+            id: sink.name,
+            name: sink.description,
+        })
+        .collect();
+    OutputDevices { default, devices }
+}
+
+pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
+    // Uma introspecção serve aos dois backends: o PipeWire mira o sink e o Pulse, o monitor dele.
+    // Sem ela não dá para conferir o sink pedido, e a captura segue a saída em uso.
+    let (sink, fell_back) = with_pulse_context("eclume-lista-sinks", |mainloop, context| {
+        choose_sink(mainloop, context, target)
+    })
+    .unwrap_or((None, target.is_some()));
+    if fell_back {
+        log::warn!(
+            "saída {:?} não encontrada; seguindo a saída em uso",
+            target.unwrap_or_default()
+        );
+    }
+
+    let source = match try_pipewire(sink.as_ref().map(|sink| sink.name.clone())) {
+        Ok(source) => source,
         Err(pipewire_err) => {
             log::warn!("captura do sistema por PipeWire indisponível: {pipewire_err:#}");
-            try_pulseaudio().map_err(|pulse_err| {
+            try_pulseaudio(sink.map(|sink| sink.monitor)).map_err(|pulse_err| {
                 anyhow::anyhow!(
                     "falha na captura do sistema por PipeWire: {pipewire_err:#}; e por PulseAudio: {pulse_err:#}"
                 )
-            })
+            })?
         }
-    }
+    };
+    Ok((source, fell_back))
 }
 
 struct PipeWireUserData {
@@ -72,7 +107,8 @@ fn update_pipewire_initialization(
     }
 }
 
-fn try_pipewire() -> Result<RingSource> {
+// `None` deixa o PipeWire no sink padrão.
+fn try_pipewire(target: Option<String>) -> Result<RingSource> {
     let (writer, source) = ring::channel(ring::DEFAULT_CAPACITY, DEFAULT_SAMPLE_RATE);
     let closer = writer.closer();
     let (init_tx, init_rx) = std::sync::mpsc::channel();
@@ -82,7 +118,7 @@ fn try_pipewire() -> Result<RingSource> {
         .name("eclume-system-pw".into())
         .spawn(move || {
             let setup_err_tx = init_tx.clone();
-            if let Err(error) = pipewire_capture(writer, shutdown_rx, init_tx) {
+            if let Err(error) = pipewire_capture(writer, target, shutdown_rx, init_tx) {
                 let _ = setup_err_tx.send(Err(anyhow::anyhow!(error.to_string())));
             }
             closer.close();
@@ -115,6 +151,7 @@ fn try_pipewire() -> Result<RingSource> {
 
 fn pipewire_capture(
     writer: RingWriter,
+    target: Option<String>,
     shutdown_rx: pw::channel::Receiver<()>,
     init_tx: std::sync::mpsc::Sender<Result<()>>,
 ) -> Result<()> {
@@ -134,8 +171,8 @@ fn pipewire_capture(
         *pw::keys::MEDIA_ROLE => "Music",
         *pw::keys::STREAM_CAPTURE_SINK => "true",
     };
-    if let Some(target) = resolve_sink_name() {
-        log::info!("captura do sistema seguindo o sink {target}");
+    if let Some(target) = target {
+        log::info!("captura do sistema no sink {target}");
         stream_props.insert("target.object", target);
     }
 
@@ -251,7 +288,8 @@ fn ensure_pipewire_initialized() {
     INIT.call_once(pw::init);
 }
 
-fn try_pulseaudio() -> Result<RingSource> {
+// `None` captura o monitor do sink padrão.
+fn try_pulseaudio(monitor: Option<String>) -> Result<RingSource> {
     let (writer, source) = ring::channel(ring::DEFAULT_CAPACITY, DEFAULT_SAMPLE_RATE);
     let closer = writer.closer();
     let running = Arc::new(AtomicBool::new(true));
@@ -262,7 +300,7 @@ fn try_pulseaudio() -> Result<RingSource> {
         thread::Builder::new()
             .name("eclume-system-pulse".into())
             .spawn(move || {
-                pulseaudio_capture_loop(writer, &running, &init_tx);
+                pulseaudio_capture_loop(writer, monitor, &running, &init_tx);
                 closer.close();
             })
             .context("falha ao criar a thread do PulseAudio")?
@@ -294,6 +332,7 @@ fn try_pulseaudio() -> Result<RingSource> {
 
 fn pulseaudio_capture_loop(
     mut writer: RingWriter,
+    monitor: Option<String>,
     running: &AtomicBool,
     init_tx: &std::sync::mpsc::Sender<Result<()>>,
 ) {
@@ -335,7 +374,10 @@ fn pulseaudio_capture_loop(
             anyhow::bail!("especificação de amostra inválida no PulseAudio");
         }
 
-        let monitor_device = resolve_monitor_device(&mut mainloop, &context)
+        let monitor_device = monitor
+            .or_else(|| {
+                get_default_sink_name(&mut mainloop, &context).map(|name| format!("{name}.monitor"))
+            })
             .context("falha ao resolver a fonte monitor do PulseAudio")?;
         log::info!("captura do sistema no monitor {monitor_device}");
 
@@ -460,7 +502,10 @@ fn wait_for_stream_ready(mainloop: &mut Mainloop, stream: &PaStream) -> Result<(
 #[derive(Clone, Debug)]
 struct SinkTarget {
     index: u32,
+    /// O nome do nó: o id estável da saída e o `target.object` do PipeWire.
     name: String,
+    /// O nome que o sistema mostra ao usuário.
+    description: String,
     monitor: String,
 }
 
@@ -522,9 +567,15 @@ fn query_sink_targets(mainloop: &mut Mainloop, context: &PaContext) -> Vec<SinkT
                 .monitor_source_name
                 .as_ref()
                 .map_or_else(|| format!("{name}.monitor"), ToString::to_string);
+            let description = sink_info
+                .description
+                .as_ref()
+                .filter(|description| !description.is_empty())
+                .map_or_else(|| name.to_string(), ToString::to_string);
             let _ = tx.send(Some(SinkTarget {
                 index: sink_info.index,
                 name: name.to_string(),
+                description,
                 monitor,
             }));
         }
@@ -563,16 +614,38 @@ fn query_sinks_in_use(mainloop: &mut Mainloop, context: &PaContext) -> Vec<u32> 
     collect_list(&rx)
 }
 
-// Apps de reunião costumam tocar num sink que não é o padrão. Segue o sink em que outro processo
-// está tocando; o padrão ganha o empate, para que um som alheio noutro sink não tire a captura de
-// uma reunião no sink padrão.
-fn sink_in_use(mainloop: &mut Mainloop, context: &PaContext) -> Option<SinkTarget> {
+fn choose_sink(
+    mainloop: &mut Mainloop,
+    context: &PaContext,
+    wanted: Option<&str>,
+) -> (Option<SinkTarget>, bool) {
     let sinks = query_sink_targets(mainloop, context);
     let in_use = query_sinks_in_use(mainloop, context);
     let default_sink = get_default_sink_name(mainloop, context);
-    pick_sink_in_use(sinks, &in_use, default_sink.as_deref())
+    pick_sink(sinks, wanted, &in_use, default_sink.as_deref())
 }
 
+// O sink escolhido, se ainda existe; senão, o em uso. O `bool` diz que o escolhido sumiu.
+fn pick_sink(
+    mut sinks: Vec<SinkTarget>,
+    wanted: Option<&str>,
+    in_use: &[u32],
+    default_sink: Option<&str>,
+) -> (Option<SinkTarget>, bool) {
+    if let Some(position) =
+        wanted.and_then(|wanted| sinks.iter().position(|sink| sink.name == wanted))
+    {
+        return (Some(sinks.swap_remove(position)), false);
+    }
+    (
+        pick_sink_in_use(sinks, in_use, default_sink),
+        wanted.is_some(),
+    )
+}
+
+// Apps de reunião costumam tocar num sink que não é o padrão. Segue o sink em que outro processo
+// está tocando; o padrão ganha o empate, para que um som alheio noutro sink não tire a captura de
+// uma reunião no sink padrão. `None` fica no padrão.
 fn pick_sink_in_use(
     sinks: Vec<SinkTarget>,
     in_use: &[u32],
@@ -591,20 +664,6 @@ fn pick_sink_in_use(
     Some(candidates.swap_remove(default_position.unwrap_or(0)))
 }
 
-// `None` deixa o PipeWire no sink padrão.
-fn resolve_sink_name() -> Option<String> {
-    with_pulse_context("eclume-lista-sinks", |mainloop, context| {
-        sink_in_use(mainloop, context).map(|sink| sink.name)
-    })
-    .flatten()
-}
-
-fn resolve_monitor_device(mainloop: &mut Mainloop, context: &PaContext) -> Option<String> {
-    sink_in_use(mainloop, context)
-        .map(|sink| sink.monitor)
-        .or_else(|| get_default_sink_name(mainloop, context).map(|name| format!("{name}.monitor")))
-}
-
 fn get_default_sink_name(mainloop: &mut Mainloop, context: &PaContext) -> Option<String> {
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -620,7 +679,10 @@ fn get_default_sink_name(mainloop: &mut Mainloop, context: &PaContext) -> Option
 
 #[cfg(test)]
 mod tests {
-    use super::{SinkTarget, pick_sink_in_use, update_pipewire_initialization};
+    use super::{
+        OutputDevice, SinkTarget, output_devices, pick_sink, pick_sink_in_use,
+        update_pipewire_initialization,
+    };
     use pipewire::stream::StreamState;
     use std::sync::mpsc::{self, TryRecvError};
 
@@ -658,6 +720,7 @@ mod tests {
         SinkTarget {
             index,
             name: name.to_string(),
+            description: format!("Saída {name}"),
             monitor: format!("{name}.monitor"),
         }
     }
@@ -681,5 +744,51 @@ mod tests {
         let sinks = vec![sink(1, "hdmi"), sink(2, "builtin"), sink(3, "usb")];
         let picked = pick_sink_in_use(sinks, &[1, 2, 3], Some("builtin")).unwrap();
         assert_eq!(picked.name, "builtin");
+    }
+
+    #[test]
+    fn saida_escolhida_ganha_do_sink_em_uso() {
+        let sinks = vec![sink(1, "builtin"), sink(2, "usb")];
+        let (picked, fell_back) = pick_sink(sinks, Some("builtin"), &[2], Some("builtin"));
+        assert_eq!(picked.unwrap().monitor, "builtin.monitor");
+        assert!(!fell_back);
+    }
+
+    #[test]
+    fn saida_escolhida_que_sumiu_segue_a_em_uso_e_avisa() {
+        let sinks = vec![sink(1, "builtin"), sink(2, "usb")];
+        let (picked, fell_back) = pick_sink(sinks, Some("fone-bt"), &[2], Some("builtin"));
+        assert_eq!(picked.unwrap().name, "usb");
+        assert!(fell_back);
+    }
+
+    #[test]
+    fn seguir_a_saida_em_uso_nao_e_queda() {
+        let sinks = vec![sink(1, "builtin"), sink(2, "usb")];
+        let (picked, fell_back) = pick_sink(sinks, None, &[], Some("builtin"));
+        assert!(picked.is_none());
+        assert!(!fell_back);
+    }
+
+    #[test]
+    fn lista_de_saidas_usa_o_nome_do_sink_como_id() {
+        let devices = output_devices(
+            vec![sink(1, "builtin"), sink(2, "usb")],
+            Some("usb".to_string()),
+        );
+        assert_eq!(devices.default.as_deref(), Some("usb"));
+        assert_eq!(
+            devices.devices,
+            vec![
+                OutputDevice {
+                    id: "builtin".into(),
+                    name: "Saída builtin".into()
+                },
+                OutputDevice {
+                    id: "usb".into(),
+                    name: "Saída usb".into()
+                },
+            ]
+        );
     }
 }
