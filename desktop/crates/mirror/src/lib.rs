@@ -6,6 +6,7 @@
 //! na raiz). O servidor é a fonte: o que o app gerou é sobrescrito. Contrato em
 //! docs/standards/code/desktop-pasta-sincronizada.md.
 
+pub mod agents;
 pub mod layout;
 pub mod manifest;
 pub mod reconcile;
