@@ -304,3 +304,60 @@ test('Áudio: atalhos com o estado do registro e troca pela próxima combinaçã
   const entrada = await ultimaEntrada(page)
   expect(entrada.shortcuts).toEqual({ record: 'Ctrl+Alt+R', note: 'Ctrl+Alt+N', marker: 'Ctrl+Alt+J' })
 })
+
+test('Sincronização: vem desligada, escolhe a pasta, liga e explica Collections, Obsidian e agente', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="pasta"]').click()
+  await expect(page.locator('[data-painel="pasta"]')).toBeVisible()
+  await expect(page.locator('#pasta-ligar')).not.toBeChecked()
+  await expect(page.locator('#pasta-transcricoes')).toBeChecked()
+  await expect(page.locator('#pasta-caminho')).toHaveText('Nenhuma')
+  await expect(page.locator('#pasta-estado')).toHaveText('Desligada')
+  await expect(page.locator('#pasta-agora')).toBeDisabled()
+
+  // O texto explica o que vai para a pasta e como ela serve ao Obsidian e a agentes.
+  const como = page.locator('#pasta-como')
+  await expect(como).toContainText('Collections viram subpastas')
+  await expect(como).toContainText('sem-colecao')
+  await expect(como).toContainText('Vault do Obsidian')
+  await expect(como).toContainText('AGENTS.md')
+  await expect(como).toContainText('É um espelho')
+
+  // Ligar sem pasta é recusado e a chave volta.
+  await page.locator('label.switch', { hasText: 'Sincronizar resumos numa pasta' }).click()
+  await expect(page.locator('#config-aviso.alert-error')).toContainText('Escolha a pasta dos resumos')
+  await expect(page.locator('#pasta-ligar')).not.toBeChecked()
+
+  await page.locator('#pasta-escolher').click()
+  await expect(page.locator('#pasta-caminho')).toHaveText('/home/ana/Obsidian/eclume')
+  expect((await ultimaEntrada(page)).mirror_dir).toBe('/home/ana/Obsidian/eclume')
+  await expect(page.locator('#pasta-estado')).toHaveText('Desligada')
+
+  await page.locator('label.switch', { hasText: 'Sincronizar resumos numa pasta' }).click()
+  await expect(page.locator('#pasta-ligar')).toBeChecked()
+  expect((await ultimaEntrada(page)).mirror_enabled).toBe(true)
+  await expect(page.locator('#pasta-estado')).toHaveText('Aguardando o primeiro ciclo')
+  await expect(page.locator('#pasta-agora')).toBeEnabled()
+
+  await page.locator('label.switch', { hasText: 'Incluir as transcrições' }).click()
+  await expect(page.locator('#pasta-transcricoes')).not.toBeChecked()
+  expect((await ultimaEntrada(page)).mirror_transcripts).toBe(false)
+})
+
+test('Sincronização: "Sincronizar agora" pede um ciclo e o estado mostra o resultado; a ajuda abre o artigo', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="pasta"]').click()
+  await page.locator('#pasta-escolher').click()
+  await page.locator('label.switch', { hasText: 'Sincronizar resumos numa pasta' }).click()
+  await page.locator('#pasta-agora').click()
+  await expect(page.locator('#pasta-estado')).toContainText('12 gravações lidas no último ciclo')
+  await expect(page.locator('#pasta-estado')).toHaveAttribute('data-status', 'synced')
+  await page.locator('#pasta-ajuda').click()
+  const feitas = (await chamadas(page)).filter((c) => c.comando === 'mirror_sync_now' || c.comando === 'open_help')
+  expect(feitas).toEqual([
+    { comando: 'mirror_sync_now', args: null },
+    { comando: 'open_help', args: { article: 'pasta-sincronizada' } },
+  ])
+})

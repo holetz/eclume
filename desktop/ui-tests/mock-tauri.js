@@ -94,8 +94,12 @@
         language: null,
         theme: "system",
         notify_summary: true,
+        mirror_enabled: false,
+        mirror_dir: null,
+        mirror_transcripts: true,
         note_silence_s: 4,
       },
+      mirror: { running: false, last_sync_ms: null, last_error: null, last: null },
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
       saidas: {
         default: "alsa_output.pci-0000_00_1f.3.analog-stereo",
@@ -342,6 +346,9 @@
       const systemSource =
         input.system_source === undefined ? e.settings.system_source : input.system_source || "follow";
       if (mic === "none" && systemSource === "none") throw "Escolha ao menos uma fonte de áudio";
+      const mirrorDir = input.mirror_dir === undefined ? e.settings.mirror_dir : input.mirror_dir || null;
+      const mirrorEnabled = input.mirror_enabled ?? e.settings.mirror_enabled;
+      if (mirrorEnabled && !mirrorDir) throw "Escolha a pasta dos resumos para ligar a sincronização";
       e.ultimaEntrada = input;
       e.settings = {
         ...e.settings,
@@ -357,6 +364,9 @@
         language: input.language === undefined ? e.settings.language : input.language || null,
         theme: input.theme ?? e.settings.theme,
         notify_summary: input.notify_summary ?? e.settings.notify_summary,
+        mirror_enabled: mirrorEnabled,
+        mirror_dir: mirrorDir,
+        mirror_transcripts: input.mirror_transcripts ?? e.settings.mirror_transcripts,
         shortcuts: input.shortcuts
           ? e.settings.shortcuts.map((a) => ({ ...a, keys: input.shortcuts[a.action] }))
           : e.settings.shortcuts,
@@ -442,6 +452,12 @@
     test_connection: (e) => e.testeDeConexao,
     open_signup: () => null,
     pick_ca_file: () => "/home/ana/caddy-root.pem",
+    pick_mirror_dir: () => "/home/ana/Obsidian/eclume",
+    mirror_status: (e) => e.mirror,
+    mirror_sync_now(e) {
+      e.mirror = { running: false, last_sync_ms: Date.UTC(2026, 8, 29, 13, 42), last_error: null, last: { recordings: 12, written: 24, unchanged: 0, removed: 0, failed: 0 } };
+      return null;
+    },
   };
 
   function entrar(e, email) {

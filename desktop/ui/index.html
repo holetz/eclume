@@ -259,6 +259,7 @@
           <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="true">Reuniões</button>
           <button type="button" class="tab" role="tab" data-aba="audio" aria-selected="false">Áudio</button>
           <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
+          <button type="button" class="tab" role="tab" data-aba="pasta" aria-selected="false">Pasta</button>
           <button type="button" class="tab" role="tab" data-aba="servidor" aria-selected="false">Servidor</button>
         </div>
       </div>
@@ -407,6 +408,41 @@
             <span class="text-muted small" id="espaco-usado"></span>
             <button type="button" class="btn btn-secondary btn-sm" id="tentar-de-novo">Tentar de novo as falhas</button>
           </div>
+        </div>
+      </div>
+
+      <div data-painel="pasta" hidden>
+        <div class="tray-section">
+          <label class="switch"><input type="checkbox" id="pasta-ligar" /><span class="track"></span>Sincronizar resumos numa pasta</label>
+          <span class="text-muted small"
+            >O resumo de cada gravação vira um arquivo Markdown e a transcrição, um arquivo JSONL, numa pasta
+            deste computador. Vale para toda a sua biblioteca, não só para o que este computador gravou.</span
+          >
+        </div>
+        <div class="tray-section">
+          <div class="field">
+            <span class="field-label">Pasta de destino</span>
+            <div class="code-block">
+              <span id="pasta-caminho">Nenhuma</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="pasta-escolher">Escolher pasta…</button>
+            </div>
+          </div>
+          <label class="switch"><input type="checkbox" id="pasta-transcricoes" /><span class="track"></span>Incluir as transcrições (.jsonl)</label>
+          <div class="row row-between">
+            <span class="status-line" id="pasta-estado" role="status" data-status="idle">Desligada</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="pasta-agora">Sincronizar agora</button>
+          </div>
+        </div>
+        <div class="tray-section" id="pasta-como">
+          <span class="kicker">Como a pasta é organizada</span>
+          <ul class="stack stack-tight small" id="pasta-regras">
+            <li><strong>Collections viram subpastas.</strong> Uma gravação em mais de uma Collection aparece em cada uma; as sem Collection ficam em <code>sem-colecao</code>. Organize as Collections no eclume web.</li>
+            <li><strong>Resumo e transcrição lado a lado.</strong> O resumo é um <code>.md</code> com propriedades no topo; a transcrição é um <code>.jsonl</code> com o mesmo nome.</li>
+            <li><strong>Vault do Obsidian.</strong> Abra a pasta como vault: o Obsidian lê os <code>.md</code> e ignora os <code>.jsonl</code>, então as transcrições não poluem a busca nem o grafo.</li>
+            <li><strong>Pasta de trabalho de agente.</strong> O app mantém um <code>AGENTS.md</code> na raiz que explica a um agente (como o Claude Code) como ler e pesquisar os arquivos.</li>
+            <li><strong>É um espelho.</strong> O eclume sobrescreve os arquivos que gerou; edite uma cópia. Arquivos seus na pasta nunca são tocados.</li>
+          </ul>
+          <a href="#" class="small" id="pasta-ajuda">Saiba mais na ajuda</a>
         </div>
       </div>
 

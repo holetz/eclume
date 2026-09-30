@@ -1,6 +1,7 @@
 // Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Áudio
 // (microfone, áudio do sistema, teste de nível de cada fonte, atalhos globais e parada por silêncio),
-// Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas") e Servidor (a conta
+// Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas"), Sincronização (a pasta
+// que espelha resumos e transcrições, com o estado e "Sincronizar agora") e Servidor (a conta
 // com "Sair", o endereço e, em "Avançado", a API e a CA extra). As abas salvam a cada mudança,
 // menos o Servidor, que salva pelo botão.
 import { el, trocar, $ } from "../dom.js";
@@ -89,6 +90,19 @@ export function tamanho(bytes) {
   return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: casas })} ${unidades[i]}`;
 }
 
+/** O texto da linha de estado da pasta sincronizada, do resultado de `mirror_status`. */
+export function textoDaPasta(config, estado) {
+  if (!config.mirror_enabled) return ["idle", "Desligada"];
+  if (!config.mirror_dir) return ["idle", "Escolha a pasta para começar"];
+  if (estado?.running) return ["syncing", "Sincronizando…"];
+  if (estado?.last_error) return ["away", estado.last_error];
+  if (!estado?.last_sync_ms) return ["syncing", "Aguardando o primeiro ciclo"];
+  const hora = new Date(estado.last_sync_ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const n = estado.last?.recordings ?? 0;
+  const lidas = n === 1 ? "1 gravação lida" : `${n} gravações lidas`;
+  return ["synced", `Sincronizada às ${hora} · ${lidas} no último ciclo`];
+}
+
 /** O que `save_settings` recebe, a partir do que `settings` devolveu e das mudanças. */
 export function entrada(config, mudancas = {}) {
   return {
@@ -118,6 +132,10 @@ export function montar(secao, app) {
   /** O atalho sendo capturado ("record", "note" ou "marker"). */
   let capturando = null;
   let consultaDoTeste = null;
+  /** O temporizador que atualiza o estado da pasta sincronizada enquanto a aba está aberta. */
+  let consultaDaPasta = null;
+  /** O último `mirror_status`, para redesenhar a aba sem esperar a próxima consulta. */
+  let estadoDaPasta = null;
   /** A fonte em teste ("mic" ou "system"); `null` sem teste. */
   let testando = null;
 
@@ -131,7 +149,9 @@ export function montar(secao, app) {
     for (const aba of abas) aba.setAttribute("aria-selected", String(aba.dataset.aba === nome));
     for (const painel of paineis) painel.hidden = painel.dataset.painel !== nome;
     mostrarAviso(null);
+    if (nome !== "pasta") pararConsultaDaPasta();
     if (nome === "armazenamento") lerArmazenamento();
+    if (nome === "pasta") lerPasta();
     if (nome === "audio") {
       lerMicrofones();
       lerSaidas();
@@ -389,6 +409,7 @@ export function montar(secao, app) {
     if (retencao === "dias") dias.value = String(config.retention_days);
     dias.disabled = retencao !== "dias";
 
+    desenharPasta(estadoDaPasta);
     $("#servidor-endereco", secao).value = config.web_url;
     $("#servidor-api", secao).value = config.api_url ?? "";
     caPath = config.ca_path ?? null;
@@ -418,6 +439,34 @@ export function montar(secao, app) {
     $("#servidor-entrar", secao).hidden = config.connection === "account";
     $("#servidor-sair", secao).hidden = config.connection === "first_run";
     $("#servidor-conexao", secao).hidden = true;
+  }
+
+  /** Consulta o estado da pasta sincronizada; enquanto a aba está aberta, repete a cada 3 s. */
+  async function lerPasta() {
+    try {
+      estadoDaPasta = await app.invoke("mirror_status");
+      desenharPasta(estadoDaPasta);
+    } catch (falha) {
+      mostrarAviso(String(falha));
+    }
+    if (consultaDaPasta === null) consultaDaPasta = setInterval(lerPasta, 3000);
+  }
+
+  function pararConsultaDaPasta() {
+    clearInterval(consultaDaPasta);
+    consultaDaPasta = null;
+  }
+
+  function desenharPasta(estado) {
+    if (!config) return;
+    $("#pasta-ligar", secao).checked = config.mirror_enabled;
+    $("#pasta-transcricoes", secao).checked = config.mirror_transcripts;
+    $("#pasta-caminho", secao).textContent = config.mirror_dir ?? "Nenhuma";
+    const [situacao, texto] = textoDaPasta(config, estado);
+    const linha = $("#pasta-estado", secao);
+    linha.dataset.status = situacao;
+    linha.textContent = texto;
+    $("#pasta-agora", secao).disabled = !config.mirror_enabled || !config.mirror_dir || Boolean(estado?.running);
   }
 
   async function lerArmazenamento() {
@@ -495,6 +544,35 @@ export function montar(secao, app) {
     }
   });
 
+  $("#pasta-ligar", secao).addEventListener("change", (evento) => {
+    salvar({ mirror_enabled: evento.target.checked }).then(lerPasta);
+  });
+  $("#pasta-transcricoes", secao).addEventListener("change", (evento) => {
+    salvar({ mirror_transcripts: evento.target.checked }).then(lerPasta);
+  });
+  $("#pasta-escolher", secao).addEventListener("click", async () => {
+    const escolhida = await app.invoke("pick_mirror_dir").catch((falha) => {
+      mostrarAviso(String(falha));
+      return null;
+    });
+    if (!escolhida) return;
+    await salvar({ mirror_dir: escolhida });
+    lerPasta();
+  });
+  $("#pasta-agora", secao).addEventListener("click", async () => {
+    try {
+      await app.invoke("mirror_sync_now");
+    } catch (falha) {
+      mostrarAviso(String(falha));
+      return;
+    }
+    lerPasta();
+  });
+  $("#pasta-ajuda", secao).addEventListener("click", (evento) => {
+    evento.preventDefault();
+    app.invoke("open_help", { article: "pasta-sincronizada" }).catch((falha) => mostrarAviso(String(falha)));
+  });
+
   $("#servidor-salvar", secao).addEventListener("click", () => {
     salvar(
       {
@@ -547,6 +625,7 @@ export function montar(secao, app) {
   return {
     sair() {
       capturando = null;
+      pararConsultaDaPasta();
       if (testando) encerrarTeste();
     },
 
