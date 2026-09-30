@@ -71,6 +71,7 @@ describe('navegação', () => {
       Tags: '/tags',
       'Campos personalizados': '/config/campos',
       'Tipos de agenda': '/config/agendas',
+      Conta: '/config/conta',
       'Ambiente': '/config/ambiente',
       'Conexão MCP': '/config/mcp',
       'App móvel': '/app-movel',
@@ -164,6 +165,7 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: 'Configurações' }))
     const menu = screen.getByRole('menu', { name: 'Minhas configurações' })
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Conta',
       'Ambiente',
       'Conexão MCP',
       'Tokens de acesso',

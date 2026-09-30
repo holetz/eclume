@@ -108,6 +108,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trocar a própria senha
+         * @description Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
+         *     do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
+         *     continua; os PATs continuam valendo. Só pela sessão do usuário, com o limite de tentativas
+         *     das credenciais.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Excluir a própria conta
+         * @description Confere a senha (errada: 422 em `password`) e apaga a conta com tudo o que é dela:
+         *     gravações e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags,
+         *     campos, tipos de agenda, tokens e aparelhos. Não há como desfazer. A resposta apaga os
+         *     cookies da sessão. Só pela sessão do usuário, com o limite de tentativas das credenciais.
+         */
+        post: operations["deleteAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/notice": {
         parameters: {
             query?: never;
@@ -2650,6 +2696,22 @@ export interface components {
             /** @description Acima deste tamanho do cadastro, o agente não cria mais tags. */
             catalog_limit: number;
         };
+        PasswordChange: {
+            /** Format: password */
+            current_password: string;
+            /**
+             * Format: password
+             * @description Ao menos 12 caracteres, como no cadastro.
+             */
+            new_password: string;
+        };
+        AccountDeletion: {
+            /**
+             * Format: password
+             * @description A senha da conta, que confirma a exclusão.
+             */
+            password: string;
+        };
         TagAssignmentPatch: {
             auto_fill?: boolean;
             instructions?: string;
@@ -3910,6 +3972,64 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Senha trocada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletion"];
+            };
+        };
+        responses: {
+            /** @description Conta excluída; a sessão acabou. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     acceptNotice: {
