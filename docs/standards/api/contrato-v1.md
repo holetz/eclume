@@ -53,7 +53,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Quando basta um de
   vários, a operação declara um requisito `pat` por escopo e a rota usa `requires_any` (desde a
   2.4.0, `GET /agenda-types` aceita `summaries:read` ou `recordings:read`, para a credencial de
-  dispositivo escolher o tipo ao parar). Sessão tem todas as permissões do usuário.
+  dispositivo escolher o tipo ao parar). A credencial de dispositivo tem `recordings:read`,
+  `recordings:write`, `summaries:read` (2.6.0) e `transcripts:read` (2.7.0, a pasta sincronizada do
+  desktop). Sessão tem todas as permissões do usuário.
 - **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
@@ -71,7 +73,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
-  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Um cursor vale
+  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Desde a 2.7.0, um
+  resumo que termina ou é editado também move o `updated_at` da gravação e da transcrição, então
+  `?since=` percebe resumo novo ou refeito. Um cursor vale
   só para a ordenação (`sort`) que o gerou.
 - **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
   valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota
