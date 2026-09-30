@@ -80,6 +80,64 @@ describe('documento do resumo', () => {
     expect(copied).not.toMatch(/^#/m)
   })
 
+  it('regenera o resumo só depois de confirmar, pelo tipo da gravação, e espera a geração', async () => {
+    const user = userEvent.setup()
+    let pending = false
+    const http = mockTranscriptApi({
+      'GET /api/v1/recordings/:id/summary': () => {
+        const state = fixtures.summaryState()
+        if (pending) state.pending = fixtures.summaryQueued()
+        return state
+      },
+      'POST /api/v1/transcripts/:id/summaries': () => {
+        pending = true
+        return json(fixtures.summaryQueued(), 202)
+      },
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    const regenerate = within(section).getByRole('button', { name: 'Regenerar' })
+
+    await user.click(regenerate)
+    let dialog = screen.getByRole('dialog', { name: 'Regenerar o resumo?' })
+    expect(dialog).toHaveTextContent('A nova versão passa a ser a atual')
+    expect(dialog).toHaveTextContent('a versão 2 (Editado por você) fica guardada')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(0)
+
+    await user.click(regenerate)
+    dialog = screen.getByRole('dialog', { name: 'Regenerar o resumo?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Regenerar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()).toEqual({})
+    expect(await within(section).findByText('Gerando uma versão nova…')).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Regenerar' })).toBeDisabled()
+  })
+
+  it('regenerar sem tipo de agenda abre o diálogo de trocar o tipo', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi({
+      'POST /api/v1/transcripts/:id/summaries': () =>
+        json(
+          {
+            type: 'about:blank',
+            title: 'validation_failed',
+            status: 422,
+            code: 'validation_failed',
+            errors: [{ field: 'agenda_type_id', message: 'a gravação não tem tipo de agenda' }],
+          },
+          422,
+        ),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    await user.click(within(section).getByRole('button', { name: 'Regenerar' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Regenerar o resumo?' })).getByRole('button', { name: 'Regenerar' }))
+    expect(await screen.findByRole('dialog', { name: 'Trocar o tipo de agenda' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Regenerar o resumo?' })).not.toBeInTheDocument()
+  })
+
   it('troca o tipo de agenda num diálogo e relê o resumo, que volta em geração', async () => {
     const user = userEvent.setup()
     let pending = false
