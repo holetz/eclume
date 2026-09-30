@@ -319,7 +319,7 @@ mod tests {
                 .recordings
                 .borrow()
                 .iter()
-                .filter(|r| since.map_or(true, |s| r.updated_at.as_deref() >= Some(s)))
+                .filter(|r| since.is_none_or(|s| r.updated_at.as_deref() >= Some(s)))
                 .cloned()
                 .collect())
         }
