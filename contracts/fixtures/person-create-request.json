@@ -1,5 +1,10 @@
 {
   "name": "Juliana Prado",
   "email": "juliana.prado@example.com",
-  "notes": "Diretora de Pessoas da Metalúrgica Serra Azul."
+  "notes": "Diretora de Pessoas da Metalúrgica Serra Azul.",
+  "company": "Metalúrgica Serra Azul",
+  "department": "Pessoas",
+  "tags": [
+    "cliente"
+  ]
 }

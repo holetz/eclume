@@ -16,7 +16,17 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, decode_named_position, encode_position, page
-from eclume_server.people import get_person, person_json, person_select, prefix_filter
+from eclume_server.people import (
+    MAX_PERSON_TAG,
+    MAX_PERSON_TAGS,
+    clean_attribute,
+    clean_tags,
+    facets,
+    get_person,
+    person_json,
+    person_select,
+    prefix_filter,
+)
 from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.routes.auth import check_email
 from eclume_server.transcripts import load_speakers, summary_json, transcript_select
@@ -29,8 +39,16 @@ TranscriptReader = Annotated[Principal, Depends(requires("people:read", "transcr
 EMAIL_TAKEN = "Já existe uma pessoa sua com este e-mail."
 
 
+PersonTag = Annotated[str, Field(min_length=1, max_length=MAX_PERSON_TAG)]
+Attribute = Annotated[str | None, Field(max_length=120)]
+
+
 def _optional_email(value: str | None) -> str | None:
     return None if value is None else check_email(value)
+
+
+def _clean_tags(value: list[str] | None) -> list[str] | None:
+    return None if value is None else clean_tags(value)
 
 
 class PersonCreate(BaseModel):
@@ -39,8 +57,15 @@ class PersonCreate(BaseModel):
     name: str = Field(min_length=1)
     email: str | None = None
     notes: str | None = None
+    company: Attribute = None
+    department: Attribute = None
+    job_title: Attribute = None
+    phone: str | None = Field(default=None, max_length=40)
+    tags: list[PersonTag] = Field(default_factory=list, max_length=MAX_PERSON_TAGS)
 
     _email = field_validator("email")(_optional_email)
+    _attributes = field_validator("company", "department", "job_title", "phone")(clean_attribute)
+    _tags = field_validator("tags")(_clean_tags)
 
 
 class PersonPatch(BaseModel):
@@ -49,8 +74,15 @@ class PersonPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     email: str | None = None
     notes: str | None = None
+    company: Attribute = None
+    department: Attribute = None
+    job_title: Attribute = None
+    phone: str | None = Field(default=None, max_length=40)
+    tags: list[PersonTag] | None = Field(default=None, max_length=MAX_PERSON_TAGS)
 
     _email = field_validator("email")(_optional_email)
+    _attributes = field_validator("company", "department", "job_title", "phone")(clean_attribute)
+    _tags = field_validator("tags")(_clean_tags)
 
 
 @router.get("/people")
@@ -69,6 +101,13 @@ async def list_people(
         rows = (await conn.execute(query)).mappings().all()
     next_cursor = encode_position(rows[limit - 1]["sort_name"], rows[limit - 1]["id"]) if len(rows) > limit else None
     return {"items": [person_json(row) for row in rows[:limit]], "next_cursor": next_cursor}
+
+
+@router.get("/people/facets")
+async def list_person_facets(principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """Empresas, áreas e tags de pessoa em uso, com quantas pessoas usam cada uma."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await facets(conn)
 
 
 @router.post("/people", status_code=201)
@@ -98,12 +137,13 @@ async def read_person(person_id: UUID, principal: Reader, ctx: Ctx) -> dict[str,
 
 @router.patch("/people/{person_id}")
 async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Edita nome, e-mail e notas; renomear sobe o `updated_at` das transcrições em que ela fala."""
+    """Edita nome, e-mail, notas e atributos; renomear sobe o `updated_at` das transcrições em que ela fala."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
-    if "name" in values and values["name"] is None:
-        raise invalid_field("name", "não pode ser nulo")
+    for field in ("name", "tags"):
+        if field in values and values[field] is None:
+            raise invalid_field(field, "não pode ser nulo")
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             await get_person(conn, person_id)

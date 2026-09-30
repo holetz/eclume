@@ -25,7 +25,7 @@ describe('filtros na URL', () => {
   it('lê os filtros em pt-BR, repetíveis, e descarta valores estranhos', () => {
     const params = new URLSearchParams(
       'visao=semana&data=2026-09-21&tipo=nota&tipo=xyz&situacao=falhou&situacao=pronta&tag=backlog&tag=backlog' +
-        '&pessoa=p1&colecao=c1&campo=f1:Serra%20Azul&campo=sem-valor',
+        '&pessoa=p1&colecao=c1&campo=f1:Serra%20Azul&campo=sem-valor&empresa=Agro%20Sul&area=RH&tag-pessoa=cliente',
     )
     expect(readFilters(params)).toEqual({
       kind: ['nota'],
@@ -34,10 +34,13 @@ describe('filtros na URL', () => {
       person: ['p1'],
       collection: ['c1'],
       field: ['f1:Serra Azul'],
+      personCompany: ['Agro Sul'],
+      personDepartment: ['RH'],
+      personTag: ['cliente'],
     })
     expect(readView(params)).toBe('semana')
     expect(readView(new URLSearchParams('visao=ano'))).toBeNull()
-    expect(activeFilterCount(readFilters(params))).toBe(7)
+    expect(activeFilterCount(readFilters(params))).toBe(10)
   })
 
   it('escreve os filtros sem mexer na visão, na data nem no modal', () => {
@@ -57,6 +60,9 @@ describe('filtros na URL', () => {
         person: ['p1'],
         collection: ['c1'],
         field: ['f1:x'],
+        personCompany: ['Agro Sul'],
+        personDepartment: [],
+        personTag: ['cliente'],
       }),
     ).toEqual({
       kind: ['note'],
@@ -65,6 +71,8 @@ describe('filtros na URL', () => {
       person: ['p1'],
       collection: ['c1'],
       field: ['f1:x'],
+      person_company: ['Agro Sul'],
+      person_tag: ['cliente'],
     })
     // Tudo marcado num grupo não manda o parâmetro.
     expect(

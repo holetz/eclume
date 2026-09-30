@@ -415,6 +415,12 @@ people = Table(
     Column("email", Text),
     Column("notes", Text),
     Column("sort_name", Text, server_default=FetchedValue()),
+    # 020_pessoas_enriquecidas
+    Column("company", Text),
+    Column("department", Text),
+    Column("job_title", Text),
+    Column("phone", Text),
+    Column("tags", ARRAY(Text), server_default=FetchedValue()),
     _uuid("created_by"),
     _ts("created_at", server_default=FetchedValue()),
     _ts("updated_at", server_default=FetchedValue()),

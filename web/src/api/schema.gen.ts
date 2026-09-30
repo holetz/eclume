@@ -1243,6 +1243,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/people/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Empresas, áreas e tags de pessoa em uso
+         * @description Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
+         *     um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+         *     usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
+         *     Participantes da biblioteca.
+         */
+        get: operations["listPersonFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/people/{person_id}": {
         parameters: {
             query?: never;
@@ -2331,6 +2354,15 @@ export interface components {
             /** Format: email */
             email: string | null;
             notes: string | null;
+            /** @description Empresa (empresa, cooperativa, órgão) da pessoa. */
+            company: string | null;
+            /** @description Área ou departamento da pessoa na empresa. */
+            department: string | null;
+            /** @description Cargo ou função. */
+            job_title: string | null;
+            phone: string | null;
+            /** @description Tags de pessoa, rótulos livres da pessoa (separados das tags das gravações). */
+            tags: string[];
             /** @description Transcrições do usuário em que a pessoa fala. */
             transcript_count: number;
             /**
@@ -2352,12 +2384,34 @@ export interface components {
             /** Format: email */
             email?: string | null;
             notes?: string | null;
+            company?: string | null;
+            department?: string | null;
+            job_title?: string | null;
+            phone?: string | null;
+            /** @description Sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            tags?: string[];
         };
         PersonPatch: {
             name?: string;
             /** Format: email */
             email?: string | null;
             notes?: string | null;
+            company?: string | null;
+            department?: string | null;
+            job_title?: string | null;
+            phone?: string | null;
+            /** @description Substitui a lista inteira; sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            tags?: string[];
+        };
+        PersonFacetValue: {
+            value: string;
+            /** @description Pessoas com esse valor. */
+            count: number;
+        };
+        PersonFacets: {
+            companies: components["schemas"]["PersonFacetValue"][];
+            departments: components["schemas"]["PersonFacetValue"][];
+            tags: components["schemas"]["PersonFacetValue"][];
         };
         PersonPage: {
             items: components["schemas"]["Person"][];
@@ -3346,7 +3400,7 @@ export interface components {
             id: string;
             name: string;
         };
-        /** @description Pessoa sugerida para um locutor pela impressão de voz. Nunca é aplicada sem confirmação humana. */
+        /** @description Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela. */
         SpeakerSuggestion: {
             person: components["schemas"]["PersonRef"];
             /** @description Similaridade de cosseno normalizada, de 0 a 1. */
@@ -4143,6 +4197,12 @@ export interface operations {
                 person?: string[];
                 /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
                 field?: string[];
+                /** @description Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação. */
+                person_company?: string[];
+                /** @description Área de um participante, sem acento nem caixa; repetível (ver `person_company`). */
+                person_department?: string[];
+                /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`). */
+                person_tag?: string[];
             };
             header?: never;
             path?: never;
@@ -5600,6 +5660,28 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listPersonFacets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Valores em uso, em ordem alfabética. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonFacets"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getPerson: {

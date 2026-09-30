@@ -870,6 +870,30 @@ paths:
             items:
               type: string
               pattern: "^[0-9a-fA-F-]{36}:.+$"
+        - name: person_company
+          in: query
+          description: >-
+            Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa;
+            repetível. Os atributos `person_*` valem para uma mesma pessoa: com
+            `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação.
+          schema:
+            type: array
+            items:
+              type: string
+        - name: person_department
+          in: query
+          description: Área de um participante, sem acento nem caixa; repetível (ver `person_company`).
+          schema:
+            type: array
+            items:
+              type: string
+        - name: person_tag
+          in: query
+          description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`).
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         "200":
           description: Gravações, na ordem de `sort`.
@@ -2501,6 +2525,31 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/people/facets:
+    get:
+      tags: [people]
+      operationId: listPersonFacets
+      summary: Empresas, áreas e tags de pessoa em uso
+      description: |
+        Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
+        um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+        usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
+        Participantes da biblioteca.
+      security:
+        - sessionCookie: []
+        - pat: ["people:read"]
+      responses:
+        "200":
+          description: Valores em uso, em ordem alfabética.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonFacets"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/v1/people/{person_id}:
     parameters:
@@ -4818,7 +4867,7 @@ components:
 
     Person:
       type: object
-      required: [id, name, email, notes, transcript_count, last_seen_at, voice_sample_count, speaking_time_ms, created_at, updated_at]
+      required: [id, name, email, notes, company, department, job_title, phone, tags, transcript_count, last_seen_at, voice_sample_count, speaking_time_ms, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4830,6 +4879,22 @@ components:
           format: email
         notes:
           type: [string, "null"]
+        company:
+          description: Empresa (empresa, cooperativa, órgão) da pessoa.
+          type: [string, "null"]
+        department:
+          description: Área ou departamento da pessoa na empresa.
+          type: [string, "null"]
+        job_title:
+          description: Cargo ou função.
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        tags:
+          description: Tags de pessoa, rótulos livres da pessoa (separados das tags das gravações).
+          type: array
+          items:
+            type: string
         transcript_count:
           description: Transcrições do usuário em que a pessoa fala.
           type: integer
@@ -4865,6 +4930,26 @@ components:
           format: email
         notes:
           type: [string, "null"]
+        company:
+          type: [string, "null"]
+          maxLength: 120
+        department:
+          type: [string, "null"]
+          maxLength: 120
+        job_title:
+          type: [string, "null"]
+          maxLength: 120
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+        tags:
+          description: Sem repetição (ignorando a caixa); vazias e espaços nas pontas saem.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
 
     PersonPatch:
       type: object
@@ -4878,6 +4963,54 @@ components:
           format: email
         notes:
           type: [string, "null"]
+        company:
+          type: [string, "null"]
+          maxLength: 120
+        department:
+          type: [string, "null"]
+          maxLength: 120
+        job_title:
+          type: [string, "null"]
+          maxLength: 120
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+        tags:
+          description: Substitui a lista inteira; sem repetição (ignorando a caixa); vazias e espaços nas pontas saem.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+
+    PersonFacetValue:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          description: Pessoas com esse valor.
+          type: integer
+          minimum: 1
+
+    PersonFacets:
+      type: object
+      required: [companies, departments, tags]
+      properties:
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonFacetValue"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonFacetValue"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonFacetValue"
 
     PersonPage:
       type: object

@@ -83,9 +83,29 @@ async def list_recordings(
     collection: Annotated[list[UUID] | None, Query()] = None,
     person: Annotated[list[UUID] | None, Query()] = None,
     field: Many = None,
+    person_company: Many = None,
+    person_department: Many = None,
+    person_tag: Many = None,
 ) -> dict[str, Any]:
-    """A biblioteca: por intervalo de `recorded_at` e filtros (OU no mesmo filtro, E entre filtros)."""
-    library = Library(since, from_, to, kind, status, tag, collection, person, field)
+    """A biblioteca: por intervalo de `recorded_at` e filtros (OU no mesmo filtro, E entre filtros).
+
+    Os atributos de pessoa (`person_*`) valem para um mesmo participante: alguém ligado a um locutor
+    da gravação que cumpre todos eles.
+    """
+    library = Library(
+        since,
+        from_,
+        to,
+        kind,
+        status,
+        tag,
+        collection,
+        person,
+        field,
+        person_company=person_company,
+        person_department=person_department,
+        person_tag=person_tag,
+    )
     return await list_library(ctx, principal.user_id, library, sort=sort, cursor=cursor, limit=limit)
 
 
