@@ -35,6 +35,7 @@ from eclume_server.pagination import Cursor, Limit, decode_ordered_position, enc
 from eclume_server.previews import create_preview
 from eclume_server.problems import conflict, invalid_field
 from eclume_server.routes.previews import check_transcribed
+from eclume_server.tags import adopt
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -68,6 +69,8 @@ async def create_agenda_type(body: AgendaTypeCreate, principal: Writer, ctx: Ctx
         async with user_tx(ctx.engine, principal.user_id) as conn:
             if values["position"] is None:
                 values["position"] = await next_position(conn, t.agenda_types)
+            # As tags padrão entram no cadastro, na grafia dele.
+            values["default_tags"] = await adopt(conn, principal.user_id, values["default_tags"])
             row = (
                 (
                     await conn.execute(
@@ -122,6 +125,8 @@ async def update_agenda_type(
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             await get_agenda_type(conn, agenda_type_id)
+            if "default_tags" in values:
+                values["default_tags"] = await adopt(conn, principal.user_id, values["default_tags"])
             row = (
                 (
                     await conn.execute(

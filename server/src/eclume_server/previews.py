@@ -24,7 +24,6 @@ from eclume_server.agents.prompting import summarize
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.fields import known_tags
 from eclume_server.problems import rate_limited
 from eclume_server.queue import DEFAULT_QUEUE
 from eclume_server.summaries import (
@@ -164,11 +163,10 @@ async def _field_rule(ctx: dict[str, Any], owner_id: UUID, request: dict[str, An
     async with system_tx(ctx["engine"]) as conn:
         provider = await _provider(ctx, conn, "fields")
         recordings = await _transcribed(conn, owner_id, [UUID(value) for value in request.get("recording_ids", [])])
-        tags = await known_tags(conn, owner_id)
         transcripts = [await transcript_text(conn, row["transcript_id"]) for row in recordings]
     items = []
     for row, transcript in zip(recordings, transcripts, strict=True):
-        values, _ = await extract_fields(provider, [field], tags, transcript)
+        values, _ = await extract_fields(provider, [field], None, transcript)
         items.append({"recording_id": str(row["id"]), "recording_title": row["title"], "value": values["campo"]})
     return items
 

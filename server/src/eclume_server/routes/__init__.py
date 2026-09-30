@@ -28,6 +28,7 @@ from eclume_server.routes import (
     server_info,
     summaries,
     summary_chat,
+    tags,
     tokens,
     transcripts,
     uploads,
@@ -68,6 +69,7 @@ def include_routes(app: FastAPI) -> None:
         previews,
         people,
         collections,
+        tags,
         search,
         voice,
     ):

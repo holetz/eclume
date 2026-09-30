@@ -70,6 +70,7 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
         "pendencias": ["enviar proposta", 3, ""],
         "manual": "não pedido",
     }
+    user.post("/api/v1/tags", json={"name": "contrato", "description": "Contratos e renovações."})
     agents = FakeAgents(replies={"fields": [json.dumps(reply)]})
     recording = _process(user, services, agents)
 
@@ -80,10 +81,13 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
     assert "- pendencias (lista): O que ficou para depois." in prompt
     assert "manual" not in prompt
     assert "<transcricao>" in prompt
+    assert "- contrato — Contratos e renovações." in prompt
+    assert "use só tags desta lista" in prompt
 
     # O tipo detectado (o primeiro, pela resposta padrão) aplica o padrão de título e as tags dele.
     assert recording["title"] == "Reunião de equipe · Revisão do contrato de manutenção"
-    assert recording["tags"] == ["contrato", "Contrato", "manutenção", "interno", "planejamento"]
+    # Tags fixas: "Contrato" é a cadastrada "contrato"; "manutenção" não está no cadastro e sai.
+    assert recording["tags"] == ["contrato", "interno", "planejamento"]
     values = _values(user, recording["id"])
     assert (values["titulo"]["origin"], values["tags"]["origin"]) == ("auto", "auto")
     # Escolha fora das opções vira "nada encontrado"; da lista, só os textos.
@@ -95,6 +99,7 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
 
 
 def test_o_que_o_usuario_escreveu_nao_e_sobrescrito(user: Api, services: Services):
+    user.patch("/api/v1/me/tag-assignment", json={"mode": "auto"})
     reply = json.dumps({"titulo": "Outro título", "tags": ["automática"]})
     agents = FakeAgents(replies={"fields": [reply]})
     recording = _process(user, services, agents, title="Kickoff com a Serra Azul")
@@ -105,6 +110,7 @@ def test_o_que_o_usuario_escreveu_nao_e_sobrescrito(user: Api, services: Service
 
 
 def test_tag_automatica_tem_o_teto_das_tags_padrao(user: Api, services: Services):
+    user.patch("/api/v1/me/tag-assignment", json={"mode": "auto", "new_limit": 2})
     reply = json.dumps({"tags": ["t" * 100, "curta"]})
     recording = _process(user, services, FakeAgents(replies={"fields": [reply]}))
     assert recording["tags"][:2] == ["t" * 64, "curta"]
@@ -150,6 +156,8 @@ def test_json_invalido_retenta_e_falha_sem_parar_a_cadeia(user: Api, services: S
 
 def test_retranscricao_recalcula_o_automatico_e_mantem_o_aceito(user: Api, services: Services):
     field = user.post("/api/v1/fields", json=CLIENT).json()
+    for name in ("a", "b"):
+        user.post("/api/v1/tags", json={"name": name})
     first = json.dumps({"titulo": "Primeiro", "cliente": "Serra Azul", "tags": ["a"]})
     recording = _process(user, services, FakeAgents(replies={"fields": [first]}))
     user.post(f"/api/v1/recordings/{recording['id']}/fields/{field['id']}/accept")
@@ -182,6 +190,7 @@ def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, s
     )
     user.post("/api/v1/fields", json=CLIENT)
     detection = json.dumps({"tipo": "T3", "confianca": 1.7, "motivo": "Fala com a Serra Azul."})
+    user.post("/api/v1/tags", json={"name": "proposta"})
     fields = json.dumps({"titulo": "Proposta de manutenção", "cliente": "Serra Azul", "tags": ["proposta"]})
     agents = FakeAgents(replies={"fields": [fields], "agenda_detection": [detection]})
     recording = _process(user, services, agents, recorded_at="2026-09-18T14:00:05Z")
@@ -347,7 +356,7 @@ def test_falha_inesperada_fora_do_agente_marca_a_etapa_e_segue(
     def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError
 
-    monkeypatch.setattr(fields_module, "known_tags", boom)
+    monkeypatch.setattr(fields_module, "tag_guide", boom)
     monkeypatch.setattr(agenda_types_module, "apply_type", boom)
     recording = _process(user, services, FakeAgents())
     for name in ("fields", "agenda_type"):
@@ -430,3 +439,31 @@ def test_so_colecoes_automaticas_tambem_chamam_o_agente(user: Api, services: Ser
     assert _step(recording, "fields")["state"] == "done"
     assert recording["collection_ids"] == [coll.json()["id"]]
     assert "## Campos" not in agents.of("fields")[0][2]
+
+
+def test_tags_fixas_casam_variacoes_e_descartam_as_novas(user: Api, services: Services):
+    user.post("/api/v1/tags", json={"name": "reunião de equipe"})
+    reply = json.dumps({"tags": ["Reuniões de Equipe", "inventada"]})
+    recording = _process(user, services, FakeAgents(replies={"fields": [reply]}))
+    assert recording["tags"] == ["reunião de equipe", "interno", "planejamento"]
+    names = {tag["name"]: tag for tag in user.get("/api/v1/tags").json()["items"]}
+    assert "inventada" not in names
+
+
+def test_tags_autogerenciadas_respeitam_o_limite_e_o_teto(
+    user: Api, services: Services, monkeypatch: pytest.MonkeyPatch
+):
+    assert user.patch("/api/v1/me/tag-assignment", json={"mode": "auto"}).json()["new_limit"] == 1
+    agents = FakeAgents(replies={"fields": [json.dumps({"tags": ["interno", "nova um", "nova dois"]})]})
+    recording = _process(user, services, agents)
+    assert "crie uma nova, curta e em minúsculas: no máximo 1 nova(s) por gravação" in agents.of("fields")[0][2]
+    assert recording["tags"] == ["interno", "nova um", "planejamento"]
+    created = {tag["name"]: tag["origin"] for tag in user.get("/api/v1/tags").json()["items"]}
+    assert (created["nova um"], created["interno"]) == ("auto", "user")
+    assert "nova dois" not in created
+
+    # Cadastro no teto: o agente não cria mais.
+    monkeypatch.setattr(fields_module, "MAX_CATALOG", len(created))
+    agents = FakeAgents(replies={"fields": [json.dumps({"tags": ["outra nova"]})]})
+    recording = _process(user, services, agents)
+    assert "outra nova" not in recording["tags"]

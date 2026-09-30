@@ -50,6 +50,9 @@ users = Table(
     _ts("notice_accepted_at"),
     Column("voice_auto_assign", Boolean, server_default=FetchedValue()),
     Column("voice_auto_threshold", Float, server_default=FetchedValue()),
+    # 023_cadastro_de_tags
+    Column("tag_mode", Text, server_default=FetchedValue()),
+    Column("tag_new_limit", Integer, server_default=FetchedValue()),
 )
 
 sessions = Table(
@@ -440,6 +443,20 @@ collections = Table(
     # 022_colecoes_automaticas
     Column("instructions", Text, server_default=FetchedValue()),
     Column("auto_assign", Boolean, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+# --- cadastro de tags (023_cadastro_de_tags) ---------------------------------------------------------
+
+tags = Table(
+    "tags",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("name", Text),
+    Column("description", Text, server_default=FetchedValue()),
+    Column("origin", Text, server_default=FetchedValue()),
     _ts("created_at", server_default=FetchedValue()),
     _ts("updated_at", server_default=FetchedValue()),
 )
