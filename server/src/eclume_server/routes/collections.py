@@ -129,6 +129,15 @@ async def update_collection(collection_id: UUID, body: CollectionPatch, principa
             .where(t.collections.c.id == collection_id)
             .values(**values, updated_at=datetime.now(UTC))
         )
+        if "name" in values:
+            # O nome é a subpasta da pasta sincronizada do desktop: as gravações da coleção
+            # reaparecem no `?since=` e mudam de pasta.
+            r = t.recordings.c
+            await conn.execute(
+                update(t.recordings)
+                .where(r.collection_ids.contains([collection_id]))
+                .values(updated_at=datetime.now(UTC))
+            )
         return collection_json(await _get(conn, collection_id))
 
 

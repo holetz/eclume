@@ -475,3 +475,26 @@ def test_resumo_novo_move_o_updated_at_da_gravacao(team: dict[str, Any], service
     assert owner.post(f"/api/v1/transcripts/{transcript_id}/summaries", json={}).status_code == 202
     run_cpu(services.settings)
     assert stamp() > after_edit
+
+
+def test_apagar_o_resumo_move_o_updated_at_da_gravacao(team: dict[str, Any], services: Services):
+    """Um `.md` já espelhado precisa sair da pasta: apagar versões também reaparece no `?since=`."""
+    owner: Api = team["member"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    one_on_one = _types(services, team["member_account"])["1:1"]
+    transcript_id = _transcribed(owner, services, agenda_type_id=one_on_one["id"])
+    recording_id = owner.get(f"/api/v1/transcripts/{transcript_id}").json()["recording_id"]
+
+    def stamp() -> str:
+        return owner.get(f"/api/v1/recordings/{recording_id}").json()["updated_at"]
+
+    url = f"/api/v1/recordings/{recording_id}/summary"
+    assert owner.put(url, json={"content_md": "# Editado", "base_version": 1}).status_code == 200
+    before = stamp()
+    manual = owner.get(url).json()["current"]
+    assert owner.delete(f"/api/v1/summaries/{manual['id']}").status_code == 204
+    after_one = stamp()
+    assert after_one > before
+
+    assert owner.delete(url).status_code == 204
+    assert stamp() > after_one

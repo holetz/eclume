@@ -30,6 +30,7 @@ from eclume_server.summaries import (
     summary_json,
     summary_provider,
     summary_state,
+    touch_recording,
 )
 
 router = APIRouter()
@@ -123,8 +124,14 @@ async def get_summary(summary_id: UUID, principal: Reader, ctx: Ctx) -> dict[str
 async def delete_summary(summary_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Exclui uma versão; um job ainda na fila encontra o resumo apagado e não faz nada."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        result = await conn.execute(delete(t.summaries).where(t.summaries.c.id == summary_id))
-    if result.rowcount == 0:
+        transcript_id = (
+            await conn.execute(
+                delete(t.summaries).where(t.summaries.c.id == summary_id).returning(t.summaries.c.transcript_id)
+            )
+        ).scalar_one_or_none()
+        if transcript_id is not None:
+            await touch_recording(conn, transcript_id)
+    if transcript_id is None:
         raise not_found("Resumo inexistente ou sem acesso.")
     return Response(status_code=204)
 
@@ -162,5 +169,7 @@ async def revert_recording_summary(recording_id: UUID, principal: Writer, ctx: C
 async def delete_recording_summary(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Apaga todas as versões e o chat de ajuste da gravação."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        await delete_all(conn, await recording_transcript(conn, recording_id))
+        transcript = await recording_transcript(conn, recording_id)
+        await delete_all(conn, transcript)
+        await touch_recording(conn, transcript["id"])
     return Response(status_code=204)

@@ -466,11 +466,19 @@ async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row
 
 async def bump_revision(conn: AsyncConnection, transcript_id: UUID) -> None:
     """Toda edição sobe a `revision` e o `updated_at` (o `?since=` dos clientes enxerga)."""
-    await conn.execute(
-        update(t.transcripts)
-        .where(t.transcripts.c.id == transcript_id)
-        .values(revision=t.transcripts.c.revision + 1, updated_at=datetime.now(UTC))
-    )
+    now = datetime.now(UTC)
+    recording_id = (
+        await conn.execute(
+            update(t.transcripts)
+            .where(t.transcripts.c.id == transcript_id)
+            .values(revision=t.transcripts.c.revision + 1, updated_at=now)
+            .returning(t.transcripts.c.recording_id)
+        )
+    ).scalar_one_or_none()
+    if recording_id is not None:
+        # A pasta sincronizada do desktop lista por `recordings.updated_at`: sem isto, corrigir um
+        # segmento ou renomear um locutor nunca chegaria ao `.jsonl`.
+        await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=now))
 
 
 async def recompute_talk(conn: AsyncConnection, transcript_id: UUID, speaker_ids: set[str]) -> None:
