@@ -156,10 +156,13 @@ async def update_speaker(
             except ApiProblemError as exc:
                 raise invalid_field("person_id", "pessoa inexistente") from exc
             values.setdefault("label", person["name"])
+        if "person_id" in values:
+            # Ligar, confirmar ou desligar é decisão de uma pessoa: deixa de ser vínculo automático.
+            values["auto_score"] = None
         await conn.execute(update(t.speakers).where(*where).values(**values))
         if "person_id" in values:
             key = SpeakerKey(transcript_id, speaker_id)
-            await on_link(conn, principal, key, current.person_id, values["person_id"])
+            await on_link(conn, principal, key, values["person_id"])
         await bump_revision(conn, transcript_id)
         return await speaker_response(conn, transcript_id, speaker_id)
 

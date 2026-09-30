@@ -367,6 +367,7 @@ def speaker_json(row: Row) -> dict[str, Any]:
         "label": row["label"],
         "person": person,
         "suggestions": [] if person else list(row.get("suggestions") or []),
+        "auto_score": None if person is None or row.get("auto_score") is None else round(float(row["auto_score"]), 4),
         "talk_ms": row["talk_ms"],
     }
 

@@ -11,18 +11,30 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Response
-from sqlalchemy import text
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text, update
 
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
+from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import iso
 from eclume_server.people import get_person
-from eclume_server.problems import not_found
+from eclume_server.problems import invalid_field, not_found
 from eclume_server.routes.transcripts import SPEAKER_ID, speaker_response
 from eclume_server.serialize import user_ref
 from eclume_server.transcripts import bump_revision, editable_transcript
-from eclume_server.voice import SpeakerKey, forget, forget_sample, platform_voice, reject
+from eclume_server.voice import (
+    MAX_AUTO_THRESHOLD,
+    MIN_AUTO_THRESHOLD,
+    AutoPrefs,
+    SpeakerKey,
+    auto_prefs,
+    forget,
+    forget_sample,
+    platform_voice,
+    reject,
+)
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -130,3 +142,43 @@ async def delete_voice_sample(
         if not await forget_sample(conn, person_id, SpeakerKey(transcript_id, speaker_id)):
             raise not_found("Amostra inexistente ou sem acesso.")
     return Response(status_code=204)
+
+
+# --- atribuição automática ----------------------------------------------------------------------
+
+
+class VoiceAssignmentPatch(BaseModel):
+    """Corpo do `PATCH /me/voice-assignment`: os campos enviados mudam, os demais ficam."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    threshold: float | None = Field(default=None, ge=MIN_AUTO_THRESHOLD, le=MAX_AUTO_THRESHOLD)
+
+
+def _assignment_json(prefs: AutoPrefs, platform: dict[str, Any]) -> dict[str, Any]:
+    """Schema `VoiceAssignment`; `platform_enabled` diz se a plataforma deixa a voz valer."""
+    return {"enabled": prefs.enabled, "threshold": round(prefs.threshold, 4), "platform_enabled": platform["enabled"]}
+
+
+@router.get("/me/voice-assignment")
+async def get_voice_assignment(principal: Member, ctx: Ctx) -> dict[str, Any]:
+    """Preferência da conta: ligar o locutor à pessoa sozinho, e a pontuação mínima para isso."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return _assignment_json(await auto_prefs(conn, principal.user_id), await platform_voice(conn))
+
+
+@router.patch("/me/voice-assignment")
+async def patch_voice_assignment(body: VoiceAssignmentPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
+    """Muda a preferência; vale para as próximas transcrições, sem mexer nos vínculos que já existem."""
+    values = body.model_dump(exclude_unset=True)
+    if any(value is None for value in values.values()):
+        raise invalid_field("body", "os campos não aceitam null")
+    if not values:
+        raise invalid_field("body", "informe ao menos um campo")
+    columns = {"enabled": "voice_auto_assign", "threshold": "voice_auto_threshold"}
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await conn.execute(
+            update(t.users).where(t.users.c.id == principal.user_id).values({columns[k]: v for k, v in values.items()})
+        )
+        return _assignment_json(await auto_prefs(conn, principal.user_id), await platform_voice(conn))

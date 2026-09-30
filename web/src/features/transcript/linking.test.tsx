@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
@@ -95,6 +95,22 @@ describe('vínculo de locutor com pessoa', () => {
     expect(list).toHaveTextContent('Parece ser Rafael Lima — 82%')
     await userEvent.click(within(panel).getByRole('button', { name: 'Aceitar Rafael Lima para Locutor 2' }))
     expect(await within(panel).findByRole('link', { name: 'Rafael Lima' })).toBeInTheDocument()
+    expect(await http.requests('PATCH /api/v1/transcripts/:id/speakers/:speaker')[0].json()).toEqual({
+      person_id: RAFAEL.id,
+    })
+  })
+
+  it('mostra o vínculo feito pela voz e o confirma com um clique', async () => {
+    const transcript = fixtures.transcript()
+    transcript.speakers[1] = { ...transcript.speakers[1], label: RAFAEL.name, person: RAFAEL, auto_score: 0.91 }
+    const http = mockTranscriptApi({
+      'GET /api/v1/transcripts/:id': () => transcript,
+      'PATCH /api/v1/transcripts/:id/speakers/:speaker': () => ({ ...transcript.speakers[1], auto_score: null }),
+    })
+    const panel = await openPanel()
+    expect(within(panel).getByText('Atribuído pela voz — 91%')).toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Confirmar Rafael Lima para Rafael Lima' }))
+    await waitFor(() => expect(within(panel).queryByText(/Atribuído pela voz/)).not.toBeInTheDocument())
     expect(await http.requests('PATCH /api/v1/transcripts/:id/speakers/:speaker')[0].json()).toEqual({
       person_id: RAFAEL.id,
     })

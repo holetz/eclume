@@ -4,6 +4,7 @@ import { ApiError, errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
+import { AutoAssignCard } from './AutoAssignCard'
 import styles from './People.module.css'
 import { useCreatePerson, usePeople, type Person } from './queries'
 
@@ -23,11 +24,13 @@ export function PeoplePage() {
         hint={
           <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="sugestoes-por-voz">
             O eclume compara a voz de um locutor sem pessoa com as amostras das pessoas que você
-            cadastrou. Uma sugestão nunca liga sozinha: só vira vínculo quando você aceita.
+            cadastrou. Abaixo da sua pontuação mínima, a sugestão só vira vínculo quando você aceita; acima dela,
+            o eclume liga sozinho e você pode desfazer.
           </HelpHint>
         }
       />
       <p className="text-muted">Quem fala nas suas gravações. Ligue os locutores a elas na página da gravação.</p>
+      <AutoAssignCard />
 
       <div className="toolbar">
         <input

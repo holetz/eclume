@@ -114,7 +114,8 @@ worker de produção ocioso ao lado.
   amostras. O "máximo" ganha pouco em FNR e perde em FPR.
 - **Limiar padrão: 0,55.** Com FPR de 0,17% por comparação, uma organização com 50 pessoas com
   consentimento tem ~8% de chance de uma sugestão errada para um locutor desconhecido. A sugestão
-  nunca liga sozinha, e recusar custa um clique. Com FNR de ~4%, a pessoa certa quase sempre
+  só propõe, e recusar custa um clique; a atribuição automática usa um limiar próprio, mais alto
+  (padrão 0,75, ~0,05% de FPR na tabela acima), que cada conta ajusta. Com FNR de ~4%, a pessoa certa quase sempre
   aparece. Abaixo de 0,50 o FPR triplica; acima de 0,60 quase não ganha precisão.
 - **Fala mínima de 10 s** para comparar e para virar amostra. Nem o locutor mais curto (5,5 s)
   piorou as taxas. O corte protege de fragmentos de diarização de 1–2 s, que o experimento não

@@ -1,10 +1,10 @@
 ---
 type: standard
 title: Identificação de pessoas pela voz
-description: Como o eclume sugere quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão que nunca liga sozinha, retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
-resource: server/src/eclume_server/voice.py, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
+description: Como o eclume sugere e atribui quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão abaixo do limiar da conta e atribuição automática acima dele (antes do resumo), retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
+resource: server/src/eclume_server/voice.py, server/src/eclume_server/db/migrations/019_atribuicao_automatica_de_locutores.sql, web/src/features/people/AutoAssignCard.tsx, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
-timestamp: 2026-09-27
+timestamp: 2026-09-30
 audience: both
 authority: current
 source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
@@ -14,7 +14,8 @@ maintainer: holetz
 # Identificação de pessoas pela voz
 
 Ligar locutores a pessoas à mão em toda transcrição é repetitivo. O eclume aprende a voz de quem
-já foi confirmado e **sugere** a pessoa nas transcrições novas. Voz é dado biométrico, dado
+já foi confirmado, **liga sozinho** o locutor cuja voz passa do limiar de atribuição da conta e
+**sugere** a pessoa nos casos de menos certeza. Voz é dado biométrico, dado
 pessoal sensível pela LGPD (art. 11), então tudo aqui depende de duas travas: o liga-desliga da
 plataforma, que só o admin muda, e o aceite do aviso "Sou responsável por pedir o consentimento
 das pessoas que gravo", que toda conta dá no cadastro e que substitui o consentimento por pessoa.
@@ -57,7 +58,32 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 - Comparação exata, sem índice ANN. Uma conta tem dezenas de pessoas e centenas de amostras, e o
   índice exigiria dimensão fixa na coluna.
 
-## Sugestão nunca é identidade
+## Atribuição automática
+
+- **Preferência da conta** (`users.voice_auto_assign`, padrão ligada; `users.voice_auto_threshold`,
+  padrão 0,75, de 0,50 a 0,99): `GET`/`PATCH /me/voice-assignment`, só sessão. O `PATCH` vale para as
+  próximas transcrições e não mexe nos vínculos que já existem. Só tem efeito com a identificação
+  por voz ligada na plataforma (`platform_enabled` na resposta); o padrão de 0,75 fica acima do de
+  sugestão (0,55), onde a calibração dá FPR de ~0,05% ([calibracao-voz.md](/docs/project/calibracao-voz.md)).
+- **Quando liga.** Na mesma comparação do `ingest_transcript` (`voice.suggest`), antes da cadeia de
+  campos, tipo de agenda e resumo: o resumo já nasce com o nome da pessoa e não com "Locutor N". A
+  primeira candidata do locutor precisa ter pontuação ≥ limiar da conta **e** folga de
+  `AUTO_MARGIN` (0,05) sobre a segunda, para não ligar quando duas pessoas têm voz parecida; uma
+  pessoa que dois locutores disputam fica com o de maior pontuação. Quem não passa nesses
+  critérios só recebe sugestões, como antes.
+- **O que grava.** `speakers.person_id`, o `label` com o nome da pessoa e `speakers.auto_score`
+  (a pontuação). `auto_score` nulo é vínculo feito ou confirmado por alguém; o `Speaker` da API traz
+  `auto_score` para a interface marcar "Atribuído pela voz — 91%".
+- **Não reforça a impressão.** A amostra (`voice.add_sample`) só entra com `auto_score IS NULL`:
+  uma atribuição errada não vira amostra e não se propaga às próximas. **Confirmar** é o `PATCH` do
+  locutor com o mesmo `person_id`; ele zera o `auto_score` e a amostra entra. Trocar ou desligar a
+  pessoa também zera.
+- **Retranscrição** restaura o vínculo automático como estava (com o `auto_score`, sem amostra);
+  depois da restauração, os locutores que sobraram passam de novo pela atribuição.
+- **Web:** cartão "Atribuição automática" em Pessoas (interruptor e pontuação mínima; só aparece com
+  a voz ligada na plataforma) e, no painel de locutores, o selo com **Confirmar** e **Desligar pessoa**.
+
+## Sugestão é só proposta
 
 - `Speaker.suggestions` mostra só as sugestões `pending` de um locutor **sem pessoa**, e só com a
   identificação por voz ligada (`voice.load_suggestions`, em lote, na transcrição, na listagem e
@@ -66,7 +92,7 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   ligada, entra a amostra: a confirmação reforça a impressão.
 - **Recusar é `DELETE /transcripts/{id}/speakers/{speaker_id}/suggestions/{person_id}`**, só por
   sessão. A sugestão vira `rejected`, some e não volta para aquele locutor. Sobe a `revision`.
-- Nada liga um locutor sozinho, com nenhum limiar.
+- A sugestão em si nunca liga: só a atribuição automática acima liga sozinha, e só acima do limiar da conta.
 
 ## Retranscrição preserva os vínculos confirmados
 
@@ -134,7 +160,8 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 
 ## Web
 
-- **Gravação** (`SpeakersPanel`): cada sugestão pendente aparece como "Parece ser Fulana — 87%",
+- **Gravação** (`SpeakersPanel`): o locutor atribuído pela voz mostra "Atribuído pela voz — 91%" com
+  Confirmar; cada sugestão pendente aparece como "Parece ser Fulana — 87%",
   com Aceitar e Recusar.
 - **Pessoa** (`VoiceSection`): se a identificação por voz está ligada, as amostras e "Esquecer a
   voz".

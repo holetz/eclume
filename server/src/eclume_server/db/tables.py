@@ -48,6 +48,8 @@ users = Table(
     _ts("last_login_at"),
     Column("notice_version", Text),
     _ts("notice_accepted_at"),
+    Column("voice_auto_assign", Boolean, server_default=FetchedValue()),
+    Column("voice_auto_threshold", Float, server_default=FetchedValue()),
 )
 
 sessions = Table(
@@ -196,6 +198,7 @@ speakers = Table(
     Column("label", Text),
     _uuid("person_id"),
     Column("talk_ms", BigInteger),
+    Column("auto_score", Float),
 )
 
 segments = Table(

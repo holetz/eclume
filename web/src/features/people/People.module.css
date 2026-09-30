@@ -114,3 +114,15 @@
 .dangerAction {
   margin-right: auto;
 }
+
+.autoAssign {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+.autoAssign input[type='range'] {
+  width: 100%;
+  max-width: 24rem;
+}

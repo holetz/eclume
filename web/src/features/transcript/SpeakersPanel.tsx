@@ -125,6 +125,24 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
           )}
         </div>
       </div>
+      {idle && speaker.person && speaker.auto_score != null && (
+        <div className={styles.suggestion}>
+          <span>
+            Atribuído pela voz — {Math.round(speaker.auto_score * 100)}%
+          </span>
+          <span className={styles.buttons}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => link.mutate(speaker.person!.id)}
+              disabled={deciding}
+              aria-label={`Confirmar ${speaker.person.name} para ${name}`}
+            >
+              Confirmar
+            </button>
+          </span>
+        </div>
+      )}
       {idle && suggestions.length > 0 && (
         <ul className={styles.suggestions} aria-label={`Sugestões por voz para ${name}`}>
           {suggestions.map((suggestion) => (
