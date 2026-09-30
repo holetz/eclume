@@ -37,6 +37,36 @@ function group(name: string) {
 }
 
 describe('painel de filtros', () => {
+  it('filtra pelos participantes: organização, área e tag de um mesmo participante', async () => {
+    const http = mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/collections': () => ({ items: [], next_cursor: null }),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+      'GET /api/v1/people/facets': () => ({
+        organizations: [
+          { value: 'Agro Sul', count: 1 },
+          { value: 'Metalúrgica Serra Azul', count: 2 },
+        ],
+        departments: [],
+        tags: [{ value: 'diretoria', count: 1 }],
+      }),
+    })
+    renderApp(WEEK)
+    const participants = await screen.findByRole('group', { name: 'Participantes' })
+    expect(within(participants).queryByRole('group', { name: 'Área' })).not.toBeInTheDocument()
+    await userEvent.click(within(participants).getByRole('checkbox', { name: 'Agro Sul' }))
+    await userEvent.click(within(participants).getByRole('checkbox', { name: 'diretoria' }))
+    await waitFor(() => expect(lastQuery(http).getAll('person_tag')).toEqual(['diretoria']))
+    expect(lastQuery(http).getAll('person_organization')).toEqual(['Agro Sul'])
+
+    await userEvent.click(within(participants).getByRole('checkbox', { name: 'Agro Sul' }))
+    await waitFor(() => expect(lastQuery(http).getAll('person_organization')).toEqual([]))
+    expect(within(participants).getByRole('checkbox', { name: 'Agro Sul' })).not.toBeChecked()
+  })
+
   it('mostra os grupos do DS, com os campos próprios do usuário', async () => {
     mockLibrary()
     renderApp(WEEK)

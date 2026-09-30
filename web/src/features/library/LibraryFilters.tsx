@@ -3,7 +3,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { useCollections, useTags } from '../collections/queries'
-import { usePeopleOptions } from '../people/queries'
+import { usePeopleOptions, usePersonFacets } from '../people/queries'
 import { PersonCombobox } from '../transcript/PersonCombobox'
 import { activeFilterCount, KINDS, STATUS_GROUPS, type KindParam, type LibraryFilters, type StatusParam } from './filters'
 import styles from './LibraryPage.module.css'
@@ -90,6 +90,45 @@ function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field 
           if (event.key === 'Enter') apply()
         }}
       />
+    </Group>
+  )
+}
+
+type ParticipantKey = 'personOrganization' | 'personDepartment' | 'personTag'
+
+/**
+ * Participantes: organização, área e tag de pessoa de quem falou na gravação, com os valores em uso
+ * no diretório. Combinados, valem para uma mesma pessoa.
+ */
+function ParticipantFilter({ filters, onChange }: FilterProps) {
+  const facets = usePersonFacets()
+  const sections: { key: ParticipantKey; title: string; values: string[] }[] = [
+    { key: 'personOrganization', title: 'Organização', values: facets.data?.organizations.map((f) => f.value) ?? [] },
+    { key: 'personDepartment', title: 'Área', values: facets.data?.departments.map((f) => f.value) ?? [] },
+    { key: 'personTag', title: 'Tag da pessoa', values: facets.data?.tags.map((f) => f.value) ?? [] },
+  ]
+  const visible = sections.filter((section) => section.values.length > 0 || filters[section.key].length > 0)
+  if (visible.length === 0) return null
+  return (
+    <Group title="Participantes">
+      <p className={`field-hint ${styles.participantHint}`}>Alguém que falou na gravação e tem tudo o que você marcar.</p>
+      {visible.map(({ key, title, values }) => {
+        // Um valor marcado que saiu do diretório continua na lista, para poder desmarcar.
+        const all = [...values, ...filters[key].filter((value) => !values.includes(value))]
+        return (
+          <div key={key} className={styles.participantSection} role="group" aria-label={title}>
+            <span className="kicker">{title}</span>
+            {all.map((value) => (
+              <Check
+                key={value}
+                label={value}
+                checked={filters[key].includes(value)}
+                onChange={() => onChange({ ...filters, [key]: toggle(filters[key], value) })}
+              />
+            ))}
+          </div>
+        )
+      })}
     </Group>
   )
 }
@@ -185,6 +224,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
           }}
         />
       </Group>
+      <ParticipantFilter filters={filters} onChange={onChange} />
       {(collections.data?.items.length ?? 0) > 0 && (
         <Group title="Coleções">
           {collections.data?.items.map((collection) => (

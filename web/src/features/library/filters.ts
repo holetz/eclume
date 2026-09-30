@@ -28,6 +28,10 @@ export interface LibraryFilters {
   collection: string[]
   /** `<field_id>:<valor>`. */
   field: string[]
+  /** Atributos de um mesmo participante (pessoa ligada a um locutor). */
+  personOrganization: string[]
+  personDepartment: string[]
+  personTag: string[]
 }
 
 const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
@@ -37,6 +41,9 @@ const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
   person: 'pessoa',
   collection: 'colecao',
   field: 'campo',
+  personOrganization: 'organizacao',
+  personDepartment: 'area',
+  personTag: 'tag-pessoa',
 }
 
 const VIEWS: readonly LibraryView[] = ['semana', 'mes', 'lista']
@@ -54,6 +61,9 @@ export function readFilters(params: URLSearchParams): LibraryFilters {
     person: all('person'),
     collection: all('collection'),
     field: all('field').filter((value) => /^[^:]+:.+$/.test(value)),
+    personOrganization: all('personOrganization'),
+    personDepartment: all('personDepartment'),
+    personTag: all('personTag'),
   }
 }
 
@@ -72,7 +82,17 @@ export function writeFilters(params: URLSearchParams, filters: LibraryFilters): 
   return next
 }
 
-export const NO_FILTERS: LibraryFilters = { kind: [], status: [], tag: [], person: [], collection: [], field: [] }
+export const NO_FILTERS: LibraryFilters = {
+  kind: [],
+  status: [],
+  tag: [],
+  person: [],
+  collection: [],
+  field: [],
+  personOrganization: [],
+  personDepartment: [],
+  personTag: [],
+}
 
 /** Quantos filtros estão ligados (um por valor escolhido). */
 export function activeFilterCount(filters: LibraryFilters): number {
@@ -93,6 +113,9 @@ export function filtersToQuery(filters: LibraryFilters): RecordingsQuery {
   if (filters.person.length) query.person = filters.person
   if (filters.collection.length) query.collection = filters.collection
   if (filters.field.length) query.field = filters.field
+  if (filters.personOrganization.length) query.person_organization = filters.personOrganization
+  if (filters.personDepartment.length) query.person_department = filters.personDepartment
+  if (filters.personTag.length) query.person_tag = filters.personTag
   return query
 }
 
