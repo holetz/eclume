@@ -1,0 +1,45 @@
+/* A tela Conta: os dados, trocar a senha e a zona de perigo, em painéis do DS. */
+:where(.page) p {
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 44rem;
+}
+
+.identity {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.identity dt {
+  color: var(--color-text-muted);
+}
+
+.identity dd {
+  margin: 0;
+}
+
+.form,
+.danger {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.form h4,
+.danger h4 {
+  margin: 0;
+}
+
+.danger .alert {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.error {
+  color: var(--color-danger);
+}

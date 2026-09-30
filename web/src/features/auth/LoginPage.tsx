@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { ME_KEY, safeReturnPath, useMe } from '../../app/session'
@@ -10,6 +10,8 @@ import { AuthLayout } from './AuthLayout'
 export function LoginPage() {
   usePageTitle('Entrar')
   const [params] = useSearchParams()
+  // O aviso de quem chega de outra tela, como a conta excluída.
+  const notice = (useLocation().state as { notice?: string } | null)?.notice
   const volta = safeReturnPath(params.get('volta'))
   const me = useMe()
   const queryClient = useQueryClient()
@@ -44,6 +46,11 @@ export function LoginPage() {
     <AuthLayout>
       <form onSubmit={submit} noValidate>
         <h2>Entrar</h2>
+        {notice && (
+          <p className="alert alert-success" role="status">
+            {notice}
+          </p>
+        )}
         <div className="field">
           <label htmlFor="login-email">E-mail</label>
           <input

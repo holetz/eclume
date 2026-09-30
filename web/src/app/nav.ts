@@ -44,6 +44,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/tags', label: 'Tags', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos personalizados', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
+  { to: '/config/conta', label: 'Conta', group: 'Minhas configurações', section: 'header', enabled: true },
   { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', section: 'header', enabled: true },
   { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'header', enabled: true },
   { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'header', enabled: true },
