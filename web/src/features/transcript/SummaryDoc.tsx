@@ -6,6 +6,7 @@ import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { Dialog } from '../../app/Dialog'
 import { useAgendaTypes } from '../organize/queries'
+import { summaryClipboard } from './copy-summary'
 import styles from './RecordingPage.module.css'
 import { isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
 import { SummaryDiff, SummaryEditor } from './SummaryEditor'
@@ -106,7 +107,17 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   async function copy() {
     setCopied(null)
     try {
-      await navigator.clipboard.writeText(`# ${recording.title}\n\n${current?.content_md ?? ''}`)
+      const { html, text } = await summaryClipboard(recording.title, current?.content_md ?? '')
+      // Sem `ClipboardItem` (navegador antigo), só o texto; o Teams cola o HTML em negrito.
+      if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText(text)
+      else {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+          }),
+        ])
+      }
       setCopied('ok')
     } catch {
       setCopied('error')
