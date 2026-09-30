@@ -11,6 +11,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.fields import field_filters
 from eclume_server.pagination import decode_cursor, encode_cursor, iso
+from eclume_server.people import attribute_conditions, participant_filter
 from eclume_server.pipeline import load_pipelines, pipeline_json, set_step
 from eclume_server.problems import not_found
 from eclume_server.queue import transcribe_options
@@ -250,6 +251,10 @@ class Library:
     person: list[UUID] | None
     field: list[str] | None = None
     agenda_type: list[UUID] | None = None
+    # Atributos de um mesmo participante (pessoa ligada a um locutor).
+    person_organization: list[str] | None = None
+    person_department: list[str] | None = None
+    person_tag: list[str] | None = None
 
     def filters(self) -> list[ColumnElement[bool]]:
         """As condições SQL (E entre filtros; OU dentro de cada um)."""
@@ -266,6 +271,12 @@ class Library:
         if self.status:
             # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
             conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
+        return conditions + self._organization()
+
+    def _organization(self) -> list[ColumnElement[bool]]:
+        """As condições de organização: tag, coleção, tipo, pessoa e atributos de um participante."""
+        r = t.recordings.c
+        conditions: list[ColumnElement[bool]] = []
         if self.tag:
             conditions.append(r.tags.overlap(self.tag))
         if self.collection:
@@ -274,6 +285,9 @@ class Library:
             conditions.append(_person_filter(self.person))
         if self.agenda_type:
             conditions.append(r.agenda_type_id.in_(self.agenda_type))
+        participant = attribute_conditions(self.person_organization, self.person_department, self.person_tag)
+        if participant:
+            conditions.append(participant_filter(participant))
         return conditions
 
 

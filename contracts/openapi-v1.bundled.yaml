@@ -923,6 +923,29 @@ paths:
           items:
             type: string
             pattern: ^[0-9a-fA-F-]{36}:.+$
+      - name: person_organization
+        in: query
+        description: 'Organização de um participante (pessoa ligada a um locutor), sem acento nem caixa;
+          repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_organization` e
+          `person_tag`, alguém da organização e com a tag falou na gravação.'
+        schema:
+          type: array
+          items:
+            type: string
+      - name: person_department
+        in: query
+        description: Área de um participante, sem acento nem caixa; repetível (ver `person_organization`).
+        schema:
+          type: array
+          items:
+            type: string
+      - name: person_tag
+        in: query
+        description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_organization`).
+        schema:
+          type: array
+          items:
+            type: string
       responses:
         '200':
           description: Gravações, na ordem de `sort`.
@@ -2698,6 +2721,37 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+  /api/v1/people/facets:
+    get:
+      tags:
+      - people
+      operationId: listPersonFacets
+      summary: Organizações, áreas e tags de pessoa em uso
+      description: 'Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam
+        cada
+
+        um. Organização e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+
+        usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
+
+        Participantes da biblioteca.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - people:read
+      responses:
+        '200':
+          description: Valores em uso, em ordem alfabética.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonFacets'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/v1/people/{person_id}:
     parameters:
     - $ref: '#/components/parameters/PersonId'
@@ -5370,6 +5424,11 @@ components:
       - name
       - email
       - notes
+      - organization
+      - department
+      - job_title
+      - phone
+      - tags
       - transcript_count
       - last_seen_at
       - voice_sample_count
@@ -5391,6 +5450,30 @@ components:
           type:
           - string
           - 'null'
+        organization:
+          description: Organização (empresa, cooperativa, órgão) da pessoa.
+          type:
+          - string
+          - 'null'
+        department:
+          description: Área ou departamento da pessoa na organização.
+          type:
+          - string
+          - 'null'
+        job_title:
+          description: Cargo ou função.
+          type:
+          - string
+          - 'null'
+        phone:
+          type:
+          - string
+          - 'null'
+        tags:
+          description: Tags de pessoa, rótulos livres da pessoa (separados das tags das gravações).
+          type: array
+          items:
+            type: string
         transcript_count:
           description: Transcrições do usuário em que a pessoa fala.
           type: integer
@@ -5432,6 +5515,34 @@ components:
           type:
           - string
           - 'null'
+        organization:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        department:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        job_title:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        phone:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+        tags:
+          description: Sem repetição (ignorando a caixa); vazias e espaços nas pontas saem.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
     PersonPatch:
       type: object
       minProperties: 1
@@ -5448,6 +5559,66 @@ components:
           type:
           - string
           - 'null'
+        organization:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        department:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        job_title:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        phone:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+        tags:
+          description: Substitui a lista inteira; sem repetição (ignorando a caixa); vazias e espaços
+            nas pontas saem.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+    PersonFacetValue:
+      type: object
+      required:
+      - value
+      - count
+      properties:
+        value:
+          type: string
+        count:
+          description: Pessoas com esse valor.
+          type: integer
+          minimum: 1
+    PersonFacets:
+      type: object
+      required:
+      - organizations
+      - departments
+      - tags
+      properties:
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonFacetValue'
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonFacetValue'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonFacetValue'
     PersonPage:
       type: object
       required:
@@ -10800,6 +10971,13 @@ components:
           name: Juliana Prado
           email: juliana.prado@example.com
           notes: Diretora de Pessoas da Metalúrgica Serra Azul.
+          organization: Metalúrgica Serra Azul
+          department: Pessoas
+          job_title: Diretora de Pessoas
+          phone: null
+          tags:
+          - cliente
+          - diretoria
           transcript_count: 0
           last_seen_at: null
           voice_sample_count: 0
@@ -10810,6 +10988,11 @@ components:
           name: Mariana Couto
           email: mariana.couto@example.com
           notes: Consultora EK.
+          organization: null
+          department: null
+          job_title: null
+          phone: null
+          tags: []
           transcript_count: 14
           last_seen_at: '2026-09-18T14:00:05Z'
           voice_sample_count: 0
@@ -10820,6 +11003,12 @@ components:
           name: Rafael Lima
           email: rafael.lima@example.com
           notes: Gerente de RH da Metalúrgica Serra Azul.
+          organization: Metalúrgica Serra Azul
+          department: Recursos Humanos
+          job_title: Gerente de RH
+          phone: null
+          tags:
+          - cliente
           transcript_count: 3
           last_seen_at: '2026-09-11T13:00:00Z'
           voice_sample_count: 2
@@ -10834,6 +11023,12 @@ components:
         name: Rafael Lima
         email: rafael.lima@example.com
         notes: Gerente de RH da Metalúrgica Serra Azul.
+        organization: Metalúrgica Serra Azul
+        department: Recursos Humanos
+        job_title: Gerente de RH
+        phone: null
+        tags:
+        - cliente
         transcript_count: 3
         last_seen_at: '2026-09-11T13:00:00Z'
         voice_sample_count: 2
@@ -10846,6 +11041,10 @@ components:
         name: Juliana Prado
         email: juliana.prado@example.com
         notes: Diretora de Pessoas da Metalúrgica Serra Azul.
+        organization: Metalúrgica Serra Azul
+        department: Pessoas
+        tags:
+        - cliente
     SearchPage:
       summary: Busca por "turmas"
       value:
