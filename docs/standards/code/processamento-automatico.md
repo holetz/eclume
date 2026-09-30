@@ -1,21 +1,21 @@
 ---
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
-description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, tags padrão, instruções de resumo) e os tipos padrão do admin, os jobs fill_fields e detect_agenda_type com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql
+description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, os jobs detect_agenda_type e fill_fields com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
+resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
-timestamp: 2026-09-27
+timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#33
+source: holetz/eclume#33, holetz/eclume#76
 maintainer: holetz
 ---
 
 # Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
 
 Depois do upload, cada gravação passa por uma cadeia de etapas sem ninguém pedir: o áudio é
-recebido, pré-processado e transcrito pelo worker GPU; os campos são preenchidos, o tipo de agenda
-é detectado e o resumo é gerado pelo worker CPU. As rotas seguem o [contrato v1](../api/contrato-v1.md),
+recebido, pré-processado e transcrito pelo worker GPU; o tipo de agenda é detectado, os campos são
+preenchidos e o resumo é gerado pelo worker CPU. As rotas seguem o [contrato v1](../api/contrato-v1.md),
 a persistência e o isolamento seguem o [núcleo do server](server-nucleo.md), os providers e o job
 `summarize` seguem os [agentes](server-agentes.md), e o pré-processamento segue o
 [contrato de jobs](../api/jobs-transcricao.md).
@@ -30,8 +30,8 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
 | `received` | `recordings.insert_job`, ao criar o job (upload, retranscrição, retentativa); `failed` com hash divergente |
 | `preprocessing` | a ingestão, pelo `engine_info.preprocess` do worker GPU |
 | `transcription` | a ingestão (`done`), a falha e o reaper (`failed`, com o erro do job) |
-| `fields` | o job `fill_fields` |
 | `agenda_type` | o job `detect_agenda_type` |
+| `fields` | o job `fill_fields` |
 | `summary` | o resumo automático: `active` ao abrir, `done`/`failed` quando o `summarize` termina |
 
 - **Estados:** `pending`, `active`, `done`, `failed` e `skipped` (os do componente `.pipeline` do
@@ -51,7 +51,10 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
 ## Campos e a origem dos valores
 
 `fields` é do usuário (`owner_id`, RLS de dono). Toda conta tem os embutidos **título** (`text`) e
-**tags** (`list`), com a regra padrão, que não saem nem mudam de tipo (409 `builtin_field`, 422). Os
+**tags** (`list`), com a regra padrão, que não saem nem mudam de tipo (409 `builtin_field`, 422). O
+título não aparece em "Campos personalizados" e a regra dele não vale mais: o assunto segue a regra
+do tipo da gravação (ver [Tipos de agenda](#tipos-de-agenda)); a migration `021` o deixou sempre
+automático. Os
 demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`instructions`) e
 `auto_fill`. A `key` é o slug do nome, única por conta e sem os marcadores `assunto`, `data` e
 `tipo`; não muda quando o nome muda.
@@ -71,9 +74,21 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
 
 ## Tipos de agenda
 
-`agenda_types` é do usuário: nome, `title_pattern`, `identify` ("como identificar"),
-`default_tags`, `summary_instructions` e `position`. Substituem os templates de resumo: a migration
-`009` converteu cada template no tipo do dono, com o mesmo id.
+`agenda_types` é do usuário: nome, `title_pattern`, `title_instructions` ("como escrever o
+assunto"), `identify` ("como identificar"), `default_tags`, `summary_instructions` e `position`.
+Substituem os templates de resumo: a migration `009` converteu cada template no tipo do dono, com o
+mesmo id.
+
+- **Tipo de reserva** (`is_fallback`, `fallback` na API; "Geral", com o selo "Padrão" na tela):
+  um por conta (índice único parcial), criado pela migration `021` e por
+  `eclume_seed_fallback_type(user)`, que a semeadura da conta nova chama depois dos embutidos. Nasce
+  com `{assunto}` como padrão, a regra do título embutido da conta como regra do assunto e
+  instruções de resumo genéricas; "Geral" já usado vira "Geral (padrão)". Não sai (409
+  `fallback_agenda_type`) e não concorre na detecção. Excluir outro tipo passa as gravações dele
+  para o de reserva, com origem `auto`.
+- **Regra do assunto** (`title_instructions`): a regra que o agente segue para o título automático
+  (`{assunto}`). Vazia, vale a do tipo de reserva; vazia também, a de fábrica
+  (`DEFAULT_TITLE_RULE`). O admin também a escreve nos tipos padrão que distribui.
 
 - **Tipos padrão do admin** (`default_agenda_types`, da plataforma, só pela sessão de admin): os
   marcados `include_for_new_users` são copiados para cada conta nova por
@@ -85,7 +100,9 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
   ` | `, travessões); uma parte que fica vazia sai junto com o separador dela.
 - **Aplicar o tipo** (`agenda_types.apply_type`): grava `agenda_type_id` e a origem (`auto` ou
   `edited`), troca o título pelo padrão se o título não é `edited`/`accepted`, e soma as tags
-  padrão às automáticas (as do usuário ficam como estão).
+  padrão às automáticas (as do usuário ficam como estão). A detecção aplica sem o título
+  (`render=False`); o `fill_fields` o remonta no fim (`refresh_title`), com o assunto novo, e soma
+  de novo as tags padrão às que acabou de escrever.
 - **Trocar o tipo à mão** (`PATCH /recordings/{id}` com `agenda_type_id`): origem `edited`, título
   e tags reaplicados e, na gravação transcrita, um resumo automático novo com a etapa `summary`
   refeita — se ainda não há o automático da mesma revisão por esse tipo. `null` tira o tipo e
@@ -93,9 +110,10 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
 
 ## Os jobs por agente
 
-O worker CPU encadeia `ingest_transcript → fill_fields → detect_agenda_type → summarize`, com
+O worker CPU encadeia `ingest_transcript → detect_agenda_type → fill_fields → summarize`, com
 `_job_id = "{job}:{recording_id}:{revision}"`. Só a ingestão que gravou a transcrição abre a cadeia:
-job já falho (pelo reaper) ou ingestão repetida não enfileiram o `fill_fields`. Cada job resolve o provider pela finalidade
+job já falho (pelo reaper) ou ingestão repetida não enfileiram o `detect_agenda_type`. O tipo vem
+antes dos campos porque o assunto do título segue a regra do tipo. Cada job resolve o provider pela finalidade
 (`provider_for`) e chama o agente por `summaries.call_agent_step`, que aplica as retentativas do
 `summarize` (3 tentativas, 30 s e 120 s; `gpu_busy` adia sem gastar tentativa) e conta as
 tentativas em `detail.attempts` da etapa. A falha definitiva deixa a etapa `failed`, e a cadeia
@@ -106,6 +124,10 @@ segue; uma falha inesperada fora da chamada ao agente também (`internal_error`,
 
 - Campos elegíveis: os de `auto_fill` cujo valor não é `edited`/`accepted`. Nenhum → `skipped`
   (`no_auto_fields`); sem provider `fields` → `skipped` (`no_provider`).
+- O título vai com a regra do assunto do tipo da gravação (`agenda_types.title_rule`), não com a
+  do campo embutido.
+- No fim — preenchida, pulada ou falha —, `refresh_title` remonta o título pelo padrão do tipo. Ao
+  terminar, o worker abre o resumo automático.
 - Uma chamada para todos os campos (`agents/extraction.py`), (nunca uma por campo),
   com o `system` `SHARED_SYSTEM`, o mesmo do resumo, e a transcrição em `<transcricao>` no
   `context` (o bloco cacheável, idêntico ao do resumo: `Provider.complete` em
@@ -125,18 +147,22 @@ segue; uma falha inesperada fora da chamada ao agente também (`internal_error`,
 ### `detect_agenda_type`
 
 - Tipo escolhido pelo usuário (`edited`) → `skipped` (`set_by_user`), e o resumo usa esse tipo.
-  Sem tipos → `no_types`; sem provider `agenda_detection` → `no_provider`.
-- Os tipos viram `T1..Tn` (nome e como identificar) e a transcrição vai só até o orçamento da
-  janela, a partir do início (o Ollama tem 8 k, e o assunto aparece cedo). `DETECT_SYSTEM` pede o
-  tipo que melhor descreve a gravação, sempre um, e só o JSON
-  `{"tipo": "T2", "confianca": 0.0-1.0, "motivo": "uma frase"}`. Um `tipo` fora da lista é
-  `provider_bad_output`.
-- O resultado é aplicado com origem `auto` e a etapa guarda o tipo, a confiança e o motivo.
+  Só o tipo de reserva → `no_types`; sem provider `agenda_detection` → `no_provider`.
+- Os tipos, **sem o de reserva**, viram `T1..Tn` (nome e como identificar) e a transcrição vai só
+  até o orçamento da janela, a partir do início (o Ollama tem 8 k, e o assunto aparece cedo).
+  `DETECT_SYSTEM` pede o tipo que melhor descreve a gravação, ou `null` quando nenhum serve, e só o
+  JSON `{"tipo": "T2" ou null, "confianca": 0.0-1.0, "motivo": "uma frase"}`. Um `tipo` fora da
+  lista, ou a chave ausente, é `provider_bad_output`.
+- **Reserva:** `tipo: null` ou confiança abaixo de `MIN_CONFIDENCE` (0,6) aplica o tipo de
+  reserva; a etapa guarda o tipo aplicado, `fallback`, o candidato (`candidate_name`), a confiança
+  e o motivo. Pulada ou falha, o worker aplica o de reserva à gravação sem tipo (`ensure_type`,
+  que não para a cadeia se falhar): o resumo sempre tem um tipo.
+- O resultado é aplicado com origem `auto`, sem o título, que espera os campos.
 
 ### O resumo automático pelo tipo
 
-`summaries.start_auto_summary` abre o resumo `trigger: automatic` com as instruções do tipo da
-gravação e o provider `summaries`, e marca a etapa `summary` `active` com o `summary_id`. Sem tipo
+`summaries.start_auto_summary`, chamado pelo worker ao fim do `fill_fields`, abre o resumo
+`trigger: automatic` com as instruções do tipo da gravação e o provider `summaries`, e marca a etapa `summary` `active` com o `summary_id`. Sem tipo
 → `skipped` (`no_agenda_type`); sem provider → `no_provider`. Já existindo o automático da mesma
 revisão e do mesmo tipo, nada é criado. O `summarize` fecha a etapa; o resumo apagado antes de
 gerar a fecha `skipped` (`summary_deleted`). O resumo de uma chamada lê a transcrição como o
@@ -158,13 +184,15 @@ fila ou rodando, em `eclume:preview:open:{owner_id}`); a quarta é 429 `rate_lim
 
 - `field_rule` roda `FIELDS_SYSTEM` só com o campo em rascunho, em até 3 gravações transcritas (as
   indicadas, ou as 3 mais recentes do usuário).
-- `agenda_type` roda, numa gravação, a detecção com o rascunho no lugar do tipo salvo, o título e
-  as tags que ele aplicaria e o resumo com as instruções do rascunho.
+- `agenda_type` roda, numa gravação, a detecção com o rascunho no lugar do tipo salvo que ele edita
+  (`agenda_type_id`, ou o de mesmo nome), o título e as tags que ele aplicaria e o resumo com as
+  instruções do rascunho. A regra de reserva vale igual: `fallback` diz que ficaria o tipo padrão;
+  o rascunho do próprio tipo de reserva não concorre e é o que fica quando nenhum serve.
 
 ## Testes
 
 `FakeAgents` (`eclume_server_testing/fakes.py`) reconhece a finalidade pelo prompt de sistema
 ou, nos campos, pelas regras no prompt (`FIELDS_SYSTEM`, `DETECT_SYSTEM`, resumo) e tem uma fila de respostas por finalidade
-(`replies`); sem resposta programada, os campos saem vazios, a detecção escolhe `T1` e o resumo é
+(`replies`) e de erros por finalidade (`failures`); sem resposta programada, os campos saem vazios, a detecção escolhe `T1` e o resumo é
 Markdown determinístico. Nenhum teste chama LLM. `server/tests/test_processing.py` prova a cadeia
 com o worker CPU real.

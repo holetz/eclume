@@ -67,7 +67,7 @@ atualizado: 2026-09-27
   gaveta aberta.
 - **Dica em linha** (`HelpHint`): o `.hint` "?" com `aria-label="Sobre <assunto>"` que abre um
   `.popover` com o texto curto e "Ler o artigo →". Entra onde a regra não é óbvia na tela (por
-  exemplo "Como identificar" em Campos e regras e "Excluir gravações" em Conexão MCP), nunca como
+  exemplo "Como identificar" em Campos personalizados e "Excluir gravações" em Conexão MCP), nunca como
   enfeite.
 
 ## Redação

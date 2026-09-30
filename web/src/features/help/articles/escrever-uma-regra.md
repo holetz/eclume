@@ -5,7 +5,7 @@ paginas: [campos]
 relacionados: [testar-uma-regra, campos-em-toda-gravacao, origem-dos-valores]
 termos: [regra, como identificar, instrução, preencher, agente, prompt]
 ordem: 2
-atualizado: 2026-09-27
+atualizado: 2026-09-30
 ---
 A regra de um campo, em **Como identificar**, é o que o agente lê para preencher aquele campo a
 partir da transcrição. Escreva como explicaria a alguém que vai ouvir a reunião por você.
@@ -27,7 +27,7 @@ partir da transcrição. Escreva como explicaria a alguém que vai ouvir a reuni
 - Uma regra por campo. Para duas informações, crie dois campos.
 - Nos campos do tipo escolha, o agente só usa as opções que você definiu. Não precisa repeti-las
   na regra.
-- A regra do título define o título automático. Um tipo de agenda com padrão de título monta o
-  título final em cima dele: veja [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
+- O título não tem regra aqui: cada tipo de agenda diz como escrever o assunto e monta o título
+  com ele. Veja [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
 
 Antes de salvar, teste a regra: [Teste uma regra antes de salvar](/ajuda/testar-uma-regra).
