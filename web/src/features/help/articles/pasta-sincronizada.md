@@ -5,7 +5,7 @@ paginas: [app-desktop, colecoes]
 relacionados: [tags-e-colecoes, instalar-app-desktop, conectar-assistente-mcp]
 termos: [pasta, sincronizar, sincronização, Obsidian, vault, Markdown, JSONL, agente, AGENTS.md, Claude Code, coleção, coleções, subpasta, espelho]
 ordem: 6
-atualizado: 2026-09-29
+atualizado: 2026-09-30
 ---
 O app desktop pode manter uma pasta do seu computador com o **resumo** e a **transcrição** de cada
 gravação da sua biblioteca. Assim você lê, busca e reaproveita o conteúdo fora do eclume, num editor
@@ -26,12 +26,15 @@ numa biblioteca grande.
 
 ## Como a pasta fica organizada
 
-As [coleções](/colecoes) viram subpastas:
+As [coleções](/colecoes) viram subpastas, e dentro de cada uma há uma pasta por mês:
 
 ```text
 Clientes/
-  2026-09-18 Alinhamento do orçamento - 01928f3a.md
-  2026-09-18 Alinhamento do orçamento - 01928f3a.jsonl
+  2026-09/
+    2026-09-18_1100_01928f3a.md
+    2026-09-18_1100_01928f3a.jsonl
+  2026-10/
+    ...
 Interno/
   ...
 sem-colecao/
@@ -41,16 +44,25 @@ AGENTS.md
 
 - Uma gravação em mais de uma coleção aparece em cada uma, com o mesmo conteúdo.
 - As gravações que não estão em nenhuma coleção ficam em `sem-colecao`.
-- O nome do arquivo tem a data, o título e os 8 primeiros caracteres do identificador da gravação.
-  Mudou o título ou a coleção no eclume? Os arquivos mudam de nome e de pasta no ciclo seguinte.
-- O `.md` é o resumo atual, com propriedades no topo (`recording_id`, `title`, `recorded_at`,
-  `collections`, `agenda_type`, `summary_version`). O `.jsonl` é a transcrição: a primeira linha
-  descreve a gravação e cada linha seguinte é uma fala, com locutor, início, fim e texto.
+- A pasta do mês é a do **início da gravação**, na hora do seu computador.
+- O nome do arquivo é a data, a hora e uma **referência** de 8 caracteres. Ordenar os arquivos por
+  nome é ordenar por data. O título **não** está no nome (nomes longos dão erro em alguns
+  sistemas): ele fica dentro do arquivo.
+- A referência é a mesma que aparece, discreta, logo abaixo do título da gravação aqui no eclume
+  ("ref. 01928f3a"). Passe o mouse sobre ela para ver o identificador completo. Use-a para achar,
+  no computador, o arquivo de uma gravação, e vice-versa.
+- O `.md` é o resumo atual, com propriedades no topo (`recording_id`, `title`, `aliases`,
+  `recorded_at`, `collections`, `agenda_type`, `summary_version`). O `.jsonl` é a transcrição: a
+  primeira linha descreve a gravação e cada linha seguinte é uma fala, com locutor, início, fim e
+  texto.
+- Mudou a coleção no eclume? Os arquivos mudam de pasta no ciclo seguinte. Quem já usava a
+  pasta antes da divisão por mês tem os arquivos reorganizados sozinhos, sem duplicar.
 
 ## Use como vault do Obsidian
 
 Abra a pasta como **vault** no Obsidian. Ele lê os `.md`, com as propriedades, e ignora os
-`.jsonl`. Por isso as transcrições, que são longas, não entram na busca nem no grafo do vault, mas
+`.jsonl`. Como o nome do arquivo não tem o título, a busca rápida (`Ctrl+O`) e os links `[[...]]` encontram a
+nota pelo título, que o app grava como `alias`. Por isso as transcrições, que são longas, não entram na busca nem no grafo do vault, mas
 ficam ao lado do resumo quando você precisar delas.
 
 ## Use como pasta de trabalho de um agente

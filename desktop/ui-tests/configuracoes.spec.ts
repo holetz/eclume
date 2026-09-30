@@ -318,7 +318,9 @@ test('Sincronização: vem desligada, escolhe a pasta, liga e explica Collection
 
   // O texto explica o que vai para a pasta e como ela serve ao Obsidian e a agentes.
   const como = page.locator('#pasta-como')
-  await expect(como).toContainText('Collections viram subpastas')
+  await expect(como).toContainText('Collections viram subpastas, e cada uma se divide por mês')
+  await expect(como).toContainText('2026-09-18_1100_01928f3a.md')
+  await expect(como).toContainText('O título fica dentro do arquivo')
   await expect(como).toContainText('sem-colecao')
   await expect(como).toContainText('Vault do Obsidian')
   await expect(como).toContainText('AGENTS.md')

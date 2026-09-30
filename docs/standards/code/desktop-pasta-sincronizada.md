@@ -30,21 +30,34 @@ Configurações. O que a pessoa lê está no artigo de ajuda `pasta-sincronizada
   AGENTS.md                                   ← gerado pelo app
   .eclume-sync.json                           ← manifesto (o Obsidian ignora dotfiles)
   <Collection>/
-    AAAA-MM-DD <título> - <id8>.md            ← resumo atual
-    AAAA-MM-DD <título> - <id8>.jsonl         ← transcrição (se ligada)
-  sem-colecao/                                ← gravações sem Collection
+    AAAA-MM/                                  ← o mês do início da gravação (hora local)
+      AAAA-MM-DD_HHMM_<id8>.md                ← resumo atual
+      AAAA-MM-DD_HHMM_<id8>.jsonl             ← transcrição (se ligada)
+  sem-colecao/                                ← gravações sem Collection (mesma divisão por mês)
 ```
 
 - **Collections viram subpastas.** O servidor tem Collections planas (sem hierarquia) e uma
   gravação pode estar em várias: ela é escrita **em cada uma** (cópias idênticas).
-- **Nome-base** = data (`recorded_at`, ou `0000-00-00`), título e os 8 primeiros caracteres
-  alfanuméricos do id da gravação: único e estável mesmo com títulos repetidos.
-- **Nomes seguros** (`layout::slug`): caracteres proibidos no Windows (`\ / : * ? " < > |` e
-  controles) e os que quebram links do Obsidian (`[ ] # ^`) viram espaço; espaços se juntam;
-  ponto e espaço do fim caem; nomes reservados do Windows (`CON`, `NUL`, `COM1`…) ganham `_`;
-  o título é limitado a 70 caracteres e a Collection a 50, para o caminho ficar bem abaixo de 260.
-  **Maiúsculas, acentos e espaços ficam**: o nome do arquivo é o título da nota no Obsidian.
+- **Um mês por subpasta** (`AAAA-MM`, como os apps de notas: mantém cada pasta em centenas de
+  arquivos, não milhares, e as pastas ordenam sozinhas). O mês e o nome usam a **hora local do
+  computador** (`recorded_at` convertido pelo app), para baterem com o que a pessoa vê; o
+  `recorded_at` do front matter segue em UTC.
+- **Nome-base** = `AAAA-MM-DD_HHMM_<id8>`: data e hora ordenáveis e os 8 primeiros caracteres
+  alfanuméricos do id da gravação (a **referência** que o eclume web mostra sob o título, com o
+  id completo na dica). Tem tamanho fixo (24 caracteres): **o título nunca entra no caminho**, então
+  nenhum título, por longo que seja, estoura o limite de caminho de sistema algum. O id é
+  `uuid4`, então dois nomes só colidem com data, hora e 8 caracteres iguais.
+- **O título vive no arquivo**: propriedades `title` e `aliases` do front matter (o Obsidian acha
+  a nota pelo alias), e `title` no meta do JSONL.
+- **Nomes de pasta de Collection** (`layout::slug`): caracteres proibidos no Windows
+  (`\ / : * ? " < > |` e controles) e os que quebram links do Obsidian (`[ ] # ^`) viram espaço;
+  espaços se juntam; ponto e espaço do fim caem; nomes reservados do Windows (`CON`, `NUL`,
+  `COM1`…) ganham `_`; limitados a 50 caracteres. Maiúsculas, acentos e espaços ficam. O
+  caminho relativo máximo fica em cerca de 90 caracteres.
 - Uma gravação sem resumo mas com transcrição escreve só o `.jsonl`; sem nenhum dos dois, nada.
+- **Mudança de layout.** O manifesto guarda a versão do layout (`layout`); com outra versão (ou
+  sem ela, como nos manifestos do desenho antigo `<Collection>/AAAA-MM-DD <título> - <id8>`), o
+  ciclo seguinte relê tudo e o manifesto move os arquivos e apaga os antigos, sem duplicar.
 
 ## Formatos
 
@@ -55,12 +68,14 @@ Configurações. O que a pessoa lê está no artigo de ajuda `pasta-sincronizada
 source: eclume
 recording_id: "01928f3a-1c00-…"
 title: "Alinhamento do orçamento"
+aliases:
+  - "Alinhamento do orçamento"        # o Obsidian acha a nota pelo título
 recorded_at: "2026-09-18T14:00:05Z"
 collections:
   - "Clientes"
 agenda_type: "Reunião de equipe"     # omitido sem tipo de agenda
 summary_version: 3
-transcript: "2026-09-18 Alinhamento do orçamento - 01928f3a.jsonl"   # só com transcrição
+transcript: "2026-09-18_1100_01928f3a.jsonl"   # só com transcrição
 ---
 ```
 
@@ -98,7 +113,7 @@ biblioteca grande não atrasar o upload das gravações.
 - **O servidor manda.** O arquivo é reescrito quando o conteúdo em disco difere (hash SHA-256); uma
   edição local num arquivo do app é sobrescrita no ciclo seguinte. Sem mudança, nada é escrito.
 - **Só o que o manifesto lista é movido ou apagado** (título ou Collection mudou, gravação
-  removida). Arquivos da pessoa na pasta, e pastas que os contenham, ficam. Um caminho do
+  removida, ou início da gravação mudou). Arquivos da pessoa na pasta, e pastas que os contenham, ficam. Um caminho do
   manifesto que fuja da raiz (`..`, absoluto) é recusado. Um manifesto ilegível recomeça vazio e
   **não apaga nada**.
 - A escrita é atômica (arquivo temporário com ponto e renomeação). A raiz não pode ser a raiz do
