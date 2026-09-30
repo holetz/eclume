@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
-import { isItemActive, NAV_ITEMS, navGroups } from './nav'
+import { featuredItem, isItemActive, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
 import { createQueryClient } from './queryClient'
@@ -37,20 +37,22 @@ describe('navegação', () => {
     const { main, header: more } = navGroups()
     expect(titles(main)).toEqual(['Gravações', 'Organizar'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
-    // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem.
-    const enabled = (section: string) => NAV_ITEMS.filter((i) => i.enabled && i.section === section).map((i) => i.label)
+    // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem. O destacado não
+    // pertence a grupo: a barra lateral o desenha antes deles.
+    const enabled = (section: string) =>
+      NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
-    expect(labels(main).slice(0, 6)).toEqual([
-      'Biblioteca',
-      'Busca',
-      'Perguntas',
-      'Pessoas',
-      'Coleções',
-      'Campos e regras',
-    ])
+    expect(labels(main).slice(0, 5)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Campos e regras'])
     expect(labels(more)).toEqual(enabled('header'))
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
+  })
+
+  it('Perguntar é o item destacado, primeiro da lista e fora dos grupos, e segue na rota /perguntas', () => {
+    expect(NAV_ITEMS[0]).toMatchObject({ to: '/perguntas', label: 'Perguntar', featured: true, section: 'main' })
+    expect(featuredItem()).toBe(NAV_ITEMS[0])
+    expect(labels(navGroups().main)).not.toContain('Perguntar')
+    expect(featuredItem(NAV_ITEMS.map((item) => ({ ...item, enabled: !item.featured })))).toBeUndefined()
   })
 
   it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
@@ -104,6 +106,28 @@ describe('AppShell', () => {
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
       expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
     }
+  })
+
+  it('Perguntar abre a barra lateral, acima dos grupos, com ícone, e acende na própria rota', () => {
+    renderShell(member, vi.fn(), '/perguntas')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    const [first] = within(nav).getAllByRole('link')
+    expect(first).toHaveAccessibleName('Perguntar')
+    expect(first).toHaveAttribute('href', '/perguntas')
+    expect(first).toHaveClass('btn', 'btn-primary')
+    expect(first).toHaveAttribute('aria-current', 'page')
+    expect(first.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    // Vem antes do primeiro grupo e não aparece dentro de nenhum.
+    const firstGroup = within(nav).getByRole('group', { name: 'Gravações' })
+    expect(first.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(firstGroup).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: 'Perguntas' })).not.toBeInTheDocument()
+  })
+
+  it('Perguntar não acende fora da rota /perguntas', () => {
+    renderShell(member, vi.fn(), '/pessoas')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    expect(within(nav).getByRole('link', { name: 'Perguntar' })).not.toHaveAttribute('aria-current')
   })
 
   it('não mostra o painel admin', () => {

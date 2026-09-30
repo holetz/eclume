@@ -7,6 +7,17 @@
   gap: var(--space-6);
 }
 
+/* O item destacado (Perguntar) é o `.btn-primary` do DS em largura total; aceso na própria rota, fica no
+   tom de "pressionado" do DS (--color-accent-700). */
+.featured {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.nav .featured[aria-current='page'] {
+  background: var(--color-accent-700);
+}
+
 .account {
   display: flex;
   align-items: center;

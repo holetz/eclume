@@ -34,7 +34,7 @@ describe('Perguntas', () => {
     mockChat([fixtures.baseChatDone()])
     renderApp('/perguntas')
     expect(await screen.findByRole('heading', { level: 1, name: 'Perguntas' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Perguntas' })).toHaveAttribute('href', '/perguntas')
+    expect(screen.getByRole('link', { name: 'Perguntar' })).toHaveAttribute('href', '/perguntas')
     expect(screen.getByRole('button', { name: /Quais decisões foram tomadas/ })).toBeInTheDocument()
   })
 

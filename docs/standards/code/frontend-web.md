@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#79
 maintainer: holetz
 ---
 
@@ -57,7 +57,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/parear`, `/gravacoes/:id`, `/pessoas`,
-  `/pessoas/:id`, `/busca`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
+  `/pessoas/:id`, `/busca`, `/perguntas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
   `/?importar=1` (o modal). Os parâmetros também são pt-BR:
@@ -76,16 +76,22 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
-- **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `group`, `section`
-  (`main` ou `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a
-  Biblioteca fica marcada em `/gravacoes/`), e `navGroups()` devolve as duas seções. A principal,
-  na barra lateral, tem Gravações (Biblioteca, Busca; importar é o modal da biblioteca) e
-  Organizar (Pessoas, Coleções, Campos e regras, Tipos de agenda); a `header` vai para os menus do
-  cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App desktop, App móvel)
-  e Ajuda (Central de ajuda). Uma área nova entra desligada, com a rota do mapa de telas v6, e
-  ligá-la é mudar `enabled` e registrar a rota. Há um só `<nav aria-label="Principal">`; cada
-  grupo é um `role="group"` rotulado pelo título. Não há item "Painel admin": a conta de usuário
-  não tem papel, e o painel se abre pelo endereço `/admin/entrar`, com conta própria.
+- **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
+  `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a Biblioteca
+  fica marcada em `/gravacoes/`); o item comum tem `group`, e `navGroups()` devolve as duas seções.
+  **Perguntar** (`/perguntas`, o chat sobre a base) é o único item **destacado** (`featured`, com
+  `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
+  `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
+  DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
+  `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`); o título da tela segue
+  "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
+  biblioteca) e Organizar (Pessoas, Coleções, Campos e regras, Tipos de agenda); a `header` vai para
+  os menus do cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App
+  desktop, App móvel) e Ajuda (Central de ajuda). Uma área nova entra desligada, com a rota do mapa
+  de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só
+  `<nav aria-label="Principal">`; cada grupo é um `role="group"` rotulado pelo título, e o destaque
+  fica fora deles. Não há item "Painel admin": a conta de usuário não tem papel, e o painel se abre
+  pelo endereço `/admin/entrar`, com conta própria.
 - **Cabeçalho do shell** (`ShellFrame` com `account`): uma faixa de 3,25rem (`--shell-header`),
   fixa no topo em qualquer largura, com a marca à esquerda e a conta à direita: nome e e-mail, o
   menu **Ajuda** ("Ajuda desta página", que abre a gaveta, e "Central de ajuda"), o menu
@@ -230,8 +236,16 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `Dialog` aberto por "Filtros (N)".
 - **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
   recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
-  `importar` (`eclume-biblioteca-ultima`), que volta por `replace` quando `/` abre sem parâmetros.
-  "Limpar filtros" tira tudo menos `visao` e `data`.
+  `importar` (`eclume-biblioteca-ultima`). "Limpar filtros" tira tudo menos `visao` e `data`.
+- **Restauração uma vez só**: quando `/` abre sem parâmetros, a página volta à última biblioteca
+  guardada (ou abre na visão da tela Ambiente) por um `replace`, e a flag `restoring` cai assim que
+  a URL restaurada chega. Depois disso, marcar e desmarcar filtros, trocar a visão e andar pelas
+  datas são só navegação: o `setParams` do `useSearchParams` muda de identidade a cada mudança da
+  URL, então uma restauração sem essa trava roda de novo a cada filtro e o desfaz (com a abertura
+  "última" chega a alternar com a gravação da guardada, em laço). A flag cai no próprio render, e
+  não num efeito, porque o lint (`react-hooks/set-state-in-effect`) proíbe `setState` síncrono em
+  efeito. Fora da restauração, a guardada acompanha a URL, e uma URL vazia a **apaga**: tirar o
+  último filtro não o ressuscita na próxima visita.
 - **Estados**: carregando (grade com `aria-busy` e "Carregando gravações…"), erro com "Tentar de
   novo", "Nada gravado neste período." e, numa conta sem nenhuma gravação (`GET /recordings` com
   `limit=1`), o cartão "Nenhuma gravação ainda". A faixa `alert-info` "Enviando 1 de 3 arquivos ·

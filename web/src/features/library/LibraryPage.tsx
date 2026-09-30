@@ -72,19 +72,25 @@ export function LibraryPage() {
   const [collapsed, setCollapsed] = useState(() => readStored(STORAGE_KEYS.filtersCollapsed) === '1')
   const [filtersOpen, setFiltersOpen] = useState(false)
   // A biblioteca aberta sem parâmetros volta à última visão e aos últimos filtros, ou abre na visão
-  // escolhida na tela Ambiente.
+  // escolhida na tela Ambiente. A restauração acontece uma vez só: o `setParams` do roteador muda de
+  // identidade a cada mudança da URL, e um efeito que o use sem essa trava sobrescreveria cada filtro.
   const [opening] = useState(readLibraryOpening)
-  const [restoring] = useState(
+  const [restoring, setRestoring] = useState(
     () => params.size === 0 && (opening !== 'ultima' || Boolean(readStored(STORAGE_KEYS.lastLibrary))),
   )
+  // A restauração termina quando a URL restaurada chega: dali em diante, filtro tirado é filtro tirado.
+  if (restoring && params.size > 0) setRestoring(false)
   useEffect(() => {
     if (!restoring) return
     const next = opening === 'ultima' ? (readStored(STORAGE_KEYS.lastLibrary) ?? '') : { visao: opening }
     setParams(new URLSearchParams(next), { replace: true })
   }, [restoring, opening, setParams])
+  // Tirar o último filtro deixa a URL vazia: a guardada também se limpa, senão ressuscitaria na próxima
+  // visita. Durante a restauração a URL vazia é só a de partida, e a guardada ainda vai ser lida.
   useEffect(() => {
-    if (params.size > 0) writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params))
-  }, [params])
+    if (restoring) return
+    writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params) || null)
+  }, [restoring, params])
 
   // O aviso que a gravação excluída deixa ao voltar para a biblioteca.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
