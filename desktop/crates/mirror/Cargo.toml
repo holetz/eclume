@@ -1,0 +1,16 @@
+[package]
+name = "eclume-mirror"
+description = "Espelho local do eclume: resumos em Markdown e transcrições em JSONL numa pasta que serve de vault do Obsidian e de pasta de trabalho de agente."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Só lógica pura (nomes, renderização, manifesto e reconciliação em disco), sem Tauri nem rede: o
+# `mobile/` também compila `desktop/crates`.
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
