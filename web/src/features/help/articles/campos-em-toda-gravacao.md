@@ -2,8 +2,8 @@
 titulo: Acrescente um campo a toda gravação
 topico: organizar
 paginas: [campos]
-relacionados: [escrever-uma-regra, testar-uma-regra, origem-dos-valores]
-termos: [campo, campos, cliente, projeto, texto, lista, escolha, título, tags, embutido]
+relacionados: [escrever-uma-regra, testar-uma-regra, origem-dos-valores, tags-cadastradas]
+termos: [campo, campos, cliente, projeto, texto, lista, escolha, título, tags]
 ordem: 1
 atualizado: 2026-09-30
 ---
@@ -15,8 +15,9 @@ transcrição. Eles ficam em [Campos personalizados](/config/campos).
 O título não aparece aqui: ele vem do tipo de agenda da gravação, pelo padrão e pela regra do
 assunto do tipo. Veja [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
 
-As **Tags** são um campo embutido do tipo lista: o tipo não muda e ele não pode ser excluído, mas
-você pode editar a regra e desligar o preenchimento automático.
+As tags também não aparecem aqui: elas têm cadastro próprio, com a regra geral, a descrição de cada
+tag e a escolha entre usar só as cadastradas ou deixar o agente criar outras. Configure tudo em
+[Tags](/tags). Veja [Cadastre as tags e deixe o agente usá-las](/ajuda/tags-cadastradas).
 
 ## Os seus campos
 

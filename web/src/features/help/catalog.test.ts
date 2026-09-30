@@ -35,6 +35,7 @@ const APP_ROUTES = [
   /^\/perguntas$/,
   /^\/pessoas$/,
   /^\/colecoes$/,
+  /^\/tags$/,
   /^\/config\/(campos|agendas|mcp)$/,
   /^\/tokens$/,
   /^\/app-(desktop|movel)$/,
@@ -51,8 +52,8 @@ describe('artigos da central de ajuda', () => {
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
   })
 
-  it('cobrem a central inteira: 38 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
-    expect(ARTICLES).toHaveLength(38)
+  it('cobrem a central inteira: 39 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+    expect(ARTICLES).toHaveLength(39)
     for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
     for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
       expect(articlesForPage(key).length, `chave ${key}`).toBeGreaterThanOrEqual(1)

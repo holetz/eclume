@@ -1,0 +1,95 @@
+:where(.page) p {
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.page > :global(.page-head) {
+  margin-bottom: var(--space-2);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.description {
+  display: block;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.empty {
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+.badge {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.when {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+/* O cartão de configuração, como o de atribuição automática de locutores em Pessoas. */
+.config {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.rule {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.ruleActions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* O .seg do DS tem a largura das opções, não a do campo. */
+.config :global(.seg) {
+  justify-self: start;
+}
+
+.limit {
+  max-width: 16rem;
+}
+
+.catalog {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+}

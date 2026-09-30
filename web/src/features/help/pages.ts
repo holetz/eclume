@@ -9,6 +9,7 @@ export const HELP_PAGES = {
   pessoas: 'Pessoas',
   pessoa: 'Pessoa',
   colecoes: 'Coleções',
+  tags: 'Tags',
   campos: 'Campos personalizados',
   agendas: 'Tipos de agenda',
   mcp: 'Conexão MCP',
