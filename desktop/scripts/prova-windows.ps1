@@ -10,10 +10,11 @@
 # As capturas e o resumo ficam em .logs/prova-windows/. Saída 0 quando tudo passa; 2 quando a nota
 # foi descartada por falta de voz (microfone mudo: a prova precisa de uma pessoa).
 #
-# Uso: powershell -NoProfile -File desktop/scripts/prova-windows.ps1 [-Servidor <url>] [-Versao 0.2.0]
+# Uso: powershell -NoProfile -File desktop/scripts/prova-windows.ps1 [-Servidor <url>] [-Versao <x.y.z>]
+# (-Versao, por padrão, é a do tauri.conf.json)
 param(
     [string]$Servidor = "https://192.168.15.199:8443",
-    [string]$Versao = "0.2.0",
+    [string]$Versao = (Get-Content -Raw (Join-Path $PSScriptRoot "..\src-tauri\tauri.conf.json") | ConvertFrom-Json).version,
     [int]$Porta = 9229
 )
 

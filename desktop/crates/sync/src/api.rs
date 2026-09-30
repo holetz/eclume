@@ -85,7 +85,6 @@ pub struct Upload {
 
 pub mod status {
     pub const IN_PROGRESS: &str = "in_progress";
-    pub const COMPLETED: &str = "completed";
     pub const DEDUPLICATED: &str = "deduplicated";
 }
 
