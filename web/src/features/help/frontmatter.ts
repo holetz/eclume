@@ -7,7 +7,7 @@
 
 export type FrontmatterValue = string | string[]
 
-export interface Frontmatter {
+interface Frontmatter {
   data: Record<string, FrontmatterValue>
   body: string
 }

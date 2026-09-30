@@ -9,13 +9,12 @@ interface TagInputProps {
   listLabel: string
   /** Um item, no singular e feminino ("opção", "tag"): vira "Remover <item> …" e o texto do campo. */
   itemLabel: string
-  placeholder?: string
   invalid?: boolean
   describedBy?: string
 }
 
 /** Uma lista de valores curtos como `.tag`: Enter acrescenta, e o × de cada um remove. */
-export function TagInput({ id, value, onChange, listLabel, itemLabel, placeholder, invalid, describedBy }: TagInputProps) {
+export function TagInput({ id, value, onChange, listLabel, itemLabel, invalid, describedBy }: TagInputProps) {
   const [text, setText] = useState('')
 
   function add() {
@@ -53,7 +52,7 @@ export function TagInput({ id, value, onChange, listLabel, itemLabel, placeholde
         id={id}
         className={`input ${styles.tagText}`}
         value={text}
-        placeholder={placeholder ?? `Nova ${itemLabel} e Enter`}
+        placeholder={`Nova ${itemLabel} e Enter`}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         onChange={(event) => setText(event.target.value)}

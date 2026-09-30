@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 
-export const SETTINGS_KEY = ['admin', 'settings'] as const
+const SETTINGS_KEY = ['admin', 'settings'] as const
 export const PROVIDERS_KEY = ['admin', 'agent-providers'] as const
-export const SECRETS_KEY = ['admin', 'secrets'] as const
-export const USERS_KEY = ['admin', 'users'] as const
-export const HEALTH_KEY = ['admin', 'health'] as const
-export const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
+const SECRETS_KEY = ['admin', 'secrets'] as const
+const USERS_KEY = ['admin', 'users'] as const
+const HEALTH_KEY = ['admin', 'health'] as const
+const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
 
 // Alinhado ao heartbeat de 15 s do worker GPU.
 export const HEALTH_REFRESH_MS = 15_000

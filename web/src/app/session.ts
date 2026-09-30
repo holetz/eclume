@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { api, type Schemas } from '../api/client'
 import { ApiError, type Problem } from '../api/problem'
 
-export type Me = Schemas['Me']
+type Me = Schemas['Me']
 
 export const ME_KEY = ['me'] as const
 

@@ -3,7 +3,7 @@
 // usa é validado; o resto do manifesto é ignorado.
 import { useQuery } from '@tanstack/react-query'
 
-export type DesktopOs = 'windows' | 'macos' | 'linux'
+type DesktopOs = 'windows' | 'macos' | 'linux'
 
 export interface Installer {
   plataforma: DesktopOs
@@ -14,7 +14,7 @@ export interface Installer {
   recomendado: boolean
 }
 
-export interface InstallerManifest {
+interface InstallerManifest {
   versao: string
   instaladores: Installer[]
 }

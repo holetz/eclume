@@ -6,13 +6,12 @@ import { unwrap } from '../../api/problem'
 export type Collection = Schemas['Collection']
 
 export const COLLECTIONS_KEY = ['collections'] as const
-export const TAGS_KEY = ['tags'] as const
+const TAGS_KEY = ['tags'] as const
 
-export function useCollections(enabled = true) {
+export function useCollections() {
   return useQuery({
     queryKey: COLLECTIONS_KEY,
     queryFn: () => unwrap(api.GET('/api/v1/collections', { params: { query: { limit: 200 } } })),
-    enabled,
   })
 }
 

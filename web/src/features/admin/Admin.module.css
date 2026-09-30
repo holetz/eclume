@@ -36,22 +36,6 @@
   gap: var(--space-6);
 }
 
-.intro {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.intro p {
-  max-width: 64ch;
-}
-
-.form {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-6);
-  max-width: 44rem;
-}
-
 .fieldset {
   display: grid;
   gap: var(--space-4);
@@ -71,90 +55,9 @@
   gap: var(--space-4);
 }
 
-.check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-
-.check input {
-  margin-top: 0.25rem;
-}
-
-.check > span {
-  display: grid;
-}
-
-/* A dica global (`.field .hint`) só vale dentro de `.field`; aqui ela acompanha o checkbox e o card. */
-.check :global(.field-hint),
-.card > :global(.field-hint),
-.form > :global(.field-hint) {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .meta {
   font-size: 12px;
   color: var(--color-text-muted);
-}
-
-.tableWrap {
-  overflow-x: auto;
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.table th,
-.table td {
-  padding: var(--space-3) var(--space-4);
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--color-divider);
-}
-
-.table thead th {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  background: color-mix(in srgb, var(--color-text) 7%, transparent);
-}
-
-.table tbody tr:last-child th,
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.table tbody th {
-  font-weight: normal;
-}
-
-.table tr[data-muted='true'] {
-  color: var(--color-text-muted);
-}
-
-.strong {
-  display: block;
-  font-weight: 600;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
 }
 
 .actionsCell {
@@ -162,87 +65,13 @@
   white-space: nowrap;
 }
 
-.confirm {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-2);
-  white-space: normal;
-  min-width: 16rem;
-}
-
 .error {
   color: var(--color-danger);
-}
-
-.section {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-  gap: var(--space-4);
-}
-
-.card {
-  display: grid;
-  gap: var(--space-2);
-  align-content: start;
-  padding: var(--space-4) var(--space-6);
-}
-
-.card h3 {
-  font-size: 15px;
-}
-
-.facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-  font-size: 14px;
-}
-
-.facts dt {
-  color: var(--color-text-muted);
-}
-
-.facts dd {
-  margin: 0;
-}
-
-.meter {
-  width: 100%;
-  height: 0.75rem;
 }
 
 .secretRow {
   display: flex;
   gap: var(--space-2);
-}
-
-.secretValue {
-  font-family: var(--font-mono);
-  font-size: 14px;
-}
-
-.list {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.instructions {
-  white-space: pre-wrap;
-  font-size: 14px;
-  color: var(--color-text-muted);
-  max-height: 8rem;
-  overflow: auto;
 }
 
 /* Usuários: a busca na largura do DS e o contador à direita da barra. */

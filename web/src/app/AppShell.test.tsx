@@ -60,7 +60,7 @@ describe('navegação', () => {
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
-  it('liga as áreas futuras nas rotas do mapa de telas', () => {
+  it('registra cada área na rota do mapa de telas', () => {
     const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
     const { main, header: more } = navGroups(all)
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])

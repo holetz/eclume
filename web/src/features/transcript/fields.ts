@@ -25,10 +25,9 @@ export function sortFields(items: readonly FieldValue[]): FieldValue[] {
   return [...items].sort((a, b) => rank(a) - rank(b) || a.field.position - b.field.position)
 }
 
-export function useRecordingFields(recordingId: string, enabled = true) {
+export function useRecordingFields(recordingId: string) {
   return useQuery({
     queryKey: fieldsKey(recordingId),
-    enabled,
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}/fields', { params: { path: { recording_id: recordingId } } })),
   })

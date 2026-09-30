@@ -8,7 +8,7 @@ import type { Preview } from './queries'
 
 export const PREVIEW_POLL_MS = 1500
 
-export type PreviewState = 'idle' | 'queued' | 'running' | 'done' | 'failed' | 'expired'
+type PreviewState = 'idle' | 'queued' | 'running' | 'done' | 'failed' | 'expired'
 
 export interface PreviewRun<TBody> {
   run(body: TBody): void
@@ -96,7 +96,7 @@ export function usePreview<TBody>(start: (body: TBody) => Promise<Preview>): Pre
 type FieldPreviewItem = Schemas['FieldPreviewItem']
 type AgendaTypePreviewItem = Schemas['AgendaTypePreviewItem']
 
-export interface FieldTestRow {
+interface FieldTestRow {
   recordingId: string
   recordingTitle: string
   /** O valor em texto (a lista unida por ", "), ou `null` quando a regra deixaria vazio. */

@@ -7,7 +7,7 @@ import { PEOPLE_KEY } from './queries'
 
 export type Voiceprint = Schemas['Voiceprint']
 
-export const voiceprintKey = (personId: string) => [...PEOPLE_KEY, personId, 'voiceprint'] as const
+const voiceprintKey = (personId: string) => [...PEOPLE_KEY, personId, 'voiceprint'] as const
 
 export function useVoiceprint(personId: string) {
   return useQuery({

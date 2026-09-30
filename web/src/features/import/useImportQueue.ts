@@ -14,7 +14,7 @@ import {
 } from '../../lib/media-convert'
 import { cancelUpload, runUpload, UploadError, type UploadProgress } from '../../upload/multipart'
 
-export type ItemState =
+type ItemState =
   | { kind: 'reading' }
   | { kind: 'ready' }
   | { kind: 'converting'; ratio: number }
@@ -64,7 +64,7 @@ interface Runtime {
 }
 
 /** Nome do arquivo sem a extensão, para o nome do Opus. */
-export function fileStem(name: string): string {
+function fileStem(name: string): string {
   const dot = name.lastIndexOf('.')
   return (dot > 0 ? name.slice(0, dot) : name).trim() || 'gravação'
 }

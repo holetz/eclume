@@ -10,7 +10,7 @@ type Turn = Schemas['BaseChatTurn']
 
 export const BASE_CHAT_POLL_MS = 2000
 export const MAX_QUESTION = 4000
-export const MAX_HISTORY = 10
+const MAX_HISTORY = 10
 
 export const baseChatKey = (id: string) => ['base-chat', id] as const
 

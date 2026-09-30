@@ -5,7 +5,7 @@ import { unwrap } from '../../api/problem'
 /** `SignupRequest.password.minLength` no contrato. */
 export const MIN_PASSWORD = 12
 
-export const SIGNUP_INFO_KEY = ['signup-info'] as const
+const SIGNUP_INFO_KEY = ['signup-info'] as const
 
 /** Se o cadastro está aberto e o aviso em vigor (texto e versão), lidos de `GET /auth/signup`. */
 export function useSignupInfo() {

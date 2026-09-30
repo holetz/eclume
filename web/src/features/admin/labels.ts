@@ -89,7 +89,7 @@ export function labelOf(options: readonly Option[], value: string | null | undef
   return options.find((option) => option.value === value)?.label ?? value
 }
 
-export interface SpeakerPreset {
+interface SpeakerPreset {
   value: string
   label: string
   min: number | null
