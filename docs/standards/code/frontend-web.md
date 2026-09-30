@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#79
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#79
 maintainer: holetz
 ---
 
@@ -378,6 +378,11 @@ desce; abaixo de 56rem, os campos também):
 - **Coleção convive com tag**: a coleção agrupa gravações; a tag marca assuntos. Ela aparece no
   painel de campos da gravação, no filtro da biblioteca (`colecao`) e numa ficha da busca, e
   `/colecoes` fica em Organizar, como decidido na holetz/eclume#38.
+- **Coleções automáticas** (`/colecoes`): o diálogo da coleção tem "Quando incluir" (a regra, com o
+  `HelpHint` e um `<details>` "Exemplos de regras", cada um com "Usar", que copia para o campo) e o
+  `.switch` "Incluir automaticamente depois da transcrição"; a linha mostra o `.badge`
+  "Automática" quando há regra e o interruptor ligado. "Mesclar em…" (com duas coleções ou mais)
+  abre um `Dialog` com o `<select>` da coleção que recebe e manda `POST /collections/{id}/merge`.
 
 ## Minhas configurações
 
