@@ -63,6 +63,16 @@ impl Mirror {
         self.manifest.recordings.keys().cloned().collect()
     }
 
+    /// Os arquivos foram escritos com outro desenho de pasta e nome: o próximo ciclo refaz tudo.
+    pub fn layout_outdated(&self) -> bool {
+        self.manifest.layout != crate::manifest::LAYOUT
+    }
+
+    /// Marca que tudo foi escrito no layout atual (só depois de um ciclo sem falhas).
+    pub fn mark_layout_current(&mut self) {
+        self.manifest.layout = crate::manifest::LAYOUT;
+    }
+
     /// O cursor do próximo `?since=`; `None` na primeira passada.
     pub fn since(&self) -> Option<&str> {
         self.manifest.since.as_deref()
@@ -419,6 +429,23 @@ mod tests {
             (applied.written, applied.unchanged, applied.removed),
             (0, 2, 0)
         );
+    }
+
+    #[test]
+    fn manifesto_de_outro_layout_pede_para_refazer_tudo() {
+        let tmp = Tmp::new("reconcile-layout");
+        let mut mirror = Mirror::open(tmp.path()).unwrap();
+        assert!(mirror.layout_outdated());
+        mirror.mark_layout_current();
+        mirror.save().unwrap();
+        assert!(!Mirror::open(tmp.path()).unwrap().layout_outdated());
+        // Um manifesto de antes da versão do layout (sem o campo) está desatualizado.
+        fs::write(
+            tmp.path().join(crate::manifest::FILE),
+            br#"{"version": 1, "recordings": {}}"#,
+        )
+        .unwrap();
+        assert!(Mirror::open(tmp.path()).unwrap().layout_outdated());
     }
 
     #[test]

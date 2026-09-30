@@ -331,6 +331,33 @@ pub fn latest_update(items: &[LibraryRecording]) -> Option<String> {
         .map(|(_, text)| text.to_string())
 }
 
+/// O início de uma gravação (`recorded_at`, RFC 3339) no fuso `zone`, como `AAAA-MM-DDTHH:MM:SS`.
+pub fn start_in<Tz>(recorded_at: &str, zone: &Tz) -> Option<String>
+where
+    Tz: chrono::TimeZone,
+    Tz::Offset: std::fmt::Display,
+{
+    chrono::DateTime::parse_from_rfc3339(recorded_at)
+        .ok()
+        .map(|at| {
+            at.with_timezone(zone)
+                .format("%Y-%m-%dT%H:%M:%S")
+                .to_string()
+        })
+}
+
+/// O mesmo que [`start_in`] num deslocamento fixo em segundos a leste de UTC (Brasília: `-10800`).
+pub fn start_at_offset(recorded_at: &str, east_seconds: i32) -> Option<String> {
+    let zone = chrono::FixedOffset::east_opt(east_seconds)?;
+    start_in(recorded_at, &zone)
+}
+
+/// O início de uma gravação no fuso deste computador: dá o mês da pasta e o nome do arquivo na
+/// pasta sincronizada, para baterem com a hora que a pessoa vê.
+pub fn local_start(recorded_at: &str) -> Option<String> {
+    start_in(recorded_at, &chrono::Local)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,6 +375,29 @@ mod tests {
             agenda_type: None,
             pipeline: vec![],
         }
+    }
+
+    #[test]
+    fn o_inicio_local_vira_a_hora_do_fuso_e_muda_de_mes_junto() {
+        let brasilia = chrono::FixedOffset::west_opt(3 * 3600).unwrap();
+        assert_eq!(
+            start_in("2026-09-18T14:00:05Z", &brasilia).as_deref(),
+            Some("2026-09-18T11:00:05")
+        );
+        // 02:30 UTC de 1º de outubro ainda é 30 de setembro à noite em Brasília.
+        assert_eq!(
+            start_in("2026-10-01T02:30:00Z", &brasilia).as_deref(),
+            Some("2026-09-30T23:30:00")
+        );
+        assert_eq!(
+            start_in("2026-09-18T14:00:05.250000Z", &chrono::Utc).as_deref(),
+            Some("2026-09-18T14:00:05")
+        );
+        assert_eq!(start_in("lixo", &brasilia), None);
+        // O fuso do computador só muda a hora, nunca a forma.
+        let local = local_start("2026-09-18T14:00:05Z").unwrap();
+        assert_eq!(local.len(), 19);
+        assert_eq!(&local[10..11], "T");
     }
 
     #[test]

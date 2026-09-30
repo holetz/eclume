@@ -35,6 +35,11 @@ pub trait Source {
     fn library(&self, since: Option<&str>) -> Result<Vec<LibraryRecording>>;
     fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>>;
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>>;
+    /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que dá mês e nome ao arquivo.
+    /// O padrão usa o fuso deste computador; os testes fixam um.
+    fn local_start(&self, recorded_at: &str) -> Option<String> {
+        api::local_start(recorded_at)
+    }
 }
 
 impl Source for Client {
@@ -70,6 +75,7 @@ pub struct Report {
 /// Monta o que o espelho escreve a partir do que o servidor devolveu.
 pub fn to_item(
     recording: &LibraryRecording,
+    local_start: Option<String>,
     collections: &HashMap<String, String>,
     summary: Option<LibrarySummary>,
     transcript: Option<api::Transcript>,
@@ -98,7 +104,7 @@ pub fn to_item(
         recording_id: recording.id.clone(),
         title,
         recorded_at: recording.recorded_at.clone(),
-        local_start: None,
+        local_start,
         collections: names,
         agenda_type,
         summary: summary.map(|s| Summary {
@@ -145,7 +151,12 @@ pub fn sync_library(
         .into_iter()
         .map(|collection| (collection.id, collection.name))
         .collect();
-    let since = mirror.since().map(str::to_string);
+    // Arquivos de outro desenho de pasta e nome: relê tudo, e o manifesto move e apaga os antigos.
+    let since = if mirror.layout_outdated() {
+        None
+    } else {
+        mirror.since().map(str::to_string)
+    };
     let changed = source.library(since.as_deref())?;
     let latest = api::latest_update(&changed);
 
@@ -200,7 +211,11 @@ pub fn sync_library(
             } else {
                 None
             };
-            Ok(to_item(recording, &names, summary, transcript))
+            let local_start = recording
+                .recorded_at
+                .as_deref()
+                .and_then(|at| source.local_start(at));
+            Ok(to_item(recording, local_start, &names, summary, transcript))
         };
         match read(&mut transcripts_on, &mut report.transcripts_denied)
             .and_then(|item| mirror.apply(&item))
@@ -227,6 +242,9 @@ pub fn sync_library(
             // Biblioteca vazia: o próximo ciclo já é incremental.
             mirror.set_since(Some("1970-01-01T00:00:00Z".to_string()));
         }
+    }
+    if report.failed == 0 {
+        mirror.mark_layout_current();
     }
     mirror.write_agents(transcripts)?;
     mirror.save()?;
@@ -348,6 +366,8 @@ mod tests {
         /// O servidor recusa `transcripts:read` (403 `insufficient_scope`).
         denied_transcripts: RefCell<bool>,
         transcript_calls: RefCell<usize>,
+        /// Fuso do "computador" do teste, em horas a oeste de UTC (0 = UTC).
+        west_hours: RefCell<i32>,
         calls: RefCell<Vec<String>>,
     }
 
@@ -369,6 +389,9 @@ mod tests {
         }
         fn current_summary(&self, id: &str) -> Result<Option<LibrarySummary>> {
             Ok(self.summaries.borrow().get(id).cloned())
+        }
+        fn local_start(&self, recorded_at: &str) -> Option<String> {
+            api::start_at_offset(recorded_at, -*self.west_hours.borrow() * 3600)
         }
         fn transcript(&self, id: &str) -> Result<Option<api::Transcript>> {
             *self.transcript_calls.borrow_mut() += 1;
@@ -677,6 +700,63 @@ mod tests {
     }
 
     #[test]
+    fn a_pasta_e_o_nome_seguem_a_hora_local_do_computador() {
+        let dir = tmp("hora-local");
+        let fake = fake();
+        *fake.west_hours.borrow_mut() = 3;
+        // 02:30 UTC de 1º de outubro é 23:30 de 30 de setembro no computador (UTC-3).
+        fake.recordings.borrow_mut()[1].recorded_at = Some("2026-10-01T02:30:00Z".into());
+        let mut mirror = Mirror::open(&dir).unwrap();
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert!(dir
+            .join("sem-colecao/2026-09/2026-09-30_2330_bbbbbbbb.md")
+            .exists());
+        assert!(dir
+            .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md")
+            .exists());
+        // O `recorded_at` do front matter continua em UTC.
+        let md =
+            std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-30_2330_bbbbbbbb.md"))
+                .unwrap();
+        assert!(md.contains("recorded_at: \"2026-10-01T02:30:00Z\""));
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn quem_ja_sincronizou_no_layout_antigo_e_migrado_sem_duplicar() {
+        let dir = tmp("migracao");
+        let fake = fake();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+
+        // Volta a pasta ao desenho antigo: arquivo com título no nome, direto na Collection, e o
+        // manifesto sem a versão do layout.
+        let novo = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
+        let antigo_rel = "sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.md";
+        std::fs::rename(&novo, dir.join(antigo_rel)).unwrap();
+        let manifesto = dir.join(".eclume-sync.json");
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifesto).unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("layout");
+        json["recordings"]["bbbbbbbb-2"]["files"] = serde_json::json!([antigo_rel]);
+        std::fs::write(&manifesto, serde_json::to_vec(&json).unwrap()).unwrap();
+
+        let mut mirror = Mirror::open(&dir).unwrap();
+        assert!(mirror.layout_outdated());
+        let report = sync_library(&fake, &mut mirror, true, false).unwrap();
+        // Tudo foi relido (não só o que mudou desde o cursor) e o arquivo antigo se foi.
+        assert_eq!(report.recordings, 3);
+        assert!(!dir.join(antigo_rel).exists());
+        assert!(novo.exists());
+        assert!(!mirror.layout_outdated());
+        // O ciclo seguinte volta a ser incremental.
+        let next = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!((next.recordings, next.written), (1, 0));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn sem_transcricoes_so_o_markdown_e_o_agents_muda() {
         let dir = tmp("sem-jsonl");
         let fake = fake();
@@ -696,7 +776,7 @@ mod tests {
         let names = HashMap::from([("c1".to_string(), "Clientes".to_string())]);
         let mut t = transcript("eeeeeeee-5");
         t.title = "Título da transcrição".into();
-        let item = to_item(&rec, &names, Some(summary(1)), Some(t));
+        let item = to_item(&rec, None, &names, Some(summary(1)), Some(t));
         assert_eq!(item.collections, ["Clientes"]);
         assert_eq!(item.title, "Título da transcrição");
         assert_eq!(item.agenda_type.as_deref(), Some("Reunião de equipe"));

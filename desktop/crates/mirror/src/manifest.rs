@@ -14,6 +14,10 @@ pub const FILE: &str = ".eclume-sync.json";
 
 const VERSION: u32 = 1;
 
+/// A versão do layout dos arquivos (pasta e nome). Sobe quando o desenho muda: um manifesto de
+/// outra versão faz o próximo ciclo refazer tudo, e os arquivos do desenho antigo se vão.
+pub const LAYOUT: u32 = 2;
+
 /// O que foi escrito para uma gravação.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
@@ -36,6 +40,9 @@ pub struct Manifest {
     /// SHA-256 do `AGENTS.md` que o app escreveu.
     #[serde(default)]
     pub agents_sha256: Option<String>,
+    /// O layout com que os arquivos foram escritos; ausente (manifesto antigo) é `0`.
+    #[serde(default)]
+    pub layout: u32,
     /// O maior `updated_at` já espelhado: o `?since=` do próximo ciclo. Vive aqui, e não no
     /// estado do app, para que apagar a pasta (ou trocá-la) refaça tudo.
     #[serde(default)]
@@ -48,6 +55,7 @@ impl Default for Manifest {
             version: VERSION,
             recordings: BTreeMap::new(),
             agents_sha256: None,
+            layout: 0,
             since: None,
         }
     }
