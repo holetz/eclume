@@ -292,6 +292,8 @@ desce; abaixo de 56rem, os campos também):
   transferência `text/html` e `text/plain` (`copy-summary.ts`, o mesmo `react-markdown`, carregado
   sob demanda): o título da gravação e os de seção saem em negrito, sem `#`, porque o Teams não
   guarda o estilo de título ao colar; sem `ClipboardItem` cai no texto sem as hashtags dos títulos.
+  O `ClipboardItem` nasce ainda no clique, com o conteúdo como promessa de `Blob`, porque o Safari
+  recusa uma escrita na área de transferência começada depois de um `await`.
 - **Edição** (`SummaryEditor`): o Markdown num `textarea` na tipografia do `.doc`, salvo com
   `base_version` = a versão aberta. O 409 `summary_changed` guarda o rascunho e oferece "Ver a
   versão N" (a comparação do rascunho com a nova) e "Salvar sobre a versão N". "Voltar à gerada"
