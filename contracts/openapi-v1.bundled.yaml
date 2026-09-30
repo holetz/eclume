@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.7.0
+  version: 2.8.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -64,6 +64,8 @@ tags:
   description: Resultado de testar a regra de um campo ou um tipo de agenda em rascunho.
 - name: summaries
   description: Resumos gerados por agente com as instruções de um tipo de agenda.
+- name: base-chat
+  description: Perguntas em linguagem natural sobre o conjunto das gravações do usuário.
 - name: admin
   description: Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
     admin (`adminSessionCookie`); nenhuma credencial de usuário alcança estas rotas.
@@ -371,7 +373,7 @@ paths:
 
         `kind: device` com `recordings:read`, `recordings:write`, desde a 2.6.0 `summaries:read`
 
-        (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.7.0, `transcripts:read` (a
+        (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.8.0, `transcripts:read` (a
 
         pasta sincronizada do desktop lê transcrições), sem validade e revogável
 
@@ -2487,6 +2489,90 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/base-chat:
+    post:
+      tags:
+      - base-chat
+      operationId: askBaseChat
+      summary: Perguntar sobre a base de gravações
+      description: 'Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}`
+        até
+
+        `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
+
+        quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
+
+        cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BaseChatRequest'
+            examples:
+              pergunta:
+                $ref: '#/components/examples/BaseChatRequest'
+      responses:
+        '202':
+          description: Pergunta na fila.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseChat'
+              examples:
+                fila:
+                  $ref: '#/components/examples/BaseChatQueued'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/base-chat/{chat_id}:
+    parameters:
+    - $ref: '#/components/parameters/BaseChatId'
+    get:
+      tags:
+      - base-chat
+      operationId: getBaseChat
+      summary: Uma pergunta e a resposta
+      description: 'Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
+
+        que o agente de fato consultou e em que a resposta se apoia.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - summaries:read
+      responses:
+        '200':
+          description: O estado e, pronta, a resposta com as fontes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseChat'
+              examples:
+                pronta:
+                  $ref: '#/components/examples/BaseChatDone'
+                falha:
+                  $ref: '#/components/examples/BaseChatFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/people:
     get:
       tags:
@@ -3546,7 +3632,7 @@ components:
     Since:
       name: since
       in: query
-      description: 'Só itens com `updated_at >= since` (inclusivo). Desde a 2.7.0, um resumo que termina
+      description: 'Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina
         ou é
 
         editado também move o `updated_at` da gravação e da transcrição a que pertence.
@@ -3633,6 +3719,13 @@ components:
         format: uuid
     PreviewId:
       name: preview_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BaseChatId:
+      name: chat_id
       in: path
       required: true
       schema:
@@ -6110,6 +6203,99 @@ components:
               message:
                 type: string
           - type: 'null'
+    BaseChatRequest:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        history:
+          description: As últimas mensagens da conversa, em ordem; o server não guarda o histórico.
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/BaseChatTurn'
+    BaseChatTurn:
+      type: object
+      required:
+      - role
+      - content
+      properties:
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    BaseChatSource:
+      type: object
+      required:
+      - recording_id
+      - title
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+    BaseChat:
+      type: object
+      required:
+      - id
+      - status
+      - answer
+      - sources
+      - queries
+      - model
+      - error
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - done
+          - failed
+        answer:
+          description: 'Com `status: done`: a resposta em Markdown.'
+          type:
+          - string
+          - 'null'
+        sources:
+          description: As gravações consultadas em que a resposta se apoia.
+          type: array
+          items:
+            $ref: '#/components/schemas/BaseChatSource'
+        queries:
+          description: Quantas consultas à base o agente fez.
+          type: integer
+          minimum: 0
+        model:
+          type:
+          - string
+          - 'null'
+        error:
+          description: 'Com `status: failed`; `no_provider` quando a finalidade `chat` não tem provider.'
+          oneOf:
+          - type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+          - type: 'null'
     AgentProviderKind:
       type: string
       enum:
@@ -7828,7 +8014,7 @@ components:
         mcp_url: https://192.168.15.199:8443/mcp
         ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
         version: 0.1.0
-        contract_version: 2.7.0
+        contract_version: 2.8.0
     DeviceLoginRequest:
       summary: Notebook entrando com e-mail e senha
       value:
@@ -7867,7 +8053,7 @@ components:
           mcp_url: https://192.168.15.199:8443/mcp
           ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
           version: 0.1.0
-          contract_version: 2.7.0
+          contract_version: 2.8.0
     PairingCodeCreated:
       summary: Código novo com o link do QR
       value:
@@ -10412,6 +10598,50 @@ components:
 
             Um item por combinado, com prazo quando dito.'
         recording_id: 01928f3a-1c00-7a00-8000-000000000201
+    BaseChatRequest:
+      summary: Uma pergunta com duas mensagens de histórico
+      value:
+        message: Qual orçamento ficou combinado com a Serra Azul?
+        history:
+        - role: user
+          content: Quais reuniões tive esta semana com clientes?
+        - role: assistant
+          content: 'Duas: o kickoff da Serra Azul e a revisão do contrato da Vale Verde.'
+    BaseChatQueued:
+      summary: Pergunta na fila
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000f01
+        status: queued
+        answer: null
+        sources: []
+        queries: 0
+        model: null
+        error: null
+    BaseChatDone:
+      summary: Resposta com a gravação em que se apoia
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000f01
+        status: done
+        answer: Ficou combinado um orçamento de **R$ 40 mil** para o programa de lideranças, com prazo
+          em março.
+        sources:
+        - recording_id: 01928f3a-1c00-7a00-8000-000000000201
+          title: Kickoff Serra Azul
+        queries: 2
+        model: claude-sonnet-5-5
+        error: null
+    BaseChatFailed:
+      summary: Sem provider para o chat
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000f02
+        status: failed
+        answer: null
+        sources: []
+        queries: 0
+        model: null
+        error:
+          code: no_provider
+          message: Nenhum provider habilitado para o chat.
     PreviewFieldRule:
       summary: A regra em duas gravações
       value:

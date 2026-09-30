@@ -1758,7 +1758,7 @@ mod tests {
     fn configuracoes_trazem_a_politica_de_fabrica() {
         let (state, _dir) = state("fabrica");
         let apps = state.settings().unwrap().apps;
-        assert_eq!(apps.len(), 7);
+        assert_eq!(apps.len(), 8);
         let outro = apps.iter().find(|a| a.app == AppKey::Outro).unwrap();
         assert_eq!(outro.default_policy, Policy::Ignore);
         let teams = apps.iter().find(|a| a.app == AppKey::Teams).unwrap();

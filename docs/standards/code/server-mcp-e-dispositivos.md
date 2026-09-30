@@ -93,7 +93,7 @@ dele. O prefixo segue `eclp_`, que o `PatStore` do desktop valida.
   lista dos tipos de agenda, que `GET /agenda-types` aceita com `recordings:read` desde a 2.4.0)
   e, desde a 2.6.0, `summaries:read` — o app desktop lê o resumo pronto das gravações que enviou
   para avisar com "Copiar". A migration `017_dispositivo_le_resumo` estendeu os tokens já
-  emitidos. Desde a 2.7.0 também `transcripts:read`, para a pasta sincronizada do desktop (resumos
+  emitidos. Desde a 2.8.0 também `transcripts:read`, para a pasta sincronizada do desktop (resumos
   em Markdown e transcrições em JSONL, [desktop-pasta-sincronizada.md](desktop-pasta-sincronizada.md)):
   a migration `018_dispositivo_le_transcricao` estendeu os tokens já emitidos. Com ele o dispositivo também lê o resto de `/agenda-types`; escrever resumos e tipos
   de agenda segue pedindo `summaries:write`, que ele não tem. Sem validade. Aparece em `GET /tokens?kind=device` ("App móvel", "App desktop"), e

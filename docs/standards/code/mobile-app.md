@@ -4,7 +4,7 @@ title: App móvel
 description: O app móvel do eclume (Tauri 2, Android) é um microfone portátil — UI React sobre o DS, comandos Tauri e o evento estado sobre o eclume-mobile-core (os crates de gravação e sync do desktop), e o plugin nativo Kotlin pela ponte JNI (serviço em primeiro plano do tipo microfone, notificação, NsdManager, Wi-Fi não medido, WorkManager, instalador); a conexão pelos três caminhos com a CA fixada, a rede do eclume, a sessão com tempo de áudio e marcadores, o sync, as telas e a prova no emulador.
 resource: mobile/**
 tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
-timestamp: 2026-09-27
+timestamp: 2026-09-29
 audience: both
 authority: current
 source: holetz/eclume#41
@@ -203,5 +203,12 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   recuperação depois de `am force-stop` (a gravação fica salva, `interrompida` ou já
   `sincronizada`). Parte do Wi‑Fi ligado, que o AVD guarda de uma prova que caiu no meio. A
   limpeza apaga as gravações da prova e revoga o token do aparelho.
-- **Passos humanos:** o aceite em aparelho real (mDNS no Wi‑Fi real, QR da web, 10 min no bolso,
-  fabricantes com economia de bateria agressiva) e tudo de iOS.
+- **Aparelho real:** o celular, com a depuração USB ligada, vai numa porta USB do host (cabo de
+  dados, modo MTP). O APK de depuração da prova só traz `x86_64`; para o aparelho, compile
+  `npm --prefix mobile run tauri -- android build --debug --apk --target aarch64` no host e
+  instale com `adb -s <serial> install -r` (mantém os dados). Esse APK é assinado com a chave de
+  depuração: o de release não instala por cima, e trocar exige desinstalar, o que apaga as
+  gravações que ainda não subiram. O aceite de 29/09/2026 (Galaxy M34, Android 16) passou pelo
+  mDNS, pela entrada, pela gravação com a tela bloqueada e pelo sync ao voltar ao Wi‑Fi.
+- **Passos humanos:** o aceite em cada aparelho novo, sobretudo de fabricantes com economia de
+  bateria agressiva, e tudo de iOS.

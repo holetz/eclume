@@ -15,6 +15,7 @@ const APPS = {
   meet: ["Google Meet", "Aba do navegador"],
   webex: ["Webex", "App ou aba do navegador"],
   slack: ["Slack", "Chamadas"],
+  whatsapp: ["WhatsApp", "App ou aba do WhatsApp Web"],
   navegador: ["Navegador", "Microfone em uso, reunião não reconhecida"],
   outro: ["Outro app", "Ditado, gravadores de voz, jogos"],
 };

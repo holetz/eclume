@@ -39,13 +39,14 @@ nome vem só do último componente do id (no Windows, o id é o caminho inteiro)
 `cargo run -p eclume-detect --example sinais -- 10` imprime os retratos e a classificação para
 diagnóstico de campo.
 
-**Classificação** (`AppKey`: `teams`, `zoom`, `meet`, `webex`, `slack`, `navegador`, `outro`):
+**Classificação** (`AppKey`: `teams`, `zoom`, `meet`, `webex`, `slack`, `whatsapp`, `navegador`, `outro`):
 
 1. Mic livre → nenhuma reunião, com qualquer app aberto.
 2. App de reunião nativo usando o mic (binário, nome ou bundle com `teams`, `zoom`, `webex`,
-   `slack`...) → esse app.
+   `slack`, `whatsapp`...) → esse app.
 3. Navegador usando o mic → o título de janela decide (`meet.google.com`/`Meet - ` → `meet`,
-   `Microsoft Teams` → `teams`, `Zoom Meeting` → `zoom`); sem título conhecido, `navegador`.
+   `Microsoft Teams` → `teams`, `Zoom Meeting` → `zoom`, `WhatsApp` → `whatsapp`, este por último
+   para não vencer uma reunião aberta em outra aba); sem título conhecido, `navegador`.
 4. Mic ocupado sem dono identificado → processo de reunião em execução (`CptHost` do Zoom,
    Teams) ou `outro`.
 5. Qualquer outro usuário do mic → `outro`.
@@ -80,7 +81,7 @@ decisão do usuário, então `auto` nunca é padrão.
   PowerShell em dev) no Windows, `mac-notification-sys` no macOS — e fica também no menu da
   bandeja e na janela, porque o SO pode suprimir a notificação.
 - Com a detecção desligada, o detector só acompanha até o fim a reunião que já tinha visto.
-- **Onde muda:** Configurações · Reuniões tem o `.switch` "Detectar reuniões" e os 7 apps, cada um
+- **Onde muda:** Configurações · Reuniões tem o `.switch` "Detectar reuniões" e os 8 apps, cada um
   com o `.seg` Gravar, Perguntar e Ignorar e o subtítulo do DS, e "Restaurar padrões" volta a
   `DetectionConfig::default()`. Durante uma gravação automática, a principal mostra o `.seg`
   "Reuniões no <app>", que muda a política daquele app ali mesmo.

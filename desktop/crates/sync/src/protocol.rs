@@ -85,7 +85,7 @@ pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
 }
 
 /// O servidor recusou porque o token não tem o escopo da operação (403 `insufficient_scope`): um
-/// servidor anterior ao contrato 2.7.0, ou um token que a migração ainda não alcançou. Quem chama
+/// servidor anterior ao contrato 2.8.0, ou um token que a migração ainda não alcançou. Quem chama
 /// distingue este erro (`downcast_ref`) de uma falha qualquer para degradar em vez de desistir.
 #[derive(Debug)]
 pub struct MissingScope {
@@ -301,7 +301,7 @@ impl Client {
     }
 
     /// As gravações da biblioteca: `GET /api/v1/recordings`, só as com `updated_at >= since`
-    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.7.0).
+    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.8.0).
     pub fn library(&self, since: Option<&str>) -> Result<Vec<api::LibraryRecording>> {
         let query: Vec<(&str, &str)> = since.map(|value| ("since", value)).into_iter().collect();
         self.paged(
@@ -337,7 +337,7 @@ impl Client {
     }
 
     /// A transcrição de uma gravação: `GET /api/v1/transcripts?recording_id=` (`transcripts:read`,
-    /// que a credencial de dispositivo tem desde o contrato 2.7.0). `Ok(None)` sem transcrição.
+    /// que a credencial de dispositivo tem desde o contrato 2.8.0). `Ok(None)` sem transcrição.
     pub fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
         let transcripts = self.paged(
             "falha ao ler a transcrição",

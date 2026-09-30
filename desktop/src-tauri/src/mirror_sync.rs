@@ -257,7 +257,7 @@ pub fn status_note(report: &Report) -> Option<String> {
     if report.transcripts_denied {
         notes.push(
             "Resumos sincronizados, mas o servidor ainda não permite que o app leia transcrições \
-             (precisa do contrato 2.7.0): atualize o servidor"
+             (precisa do contrato 2.8.0): atualize o servidor"
                 .to_string(),
         );
     }
@@ -554,7 +554,7 @@ mod tests {
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
-        // O servidor move `updated_at` quando o resumo muda (contrato 2.7.0).
+        // O servidor move `updated_at` quando o resumo muda (contrato 2.8.0).
         fake.summaries
             .borrow_mut()
             .insert("bbbbbbbb-2".into(), summary(2));
@@ -658,7 +658,7 @@ mod tests {
         // O cursor avança (não se relê tudo a cada minuto) e a aba explica o que faltou.
         assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
         let nota = status_note(&report).unwrap();
-        assert!(nota.contains("transcrições") && nota.contains("contrato 2.7.0"));
+        assert!(nota.contains("transcrições") && nota.contains("contrato 2.8.0"));
         assert!(!nota.contains("não puderam ser lidas"));
 
         // O servidor é atualizado: a varredura completa as transcrições que faltavam.
@@ -696,7 +696,7 @@ mod tests {
             ..Report::default()
         };
         let nota = status_note(&ambos).unwrap();
-        assert!(nota.contains("contrato 2.7.0") && nota.contains(" · 1 gravações"));
+        assert!(nota.contains("contrato 2.8.0") && nota.contains(" · 1 gravações"));
     }
 
     #[test]

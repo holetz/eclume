@@ -95,6 +95,15 @@ class Provider(Protocol):
 
     config: ProviderConfig
 
-    async def complete(self, system: str, prompt: str) -> Completion:
-        """Uma chamada: instruções de sistema e o prompt do usuário → texto."""
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
+        """Uma chamada: instruções de sistema e o prompt do usuário → texto.
+
+        `context` é o material que várias chamadas da mesma gravação repetem (a transcrição): vai
+        antes do `prompt` na mensagem do usuário e, onde o provider cacheia prefixos, é o bloco marcado.
+        """
         ...
+
+
+def with_context(context: str, prompt: str) -> str:
+    """A mensagem do usuário dos providers sem marcação de cache: o contexto e depois o prompt."""
+    return f"{context}\n\n{prompt}" if context else prompt

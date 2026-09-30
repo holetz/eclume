@@ -18,6 +18,9 @@ import partUrls from '../../../contracts/fixtures/part-urls.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
 import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
 import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
+import baseChatDone from '../../../contracts/fixtures/base-chat-done.json'
+import baseChatFailed from '../../../contracts/fixtures/base-chat-failed.json'
+import baseChatQueued from '../../../contracts/fixtures/base-chat-queued.json'
 import person from '../../../contracts/fixtures/person.json'
 import recordingFieldValues from '../../../contracts/fixtures/recording-field-values.json'
 import recordingPage from '../../../contracts/fixtures/recording-page.json'
@@ -79,6 +82,9 @@ export const fixtures = {
   summaryChatExchangeQueued: fresh<Schemas['SummaryChatExchange']>(summaryChatExchangeQueued),
   summaryChatMessageDone: fresh<Schemas['SummaryChatMessage']>(summaryChatMessageDone),
   agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
+  baseChatQueued: fresh<Schemas['BaseChat']>(baseChatQueued),
+  baseChatDone: fresh<Schemas['BaseChat']>(baseChatDone),
+  baseChatFailed: fresh<Schemas['BaseChat']>(baseChatFailed),
   previewFieldRule: fresh<Schemas['Preview']>(previewFieldRule),
   previewAgendaType: fresh<Schemas['Preview']>(previewAgendaType),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),

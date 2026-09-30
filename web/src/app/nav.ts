@@ -18,6 +18,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
+  { to: '/perguntas', label: 'Perguntas', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
   // A coleção convive com a tag e fica em Organizar (holetz/eclume#38).
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },

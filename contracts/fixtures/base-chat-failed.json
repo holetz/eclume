@@ -1,0 +1,12 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000f02",
+  "status": "failed",
+  "answer": null,
+  "sources": [],
+  "queries": 0,
+  "model": null,
+  "error": {
+    "code": "no_provider",
+    "message": "Nenhum provider habilitado para o chat."
+  }
+}

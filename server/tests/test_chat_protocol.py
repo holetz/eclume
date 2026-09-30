@@ -57,7 +57,7 @@ class Scripted:
     config: ProviderConfig = field(default_factory=lambda: ProviderConfig(kind="claude-cli", model="sonnet"))
     prompts: list[tuple[str, str]] = field(default_factory=list)
 
-    async def complete(self, system: str, prompt: str) -> Completion:
+    async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:  # noqa: ARG002
         """A próxima resposta do roteiro."""
         self.prompts.append((system, prompt))
         return Completion(text=self.replies.pop(0), model="sonnet-fake")

@@ -12,6 +12,7 @@ from eclume_server import fields as fields_module
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
+from eclume_server.agents.prompting import SHARED_SYSTEM
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 
@@ -63,7 +64,8 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
     recording = _process(user, services, agents)
 
     ((config, system, prompt),) = agents.of("fields")
-    assert (config.name, system) == ("Claude (servidor)", FIELDS_SYSTEM)
+    assert (config.name, system) == ("Claude (servidor)", SHARED_SYSTEM)
+    assert FIELDS_SYSTEM in prompt
     assert "- cliente (escolha, opções: Serra Azul | Vale Verde): A empresa." in prompt
     assert "- pendencias (lista): O que ficou para depois." in prompt
     assert "manual" not in prompt

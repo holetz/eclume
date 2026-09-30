@@ -76,6 +76,7 @@
           ["meet", "Google Meet", "ask"],
           ["webex", "Webex", "ask"],
           ["slack", "Slack", "ask"],
+          ["whatsapp", "WhatsApp", "ask"],
           ["navegador", "navegador", "ask"],
           ["outro", "outro app", "ignore"],
         ].map(([app, label, policy]) => ({ app, label, policy, default_policy: app === "outro" ? "ignore" : "ask" })),
