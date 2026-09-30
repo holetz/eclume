@@ -1072,7 +1072,8 @@ export interface paths {
         post?: never;
         /**
          * Excluir um tipo de agenda
-         * @description As gravações que o usavam ficam sem tipo; os resumos ficam.
+         * @description As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
+         *     ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
          */
         delete: operations["deleteAgendaType"];
         options?: never;
@@ -2219,8 +2220,11 @@ export interface components {
             updated_at: string;
         };
         PipelineStep: {
-            /** @enum {string} */
-            step: "received" | "preprocessing" | "transcription" | "fields" | "agenda_type" | "summary";
+            /**
+             * @description Na ordem da cadeia; o tipo de agenda vem antes dos campos.
+             * @enum {string}
+             */
+            step: "received" | "preprocessing" | "transcription" | "agenda_type" | "fields" | "summary";
             /** @enum {string} */
             state: "pending" | "active" | "done" | "failed" | "skipped";
             /** Format: date-time */
@@ -2476,6 +2480,11 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern: string | null;
+            /**
+             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
+             *     padrão da conta.
+             */
+            title_instructions: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2484,6 +2493,11 @@ export interface components {
             summary_instructions: string;
             /** @description Ordem na lista do usuário. */
             position: number;
+            /**
+             * @description O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança, sem
+             *     outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+             */
+            fallback: boolean;
         };
         /** @description O conteúdo de um tipo de agenda, salvo ou em rascunho. */
         AgendaTypeDraft: {
@@ -2494,6 +2508,8 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern?: string | null;
+            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            title_instructions?: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify?: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2509,6 +2525,8 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern?: string | null;
+            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            title_instructions?: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify?: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2526,6 +2544,8 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern?: string | null;
+            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            title_instructions?: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify?: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2548,6 +2568,11 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern: string | null;
+            /**
+             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
+             *     padrão da conta.
+             */
+            title_instructions: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2567,6 +2592,8 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern?: string | null;
+            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            title_instructions?: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify?: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2586,6 +2613,8 @@ export interface components {
              *     título automático fica como está.
              */
             title_pattern?: string | null;
+            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            title_instructions?: string;
             /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
             identify?: string;
             /** @description Tags somadas às automáticas quando o tipo é aplicado. */
@@ -2700,6 +2729,11 @@ export interface components {
              * @description Uma gravação transcrita do usuário.
              */
             recording_id: string;
+            /**
+             * Format: uuid
+             * @description O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem ele, sai o de mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.
+             */
+            agenda_type_id?: string | null;
         };
         FieldPreviewItem: {
             /** Format: uuid */
@@ -2713,8 +2747,10 @@ export interface components {
             recording_title: string;
             /** @description A detecção escolheu o rascunho. */
             detected: boolean;
-            /** @description O tipo que a detecção escolheu (o rascunho ou um dos salvos). */
+            /** @description O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão). */
             detected_type_name: string;
+            /** @description Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo padrão. */
+            fallback: boolean;
             confidence: number | null;
             /** @description O título que o rascunho aplicaria. */
             title: string;
@@ -3247,7 +3283,7 @@ export interface components {
                  * @description A etapa do pipeline que falhou (holetz/eclume#33).
                  * @enum {string}
                  */
-                step?: "received" | "preprocessing" | "transcription" | "fields" | "agenda_type" | "summary";
+                step?: "received" | "preprocessing" | "transcription" | "agenda_type" | "fields" | "summary";
                 /** Format: uuid */
                 recording_id: string;
                 stage: string | null;
@@ -5317,6 +5353,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateAgendaType: {

@@ -15,7 +15,10 @@ import {
 import { Switch } from './Switch'
 
 type AgendaType = Schemas['DefaultAgendaType']
-type Draft = Pick<AgendaType, 'name' | 'title_pattern' | 'identify' | 'default_tags' | 'summary_instructions'> & {
+type Draft = Pick<
+  AgendaType,
+  'name' | 'title_pattern' | 'title_instructions' | 'identify' | 'default_tags' | 'summary_instructions'
+> & {
   include_for_new_users: boolean
 }
 
@@ -24,6 +27,7 @@ const NEW = 'novo'
 const EMPTY: Draft = {
   name: '',
   title_pattern: null,
+  title_instructions: '',
   identify: '',
   default_tags: [],
   summary_instructions: '',
@@ -31,8 +35,9 @@ const EMPTY: Draft = {
 }
 
 function draftOf(type: AgendaType): Draft {
-  const { name, title_pattern, identify, default_tags, summary_instructions, include_for_new_users } = type
-  return { name, title_pattern, identify, default_tags, summary_instructions, include_for_new_users }
+  const { name, title_pattern, title_instructions, identify, default_tags, summary_instructions, include_for_new_users } =
+    type
+  return { name, title_pattern, title_instructions, identify, default_tags, summary_instructions, include_for_new_users }
 }
 
 /** O que mudou no rascunho, para o PATCH mandar só isso. */
@@ -167,7 +172,14 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
   const [draft, setDraft] = useState<Draft>(saved)
   const [tag, setTag] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const ids = { name: useId(), title: useId(), identify: useId(), tags: useId(), instructions: useId() }
+  const ids = {
+    name: useId(),
+    title: useId(),
+    titleRule: useId(),
+    identify: useId(),
+    tags: useId(),
+    instructions: useId(),
+  }
   // Na edição, "Incluir" grava na hora, como na lista; no tipo novo, vai no POST.
   const effective = type ? { ...draft, include_for_new_users: type.include_for_new_users } : draft
   const changes = changesOf(effective, saved)
@@ -254,6 +266,20 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
             Marcadores: {'{assunto}'}, {'{data}'}, {'{tipo}'}. Vazio: o título automático.
           </span>
         </div>
+      </div>
+      <div className="field">
+        <label htmlFor={ids.titleRule}>Como escrever o assunto</label>
+        <textarea
+          id={ids.titleRule}
+          className={`input ${styles.identify}`}
+          maxLength={4000}
+          value={draft.title_instructions}
+          aria-describedby={`${ids.titleRule}-dica`}
+          onChange={(e) => set('title_instructions', e.target.value)}
+        />
+        <span id={`${ids.titleRule}-dica`} className="field-hint">
+          A regra do {'{assunto}'} do título. Vazia, vale a do tipo padrão da conta.
+        </span>
       </div>
       <div className="field">
         <label htmlFor={ids.identify}>Como identificar</label>

@@ -8,7 +8,7 @@ ordem: 1
 atualizado: 2026-09-27
 ---
 Campos são as informações que você quer em toda gravação, preenchidas pelo agente depois da
-transcrição. Eles ficam em [Campos e regras](/config/campos).
+transcrição. Eles ficam em [Campos personalizados](/config/campos).
 
 ## Os campos embutidos
 

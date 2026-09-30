@@ -56,7 +56,7 @@ describe('painel de campos', () => {
     expect(within(speakers).getByText('Mariana Couto')).toHaveClass('speaker', 'speaker-1')
     const legacy = prop(section, 'Dados anteriores')
     expect(legacy).toHaveTextContent('Cliente: Metalúrgica Serra Azul')
-    expect(legacy).toHaveTextContent('Da organização antiga; crie um campo em Campos e regras para usar de novo.')
+    expect(legacy).toHaveTextContent('Da organização antiga; crie um campo em Campos personalizados para usar de novo.')
   })
 
   it('aceita um valor e aceita tudo', async () => {

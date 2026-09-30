@@ -206,3 +206,13 @@
   gap: var(--space-1);
   justify-items: start;
 }
+
+/* O selo "Padrão" do tipo de reserva, ao lado do nome na lista e no painel. */
+.badge {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+
+.fallbackNote {
+  margin: 0;
+}

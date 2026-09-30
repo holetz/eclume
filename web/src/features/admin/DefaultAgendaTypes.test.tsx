@@ -123,6 +123,7 @@ describe('Tipos de agenda padrão', () => {
     expect(await bodyOf(http, 'POST /api/v1/admin/default-agenda-types', 1)).toEqual({
       name: 'Nota de voz',
       title_pattern: null,
+      title_instructions: '',
       identify: '',
       default_tags: [],
       summary_instructions: 'Texto limpo.',

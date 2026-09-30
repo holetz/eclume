@@ -28,4 +28,4 @@ O preenchimento automático nunca sobrescreve um valor **editado** ou **aceito**
 gravação ou mudar a regra do campo recalcula só os valores automáticos. O que você conferiu fica.
 
 Para mudar o que o agente preenche, ajuste a regra do campo em
-[Campos e regras](/config/campos): veja [Escreva uma regra que preenche um campo](/ajuda/escrever-uma-regra).
+[Campos personalizados](/config/campos): veja [Escreva uma regra que preenche um campo](/ajuda/escrever-uma-regra).

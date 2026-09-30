@@ -11,7 +11,7 @@ atualizado: 2026-09-27
 
 ## Como testar
 
-1. Em [Campos e regras](/config/campos), abra o campo e ajuste a regra.
+1. Em [Campos personalizados](/config/campos), abra o campo e ajuste a regra.
 2. Use **Testar numa gravação**.
 3. Espere o resultado: leva de alguns segundos a um minuto, conforme o agente do servidor.
 
