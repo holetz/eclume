@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   workHours: 'eclume-expediente',
   density: 'eclume-densidade',
   motion: 'eclume-movimento',
+  peopleColumns: 'eclume-pessoas-colunas',
 } as const
 
 export function readStored(key: string): string | null {

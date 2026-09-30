@@ -59,12 +59,7 @@ function PersonDetail({ person }: { person: Person }) {
           </button>
         }
       />
-      {(person.email || person.notes) && (
-        <div className={styles.identity}>
-          {person.email && <p className="mono text-muted">{person.email}</p>}
-          {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
-        </div>
-      )}
+      <PersonIdentity person={person} />
       <PersonStats person={person} voiceprint={voiceprint.data} />
       <PersonTabs person={person} />
       {dialog === 'editar' && (
@@ -72,6 +67,29 @@ function PersonDetail({ person }: { person: Person }) {
       )}
       {dialog === 'excluir' && <DeleteDialog person={person} onClose={() => setDialog(null)} />}
     </>
+  )
+}
+
+/** O cadastro: onde a pessoa trabalha, as tags, os contatos e as notas; só o que foi preenchido. */
+function PersonIdentity({ person }: { person: Person }) {
+  const role = [person.job_title, person.department, person.company].filter(Boolean).join(' · ')
+  const contacts = [person.email, person.phone].filter(Boolean).join(' · ')
+  if (!role && !contacts && !person.notes && person.tags.length === 0) return null
+  return (
+    <div className={styles.identity}>
+      {role && <p>{role}</p>}
+      {person.tags.length > 0 && (
+        <ul className={styles.personTags} aria-label="Tags da pessoa">
+          {person.tags.map((tag) => (
+            <li key={tag} className="tag tag-neutral">
+              {tag}
+            </li>
+          ))}
+        </ul>
+      )}
+      {contacts && <p className="mono text-muted">{contacts}</p>}
+      {person.notes && <p className={`text-muted ${styles.notes}`}>{person.notes}</p>}
+    </div>
   )
 }
 
