@@ -73,6 +73,14 @@ export function recordingAt(recordingId: string, ms: number): string {
   return `/gravacoes/${recordingId}?t=${Math.max(0, Math.floor(ms))}`
 }
 
+/** Organizações, áreas e tags de pessoa em uso: sugestões do cadastro e o filtro Participantes. */
+export function usePersonFacets() {
+  return useQuery({
+    queryKey: [...PEOPLE_KEY, 'facets'],
+    queryFn: () => unwrap(api.GET('/api/v1/people/facets')),
+  })
+}
+
 /** Até 200 pessoas em ordem alfabética, para escolher numa lista (filtro da busca). */
 export function usePeopleOptions() {
   return useQuery({

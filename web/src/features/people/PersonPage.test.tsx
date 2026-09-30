@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
@@ -95,6 +95,35 @@ describe('página da pessoa', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Rafael Lima Souza' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await http.requests('PATCH /api/v1/people/:id')[0].json()).toMatchObject({ name: 'Rafael Lima Souza' })
+  })
+
+  it('mostra e edita o cadastro: organização, área, cargo e tags da pessoa', async () => {
+    let current = fixtures.person()
+    const http = mockPerson({
+      'GET /api/v1/people/:id': () => current,
+      'GET /api/v1/people/facets': () => ({ organizations: [{ value: 'Agro Sul', count: 2 }], departments: [], tags: [] }),
+      'PATCH /api/v1/people/:id': async (request) => (current = { ...current, ...((await request.json()) as object) }),
+    })
+    renderApp(`/pessoas/${RAFAEL}`)
+    expect(await screen.findByText('Gerente de RH · Recursos Humanos · Metalúrgica Serra Azul')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Tags da pessoa' })).getByText('cliente')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    const dialog = screen.getByRole('dialog', { name: 'Editar pessoa' })
+    const organization = within(dialog).getByLabelText('Organização')
+    expect(organization).toHaveValue('Metalúrgica Serra Azul')
+    await userEvent.clear(organization)
+    await userEvent.type(organization, 'Agro Sul')
+    await userEvent.clear(within(dialog).getByLabelText('Área'))
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Tags da pessoa' }), 'diretoria{Enter}')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(http.requests('PATCH /api/v1/people/:id')).toHaveLength(1))
+    expect(await http.requests('PATCH /api/v1/people/:id')[0].json()).toMatchObject({
+      organization: 'Agro Sul',
+      department: null,
+      job_title: 'Gerente de RH',
+      tags: ['cliente', 'diretoria'],
+    })
   })
 
   it('exclui pelo diálogo de edição, com confirmação', async () => {
