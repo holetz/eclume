@@ -22,8 +22,8 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
       'Áudio recebido',
       'Pré-processamento',
       'Transcrição',
-      'Campos preenchidos',
       'Tipo de agenda',
+      'Campos preenchidos',
       'Resumo pronto',
     ])
     expect(steps.every((step) => step.dataset.state === 'done')).toBe(true)
@@ -53,7 +53,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     renderApp(`/gravacoes/${RECORDING}`)
     const skipped = await screen.findByText('Tipo de agenda', { selector: 'li' })
     expect(skipped).toHaveAttribute('data-state', 'skipped')
-    expect(skipped).toHaveAttribute('title', 'nenhum tipo de agenda cadastrado')
+    expect(skipped).toHaveAttribute('title', 'só o tipo padrão está cadastrado: ficou ele')
     const failed = screen.getByText(/^Resumo/, { selector: 'li' })
     expect(failed).toHaveAttribute('data-state', 'failed')
     expect(failed).toHaveTextContent('(O agente não respondeu a tempo.)')

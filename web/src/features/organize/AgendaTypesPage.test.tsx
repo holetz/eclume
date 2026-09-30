@@ -9,6 +9,7 @@ import { renderApp } from '../../test/render'
 afterEach(() => vi.unstubAllGlobals())
 
 const UM_A_UM = '01928f3a-1c00-7a00-8000-000000000902'
+const EQUIPE = '01928f3a-1c00-7a00-8000-000000000901'
 
 /** API de tipos de agenda com estado, como o servidor. */
 function mockAgendaTypes(overrides: Record<string, Parameters<typeof mockFetch>[0][string]> = {}) {
@@ -18,10 +19,12 @@ function mockAgendaTypes(overrides: Record<string, Parameters<typeof mockFetch>[
       id: '01928f3a-1c00-7a00-8000-000000000903',
       name: 'Nota de voz',
       title_pattern: null,
+      title_instructions: '',
       identify: 'Uma pessoa só, falando para si.',
       default_tags: [],
       summary_instructions: 'Reescreva o que foi dito como texto limpo, em parágrafos curtos, sem inventar nada que não foi dito.',
       position: 3,
+      fallback: false,
     },
   ]
   return mockFetch({
@@ -33,9 +36,11 @@ function mockAgendaTypes(overrides: Record<string, Parameters<typeof mockFetch>[
       const created: Schemas['AgendaType'] = {
         id: 'novo-tipo',
         title_pattern: null,
+        title_instructions: '',
         identify: '',
         default_tags: [],
         position: items.length + 1,
+        fallback: false,
         ...body,
       }
       items = [...items, created]
@@ -59,9 +64,25 @@ const row = (name: string) =>
   within(screen.getByRole('list', { name: 'Tipos de agenda' })).getByRole('button', { name }).closest('li')!
 
 describe('tipos de agenda', () => {
-  it('lista os tipos com o resumo das instruções e abre o primeiro no painel', async () => {
+  it('abre o tipo padrão, no topo com o selo, sem Excluir e sem Como identificar', async () => {
     mockAgendaTypes()
     renderApp('/config/agendas')
+    await list()
+    const first = within(screen.getByRole('list', { name: 'Tipos de agenda' })).getAllByRole('listitem')[0]
+    expect(within(first).getByRole('button', { name: /^Geral/ })).toHaveAttribute('aria-current', 'true')
+    expect(within(first).getByText('Padrão')).toHaveClass('badge')
+    const panel = screen.getByRole('form', { name: 'Editar Geral' })
+    expect(within(panel).queryByRole('button', { name: 'Excluir tipo' })).not.toBeInTheDocument()
+    expect(within(panel).queryByLabelText('Como identificar')).not.toBeInTheDocument()
+    expect(within(panel).getByText(/nenhum outro tipo se encaixa com confiança/)).toBeInTheDocument()
+    expect(within(panel).getByLabelText('Como escrever o assunto')).toHaveValue(
+      'Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data nem nomes de pessoas.',
+    )
+  })
+
+  it('lista os tipos com o resumo das instruções e abre o escolhido no painel', async () => {
+    mockAgendaTypes()
+    renderApp(`/config/agendas?tipo=${EQUIPE}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Tipos de agenda' })).toBeInTheDocument()
     expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
     await list()
@@ -74,7 +95,6 @@ describe('tipos de agenda', () => {
 
     const panel = screen.getByRole('form', { name: 'Editar Reunião de equipe' })
     expect(within(panel).getByRole('textbox', { name: /^Título da gravação/ })).toHaveValue('Reunião de equipe · {assunto}')
-    expect(within(panel).getByText('· substitui a regra do título em Campos e regras')).toBeInTheDocument()
     expect(within(panel).getByLabelText('Como identificar')).toHaveAccessibleDescription(
       'Depois da transcrição, um agente lê isto e escolhe o tipo.',
     )
@@ -105,6 +125,8 @@ describe('tipos de agenda', () => {
     title.focus()
     title.setSelectionRange(6, 6)
     await userEvent.click(within(markers).getByRole('button', { name: 'Inserir {cliente}' }))
+    // A inserção devolve o cursor no quadro seguinte: espera por ele antes de mover o cursor.
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     await userEvent.click(title)
     title.setSelectionRange(title.value.length, title.value.length)
     await userEvent.click(within(markers).getByRole('button', { name: 'Inserir {data}' }))
@@ -116,6 +138,7 @@ describe('tipos de agenda', () => {
     expect(await http.requests('PATCH /api/v1/agenda-types/:id')[0].json()).toEqual({
       name: '1:1',
       title_pattern: '1:1 · {cliente} · {data}',
+      title_instructions: '',
       identify: 'Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.',
       default_tags: ['equipe'],
       summary_instructions:
@@ -139,6 +162,7 @@ describe('tipos de agenda', () => {
     expect(await http.requests('POST /api/v1/agenda-types')[0].json()).toEqual({
       name: 'Mentoria',
       title_pattern: null,
+      title_instructions: '',
       identify: '',
       default_tags: [],
       summary_instructions: '## Temas',
@@ -150,7 +174,7 @@ describe('tipos de agenda', () => {
     mockAgendaTypes()
     renderApp('/config/agendas')
     await list()
-    await userEvent.type(screen.getByLabelText('Como identificar'), ' Semanal.')
+    await userEvent.type(screen.getByLabelText('Como escrever o assunto'), ' Sem siglas.')
     await userEvent.click(within(row('1:1')).getByRole('button', { name: '1:1' }))
     await userEvent.click(
       within(screen.getByRole('dialog', { name: 'Descartar alterações?' })).getByRole('button', { name: 'Descartar' }),
@@ -178,10 +202,10 @@ describe('tipos de agenda', () => {
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Excluir tipo' }))
     const dialog = screen.getByRole('dialog', { name: 'Excluir 1:1?' })
-    expect(dialog).toHaveTextContent('As gravações deste tipo ficam sem tipo. Os resumos já feitos continuam.')
+    expect(dialog).toHaveTextContent('As gravações deste tipo passam para o tipo padrão. Os resumos já feitos continuam.')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Excluir tipo' }))
     await waitFor(() => expect(http.requests('DELETE /api/v1/agenda-types/:id')).toHaveLength(1))
-    expect(await screen.findByRole('form', { name: 'Editar Reunião de equipe' })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: 'Editar Geral' })).toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Tipos de agenda' })).queryByText('1:1')).not.toBeInTheDocument()
   })
 })

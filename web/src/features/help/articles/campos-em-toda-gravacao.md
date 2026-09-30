@@ -5,20 +5,18 @@ paginas: [campos]
 relacionados: [escrever-uma-regra, testar-uma-regra, origem-dos-valores]
 termos: [campo, campos, cliente, projeto, texto, lista, escolha, título, tags, embutido]
 ordem: 1
-atualizado: 2026-09-27
+atualizado: 2026-09-30
 ---
 Campos são as informações que você quer em toda gravação, preenchidas pelo agente depois da
-transcrição. Eles ficam em [Campos e regras](/config/campos).
+transcrição. Eles ficam em [Campos personalizados](/config/campos).
 
-## Os campos embutidos
+## O título e as tags
 
-Toda conta já tem dois campos:
+O título não aparece aqui: ele vem do tipo de agenda da gravação, pelo padrão e pela regra do
+assunto do tipo. Veja [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
 
-- **Título:** texto.
-- **Tags:** lista.
-
-O tipo deles não muda, e eles não podem ser excluídos. Você pode editar a regra e desligar o
-preenchimento automático.
+As **Tags** são um campo embutido do tipo lista: o tipo não muda e ele não pode ser excluído, mas
+você pode editar a regra e desligar o preenchimento automático.
 
 ## Os seus campos
 

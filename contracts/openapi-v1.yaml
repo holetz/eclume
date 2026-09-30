@@ -2167,7 +2167,9 @@ paths:
       tags: [agenda-types]
       operationId: deleteAgendaType
       summary: Excluir um tipo de agenda
-      description: As gravações que o usavam ficam sem tipo; os resumos ficam.
+      description: |
+        As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
+        ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -2182,6 +2184,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/fields:
     get:
@@ -4616,7 +4620,8 @@ components:
       properties:
         step:
           type: string
-          enum: [received, preprocessing, transcription, fields, agenda_type, summary]
+          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos.
+          enum: [received, preprocessing, transcription, agenda_type, fields, summary]
         state:
           type: string
           enum: [pending, active, done, failed, skipped]
@@ -5133,7 +5138,7 @@ components:
 
     AgendaType:
       type: object
-      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position]
+      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position, title_instructions, fallback]
       properties:
         id:
           type: string
@@ -5149,6 +5154,12 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: |
+            Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
+            padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5168,6 +5179,11 @@ components:
           description: Ordem na lista do usuário.
           type: integer
           minimum: 0
+        fallback:
+          description: |
+            O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança, sem
+            outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+          type: boolean
 
     AgendaTypeDraft:
       description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
@@ -5186,6 +5202,10 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5220,6 +5240,10 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5258,6 +5282,10 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5292,7 +5320,7 @@ components:
 
     DefaultAgendaType:
       type: object
-      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position, include_for_new_users]
+      required: [id, name, title_pattern, identify, default_tags, summary_instructions, position, include_for_new_users, title_instructions]
       properties:
         id:
           type: string
@@ -5308,6 +5336,12 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: |
+            Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
+            padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5347,6 +5381,10 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5388,6 +5426,10 @@ components:
             título automático fica como está.
           type: [string, "null"]
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5653,6 +5695,12 @@ components:
           description: Uma gravação transcrita do usuário.
           type: string
           format: uuid
+        agenda_type_id:
+          description: >-
+            O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem ele, sai o de
+            mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.
+          type: [string, "null"]
+          format: uuid
 
     FieldPreviewItem:
       type: object
@@ -5668,7 +5716,7 @@ components:
 
     AgendaTypePreviewItem:
       type: object
-      required: [recording_id, recording_title, detected, detected_type_name, confidence, title, tags, summary_md]
+      required: [recording_id, recording_title, detected, detected_type_name, fallback, confidence, title, tags, summary_md]
       properties:
         recording_id:
           type: string
@@ -5679,8 +5727,12 @@ components:
           description: A detecção escolheu o rascunho.
           type: boolean
         detected_type_name:
-          description: O tipo que a detecção escolheu (o rascunho ou um dos salvos).
+          description: O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão).
           type: string
+        fallback:
+          description: >-
+            Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo padrão.
+          type: boolean
         confidence:
           type: [number, "null"]
           minimum: 0
@@ -6664,7 +6716,7 @@ components:
               step:
                 description: A etapa do pipeline que falhou (holetz/eclume#33).
                 type: string
-                enum: [received, preprocessing, transcription, fields, agenda_type, summary]
+                enum: [received, preprocessing, transcription, agenda_type, fields, summary]
               recording_id:
                 type: string
                 format: uuid

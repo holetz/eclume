@@ -1,7 +1,8 @@
 """Tipos de agenda: os do usuário (`agenda_types`) e os padrão da plataforma (`default_agenda_types`).
 
-O tipo diz como reconhecer a gravação, que título e tags ela ganha e como resumi-la. Contrato e
-decisões em docs/standards/code/processamento-automatico.md.
+O tipo diz como reconhecer a gravação, que título e tags ela ganha e como resumi-la. Toda conta tem
+um tipo de reserva (`is_fallback`), que não sai e fica com a gravação quando nenhum outro se encaixa.
+Contrato e decisões em docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 
-from eclume_server.agents.extraction import MAX_INSTRUCTIONS, MAX_TAG, TypeSpec, detect_type
+from eclume_server.agents.extraction import MAX_INSTRUCTIONS, MAX_TAG, MIN_CONFIDENCE, TypeSpec, detect_type
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pipeline import GONE, STALE, current_revision, get_step, set_step
@@ -29,7 +30,11 @@ if TYPE_CHECKING:
 
 Tag = Annotated[str, Field(min_length=1, max_length=MAX_TAG)]
 # Não podem ser nulos num PATCH (os demais aceitam `null`, que limpa).
-REQUIRED = ("name", "summary_instructions", "identify", "default_tags", "position")
+REQUIRED = ("name", "summary_instructions", "identify", "default_tags", "position", "title_instructions")
+# A regra do assunto quando nem o tipo nem o de reserva têm uma (a regra de fábrica do título embutido).
+DEFAULT_TITLE_RULE = (
+    "Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data nem nomes de pessoas."
+)
 
 
 class AgendaTypeDraft(BaseModel):
@@ -39,6 +44,7 @@ class AgendaTypeDraft(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     title_pattern: str | None = Field(default=None, max_length=300)
+    title_instructions: str = Field(default="", max_length=MAX_INSTRUCTIONS)
     identify: str = Field(default="", max_length=MAX_INSTRUCTIONS)
     default_tags: list[Tag] = Field(default_factory=list, max_length=20)
     summary_instructions: str = Field(min_length=1, max_length=MAX_INSTRUCTIONS)
@@ -57,6 +63,7 @@ class AgendaTypePatch(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     title_pattern: str | None = Field(default=None, max_length=300)
+    title_instructions: str | None = Field(default=None, max_length=MAX_INSTRUCTIONS)
     identify: str | None = Field(default=None, max_length=MAX_INSTRUCTIONS)
     default_tags: list[Tag] | None = Field(default=None, max_length=20)
     summary_instructions: str | None = Field(default=None, min_length=1, max_length=MAX_INSTRUCTIONS)
@@ -81,16 +88,20 @@ def agenda_type_json(row: Row) -> dict[str, Any]:
         "id": str(row["id"]),
         "name": row["name"],
         "title_pattern": row["title_pattern"],
+        "title_instructions": row["title_instructions"],
         "identify": row["identify"],
         "default_tags": list(row["default_tags"]),
         "summary_instructions": row["summary_instructions"],
         "position": row["position"],
+        "fallback": bool(row.get("is_fallback", False)),
     }
 
 
 def default_agenda_type_json(row: Row) -> dict[str, Any]:
-    """Schema `DefaultAgendaType`: o `AgendaType` com `include_for_new_users`."""
-    return {**agenda_type_json(row), "include_for_new_users": row["include_for_new_users"]}
+    """Schema `DefaultAgendaType`: o `AgendaType` sem `fallback`, com `include_for_new_users`."""
+    body = agenda_type_json(row)
+    del body["fallback"]
+    return {**body, "include_for_new_users": row["include_for_new_users"]}
 
 
 def create_values(body: AgendaTypeDraft) -> dict[str, Any]:
@@ -178,11 +189,19 @@ async def title_values(conn: AsyncConnection, recording: Row, agenda_type: Row |
     return values
 
 
-async def apply_type(conn: AsyncConnection, recording: Row, agenda_type: Row | None, origin: str | None) -> None:
+async def apply_type(
+    conn: AsyncConnection,
+    recording: Row,
+    agenda_type: Row | None,
+    origin: str | None,
+    *,
+    render: bool = True,
+) -> None:
     """Grava o tipo da gravação e aplica o padrão de título e as tags padrão dele.
 
     O título só muda se não foi escrito nem aceito pelo usuário; as tags padrão se somam às
-    automáticas, e as do usuário ficam como estão. Sem tipo, só limpa o tipo.
+    automáticas, e as do usuário ficam como estão. Sem tipo, só limpa o tipo. `render=False` deixa o
+    título para depois (a detecção: os campos, que vêm em seguida, trazem o assunto novo).
     """
     changes: dict[str, Any] = {
         "agenda_type_id": agenda_type["id"] if agenda_type is not None else None,
@@ -199,7 +218,7 @@ async def apply_type(conn: AsyncConnection, recording: Row, agenda_type: Row | N
                 )
             ).scalars()
         )
-        if agenda_type["title_pattern"] and "title" not in locked:
+        if render and agenda_type["title_pattern"] and "title" not in locked:
             title = render_title(agenda_type["title_pattern"], await title_values(conn, recording, agenda_type))
             if title:
                 changes["title"] = title
@@ -216,13 +235,61 @@ async def apply_type(conn: AsyncConnection, recording: Row, agenda_type: Row | N
     )
 
 
+async def fallback_type(conn: AsyncConnection, owner_id: UUID) -> Row | None:
+    """O tipo de reserva da conta (a migration 021 e a semeadura garantem um)."""
+    query = select(t.agenda_types).where(t.agenda_types.c.owner_id == owner_id, t.agenda_types.c.is_fallback)
+    return (await conn.execute(query)).mappings().first()
+
+
+async def title_rule(conn: AsyncConnection, recording: Row) -> str:
+    """A regra do assunto do título: a do tipo da gravação, a do tipo de reserva ou a de fábrica."""
+    rules = (
+        await conn.execute(
+            select(t.agenda_types.c.id, t.agenda_types.c.is_fallback, t.agenda_types.c.title_instructions).where(
+                t.agenda_types.c.owner_id == recording["owner_id"],
+                (t.agenda_types.c.id == recording["agenda_type_id"]) | t.agenda_types.c.is_fallback,
+            )
+        )
+    ).all()
+    own = next((rule for id_, _, rule in rules if id_ == recording["agenda_type_id"]), "")
+    reserve = next((rule for _, fallback, rule in rules if fallback), "")
+    return own.strip() or reserve.strip() or DEFAULT_TITLE_RULE
+
+
+async def ensure_type(conn: AsyncConnection, recording_id: UUID) -> None:
+    """Sem tipo depois da detecção (pulada, falha), a gravação fica com o tipo de reserva."""
+    recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
+    if recording is None or recording["agenda_type_id"] is not None:
+        return
+    reserve = await fallback_type(conn, recording["owner_id"])
+    if reserve is not None:
+        await apply_type(conn, recording, reserve, "auto", render=False)
+
+
+async def refresh_title(conn: AsyncConnection, recording_id: UUID) -> None:
+    """Remonta o título pelo padrão do tipo e soma as tags padrão, depois dos campos preenchidos."""
+    recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
+    if recording is None or recording["agenda_type_id"] is None:
+        return
+    agenda_type = (
+        (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == recording["agenda_type_id"])))
+        .mappings()
+        .first()
+    )
+    if agenda_type is not None:
+        await apply_type(conn, recording, agenda_type, recording["agenda_type_origin"])
+
+
 # --- detecção (job `detect_agenda_type`) -----------------------------------------------------------
 
 
 async def run_detect(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:
     """O job `detect_agenda_type`: escolhe o tipo da gravação e o aplica; grava a etapa `agenda_type`.
 
-    Roda com o papel de conexão, no worker CPU. O tipo escolhido pelo usuário (`edited`) fica.
+    Roda com o papel de conexão, no worker CPU. O tipo escolhido pelo usuário (`edited`) fica. O tipo
+    de reserva não concorre: fica com a gravação quando nenhum outro serve ou a confiança fica abaixo
+    de `MIN_CONFIDENCE`; pulada ou falha, o worker o aplica depois (`ensure_type`). O título espera os
+    campos, que vêm em seguida.
     """
     engine = ctx["engine"]
     async with system_tx(engine) as conn:
@@ -234,7 +301,7 @@ async def run_detect(ctx: dict[str, Any], recording_id: UUID, revision: int) -> 
         if await current_revision(conn, recording_id) != revision:
             return STALE
         skip = None
-        types = (
+        rows = (
             (
                 await conn.execute(
                     select(t.agenda_types)
@@ -245,6 +312,8 @@ async def run_detect(ctx: dict[str, Any], recording_id: UUID, revision: int) -> 
             .mappings()
             .all()
         )
+        types = [row for row in rows if not row["is_fallback"]]
+        reserve = next((row for row in rows if row["is_fallback"]), None)
         provider = await provider_for(conn, "agenda_detection")
         if recording["agenda_type_origin"] == "edited" and recording["agenda_type_id"] is not None:
             skip = "set_by_user"
@@ -273,12 +342,14 @@ async def run_detect(ctx: dict[str, Any], recording_id: UUID, revision: int) -> 
     )
     if isinstance(outcome, str):
         return outcome
-    chosen = types[outcome.index]
+    candidate = types[outcome.index] if outcome.index is not None else None
+    unsure = outcome.confidence is not None and outcome.confidence < MIN_CONFIDENCE
+    chosen = reserve if (candidate is None or unsure) and reserve is not None else candidate
     async with system_tx(engine) as conn:
         current = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
         # O usuário pode ter escolhido um tipo enquanto o agente trabalhava: esse fica.
-        if current["agenda_type_origin"] != "edited":
-            await apply_type(conn, current, chosen, "auto")
+        if current["agenda_type_origin"] != "edited" and chosen is not None:
+            await apply_type(conn, current, chosen, "auto", render=False)
         await set_step(
             conn,
             recording,
@@ -286,11 +357,13 @@ async def run_detect(ctx: dict[str, Any], recording_id: UUID, revision: int) -> 
             "agenda_type",
             "done",
             detail={
-                "agenda_type_id": str(chosen["id"]),
-                "agenda_type_name": chosen["name"],
+                "agenda_type_id": str(chosen["id"]) if chosen is not None else None,
+                "agenda_type_name": chosen["name"] if chosen is not None else None,
+                "fallback": chosen is not None and chosen is reserve,
+                "candidate_name": candidate["name"] if candidate is not None else None,
                 "confidence": outcome.confidence,
                 "reason_text": outcome.reason,
                 "model": outcome.completion.model,
             },
         )
-    return f"tipo: {chosen['name']}"
+    return f"tipo: {chosen['name'] if chosen is not None else 'nenhum'}"

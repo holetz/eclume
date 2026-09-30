@@ -2330,7 +2330,11 @@ paths:
       - agenda-types
       operationId: deleteAgendaType
       summary: Excluir um tipo de agenda
-      description: As gravações que o usavam ficam sem tipo; os resumos ficam.
+      description: 'As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
+
+        ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
+
+        '
       security:
       - sessionCookie: []
       - pat:
@@ -2346,6 +2350,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/v1/fields:
     get:
       tags:
@@ -5109,12 +5115,13 @@ components:
       properties:
         step:
           type: string
+          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos.
           enum:
           - received
           - preprocessing
           - transcription
-          - fields
           - agenda_type
+          - fields
           - summary
         state:
           type: string
@@ -5771,6 +5778,8 @@ components:
       - default_tags
       - summary_instructions
       - position
+      - title_instructions
+      - fallback
       properties:
         id:
           type: string
@@ -5791,6 +5800,15 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: 'Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale
+            a do tipo
+
+            padrão da conta.
+
+            '
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5810,6 +5828,14 @@ components:
           description: Ordem na lista do usuário.
           type: integer
           minimum: 0
+        fallback:
+          description: 'O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança,
+            sem
+
+            outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+
+            '
+          type: boolean
     AgendaTypeDraft:
       description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
       type: object
@@ -5834,6 +5860,10 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5874,6 +5904,10 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5916,6 +5950,10 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -5959,6 +5997,7 @@ components:
       - summary_instructions
       - position
       - include_for_new_users
+      - title_instructions
       properties:
         id:
           type: string
@@ -5979,6 +6018,15 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: 'Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale
+            a do tipo
+
+            padrão da conta.
+
+            '
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -6024,6 +6072,10 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -6069,6 +6121,10 @@ components:
           - string
           - 'null'
           maxLength: 300
+        title_instructions:
+          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          type: string
+          maxLength: 4000
         identify:
           description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
           type: string
@@ -6365,6 +6421,13 @@ components:
           description: Uma gravação transcrita do usuário.
           type: string
           format: uuid
+        agenda_type_id:
+          description: 'O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem
+            ele, sai o de mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.'
+          type:
+          - string
+          - 'null'
+          format: uuid
     FieldPreviewItem:
       type: object
       required:
@@ -6386,6 +6449,7 @@ components:
       - recording_title
       - detected
       - detected_type_name
+      - fallback
       - confidence
       - title
       - tags
@@ -6400,8 +6464,12 @@ components:
           description: A detecção escolheu o rascunho.
           type: boolean
         detected_type_name:
-          description: O tipo que a detecção escolheu (o rascunho ou um dos salvos).
+          description: O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão).
           type: string
+        fallback:
+          description: 'Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo
+            padrão.'
+          type: boolean
         confidence:
           type:
           - number
@@ -7700,8 +7768,8 @@ components:
                 - received
                 - preprocessing
                 - transcription
-                - fields
                 - agenda_type
+                - fields
                 - summary
               recording_id:
                 type: string
@@ -8574,14 +8642,14 @@ components:
           duration_ms: null
           error: null
           reason: null
-        - step: fields
+        - step: agenda_type
           state: pending
           started_at: null
           finished_at: null
           duration_ms: null
           error: null
           reason: null
-        - step: agenda_type
+        - step: fields
           state: pending
           started_at: null
           finished_at: null
@@ -8666,18 +8734,18 @@ components:
           duration_ms: 78000
           error: null
           reason: null
-        - step: fields
-          state: done
-          started_at: '2026-09-18T15:01:31Z'
-          finished_at: '2026-09-18T15:01:40Z'
-          duration_ms: 9000
-          error: null
-          reason: null
         - step: agenda_type
           state: done
           started_at: '2026-09-18T15:01:40Z'
           finished_at: '2026-09-18T15:01:44Z'
           duration_ms: 4000
+          error: null
+          reason: null
+        - step: fields
+          state: done
+          started_at: '2026-09-18T15:01:31Z'
+          finished_at: '2026-09-18T15:01:40Z'
+          duration_ms: 9000
           error: null
           reason: null
         - step: summary
@@ -8748,14 +8816,14 @@ components:
             duration_ms: null
             error: null
             reason: null
-          - step: fields
+          - step: agenda_type
             state: pending
             started_at: null
             finished_at: null
             duration_ms: null
             error: null
             reason: null
-          - step: agenda_type
+          - step: fields
             state: pending
             started_at: null
             finished_at: null
@@ -8834,18 +8902,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-18T15:01:31Z'
-            finished_at: '2026-09-18T15:01:40Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-18T15:01:40Z'
             finished_at: '2026-09-18T15:01:44Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-18T15:01:31Z'
+            finished_at: '2026-09-18T15:01:40Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -8922,18 +8990,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-21T13:00:29Z'
-            finished_at: '2026-09-21T13:00:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-21T13:00:39Z'
             finished_at: '2026-09-21T13:00:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-21T13:00:29Z'
+            finished_at: '2026-09-21T13:00:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9005,18 +9073,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-21T17:47:29Z'
-            finished_at: '2026-09-21T17:47:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-21T17:47:39Z'
             finished_at: '2026-09-21T17:47:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-21T17:47:29Z'
+            finished_at: '2026-09-21T17:47:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9088,18 +9156,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-22T15:12:29Z'
-            finished_at: '2026-09-22T15:12:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-22T15:12:39Z'
             finished_at: '2026-09-22T15:12:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-22T15:12:29Z'
+            finished_at: '2026-09-22T15:12:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9168,13 +9236,6 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-22T19:33:29Z'
-            finished_at: '2026-09-22T19:33:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: skipped
             started_at: '2026-09-22T19:33:39Z'
@@ -9182,6 +9243,13 @@ components:
             duration_ms: 0
             error: null
             reason: no_types
+          - step: fields
+            state: done
+            started_at: '2026-09-22T19:33:29Z'
+            finished_at: '2026-09-22T19:33:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
           - step: summary
             state: skipped
             started_at: '2026-09-22T19:33:44Z'
@@ -9248,13 +9316,6 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-23T11:21:29Z'
-            finished_at: '2026-09-23T11:21:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: skipped
             started_at: '2026-09-23T11:21:39Z'
@@ -9262,6 +9323,13 @@ components:
             duration_ms: 0
             error: null
             reason: no_types
+          - step: fields
+            state: done
+            started_at: '2026-09-23T11:21:29Z'
+            finished_at: '2026-09-23T11:21:38Z'
+            duration_ms: 9000
+            error: null
+            reason: null
           - step: summary
             state: skipped
             started_at: '2026-09-23T11:21:44Z'
@@ -9329,14 +9397,14 @@ components:
               code: media_unreadable
               message: O áudio do arquivo não pôde ser lido.
             reason: null
-          - step: fields
+          - step: agenda_type
             state: pending
             started_at: null
             finished_at: null
             duration_ms: null
             error: null
             reason: null
-          - step: agenda_type
+          - step: fields
             state: pending
             started_at: null
             finished_at: null
@@ -9412,18 +9480,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-24T13:14:29Z'
-            finished_at: '2026-09-24T13:14:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-24T13:14:39Z'
             finished_at: '2026-09-24T13:14:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-24T13:14:29Z'
+            finished_at: '2026-09-24T13:14:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9495,18 +9563,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-24T13:35:29Z'
-            finished_at: '2026-09-24T13:35:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-24T13:35:39Z'
             finished_at: '2026-09-24T13:35:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-24T13:35:29Z'
+            finished_at: '2026-09-24T13:35:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9578,18 +9646,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-25T14:49:29Z'
-            finished_at: '2026-09-25T14:49:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-25T14:49:39Z'
             finished_at: '2026-09-25T14:49:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-25T14:49:29Z'
+            finished_at: '2026-09-25T14:49:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -9661,18 +9729,18 @@ components:
             duration_ms: 78000
             error: null
             reason: null
-          - step: fields
-            state: done
-            started_at: '2026-09-26T14:11:29Z'
-            finished_at: '2026-09-26T14:11:38Z'
-            duration_ms: 9000
-            error: null
-            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-26T14:11:39Z'
             finished_at: '2026-09-26T14:11:43Z'
             duration_ms: 4000
+            error: null
+            reason: null
+          - step: fields
+            state: done
+            started_at: '2026-09-26T14:11:29Z'
+            finished_at: '2026-09-26T14:11:38Z'
+            duration_ms: 9000
             error: null
             reason: null
           - step: summary
@@ -10650,6 +10718,7 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000c01
           name: Reunião de equipe
           title_pattern: Reunião de equipe · {assunto}
+          title_instructions: ''
           identify: Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa
             com cliente nem 1:1.
           default_tags:
@@ -10673,6 +10742,7 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000c02
           name: '1:1'
           title_pattern: null
+          title_instructions: ''
           identify: Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.
           default_tags: []
           summary_instructions: '## Pontos tratados
@@ -10690,9 +10760,32 @@ components:
       summary: Os tipos padrão de uma conta nova
       value:
         items:
+        - id: 01928f3a-1c00-7a00-8000-000000000a00
+          name: Geral
+          title_pattern: '{assunto}'
+          title_instructions: Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem
+            data nem nomes de pessoas.
+          identify: ''
+          default_tags: []
+          summary_instructions: '## Resumo
+
+            De duas a quatro frases sobre o que a conversa tratou.
+
+
+            ## Decisões
+
+            Um item por decisão tomada. Sem decisões, escreva "Nenhuma decisão registrada."
+
+
+            ## Próximos passos
+
+            Um item por tarefa combinada: responsável, o quê e quando, quando ditos.'
+          position: 0
+          fallback: true
         - id: 01928f3a-1c00-7a00-8000-000000000901
           name: Reunião de equipe
           title_pattern: Reunião de equipe · {assunto}
+          title_instructions: ''
           identify: Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa
             com cliente nem 1:1.
           default_tags:
@@ -10712,9 +10805,11 @@ components:
 
             Um item por tarefa: responsável, o quê e quando.'
           position: 1
+          fallback: false
         - id: 01928f3a-1c00-7a00-8000-000000000902
           name: '1:1'
           title_pattern: null
+          title_instructions: ''
           identify: Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.
           default_tags: []
           summary_instructions: '## Pontos tratados
@@ -10726,12 +10821,14 @@ components:
 
             Um item por acompanhamento combinado: quem, o quê e até quando.'
           position: 2
+          fallback: false
         next_cursor: WyIyIiwgIjAxOTI4ZjNhLTFjMDAtN2EwMC04MDAwLTAwMDAwMDAwMDkwMiJd
     AgendaTypeCreateRequest:
       summary: Tipo de agenda para mentorias
       value:
         name: Mentoria
         title_pattern: Mentoria · {assunto}
+        title_instructions: O nome da pessoa mentorada e o tema principal, em até 8 palavras.
         identify: Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.
         default_tags:
         - mentoria
@@ -10948,6 +11045,7 @@ components:
           recording_title: Conversa com a Ana
           detected: true
           detected_type_name: Mentoria
+          fallback: false
           confidence: 0.82
           title: Mentoria · Próximos passos na carreira
           tags:
@@ -11344,13 +11442,13 @@ components:
           runs: 14
           median_ms: 92000
           failures: 1
-        - step: fields
-          runs: 13
-          median_ms: 8400
-          failures: 0
         - step: agenda_type
           runs: 13
           median_ms: 3100
+          failures: 0
+        - step: fields
+          runs: 13
+          median_ms: 8400
           failures: 0
         - step: summary
           runs: 12

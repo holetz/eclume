@@ -47,21 +47,26 @@ function mockFields(overrides: Record<string, Parameters<typeof mockFetch>[0][st
 const list = () => screen.findByRole('list', { name: 'Campos' })
 const row = (name: string) => within(screen.getByRole('list', { name: 'Campos' })).getByRole('button', { name }).closest('li')!
 
-describe('campos e regras', () => {
-  it('lista os embutidos e os do usuário com o Automático, e abre o primeiro no painel', async () => {
+describe('campos personalizados', () => {
+  it('lista os campos sem o título, com o Automático, e abre o primeiro no painel', async () => {
     mockFields()
     renderApp('/config/campos')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Campos e regras' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeInTheDocument()
     expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
     await list()
-    expect(within(row('Título')).getByText('Embutido · texto')).toBeInTheDocument()
+    // O título vem dos tipos de agenda: não aparece aqui.
+    expect(within(screen.getByRole('list', { name: 'Campos' })).queryByRole('button', { name: 'Título' })).toBeNull()
+    expect(within(screen.getByRole('main')).getByRole('link', { name: 'Tipos de agenda' })).toHaveAttribute(
+      'href',
+      '/config/agendas',
+    )
     expect(within(row('Tags')).getByText('Embutido · lista')).toBeInTheDocument()
     expect(within(row('Cliente')).getByText('Seu campo · escolha')).toBeInTheDocument()
     expect(within(row('Cliente')).getByRole('checkbox', { name: 'Automático: Cliente' })).toBeChecked()
-    expect(within(row('Título')).getByRole('button', { name: 'Título' })).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Tags')).getByRole('button', { name: 'Tags' })).toHaveAttribute('aria-current', 'true')
 
-    const panel = screen.getByRole('form', { name: 'Editar Título' })
-    expect(within(panel).getByRole('radio', { name: 'Texto' })).toBeDisabled()
+    const panel = screen.getByRole('form', { name: 'Editar Tags' })
+    expect(within(panel).getByRole('radio', { name: 'Lista' })).toBeDisabled()
     expect(within(panel).getByText('O tipo de um campo embutido não muda.')).toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Excluir campo' })).not.toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Sobre como escrever uma regra' })).toBeInTheDocument()
@@ -136,15 +141,15 @@ describe('campos e regras', () => {
     mockFields()
     renderApp('/config/campos')
     await list()
-    const panel = screen.getByRole('form', { name: 'Editar Título' })
+    const panel = screen.getByRole('form', { name: 'Editar Tags' })
     await userEvent.type(within(panel).getByLabelText('Como identificar'), ' Sem siglas.')
     await userEvent.click(within(row('Cliente')).getByRole('button', { name: 'Cliente' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Descartar alterações?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Continuar editando' }))
-    expect(screen.getByRole('form', { name: 'Editar Título' })).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Editar Tags' })).toBeInTheDocument()
     expect(within(panel).getByLabelText('Como identificar')).toHaveValue(
-      'Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data nem nomes de pessoas. Sem siglas.',
+      'De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa. Sem siglas.',
     )
 
     await userEvent.click(within(row('Cliente')).getByRole('button', { name: 'Cliente' }))
@@ -180,7 +185,7 @@ describe('campos e regras', () => {
     await waitFor(() =>
       expect(within(screen.getByRole('list', { name: 'Campos' })).queryByText('Cliente')).not.toBeInTheDocument(),
     )
-    expect(await screen.findByRole('form', { name: 'Editar Título' })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: 'Editar Tags' })).toBeInTheDocument()
   })
 })
 
@@ -258,7 +263,7 @@ describe('testar numa gravação', () => {
   it('avisa quando ainda não há gravações transcritas', async () => {
     mockFields({ 'POST /api/v1/fields/preview': () => ({ ...queued(), status: 'done' }) })
     renderApp('/config/campos')
-    const panel = await screen.findByRole('form', { name: 'Editar Título' })
+    const panel = await screen.findByRole('form', { name: 'Editar Tags' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
     expect(await within(panel).findByRole('status')).toHaveTextContent(
       'Você ainda não tem gravações transcritas para testar.',

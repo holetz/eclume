@@ -64,7 +64,7 @@
       "reason": null
     },
     {
-      "step": "fields",
+      "step": "agenda_type",
       "state": "pending",
       "started_at": null,
       "finished_at": null,
@@ -73,7 +73,7 @@
       "reason": null
     },
     {
-      "step": "agenda_type",
+      "step": "fields",
       "state": "pending",
       "started_at": null,
       "finished_at": null,

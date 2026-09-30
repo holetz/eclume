@@ -64,7 +64,7 @@
           "reason": null
         },
         {
-          "step": "fields",
+          "step": "agenda_type",
           "state": "pending",
           "started_at": null,
           "finished_at": null,
@@ -73,7 +73,7 @@
           "reason": null
         },
         {
-          "step": "agenda_type",
+          "step": "fields",
           "state": "pending",
           "started_at": null,
           "finished_at": null,
@@ -171,20 +171,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-18T15:01:31Z",
-          "finished_at": "2026-09-18T15:01:40Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-18T15:01:40Z",
           "finished_at": "2026-09-18T15:01:44Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-18T15:01:31Z",
+          "finished_at": "2026-09-18T15:01:40Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },

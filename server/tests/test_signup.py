@@ -54,7 +54,7 @@ def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_tipos_de_agenda(client: 
     assert me["notice_required"] is False
     user_id = api.get("/api/v1/me").json()["user"]["id"]
     types = agenda_types(services, UUID(user_id))
-    assert [t["name"] for t in types] == ["Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
+    assert [t["name"] for t in types] == ["Geral", "Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 
     # O login com a senha do cadastro funciona.
     client.cookies.clear()

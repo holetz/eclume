@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#79
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#79
 maintainer: holetz
 ---
 
@@ -67,7 +67,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   - gravação: `t=<ms>`;
   - busca: `q`, `pessoa`, `periodo=7d|30d|ano`, `de`, `ate`, `tag`, `colecao` e `campo`
     (repetível);
-  - pessoa: `aba=gravacoes|falas|amostras`; Campos e regras: `campo`; Tipos de agenda: `tipo`.
+  - pessoa: `aba=gravacoes|falas|amostras`; Campos personalizados: `campo`; Tipos de agenda: `tipo`.
   A biblioteca mostra só as gravações do usuário: não há filtro Minhas/Compartilhadas.
 - **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
   biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
@@ -85,7 +85,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
   `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`); o título da tela segue
   "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
-  biblioteca) e Organizar (Pessoas, Coleções, Campos e regras, Tipos de agenda); a `header` vai para
+  biblioteca) e Organizar (Pessoas, Coleções, Campos personalizados, Tipos de agenda); a `header` vai para
   os menus do cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App
   desktop, App móvel) e Ajuda (Central de ajuda). Uma área nova entra desligada, com a rota do mapa
   de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só
@@ -361,11 +361,15 @@ desce; abaixo de 56rem, os campos também):
   amostras e tem "Esquecer a voz", com confirmação; não há consentimento por pessoa, que o aceite
   do aviso no cadastro substitui. O admin liga a identificação e ajusta o limiar em Locutores
   (`/admin/locutores`).
-- **Campos e regras** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
+- **Campos personalizados** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
   do DS: lista à esquerda (seleção em `?campo=`/`?tipo=`, `novo` para o rascunho) e painel à
   direita. Trocar de item com alterações pede "Descartar alterações?"; sair da rota só avisa pelo
-  `beforeunload`, porque o app usa `BrowserRouter` e o `useBlocker` exige data router. Título e
-  tags são embutidos (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora.
+  `beforeunload`, porque o app usa `BrowserRouter` e o `useBlocker` exige data router. Campos
+  personalizados não lista o título embutido (o título vem do tipo de agenda) e mostra as tags
+  como embutido (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora. Em Tipos
+  de agenda, o tipo padrão (`fallback`) fica no topo com o `.badge` "Padrão", sem Excluir e sem
+  "Como identificar"; todo tipo tem "Como escrever o assunto" (`title_instructions`), e a
+  pré-visualização manda o `agenda_type_id` do tipo editado e diz quando ficaria o tipo padrão.
 - **Pré-visualização por consulta ao job** (`organize/usePreview.ts`): "Testar numa gravação"
   (`POST /fields/preview`, sem `recording_ids`: as 3 últimas transcritas) e "Pré-visualizar numa
   gravação" (`POST /agenda-types/preview`) devolvem 202 com o job, e a tela consulta

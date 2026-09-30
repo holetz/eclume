@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -9,7 +10,10 @@ import { NEW, useGuardedSelection } from './useGuardedSelection'
 export function FieldsPage() {
   useHelpTopic('campos')
   const fields = useFields()
-  const items = [...(fields.data?.items ?? [])].sort((a, b) => a.position - b.position)
+  // O título é definido pelos tipos de agenda (padrão e regra do assunto): não aparece aqui.
+  const items = [...(fields.data?.items ?? [])]
+    .filter((field) => field.builtin !== 'title')
+    .sort((a, b) => a.position - b.position)
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('campo')
   const current = selected === NEW ? null : (items.find((f) => f.id === selected) ?? (selected ? undefined : items[0]))
 
@@ -17,7 +21,7 @@ export function FieldsPage() {
     <section className={styles.page}>
       <PageHead
         kicker="Organizar"
-        title="Campos e regras"
+        title="Campos personalizados"
         actions={
           <button type="button" className="btn btn-primary" onClick={() => select(NEW)}>
             Novo campo
@@ -25,8 +29,9 @@ export function FieldsPage() {
         }
       />
       <p className="text-muted">
-        O que o eclume preenche em toda gravação depois da transcrição. Título e tags vêm embutidos; os
-        outros campos são seus.
+        O que o eclume preenche em toda gravação depois da transcrição, cada campo com a regra que o agente
+        segue. O título vem do tipo de agenda da gravação: ajuste-o em{' '}
+        <Link to="/config/agendas">Tipos de agenda</Link>.
       </p>
 
       {fields.isPending && <p role="status">Carregando campos…</p>}

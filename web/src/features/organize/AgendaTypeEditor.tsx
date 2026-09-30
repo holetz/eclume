@@ -16,15 +16,22 @@ import {
 import { TagInput } from './TagInput'
 import { usePreview } from './usePreview'
 
-const EMPTY: AgendaTypeDraft = { name: '', title_pattern: null, identify: '', default_tags: [], summary_instructions: '' }
+const EMPTY: AgendaTypeDraft = {
+  name: '',
+  title_pattern: null,
+  title_instructions: '',
+  identify: '',
+  default_tags: [],
+  summary_instructions: '',
+}
 
 // Os marcadores que todo padrão de título aceita; os campos do usuário entram pela chave.
 const BASE_MARKERS = ['{assunto}', '{data}', '{tipo}']
 
 function draftOf(type: AgendaType | null): AgendaTypeDraft {
   if (!type) return EMPTY
-  const { name, title_pattern, identify, default_tags, summary_instructions } = type
-  return { name, title_pattern, identify, default_tags, summary_instructions }
+  const { name, title_pattern, title_instructions, identify, default_tags, summary_instructions } = type
+  return { name, title_pattern, title_instructions, identify, default_tags, summary_instructions }
 }
 
 /** O rascunho no formato do contrato: sem espaços nas pontas do nome, e padrão vazio vira `null`. */
@@ -58,6 +65,8 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
   const complete = draft.name.trim() !== '' && draft.summary_instructions.trim() !== ''
   const canSave = dirty && complete && !save.isPending
   const previewing = preview.state === 'queued' || preview.state === 'running'
+  // O tipo padrão fica com a gravação quando nenhum outro se encaixa: não sai e não concorre.
+  const fallback = type?.fallback === true
   const markers = [
     ...BASE_MARKERS,
     ...(fields.data?.items ?? []).filter((field) => !field.builtin).map((field) => `{${field.key}}`),
@@ -99,8 +108,11 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
   return (
     <form className="panel" onSubmit={submit} aria-label={type ? `Editar ${type.name}` : 'Novo tipo'}>
       <div className={styles.panelHead}>
-        <h4>{type ? type.name : 'Novo tipo'}</h4>
-        {type && (
+        <h4>
+          {type ? type.name : 'Novo tipo'}
+          {fallback && <span className={`badge ${styles.badge}`}>Padrão</span>}
+        </h4>
+        {type && !fallback && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(true)}>
             Excluir tipo
           </button>
@@ -123,9 +135,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
         </div>
         <div className="field">
           <div className={styles.labelRow}>
-            <label htmlFor={`${id}-title`}>
-              Título da gravação <span className="text-muted">· substitui a regra do título em Campos e regras</span>
-            </label>
+            <label htmlFor={`${id}-title`}>Título da gravação</label>
             <HelpHint subject="como montar o título" title="Como montar o título" article="padrao-de-titulo">
               Monte o título com os marcadores. Um marcador sem valor some junto com o separador ao lado.
             </HelpHint>
@@ -158,17 +168,46 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
       </div>
 
       <div className="field">
-        <label htmlFor={`${id}-identify`}>Como identificar</label>
+        <div className={styles.labelRow}>
+          <label htmlFor={`${id}-title-rule`}>Como escrever o assunto</label>
+          <HelpHint subject="a regra do assunto" title="A regra do assunto" article="padrao-de-titulo">
+            O agente escreve o {'{assunto}'} do título seguindo esta regra. Vazia, vale a do tipo padrão.
+          </HelpHint>
+        </div>
         <textarea
-          id={`${id}-identify`}
+          id={`${id}-title-rule`}
           className={`input ${styles.identify}`}
-          value={draft.identify ?? ''}
-          aria-invalid={invalid('identify')}
-          aria-describedby={`${id}-identify-hint`}
-          onChange={(event) => set({ identify: event.target.value })}
+          value={draft.title_instructions ?? ''}
+          placeholder={fallback ? undefined : 'Vazia: vale a regra do tipo padrão.'}
+          aria-invalid={invalid('title_instructions')}
+          aria-describedby={`${id}-title_instructions-hint`}
+          onChange={(event) => set({ title_instructions: event.target.value })}
         />
-        {hint('identify', 'Depois da transcrição, um agente lê isto e escolhe o tipo.')}
+        {hint(
+          'title_instructions',
+          fallback ? 'Vale também para os tipos sem regra própria.' : 'Por exemplo: “o cliente e o assunto principal”.',
+        )}
       </div>
+
+      {fallback ? (
+        <p className={`field-hint ${styles.fallbackNote}`}>
+          Este é o tipo padrão: a gravação fica com ele quando nenhum outro tipo se encaixa com confiança. Ele não
+          tem “Como identificar” e não pode ser excluído.
+        </p>
+      ) : (
+        <div className="field">
+          <label htmlFor={`${id}-identify`}>Como identificar</label>
+          <textarea
+            id={`${id}-identify`}
+            className={`input ${styles.identify}`}
+            value={draft.identify ?? ''}
+            aria-invalid={invalid('identify')}
+            aria-describedby={`${id}-identify-hint`}
+            onChange={(event) => set({ identify: event.target.value })}
+          />
+          {hint('identify', 'Depois da transcrição, um agente lê isto e escolhe o tipo.')}
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor={`${id}-tags`}>Tags padrão</label>
@@ -226,7 +265,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
           onPick={(recordingId) => {
             setPicking(false)
             setPreviewedDraft(draftKey)
-            preview.run({ agenda_type: cleanDraft(draft), recording_id: recordingId })
+            preview.run({ agenda_type: cleanDraft(draft), recording_id: recordingId, agenda_type_id: type?.id ?? null })
           }}
         />
       )}
@@ -251,7 +290,7 @@ function DeleteAgendaTypeDialog({
     <Dialog
       plain
       title={`Excluir ${type.name}?`}
-      message="As gravações deste tipo ficam sem tipo. Os resumos já feitos continuam."
+      message="As gravações deste tipo passam para o tipo padrão. Os resumos já feitos continuam."
       onClose={onClose}
       actions={
         <>

@@ -8,6 +8,7 @@
       "recording_title": "Conversa com a Ana",
       "detected": true,
       "detected_type_name": "Mentoria",
+      "fallback": false,
       "confidence": 0.82,
       "title": "Mentoria · Próximos passos na carreira",
       "tags": [

@@ -25,7 +25,10 @@ function summaryLabel(instructions: string): string {
 export function AgendaTypesPage() {
   useHelpTopic('agendas')
   const types = useAgendaTypes()
-  const items = [...(types.data?.items ?? [])].sort((a, b) => a.position - b.position)
+  // O tipo padrão fica no topo, com o selo; os outros na ordem do usuário.
+  const items = [...(types.data?.items ?? [])].sort(
+    (a, b) => Number(b.fallback) - Number(a.fallback) || a.position - b.position,
+  )
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('tipo')
   const current = selected === NEW ? null : (items.find((t) => t.id === selected) ?? (selected ? undefined : items[0]))
 
@@ -41,8 +44,9 @@ export function AgendaTypesPage() {
         }
       />
       <p className="text-muted">
-        Depois da transcrição, o eclume escolhe um destes tipos para a gravação e faz o resumo pelas
-        instruções dele.
+        Depois da transcrição, o eclume escolhe um destes tipos para a gravação, dá o título pelo padrão
+        dele e faz o resumo pelas instruções dele. Quando nenhum se encaixa com confiança, fica o tipo
+        padrão.
       </p>
 
       {types.isPending && <p role="status">Carregando tipos de agenda…</p>}
@@ -91,6 +95,7 @@ function AgendaTypeRow({ type, selected, onSelect }: { type: AgendaType; selecte
         onClick={onSelect}
       >
         {type.name}
+        {type.fallback && <span className={`badge ${styles.badge}`}>Padrão</span>}
       </button>
       <span className="list-row-sub">{summaryLabel(type.summary_instructions)}</span>
     </li>

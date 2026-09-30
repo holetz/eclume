@@ -191,11 +191,12 @@ class FakeAgents:
     (nada encontrado) nos campos, o primeiro tipo (`T1`) na detecção e um `reply` sem mudar o
     resumo no chat.
     Os `errors` valem para qualquer
-    chamada, antes das respostas.
+    chamada, antes das respostas; `failures[finalidade]` só para as daquela finalidade.
     """
 
     errors: list[ProviderError] = field(default_factory=list)
     replies: dict[str, list[str]] = field(default_factory=dict)
+    failures: dict[str, list[ProviderError]] = field(default_factory=dict)
     calls: list[tuple[ProviderConfig, str, str]] = field(default_factory=list)
 
     def of(self, purpose: str) -> list[tuple[ProviderConfig, str, str]]:
@@ -218,6 +219,8 @@ class _FakeAgent:
         if self.agents.errors:
             raise self.agents.errors.pop(0)
         purpose = purpose_of(system, prompt)
+        if self.agents.failures.get(purpose):
+            raise self.agents.failures[purpose].pop(0)
         queued = self.agents.replies.get(purpose)
         if queued:
             text = queued.pop(0)

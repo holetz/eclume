@@ -5,7 +5,7 @@ paginas: [gravacao, biblioteca]
 relacionados: [pre-processamento, por-que-falhou, quanto-tempo-leva]
 termos: [etapas, pipeline, processando, status, pulada, esperando, transcrevendo, resumindo]
 ordem: 1
-atualizado: 2026-09-27
+atualizado: 2026-09-30
 ---
 Toda gravação passa pelas mesmas seis etapas, uma depois da outra. A barra de etapas no alto da
 página da gravação mostra em qual ela está.
@@ -16,10 +16,12 @@ página da gravação mostra em qual ela está.
 2. **Pré-processamento:** o áudio é preparado para a transcrição, conforme o que quem administra o
    servidor ligou. Veja [O que o pré-processamento faz com o áudio](/ajuda/pre-processamento).
 3. **Transcrição:** a fala vira texto, separada por locutor e com o tempo de cada fala.
-4. **Preenchimento de campos:** um agente lê a transcrição e preenche os campos marcados como
-   automáticos, como o título, as tags e os campos que você criou.
-5. **Tipo de agenda:** um agente escolhe o tipo que melhor descreve a gravação, entre os seus. O
-   tipo aplica o padrão de título e as tags padrão.
+4. **Tipo de agenda:** um agente escolhe o tipo que melhor descreve a gravação, entre os seus.
+   Quando nenhum se encaixa com boa confiança, fica o tipo padrão. O tipo dá as tags padrão e a
+   regra do título.
+5. **Preenchimento de campos:** um agente lê a transcrição e preenche os campos marcados como
+   automáticos, como as tags e os campos que você criou, e escreve o assunto pela regra do tipo. O
+   título é montado pelo padrão do tipo.
 6. **Resumo:** o agente escreve o resumo pelas instruções do tipo escolhido.
 
 ## Os estados de uma etapa

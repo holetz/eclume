@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from eclume_server import agenda_types as agenda_types_module
 from eclume_server import fields as fields_module
@@ -15,6 +16,7 @@ from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.agents.prompting import SHARED_SYSTEM
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,6 +45,14 @@ def _process(api: Api, services: Services, agents: FakeAgents, **fields: Any) ->
 def _values(api: Api, recording_id: str) -> dict[str, dict[str, Any]]:
     items = api.get(f"/api/v1/recordings/{recording_id}/fields").json()["items"]
     return {item["field"]["key"]: item for item in items}
+
+
+async def _detail(conn: Any, recording_id: str, step: str) -> dict[str, Any]:  # noqa: ANN401
+    """A `detail` da etapa na maior revisão (a API mostra só o motivo e o erro)."""
+    query = text(
+        "SELECT detail FROM pipeline_steps WHERE recording_id = :r AND step = :s ORDER BY revision DESC LIMIT 1"
+    )
+    return (await conn.execute(query, {"r": recording_id, "s": step})).scalar_one()
 
 
 def _step(recording: dict[str, Any], name: str) -> dict[str, Any]:
@@ -123,14 +133,14 @@ def test_json_invalido_retenta_e_falha_sem_parar_a_cadeia(user: Api, services: S
     assert len(agents.of("fields")) == 2
 
     down = ProviderError(codes.PROVIDER_UNAVAILABLE, "fora do ar")
-    agents = FakeAgents(errors=[down, down, down])
+    agents = FakeAgents(failures={"fields": [down, down, down]})
     recording = _process(user, services, agents)
     step = _step(recording, "fields")
     assert (step["state"], step["error"]) == ("failed", {"code": "provider_unavailable", "message": "fora do ar"})
     assert len(agents.of("fields")) == 3
 
     auth = ProviderError(codes.PROVIDER_AUTH, "Not logged in")
-    agents = FakeAgents(errors=[auth])
+    agents = FakeAgents(failures={"fields": [auth]})
     recording = _process(user, services, agents)
     assert _step(recording, "fields")["error"]["code"] == "provider_auth"
     assert len(agents.of("fields")) == 1
@@ -200,7 +210,7 @@ def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, s
     assert {step["state"] for step in recording["pipeline"]} == {"done"}
 
 
-def test_tipo_do_usuario_nao_e_trocado_e_sem_tipos_nao_ha_resumo(user: Api, services: Services):
+def test_tipo_do_usuario_nao_e_trocado_e_sem_outros_tipos_fica_o_padrao(user: Api, services: Services):
     agents = FakeAgents()
     recording = upload_file(user, audio_bytes(2200))
     one_on_one = _types(user)["1:1"]
@@ -215,16 +225,68 @@ def test_tipo_do_usuario_nao_e_trocado_e_sem_tipos_nao_ha_resumo(user: Api, serv
 
     for item in _types(user).values():
         user.delete(f"/api/v1/agenda-types/{item['id']}")
-    body = _process(user, services, FakeAgents())
+    assert list(_types(user)) == ["Geral"]
+    agents = FakeAgents()
+    body = _process(user, services, agents)
     assert _step(body, "agenda_type")["reason"] == "no_types"
-    assert (_step(body, "summary")["state"], _step(body, "summary")["reason"]) == ("skipped", "no_agenda_type")
+    assert agents.of("agenda_detection") == []
+    # Sem outros tipos, a gravação fica com o tipo padrão e tem resumo pelas instruções dele.
+    assert body["agenda_type"]["name"] == "Geral"
+    assert _step(body, "summary")["state"] == "done"
+    assert "## Próximos passos" in agents.of("summaries")[-1][2]
 
 
 def test_tipo_fora_da_lista_retenta(user: Api, services: Services):
-    agents = FakeAgents(replies={"agenda_detection": ['{"tipo": "T9"}', '{"tipo": "T2", "confianca": 0.4}']})
+    agents = FakeAgents(replies={"agenda_detection": ['{"tipo": "T9"}', '{"tipo": "T2", "confianca": 0.8}']})
     recording = _process(user, services, agents)
     assert recording["agenda_type"]["name"] == "1:1"
     assert len(agents.of("agenda_detection")) == 2
+    # O tipo padrão não concorre: a lista do agente tem só os outros.
+    assert "Geral" not in agents.of("agenda_detection")[0][2]
+
+
+@pytest.mark.parametrize(
+    ("reply", "candidate"),
+    [
+        ('{"tipo": null, "confianca": 0.9, "motivo": "nenhum serve"}', None),
+        ('{"tipo": "T2", "confianca": 0.4, "motivo": "talvez 1:1"}', "1:1"),
+    ],
+)
+def test_nenhum_tipo_ou_pouca_confianca_fica_o_padrao(user: Api, services: Services, reply: str, candidate: str | None):
+    agents = FakeAgents(replies={"agenda_detection": [reply]})
+    recording = _process(user, services, agents)
+    assert recording["agenda_type"] == {"id": _types(user)["Geral"]["id"], "name": "Geral", "origin": "auto"}
+    assert _step(recording, "agenda_type")["state"] == "done"
+    detail = run(services.sql(lambda conn: _detail(conn, recording["id"], "agenda_type")))
+    assert (detail["fallback"], detail["candidate_name"]) == (True, candidate)
+    # O resumo sai pelas instruções do tipo padrão, e o título pelo padrão dele (`{assunto}`).
+    assert _step(recording, "summary")["state"] == "done"
+    assert "## Próximos passos" in agents.of("summaries")[-1][2]
+
+
+def test_detecao_falha_fica_o_padrao(user: Api, services: Services):
+    down = ProviderError(codes.PROVIDER_AUTH, "Not logged in")
+    recording = _process(user, services, FakeAgents(failures={"agenda_detection": [down]}))
+    assert _step(recording, "agenda_type")["state"] == "failed"
+    assert recording["agenda_type"]["name"] == "Geral"
+    assert _step(recording, "summary")["state"] == "done"
+
+
+def test_o_assunto_do_titulo_segue_a_regra_do_tipo(user: Api, services: Services):
+    types = _types(user)
+    team = types["Reunião de equipe"]
+    user.patch(f"/api/v1/agenda-types/{team['id']}", json={"title_instructions": "O projeto discutido, em 3 palavras."})
+    agents = FakeAgents(replies={"fields": ['{"titulo": "Projeto Aurora"}']})
+    recording = _process(user, services, agents)
+    assert recording["title"] == "Reunião de equipe · Projeto Aurora"
+    fields_prompt = agents.of("fields")[0][2]
+    assert "O projeto discutido, em 3 palavras." in fields_prompt
+    # Sem regra própria, vale a do tipo padrão.
+    user.patch(f"/api/v1/agenda-types/{types['Geral']['id']}", json={"title_instructions": "Regra do Geral."})
+    user.patch(f"/api/v1/agenda-types/{team['id']}", json={"title_instructions": ""})
+    agents = FakeAgents()
+    _process(user, services, agents)
+    assert "Regra do Geral." in agents.of("fields")[0][2]
 
 
 def test_trocar_o_tipo_a_mao_gera_um_resumo_novo(user: Api, services: Services):
@@ -282,7 +344,7 @@ def test_o_mesmo_tipo_de_novo_nao_duplica_o_resumo_automatico(user: Api, service
 def test_falha_inesperada_fora_do_agente_marca_a_etapa_e_segue(
     user: Api, services: Services, monkeypatch: pytest.MonkeyPatch
 ):
-    def boom(*_args: object) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError
 
     monkeypatch.setattr(fields_module, "known_tags", boom)

@@ -135,10 +135,14 @@ export function AgendaPreviewResult({
       <div className={styles.previewBlock}>
         <span className="kicker">Detecção · {item.recording_title}</span>
         {item.detected ? (
-          <span className="badge badge-success">Este tipo seria escolhido{percent(item.confidence)}</span>
+          <span className="badge badge-success">
+            {item.fallback ? 'Nenhum outro tipo se encaixaria: ficaria este' : 'Este tipo seria escolhido'}
+            {percent(item.confidence)}
+          </span>
         ) : (
           <span className="badge badge-warning">
-            O agente escolheria&nbsp;<strong>{item.detected_type_name}</strong>
+            {item.fallback ? 'Nenhum tipo se encaixaria: ficaria o padrão,' : 'O agente escolheria'}&nbsp;
+            <strong>{item.detected_type_name}</strong>
             {percent(item.confidence)}
           </span>
         )}

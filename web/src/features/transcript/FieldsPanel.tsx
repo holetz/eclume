@@ -370,7 +370,7 @@ export function FieldsPanel({ recording, transcript, onChangeType, onFixSpeakers
                 </span>
               ))}
               <span className="text-muted">
-                Da organização antiga; crie um campo em Campos e regras para usar de novo.
+                Da organização antiga; crie um campo em Campos personalizados para usar de novo.
               </span>
             </span>
           </Prop>

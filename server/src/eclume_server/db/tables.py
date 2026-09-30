@@ -245,6 +245,8 @@ def _agenda_type_columns() -> list[Column]:
         Column("identify", Text, server_default=FetchedValue()),
         Column("default_tags", ARRAY(Text), server_default=FetchedValue()),
         Column("summary_instructions", Text),
+        # 021_tipo_de_agenda_padrao
+        Column("title_instructions", Text, server_default=FetchedValue()),
         _ts("created_at", server_default=FetchedValue()),
         _ts("updated_at", server_default=FetchedValue()),
     ]
@@ -257,6 +259,7 @@ agenda_types = Table(
     _uuid("owner_id"),
     *_agenda_type_columns(),
     _uuid("from_default_id"),
+    Column("is_fallback", Boolean, server_default=FetchedValue()),
 )
 
 default_agenda_types = Table(

@@ -101,15 +101,15 @@
       "failures": 1
     },
     {
-      "step": "fields",
-      "runs": 13,
-      "median_ms": 8400,
-      "failures": 0
-    },
-    {
       "step": "agenda_type",
       "runs": 13,
       "median_ms": 3100,
+      "failures": 0
+    },
+    {
+      "step": "fields",
+      "runs": 13,
+      "median_ms": 8400,
       "failures": 0
     },
     {

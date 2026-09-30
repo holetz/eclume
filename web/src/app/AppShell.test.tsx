@@ -43,7 +43,7 @@ describe('navegação', () => {
       NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
-    expect(labels(main).slice(0, 5)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Campos e regras'])
+    expect(labels(main).slice(0, 5)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Campos personalizados'])
     expect(labels(more)).toEqual(enabled('header'))
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
@@ -57,8 +57,8 @@ describe('navegação', () => {
 
   it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
     const { main, header: more } = navGroups()
-    const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos e regras' }))
-    expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos e regras')
+    const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos personalizados' }))
+    expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos personalizados')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
@@ -68,7 +68,7 @@ describe('navegação', () => {
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
     expect(routes).toMatchObject({
-      'Campos e regras': '/config/campos',
+      'Campos personalizados': '/config/campos',
       'Tipos de agenda': '/config/agendas',
       'Ambiente': '/config/ambiente',
       'Conexão MCP': '/config/mcp',

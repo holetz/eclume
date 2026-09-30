@@ -16,7 +16,7 @@ const LABELS: Record<Step, { base: string; active?: string; done?: string; faile
 const REASONS: Record<string, string> = {
   no_provider: 'nenhum agente configurado para esta etapa',
   no_auto_fields: 'nenhum campo com preenchimento automático',
-  no_types: 'nenhum tipo de agenda cadastrado',
+  no_types: 'só o tipo padrão está cadastrado: ficou ele',
   set_by_user: 'o tipo foi escolhido por você',
   no_agenda_type: 'a gravação não tem tipo de agenda',
   before_pipeline: 'gravação anterior ao processamento automático',
