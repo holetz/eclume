@@ -50,8 +50,8 @@ describe('artigos da central de ajuda', () => {
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
   })
 
-  it('cobrem a central inteira: 35 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
-    expect(ARTICLES).toHaveLength(35)
+  it('cobrem a central inteira: 36 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+    expect(ARTICLES).toHaveLength(36)
     for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
     for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
       expect(articlesForPage(key).length, `chave ${key}`).toBeGreaterThanOrEqual(1)
