@@ -150,14 +150,16 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   async function copy() {
     setCopied(null)
     try {
-      const { html, text } = await summaryClipboard(recording.title, current?.content_md ?? '')
+      const content = summaryClipboard(recording.title, current?.content_md ?? '')
       // Sem `ClipboardItem` (navegador antigo), só o texto; o Teams cola o HTML em negrito.
-      if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText(text)
+      if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText((await content).text)
       else {
+        // O item nasce ainda no clique, com o conteúdo como promessa: o Safari recusa a escrita
+        // começada depois de um `await`.
         await navigator.clipboard.write([
           new ClipboardItem({
-            'text/html': new Blob([html], { type: 'text/html' }),
-            'text/plain': new Blob([text], { type: 'text/plain' }),
+            'text/html': content.then(({ html }) => new Blob([html], { type: 'text/html' })),
+            'text/plain': content.then(({ text }) => new Blob([text], { type: 'text/plain' })),
           }),
         ])
       }

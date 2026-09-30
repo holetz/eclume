@@ -37,8 +37,8 @@ describe('documento do resumo', () => {
     vi.stubGlobal(
       'ClipboardItem',
       class {
-        items: Record<string, Blob>
-        constructor(items: Record<string, Blob>) {
+        items: Record<string, Promise<Blob>>
+        constructor(items: Record<string, Promise<Blob>>) {
           this.items = items
         }
       },
@@ -50,13 +50,13 @@ describe('documento do resumo', () => {
     expect(copy).toHaveAttribute('title', 'Copia o título e o resumo')
     await user.click(copy)
     expect(await within(section).findByText('Copiado')).toHaveAttribute('role', 'status')
-    const { items } = write.mock.calls[0][0][0] as { items: Record<string, Blob> }
+    const { items } = write.mock.calls[0][0][0] as { items: Record<string, Promise<Blob>> }
     expect(Object.keys(items).sort()).toEqual(['text/html', 'text/plain'])
-    const html = await items['text/html'].text()
+    const html = await (await items['text/html']).text()
     expect(html.startsWith('<p><strong>Alinhamento do programa de lideranças</strong></p>')).toBe(true)
     expect(html).toContain('<p><strong>Decisões</strong></p>')
     expect(html).not.toMatch(/<h[1-6]/)
-    const text = await items['text/plain'].text()
+    const text = await (await items['text/plain']).text()
     expect(text.startsWith('Alinhamento do programa de lideranças\n\n')).toBe(true)
     expect(text).not.toMatch(/^#/m)
 
