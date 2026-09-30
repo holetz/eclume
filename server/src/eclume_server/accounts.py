@@ -33,6 +33,10 @@ class EmailTakenError(AccountError):
     """Já existe conta de usuário com o e-mail."""
 
 
+class WrongPasswordError(AccountError):
+    """A senha informada não é a da conta."""
+
+
 def notice() -> dict[str, str]:
     """Schema `Notice`: o aviso em vigor."""
     return {"version": NOTICE_VERSION, "text": NOTICE_TEXT}
@@ -97,6 +101,43 @@ async def password_login(conn: AsyncConnection, email: str, password: str) -> UU
         values["password_hash"] = hash_password(password)
     await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
     return user["id"]
+
+
+async def change_password(
+    conn: AsyncConnection, user_id: UUID, current: str, new: str, *, keep_session: UUID | None
+) -> None:
+    """Troca a senha da conta e encerra as outras sessões dela; senha atual errada é `AccountError`.
+
+    Os PATs continuam valendo: são credenciais à parte, revogáveis em Tokens.
+    """
+    stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
+    if not verify_password(stored, current):
+        msg = "senha atual incorreta"
+        raise WrongPasswordError(msg)
+    if len(new) < MIN_PASSWORD:
+        msg = f"a senha precisa de ao menos {MIN_PASSWORD} caracteres"
+        raise AccountError(msg)
+    await conn.execute(update(t.users).where(t.users.c.id == user_id).values(password_hash=hash_password(new)))
+    others = delete(t.sessions).where(t.sessions.c.user_id == user_id)
+    if keep_session is not None:
+        others = others.where(t.sessions.c.id != keep_session)
+    await conn.execute(others)
+
+
+async def delete_user(conn: AsyncConnection, user_id: UUID, password: str) -> list[tuple[str | None, UUID]]:
+    """Apaga a conta e tudo o que é dela (as FKs levam em cascata); senha errada é `AccountError`.
+
+    Devolve `(audio_key, recording_id)` de cada gravação, para quem chamou apagar os objetos do
+    armazenamento depois do commit.
+    """
+    stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
+    if not verify_password(stored, password):
+        msg = "senha incorreta"
+        raise WrongPasswordError(msg)
+    r = t.recordings.c
+    objects = [(key, rid) for key, rid in (await conn.execute(select(r.audio_key, r.id).where(r.owner_id == user_id)))]
+    await conn.execute(delete(t.users).where(t.users.c.id == user_id))
+    return objects
 
 
 async def create_admin(conn: AsyncConnection, *, email: str, name: str, password: str) -> UUID:

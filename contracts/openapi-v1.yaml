@@ -223,6 +223,70 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/me/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Trocar a própria senha
+      description: |
+        Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
+        do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
+        continua; os PATs continuam valendo. Só pela sessão do usuário, com o limite de tentativas
+        das credenciais.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChange"
+      responses:
+        "204":
+          description: Senha trocada.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/me/delete:
+    post:
+      tags: [auth]
+      operationId: deleteAccount
+      summary: Excluir a própria conta
+      description: |
+        Confere a senha (errada: 422 em `password`) e apaga a conta com tudo o que é dela:
+        gravações e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags,
+        campos, tipos de agenda, tokens e aparelhos. Não há como desfazer. A resposta apaga os
+        cookies da sessão. Só pela sessão do usuário, com o limite de tentativas das credenciais.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountDeletion"
+      responses:
+        "204":
+          description: Conta excluída; a sessão acabou.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /api/v1/me/notice:
     post:
       tags: [auth]
@@ -5485,6 +5549,30 @@ components:
           description: Acima deste tamanho do cadastro, o agente não cria mais tags.
           type: integer
           minimum: 1
+
+    PasswordChange:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+          format: password
+        new_password:
+          description: Ao menos 12 caracteres, como no cadastro.
+          type: string
+          minLength: 1
+          format: password
+
+    AccountDeletion:
+      type: object
+      required: [password]
+      properties:
+        password:
+          description: A senha da conta, que confirma a exclusão.
+          type: string
+          minLength: 1
+          format: password
 
     TagAssignmentPatch:
       type: object

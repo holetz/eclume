@@ -14,8 +14,12 @@ from eclume_server import __version__
 from eclume_server.accounts import (
     MIN_PASSWORD,
     NOTICE_VERSION,
+    AccountError,
     EmailTakenError,
+    WrongPasswordError,
+    change_password,
     create_user,
+    delete_user,
     notice,
     password_login,
 )
@@ -152,9 +156,62 @@ async def logout(
     async with system_tx(ctx.engine) as conn:
         await conn.execute(delete(t.sessions).where(t.sessions.c.id == principal.session_id))
     response = Response(status_code=204)
+    _clear_cookies(response, ctx)
+    return response
+
+
+class PasswordChange(BaseModel):
+    """Schema `PasswordChange`."""
+
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
+class AccountDeletion(BaseModel):
+    """Schema `AccountDeletion`: a senha confirma que é o dono."""
+
+    password: str = Field(min_length=1, max_length=1024)
+
+
+Member = Annotated[Principal, Depends(requires(session_only=True))]
+
+
+def _clear_cookies(response: Response, ctx: AppContext) -> None:
     secure = ctx.settings.cookie_secure
     response.delete_cookie(SESSION_COOKIE, httponly=True, secure=secure, samesite="lax")
     response.delete_cookie(CSRF_COOKIE, secure=secure, samesite="lax")
+
+
+@router.post("/me/password", status_code=204)
+async def change_own_password(
+    body: PasswordChange, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_password"))]
+) -> Response:
+    """Troca a senha; as outras sessões da conta acabam e esta continua."""
+    try:
+        async with system_tx(ctx.engine) as conn:
+            await change_password(
+                conn, principal.user_id, body.current_password, body.new_password, keep_session=principal.session_id
+            )
+    except AccountError as exc:
+        field = "current_password" if isinstance(exc, WrongPasswordError) else "new_password"
+        raise invalid_field(field, str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.post("/me/delete", status_code=204)
+async def delete_own_account(
+    body: AccountDeletion, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_delete"))]
+) -> Response:
+    """Exclui a conta e todos os dados dela, com os áudios do armazenamento; encerra a sessão."""
+    try:
+        async with system_tx(ctx.engine) as conn:
+            objects = await delete_user(conn, principal.user_id, body.password)
+    except AccountError as exc:
+        raise invalid_field("password", str(exc)) from exc
+    for key, recording_id in objects:
+        await ctx.storage.delete_recording(key, recording_id)
+    response = Response(status_code=204)
+    _clear_cookies(response, ctx)
     return response
 
 
