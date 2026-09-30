@@ -85,6 +85,10 @@ biblioteca grande não atrasar o upload das gravações.
 2. Para cada gravação com transcrição: `GET /recordings/{id}/summary` e, se ligadas,
    `GET /transcripts?recording_id=`. Uma falha numa gravação não para as outras, e **o cursor não
    avança** (o próximo ciclo repete, sem custo: a escrita é idempotente).
+   **Servidor sem o escopo das transcrições** (403 `insufficient_scope`, um servidor anterior ao
+   contrato 2.7.0 ou um token que a migração 018 ainda não alcançou): a primeira recusa vale para o
+   ciclo todo, os resumos são escritos, o cursor avança e a aba avisa que falta atualizar o
+   servidor. A varredura completa as transcrições que ficaram faltando quando o escopo chegar.
 3. **Varredura** a cada 6 h e em "Sincronizar agora": lista a biblioteca inteira, traz o que o
    manifesto ainda não tem e apaga o que saiu do servidor. Só ela apaga; o ciclo incremental nunca.
 4. Escreve o `AGENTS.md` e grava o manifesto.

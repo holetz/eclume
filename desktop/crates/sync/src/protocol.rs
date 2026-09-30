@@ -74,11 +74,39 @@ pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
         .or(problem.title)
         .map(|text| format!(": {text}"))
         .unwrap_or_default();
-    anyhow!(
+    let message = format!(
         "{what}: o servidor respondeu {}{code}{text}",
         response.status
-    )
+    );
+    if response.status == 403 && code == " (insufficient_scope)" {
+        return anyhow::Error::new(MissingScope::new(message));
+    }
+    anyhow!(message)
 }
+
+/// O servidor recusou porque o token não tem o escopo da operação (403 `insufficient_scope`): um
+/// servidor anterior ao contrato 2.7.0, ou um token que a migração ainda não alcançou. Quem chama
+/// distingue este erro (`downcast_ref`) de uma falha qualquer para degradar em vez de desistir.
+#[derive(Debug)]
+pub struct MissingScope {
+    message: String,
+}
+
+impl MissingScope {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for MissingScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for MissingScope {}
 
 /// Cliente da API do eclume por PAT.
 pub struct Client {
@@ -982,6 +1010,36 @@ mod tests {
         assert_eq!(client.current_summary("r4").unwrap(), None);
         assert_eq!(client.current_summary("r5").unwrap(), None);
         assert!(client.current_summary("r6").is_err());
+    }
+
+    #[test]
+    fn falta_de_escopo_e_um_erro_distinguivel_e_o_resto_segue_generico() {
+        let problema = |status: u16, code: &str| {
+            json(
+                status,
+                serde_json::json!({"title": "Forbidden", "detail": "Este PAT não tem o escopo transcripts:read.", "code": code}),
+            )
+        };
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/transcripts?limit=200&recording_id=r1",
+                problema(403, "insufficient_scope"),
+            )
+            .expect(
+                "GET /api/v1/transcripts?limit=200&recording_id=r2",
+                problema(403, "outro_codigo"),
+            );
+        let (client, _, _) = make_client(script);
+        let falta = client.transcript("r1").unwrap_err();
+        assert!(falta.downcast_ref::<MissingScope>().is_some());
+        assert!(format!("{falta:#}").contains("insufficient_scope"));
+        assert!(format!("{falta:#}").contains("transcripts:read"));
+        // Só 403 com esse código conta: o resto segue erro comum.
+        assert!(client
+            .transcript("r2")
+            .unwrap_err()
+            .downcast_ref::<MissingScope>()
+            .is_none());
     }
 
     #[test]

@@ -16,7 +16,7 @@ use anyhow::{anyhow, Result};
 use eclume_mirror::{Mirror, MirrorItem, Segment, Speaker, Summary, Transcript};
 use eclume_recorder::now_ms;
 use eclume_sync::api::{self, CollectionInfo, LibraryRecording};
-use eclume_sync::{Client, LibrarySummary};
+use eclume_sync::{Client, LibrarySummary, MissingScope};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
@@ -62,6 +62,9 @@ pub struct Report {
     pub removed: usize,
     /// Gravações que falharam ao ler: o cursor não avança e o próximo ciclo as tenta de novo.
     pub failed: usize,
+    /// O servidor recusou a leitura de transcrições (403 `insufficient_scope`): os resumos foram
+    /// sincronizados e as transcrições esperam o servidor liberar o escopo.
+    pub transcripts_denied: bool,
 }
 
 /// Monta o que o espelho escreve a partir do que o servidor devolveu.
@@ -155,29 +158,52 @@ pub fn sync_library(
         let all = source.library(None)?;
         present = Some(all.iter().map(|r| r.id.clone()).collect());
         for recording in all {
-            if mirror.entry(&recording.id).is_none() && !todo.iter().any(|r| r.id == recording.id) {
+            // O que o manifesto não tem, e as transcrições que ficaram faltando (um servidor sem
+            // o escopo, antes): a varredura as completa quando o servidor passa a permitir.
+            let missing = match mirror.entry(&recording.id) {
+                None => true,
+                Some(entry) => {
+                    transcripts
+                        && recording.transcript_id.is_some()
+                        && entry.transcript_revision.is_none()
+                }
+            };
+            if missing && !todo.iter().any(|r| r.id == recording.id) {
                 todo.push(recording);
             }
         }
     }
 
     let mut report = Report::default();
+    // Sem o escopo, a primeira recusa vale para o ciclo todo: as demais gravações nem pedem.
+    let mut transcripts_on = transcripts;
     for recording in &todo {
         report.recordings += 1;
-        let read = || -> Result<MirrorItem> {
+        let read = |transcripts_on: &mut bool, denied: &mut bool| -> Result<MirrorItem> {
             let summary = if recording.transcript_id.is_some() {
                 source.current_summary(&recording.id)?
             } else {
                 None
             };
-            let transcript = if transcripts && recording.transcript_id.is_some() {
-                source.transcript(&recording.id)?
+            let transcript = if *transcripts_on && recording.transcript_id.is_some() {
+                match source.transcript(&recording.id) {
+                    Ok(transcript) => transcript,
+                    Err(err) if err.downcast_ref::<MissingScope>().is_some() => {
+                        log::warn!("pasta sincronizada: sem o escopo das transcrições: {err:#}");
+                        *transcripts_on = false;
+                        *denied = true;
+                        None
+                    }
+                    Err(err) => return Err(err),
+                }
             } else {
                 None
             };
             Ok(to_item(recording, &names, summary, transcript))
         };
-        match read().and_then(|item| mirror.apply(&item)) {
+        match read(&mut transcripts_on, &mut report.transcripts_denied)
+            .and_then(|item| mirror.apply(&item))
+        {
             Ok(applied) => {
                 report.written += applied.written;
                 report.unchanged += applied.unchanged;
@@ -204,6 +230,25 @@ pub fn sync_library(
     mirror.write_agents(transcripts)?;
     mirror.save()?;
     Ok(report)
+}
+
+/// O que a aba mostra além do "sincronizada": nada quando tudo passou, ou o que ficou de fora.
+pub fn status_note(report: &Report) -> Option<String> {
+    let mut notes = Vec::new();
+    if report.transcripts_denied {
+        notes.push(
+            "Resumos sincronizados, mas o servidor ainda não permite que o app leia transcrições \
+             (precisa do contrato 2.7.0): atualize o servidor"
+                .to_string(),
+        );
+    }
+    if report.failed > 0 {
+        notes.push(format!(
+            "{} gravações não puderam ser lidas; nova tentativa no próximo ciclo",
+            report.failed
+        ));
+    }
+    (!notes.is_empty()).then(|| notes.join(" · "))
 }
 
 /// O canal para cutucar o laço; a mensagem diz se é para varrer a biblioteca inteira.
@@ -275,12 +320,7 @@ fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
         match &result {
             Ok(report) => {
                 status.last_sync_ms = Some(now_ms());
-                status.last_error = (report.failed > 0).then(|| {
-                    format!(
-                        "{} gravações não puderam ser lidas; nova tentativa no próximo ciclo",
-                        report.failed
-                    )
-                });
+                status.last_error = status_note(report);
                 status.last = Some(*report);
             }
             Err(err) => status.last_error = Some(format!("{err:#}")),
@@ -304,6 +344,9 @@ mod tests {
         summaries: RefCell<BTreeMap<String, LibrarySummary>>,
         transcripts: RefCell<BTreeMap<String, api::Transcript>>,
         broken_transcript: RefCell<Vec<String>>,
+        /// O servidor recusa `transcripts:read` (403 `insufficient_scope`).
+        denied_transcripts: RefCell<bool>,
+        transcript_calls: RefCell<usize>,
         calls: RefCell<Vec<String>>,
     }
 
@@ -327,6 +370,12 @@ mod tests {
             Ok(self.summaries.borrow().get(id).cloned())
         }
         fn transcript(&self, id: &str) -> Result<Option<api::Transcript>> {
+            *self.transcript_calls.borrow_mut() += 1;
+            if *self.denied_transcripts.borrow() {
+                return Err(anyhow::Error::new(eclume_sync::MissingScope::new(
+                    "403 (insufficient_scope)",
+                )));
+            }
             if self.broken_transcript.borrow().iter().any(|b| b == id) {
                 return Err(anyhow!("500"));
             }
@@ -564,6 +613,65 @@ mod tests {
         assert_eq!((again.failed, again.written), (0, 4));
         assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn servidor_sem_o_escopo_das_transcricoes_sincroniza_os_resumos_e_nao_insiste() {
+        let dir = tmp("sem-escopo");
+        let fake = fake();
+        *fake.denied_transcripts.borrow_mut() = true;
+        let mut mirror = Mirror::open(&dir).unwrap();
+        let report = sync_library(&fake, &mut mirror, true, false).unwrap();
+        // Os resumos de aaaaaaaa (2 Collections) e bbbbbbbb (1) saem; nenhum `.jsonl`; nada falhou.
+        assert_eq!(
+            (report.written, report.failed, report.transcripts_denied),
+            (3, 0, true)
+        );
+        assert!(listed(&dir).iter().all(|f| f.ends_with(".md")));
+        // A primeira recusa vale para o ciclo todo: uma chamada só, não uma por gravação.
+        assert_eq!(*fake.transcript_calls.borrow(), 1);
+        // O cursor avança (não se relê tudo a cada minuto) e a aba explica o que faltou.
+        assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
+        let nota = status_note(&report).unwrap();
+        assert!(nota.contains("transcrições") && nota.contains("contrato 2.7.0"));
+        assert!(!nota.contains("não puderam ser lidas"));
+
+        // O servidor é atualizado: a varredura completa as transcrições que faltavam.
+        *fake.denied_transcripts.borrow_mut() = false;
+        let incremental = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!(incremental.written, 0);
+        let sweep = sync_library(&fake, &mut mirror, true, true).unwrap();
+        assert_eq!((sweep.transcripts_denied, sweep.failed), (false, 0));
+        // Os três `.jsonl` que faltavam, e os três `.md`, que ganham a propriedade `transcript`.
+        assert_eq!(sweep.written, 6);
+        assert_eq!(
+            listed(&dir)
+                .iter()
+                .filter(|f| f.ends_with(".jsonl"))
+                .count(),
+            3
+        );
+        assert_eq!(status_note(&sweep), None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_nota_da_aba_soma_recusa_e_falhas() {
+        assert_eq!(status_note(&Report::default()), None);
+        let so_falhas = Report {
+            failed: 2,
+            ..Report::default()
+        };
+        assert!(status_note(&so_falhas)
+            .unwrap()
+            .starts_with("2 gravações não puderam"));
+        let ambos = Report {
+            failed: 1,
+            transcripts_denied: true,
+            ..Report::default()
+        };
+        let nota = status_note(&ambos).unwrap();
+        assert!(nota.contains("contrato 2.7.0") && nota.contains(" · 1 gravações"));
     }
 
     #[test]
