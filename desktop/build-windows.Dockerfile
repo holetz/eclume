@@ -10,3 +10,7 @@ ENV PATH=/usr/lib/llvm-18/bin:$PATH
 RUN rustup target add x86_64-pc-windows-msvc \
  && cargo install --locked cargo-xwin \
  && chmod -R a+rwX /opt/cargo /opt/rustup
+# O libopus (crate `opus`) compila pelo CMake com o gerador Ninja quando o alvo é MSVC; sem ele o
+# build falha em "CMAKE_MAKE_PROGRAM is not set". Camada própria para não refazer o cargo-xwin.
+RUN apt-get update && apt-get install -y --no-install-recommends ninja-build \
+ && rm -rf /var/lib/apt/lists/*
