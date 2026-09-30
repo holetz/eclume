@@ -30,24 +30,112 @@ describe('documento do resumo', () => {
     expect(screen.getByRole('menuitem', { name: /^Resumo/ })).not.toHaveAttribute('aria-disabled')
   })
 
-  it('copia o título e o resumo, e avisa quando o navegador não deixa', async () => {
+  it('copia o título e o resumo em HTML e texto, com os títulos em negrito, e avisa quando o navegador não deixa', async () => {
     const user = userEvent.setup()
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const write = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { write }, configurable: true })
+    vi.stubGlobal(
+      'ClipboardItem',
+      class {
+        items: Record<string, Promise<Blob>>
+        constructor(items: Record<string, Promise<Blob>>) {
+          this.items = items
+        }
+      },
+    )
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await summarySection()
     const copy = within(section).getByRole('button', { name: 'Copiar com título' })
     expect(copy).toHaveAttribute('title', 'Copia o título e o resumo')
     await user.click(copy)
-    expect(writeText).toHaveBeenCalledWith(
-      `# Alinhamento do programa de lideranças\n\n${fixtures.summaryState().current!.content_md}`,
-    )
     expect(await within(section).findByText('Copiado')).toHaveAttribute('role', 'status')
+    const { items } = write.mock.calls[0][0][0] as { items: Record<string, Promise<Blob>> }
+    expect(Object.keys(items).sort()).toEqual(['text/html', 'text/plain'])
+    const html = await (await items['text/html']).text()
+    expect(html.startsWith('<p><strong>Alinhamento do programa de lideranças</strong></p>')).toBe(true)
+    expect(html).toContain('<p><strong>Decisões</strong></p>')
+    expect(html).not.toMatch(/<h[1-6]/)
+    const text = await (await items['text/plain']).text()
+    expect(text.startsWith('Alinhamento do programa de lideranças\n\n')).toBe(true)
+    expect(text).not.toMatch(/^#/m)
 
-    writeText.mockRejectedValueOnce(new Error('negado'))
+    write.mockRejectedValueOnce(new Error('negado'))
     await user.click(copy)
     expect(await within(section).findByRole('alert')).toHaveTextContent('Não deu para copiar')
+  })
+
+  it('sem ClipboardItem, copia o texto puro sem as hashtags dos títulos', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    vi.stubGlobal('ClipboardItem', undefined)
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    await user.click(within(section).getByRole('button', { name: 'Copiar com título' }))
+    expect(await within(section).findByText('Copiado')).toBeInTheDocument()
+    const copied = writeText.mock.calls[0][0] as string
+    expect(copied.startsWith('Alinhamento do programa de lideranças\n\n')).toBe(true)
+    expect(copied).not.toMatch(/^#/m)
+  })
+
+  it('regenera o resumo só depois de confirmar, pelo tipo da gravação, e espera a geração', async () => {
+    const user = userEvent.setup()
+    let pending = false
+    const http = mockTranscriptApi({
+      'GET /api/v1/recordings/:id/summary': () => {
+        const state = fixtures.summaryState()
+        if (pending) state.pending = fixtures.summaryQueued()
+        return state
+      },
+      'POST /api/v1/transcripts/:id/summaries': () => {
+        pending = true
+        return json(fixtures.summaryQueued(), 202)
+      },
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    const regenerate = within(section).getByRole('button', { name: 'Regenerar' })
+
+    await user.click(regenerate)
+    let dialog = screen.getByRole('dialog', { name: 'Regenerar o resumo?' })
+    expect(dialog).toHaveTextContent('A nova versão passa a ser a atual')
+    expect(dialog).toHaveTextContent('a versão 2 (Editado por você) fica guardada')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(0)
+
+    await user.click(regenerate)
+    dialog = screen.getByRole('dialog', { name: 'Regenerar o resumo?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Regenerar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()).toEqual({})
+    expect(await within(section).findByText('Gerando uma versão nova…')).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Regenerar' })).toBeDisabled()
+  })
+
+  it('regenerar sem tipo de agenda abre o diálogo de trocar o tipo', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi({
+      'POST /api/v1/transcripts/:id/summaries': () =>
+        json(
+          {
+            type: 'about:blank',
+            title: 'validation_failed',
+            status: 422,
+            code: 'validation_failed',
+            errors: [{ field: 'agenda_type_id', message: 'a gravação não tem tipo de agenda' }],
+          },
+          422,
+        ),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    await user.click(within(section).getByRole('button', { name: 'Regenerar' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Regenerar o resumo?' })).getByRole('button', { name: 'Regenerar' }))
+    expect(await screen.findByRole('dialog', { name: 'Trocar o tipo de agenda' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Regenerar o resumo?' })).not.toBeInTheDocument()
   })
 
   it('troca o tipo de agenda num diálogo e relê o resumo, que volta em geração', async () => {

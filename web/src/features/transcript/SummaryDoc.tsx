@@ -6,6 +6,7 @@ import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { Dialog } from '../../app/Dialog'
 import { useAgendaTypes } from '../organize/queries'
+import { summaryClipboard } from './copy-summary'
 import styles from './RecordingPage.module.css'
 import { isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
 import { SummaryDiff, SummaryEditor } from './SummaryEditor'
@@ -76,6 +77,48 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
   )
 }
 
+interface RegenerateDialogProps {
+  typeName: string | null
+  current: Pick<Schemas['Summary'], 'version' | 'origin' | 'restored_from_id'>
+  busy: boolean
+  error: unknown
+  onConfirm: () => void
+  onClose: () => void
+}
+
+/** Confirma gerar outra versão pelo tipo de agenda da gravação: a nova passa a ser a atual. */
+function RegenerateDialog({ typeName, current, busy, error, onConfirm, onClose }: RegenerateDialogProps) {
+  return (
+    <Dialog
+      title="Regenerar o resumo?"
+      plain
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="button" className="btn btn-primary" disabled={busy} aria-busy={busy} onClick={onConfirm}>
+            {busy ? 'Enfileirando…' : 'Regenerar'}
+          </button>
+        </>
+      }
+    >
+      <div className={styles.dialogStack}>
+        <p>
+          Gera uma versão nova pelas instruções de {typeName ?? 'o tipo de agenda'}. A nova versão passa a ser a atual; a
+          versão {current.version} ({originLabel(current)}) fica guardada.
+        </p>
+        {error != null && (
+          <p className="alert alert-error" role="alert">
+            {errorMessage(error)}
+          </p>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
 interface SummaryDocProps {
   recording: Recording
   onChangeType: () => void
@@ -86,6 +129,7 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   const state = useSummaryState(recording.id, recording.transcript_id !== null)
   const { remove, generate } = useSummaryMutations(recording)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false)
   const [mode, setMode] = useState<'read' | 'edit' | 'compare'>('read')
   const [copied, setCopied] = useState<'ok' | 'error' | null>(null)
 
@@ -106,11 +150,34 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   async function copy() {
     setCopied(null)
     try {
-      await navigator.clipboard.writeText(`# ${recording.title}\n\n${current?.content_md ?? ''}`)
+      const content = summaryClipboard(recording.title, current?.content_md ?? '')
+      // Sem `ClipboardItem` (navegador antigo), só o texto; o Teams cola o HTML em negrito.
+      if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText((await content).text)
+      else {
+        // O item nasce ainda no clique, com o conteúdo como promessa: o Safari recusa a escrita
+        // começada depois de um `await`.
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': content.then(({ html }) => new Blob([html], { type: 'text/html' })),
+            'text/plain': content.then(({ text }) => new Blob([text], { type: 'text/plain' })),
+          }),
+        ])
+      }
       setCopied('ok')
     } catch {
       setCopied('error')
     }
+  }
+
+  function regenerate() {
+    generate.mutate(undefined, {
+      onSuccess: () => setConfirmingRegenerate(false),
+      onError: (error) => {
+        if (!isMissingType(error)) return
+        setConfirmingRegenerate(false)
+        onChangeType()
+      },
+    })
   }
 
   function startGenerate() {
@@ -188,6 +255,17 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
             {mode === 'compare' ? 'Fechar comparação' : 'Comparar com a gerada'}
           </button>
         )}
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={pending !== null || generate.isPending}
+          onClick={() => {
+            generate.reset()
+            setConfirmingRegenerate(true)
+          }}
+        >
+          Regenerar
+        </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onChangeType}>
           Trocar tipo
         </button>
@@ -218,6 +296,16 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
         <div className={`doc ${styles.doc}`}>
           <ReactMarkdown components={MARKDOWN}>{current.content_md ?? ''}</ReactMarkdown>
         </div>
+      )}
+      {confirmingRegenerate && (
+        <RegenerateDialog
+          typeName={current.agenda_type?.name ?? typeName}
+          current={current}
+          busy={generate.isPending}
+          error={generate.isError && !isMissingType(generate.error) ? generate.error : null}
+          onConfirm={regenerate}
+          onClose={() => setConfirmingRegenerate(false)}
+        />
       )}
       {confirmingDelete && (
         <ConfirmDialog
