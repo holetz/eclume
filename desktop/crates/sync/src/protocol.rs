@@ -227,6 +227,99 @@ impl Client {
         }
     }
 
+    /// Percorre as páginas de uma listagem por cursor (`limit` 200) e junta os itens.
+    fn paged<P, T>(
+        &self,
+        what: &str,
+        path: &str,
+        query: &[(&str, &str)],
+        split: impl Fn(P) -> (Vec<T>, Option<String>),
+    ) -> Result<Vec<T>>
+    where
+        P: DeserializeOwned,
+    {
+        let mut items = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut url = Url::parse(&self.endpoint(path)).context("endereço da API inválido")?;
+            {
+                let mut pairs = url.query_pairs_mut();
+                pairs.append_pair("limit", "200");
+                for (key, value) in query {
+                    pairs.append_pair(key, value);
+                }
+                if let Some(cursor) = &cursor {
+                    pairs.append_pair("cursor", cursor);
+                }
+            }
+            let page: P = self.call_json(what, HttpRequest::new("GET", url.to_string()))?;
+            let (mut batch, next) = split(page);
+            items.append(&mut batch);
+            match next {
+                Some(next) if !next.is_empty() => cursor = Some(next),
+                _ => return Ok(items),
+            }
+        }
+    }
+
+    /// As Collections do usuário: `GET /api/v1/collections` (`recordings:read`).
+    pub fn collections(&self) -> Result<Vec<api::CollectionInfo>> {
+        self.paged(
+            "falha ao listar as coleções",
+            "/collections",
+            &[],
+            |page: api::CollectionPage| (page.items, page.next_cursor),
+        )
+    }
+
+    /// As gravações da biblioteca: `GET /api/v1/recordings`, só as com `updated_at >= since`
+    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.7.0).
+    pub fn library(&self, since: Option<&str>) -> Result<Vec<api::LibraryRecording>> {
+        let query: Vec<(&str, &str)> = since.map(|value| ("since", value)).into_iter().collect();
+        self.paged(
+            "falha ao listar as gravações",
+            "/recordings",
+            &query,
+            |page: api::LibraryPage| (page.items, page.next_cursor),
+        )
+    }
+
+    /// O resumo atual de uma gravação para o espelho: `Ok(None)` quando ainda não há (404, 409
+    /// sem transcrição, ou nenhuma versão concluída).
+    pub fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>> {
+        let url = self.endpoint(&format!("/recordings/{recording_id}/summary"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            404 | 409 => Ok(None),
+            _ if response.is_success() => {
+                let state: SummaryState = parse("falha ao ler o resumo", &response)?;
+                Ok(state.current.and_then(|current| {
+                    let markdown = current.content_md?;
+                    (current.status == "done" && !markdown.trim().is_empty()).then(|| {
+                        LibrarySummary {
+                            version: current.version,
+                            agenda_type: current.agenda_type.map(|agenda| agenda.name),
+                            content_md: markdown,
+                        }
+                    })
+                }))
+            }
+            _ => Err(api_error("falha ao ler o resumo", &response)),
+        }
+    }
+
+    /// A transcrição de uma gravação: `GET /api/v1/transcripts?recording_id=` (`transcripts:read`,
+    /// que a credencial de dispositivo tem desde o contrato 2.7.0). `Ok(None)` sem transcrição.
+    pub fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
+        let transcripts = self.paged(
+            "falha ao ler a transcrição",
+            "/transcripts",
+            &[("recording_id", recording_id)],
+            |page: api::TranscriptPage| (page.items, page.next_cursor),
+        )?;
+        Ok(transcripts.into_iter().next())
+    }
+
     fn get_upload(&self, upload_id: &str) -> Result<Option<Upload>> {
         let url = self.endpoint(&format!("/uploads/{upload_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -451,6 +544,19 @@ pub struct SummaryVersion {
     pub status: String,
     #[serde(default)]
     pub content_md: Option<String>,
+    /// Número da versão (`summaries.version`): muda quando o resumo é refeito ou editado.
+    #[serde(default)]
+    pub version: u64,
+    #[serde(default)]
+    pub agenda_type: Option<api::AgendaRef>,
+}
+
+/// O resumo atual de uma gravação para o espelho local.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibrarySummary {
+    pub version: u64,
+    pub agenda_type: Option<String>,
+    pub content_md: String,
 }
 
 impl SummaryState {
@@ -461,6 +567,7 @@ impl SummaryState {
             Some(SummaryVersion {
                 status,
                 content_md: Some(markdown),
+                ..
             }) if status == "done" && !markdown.trim().is_empty() => SummaryPoll::Ready(markdown),
             _ => SummaryPoll::Waiting,
         }
@@ -779,6 +886,133 @@ mod tests {
         assert!(seen.iter().all(|request| request
             .headers
             .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
+    }
+
+    #[test]
+    fn biblioteca_pagina_colecoes_e_gravacoes() {
+        let gravacao = |id: &str, colecoes: &[&str]| {
+            serde_json::json!({
+                "id": id, "title": format!("Reunião {id}"), "status": "done",
+                "recorded_at": "2026-09-18T14:00:05Z", "updated_at": "2026-09-19T10:00:00Z",
+                "collection_ids": colecoes, "transcript_id": format!("t-{id}"),
+                "agenda_type": {"id": "a1", "name": "Reunião de equipe", "origin": "auto"},
+                "pipeline": [{"step": "summary", "state": "done"}]
+            })
+        };
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/collections?limit=200",
+                json(
+                    200,
+                    serde_json::json!({"items": [{"id": "c1", "name": "Clientes"}], "next_cursor": "p2"}),
+                ),
+            )
+            .expect(
+                "GET /api/v1/collections?limit=200&cursor=p2",
+                json(
+                    200,
+                    serde_json::json!({"items": [{"id": "c2", "name": "Interno"}], "next_cursor": null}),
+                ),
+            )
+            .expect(
+                "GET /api/v1/recordings?limit=200&since=2026-09-18T00%3A00%3A00Z",
+                json(
+                    200,
+                    serde_json::json!({"items": [gravacao("r1", &["c1", "c2"]), gravacao("r2", &[])], "next_cursor": null}),
+                ),
+            );
+        let (client, script, _) = make_client(script);
+        let colecoes = client.collections().unwrap();
+        assert_eq!(
+            colecoes.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            ["Clientes", "Interno"]
+        );
+        let gravacoes = client.library(Some("2026-09-18T00:00:00Z")).unwrap();
+        assert_eq!(gravacoes.len(), 2);
+        assert_eq!(gravacoes[0].collection_ids, ["c1", "c2"]);
+        assert!(gravacoes[1].collection_ids.is_empty());
+        assert_eq!(gravacoes[0].summary_state(), Some("done"));
+        assert_eq!(
+            gravacoes[0].agenda_type.as_ref().map(|a| a.name.as_str()),
+            Some("Reunião de equipe")
+        );
+        assert!(script.seen().iter().all(|request| request
+            .headers
+            .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
+    }
+
+    #[test]
+    fn resumo_atual_da_biblioteca_traz_versao_e_tipo() {
+        let atual = |status: &str, md: Option<&str>| {
+            json(
+                200,
+                serde_json::json!({
+                    "current": {"status": status, "content_md": md, "version": 3,
+                                "agenda_type": {"id": "a1", "name": "1:1"}},
+                    "generated": null, "pending": null, "version_count": 3
+                }),
+            )
+        };
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/recordings/r1/summary",
+                atual("done", Some("# Ata")),
+            )
+            .expect(
+                "GET /api/v1/recordings/r2/summary",
+                atual("done", Some("  ")),
+            )
+            .expect(
+                "GET /api/v1/recordings/r3/summary",
+                json(
+                    200,
+                    serde_json::json!({"current": null, "pending": null, "version_count": 0}),
+                ),
+            )
+            .expect("GET /api/v1/recordings/r4/summary", status(409))
+            .expect("GET /api/v1/recordings/r5/summary", status(404))
+            .expect("GET /api/v1/recordings/r6/summary", status(403));
+        let (client, _, _) = make_client(script);
+        let pronto = client.current_summary("r1").unwrap().unwrap();
+        assert_eq!(pronto.version, 3);
+        assert_eq!(pronto.agenda_type.as_deref(), Some("1:1"));
+        assert_eq!(pronto.content_md, "# Ata");
+        assert_eq!(client.current_summary("r2").unwrap(), None);
+        assert_eq!(client.current_summary("r3").unwrap(), None);
+        assert_eq!(client.current_summary("r4").unwrap(), None);
+        assert_eq!(client.current_summary("r5").unwrap(), None);
+        assert!(client.current_summary("r6").is_err());
+    }
+
+    #[test]
+    fn transcricao_da_gravacao_vem_do_filtro_por_gravacao() {
+        let transcricao = serde_json::json!({
+            "id": "t1", "recording_id": "r1", "title": "Alinhamento", "language": "pt",
+            "recorded_at": "2026-09-18T14:00:05Z", "duration_ms": 61000, "revision": 2,
+            "speakers": [{"id": "S1", "label": "Mariana"}],
+            "segments": [{"id": "g1", "speaker_id": "S1", "start_ms": 0, "end_ms": 4200, "text": "Bom dia."}]
+        });
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/transcripts?limit=200&recording_id=r1",
+                json(
+                    200,
+                    serde_json::json!({"items": [transcricao], "next_cursor": null}),
+                ),
+            )
+            .expect(
+                "GET /api/v1/transcripts?limit=200&recording_id=r2",
+                json(200, serde_json::json!({"items": [], "next_cursor": null})),
+            );
+        let (client, _, _) = make_client(script);
+        let lida = client.transcript("r1").unwrap().unwrap();
+        assert_eq!(
+            (lida.revision, lida.speakers[0].label.as_str()),
+            (2, "Mariana")
+        );
+        assert_eq!(lida.segments[0].text, "Bom dia.");
+        assert_eq!(lida.segments[0].end_ms, 4200);
+        assert!(client.transcript("r2").unwrap().is_none());
     }
 
     #[test]

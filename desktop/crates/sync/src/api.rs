@@ -191,3 +191,127 @@ pub struct MeAuth {
     pub method: String,
     pub token_id: Option<String>,
 }
+
+/// Uma Collection de `GET /api/v1/collections` (plana: sem hierarquia).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct CollectionInfo {
+    pub id: String,
+    pub name: String,
+}
+
+/// Uma página de `GET /api/v1/collections`.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct CollectionPage {
+    #[serde(default)]
+    pub items: Vec<CollectionInfo>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
+
+/// O tipo de agenda de uma gravação: só o nome importa para o espelho local.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AgendaRef {
+    #[serde(default)]
+    pub name: String,
+}
+
+/// Uma etapa do pipeline de uma gravação.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct PipelineStepInfo {
+    pub step: String,
+    pub state: String,
+}
+
+/// O que o espelho local lê de uma gravação da biblioteca (`GET /api/v1/recordings`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct LibraryRecording {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub recorded_at: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub collection_ids: Vec<String>,
+    #[serde(default)]
+    pub transcript_id: Option<String>,
+    #[serde(default)]
+    pub agenda_type: Option<AgendaRef>,
+    #[serde(default)]
+    pub pipeline: Vec<PipelineStepInfo>,
+}
+
+impl LibraryRecording {
+    /// Estado da etapa `summary` do pipeline, quando a gravação a tem.
+    pub fn summary_state(&self) -> Option<&str> {
+        self.pipeline
+            .iter()
+            .find(|step| step.step == "summary")
+            .map(|step| step.state.as_str())
+    }
+}
+
+/// Uma página de `GET /api/v1/recordings`.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct LibraryPage {
+    #[serde(default)]
+    pub items: Vec<LibraryRecording>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
+
+/// Um locutor da transcrição.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct TranscriptSpeaker {
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+}
+
+/// Um segmento da transcrição (as palavras ficam de fora: só vêm com `?include=words`).
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct TranscriptSegment {
+    #[serde(default)]
+    pub speaker_id: Option<String>,
+    #[serde(default)]
+    pub start_ms: u64,
+    #[serde(default)]
+    pub end_ms: u64,
+    #[serde(default)]
+    pub text: String,
+}
+
+/// A transcrição de `GET /api/v1/transcripts`.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Transcript {
+    pub id: String,
+    pub recording_id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub recorded_at: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub speakers: Vec<TranscriptSpeaker>,
+    #[serde(default)]
+    pub segments: Vec<TranscriptSegment>,
+}
+
+/// Uma página de `GET /api/v1/transcripts`.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct TranscriptPage {
+    #[serde(default)]
+    pub items: Vec<Transcript>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
