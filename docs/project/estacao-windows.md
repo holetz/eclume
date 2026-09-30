@@ -148,7 +148,7 @@ O host tem a toolchain instalada no espaço do `holetz`, sem apt: o target `x86_
 `rust-lld` da toolchain, `llvm-rc` → `llvm-rc-18`, `llvm-mt` → `llvm-mt-18` e `llvm-lib` →
 `llvm-lib-18`. O primeiro build baixa o CRT e o SDK da Microsoft para `~/.cache/cargo-xwin`.
 Os instaladores oficiais saem do `deploy/release-desktop.sh`, que compila o NSIS com o mesmo
-`cargo-xwin` num contêiner (`--windows`, desligado por padrão), ou do `desktop-release`
+`cargo-xwin` num contêiner (o Windows é padrão; `--sem-windows` o omite), ou do `desktop-release`
 ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)).
 
 ## Validação de 2026-09-25 (holetz/eclume#28)

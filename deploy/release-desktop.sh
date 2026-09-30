@@ -5,11 +5,12 @@
 # GitHub Release desktop-v<versão> pelo gh do host. Depois, deploy/publicar-desktop.sh leva o
 # release para /downloads. Contrato: docs/standards/code/desktop-distribuicao.md.
 #
-# Uso: bash deploy/release-desktop.sh [--plan] [--context NOME] [--windows] [--publicar]
+# Uso: bash deploy/release-desktop.sh [--plan] [--context NOME] [--sem-windows] [--publicar]
 #                                     [--notas "texto"]
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
-#   --windows   inclui o instalador NSIS do Windows (compilação cruzada; desligado por padrão).
+#   --sem-windows  deixa o Windows de fora (por padrão o release inclui o instalador NSIS,
+#               compilado por compilação cruzada; `--windows` segue aceito e não muda nada).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
 #   --notas     notas do release, que o app mostra no aviso "Atualizado para X".
 # Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
@@ -23,7 +24,7 @@ REPO=holetz/eclume
 SECRETS=/srv/eclume/secrets
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
 PLAN_ONLY=0
-WINDOWS=0
+WINDOWS=1
 PUBLICAR=0
 NOTAS=""
 
@@ -34,11 +35,12 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && -n "$2" ]] || { echo "--context exige o nome de um contexto Docker." >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
     --windows) WINDOWS=1; shift ;;
+    --sem-windows) WINDOWS=0; shift ;;
     --publicar) PUBLICAR=1; shift ;;
     --notas)
       [[ $# -ge 2 ]] || { echo "--notas exige um texto." >&2; exit 2; }
       NOTAS="$2"; shift 2 ;;
-    --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
