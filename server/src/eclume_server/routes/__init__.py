@@ -33,7 +33,6 @@ from eclume_server.routes import (
     uploads,
     voice,
 )
-from eclume_server.routes.not_implemented import include_not_implemented
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -75,5 +74,3 @@ def include_routes(app: FastAPI) -> None:
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.
     app.include_router(recordings.media_router)
-    # Depois das implementadas: as rotas pendentes nunca encobrem uma rota real.
-    include_not_implemented(app)

@@ -133,7 +133,7 @@ class EngineRegistry:
                 raise JobFailedError(INTERNAL_ERROR, str(exc)) from exc
             self._key = (name, base_url)
         if hasattr(self._engine, "hf_token"):
-            # o da organização (vindo no job) vence; o do ambiente é relido a cada job
+            # o da plataforma (vindo no job) vence; o do ambiente é relido a cada job
             self._engine.hf_token = hf_token or self.hf_token()
         return self._engine
 
@@ -317,7 +317,7 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
 
     pre = await _preprocess(ctx["config"], reporter, audio_path, workdir, options.get("preprocess"))
 
-    hf_token, token_warnings = _organization_hf_token(ctx["config"], options.get("hf_token_encrypted"))
+    hf_token, token_warnings = _platform_hf_token(ctx["config"], options.get("hf_token_encrypted"))
     progress, futures = _thread_progress(reporter, asyncio.get_running_loop())
     engine_started = time.monotonic()
     run = functools.partial(
@@ -361,14 +361,14 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
     return {"status": "done", "transcript_key": t_key, "embeddings_key": e_key, "engine_info": info}
 
 
-def _organization_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple[str | None, list[str]]:
-    """Token do HF da organização (cifrado nas `options`); não abrir cai no do ambiente, com aviso."""
+def _platform_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple[str | None, list[str]]:
+    """Token do HF da plataforma (cifrado nas `options`); não abrir cai no do ambiente, com aviso."""
     if not encrypted:
         return None, []
     try:
         return open_secret(encrypted, encryption_key=config.encryption_key, secret_key=config.secret_key), []
     except SecretError as exc:
-        logger.warning("token do HF da organização não abre (%s); usando o do ambiente", exc)
+        logger.warning("token do HF da plataforma não abre (%s); usando o do ambiente", exc)
         return None, [WARN_HF_TOKEN_UNDECRYPTABLE]
 
 

@@ -1,22 +1,15 @@
-"""Cobertura do contrato: toda operação existe (implementada ou 501) e o validador morde."""
+"""Cobertura do contrato: toda operação existe e o validador morde."""
 
 from __future__ import annotations
 
-import re
-import uuid
 from typing import TYPE_CHECKING
 
 import httpx
 
-from eclume_server.routes.not_implemented import NOT_IMPLEMENTED
 from eclume_server_testing.conformance import Conformance, operations
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from fastapi.testclient import TestClient
-
-    from eclume_server_testing.api import Account, Api
 
 
 def _implemented(client: TestClient) -> set[tuple[str, str]]:
@@ -24,25 +17,8 @@ def _implemented(client: TestClient) -> set[tuple[str, str]]:
     return {(method.upper(), path) for path, item in schema["paths"].items() for method in item}
 
 
-def test_implementadas_mais_pendentes_sao_o_contrato_inteiro(client: TestClient):
-    implemented = _implemented(client)
-    pending = {(method, path) for method, path, _ in NOT_IMPLEMENTED}
-    assert implemented.isdisjoint(pending)
-    assert implemented | pending == operations()
-    assert len(pending) == len(NOT_IMPLEMENTED)
-
-
-def test_rotas_pendentes_respondem_501(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
-    api = as_user(make_user())
-    for method, path, owner in NOT_IMPLEMENTED:
-        url = re.sub(r"\{speaker_id\}", "S1", path)
-        url = re.sub(r"\{secret_name\}", "hf_token", url)
-        url = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), url)
-        response = api.request(method, url, json={} if method in {"POST", "PUT", "PATCH"} else None)
-        assert response.status_code == 501, (method, path)
-        body = response.json()
-        assert body["code"] == "not_implemented"
-        assert owner in body["detail"]
+def test_as_rotas_implementadas_sao_o_contrato_inteiro(client: TestClient):
+    assert _implemented(client) == operations()
 
 
 def _response(method: str, path: str, status: int, body: object) -> httpx.Response:

@@ -151,10 +151,6 @@ class Storage:
 
         return await run_in_threadpool(read)
 
-    async def put_bytes(self, key: str, body: bytes, content_type: str) -> None:
-        """Grava um objeto pequeno."""
-        await run_in_threadpool(self._s3.put_object, Bucket=self.bucket, Key=key, Body=body, ContentType=content_type)
-
     async def open_range(self, key: str, byte_range: str | None) -> ObjectRange:
         """Abre o objeto (ou um trecho `bytes=a-b`) para streaming."""
         kwargs: dict[str, Any] = {"Bucket": self.bucket, "Key": key}

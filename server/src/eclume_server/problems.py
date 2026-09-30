@@ -29,7 +29,6 @@ _TITLES = {
     "notice_required": "Aviso não aceito",
     "invalid_pairing_code": "Código de pareamento inválido",
     "method_not_allowed": "Método não permitido",
-    "not_implemented": "Ainda não implementado",
 }
 
 

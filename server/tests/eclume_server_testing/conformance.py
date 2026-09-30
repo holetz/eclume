@@ -2,9 +2,8 @@
 
 Cada resposta de `/api/v1` que a suíte produz passa por `check`: o status tem de estar declarado na
 operação, os headers obrigatórios presentes e o corpo JSON válido contra o schema **estrito** (os
-objetos fechados a propriedades não declaradas, como em `contracts/tests/test_contract.py`). As
-rotas pendentes (501 `not_implemented`) ficam fora do contrato por construção e só precisam ser um
-problem+json. Uma requisição fora do contrato (parâmetro, corpo ou regra de negócio inválidos)
+objetos fechados a propriedades não declaradas, como em `contracts/tests/test_contract.py`). Uma
+requisição fora do contrato (parâmetro, corpo ou regra de negócio inválidos)
 recebe 422 `validation_failed` em qualquer operação, como no mock (Prism), mesmo onde a operação
 não declara o 422.
 """
@@ -81,7 +80,6 @@ class Conformance:
     """Coletor de violações e de operações exercitadas."""
 
     failures: list[str] = field(default_factory=list)
-    seen: set[tuple[str, str, int]] = field(default_factory=set)
 
     def check(self, response: httpx.Response) -> None:
         """Valida uma resposta de `/api/v1` contra o contrato."""
@@ -94,12 +92,11 @@ class Conformance:
         if template is None or method.lower() not in bundle()["paths"][template]:
             self.failures.append(f"{where}: operação fora do contrato")
             return
-        self.seen.add((method, template, response.status_code))
         response.read()
         operation = bundle()["paths"][template][method.lower()]
         declared = operation["responses"].get(str(response.status_code))
-        if declared is None and response.status_code in {422, 501}:
-            # 501: rota pendente, fora do contrato por construção; 422: requisição fora do contrato.
+        if declared is None and response.status_code == 422:
+            # 422: requisição fora do contrato, em qualquer operação (como no mock).
             self._body(where, response, _pointer("components", "schemas", "Problem"))
             return
         if declared is None:

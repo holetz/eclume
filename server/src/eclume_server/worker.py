@@ -181,13 +181,12 @@ async def transcription_failed(
     return result
 
 
-async def purge_embedding_objects(ctx: dict[str, Any], org_id: str | None = None) -> int:
+async def purge_embedding_objects(ctx: dict[str, Any]) -> int:
     """Apaga do bucket os `speaker_embeddings.json` de todas as gravações (voz desligada na plataforma).
 
     Nada é apagado se a identificação por voz tiver sido religada nesse meio-tempo: os arquivos
-    novos já valem. `org_id` é ignorado: um job da versão com organização pode estar na fila.
+    novos já valem.
     """
-    del org_id
     async with system_tx(ctx["engine"]) as conn:
         if (await platform_voice(conn))["enabled"]:
             return 0
