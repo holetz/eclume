@@ -198,6 +198,68 @@ describe('biblioteca na semana', () => {
   })
 })
 
+describe('filtros e restauração da biblioteca', () => {
+  const COLLECTION = '01928f3a-1c00-7a00-8000-000000000801'
+  const LAST = 'eclume-biblioteca-ultima'
+  const VIEW_LABELS: Record<string, string> = { semana: 'Semana', mes: 'Mês', lista: 'Lista' }
+
+  /** A query da última requisição de gravações do período (a que a tela mostra agora). */
+  function lastRangeQuery(http: ReturnType<typeof mockLibrary>) {
+    const ranges = http.requests('GET /api/v1/recordings').filter((r) => new URL(r.url).searchParams.has('from'))
+    return new URL(ranges.at(-1)!.url).searchParams
+  }
+
+  it('restaura a última biblioteca uma vez e deixa desmarcar a coleção', async () => {
+    saturdayMorning()
+    const http = mockLibrary()
+    localStorage.setItem(LAST, `visao=semana&data=2026-09-21&colecao=${COLLECTION}`)
+    renderApp('/')
+
+    const collection = await screen.findByRole('checkbox', { name: 'Metalúrgica Serra Azul' })
+    await waitFor(() => expect(collection).toBeChecked())
+    await waitFor(() => expect(lastRangeQuery(http).getAll('collection')).toEqual([COLLECTION]))
+
+    await userEvent.click(collection)
+    await waitFor(() => expect(collection).not.toBeChecked())
+    await waitFor(() => expect(lastRangeQuery(http).has('collection')).toBe(false))
+    // A URL fica como o filtro a deixou: nem a coleção volta, nem a visão é trocada.
+    expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
+    expect(screen.getByText('21–27 de setembro de 2026')).toBeInTheDocument()
+    expect(localStorage.getItem(LAST)).toBe('visao=semana&data=2026-09-21')
+  })
+
+  it.each(['semana', 'mes', 'lista'])('com a abertura "%s", marcar uma tag mantém a tag', async (opening) => {
+    saturdayMorning()
+    mockLibrary()
+    localStorage.setItem('eclume-biblioteca-abertura', opening)
+    renderApp('/')
+
+    const tag = await screen.findByRole('button', { name: 'cliente-metalurgica' })
+    // A guardada só é gravada depois que a abertura escolhida chegou à URL.
+    await waitFor(() => expect(localStorage.getItem(LAST)).toBe(`visao=${opening}`))
+    await userEvent.click(tag)
+    await waitFor(() => expect(tag).toHaveAttribute('aria-pressed', 'true'))
+    // Dá tempo de um efeito de restauração, se ainda houvesse, sobrescrever a URL.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(tag).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: VIEW_LABELS[opening] })).toBeChecked()
+    expect(localStorage.getItem(LAST)).toBe(`visao=${opening}&tag=cliente-metalurgica`)
+  })
+
+  it('tirar o último filtro, deixando a URL vazia, limpa a última biblioteca guardada', async () => {
+    mockLibrary()
+    renderApp('/?tag=cliente-metalurgica')
+
+    const tag = await screen.findByRole('button', { name: 'cliente-metalurgica' })
+    await waitFor(() => expect(tag).toHaveAttribute('aria-pressed', 'true'))
+    expect(localStorage.getItem(LAST)).toBe('tag=cliente-metalurgica')
+
+    await userEvent.click(tag)
+    await waitFor(() => expect(tag).toHaveAttribute('aria-pressed', 'false'))
+    await waitFor(() => expect(localStorage.getItem(LAST)).toBeNull())
+  })
+})
+
 describe('biblioteca no mês e na lista', () => {
   it('mostra o mês com até três gravações por dia, e o dia abre a semana', async () => {
     saturdayMorning()
