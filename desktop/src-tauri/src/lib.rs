@@ -309,6 +309,7 @@ pub fn run() {
             commands::test_connection,
             commands::open_signup,
             commands::pick_ca_file,
+            commands::pick_mirror_dir,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");

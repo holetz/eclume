@@ -401,6 +401,19 @@ pub fn pick_ca_file(app: AppHandle) -> Option<String> {
         .map(|path| path.to_string_lossy().into_owned())
 }
 
+/// "Escolher pasta…" da pasta sincronizada: o diálogo nativo de pasta; `null` quando a pessoa
+/// desiste.
+#[tauri::command(async)]
+pub fn pick_mirror_dir(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Pasta dos resumos")
+        .blocking_pick_folder()
+        .and_then(|folder| folder.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 /// "Criar conta": abre o cadastro do servidor escolhido no navegador.
 #[tauri::command]
 pub fn open_signup(app: AppHandle, url: String) -> CommandResult<()> {
