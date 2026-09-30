@@ -30,6 +30,12 @@ DEFAULT_THRESHOLD = 0.55
 MIN_COMPARE_TALK_MS = 10_000
 MIN_SAMPLE_TALK_MS = 10_000
 MAX_SUGGESTIONS = 3
+# Atribuição automática: limiar padrão da conta (calibracao-voz.md: FPR ~0,05% a 0,70), faixa aceita e a
+# folga mínima entre a 1ª e a 2ª pessoa candidatas do mesmo locutor; sem folga, só sugere.
+DEFAULT_AUTO_THRESHOLD = 0.75
+MIN_AUTO_THRESHOLD = 0.5
+MAX_AUTO_THRESHOLD = 0.99
+AUTO_MARGIN = 0.05
 # Retranscrição: o locutor novo herda o vínculo do antigo quando a fala dos dois se sobrepõe ao
 # menos nesta fração, nos dois sentidos.
 RESTORE_OVERLAP = 0.5
@@ -58,7 +64,7 @@ _ADD_SAMPLE = text(
     JOIN speakers sp ON sp.transcript_id = e.transcript_id AND sp.speaker_id = e.speaker_id
     CROSS JOIN platform_settings o
     WHERE e.transcript_id = :transcript AND e.speaker_id = :speaker
-      AND sp.person_id IS NOT NULL
+      AND sp.person_id IS NOT NULL AND sp.auto_score IS NULL
       AND (o.voice_identification ->> 'enabled')::boolean
       AND sp.talk_ms >= :min_talk
     ON CONFLICT (transcript_id, speaker_id) DO NOTHING
@@ -68,7 +74,10 @@ _ADD_SAMPLE = text(
 
 
 async def add_sample(conn: AsyncConnection, transcript_id: UUID, speaker_id: str, actor_id: UUID | None) -> bool:
-    """Guarda o locutor (já ligado) como amostra da pessoa, com a identificação por voz ligada."""
+    """Guarda o locutor (ligado e confirmado) como amostra da pessoa, com a identificação por voz ligada.
+
+    O vínculo que a voz fez sozinho (`auto_score`) não entra: só uma confirmação reforça a impressão.
+    """
     params = {"transcript": transcript_id, "speaker": speaker_id, "actor": actor_id, "min_talk": MIN_SAMPLE_TALK_MS}
     return (await conn.execute(_ADD_SAMPLE, params)).first() is not None
 
@@ -83,6 +92,7 @@ class OldLink:
     speaker_id: str
     person_id: UUID
     label: str
+    auto_score: float | None
     spans: list[tuple[int, int]]
 
 
@@ -91,7 +101,7 @@ async def capture_links(conn: AsyncConnection, transcript_id: UUID) -> list[OldL
     sp, sg = t.speakers.c, t.segments.c
     linked = (
         await conn.execute(
-            select(sp.speaker_id, sp.person_id, sp.label).where(
+            select(sp.speaker_id, sp.person_id, sp.label, sp.auto_score).where(
                 sp.transcript_id == transcript_id, sp.person_id.is_not(None)
             )
         )
@@ -106,7 +116,10 @@ async def capture_links(conn: AsyncConnection, transcript_id: UUID) -> list[OldL
     )
     for row in rows:
         spans.setdefault(row.speaker_id, []).append((row.start_ms, row.end_ms))
-    return [OldLink(row.speaker_id, row.person_id, row.label, spans.get(row.speaker_id, [])) for row in linked]
+    return [
+        OldLink(row.speaker_id, row.person_id, row.label, row.auto_score, spans.get(row.speaker_id, []))
+        for row in linked
+    ]
 
 
 def _merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -167,7 +180,7 @@ async def restore_links(
         await conn.execute(
             update(t.speakers)
             .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == new_id)
-            .values(person_id=link.person_id, label=link.label)
+            .values(person_id=link.person_id, label=link.label, auto_score=link.auto_score)
         )
         await add_sample(conn, transcript_id, new_id, None)
 
@@ -199,11 +212,58 @@ _COMPARE = text(
 )
 
 
-async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, model: str, dims: int) -> int:
-    """Compara os locutores da transcrição com as impressões e grava as sugestões acima do limiar.
+@dataclass(frozen=True)
+class AutoPrefs:
+    """Preferência da conta: atribuir sozinho e a partir de que pontuação."""
 
-    Roda na ingestão, com o papel de conexão: filtra o dono explicitamente. Devolve quantas
-    sugestões gravou.
+    enabled: bool
+    threshold: float
+
+
+async def auto_prefs(conn: AsyncConnection, user_id: UUID) -> AutoPrefs:
+    """Preferência de atribuição automática do usuário (o padrão, se a conta não existe mais)."""
+    row = (
+        await conn.execute(
+            select(t.users.c.voice_auto_assign, t.users.c.voice_auto_threshold).where(t.users.c.id == user_id)
+        )
+    ).first()
+    return (
+        AutoPrefs(enabled=True, threshold=DEFAULT_AUTO_THRESHOLD) if row is None else AutoPrefs(row[0], float(row[1]))
+    )
+
+
+def pick_auto(rows: list[Any], threshold: float) -> dict[str, Any]:
+    """Escolhe `{locutor: linha}` a atribuir: 1ª candidata ≥ limiar, com folga sobre a 2ª e sem repetir pessoa.
+
+    `rows` vem ordenada por locutor e por pontuação decrescente. A folga (`AUTO_MARGIN`) evita ligar
+    quando duas pessoas têm voz parecida com a do locutor; a pessoa que dois locutores disputam fica
+    com o de maior pontuação.
+    """
+    by_speaker: dict[str, list[Any]] = {}
+    for row in rows:
+        by_speaker.setdefault(row.speaker_id, []).append(row)
+    best = []
+    for candidates in by_speaker.values():
+        top = candidates[0]
+        runner_up = candidates[1].score if len(candidates) > 1 else 0.0
+        if top.score >= threshold and top.score - runner_up >= AUTO_MARGIN:
+            best.append(top)
+    chosen: dict[str, Any] = {}
+    taken: set[UUID] = set()
+    for row in sorted(best, key=lambda r: -r.score):
+        if row.person_id not in taken:
+            taken.add(row.person_id)
+            chosen[row.speaker_id] = row
+    return chosen
+
+
+async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, model: str, dims: int) -> int:
+    """Compara os locutores da transcrição com as impressões, liga os de alta confiança e sugere o resto.
+
+    Roda na ingestão, com o papel de conexão: filtra o dono explicitamente. Com a atribuição
+    automática ligada na conta, o locutor com pontuação ≥ o limiar dela é ligado à pessoa (e o
+    rótulo vira o nome dela) antes de a cadeia de agentes e o resumo lerem a transcrição; os demais
+    recebem sugestões acima do limiar da plataforma. Devolve quantas sugestões gravou.
     """
     settings = await platform_voice(conn)
     if not settings["enabled"]:
@@ -217,9 +277,30 @@ async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, mo
         "min_talk": MIN_COMPARE_TALK_MS,
     }
     rows = (await conn.execute(_COMPARE, params)).all()
+    prefs = await auto_prefs(conn, owner_id)
+    assigned = pick_auto(rows, prefs.threshold) if prefs.enabled else {}
+    if assigned:
+        names = dict(
+            (
+                await conn.execute(
+                    select(t.people.c.id, t.people.c.name).where(
+                        t.people.c.id.in_([row.person_id for row in assigned.values()])
+                    )
+                )
+            ).all()
+        )
+        for speaker_id, row in assigned.items():
+            await conn.execute(
+                update(t.speakers)
+                .where(t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
+                .values(person_id=row.person_id, label=names[row.person_id], auto_score=min(1.0, float(row.score)))
+            )
+    taken_people = {row.person_id for row in assigned.values()}
     per_speaker: dict[str, int] = {}
     suggested = []
     for row in rows:
+        if row.speaker_id in assigned or row.person_id in taken_people:
+            continue
         if row.score >= threshold and per_speaker.get(row.speaker_id, 0) < MAX_SUGGESTIONS:
             per_speaker[row.speaker_id] = per_speaker.get(row.speaker_id, 0) + 1
             suggested.append(row)
@@ -282,14 +363,14 @@ class SpeakerKey:
     speaker_id: str
 
 
-async def on_link(
-    conn: AsyncConnection, principal: Principal, key: SpeakerKey, old_person: UUID | None, new_person: UUID | None
-) -> None:
+async def on_link(conn: AsyncConnection, principal: Principal, key: SpeakerKey, new_person: UUID | None) -> None:
     """Depois do `PATCH` que troca a pessoa do locutor: aceite da sugestão e a amostra nova.
 
-    A amostra da pessoa anterior já saiu pelo gatilho `speakers_voice_relink`.
+    A amostra da pessoa anterior já saiu pelo gatilho `speakers_voice_relink`. Mandar a mesma
+    pessoa confirma o vínculo que a voz fez sozinho: o `PATCH` já zerou o `auto_score`, e agora a
+    amostra entra.
     """
-    if new_person is None or new_person == old_person:
+    if new_person is None:
         return
     actor_id = principal.user_id
     transcript_id, speaker_id = key.transcript_id, key.speaker_id

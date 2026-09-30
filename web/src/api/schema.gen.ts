@@ -128,6 +128,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/voice-assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ler a atribuição automática de locutores da conta
+         * @description Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima para isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`): desligado, a preferência não tem efeito. Só sessão.
+         */
+        get: operations["getVoiceAssignment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mudar a atribuição automática de locutores da conta
+         * @description Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão é 0,75.
+         */
+        patch: operations["updateVoiceAssignment"];
+        trace?: never;
+    };
     "/api/v1/tokens": {
         parameters: {
             query?: never;
@@ -1824,6 +1848,18 @@ export interface components {
                 token_id: string | null;
             };
         };
+        /** @description Atribuição automática de locutores da conta: com ela ligada e a identificação por voz ligada na plataforma, o locutor cuja voz passa do limiar é ligado à pessoa na ingestão, antes do resumo, e sai com `auto_score` no `Speaker`. */
+        VoiceAssignment: {
+            enabled: boolean;
+            /** @description Pontuação mínima (cosseno normalizado) para ligar sozinho, de 0,50 a 0,99. */
+            threshold: number;
+            /** @description A identificação por voz está ligada na plataforma; desligada, nada é atribuído. */
+            platform_enabled: boolean;
+        };
+        VoiceAssignmentPatch: {
+            enabled?: boolean;
+            threshold?: number;
+        };
         /** @description Cursor da próxima página, ou `null` na última. */
         NextCursor: string | null;
         Token: {
@@ -3322,8 +3358,10 @@ export interface components {
             id: string;
             /** @description Nome exibido. Começa como `Locutor N` e muda quando o usuário renomeia o locutor. */
             label: string;
-            /** @description Pessoa confirmada para o locutor, ou `null` enquanto ninguém a identificou. */
+            /** @description Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma confirmação humana ou, com `auto_score`, da atribuição automática pela voz. */
             person: components["schemas"]["PersonRef"] | null;
+            /** @description Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person` na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`) o zera e só então reforça a impressão de voz. */
+            auto_score?: number | null;
             /** @description Sugestões por voz ainda não confirmadas, da maior para a menor `score`. */
             suggestions?: components["schemas"]["SpeakerSuggestion"][];
             /** @description Tempo total de fala do locutor, em milissegundos. */
@@ -3618,6 +3656,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getVoiceAssignment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferência corrente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceAssignment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateVoiceAssignment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceAssignmentPatch"];
+            };
+        };
+        responses: {
+            /** @description Preferência resultante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceAssignment"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

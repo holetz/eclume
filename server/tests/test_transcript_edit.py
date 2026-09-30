@@ -43,7 +43,14 @@ def test_renomear_e_ligar_a_pessoa(
 
     renamed = api.patch(f"{base}/speakers/S3", json={"label": "Joana Prado"})
     assert renamed.status_code == 200
-    assert renamed.json() == {"id": "S3", "label": "Joana Prado", "person": None, "suggestions": [], "talk_ms": 29750}
+    assert renamed.json() == {
+        "id": "S3",
+        "label": "Joana Prado",
+        "person": None,
+        "suggestions": [],
+        "auto_score": None,
+        "talk_ms": 29750,
+    }
     after = api.get(base).json()
     assert after["revision"] == before["revision"] + 1
     assert after["updated_at"] > before["updated_at"]

@@ -33,11 +33,20 @@ class Conta:
     def __init__(self, services: Services, admin: Api, owner: Account, owner_api: Api) -> None:
         """Admin da plataforma e o dono das gravações."""
         self.services, self.admin, self.owner, self.owner_id = services, admin, owner_api, owner.user_id
+        # Os testes de sugestão partem da atribuição automática desligada; os dela a ligam.
+        self.auto(enabled=False)
 
     def voice_on(self, *, enabled: bool = True) -> None:
         """Liga (ou desliga) a identificação por voz na plataforma, pelo admin."""
         response = self.admin.patch("/api/v1/admin/settings", json={"voice_identification": {"enabled": enabled}})
         assert response.status_code == 200, response.text
+
+    def auto(self, *, enabled: bool | None = None, threshold: float | None = None) -> dict[str, Any]:
+        """Muda a atribuição automática da conta do dono."""
+        body = {k: v for k, v in {"enabled": enabled, "threshold": threshold}.items() if v is not None}
+        response = self.owner.patch("/api/v1/me/voice-assignment", json=body)
+        assert response.status_code == 200, response.text
+        return response.json()
 
     def person(self, name: str) -> dict[str, Any]:
         """Cadastra a pessoa."""
@@ -387,3 +396,122 @@ def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumo
     assert _sql(services, counts, t=tid, r=rid) == [(0, 0, 0, 0, 0, 0, 0)]
     assert _objects(services, audio_key) == []
     assert _objects(services, f"recordings/{rid}/") == []
+
+
+# --- atribuição automática de locutores ------------------------------------------------------------
+
+
+def test_atribuicao_automatica_padrao_e_limiar_da_conta(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api], admin: Api
+):
+    owner = as_user(make_user())
+    assert owner.get("/api/v1/me/voice-assignment").json() == {
+        "enabled": True,
+        "threshold": 0.75,
+        "platform_enabled": False,
+    }
+    admin.patch("/api/v1/admin/settings", json={"voice_identification": {"enabled": True}})
+    assert owner.patch("/api/v1/me/voice-assignment", json={"threshold": 0.9}).json() == {
+        "enabled": True,
+        "threshold": 0.9,
+        "platform_enabled": True,
+    }
+    assert owner.patch("/api/v1/me/voice-assignment", json={"enabled": False}).json()["threshold"] == 0.9
+    for body in ({}, {"threshold": 0.3}, {"threshold": 1}, {"enabled": None}, {"outro": 1}):
+        assert owner.patch("/api/v1/me/voice-assignment", json=body).status_code == 422, body
+
+
+def test_voz_parecida_liga_o_locutor_e_o_resumo_ja_usa_o_nome(ek: Conta):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    ek.auto(enabled=True, threshold=0.7)
+
+    second = ek.transcript(dict(DEFAULT_VOICES, S2=voice(2, jitter=0.3, jitter_seed=1)))
+    speakers = ek.speakers(second)
+    assert (speakers["S2"]["person"], speakers["S2"]["label"]) == (
+        {"id": rafael["id"], "name": "Rafael Lima"},
+        "Rafael Lima",
+    )
+    assert 0.7 <= speakers["S2"]["auto_score"] <= 1
+    assert speakers["S2"]["suggestions"] == []
+    assert speakers["S1"]["auto_score"] is None
+    assert speakers["S1"]["person"] is None
+    # Vínculo automático não reforça a impressão de voz: só a confirmação.
+    assert ek.samples(rafael["id"]) == 1
+
+    confirmed = ek.link(second, "S2", rafael["id"])
+    assert (confirmed["person"]["name"], confirmed["auto_score"]) == ("Rafael Lima", None)
+    assert ek.samples(rafael["id"]) == 2
+
+
+def test_desfazer_a_atribuicao_automatica_e_recusada_a_pessoa(ek: Conta):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    ek.auto(enabled=True, threshold=0.7)
+    second = ek.transcript(dict(DEFAULT_VOICES, S2=voice(2, jitter=0.3, jitter_seed=1)))
+    assert ek.speakers(second)["S2"]["auto_score"] is not None
+    undone = ek.link(second, "S2", None)
+    assert (undone["person"], undone["auto_score"]) == (None, None)
+
+
+def test_limiar_alto_ou_conta_desligada_so_sugere(ek: Conta):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    close = dict(DEFAULT_VOICES, S2=voice(2, jitter=0.5, jitter_seed=1))
+
+    ek.auto(enabled=True, threshold=0.99)
+    high = ek.speakers(ek.transcript(close))["S2"]
+    assert (high["person"], high["auto_score"]) == (None, None)
+    assert [s["person"]["name"] for s in high["suggestions"]] == ["Rafael Lima"]
+
+    ek.auto(enabled=True, threshold=0.5)
+    ek.auto(enabled=False)
+    off = ek.speakers(ek.transcript(close))["S2"]
+    assert (off["person"], off["auto_score"]) == (None, None)
+    assert len(off["suggestions"]) == 1
+
+
+def test_plataforma_desligada_nada_e_atribuido(ek: Conta):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    ek.auto(enabled=True, threshold=0.5)
+    ek.voice_on(enabled=False)
+    speaker = ek.speakers(ek.transcript())["S2"]
+    assert (speaker["person"], speaker["auto_score"]) == (None, None)
+
+
+def test_duas_pessoas_de_voz_parecida_nao_sao_atribuidas(ek: Conta):
+    ek.voice_on()
+    rafael, juliana = ek.person("Rafael Lima"), ek.person("Juliana Prado")
+    twins = dict(DEFAULT_VOICES, S3=voice(2, jitter=0.05, jitter_seed=3))
+    first = ek.transcript(twins)
+    ek.link(first, "S2", rafael["id"])
+    ek.link(first, "S3", juliana["id"])
+    ek.auto(enabled=True, threshold=0.5)
+    # Sem folga entre as duas candidatas, o locutor não é ligado a nenhuma: só sugere as duas.
+    second = ek.speakers(ek.transcript())["S2"]
+    assert (second["person"], second["auto_score"]) == (None, None)
+    assert {s["person"]["name"] for s in second["suggestions"]} == {"Rafael Lima", "Juliana Prado"}
+
+
+def test_retranscricao_preserva_o_vinculo_automatico_sem_virar_amostra(ek: Conta, services: Services):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    ek.link(ek.transcript(), "S2", rafael["id"])
+    ek.auto(enabled=True, threshold=0.7)
+    recording = transcribed(
+        ek.owner, services.settings, voices=dict(DEFAULT_VOICES, S2=voice(2, jitter=0.3, jitter_seed=1))
+    )
+    tid = recording["transcript_id"]
+    assert ek.speakers(tid)["S2"]["auto_score"] is not None
+
+    response = ek.owner.post(f"/api/v1/recordings/{recording['id']}/retranscribe", json={})
+    assert response.status_code in {200, 202}, response.text
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert ek.speakers(tid)["S2"]["person"]["id"] == rafael["id"]
+    assert ek.samples(rafael["id"]) == 1

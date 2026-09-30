@@ -152,7 +152,7 @@
       }
     },
     "SpeakerSuggestion": {
-      "description": "Pessoa sugerida para um locutor pela impressão de voz. Nunca é aplicada sem confirmação humana.",
+      "description": "Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela.",
       "type": "object",
       "required": ["person", "score"],
       "properties": {
@@ -183,7 +183,7 @@
           "minLength": 1
         },
         "person": {
-          "description": "Pessoa confirmada para o locutor, ou `null` enquanto ninguém a identificou.",
+          "description": "Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma confirmação humana ou, com `auto_score`, da atribuição automática pela voz.",
           "oneOf": [
             {
               "$ref": "#/$defs/PersonRef"
@@ -192,6 +192,12 @@
               "type": "null"
             }
           ]
+        },
+        "auto_score": {
+          "description": "Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person` na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`) o zera e só então reforça a impressão de voz.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
         },
         "suggestions": {
           "description": "Sugestões por voz ainda não confirmadas, da maior para a menor `score`.",

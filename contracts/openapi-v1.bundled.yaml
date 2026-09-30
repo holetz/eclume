@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.8.0
+  version: 2.9.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -48,8 +48,8 @@ tags:
 - name: people
   description: Diretório de pessoas do usuário.
 - name: voice
-  description: 'Identificação por voz (LGPD): impressão de voz e recusa de sugestão. Só sessão: um PAT
-    nunca lê nem apaga dado biométrico.'
+  description: 'Identificação por voz (LGPD): impressão de voz, recusa de sugestão e atribuição automática
+    de locutores. Só sessão: um PAT nunca lê nem apaga dado biométrico.'
 - name: search
   description: Busca full-text sobre segmentos.
 - name: organize
@@ -246,6 +246,64 @@ paths:
       responses:
         '204':
           description: Aceite registrado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/me/voice-assignment:
+    get:
+      tags:
+      - voice
+      operationId: getVoiceAssignment
+      summary: Ler a atribuição automática de locutores da conta
+      description: 'Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima
+        para isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`):
+        desligado, a preferência não tem efeito. Só sessão.'
+      responses:
+        '200':
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceAssignment'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/VoiceAssignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags:
+      - voice
+      operationId: updateVoiceAssignment
+      summary: Mudar a atribuição automática de locutores da conta
+      description: 'Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os
+        vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão
+        é 0,75.'
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceAssignmentPatch'
+            examples:
+              limiar:
+                $ref: '#/components/examples/VoiceAssignmentPatchRequest'
+      responses:
+        '200':
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceAssignment'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/VoiceAssignment'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4171,6 +4229,37 @@ components:
               - string
               - 'null'
               format: uuid
+    VoiceAssignment:
+      description: 'Atribuição automática de locutores da conta: com ela ligada e a identificação por
+        voz ligada na plataforma, o locutor cuja voz passa do limiar é ligado à pessoa na ingestão, antes
+        do resumo, e sai com `auto_score` no `Speaker`.'
+      type: object
+      required:
+      - enabled
+      - threshold
+      - platform_enabled
+      properties:
+        enabled:
+          type: boolean
+        threshold:
+          description: Pontuação mínima (cosseno normalizado) para ligar sozinho, de 0,50 a 0,99.
+          type: number
+          minimum: 0.5
+          maximum: 0.99
+        platform_enabled:
+          description: A identificação por voz está ligada na plataforma; desligada, nada é atribuído.
+          type: boolean
+    VoiceAssignmentPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: boolean
+        threshold:
+          type: number
+          minimum: 0.5
+          maximum: 0.99
     NextCursor:
       description: Cursor da próxima página, ou `null` na última.
       type:
@@ -7789,8 +7878,8 @@ components:
           type: string
           minLength: 1
     SpeakerSuggestion:
-      description: Pessoa sugerida para um locutor pela impressão de voz. Nunca é aplicada sem confirmação
-        humana.
+      description: Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da
+        conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela.
       type: object
       required:
       - person
@@ -7821,10 +7910,21 @@ components:
           type: string
           minLength: 1
         person:
-          description: Pessoa confirmada para o locutor, ou `null` enquanto ninguém a identificou.
+          description: Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma
+            confirmação humana ou, com `auto_score`, da atribuição automática pela voz.
           oneOf:
           - $ref: '#/components/schemas/PersonRef'
           - type: 'null'
+        auto_score:
+          description: Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person`
+            na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou
+            ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`)
+            o zera e só então reforça a impressão de voz.
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
         suggestions:
           description: Sugestões por voz ainda não confirmadas, da maior para a menor `score`.
           type: array
@@ -7962,6 +8062,16 @@ components:
       summary: Aceite do aviso v1
       value:
         notice_version: '1'
+    VoiceAssignment:
+      summary: Atribuição automática ligada, limiar 0,80
+      value:
+        enabled: true
+        threshold: 0.8
+        platform_enabled: true
+    VoiceAssignmentPatchRequest:
+      summary: Subir o limiar para 0,80
+      value:
+        threshold: 0.8
     AdminMe:
       summary: Conta de admin
       value:
@@ -8014,7 +8124,7 @@ components:
         mcp_url: https://192.168.15.199:8443/mcp
         ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
         version: 0.1.0
-        contract_version: 2.8.0
+        contract_version: 2.9.0
     DeviceLoginRequest:
       summary: Notebook entrando com e-mail e senha
       value:
@@ -8053,7 +8163,7 @@ components:
           mcp_url: https://192.168.15.199:8443/mcp
           ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
           version: 0.1.0
-          contract_version: 2.8.0
+          contract_version: 2.9.0
     PairingCodeCreated:
       summary: Código novo com o link do QR
       value:

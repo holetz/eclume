@@ -68,7 +68,7 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   estourado, **429** `rate_limited` com `Retry-After`. Código de pareamento inválido, vencido
   ou usado é **401** `invalid_pairing_code`.
 - **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
-  impressão e recusa de sugestão). Um PAT vazado não cria outro PAT e não lê nem apaga dado
+  impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
   credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
 - **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha

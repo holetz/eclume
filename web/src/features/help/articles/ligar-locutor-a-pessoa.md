@@ -5,7 +5,7 @@ paginas: [gravacao, pessoas, pessoa]
 relacionados: [sugestoes-por-voz, corrigir-transcricao, buscar-nas-gravacoes]
 termos: [locutor, pessoa, vincular, quem falou, S1, S2, cadastrar pessoa]
 ordem: 1
-atualizado: 2026-09-27
+atualizado: 2026-09-30
 ---
 A transcrição separa a conversa por locutor (S1, S2, S3…), mas não sabe quem é cada um. Ligar um
 locutor a uma pessoa dá nome às falas.
@@ -26,6 +26,8 @@ O vínculo passa a valer na hora, em todas as falas daquele locutor.
 - Com a identificação por voz ligada no servidor, o vínculo confirmado vira uma amostra da voz da
   pessoa, e as próximas gravações podem sugerir quem é. Veja
   [Como funcionam as sugestões por voz](/ajuda/sugestoes-por-voz).
+- Com a atribuição automática, o eclume também pode ligar o locutor sozinho quando a voz é muito
+  parecida; o locutor aparece como **Atribuído pela voz** e você confirma ou desliga.
 
 ## Errou a pessoa?
 

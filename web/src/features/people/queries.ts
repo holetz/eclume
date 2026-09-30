@@ -80,3 +80,23 @@ export function usePeopleOptions() {
     queryFn: () => unwrap(api.GET('/api/v1/people', { params: { query: { limit: 200 } } })),
   })
 }
+
+export type VoiceAssignment = Schemas['VoiceAssignment']
+
+const VOICE_ASSIGNMENT_KEY = ['me', 'voice-assignment'] as const
+
+/** A atribuição automática de locutores da conta: liga-desliga e limiar. */
+export function useVoiceAssignment() {
+  return useQuery({
+    queryKey: VOICE_ASSIGNMENT_KEY,
+    queryFn: () => unwrap(api.GET('/api/v1/me/voice-assignment')),
+  })
+}
+
+export function useUpdateVoiceAssignment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['VoiceAssignmentPatch']) => unwrap(api.PATCH('/api/v1/me/voice-assignment', { body })),
+    onSuccess: (updated) => queryClient.setQueryData(VOICE_ASSIGNMENT_KEY, updated),
+  })
+}

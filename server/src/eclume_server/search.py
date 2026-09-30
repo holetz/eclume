@@ -87,6 +87,7 @@ async def search(conn: AsyncConnection, filters: SearchFilters, offset: int, lim
         sp.c.person_id,
         pe.c.name.label("person_name"),
         sp.c.talk_ms,
+        sp.c.auto_score,
         s.c.segment_id,
         s.c.start_ms,
         s.c.end_ms,

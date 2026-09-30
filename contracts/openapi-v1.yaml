@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.8.0
+  version: 2.9.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -55,7 +55,7 @@ tags:
     description: Diretório de pessoas do usuário.
   - name: voice
     description: >-
-      Identificação por voz (LGPD): impressão de voz e recusa de sugestão. Só sessão: um PAT
+      Identificação por voz (LGPD): impressão de voz, recusa de sugestão e atribuição automática de locutores. Só sessão: um PAT
       nunca lê nem apaga dado biométrico.
   - name: search
     description: Busca full-text sobre segmentos.
@@ -245,6 +245,65 @@ paths:
       responses:
         "204":
           description: Aceite registrado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/voice-assignment:
+    get:
+      tags: [voice]
+      operationId: getVoiceAssignment
+      summary: Ler a atribuição automática de locutores da conta
+      description: >-
+        Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima para
+        isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`):
+        desligado, a preferência não tem efeito. Só sessão.
+      responses:
+        "200":
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceAssignment"
+              examples:
+                padrao:
+                  $ref: "#/components/examples/VoiceAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [voice]
+      operationId: updateVoiceAssignment
+      summary: Mudar a atribuição automática de locutores da conta
+      description: >-
+        Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os
+        vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o
+        padrão é 0,75.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceAssignmentPatch"
+            examples:
+              limiar:
+                $ref: "#/components/examples/VoiceAssignmentPatchRequest"
+      responses:
+        "200":
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceAssignment"
+              examples:
+                padrao:
+                  $ref: "#/components/examples/VoiceAssignment"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3865,6 +3924,37 @@ components:
               type: [string, "null"]
               format: uuid
 
+    VoiceAssignment:
+      description: >-
+        Atribuição automática de locutores da conta: com ela ligada e a identificação por voz ligada
+        na plataforma, o locutor cuja voz passa do limiar é ligado à pessoa na ingestão, antes do
+        resumo, e sai com `auto_score` no `Speaker`.
+      type: object
+      required: [enabled, threshold, platform_enabled]
+      properties:
+        enabled:
+          type: boolean
+        threshold:
+          description: Pontuação mínima (cosseno normalizado) para ligar sozinho, de 0,50 a 0,99.
+          type: number
+          minimum: 0.5
+          maximum: 0.99
+        platform_enabled:
+          description: A identificação por voz está ligada na plataforma; desligada, nada é atribuído.
+          type: boolean
+
+    VoiceAssignmentPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: boolean
+        threshold:
+          type: number
+          minimum: 0.5
+          maximum: 0.99
+
     NextCursor:
       description: Cursor da próxima página, ou `null` na última.
       type: [string, "null"]
@@ -6593,6 +6683,12 @@ components:
     NoticeAcceptRequest:
       summary: Aceite do aviso v1
       externalValue: ./fixtures/notice-accept-request.json
+    VoiceAssignment:
+      summary: Atribuição automática ligada, limiar 0,80
+      externalValue: ./fixtures/voice-assignment.json
+    VoiceAssignmentPatchRequest:
+      summary: Subir o limiar para 0,80
+      externalValue: ./fixtures/voice-assignment-patch-request.json
     AdminMe:
       summary: Conta de admin
       externalValue: ./fixtures/admin-me.json
