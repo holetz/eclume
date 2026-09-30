@@ -1,6 +1,6 @@
 # CI do eclume: lint e teste dos pilares e do contrato v1 em Linux a cada PR e a cada push em main.
 # macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os instaladores do desktop saem
-# do `desktop-release.yml`, só por tag `desktop-v*` ou à mão.
+# do host, por `deploy/release-desktop.sh`; o `desktop-release.yml` é só a alternativa manual.
 #
 # Economia de minutos: mudança só de documentação não dispara a CI (`paths-ignore`), e o job
 # `mudancas` liga só os jobs dos pilares tocados. Cada job cobra ao menos 1 minuto; os filtros
@@ -73,6 +73,7 @@ jobs:
               - "server/**"
               - "worker-gpu/**"
               - "contracts/**"
+              - "mobile/scripts/**"
               - "deploy/docker-compose.test.yml"
             contracts:
               - *ci

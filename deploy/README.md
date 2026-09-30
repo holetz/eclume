@@ -43,7 +43,7 @@ O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook
 - `.env.prod.example`: as variáveis; `deploy.sh --gerar-env` cria o `deploy/.env.prod` real (600,
   fora do git).
 - `deploy.sh`: build no daemon do host pelo contexto Docker e subida em ordem; `bootstrap-admin.sh`:
-  a primeira organização e o admin; `smoke_prod.py`: prova o caminho inteiro pela API pública;
+  a primeira conta de admin; `smoke_prod.py`: prova o caminho inteiro pela API pública;
   `smoke_mcp.py`: prova o servidor MCP com o SDK `mcp` e o pareamento de um aparelho.
 - `backup.sh` e `restaurar-backup.sh`: instalados em `/srv/eclume/bin/` pelo deploy; o backup
   roda no cron do host.
