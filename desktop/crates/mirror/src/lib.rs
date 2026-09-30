@@ -7,6 +7,7 @@
 //! docs/standards/code/desktop-pasta-sincronizada.md.
 
 pub mod layout;
+pub mod render;
 
 pub use layout::{base_name, collection_dir, slug, NO_COLLECTION};
 
