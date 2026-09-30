@@ -207,6 +207,7 @@ mod tests {
             recording_id: id.into(),
             title: title.into(),
             recorded_at: Some("2026-09-18T14:00:05Z".into()),
+            local_start: Some("2026-09-18T11:00:05".into()),
             collections: colecoes.iter().map(|c| c.to_string()).collect(),
             agenda_type: None,
             summary: Some(Summary {
@@ -264,10 +265,10 @@ mod tests {
         assert_eq!(
             files(tmp.path()),
             [
-                "Clientes/2026-09-18 Ata - aaaaaaaa.jsonl",
-                "Clientes/2026-09-18 Ata - aaaaaaaa.md",
-                "Interno/2026-09-18 Ata - aaaaaaaa.jsonl",
-                "Interno/2026-09-18 Ata - aaaaaaaa.md",
+                "Clientes/2026-09/2026-09-18_1100_aaaaaaaa.jsonl",
+                "Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md",
+                "Interno/2026-09/2026-09-18_1100_aaaaaaaa.jsonl",
+                "Interno/2026-09/2026-09-18_1100_aaaaaaaa.md",
             ]
         );
         let second = mirror.apply(&ata).unwrap();
@@ -283,7 +284,9 @@ mod tests {
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         let ata = item("aaaaaaaa-1", "Ata", &["Clientes"], 1);
         mirror.apply(&ata).unwrap();
-        let md = tmp.path().join("Clientes/2026-09-18 Ata - aaaaaaaa.md");
+        let md = tmp
+            .path()
+            .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md");
         let original = fs::read_to_string(&md).unwrap();
         fs::write(&md, "editei à mão").unwrap();
         let again = mirror.apply(&ata).unwrap();
@@ -292,27 +295,47 @@ mod tests {
     }
 
     #[test]
-    fn titulo_novo_move_os_arquivos_e_a_versao_nova_reescreve() {
+    fn titulo_novo_reescreve_no_mesmo_lugar_e_horario_novo_move() {
         let tmp = Tmp::new("reconcile-renomeia");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         mirror
             .apply(&item("aaaaaaaa-1", "Ata", &["Clientes"], 1))
             .unwrap();
-        let moved = mirror
+        // O título não está no nome: mudar o título (e a versão) reescreve o `.md` e o `.jsonl`
+        // (o título vai no meta) no mesmo lugar, sem mover nada.
+        let renamed = mirror
             .apply(&item("aaaaaaaa-1", "Ata final", &["Clientes"], 2))
             .unwrap();
-        assert_eq!((moved.written, moved.removed), (2, 2));
+        assert_eq!((renamed.written, renamed.removed), (2, 0));
         assert_eq!(
             files(tmp.path())
                 .into_iter()
                 .filter(|f| !f.starts_with('.'))
                 .collect::<Vec<_>>(),
             [
-                "Clientes/2026-09-18 Ata final - aaaaaaaa.jsonl",
-                "Clientes/2026-09-18 Ata final - aaaaaaaa.md",
+                "Clientes/2026-09/2026-09-18_1100_aaaaaaaa.jsonl",
+                "Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md",
             ]
         );
+        let md = std::fs::read_to_string(
+            tmp.path()
+                .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md"),
+        )
+        .unwrap();
+        assert!(md.contains("title: \"Ata final\"") && md.contains("aliases:"));
         assert_eq!(mirror.entry("aaaaaaaa-1").unwrap().summary_version, Some(2));
+
+        // Mudar o início (o fuso do computador mudou, ou a data foi corrigida) move os arquivos,
+        // inclusive de mês, e apaga a pasta do mês antigo.
+        let mut later = item("aaaaaaaa-1", "Ata final", &["Clientes"], 2);
+        later.local_start = Some("2026-10-01T00:30:00".into());
+        let moved = mirror.apply(&later).unwrap();
+        assert_eq!((moved.written, moved.removed), (2, 2));
+        assert!(!tmp.path().join("Clientes/2026-09").exists());
+        assert!(tmp
+            .path()
+            .join("Clientes/2026-10/2026-10-01_0030_aaaaaaaa.md")
+            .exists());
     }
 
     #[test]
@@ -334,7 +357,7 @@ mod tests {
         assert!(!tmp.path().join("Clientes").exists());
         assert!(tmp
             .path()
-            .join("sem-colecao/2026-09-18 Ata - aaaaaaaa.md")
+            .join("sem-colecao/2026-09/2026-09-18_1100_aaaaaaaa.md")
             .exists());
     }
 
@@ -360,11 +383,11 @@ mod tests {
         assert!(tmp.path().join("diario.md").exists());
         assert!(tmp
             .path()
-            .join("Clientes/2026-09-18 Outra - bbbbbbbb.md")
+            .join("Clientes/2026-09/2026-09-18_1100_bbbbbbbb.md")
             .exists());
         assert!(!tmp
             .path()
-            .join("Clientes/2026-09-18 Ata - aaaaaaaa.md")
+            .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md")
             .exists());
 
         // A pasta com nota do usuário não some, mesmo depois de esquecer tudo.
@@ -449,7 +472,7 @@ mod tests {
         assert_eq!(applied.written, 1);
         assert_eq!(
             files(tmp.path()),
-            ["Clientes/2026-09-18 Ata - aaaaaaaa.jsonl"]
+            ["Clientes/2026-09/2026-09-18_1100_aaaaaaaa.jsonl"]
         );
         let mut vazio = so_transcricao.clone();
         vazio.transcript = None;

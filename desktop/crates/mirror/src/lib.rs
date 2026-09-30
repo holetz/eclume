@@ -12,7 +12,7 @@ pub mod manifest;
 pub mod reconcile;
 pub mod render;
 
-pub use layout::{base_name, collection_dir, slug, NO_COLLECTION};
+pub use layout::{base_name, collection_dir, month_dir, slug, NO_COLLECTION};
 pub use manifest::Manifest;
 pub use reconcile::{Applied, Mirror};
 
@@ -22,8 +22,12 @@ pub use reconcile::{Applied, Mirror};
 pub struct MirrorItem {
     pub recording_id: String,
     pub title: String,
-    /// `recorded_at` do servidor (ISO 8601); só a data entra no nome do arquivo.
+    /// `recorded_at` do servidor (ISO 8601, UTC): vai para o front matter e, sem `local_start`,
+    /// dá nome e mês ao arquivo.
     pub recorded_at: Option<String>,
+    /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que o app calcula: dá o mês da
+    /// subpasta e o nome do arquivo, para baterem com o que a pessoa vê.
+    pub local_start: Option<String>,
     /// Nomes das Collections da gravação; vazio cai em [`NO_COLLECTION`].
     pub collections: Vec<String>,
     pub agenda_type: Option<String>,

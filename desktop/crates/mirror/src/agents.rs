@@ -34,10 +34,12 @@ apaga os que saíram do servidor. **Não edite** esses arquivos; para anotar, cr
     );
     out.push_str("## Como está organizado\n\n");
     out.push_str(
-        "- Uma **subpasta por Collection**. Uma gravação em várias Collections aparece em cada uma \
-(cópias idênticas). Gravações sem Collection ficam em `sem-colecao/`.\n\
-- Nome do arquivo: `AAAA-MM-DD <título> - <id8>.md`, em que `<id8>` são os 8 primeiros caracteres \
-do id da gravação.\n",
+        "- Uma **subpasta por Collection**, e dentro dela uma **subpasta por mês** (`AAAA-MM`). Uma \
+gravação em várias Collections aparece em cada uma (cópias idênticas). Gravações sem Collection \
+ficam em `sem-colecao/`.\n\
+- Nome do arquivo: `AAAA-MM-DD_HHMM_<id8>.md`, ordenável por data e hora locais, em que `<id8>` \
+são os 8 primeiros caracteres do id da gravação (a referência que o eclume web mostra). O título \
+**não** está no nome: está na propriedade `title` (e em `aliases`), dentro do arquivo.\n",
     );
     if transcripts {
         out.push_str(
@@ -47,7 +49,7 @@ do id da gravação.\n",
     out.push_str("- `.eclume-sync.json` é o controle do app: ignore-o.\n\n");
     out.push_str("## O resumo (`.md`)\n\n");
     out.push_str(
-        "Começa com front matter YAML (propriedades no Obsidian): `recording_id`, `title`, \
+        "Começa com front matter YAML (propriedades no Obsidian): `recording_id`, `title`, `aliases`, \
 `recorded_at`, `collections`, `agenda_type` (o tipo de agenda, como \"Reunião de equipe\"), \
 `summary_version`",
     );
@@ -66,12 +68,13 @@ Como o Obsidian não indexa `.jsonl`, as transcrições não aparecem na busca n
     }
     out.push_str("## Como pesquisar\n\n```bash\n");
     out.push_str("# resumos que citam um termo\nrg -il \"orçamento\" --glob '*.md'\n\n");
-    out.push_str("# tudo de uma Collection\nls \"Clientes/\"\n\n");
+    out.push_str("# tudo de uma Collection num mês\nls \"Clientes/2026-09/\"\n\n\
+# achar pelo título (está no front matter, não no nome)\nrg -l '^title: .*orçamento' --glob '*.md'\n\n");
     out.push_str("# resumos de um tipo de agenda\nrg -l '^agenda_type: \"1:1\"' --glob '*.md'\n");
     if transcripts {
         out.push_str(
             "\n# quem falou o quê, num trecho\n\
-jq -r 'select(.type==\"segment\") | \"\\(.speaker): \\(.text)\"' \"Clientes/2026-09-18 Ata - 01928f3a.jsonl\"\n\n\
+jq -r 'select(.type==\"segment\") | \"\\(.speaker): \\(.text)\"' \"Clientes/2026-09/2026-09-18_1100_01928f3a.jsonl\"\n\n\
 # transcrições que citam um termo\nrg -il \"prazo\" --glob '*.jsonl'\n",
         );
     }
@@ -112,7 +115,9 @@ mod tests {
         for esperado in [
             "subpasta por Collection",
             "sem-colecao/",
-            "AAAA-MM-DD <título> - <id8>.md",
+            "AAAA-MM-DD_HHMM_<id8>.md",
+            "subpasta por mês",
+            "`aliases`",
             "`recording_id`",
             "\"type\":\"meta\"",
             "não indexa `.jsonl`",

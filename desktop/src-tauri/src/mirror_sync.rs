@@ -98,6 +98,7 @@ pub fn to_item(
         recording_id: recording.id.clone(),
         title,
         recorded_at: recording.recorded_at.clone(),
+        local_start: None,
         collections: names,
         agenda_type,
         summary: summary.map(|s| Summary {
@@ -503,12 +504,12 @@ mod tests {
         assert_eq!(
             listed(&dir),
             [
-                "Clientes/2026-09-18 Reunião aaaaaaaa-1 - aaaaaaaa.jsonl",
-                "Clientes/2026-09-18 Reunião aaaaaaaa-1 - aaaaaaaa.md",
-                "Interno/2026-09-18 Reunião aaaaaaaa-1 - aaaaaaaa.jsonl",
-                "Interno/2026-09-18 Reunião aaaaaaaa-1 - aaaaaaaa.md",
-                "sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.jsonl",
-                "sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.md",
+                "Clientes/2026-09/2026-09-18_1400_aaaaaaaa.jsonl",
+                "Clientes/2026-09/2026-09-18_1400_aaaaaaaa.md",
+                "Interno/2026-09/2026-09-18_1400_aaaaaaaa.jsonl",
+                "Interno/2026-09/2026-09-18_1400_aaaaaaaa.md",
+                "sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.jsonl",
+                "sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md",
             ]
         );
         assert!(dir.join("AGENTS.md").exists());
@@ -541,10 +542,9 @@ mod tests {
             (report.recordings, report.written, report.unchanged),
             (2, 1, 1)
         );
-        let md = std::fs::read_to_string(
-            dir.join("sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.md"),
-        )
-        .unwrap();
+        let md =
+            std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md"))
+                .unwrap();
         assert!(md.contains("summary_version: 2") && md.contains("# Ata v2"));
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -592,7 +592,9 @@ mod tests {
         );
         let sweep = sync_library(&fake, &mut mirror, true, true).unwrap();
         assert_eq!(sweep.written, 2);
-        assert!(dir.join("Interno/2026-09-18 Antiga - dddddddd.md").exists());
+        assert!(dir
+            .join("Interno/2026-09/2026-09-18_1400_dddddddd.md")
+            .exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -26,8 +26,8 @@ fn yaml_string(text: &str) -> String {
 
 /// O `.md` do resumo: front matter e o Markdown do servidor, ou `None` sem resumo.
 ///
-/// `transcript_path` é o caminho relativo do `.jsonl` a partir da pasta do `.md` (mesmo nome-base,
-/// então basta o nome do arquivo); só entra nas propriedades quando a transcrição é espelhada.
+/// A propriedade `transcript` é o nome do `.jsonl` da mesma pasta (mesmo nome-base); só entra
+/// quando a transcrição é espelhada.
 pub fn markdown(item: &MirrorItem) -> Option<String> {
     let summary = item.summary.as_ref()?;
     let mut out = String::from("---\n");
@@ -37,6 +37,8 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
         yaml_string(&item.recording_id)
     ));
     out.push_str(&format!("title: {}\n", yaml_string(&item.title)));
+    // O nome do arquivo não leva o título: `aliases` faz o Obsidian achar a nota por ele.
+    out.push_str(&format!("aliases:\n  - {}\n", yaml_string(&item.title)));
     if let Some(recorded_at) = &item.recorded_at {
         out.push_str(&format!("recorded_at: {}\n", yaml_string(recorded_at)));
     }
@@ -56,7 +58,7 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
     }
     out.push_str(&format!("summary_version: {}\n", summary.version));
     if item.transcript.is_some() {
-        let file = layout::base_name(item.recorded_at.as_deref(), &item.title, &item.recording_id);
+        let file = layout::base_name(layout::start_of(item), &item.recording_id);
         out.push_str(&format!(
             "transcript: {}\n",
             yaml_string(&format!("{file}.jsonl"))
@@ -122,6 +124,7 @@ mod tests {
             recording_id: "01928f3a-1c00".into(),
             title: "Alinhamento \"Q4\"".into(),
             recorded_at: Some("2026-09-18T14:00:05Z".into()),
+            local_start: Some("2026-09-18T11:00:05".into()),
             collections: vec!["Interno".into(), "Clientes".into()],
             agenda_type: Some("Reunião de equipe".into()),
             summary: Some(Summary {
@@ -162,11 +165,12 @@ mod tests {
 source: eclume\n\
 recording_id: \"01928f3a-1c00\"\n\
 title: \"Alinhamento \\\"Q4\\\"\"\n\
+aliases:\n  - \"Alinhamento \\\"Q4\\\"\"\n\
 recorded_at: \"2026-09-18T14:00:05Z\"\n\
 collections:\n  - \"Clientes\"\n  - \"Interno\"\n\
 agenda_type: \"Reunião de equipe\"\n\
 summary_version: 3\n\
-transcript: \"2026-09-18 Alinhamento Q4 - 01928f3a.jsonl\"\n\
+transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
 ---\n\n# Ata\n\n- decisão\n";
         assert_eq!(md, expected);
     }
