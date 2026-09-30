@@ -9,6 +9,7 @@ test('o ícone de ajuda abre o menu do DS com a versão', async ({ abrir }) => {
   await expect(page.locator('#menu-ajuda [role=menuitem]')).toHaveText([
     'Primeiros passos',
     'Permissões de microfone',
+    'Pasta sincronizada',
     /Atalhos de teclado\s*Ctrl\+\//,
     /Abrir a central de ajuda\s*↗/,
     /Relatar um problema…\s*Anexe o eclume\.log/,
@@ -25,7 +26,7 @@ test('o ícone de ajuda abre o menu do DS com a versão', async ({ abrir }) => {
 
 test('os itens abrem a ajuda do servidor e a pasta de logs', async ({ abrir }) => {
   const page = await abrir()
-  for (const id of ['#ajuda-primeiros-passos', '#ajuda-permissoes', '#ajuda-central', '#ajuda-problema']) {
+  for (const id of ['#ajuda-primeiros-passos', '#ajuda-permissoes', '#ajuda-pasta', '#ajuda-central', '#ajuda-problema']) {
     await page.locator('#abrir-ajuda').click()
     await page.locator(id).click()
     await expect(page.locator('#menu-ajuda')).toBeHidden()
@@ -34,6 +35,7 @@ test('os itens abrem a ajuda do servidor e a pasta de logs', async ({ abrir }) =
   expect(feitas).toEqual([
     { comando: 'open_help', args: { article: 'primeiros-passos' } },
     { comando: 'open_help', args: { article: 'permissoes-de-microfone' } },
+    { comando: 'open_help', args: { article: 'pasta-sincronizada' } },
     { comando: 'open_help', args: { article: null } },
     { comando: 'open_log_dir', args: null },
   ])
