@@ -124,7 +124,7 @@ test('organizar, configurações e ajuda no Design System: cantos, QR, listas, t
   expect((await computed(page, '.split', 'grid-template-columns')).trim().split(/\s+/)).toHaveLength(2)
 
   await page.goto('/config/campos')
-  await ready(page, 'Campos e regras')
+  await ready(page, 'Campos personalizados')
   expect(await computed(page, '.list-row', 'display')).toBe('grid')
   expect(await computed(page, '.list-row', 'border-bottom-style')).toBe('solid')
 
@@ -154,7 +154,8 @@ for (const viewport of [DESKTOP, MOBILE]) {
 
     const routes = [
       { name: 'pessoas', route: '/pessoas', heading: 'Pessoas' },
-      { name: 'campos', route: '/config/campos', heading: 'Campos e regras' },
+      { name: 'campos', route: '/config/campos', heading: 'Campos personalizados' },
+      { name: 'tags', route: '/tags', heading: 'Tags' },
       { name: 'agendas', route: '/config/agendas', heading: 'Tipos de agenda' },
       { name: 'mcp', route: '/config/mcp', heading: 'Conexão MCP' },
       { name: 'tokens', route: '/tokens', heading: 'Tokens de acesso' },

@@ -330,6 +330,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TagAssignment"
+              examples:
+                fixas:
+                  $ref: "#/components/examples/TagAssignment"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -7420,8 +7423,11 @@ components:
       summary: Uma coleção por cliente
       externalValue: ./fixtures/collection-page.json
     TagList:
-      summary: Tags em uso
+      summary: Uma tag cadastrada pelo usuário e uma criada pelo agente
       externalValue: ./fixtures/tag-list.json
+    TagAssignment:
+      summary: Tags fixas, com o limite guardado para o modo autogerenciado
+      externalValue: ./fixtures/tag-assignment.json
     AdminSettings:
       summary: WhisperX na GTX 1660 Super
       externalValue: ./fixtures/admin-settings.json
