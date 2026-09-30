@@ -6,7 +6,6 @@ em docs/standards/code/processamento-automatico.md.
 
 from __future__ import annotations
 
-import logging
 import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal
@@ -52,7 +51,6 @@ MAX_KEY = 64
 MAX_VALUE_ITEMS = 50
 # O filtro por campo da biblioteca e da busca: `<field_id>:<valor>`.
 FIELD_FILTER = r"^([0-9a-fA-F-]{36}):(.+)$"
-log = logging.getLogger(__name__)
 
 
 class FieldDraft(BaseModel):

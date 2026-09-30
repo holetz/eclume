@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
+import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import {
   baseChatKey,
@@ -79,6 +80,7 @@ function Answer({ chatId, onRetry }: { chatId: string; onRetry: () => void }) {
 
 /** A tela Perguntas: uma conversa sobre o conjunto das gravações, que prioriza os resumos. */
 export function ChatPage() {
+  useHelpTopic('perguntas')
   const queryClient = useQueryClient()
   const ask = useAskBaseChat()
   const [entries, setEntries] = useState<Entry[]>([])

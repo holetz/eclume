@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 // Seções do painel, na ordem da barra lateral "Plataforma". Os caminhos são relativos a /admin.
-export interface AdminSection {
+interface AdminSection {
   path: string
   label: string
 }

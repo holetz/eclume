@@ -294,5 +294,6 @@ remote-run . 'ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test --manifest-path d
 remote-run . 'docker compose -p eclume-13-mock -f deploy/docker-compose.mock.yml down -v'
 ```
 
-- Windows e macOS: só `cargo check` pelo workflow manual `desktop-plataformas.yml`; o teste de
-  campo (ConsentStore, toasts com botões, Core Audio) é da spec `distribuicao-desktop`.
+- Windows: verificação pelo workflow manual `desktop-plataformas.yml` (o macOS está fora até o
+  repositório ficar público, ver [monorepo.md](monorepo.md)); o teste de campo (ConsentStore, toasts
+  com botões) é da `holetz/eclume#16` e da `holetz/eclume#28`.

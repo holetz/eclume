@@ -1,6 +1,6 @@
 //! Pontos de extensão do app: o upload das gravações e a detecção de reuniões. Aqui ficam os
 //! contratos e o laço de sync sobre a fila; as implementações reais são o `HttpUploader` do
-//! `eclume-sync` (HTTP por PAT) e o `DebouncedDetector` do `eclume-detect` (mic e processo).
+//! `eclume-sync` (HTTP com a credencial da conta) e o `DebouncedDetector` do `eclume-detect` (mic e processo).
 
 use std::sync::Mutex;
 

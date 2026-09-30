@@ -165,8 +165,6 @@ nas duas.
   - escopo faltando → **403** `insufficient_scope` com `required_scopes`;
   - requisição fora do contrato (parâmetro, corpo ou regra de negócio) → **422**
     `validation_failed` com `errors[]`, em qualquer operação, como o mock;
-  - operação do contrato ainda sem implementação → **501** `not_implemented`, com a spec dona no
-    `detail` (`routes/not_implemented.py`). A lista sai quando a spec implementa a rota.
 - Desativar um usuário (`PATCH /admin/users/{id}`) apaga as sessões e revoga os PATs dele.
 
 ## Cadastro e aviso
@@ -328,7 +326,7 @@ nas duas.
   com `ECLUME_TEST_REQUIRE_SERVICES=1` (a CI), a ausência **falha**.
 - **Conformidade:** um hook de resposta no `TestClient` valida toda resposta de `/api/v1` contra
   `contracts/openapi-v1.bundled.yaml` com os objetos fechados (`strictify`): status declarado,
-  headers obrigatórios e corpo. Um teste confere que implementadas + pendentes = o contrato.
+  headers obrigatórios e corpo. Um teste confere que as rotas implementadas são exatamente as operações do contrato.
 - **Isolamento** é provado pela API e por SQL direto sob `eclume_app` entre duas contas, em toda
   tabela de conteúdo (`test_isolation.py`); a busca tem o próprio: nunca devolve segmento de outra
   conta, nem pela função do GIN (`test_search.py`).

@@ -172,7 +172,7 @@ recording ──parar──▶ pending ──claim_next──▶ syncing ──�
 
 ## Pontos de extensão
 
-Implementados pela spec `desktop-deteccao-e-sync`; o detalhe está em
+Implementados pela `holetz/eclume#13`; o detalhe está em
 [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md).
 
 - `Uploader::upload(&QueuedRecording) -> Result<String>` envia o arquivo e devolve o id remoto;

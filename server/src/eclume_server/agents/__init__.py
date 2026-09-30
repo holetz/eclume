@@ -21,8 +21,6 @@ if TYPE_CHECKING:
 
 __all__ = ["Completion", "Provider", "ProviderConfig", "ProviderError", "build_provider"]
 
-KINDS = ("ollama", "openai-compatible", "anthropic", "claude-cli")
-
 
 def build_provider(
     config: ProviderConfig, *, claude_bin: str = "claude", gpu_idle: Callable[[], Awaitable[bool]] | None = None

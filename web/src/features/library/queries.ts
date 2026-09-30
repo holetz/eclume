@@ -16,7 +16,7 @@ function anyBusy(items: Recording[] | undefined): boolean {
   return items?.some((item) => recordingState(item).state === 'busy') ?? false
 }
 
-export interface RangeResult {
+interface RangeResult {
   items: Recording[]
   /** Passou do teto de páginas: há mais gravações no período do que as mostradas. */
   truncated: boolean

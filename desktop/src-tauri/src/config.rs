@@ -24,7 +24,6 @@ pub const MAX_RETENTION_DAYS: u32 = 3650;
 pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
 /// A parada por silêncio padrão da nota, em segundos.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
-/// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
 /// Os temas da janela; `system` acompanha o `prefers-color-scheme`.
 pub const THEMES: [&str; 3] = ["system", "light", "dark"];
 
@@ -39,6 +38,7 @@ fn default_true() -> bool {
 /// Os idiomas de transcrição que a aba Áudio oferece, além do automático (o padrão do servidor).
 pub const LANGUAGES: [&str; 3] = ["pt", "es", "en"];
 
+/// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
 pub const SOURCE_NONE: &str = "none";
 /// O áudio do sistema seguindo a saída em uso, o padrão.
 pub const SYSTEM_FOLLOW: &str = "follow";

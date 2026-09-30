@@ -4,11 +4,10 @@ import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 import { TOKENS_KEY } from '../tokens/scopes'
 
-export type PairingCode = Schemas['PairingCode']
-export type DevicePlatform = Schemas['DevicePlatform']
+type PairingCode = Schemas['PairingCode']
 
 /** Quanto faltava quando a resposta chegou, medido no relógio do servidor, e o `performance.now()` de então. */
-export interface CountdownAnchor {
+interface CountdownAnchor {
   expiresInMs: number
   at: number
 }
@@ -19,7 +18,7 @@ export interface Pairing {
 }
 
 /** Um código vale 10 minutos (holetz/eclume#35). */
-export const PAIRING_TTL_MS = 10 * 60_000
+const PAIRING_TTL_MS = 10 * 60_000
 
 /**
  * A âncora da contagem: `expires_at` menos o `Date` da resposta (o relógio do servidor), contada a
@@ -44,7 +43,7 @@ export function useCreatePairingCode() {
   })
 }
 
-export function remainingMs(anchor: CountdownAnchor, now: number = performance.now()): number {
+function remainingMs(anchor: CountdownAnchor, now: number = performance.now()): number {
   return Math.max(0, anchor.expiresInMs - (now - anchor.at))
 }
 
@@ -58,7 +57,7 @@ export function formatCountdown(ms: number): string {
 }
 
 /** O tempo que falta, recalculado a cada segundo e parado quando zera. */
-export function useCountdown(anchor: CountdownAnchor | null): number {
+function useCountdown(anchor: CountdownAnchor | null): number {
   const [left, setLeft] = useState(() => (anchor ? remainingMs(anchor) : 0))
   const [current, setCurrent] = useState(anchor)
   if (current !== anchor) {
@@ -83,7 +82,7 @@ export function useCountdown(anchor: CountdownAnchor | null): number {
  * Consulta o estado do código a cada 3 s enquanto ele está `pending` e a contagem não zerou. No
  * `used`, atualiza as listas de tokens, onde o aparelho novo aparece.
  */
-export function usePairingStatus(id: string, counting: boolean) {
+function usePairingStatus(id: string, counting: boolean) {
   const queryClient = useQueryClient()
   const status = useQuery({
     queryKey: ['pairing-codes', id],
@@ -109,7 +108,7 @@ export function useDeviceTokens() {
   })
 }
 
-export type PairingState =
+type PairingState =
   | { phase: 'pending'; left: string; announce: string }
   | { phase: 'expired'; announce: string }
   | { phase: 'used'; deviceName: string | null; announce: string }

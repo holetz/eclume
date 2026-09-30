@@ -165,7 +165,7 @@ Pré-processamento e que chega em `options.preprocess`. A ordem e as regras est�
     https://huggingface.co/pyannote/speaker-diarization-community-1/resolve/main/config.yaml   # 200
   ```
 
-- **Token da organização:** o admin grava o token em Administração → Segredos, e ele chega a
+- **Token da plataforma:** o admin grava o token em Administração → Segredos, e ele chega a
   cada job cifrado nas `options` (`hf_token_encrypted`), com precedência sobre `HF_TOKEN` e o
   arquivo. Para abri-lo, o worker precisa de `ECLUME_ENCRYPTION_KEY` (ou `ECLUME_SECRET_KEY`)
   **igual à do server**; sem ela, o job avisa `hf_token_undecryptable` e usa o token do ambiente.
@@ -192,7 +192,7 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
 | `ECLUME_RESIDENT_MIN_FREE_MB` | `2500` | VRAM livre mínima, com o ASR carregado, para ele ficar ao carregar o alinhador ou o pyannote |
 | `ECLUME_JOB_TIMEOUT_SECONDS` | `21600` | limite de um job (6 h) |
 | `ECLUME_WORK_DIR` | `/tmp/eclume-work` | onde o áudio é baixado; limpo ao fim do job |
-| `HF_TOKEN`, `ECLUME_HF_TOKEN_FILE` | —, `/run/secrets/hf_token` | token do Hugging Face (o da organização, vindo no job, vence) |
+| `HF_TOKEN`, `ECLUME_HF_TOKEN_FILE` | —, `/run/secrets/hf_token` | token do Hugging Face (o da plataforma, vindo no job, vence) |
 | `ECLUME_ENCRYPTION_KEY`, `ECLUME_SECRET_KEY` | — | as mesmas do server: abrem o token do HF que chega cifrado no job |
 | `ECLUME_REMOTE_BASE_URL`, `ECLUME_REMOTE_API_KEY`, `ECLUME_REMOTE_MODEL` | — | engine `openai-compatible` (speaches) |
 

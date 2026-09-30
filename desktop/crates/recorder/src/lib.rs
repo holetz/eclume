@@ -1,6 +1,6 @@
 //! Núcleo de gravação do app desktop do eclume, sem dispositivo de áudio: mixagem das fontes,
-//! codificação em Ogg/Opus mono 16 kHz, fila local de gravações e as interfaces que a spec
-//! `desktop-deteccao-e-sync` implementa.
+//! codificação em Ogg/Opus mono 16 kHz, fila local de gravações e as interfaces de upload e de
+//! detecção de reuniões (`ext`).
 
 pub mod encode;
 pub mod ext;
@@ -13,10 +13,10 @@ pub mod vad;
 pub use eclume_audio_capture::AudioSource;
 pub use encode::OggOpusWriter;
 pub use ext::{sync_pending, MeetingDetector, MeetingEvent, SyncReport, Uploader};
-pub use mix::{Mixer, FRAME, TARGET_RATE};
+pub use mix::{Mixer, TARGET_RATE};
 pub use queue::{
-    now_ms, retry_backoff_ms, Kind, Marker, NewImport, Queue, QueueCounts, QueuedRecording,
-    RecordedAtSource, Source, Status, DETAILS_WAIT_MS, MAX_MARKER_NOTE,
+    now_ms, Kind, Marker, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource, Source,
+    Status,
 };
 pub use session::{ActiveRecording, RecorderConfig};
-pub use vad::{SilenceDetector, VadEvent, METER_BARS};
+pub use vad::{SilenceDetector, METER_BARS};

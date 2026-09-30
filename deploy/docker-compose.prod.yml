@@ -244,7 +244,7 @@ configs:
   # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
   # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o
   # SPA. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou /downloads (a tela é
-  # /configuracoes/mcp).
+  # /config/mcp).
   caddyfile:
     content: |
       {

@@ -19,7 +19,7 @@ passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).
 | `ui/` | a janela no Design System do eclume (HTML e módulos ES, sem bundler) |
 | `ui-tests/` | testes Playwright da janela com o Tauri simulado, inclusive a verificação visual |
 | `crates/audio-capture/` | captura do mic (`cpal`) e do áudio do sistema (PipeWire/Pulse, WASAPI, Core Audio), adaptada do Anarlog |
-| `crates/recorder/` | mixagem para 16 kHz, encoder Ogg/Opus, detector de silêncio da nota, fila SQLite (v3, com marcadores), sessão de gravação e traits de sync/detecção |
+| `crates/recorder/` | mixagem para 16 kHz, encoder Ogg/Opus, detector de silêncio da nota, fila SQLite (v4, com marcadores), sessão de gravação e traits de sync/detecção |
 | `crates/resampler/` | reamostrador vendorizado do Anarlog |
 | `crates/detect/` | detecção de reuniões: sinais de mic por SO (adaptados do Anarlog), classificação, debounce e gravação automática |
 | `crates/sync/` | sync: upload resumível do contrato v1, login e pareamento de dispositivo, CA fixada, descoberta mDNS e a credencial no chaveiro do SO |

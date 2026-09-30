@@ -1,11 +1,12 @@
 // Navegação do shell em duas seções: a principal, na barra lateral, e a do cabeçalho, nos menus da
-// engrenagem (Minhas configurações) e da ajuda. As áreas de outras specs já estão previstas e
-// desligadas: para ligá-las, a spec dona muda `enabled` e registra a rota em routes.tsx. As rotas
-// seguem o mapa de telas v6. O painel admin não entra: ele tem conta e login próprios (/admin/entrar).
-export type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
-export type NavSection = 'main' | 'header'
+// engrenagem (Minhas configurações) e da ajuda. Todas as áreas estão ligadas: para acrescentar uma,
+// a spec dona registra o item aqui e a rota em routes.tsx, e `enabled: false` a mantém fora do menu
+// até ficar pronta. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem conta e
+// login próprios (/admin/entrar).
+type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
+type NavSection = 'main' | 'header'
 
-export interface NavItem {
+interface NavItem {
   to: string
   label: string
   group: NavGroup

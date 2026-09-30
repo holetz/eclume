@@ -1,6 +1,6 @@
 import QRCode from 'qrcode'
 
-export interface QrMatrix {
+interface QrMatrix {
   size: number
   dark(x: number, y: number): boolean
 }

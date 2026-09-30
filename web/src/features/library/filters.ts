@@ -30,7 +30,7 @@ export interface LibraryFilters {
   field: string[]
 }
 
-export const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
+const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
   kind: 'tipo',
   status: 'situacao',
   tag: 'tag',

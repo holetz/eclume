@@ -20,7 +20,7 @@ case "$mode" in
     stamp="${2:?informe a data do backup}"
     [[ "${3:-}" == --confirmo ]] || { echo "--aplicar substitui a produção: repita com --confirmo." >&2; exit 2; }
     ;;
-  *) sed -n '2,11p' "$0"; exit 2 ;;
+  *) sed -n '2,10p' "$0"; exit 2 ;;
 esac
 [[ -n "$stamp" ]] || stamp="$(find "$DEST/pg" -name 'eclume-20*.dump' -printf '%f\n' | sort | tail -n 1 | sed 's/^eclume-//; s/\.dump$//')"
 dump="$DEST/pg/eclume-$stamp.dump"

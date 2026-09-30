@@ -12,7 +12,7 @@ export interface RecordedAt {
   detail: string
 }
 
-export interface ReadRecordedAtOptions {
+interface ReadRecordedAtOptions {
   /** "Agora", para descartar datas no futuro. */
   now?: Date
   /** Lê as tags de data do arquivo; o padrão usa o Mediabunny, carregado sob demanda. */

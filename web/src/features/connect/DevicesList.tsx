@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
-import { TOKENS_KEY } from '../tokens/scopes'
+import { TOKENS_KEY, type DevicePlatform } from '../tokens/scopes'
 import styles from './Connect.module.css'
-import { useDeviceTokens, type DevicePlatform } from './pairing'
+import { useDeviceTokens } from './pairing'
 
 type Token = Schemas['Token']
 

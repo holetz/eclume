@@ -5,7 +5,7 @@ import type { Schemas } from '../../api/client'
 type Recording = Schemas['Recording']
 type Job = Schemas['Job']
 
-export type Tone = 'neutral' | 'progress' | 'success' | 'danger' | 'warning'
+type Tone = 'neutral' | 'progress' | 'success' | 'danger' | 'warning'
 
 type Step = Schemas['PipelineStep']['step']
 
@@ -20,7 +20,7 @@ const STEP_BUSY: Partial<Record<string, string>> = {
 
 const AFTER_TRANSCRIPTION: readonly Step[] = ['fields', 'agenda_type', 'summary']
 
-export interface RecordingState {
+interface RecordingState {
   state: 'failed' | 'busy' | 'ready'
   label: string
   tone: Tone

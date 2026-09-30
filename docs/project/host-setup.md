@@ -161,8 +161,9 @@ O worker CPU do eclume recebe o token por `ECLUME_CLAUDE_OAUTH_TOKEN`
 
 1. Crie um token de leitura em <https://huggingface.co/settings/tokens>.
 2. Aceite os termos de `pyannote/speaker-diarization-community-1`, e também dos demais modelos
-   gated indicados pela spec `engine-asr-whisperx`, com a mesma conta.
-3. O token entra no `.env` do eclume no servidor. Ele nunca é versionado.
+   gated indicados em `holetz/eclume#8`, com a mesma conta.
+3. O token vai em `/srv/eclume/secrets/hf_token` ou no painel de administração (veja
+   [worker-gpu.md](worker-gpu.md)). Ele nunca é versionado.
 
 ## 9. Na máquina de desenvolvimento: contexto Docker
 
@@ -196,8 +197,9 @@ A conferência da impressão digital e o uso pelo lumea (`LUMEA_ECLUME_CA_BUNDLE
 
 ## Instaladores do desktop (sem assinatura de código)
 
-Os instaladores saem do workflow `desktop-release` (tag `desktop-v<versão>`) como um GitHub
-Release privado; o contrato está em
+Os instaladores saem de `deploy/release-desktop.sh` (compila no host e cria a tag
+`desktop-v<versão>` como um GitHub Release privado; o workflow `desktop-release` é só a
+alternativa manual); o contrato está em
 [desktop-distribuicao.md](../standards/code/desktop-distribuicao.md). Como o repo é privado, os
 clientes baixam do próprio servidor eclume:
 
@@ -213,10 +215,10 @@ clientes baixam do próprio servidor eclume:
   ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publicar-desktop.sh
   ```
   O script confere o `SHA256SUMS` antes de trocar os manifestos da raiz.
-- **Chave do updater (minisign):** a privada e a senha estão nos secrets do GitHub
-  `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; a cópia de segurança fica em
-  `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` (`chmod 600`), nunca no
-  repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
+- **Chave do updater (minisign):** a privada e a senha ficam em
+  `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` (`chmod 600`), que o
+  release no host lê; os mesmos valores estão nos secrets do GitHub `TAURI_SIGNING_PRIVATE_KEY` e
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` para o workflow manual. Nunca no repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
   reinstalar o app à mão em todos os clientes.
 
 Avisos da primeira instalação, detalhados para o usuário em

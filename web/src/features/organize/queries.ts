@@ -28,9 +28,9 @@ export function invalidFields(error: unknown): Record<string, string> {
   return byField
 }
 
-export const FIELDS_KEY = ['fields'] as const
+const FIELDS_KEY = ['fields'] as const
 // Uma consulta só, usada também pelo painel de resumos da gravação (troca do tipo).
-export const AGENDA_TYPES_KEY = ['agenda-types'] as const
+const AGENDA_TYPES_KEY = ['agenda-types'] as const
 
 export function useFields() {
   return useQuery({ queryKey: FIELDS_KEY, queryFn: () => unwrap(api.GET('/api/v1/fields')) })

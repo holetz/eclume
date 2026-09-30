@@ -1,6 +1,6 @@
 // O `highlight` da busca chega com o texto escapado e os termos entre <mark> e </mark>, e nenhum
 // outro HTML (contrato). Aqui vira pedaços de texto puro, renderizados pelo React sem innerHTML.
-export interface HighlightPart {
+interface HighlightPart {
   text: string
   marked: boolean
 }

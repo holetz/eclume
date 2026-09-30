@@ -4,7 +4,9 @@ Serviço de transcrição institucional e auto-hospedado. Grava reuniões, trans
 servidor, separa e reconhece os locutores, organiza as transcrições por pessoa e as resume com o
 agente que o admin da plataforma configurar. Cada usuário tem o próprio espaço, sem organização.
 
-> Estado: em definição. O plano de construção é o épico em `holetz/eclume#1`.
+> Estado: em produção no host da consultoria (`https://192.168.15.199:8443`); o runbook está em
+> [docs/project/deploy-producao.md](docs/project/deploy-producao.md). O plano de construção é o épico
+> `holetz/eclume#1`.
 
 ## Peças
 
@@ -13,13 +15,15 @@ agente que o admin da plataforma configurar. Cada usuário tem o próprio espaç
 - **worker-gpu/**: WhisperX (ASR, alinhamento, diarização e embeddings de locutor) em CUDA.
 - **web/**: interface do usuário e painel de administração, com conversão local de áudio e vídeo
   antes do upload.
-- **desktop/**: app Tauri para Windows, Linux e macOS. Detecta reuniões, grava, sincroniza e fica
-  na bandeja do sistema.
+- **desktop/**: app Tauri para Windows e Linux (macOS fora enquanto o repositório for privado).
+  Detecta reuniões, grava, sincroniza e fica na bandeja do sistema.
+- **mobile/**: app Tauri 2 para Android, um microfone portátil que grava com o serviço em primeiro
+  plano, marca momentos e sincroniza com o servidor.
 - **engines/**: a interface de engine de ASR, compartilhada pelo server e pelo worker.
 - **contracts/**: OpenAPI v1 e o schema da transcrição, que são o contrato com integrações como o
   lumea.
-- **deploy/**: compose de desenvolvimento (Postgres com pgvector, Redis e MinIO) e, depois, o de
-  produção.
+- **deploy/**: composes de desenvolvimento e de teste (Postgres com pgvector, Redis e MinIO), o de
+  produção no host GPU e os scripts de deploy, backup e release do desktop.
 - **docs/**: o conhecimento do projeto, num bundle OKF.
 
 ## Desenvolvimento

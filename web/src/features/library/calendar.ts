@@ -27,7 +27,7 @@ function weekdayIndex(day: Date): number {
   return (day.getDay() + 6) % 7
 }
 
-export function startOfDay(day: Date): Date {
+function startOfDay(day: Date): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate())
 }
 
@@ -151,7 +151,7 @@ export function eventLabel(recording: Recording): string {
   return parts.join(', ')
 }
 
-export interface EventBox {
+interface EventBox {
   /** Hora de início (9.5 = 09:30). */
   s: number
   /** Duração em horas. */
@@ -169,7 +169,7 @@ export function eventBox(recording: Pick<Recording, 'recorded_at' | 'duration_ms
   return { s, d: Math.max(MIN_HOURS, Math.min(hours, 24 - s)) }
 }
 
-export type Laned<T> = T & { lane: number; lanes: number }
+type Laned<T> = T & { lane: number; lanes: number }
 
 /**
  * Faixas de sobreposição de um dia: guloso por início; cada grupo de eventos que se tocam divide a

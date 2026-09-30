@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
     --notas)
       [[ $# -ge 2 ]] || { echo "--notas exige um texto." >&2; exit 2; }
       NOTAS="$2"; shift 2 ;;
-    --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done

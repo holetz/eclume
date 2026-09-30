@@ -14,6 +14,7 @@ nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from dataclasses import dataclass, field
@@ -80,6 +81,17 @@ def raw_transcript() -> dict[str, Any]:
     }
 
 
+async def _put_json(storage: Storage, key: str, document: object) -> None:
+    """Grava um JSON no bucket como o worker GPU faz."""
+    await asyncio.to_thread(
+        storage._s3.put_object,  # noqa: SLF001 — o worker de verdade grava pelo próprio cliente S3
+        Bucket=storage.bucket,
+        Key=key,
+        Body=json.dumps(document).encode(),
+        ContentType="application/json",
+    )
+
+
 async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any]) -> str:
     """O `transcribe` do contrato, sem GPU."""
     storage: Storage = ctx["storage"]
@@ -95,13 +107,13 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
     await storage.sha256(audio_key)  # o áudio existe e é legível
     prefix = artifacts_prefix(recording_id)
     transcript_key = f"{prefix}transcript.raw.json"
-    await storage.put_bytes(transcript_key, json.dumps(raw_transcript()).encode(), "application/json")
+    await _put_json(storage, transcript_key, raw_transcript())
     embeddings_key = None
     if options.get("embeddings"):
         embeddings_key = f"{prefix}speaker_embeddings.json"
         vectors = ctx.get("voices") or DEFAULT_VOICES
         document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL, "dimension": EMBEDDING_DIMS}
-        await storage.put_bytes(embeddings_key, json.dumps(document).encode(), "application/json")
+        await _put_json(storage, embeddings_key, document)
     # O job começou no worker há pouco, antes da ingestão.
     info = dict(ENGINE_INFO) | {"started_at": (datetime.now(UTC) - timedelta(seconds=5)).isoformat()}
     if "preprocess" in options:

@@ -14,7 +14,6 @@ import markerPage from '../../../contracts/fixtures/marker-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import pairingCodeCreated from '../../../contracts/fixtures/pairing-code-created.json'
 import pairingCodeUsed from '../../../contracts/fixtures/pairing-code-used.json'
-import partUrls from '../../../contracts/fixtures/part-urls.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
 import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
 import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
@@ -33,10 +32,8 @@ import serverInfo from '../../../contracts/fixtures/server-info.json'
 import signupInfo from '../../../contracts/fixtures/signup-info.json'
 import signupRequest from '../../../contracts/fixtures/signup-request.json'
 import speakerLinked from '../../../contracts/fixtures/speaker-linked.json'
-import summaryChatMessageDone from '../../../contracts/fixtures/summary-chat-message-done.json'
 import summaryChatExchangeQueued from '../../../contracts/fixtures/summary-chat-message-queued.json'
 import summaryChatPage from '../../../contracts/fixtures/summary-chat-page.json'
-import summaryDone from '../../../contracts/fixtures/summary-done.json'
 import summaryPage from '../../../contracts/fixtures/summary-page.json'
 import summaryQueued from '../../../contracts/fixtures/summary-queued.json'
 import summaryState from '../../../contracts/fixtures/summary-state.json'
@@ -76,11 +73,9 @@ export const fixtures = {
   speakerLinked: fresh<Transcript['speakers'][number]>(speakerLinked),
   summaryPage: fresh<Schemas['SummaryPage']>(summaryPage),
   summaryQueued: fresh<Schemas['Summary']>(summaryQueued),
-  summaryDone: fresh<Schemas['Summary']>(summaryDone),
   summaryState: fresh<Schemas['SummaryState']>(summaryState),
   summaryChatPage: fresh<Schemas['SummaryChatPage']>(summaryChatPage),
   summaryChatExchangeQueued: fresh<Schemas['SummaryChatExchange']>(summaryChatExchangeQueued),
-  summaryChatMessageDone: fresh<Schemas['SummaryChatMessage']>(summaryChatMessageDone),
   agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
   baseChatQueued: fresh<Schemas['BaseChat']>(baseChatQueued),
   baseChatDone: fresh<Schemas['BaseChat']>(baseChatDone),
@@ -95,7 +90,6 @@ export const fixtures = {
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),
   uploadDeduplicated: fresh<Schemas['Upload']>(uploadDeduplicated),
   uploadInProgress: fresh<Schemas['Upload']>(uploadInProgress),
-  partUrls: fresh<Schemas['PartUrls']>(partUrls),
   adminSettings: fresh<Schemas['AdminSettings']>(adminSettings),
   adminHealth: fresh<Schemas['AdminHealth']>(adminHealth),
   agentProviderPage: fresh<Schemas['AgentProviderPage']>(agentProviderPage),

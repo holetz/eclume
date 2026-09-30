@@ -5,7 +5,7 @@ import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
 import { recordingKey, summaryKey } from './queries'
 
-export type Summary = Schemas['Summary']
+type Summary = Schemas['Summary']
 export type SummaryState = Schemas['SummaryState']
 
 const POLL_MS = 3000

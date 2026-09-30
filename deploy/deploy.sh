@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       read -r -a BUILD <<< "$2"; shift 2 ;;
     --sem-build) NO_BUILD=1; shift ;;
     --gerar-env) GEN_ENV=1; shift ;;
-    --help|-h) sed -n '2,13p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done

@@ -5,9 +5,9 @@ import type { components, paths } from './schema.gen'
 
 export type Schemas = components['schemas']
 
-export const CSRF_COOKIE = 'eclume_csrf'
+const CSRF_COOKIE = 'eclume_csrf'
 // O painel admin tem sessão própria, com o próprio cookie de CSRF.
-export const ADMIN_CSRF_COOKIE = 'eclume_admin_csrf'
+const ADMIN_CSRF_COOKIE = 'eclume_admin_csrf'
 export const CSRF_HEADER = 'X-CSRF-Token'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const LOGIN_PATH = '/api/v1/auth/login'
@@ -31,7 +31,7 @@ export function readCookie(name: string, cookies: string = globalThis.document?.
  * Double-submit: todo método mutável ecoa no header `X-CSRF-Token` o cookie da sessão da área:
  * `eclume_admin_csrf` em /api/v1/admin/, `eclume_csrf` no resto.
  */
-export const csrfMiddleware: Middleware = {
+const csrfMiddleware: Middleware = {
   onRequest({ request }) {
     if (!SAFE_METHODS.has(request.method)) {
       const token = readCookie(isAdminUrl(request.url) ? ADMIN_CSRF_COOKIE : CSRF_COOKIE)
@@ -59,7 +59,7 @@ export function onAdminUnauthorized(listener: () => void): () => void {
   return subscribe(adminUnauthorizedListeners, listener)
 }
 
-export const unauthorizedMiddleware: Middleware = {
+const unauthorizedMiddleware: Middleware = {
   onResponse({ response, schemaPath }) {
     if (response.status !== 401) return response
     // Um 401 do painel admin é da sessão de admin, e só a guarda do painel o ouve.

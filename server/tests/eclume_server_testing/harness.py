@@ -59,8 +59,6 @@ class Services:
 
     settings: Settings
     database: str
-    # URL do migrador (superusuário) do banco da sessão; `settings.database_url` é a de `eclume_server`.
-    owner_url: str
 
     def s3(self) -> Any:  # noqa: ANN401 — cliente boto3 sem stubs
         """Cliente S3 do MinIO de teste."""
@@ -124,7 +122,7 @@ def provision() -> Services:
         # Partes no mínimo do contrato (5 MiB) deixam os testes de upload mais leves.
         upload_part_size=5 * 1024 * 1024,
     )
-    services = Services(settings=settings, database=database, owner_url=owner_url)
+    services = Services(settings=settings, database=database)
     services.s3().create_bucket(Bucket=settings.s3_bucket)
     # Filas de uma sessão anterior no mesmo banco do Redis travariam os workers em modo burst.
     redis.Redis.from_url(settings.redis_url).flushdb()

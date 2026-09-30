@@ -11,7 +11,7 @@ export const WHISPER_LANGUAGE_CODES = [
 // O Whisper usa `jw` para o javanês, que no ISO é `jv`.
 const ISO_CODE: Record<string, string> = { jw: 'jv' }
 
-export interface LanguageOption {
+interface LanguageOption {
   value: string
   label: string
 }

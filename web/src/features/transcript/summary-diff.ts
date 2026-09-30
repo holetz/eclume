@@ -1,7 +1,7 @@
 // Comparação de duas versões do resumo por linha (LCS), no cliente: a gerada contra a atual, ou o
 // rascunho contra a versão que mudou enquanto a pessoa editava.
 
-export interface DiffLine {
+interface DiffLine {
   kind: 'same' | 'removed' | 'added'
   text: string
 }

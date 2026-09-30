@@ -1,11 +1,12 @@
 // Exportar a gravação por fetch (e não por link): o erro vem como problem e vira alerta na tela, em
 // vez de o navegador baixar um JSON.
 import { ApiError, type Problem } from '../../api/problem'
+import type { operations } from '../../api/schema.gen'
 
-export type ExportFormat = 'txt' | 'srt' | 'md' | 'docx'
+export type ExportFormat = operations['exportRecording']['parameters']['query']['format']
 
 /** O nome do arquivo do `Content-Disposition` (`filename*` UTF-8 ou `filename`). */
-export function dispositionName(header: string | null): string | null {
+function dispositionName(header: string | null): string | null {
   if (!header) return null
   const extended = /filename\*=UTF-8''([^;]+)/i.exec(header)
   if (extended) return decodeURIComponent(extended[1].trim())

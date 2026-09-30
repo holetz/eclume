@@ -1,7 +1,7 @@
 // Filtros da busca: o que fica na URL (em pt-BR) e o que vai para `GET /api/v1/search`.
 import type { operations } from '../../api/schema.gen'
 
-export type SearchQuery = NonNullable<operations['search']['parameters']['query']>
+type SearchQuery = NonNullable<operations['search']['parameters']['query']>
 
 /** Período rápido: últimos 7 ou 30 dias, este ano; vazio usa o intervalo livre (`de`/`ate`). */
 export type Period = '' | '7d' | '30d' | 'ano'

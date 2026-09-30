@@ -25,7 +25,7 @@ const FORMAS = {
 const modelos = new Map();
 
 /** Um ícone novo (16 px, traço de 2 px, como o DS pede), decorativo. */
-export function icone(nome) {
+function icone(nome) {
   if (!modelos.has(nome)) {
     const forma = FORMAS[nome];
     if (!forma) throw new Error(`ícone desconhecido: ${nome}`);

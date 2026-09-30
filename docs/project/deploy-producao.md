@@ -104,6 +104,9 @@ O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do e
    sem tag (rótulo `org.eclume.image`, nada de outros projetos) e confere o health pela CA
    publicada.
 
+Deploys de branches diferentes se sobrescrevem: o servidor e o web de produção são os do último
+deploy. O estado estável é o deploy de `main`; depois de testar um branch, volte a `main`.
+
 ### Segredos
 
 `deploy/.env.prod` (600, no `.gitignore`) sai de `deploy/.env.prod.example` por
@@ -133,7 +136,7 @@ sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
 ([server-admin.md](../standards/code/server-admin.md)).
 
 - **Contas de usuário** nascem pelo cadastro aberto (`POST /api/v1/auth/signup`; a tela Criar
-  conta do web chega com a holetz/eclume#36), com o aceite do aviso de consentimento. Não há convite nem CLI de usuário; o admin só ativa ou desativa contas em
+  conta do web), com o aceite do aviso de consentimento. Não há convite nem CLI de usuário; o admin só ativa ou desativa contas em
   Admin → Usuários. `ECLUME_SIGNUP_OPEN=false` fecha o cadastro.
 - **Conta de admin.** O `bootstrap-admin.sh` (pelo one-shot `migrate`, com o superusuário) cria a
   conta de admin `admin@example.com` por `eclume-server admin create`. A senha é
@@ -158,10 +161,8 @@ vence o `ECLUME_CLAUDE_OAUTH_TOKEN` do env, que sobra como alternativa de opera�
 token vale 1 ano e não se renova: gere outro antes de vencer (o sintoma é o resumo falhando com
 `provider_auth` na Saúde do admin).
 
-Deploy de uma estação Windows ([estacao-windows.md](estacao-windows.md)): rode o `deploy.sh` de
-uma exportação com LF (`git -c core.autocrlf=false archive HEAD | tar -x -C <pasta>`), porque o
-`autocrlf` do checkout põe CRLF nos scripts que o deploy instala no host. Sem `flock`, a trava
-vira o diretório `deploy/.deploy.lock.d`.
+Numa estação Windows ([estacao-windows.md](estacao-windows.md)), o `.gitattributes` mantém os
+scripts com LF em qualquer checkout. Sem `flock`, a trava vira o diretório `deploy/.deploy.lock.d`.
 
 ## Validar
 
@@ -242,146 +243,6 @@ vínculo gerados vencem sozinhos em 10 minutos.
 bash deploy/prova-web-prod.sh
 ```
 
-### Primeiro deploy (2026-09-25)
-
-- **Tempo:** o deploy do zero levou ~6,5 min, quase tudo no build do worker GPU (7,98 GB). As
-  demais imagens medem 507 MB (server) e 96 MB (web). Um redeploy sem mudança de dependência leva
-  ~20 s. O disco do host foi de 80% a 82%.
-- **Smoke:** o upload de uma parte, a transcrição na GPU em 30 s (13 segmentos, 2 locutores, com os
-  modelos já no cache de `/srv/eclume/models`) e a ata pelo `claude-sonnet-5` em ~8 s passaram.
-  O smoke inteiro levou 41 s.
-- **Backup:** o primeiro backup levou 1 s. `restaurar-backup.sh --teste` restaurou banco e bucket
-  com contagens idênticas às da produção. A retenção de 7 e os hardlinks entre instantâneos foram
-  conferidos.
-- **Rede:** um container do lumea alcança `https://192.168.15.199:8443` pelo IP do host.
-
-### Conta por usuário em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 organização, 1
-  usuário, 7 gravações, 7 transcrições, 10 resumos, 17 objetos).
-- **Deploy:** a 008 aplicou sem erro; usuários, gravações, transcrições e resumos ficaram com as
-  mesmas contagens, `organizations` sumiu e o admin antigo ganhou a conta de admin com o mesmo
-  e-mail. O disco foi de 87% a 89%.
-- **Smoke:** cadastro aberto (aviso v1), sessão de admin e sessão de usuário com a senha de
-  `admin-password`, transcrição deduplicada e resumo novo pelo `claude-cli` passaram. A conta
-  migrada fica com `notice_required` até aceitar o aviso (`POST /api/v1/me/notice`).
-
-### Processamento automático em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
-  7 transcrições, 11 resumos, 17 objetos).
-- **Deploy:** as migrations 009 a 012 aplicaram sem erro. Os 3 templates viraram tipos de agenda
-  do dono (mesmo id) e ganharam os 4 tipos padrão; o provider `Claude (servidor)` herdou as
-  quatro finalidades; as 7 gravações ganharam o histórico do pipeline (recebido e transcrição
-  feitos, o resto `before_pipeline`). A imagem do worker GPU traz o `cb.rnnn` do RNNoise. O disco
-  foi de 86% a 84% (a poda levou as imagens antigas).
-- **Smoke `--pipeline`:** numa gravação real de 32 s, as seis etapas feitas em 30 s:
-  pré-processamento 1,1 s (RNNoise, loudness, sem silêncio a cortar), transcrição 9,9 s, campos
-  3,1 s, tipo 4,6 s e resumo 7,5 s. O agente deu o título e as tags, a detecção escolheu
-  "Reunião de equipe" (padrão de título e tags padrão aplicados) e o resumo automático saiu pelas
-  instruções do tipo, pelo `claude-cli`. Numa gravação sem fala, a cadeia também fechou: nenhum
-  campo preenchido e o resumo dizendo que não havia fala.
-
-### Painel de administração em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
-  7 transcrições, 15 resumos, 18 objetos).
-- **Deploy:** nenhuma migration (schema em dia); os scripts em `/srv/eclume/bin/` ficaram com LF.
-- **Navegador:** o `test:e2e:prod` passou em 18 s no Edge da estação (sem Chrome instalado):
-  as sete telas com os dados reais, as cinco etapas e a API saudável na Saúde, a segunda leitura
-  em 15 s, `/admin/voz` → Locutores, 401 em `GET /api/v1/me` com a sessão de admin e o logout. O
-  MCP aparece "Ausente" até a holetz/eclume#35.
-
-### Gravação centrada no resumo em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
-  7 transcrições, 15 resumos, 18 objetos).
-- **Deploy:** feito de uma exportação com LF (`git -c core.autocrlf=false archive`), só as imagens
-  `server` e `web` (o worker GPU não mudou). A 014 aplicou sem erro: as versões dos resumos
-  renumeradas por transcrição, as gravações do desktop com `recorded_at_source: capture`, e as
-  tabelas do chat e dos marcadores. Os scripts em `/srv/eclume/bin/` ficaram sem CRLF. A imagem
-  do server foi de 507 MB para 522 MB com o `python-docx` (e o `lxml`); o disco ficou em 84%.
-- **Smoke:** a edição à mão virou versão `manual`; o chat leu a transcrição (`read_transcript`
-  de 00:00:00 a 00:00:30) e criou a versão `chat` em 14 s pelo `claude-cli`; voltar à gerada, os
-  2 marcadores, a biblioteca do dia com `kind=meeting` e os quatro formatos (TXT 848 B, SRT
-  1 022 B, MD 1 118 B, DOCX 37 kB) passaram.
-
-### MCP e pareamento em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
-  7 transcrições, 19 resumos, 18 objetos).
-- **Deploy:** de uma exportação com LF, só as imagens `server` e `web`. A 015 aplicou sem erro
-  (tipo e plataforma dos tokens, `recordings:delete` para quem tinha `recordings:write`,
-  `pairing_codes`). O `mdns` subiu na rede do host anunciando `192.168.15.199:8443`, e a
-  conferência achou a impressão digital da CA no descritor. A imagem do server foi a 533 MB com o
-  `mcp` e o `zeroconf`; o disco ficou em 84%.
-- **Smoke:** o SDK `mcp` inicializou, listou as 9 ferramentas, buscou 5 gravações, leu uma
-  (campos e etapas) e a transcrição dela (38 646 caracteres) e teve a exclusão recusada por falta
-  de `recordings:delete`; o código `AED-YA3` virou a credencial de dispositivo da conta, e os dois
-  tokens do smoke foram revogados. Da estação Windows, `eclume-server discover --timeout 10` achou
-  o servidor com a impressão digital `98e209f5…3d97792f`, **sem** a regra 5353/udp no ufw: o
-  `before.rules` padrão do Ubuntu já aceita o mDNS multicast.
-- **Repositório:** as variáveis `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (a impressão
-  digital acima), que o `desktop-release.yml` embute no instalador (holetz/eclume#40).
-
-### Desktop 0.2.0 (27/09/2026, holetz/eclume#40)
-
-- **Release:** `desktop-release` pelo dispatch em `plan/40-desktop-ds` (run 36338364507, com macOS),
-  tag `desktop-v0.2.0` em `0b08ab39`, notas "Nova nota, Importar arquivo e entrar com e-mail e
-  senha" e o servidor embutido pelas variáveis do repositório.
-- **Publicação:** `publicar-desktop.sh desktop-v0.2.0` conferiu o `SHA256SUMS`, gravou
-  `/srv/eclume/downloads/0.2.0/` e trocou a raiz; `latest.json` serve `0.2.0`, e os apps 0.1.x
-  se atualizam sozinhos, mantendo o PAT.
-
-### Biblioteca e gravação em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (1 usuário, 7 gravações,
-  7 transcrições, 24 resumos, 18 objetos).
-- **Deploy:** de uma exportação com LF, só `server` e `web` (holetz/eclume#37: a biblioteca no
-  tempo, o modal Importar, a gravação centrada no resumo, a busca com o filtro `field`). Nenhuma
-  migration (schema em dia); os scripts em `/srv/eclume/bin/` ficaram sem CRLF; disco em 86%.
-- **Navegador:** a prova passou em 1,3 min no Chrome do host: o M4A entrou com a data dos
-  metadados (09:00 da segunda 21/09), o evento apareceu na semana, o pipeline chegou ao resumo
-  pelo `claude-cli`, a edição virou versão "Editado por você", o chat leu a transcrição (00:00:00 a
-  00:00:30) e criou a versão "Ajustado pelo chat", o DOCX baixou, e a gravação da prova foi
-  excluída.
-
-### Organizar, configurações e ajuda em produção (2026-09-27)
-
-- **Antes:** backup do dia (280 KB de banco, 18 objetos no bucket).
-- **Deploy:** de uma exportação com LF, só a imagem `web`; sem migration. Outro deploy paralelo,
-  de um branch sem holetz/eclume#35, trocou `server` e `web` no meio (o `/api/v1/server` voltou
-  404, contrato 2.2.0, e o `mdns` ficou reiniciando sem o `announce`); refeito com
-  `--services "server web"` a partir do branch com `main` mesclado, o descritor voltou com a
-  impressão digital `98e209f5…3d97792f` e o `mdns` saudável. Os scripts em `/srv/eclume/bin/`
-  ficaram sem CRLF. Deploys de branches diferentes se sobrescrevem: o web de produção é o do
-  último deploy, e o estado estável é o deploy de `main`.
-- **Prova** (`E2E_CHANNEL=msedge bash deploy/prova-web-prod.sh`, 21 s): campo temporário salvo,
-  testado pelo agente real nas 3 últimas gravações e excluído; o código de vínculo começou entre
-  9:55 e 10:00 e desceu (a primeira rodada mostrou 10:01, corrigido limitando a validade aos 10
-  minutos do código); o QR lido no navegador trouxe o `pair_url` com o código da tela; o endereço
-  MCP bateu com o descritor, e o token só de leitura foi criado e revogado; a busca "token" abriu
-  o artigo; a gaveta de Pessoas mostrou os artigos da página. `OK`.
-
-### App móvel em produção (2026-09-27)
-
-- **Antes:** backup e `restaurar-backup.sh --teste` idênticos à produção (2 usuários, 7 gravações,
-  7 transcrições, 38 resumos, 18 objetos).
-- **Deploy:** de uma exportação com LF de `main` (holetz/eclume#41), só `server` e `web`; a
-  migração `016_origem_mobile` (origem `mobile` no upload) aplicada, o descritor com o contrato
-  2.4.0 (`GET /agenda-types` aceita `recordings:read`) e a mesma CA `98e209f5…3d97792f`; os
-  scripts em `/srv/eclume/bin/` ficaram sem CRLF; disco em 88%. A primeira tentativa falhou no
-  build por um tempo esgotado no Docker Hub (`dockerfile:1.9`) e passou na segunda.
-- **Smoke:** `smoke_prod.py` e `smoke_mcp.py` `OK`.
-- **Prova do app no emulador** (`mobile/scripts/prova-emulador.sh`, task 8.1): entrou pelo
-  endereço conferindo a impressão digital, gravou 1 min 14 s com 60 s de tela bloqueada e o
-  serviço de microfone em primeiro plano, marcou pela tela e pela notificação, ficou "1
-  aguardando" fora da rede e sincronizou ao voltar; no servidor, `source: mobile`,
-  `recorded_at_source: capture` e dois marcadores; depois do `am force-stop` gravando, a gravação
-  ficou salva e subiu. Limpeza: gravações da prova excluídas e o token do aparelho revogado.
-- **Sem APK publicado:** o `mobile-release.yml` espera a keystore de release e os secrets
-  `ANDROID_KEYSTORE_*` (passo humano; `mobile/scripts/criar-keystore.sh`).
-
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo
@@ -460,12 +321,9 @@ P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml
 bash deploy/deploy.sh --context gpu-host --services "server web"   # só código do server e do web
 ```
 
-- **Login do Claude expirado:** o resumo falha com `provider_auth`. Rode `claude` no host, faça o
-  login e reenvie o resumo; o arquivo montado é o mesmo, sem reiniciar nada.
-- **Renovação do token do Claude sobre o mount de arquivo** (verificada na holetz/eclume#26): o
-  `rename` sobre um arquivo montado dá `EBUSY`, e a CLI (2.1.282) cai para a escrita no próprio
-  arquivo — o escritor atômico dela trata `EXDEV`/`EPERM`/`EEXIST`/`EBUSY` assim —, que o host
-  enxerga. Por isso o mount é do arquivo, não da pasta `~/.claude`.
+- **Token do Claude vencido:** o resumo falha com `provider_auth`. Gere outro com
+  `claude setup-token` e cadastre-o no painel, como em [Admin, contas e provider](#admin-contas-e-provider);
+  nada é montado do host e nenhum serviço precisa reiniciar.
 - **Job de transcrição parado:** o worker CPU marca sozinho como falha recuperável (`worker_lost`,
   `job_lost`, `job_stalled`) o job que o worker GPU abandonou; o dono retranscreve ou o admin usa
   "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
@@ -482,9 +340,7 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,
-  `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`
-  a partir de um checkout com LF (num Windows com `core.autocrlf`, o script sai com CRLF e o
-  `bash` recusa o `set -o pipefail`).
+  `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`.
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
   `docker --context gpu-host builder prune -f --filter until=720h`; nunca faça `image prune -a`,
   porque ele apagaria imagens dos serviços pessoais.

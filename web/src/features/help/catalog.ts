@@ -18,7 +18,7 @@ export const TOPICS = [
 export type TopicKey = (typeof TOPICS)[number]['key']
 export type Topic = (typeof TOPICS)[number]
 
-export interface Heading {
+interface Heading {
   id: string
   text: string
 }
@@ -40,7 +40,7 @@ export interface Article {
   minutes: number
 }
 
-export interface Question {
+interface Question {
   question: string
   answer: string
 }
@@ -51,7 +51,7 @@ export function headingId(text: string): string {
 }
 
 /** O texto de um trecho Markdown sem a marcação: links viram o rótulo, ênfase e código somem. */
-export function plainText(markdown: string): string {
+function plainText(markdown: string): string {
   return markdown
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')

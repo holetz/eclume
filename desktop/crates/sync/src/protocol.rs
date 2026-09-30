@@ -108,7 +108,7 @@ impl std::fmt::Display for MissingScope {
 
 impl std::error::Error for MissingScope {}
 
-/// Cliente da API do eclume por PAT.
+/// Cliente da API do eclume, com a credencial da conta ou do aparelho.
 pub struct Client {
     transport: Arc<dyn Transport>,
     base: Url,
