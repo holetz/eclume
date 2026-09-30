@@ -26,6 +26,7 @@ const PairPage = named(() => import('../features/connect/PairPage'), 'PairPage')
 const PeoplePage = named(() => import('../features/people/PeoplePage'), 'PeoplePage')
 const PersonPage = named(() => import('../features/people/PersonPage'), 'PersonPage')
 const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchPage')
+const TagsPage = named(() => import('../features/tags/TagsPage'), 'TagsPage')
 const TokensPage = named(() => import('../features/tokens/TokensPage'), 'TokensPage')
 const SignupPage = named(() => import('../features/auth/SignupPage'), 'SignupPage')
 const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
@@ -58,6 +59,7 @@ export function AppRoutes() {
         <Route path="/busca" element={page(SearchPage)} />
         <Route path="/perguntas" element={page(ChatPage)} />
         <Route path="/colecoes" element={page(CollectionsPage)} />
+        <Route path="/tags" element={page(TagsPage)} />
         <Route path="/config/campos" element={page(FieldsPage)} />
         <Route path="/config/agendas" element={page(AgendaTypesPage)} />
         <Route path="/config/mcp" element={page(McpPage)} />

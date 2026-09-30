@@ -1,0 +1,8 @@
+{
+  "auto_fill": true,
+  "instructions": "De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.",
+  "mode": "fixed",
+  "new_limit": 1,
+  "catalog_count": 2,
+  "catalog_limit": 200
+}

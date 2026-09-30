@@ -49,12 +49,14 @@ async function navTo(page: Page, name: string) {
   await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
-test('campos e regras: lista, painel e testar a regra', async ({ page }) => {
-  await navTo(page, 'Campos e regras')
-  await expect(page.getByRole('heading', { level: 1, name: 'Campos e regras' })).toBeVisible()
+test('campos personalizados: lista, painel e testar a regra', async ({ page }) => {
+  await navTo(page, 'Campos personalizados')
+  await expect(page.getByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeVisible()
   const fields = page.getByRole('list', { name: 'Campos' })
-  await expect(fields.getByRole('button', { name: 'Título' })).toBeVisible()
-  await expect(page.getByRole('heading', { level: 4, name: 'Título' })).toBeVisible()
+  // O título vem dos tipos de agenda e as tags, da tela Tags: a lista tem só os campos do usuário.
+  await expect(fields.getByRole('button', { name: 'Título' })).toHaveCount(0)
+  await expect(fields.getByRole('button', { name: 'Cliente' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 4, name: 'Cliente' })).toBeVisible()
   await page.getByRole('button', { name: 'Testar numa gravação' }).click()
   const result = page.getByRole('list', { name: 'Resultado do teste' })
   await expect(result).toContainText('Revisão do contrato')
@@ -66,7 +68,8 @@ test('tipos de agenda: painel e pré-visualizar numa gravação', async ({ page 
     route.continue({ headers: { ...route.request().headers(), prefer: 'example=tipo' } }),
   )
   await navTo(page, 'Tipos de agenda')
-  await expect(page.getByRole('heading', { level: 4, name: 'Reunião de equipe' })).toBeVisible()
+  // O tipo padrão abre primeiro, no topo da lista.
+  await expect(page.getByRole('heading', { level: 4, name: /^Geral/ })).toBeVisible()
   await page.getByRole('button', { name: 'Pré-visualizar numa gravação' }).click()
   const dialog = page.getByRole('dialog', { name: 'Pré-visualizar numa gravação' })
   await dialog.getByLabel('Gravação').selectOption({ index: 1 })
@@ -74,6 +77,14 @@ test('tipos de agenda: painel e pré-visualizar numa gravação', async ({ page 
   const preview = page.getByRole('region', { name: 'Pré-visualização' })
   await expect(preview).toContainText('Mentoria · Próximos passos na carreira')
   await expect(preview).toContainText('82%')
+})
+
+test('tags: o cadastro com o selo do agente e a configuração', async ({ page }) => {
+  await navTo(page, 'Tags')
+  await expect(page.getByRole('heading', { level: 1, name: 'Tags' })).toBeVisible()
+  const tags = page.getByRole('list', { name: 'Tags' })
+  await expect(tags).toContainText('cliente-metalurgica')
+  await expect(tags).toContainText('Criada pelo agente')
 })
 
 test('conexão MCP: endereço do descritor e token do assistente', async ({ page }) => {

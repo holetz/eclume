@@ -18,13 +18,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from eclume_server.agenda_types import refresh_title, title_rule
 from eclume_server.agents.extraction import (
     MAX_INSTRUCTIONS,
-    MAX_KNOWN_TAGS,
     MAX_TAG,
     MAX_TEXT,
     CollectionSpec,
     FieldSpec,
     Participant,
     RecordingContext,
+    TagGuide,
     extract,
 )
 from eclume_server.db import tables as t
@@ -39,6 +39,7 @@ from eclume_server.summaries import (
     provider_for,
     transcript_text,
 )
+from eclume_server.tags import MAX_CATALOG, adopt, catalog, prefs, resolve
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement
@@ -183,6 +184,9 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
     `auto` só substitui outro `auto`: o que o usuário escreveu ou aceitou no meio-tempo fica, e a
     função devolve `False`.
     """
+    if field["builtin"] == "tags" and origin != "auto" and value:
+        # A tag que o usuário escreve entra no cadastro, e a gravação fica com a grafia dele.
+        value = await adopt(conn, field["owner_id"], value)
     fv = t.field_values
     values = {
         "value": value,
@@ -284,12 +288,13 @@ async def eligible_fields(conn: AsyncConnection, recording_id: UUID, owner_id: U
     return list((await conn.execute(query)).mappings().all())
 
 
-async def known_tags(conn: AsyncConnection, owner_id: UUID) -> list[str]:
-    """As tags que o usuário mais usa, para o agente preferi-las."""
-    tag = func.unnest(t.recordings.c.tags).label("tag")
-    used = select(tag).where(t.recordings.c.owner_id == owner_id).subquery()
-    query = select(used.c.tag).group_by(used.c.tag).order_by(func.count().desc(), used.c.tag).limit(MAX_KNOWN_TAGS)
-    return list((await conn.execute(query)).scalars())
+async def tag_guide(conn: AsyncConnection, owner_id: UUID) -> tuple[TagGuide, list[str]]:
+    """O cadastro de tags e o modo da conta, para o agente, e os nomes cadastrados."""
+    rows = await catalog(conn, owner_id)
+    _, limit = await prefs(conn, owner_id)
+    names = [row["name"] for row in rows]
+    guide = TagGuide(tags=tuple((row["name"], row["description"]) for row in rows), allow_new=limit)
+    return guide, names
 
 
 def spec(row: Row, title: str | None = None) -> FieldSpec:
@@ -420,7 +425,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
             await conn.execute(select(t.transcripts.c.id).where(t.transcripts.c.recording_id == recording_id))
         ).scalar_one()
         transcript = await transcript_text(conn, transcript_id)
-        tags = await known_tags(conn, recording["owner_id"])
+        tags, catalog_names = await tag_guide(conn, recording["owner_id"])
         rule = await title_rule(conn, recording)
         started = step["started_at"] if step is not None and step["started_at"] else None
         detail = dict(step["detail"]) if step is not None else {}
@@ -440,6 +445,15 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         # O usuário pode ter escrito um valor enquanto o agente trabalhava: esse fica.
         still = {row["id"] for row in await eligible_fields(conn, recording_id, recording["owner_id"])}
         filled = 0
+        if "tags" in values:
+            # Só as tags do cadastro (ou variações delas); as novas, no modo autogerenciado e até o
+            # limite, entram no cadastro com a origem `auto`.
+            kept, new = resolve(
+                values["tags"], catalog_names, allow_new=tags.allow_new, room=MAX_CATALOG - len(catalog_names)
+            )
+            if new:
+                await adopt(conn, recording["owner_id"], new, origin="auto")
+            values["tags"] = kept or None
         for row in fields:
             value = values.get(row["key"])
             if row["id"] not in still or (value is None and row["builtin"] == "title"):

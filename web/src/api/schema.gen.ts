@@ -152,6 +152,33 @@ export interface paths {
         patch: operations["updateVoiceAssignment"];
         trace?: never;
     };
+    "/api/v1/me/tag-assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Como o agente atribui as tags
+         * @description O automático e a regra do campo embutido Tags, o modo (`fixed`: só as tags cadastradas;
+         *     `auto`: o agente pode criar até `new_limit` tags novas por gravação, sempre preferindo
+         *     reusar, enquanto o cadastro tiver menos que `catalog_limit`) e o tamanho do cadastro. Só
+         *     pela sessão do usuário.
+         */
+        get: operations["getTagAssignment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mudar como o agente atribui as tags
+         * @description Os campos enviados mudam, os demais ficam; vale para as próximas transcrições.
+         */
+        patch: operations["updateTagAssignment"];
+        trace?: never;
+    };
     "/api/v1/tokens": {
         parameters: {
             query?: never;
@@ -1456,10 +1483,70 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Tags em uso nas gravações do usuário */
+        /**
+         * O cadastro de tags do usuário
+         * @description As tags cadastradas, em ordem alfabética, com quantas gravações usam cada uma. As tags são
+         *     fixas por padrão: o agente só escolhe entre elas (ver `GET /me/tag-assignment`). Toda tag
+         *     que o usuário escreve numa gravação, num envio ou nas tags padrão de um tipo entra no
+         *     cadastro sozinha, e a gravação fica com a grafia do cadastro (sem acento e sem caixa).
+         */
         get: operations["listTags"];
         put?: never;
+        /**
+         * Cadastrar uma tag
+         * @description O mesmo nome, sem acento e sem caixa, é 409 `tag_exists`.
+         */
+        post: operations["createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         post?: never;
+        /**
+         * Excluir uma tag
+         * @description A tag sai do cadastro, das gravações e das tags padrão dos tipos.
+         */
+        delete: operations["deleteTag"];
+        options?: never;
+        head?: never;
+        /**
+         * Renomear ou descrever uma tag
+         * @description Renomear troca o nome também nas gravações e nas tags padrão dos tipos; um nome já
+         *     cadastrado é 409 `tag_exists` (para juntar as duas, mescle).
+         */
+        patch: operations["updateTag"];
+        trace?: never;
+    };
+    "/api/v1/tags/{tag_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mesclar uma tag em outra
+         * @description Onde havia a tag, fica `into` (sem repetir), nas gravações e nas tags padrão dos tipos; a
+         *     tag sai do cadastro. `into` igual à tag, ou inexistente, é 422.
+         */
+        post: operations["mergeTag"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2512,11 +2599,63 @@ export interface components {
             items: components["schemas"]["Collection"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
+        Tag: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description "Quando usar": vai ao agente junto com o nome. */
+            description: string;
+            /**
+             * @description `user` (cadastrada pelo usuário) ou `auto` (criada pelo agente no modo autogerenciado).
+             * @enum {string}
+             */
+            origin: "user" | "auto";
+            /** @description Gravações com a tag. */
+            count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
         TagList: {
-            items: {
-                name: string;
-                count: number;
-            }[];
+            items: components["schemas"]["Tag"][];
+        };
+        TagCreate: {
+            name: string;
+            description?: string;
+        };
+        TagPatch: {
+            name?: string;
+            description?: string;
+        };
+        TagMerge: {
+            /**
+             * Format: uuid
+             * @description A tag que fica; outra que não a mesclada.
+             */
+            into: string;
+        };
+        TagAssignment: {
+            /** @description O agente atribui tags depois da transcrição. */
+            auto_fill: boolean;
+            /** @description A regra geral das tags (a do campo embutido Tags). */
+            instructions: string;
+            /**
+             * @description `fixed`: só as tags cadastradas; `auto`: o agente pode criar tags novas.
+             * @enum {string}
+             */
+            mode: "fixed" | "auto";
+            /** @description No modo `auto`, quantas tags novas o agente pode criar por gravação. */
+            new_limit: number;
+            /** @description Tags no cadastro. */
+            catalog_count: number;
+            /** @description Acima deste tamanho do cadastro, o agente não cria mais tags. */
+            catalog_limit: number;
+        };
+        TagAssignmentPatch: {
+            auto_fill?: boolean;
+            instructions?: string;
+            /** @enum {string} */
+            mode?: "fixed" | "auto";
+            new_limit?: number;
         };
         AgendaType: {
             /** Format: uuid */
@@ -3624,6 +3763,7 @@ export interface components {
         BaseChatId: string;
         PersonId: string;
         CollectionId: string;
+        TagId: string;
         UserId: string;
         ProviderId: string;
     };
@@ -3845,6 +3985,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoiceAssignment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getTagAssignment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A configuração da conta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagAssignment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateTagAssignment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagAssignmentPatch"];
+            };
+        };
+        responses: {
+            /** @description A configuração atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagAssignment"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -6173,6 +6365,130 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createTag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagCreate"];
+            };
+        };
+        responses: {
+            /** @description Tag cadastrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    deleteTag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                tag_id: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                tag_id: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagPatch"];
+            };
+        };
+        responses: {
+            /** @description Tag atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    mergeTag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                tag_id: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagMerge"];
+            };
+        };
+        responses: {
+            /** @description A tag que ficou. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     adminLogin: {

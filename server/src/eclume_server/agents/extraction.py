@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
 MAX_TEXT = 300
 MAX_LIST = 10
-MAX_KNOWN_TAGS = 50
+# O cadastro de tags que vai ao prompt, com as descrições.
+MAX_KNOWN_TAGS = 200
 # O teto de uma tag, a automática e a padrão de um tipo.
 MAX_TAG = 64
 # O teto das regras e instruções que o usuário escreve e que vão ao prompt.
@@ -64,6 +65,31 @@ def _describe(field: FieldSpec) -> str:
         kind += ", opções: " + " | ".join(field.options)
     rule = field.instructions.strip() or "sem regra; use o nome do campo como guia"
     return f"- {field.key} ({kind}): {rule}"
+
+
+@dataclass(frozen=True)
+class TagGuide:
+    """O cadastro de tags para o agente: (nome, descrição) e quantas tags novas ele pode criar."""
+
+    tags: tuple[tuple[str, str], ...] = ()
+    allow_new: int = 0
+
+
+def _tag_section(guide: TagGuide) -> list[str]:
+    listed = "\n".join(
+        f"- {name} — {description.strip()}" if description.strip() else f"- {name}"
+        for name, description in guide.tags[:MAX_KNOWN_TAGS]
+    )
+    if guide.allow_new:
+        rule = (
+            "No campo tags, prefira sempre uma tag desta lista, escrita como está. Só se nenhuma servir, crie "
+            f"uma nova, curta e em minúsculas: no máximo {guide.allow_new} nova(s) por gravação."
+        )
+    else:
+        rule = "No campo tags, use só tags desta lista, escritas como estão; não crie tags novas."
+    if not guide.tags:
+        return ["## Tags cadastradas", "Nenhuma ainda.", rule]
+    return ["## Tags cadastradas", rule, listed]
 
 
 @dataclass(frozen=True)
@@ -123,7 +149,7 @@ def _expected(fields: list[FieldSpec], *, collections: bool) -> str:
     return "{" + ", ".join(items) + "}"
 
 
-def fields_prompt(fields: list[FieldSpec], known_tags: list[str], context: RecordingContext | None = None) -> str:
+def fields_prompt(fields: list[FieldSpec], tags: TagGuide | None, context: RecordingContext | None = None) -> str:
     """Prompt do usuário, depois da transcrição: a tarefa, os campos, as tags, o contexto e o formato.
 
     O contexto é o tipo de agenda, os participantes e as coleções automáticas da gravação.
@@ -132,8 +158,8 @@ def fields_prompt(fields: list[FieldSpec], known_tags: list[str], context: Recor
     parts = [FIELDS_SYSTEM]
     if fields:
         parts += ["## Campos", "\n".join(_describe(field) for field in fields)]
-    if known_tags:
-        parts += ["## Tags que o usuário já usa", ", ".join(known_tags[:MAX_KNOWN_TAGS])]
+    if tags is not None and any(field.key == "tags" for field in fields):
+        parts += _tag_section(tags)
     if context.agenda_type:
         parts += ["## Tipo de agenda da gravação", context.agenda_type]
     if context.participants:
@@ -209,23 +235,23 @@ class Extraction:
 
 
 async def extract_fields(
-    provider: Provider, fields: list[FieldSpec], known_tags: list[str], transcript: TranscriptText
+    provider: Provider, fields: list[FieldSpec], tags: TagGuide | None, transcript: TranscriptText
 ) -> tuple[dict[str, Any], Completion]:
     """O valor de cada campo (`None` = nada encontrado) e a última resposta (para o modelo)."""
-    result = await extract(provider, fields, known_tags, transcript)
+    result = await extract(provider, fields, tags, transcript)
     return result.values, result.completion
 
 
 async def extract(
     provider: Provider,
     fields: list[FieldSpec],
-    known_tags: list[str],
+    tags: TagGuide | None,
     transcript: TranscriptText,
     context: RecordingContext | None = None,
 ) -> Extraction:
     """Os campos e as coleções da gravação; em seções, a mescla dos campos e a união das coleções."""
     context = context or RecordingContext()
-    prompt = fields_prompt(fields, known_tags, context)
+    prompt = fields_prompt(fields, tags, context)
     budget = input_budget(provider, SHARED_SYSTEM, prompt)
     if budget < MIN_SECTION_TOKENS:
         raise ProviderError(CONTEXT_TOO_LONG, "A janela de contexto do provider é pequena demais para os campos.")

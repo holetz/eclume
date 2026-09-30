@@ -1,4 +1,4 @@
-"""Coleções do usuário (com a regra que o agente segue para incluir gravações) e tags em uso."""
+"""Coleções do usuário, com a regra que o agente segue para incluir gravações."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import any_, case, delete, func, insert, select, text, tuple_, update
+from sqlalchemy import any_, case, delete, func, insert, select, tuple_, update
 from sqlalchemy.dialects.postgresql import array
 
 from eclume_server.agents.extraction import MAX_INSTRUCTIONS
@@ -217,16 +217,3 @@ async def merge_collection(collection_id: UUID, body: CollectionMerge, principal
             )
         await conn.execute(delete(t.collections).where(t.collections.c.id == collection_id))
         return collection_json(await _get(conn, body.into))
-
-
-_TAGS = text(
-    "SELECT tag AS name, count(*) AS count FROM recordings, unnest(recordings.tags) AS tag GROUP BY tag ORDER BY tag"
-)
-
-
-@router.get("/tags")
-async def list_tags(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Tags das gravações do usuário, com quantas gravações usam cada uma."""
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        rows = (await conn.execute(_TAGS)).mappings().all()
-    return {"items": [{"name": row["name"], "count": row["count"]} for row in rows]}

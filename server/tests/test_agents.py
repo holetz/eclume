@@ -16,7 +16,15 @@ from eclume_server.agents import base as codes
 from eclume_server.agents.anthropic_api import AnthropicProvider
 from eclume_server.agents.base import Completion, with_context
 from eclume_server.agents.claude_cli import ClaudeCliProvider, claude_command
-from eclume_server.agents.extraction import FIELDS_SYSTEM, FieldSpec, clean, extract_fields, merge, parse_object
+from eclume_server.agents.extraction import (
+    FIELDS_SYSTEM,
+    FieldSpec,
+    TagGuide,
+    clean,
+    extract_fields,
+    merge,
+    parse_object,
+)
 from eclume_server.agents.ollama import OllamaProvider
 from eclume_server.agents.openai_compat import OpenAICompatibleProvider
 from eclume_server.agents.prompting import (
@@ -458,6 +466,7 @@ def test_secoes_respeitam_o_orcamento():
 CLIENTE = FieldSpec(key="cliente", kind="choice", instructions="A empresa.", options=("Serra Azul", "Vale Verde"))
 TITULO = FieldSpec(key="titulo", kind="text", instructions="Um título curto.")
 PENDENCIAS = FieldSpec(key="pendencias", kind="list", instructions="O que ficou para depois.")
+TAGS = FieldSpec(key="tags", kind="list", instructions="De 1 a 5 tags.", max_item=64)
 
 
 class ScriptedProvider(FakeProvider):
@@ -514,7 +523,7 @@ def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
 
     provider = Spy(context_window=100_000)
     transcript = _transcript(10)
-    run(extract_fields(provider, [TITULO], [], transcript))
+    run(extract_fields(provider, [TITULO], None, transcript))
     run(summarize(provider, transcript, "Faça uma ata."))
     (fields_call, summary_call) = seen
     assert fields_call[0] == summary_call[0] == SHARED_SYSTEM
@@ -525,13 +534,16 @@ def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
 
 def test_extracao_curta_numa_chamada_e_longa_por_secoes():
     provider = ScriptedProvider(100_000, ['{"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}'])
-    values, completion = run(extract_fields(provider, [TITULO, CLIENTE, PENDENCIAS], ["interno"], _transcript(10)))
-    assert values == {"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}
+    guide = TagGuide(tags=(("interno", "Reunião só da equipe."),))
+    fields = [TITULO, CLIENTE, PENDENCIAS, TAGS]
+    values, completion = run(extract_fields(provider, fields, guide, _transcript(10)))
+    assert values == {"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"], "tags": None}
     assert completion.model == "fake"
     ((system, prompt),) = provider.calls
     assert system == SHARED_SYSTEM
     assert FIELDS_SYSTEM in prompt
-    assert "## Tags que o usuário já usa\n\ninterno" in prompt
+    assert "## Tags cadastradas\n\nNo campo tags, use só tags desta lista" in prompt
+    assert "- interno — Reunião só da equipe." in prompt
     assert '"cliente": "uma das opções" ou null' in prompt
 
     transcript = _transcript(200)
@@ -539,7 +551,7 @@ def test_extracao_curta_numa_chamada_e_longa_por_secoes():
         '{"cliente": "Serra Azul", "pendencias": ["b"]}'
     ] * 20
     provider = ScriptedProvider(3_000, replies)
-    values, _ = run(extract_fields(provider, [CLIENTE, PENDENCIAS], [], transcript))
+    values, _ = run(extract_fields(provider, [CLIENTE, PENDENCIAS], None, transcript))
     assert len(provider.calls) >= 3
     assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
     assert values == {"cliente": "Serra Azul", "pendencias": ["a", "b"]}

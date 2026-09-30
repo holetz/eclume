@@ -98,10 +98,11 @@ def test_tags_das_gravacoes_do_usuario(as_user: Callable[[Account], Api], make_u
     upload_file(alice, audio_bytes(100), tags=["cliente-a", "entrevista"])
     upload_file(alice, audio_bytes(100), tags=["cliente-a"])
     upload_file(bob, audio_bytes(100), tags=["interno"])
-    assert alice.get("/api/v1/tags").json() == {
-        "items": [{"name": "cliente-a", "count": 2}, {"name": "entrevista", "count": 1}]
-    }
-    assert bob.get("/api/v1/tags").json() == {"items": [{"name": "interno", "count": 1}]}
+    # O cadastro tem as tags escritas nos envios e as tags padrão dos tipos da conta.
+    counts = {tag["name"]: tag["count"] for tag in alice.get("/api/v1/tags").json()["items"]}
+    assert counts == {"cliente-a": 2, "entrevista": 1, "interno": 0, "planejamento": 0}
+    counts = {tag["name"]: tag["count"] for tag in bob.get("/api/v1/tags").json()["items"]}
+    assert counts == {"interno": 1, "planejamento": 0}
 
 
 def test_renomear_a_colecao_move_o_updated_at_das_gravacoes_dela(
@@ -165,3 +166,72 @@ def test_mexer_nas_colecoes_trava_a_origem(as_user: Callable[[Account], Api], ma
     assert recording["collections_origin"] is None
     patched = api.patch(f"/api/v1/recordings/{recording['id']}", json={"collection_ids": []})
     assert (patched.json()["collection_ids"], patched.json()["collections_origin"]) == ([], "edited")
+
+
+def test_cadastro_de_tags_renomear_mesclar_e_excluir(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    api = as_user(make_user())
+    created = api.post("/api/v1/tags", json={"name": " Cliente ", "description": "Conversas com clientes."})
+    assert created.status_code == 201, created.text
+    cliente = created.json()
+    assert (cliente["name"], cliente["origin"], cliente["count"]) == ("Cliente", "user", 0)
+    duplicate = api.post("/api/v1/tags", json={"name": "clíente"})
+    assert (duplicate.status_code, duplicate.json()["code"]) == (409, "tag_exists")
+
+    # Tag escrita pelo usuário entra no cadastro na grafia dele.
+    recording = upload_file(api, audio_bytes(100), tags=["cliente", "Proposta"])
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["tags"] == ["Cliente", "Proposta"]
+    types = {t["name"]: t for t in api.get("/api/v1/agenda-types").json()["items"]}
+    team = types["Reunião de equipe"]
+    patched = api.patch(f"/api/v1/agenda-types/{team['id']}", json={"default_tags": ["interno", "CLIENTE"]})
+    assert patched.json()["default_tags"] == ["interno", "Cliente"]
+
+    renamed = api.patch(f"/api/v1/tags/{cliente['id']}", json={"name": "clientes"})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["count"] == 1
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["tags"] == ["clientes", "Proposta"]
+    assert api.get(f"/api/v1/agenda-types/{team['id']}").json()["default_tags"] == ["interno", "clientes"]
+    proposta = next(t for t in api.get("/api/v1/tags").json()["items"] if t["name"] == "Proposta")
+    taken = api.patch(f"/api/v1/tags/{proposta['id']}", json={"name": "Clientes"})
+    assert (taken.status_code, taken.json()["code"]) == (409, "tag_exists")
+
+    merged = api.post(f"/api/v1/tags/{proposta['id']}/merge", json={"into": cliente["id"]})
+    assert merged.status_code == 200, merged.text
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["tags"] == ["clientes"]
+    assert api.post(f"/api/v1/tags/{cliente['id']}/merge", json={"into": cliente["id"]}).status_code == 422
+
+    assert api.delete(f"/api/v1/tags/{cliente['id']}").status_code == 204
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["tags"] == []
+    assert api.get(f"/api/v1/agenda-types/{team['id']}").json()["default_tags"] == ["interno"]
+    assert api.delete(f"/api/v1/tags/{cliente['id']}").status_code == 404
+    other = as_user(make_user())
+    assert other.patch(f"/api/v1/tags/{proposta['id']}", json={"description": "x"}).status_code == 404
+
+
+def test_configuracao_das_tags_automaticas(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    current = api.get("/api/v1/me/tag-assignment").json()
+    assert (current["auto_fill"], current["mode"], current["new_limit"], current["catalog_limit"]) == (
+        True,
+        "fixed",
+        1,
+        200,
+    )
+    assert current["instructions"].startswith("De 1 a 5 tags")
+    changed = api.patch(
+        "/api/v1/me/tag-assignment",
+        json={"mode": "auto", "new_limit": 3, "instructions": "Até 3 tags.", "auto_fill": False},
+    )
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert (body["mode"], body["new_limit"], body["instructions"], body["auto_fill"]) == (
+        "auto",
+        3,
+        "Até 3 tags.",
+        False,
+    )
+    assert api.patch("/api/v1/me/tag-assignment", json={"new_limit": 9}).status_code == 422
+    assert api.patch("/api/v1/me/tag-assignment", json={"mode": None}).status_code == 422
+    assert api.patch("/api/v1/me/tag-assignment", json={}).status_code == 422
+    assert api.pat("recordings:read").get("/api/v1/me/tag-assignment").status_code in {401, 403}

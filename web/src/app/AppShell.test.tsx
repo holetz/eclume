@@ -43,7 +43,7 @@ describe('navegação', () => {
       NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
-    expect(labels(main).slice(0, 5)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Campos personalizados'])
+    expect(labels(main).slice(0, 6)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Tags', 'Campos personalizados'])
     expect(labels(more)).toEqual(enabled('header'))
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
@@ -68,6 +68,7 @@ describe('navegação', () => {
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
     expect(routes).toMatchObject({
+      Tags: '/tags',
       'Campos personalizados': '/config/campos',
       'Tipos de agenda': '/config/agendas',
       'Ambiente': '/config/ambiente',

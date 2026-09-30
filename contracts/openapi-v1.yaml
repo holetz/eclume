@@ -311,6 +311,61 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
+  /api/v1/me/tag-assignment:
+    get:
+      tags: [organize]
+      operationId: getTagAssignment
+      summary: Como o agente atribui as tags
+      description: |
+        O automático e a regra do campo embutido Tags, o modo (`fixed`: só as tags cadastradas;
+        `auto`: o agente pode criar até `new_limit` tags novas por gravação, sempre preferindo
+        reusar, enquanto o cadastro tiver menos que `catalog_limit`) e o tamanho do cadastro. Só
+        pela sessão do usuário.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: A configuração da conta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagAssignment"
+              examples:
+                fixas:
+                  $ref: "#/components/examples/TagAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [organize]
+      operationId: updateTagAssignment
+      summary: Mudar como o agente atribui as tags
+      description: Os campos enviados mudam, os demais ficam; vale para as próximas transcrições.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagAssignmentPatch"
+      responses:
+        "200":
+          description: A configuração atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
   /api/v1/tokens:
     get:
       tags: [tokens]
@@ -2939,7 +2994,12 @@ paths:
     get:
       tags: [organize]
       operationId: listTags
-      summary: Tags em uso nas gravações do usuário
+      summary: O cadastro de tags do usuário
+      description: |
+        As tags cadastradas, em ordem alfabética, com quantas gravações usam cada uma. As tags são
+        fixas por padrão: o agente só escolhe entre elas (ver `GET /me/tag-assignment`). Toda tag
+        que o usuário escreve numa gravação, num envio ou nas tags padrão de um tipo entra no
+        cadastro sozinha, e a gravação fica com a grafia do cadastro (sem acento e sem caixa).
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
@@ -2957,6 +3017,132 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [organize]
+      operationId: createTag
+      summary: Cadastrar uma tag
+      description: O mesmo nome, sem acento e sem caixa, é 409 `tag_exists`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagCreate"
+      responses:
+        "201":
+          description: Tag cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/tags/{tag_id}:
+    parameters:
+      - $ref: "#/components/parameters/TagId"
+    patch:
+      tags: [organize]
+      operationId: updateTag
+      summary: Renomear ou descrever uma tag
+      description: |
+        Renomear troca o nome também nas gravações e nas tags padrão dos tipos; um nome já
+        cadastrado é 409 `tag_exists` (para juntar as duas, mescle).
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagPatch"
+      responses:
+        "200":
+          description: Tag atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [organize]
+      operationId: deleteTag
+      summary: Excluir uma tag
+      description: A tag sai do cadastro, das gravações e das tags padrão dos tipos.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tags/{tag_id}/merge:
+    parameters:
+      - $ref: "#/components/parameters/TagId"
+    post:
+      tags: [organize]
+      operationId: mergeTag
+      summary: Mesclar uma tag em outra
+      description: |
+        Onde havia a tag, fica `into` (sem repetir), nas gravações e nas tags padrão dos tipos; a
+        tag sai do cadastro. `into` igual à tag, ou inexistente, é 422.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagMerge"
+      responses:
+        "200":
+          description: A tag que ficou.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/admin/auth/login:
     post:
@@ -3649,6 +3835,13 @@ components:
         format: uuid
     CollectionId:
       name: collection_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TagId:
+      name: tag_id
       in: path
       required: true
       schema:
@@ -5192,6 +5385,33 @@ components:
         next_cursor:
           $ref: "#/components/schemas/NextCursor"
 
+    Tag:
+      type: object
+      required: [id, name, description, origin, count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        description:
+          description: '"Quando usar": vai ao agente junto com o nome.'
+          type: string
+          maxLength: 4000
+        origin:
+          description: "`user` (cadastrada pelo usuário) ou `auto` (criada pelo agente no modo autogerenciado)."
+          type: string
+          enum: [user, auto]
+        count:
+          description: Gravações com a tag.
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+
     TagList:
       type: object
       required: [items]
@@ -5199,14 +5419,90 @@ components:
         items:
           type: array
           items:
-            type: object
-            required: [name, count]
-            properties:
-              name:
-                type: string
-              count:
-                type: integer
-                minimum: 0
+            $ref: "#/components/schemas/Tag"
+
+    TagCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 4000
+
+    TagPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 4000
+
+    TagMerge:
+      type: object
+      additionalProperties: false
+      required: [into]
+      properties:
+        into:
+          description: A tag que fica; outra que não a mesclada.
+          type: string
+          format: uuid
+
+    TagAssignment:
+      type: object
+      required: [auto_fill, instructions, mode, new_limit, catalog_count, catalog_limit]
+      properties:
+        auto_fill:
+          description: O agente atribui tags depois da transcrição.
+          type: boolean
+        instructions:
+          description: A regra geral das tags (a do campo embutido Tags).
+          type: string
+          maxLength: 4000
+        mode:
+          description: "`fixed`: só as tags cadastradas; `auto`: o agente pode criar tags novas."
+          type: string
+          enum: [fixed, auto]
+        new_limit:
+          description: No modo `auto`, quantas tags novas o agente pode criar por gravação.
+          type: integer
+          minimum: 1
+          maximum: 5
+        catalog_count:
+          description: Tags no cadastro.
+          type: integer
+          minimum: 0
+        catalog_limit:
+          description: Acima deste tamanho do cadastro, o agente não cria mais tags.
+          type: integer
+          minimum: 1
+
+    TagAssignmentPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        auto_fill:
+          type: boolean
+        instructions:
+          type: string
+          maxLength: 4000
+        mode:
+          type: string
+          enum: [fixed, auto]
+        new_limit:
+          type: integer
+          minimum: 1
+          maximum: 5
 
     AgendaType:
       type: object
@@ -7127,8 +7423,11 @@ components:
       summary: Uma coleção por cliente
       externalValue: ./fixtures/collection-page.json
     TagList:
-      summary: Tags em uso
+      summary: Uma tag cadastrada pelo usuário e uma criada pelo agente
       externalValue: ./fixtures/tag-list.json
+    TagAssignment:
+      summary: Tags fixas, com o limite guardado para o modo autogerenciado
+      externalValue: ./fixtures/tag-assignment.json
     AdminSettings:
       summary: WhisperX na GTX 1660 Super
       externalValue: ./fixtures/admin-settings.json

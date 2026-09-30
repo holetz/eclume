@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#79
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79
 maintainer: holetz
 ---
 
@@ -383,6 +383,13 @@ desce; abaixo de 56rem, os campos também):
   `.switch` "Incluir automaticamente depois da transcrição"; a linha mostra o `.badge`
   "Automática" quando há regra e o interruptor ligado. "Mesclar em…" (com duas coleções ou mais)
   abre um `Dialog` com o `<select>` da coleção que recebe e manda `POST /collections/{id}/merge`.
+- **Tags** (`/tags`, em Organizar depois de Coleções): o cartão de configuração grava na hora o
+  `.switch` do automático, o modo (`.seg`: "Só as tags cadastradas" ou "O agente pode criar tags")
+  e o limite de tags novas por gravação, e a regra geral com Salvar (`PATCH /me/tag-assignment`); a
+  lista mostra a descrição, a contagem, "Ver gravações" (`/?tag=`) e o `.badge` "Criada pelo
+  agente", com Nova tag, Editar (409 `tag_exists` sugere mesclar), "Mesclar em…" e Excluir em
+  `Dialog`. "Campos personalizados" lista só os campos do usuário: o título vem dos tipos de agenda
+  e as tags, desta tela.
 
 ## Minhas configurações
 

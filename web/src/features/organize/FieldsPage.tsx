@@ -10,12 +10,15 @@ import { NEW, useGuardedSelection } from './useGuardedSelection'
 export function FieldsPage() {
   useHelpTopic('campos')
   const fields = useFields()
-  // O título é definido pelos tipos de agenda (padrão e regra do assunto): não aparece aqui.
+  // Só os campos do usuário: o título vem dos tipos de agenda (padrão e regra do assunto) e as tags
+  // têm cadastro próprio, em Tags.
   const items = [...(fields.data?.items ?? [])]
-    .filter((field) => field.builtin !== 'title')
+    .filter((field) => field.builtin === null)
     .sort((a, b) => a.position - b.position)
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('campo')
   const current = selected === NEW ? null : (items.find((f) => f.id === selected) ?? (selected ? undefined : items[0]))
+  // Sem campos e sem escolha não há painel: o texto ocupa o lugar da lista até o Novo campo.
+  const missing = selected !== null && selected !== NEW && current === undefined
 
   return (
     <section className={styles.page}>
@@ -31,7 +34,7 @@ export function FieldsPage() {
       <p className="text-muted">
         O que o eclume preenche em toda gravação depois da transcrição, cada campo com a regra que o agente
         segue. O título vem do tipo de agenda da gravação: ajuste-o em{' '}
-        <Link to="/config/agendas">Tipos de agenda</Link>.
+        <Link to="/config/agendas">Tipos de agenda</Link>. As tags se configuram em <Link to="/tags">Tags</Link>.
       </p>
 
       {fields.isPending && <p role="status">Carregando campos…</p>}
@@ -42,18 +45,24 @@ export function FieldsPage() {
       )}
       {fields.isSuccess && (
         <div className={`split ${styles.split}`}>
-          <ul className={`list ${styles.list}`} aria-label="Campos">
-            {items.map((field) => (
-              <FieldRow
-                key={field.id}
-                field={field}
-                selected={field.id === current?.id}
-                onSelect={() => select(field.id)}
-              />
-            ))}
-          </ul>
+          {items.length === 0 ? (
+            <p className="text-muted">Nenhum campo personalizado ainda. Crie um com Novo campo.</p>
+          ) : (
+            <ul className={`list ${styles.list}`} aria-label="Campos">
+              {items.map((field) => (
+                <FieldRow
+                  key={field.id}
+                  field={field}
+                  selected={field.id === current?.id}
+                  onSelect={() => select(field.id)}
+                />
+              ))}
+            </ul>
+          )}
           {current === undefined ? (
-            !fields.isFetching && <p className="text-muted">Este campo não existe mais. Escolha outro na lista.</p>
+            missing && !fields.isFetching && (
+              <p className="text-muted">Este campo não existe mais. Escolha outro na lista.</p>
+            )
           ) : (
             <FieldEditor
               key={current?.id ?? NEW}
@@ -72,7 +81,6 @@ export function FieldsPage() {
 
 function FieldRow({ field, selected, onSelect }: { field: Field; selected: boolean; onSelect: () => void }) {
   const setAutoFill = useSetAutoFill()
-  const origin = field.builtin ? 'Embutido' : 'Seu campo'
   return (
     <li className={selected ? `list-row ${styles.selected}` : 'list-row'}>
       <button
@@ -84,7 +92,7 @@ function FieldRow({ field, selected, onSelect }: { field: Field; selected: boole
         {field.name}
       </button>
       <span className="list-row-sub">
-        {origin} · {KIND_LABELS[field.kind].toLowerCase()}
+        Seu campo · {KIND_LABELS[field.kind].toLowerCase()}
       </span>
       <span className="list-row-actions">
         <label className="switch">

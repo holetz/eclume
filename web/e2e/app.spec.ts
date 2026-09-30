@@ -189,8 +189,8 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
     'Áudio recebido',
     'Pré-processamento',
     'Transcrição',
-    'Campos preenchidos',
     'Tipo de agenda',
+    'Campos preenchidos',
     'Resumo pronto',
   ])
   const summary = page.getByRole('region', { name: 'Resumo', exact: true })

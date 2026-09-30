@@ -40,6 +40,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
   // A coleção convive com a tag e fica em Organizar (holetz/eclume#38).
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
+  // O cadastro de tags fica ao lado das coleções (holetz/eclume#78).
+  { to: '/tags', label: 'Tags', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos personalizados', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
   { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', section: 'header', enabled: true },

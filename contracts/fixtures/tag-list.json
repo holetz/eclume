@@ -1,12 +1,20 @@
 {
   "items": [
     {
+      "id": "01928f3a-1c00-7a00-8000-000000000b01",
       "name": "cliente-metalurgica",
-      "count": 1
+      "description": "Conversas com a Metalúrgica Serra Azul ou sobre ela.",
+      "origin": "user",
+      "count": 1,
+      "created_at": "2026-09-12T11:00:00Z"
     },
     {
+      "id": "01928f3a-1c00-7a00-8000-000000000b02",
       "name": "programa-liderancas",
-      "count": 1
+      "description": "",
+      "origin": "auto",
+      "count": 1,
+      "created_at": "2026-09-18T15:02:17Z"
     }
   ]
 }

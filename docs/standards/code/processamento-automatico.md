@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
-description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py
+description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, o cadastro de tags (fixas por padrão ou autogerenciadas com limites), os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
+resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py, server/src/eclume_server/tags.py, server/src/eclume_server/routes/tags.py, server/src/eclume_server/db/migrations/023_cadastro_de_tags.sql
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77
+source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78
 maintainer: holetz
 ---
 
@@ -71,6 +71,27 @@ demais são `text`, `list` ou `choice` (com `options`), cada um com a regra (`in
 - **Tetos:** regra do campo, `identify` e `summary_instructions` até 4000 caracteres; valor escrito
   pelo usuário até 300 caracteres (texto) ou 50 itens de até 300 (lista); tag, a escrita e a
   automática, até 64, como as tags padrão de um tipo.
+
+## Cadastro de tags
+
+`tags` é o cadastro do usuário (`owner_id`, RLS de dono): nome (até 64, único sem acento e sem
+caixa), descrição ("quando usar", até 4000) e origem (`user` ou `auto`, quando o agente criou).
+`recordings.tags` continua sendo o valor das gravações; o cadastro fica ao lado. A migration `023`
+cadastrou as tags já usadas nas gravações e nas tags padrão dos tipos, com a grafia mais usada de
+cada nome, e passou as gravações para essa grafia; a semeadura da conta nova cadastra as tags
+padrão dos tipos que ela ganha.
+
+- **Tag escrita pelo usuário entra sozinha** (`tags.adopt`): o valor `edited`/`accepted` do
+  embutido Tags (edição, envio, campo) e as tags padrão de um tipo (criar e editar) ficam na grafia
+  do cadastro, e o que falta é cadastrado com origem `user`.
+- **Renomear, mesclar e excluir** (`PATCH /tags/{id}`, `POST /tags/{id}/merge`, `DELETE`) mexem
+  também em `recordings.tags` e em `agenda_types.default_tags`, sem repetir e na mesma ordem
+  (`tags.replace_everywhere`), e sobem o `updated_at` das gravações e das transcrições. Nome já
+  cadastrado é 409 `tag_exists`.
+- **Modo** (`users.tag_mode`, `GET/PATCH /me/tag-assignment`): `fixed` (padrão) — o agente só usa
+  tags do cadastro; `auto` — pode criar até `users.tag_new_limit` (1 a 5, padrão 1) tags novas por
+  gravação, sempre preferindo reusar, enquanto o cadastro tiver menos que `MAX_CATALOG` (200). O
+  automático e a regra geral são os do embutido Tags (`auto_fill`, `instructions`).
 
 ## Tipos de agenda
 
@@ -145,8 +166,15 @@ segue; uma falha inesperada fora da chamada ao agente também (`internal_error`,
   por `FIELDS_SYSTEM`: "Tarefa: preencher campos da gravação transcrita. Para cada campo, siga a
   regra do usuário; sem a informação na conversa, devolva null. Responda só com um objeto JSON,
   sem texto fora dele."
-- O prompt lista `- key (tipo[, opções: a | b]): regra`, as 50 tags que o usuário mais usa e o
-  formato esperado.
+- O prompt lista `- key (tipo[, opções: a | b]): regra`, o cadastro de tags (`## Tags
+  cadastradas`, `- nome — descrição`, até 200, com a regra do modo: "use só tags desta lista" ou
+  "prefira sempre uma tag desta lista… no máximo N nova(s) por gravação") quando o embutido Tags é
+  elegível, e o formato esperado.
+- **Tags do agente** (`tags.resolve`): cada tag proposta é casada com o cadastro por
+  `tags.canonical` (sem acento nem caixa, hífens e espaços unificados, plural do português no
+  singular) e fica na grafia do cadastro; as que não casam só ficam no modo `auto`, até o limite
+  por gravação e o espaço que resta no cadastro, e entram nele com origem `auto`. No modo `fixed`,
+  somem.
 - Transcrição maior que a janela: uma chamada por seção (`split_sections`) e a mescla — texto e
   escolha, o valor não nulo mais frequente (empate, o primeiro); lista, a união sem repetição.
 - Validação: escolha fora das opções → `null`; lista de strings, até 10; texto até 300

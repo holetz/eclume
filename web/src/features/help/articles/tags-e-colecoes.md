@@ -1,11 +1,11 @@
 ---
 titulo: Tags e coleções
 topico: organizar
-paginas: [colecoes, biblioteca]
-relacionados: [campos-em-toda-gravacao, buscar-nas-gravacoes, configurar-tipo-de-agenda]
+paginas: [colecoes, tags, biblioteca]
+relacionados: [tags-cadastradas, campos-em-toda-gravacao, buscar-nas-gravacoes, configurar-tipo-de-agenda]
 termos: [tag, tags, coleção, coleções, agrupar, organizar, pasta]
 ordem: 7
-atualizado: 2026-09-29
+atualizado: 2026-09-30
 ---
 Tags e coleções organizam as gravações de jeitos diferentes, e uma gravação pode ter várias de
 cada.
@@ -14,9 +14,13 @@ cada.
 
 A tag marca um **assunto**: "orçamento", "contratação", "planejamento".
 
-- O agente pode aplicar tags sozinho, pela regra do campo Tags.
+- As tags ficam num cadastro seu, em [Tags](/tags). Por padrão, o agente só aplica as tags
+  cadastradas; se você quiser, pode deixá-lo criar tags novas, com limite.
 - Os tipos de agenda somam as tags padrão deles.
-- Você acrescenta e tira tags no painel de campos da gravação.
+- Você acrescenta e tira tags no painel de campos da gravação, e a tag nova entra no cadastro
+  sozinha.
+
+Veja [Cadastre as tags e deixe o agente usá-las](/ajuda/tags-cadastradas).
 
 ## Coleções
 
