@@ -33,19 +33,17 @@ impl Applied {
 pub struct Mirror {
     pub(crate) root: PathBuf,
     pub(crate) manifest: Manifest,
-    /// O manifesto estava ilegível e recomeçou vazio: nada antigo é removido neste ciclo.
-    pub recovered: bool,
 }
 
 impl Mirror {
     /// Abre (criando, se preciso) a raiz e lê o manifesto.
     pub fn open(root: &Path) -> Result<Self> {
         fs::create_dir_all(root).with_context(|| format!("criar a pasta {}", root.display()))?;
-        let (manifest, recovered) = Manifest::load(root);
+        // Um manifesto ilegível recomeça vazio: sem entradas, nada antigo é removido.
+        let (manifest, _) = Manifest::load(root);
         Ok(Self {
             root: root.to_path_buf(),
             manifest,
-            recovered,
         })
     }
 
@@ -63,9 +61,25 @@ impl Mirror {
         self.manifest.recordings.keys().cloned().collect()
     }
 
-    /// Os arquivos foram escritos com outro desenho de pasta e nome: o próximo ciclo refaz tudo.
-    pub fn layout_outdated(&self) -> bool {
+    /// Os arquivos foram escritos com outro desenho de pasta e nome, ou com a opção de transcrições
+    /// de antes: o próximo ciclo refaz tudo, e o manifesto move e apaga o que ficou para trás.
+    pub fn needs_rebuild(&self, transcripts: bool) -> bool {
         self.manifest.layout != crate::manifest::LAYOUT
+            || self.manifest.transcripts != Some(transcripts)
+    }
+
+    /// Guarda com que opção de transcrições os arquivos foram escritos.
+    pub fn set_transcripts(&mut self, transcripts: bool) {
+        self.manifest.transcripts = Some(transcripts);
+    }
+
+    /// As gravações que falharam e esperam nova tentativa.
+    pub fn pending(&self) -> &std::collections::BTreeSet<String> {
+        &self.manifest.pending
+    }
+
+    pub fn set_pending(&mut self, pending: std::collections::BTreeSet<String>) {
+        self.manifest.pending = pending;
     }
 
     /// Marca que tudo foi escrito no layout atual (só depois de um ciclo sem falhas).
@@ -414,12 +428,10 @@ mod tests {
             .unwrap();
         mirror.save().unwrap();
         let reopened = Mirror::open(tmp.path()).unwrap();
-        assert!(!reopened.recovered);
         assert_eq!(reopened.known_ids().len(), 1);
 
         fs::write(tmp.path().join(crate::manifest::FILE), b"lixo").unwrap();
         let mut broken = Mirror::open(tmp.path()).unwrap();
-        assert!(broken.recovered);
         assert!(broken.known_ids().is_empty());
         // Sem manifesto, nada foi apagado e a gravação é reescrita sem duplicar.
         let applied = broken
@@ -435,17 +447,21 @@ mod tests {
     fn manifesto_de_outro_layout_pede_para_refazer_tudo() {
         let tmp = Tmp::new("reconcile-layout");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
-        assert!(mirror.layout_outdated());
+        assert!(mirror.needs_rebuild(true));
         mirror.mark_layout_current();
+        mirror.set_transcripts(true);
         mirror.save().unwrap();
-        assert!(!Mirror::open(tmp.path()).unwrap().layout_outdated());
+        let again = Mirror::open(tmp.path()).unwrap();
+        assert!(!again.needs_rebuild(true));
+        // Mudar a opção de transcrições também pede para refazer tudo.
+        assert!(again.needs_rebuild(false));
         // Um manifesto de antes da versão do layout (sem o campo) está desatualizado.
         fs::write(
             tmp.path().join(crate::manifest::FILE),
             br#"{"version": 1, "recordings": {}}"#,
         )
         .unwrap();
-        assert!(Mirror::open(tmp.path()).unwrap().layout_outdated());
+        assert!(Mirror::open(tmp.path()).unwrap().needs_rebuild(true));
     }
 
     #[test]

@@ -4,7 +4,6 @@
 
 use anyhow::Result;
 
-use crate::manifest::sha256_hex;
 use crate::reconcile::Mirror;
 
 /// Nome do arquivo, na raiz.
@@ -98,7 +97,6 @@ impl Mirror {
         }
         let text = markdown(transcripts);
         let written = self.write_file(FILE, text.as_bytes())?;
-        self.manifest.agents_sha256 = Some(sha256_hex(text.as_bytes()));
         Ok(written)
     }
 }

@@ -196,6 +196,11 @@ impl MirrorConfig {
         if dir.is_file() {
             bail!("A pasta dos resumos é um arquivo");
         }
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+        if home.is_some_and(|home| Path::new(&home) == dir.as_path()) {
+            // Uma Collection chamada "Documents" escreveria em ~/Documents.
+            bail!("Escolha uma subpasta, não a pasta pessoal");
+        }
         Ok(())
     }
 }
@@ -430,6 +435,11 @@ mod tests {
         assert!(config.validate().is_err());
         config.mirror.dir = dir.ancestors().last().map(Path::to_path_buf);
         assert!(config.validate().is_err());
+        // A pasta pessoal também é recusada: as Collections viram subpastas dela.
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            config.mirror.dir = Some(PathBuf::from(home));
+            assert!(config.validate().is_err());
+        }
         config.mirror.dir = Some(dir.join("eclume-resumos"));
         config.validate().unwrap();
         let json = serde_json::to_string(&config).unwrap();

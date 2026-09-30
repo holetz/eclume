@@ -316,19 +316,21 @@ pub struct TranscriptPage {
     pub next_cursor: Option<String>,
 }
 
-/// O maior `updated_at` de uma listagem, como veio do servidor: o cursor do próximo `?since=`
-/// (inclusivo). Compara datas de verdade, porque o servidor omite os microssegundos quando zero.
-pub fn latest_update(items: &[LibraryRecording]) -> Option<String> {
+/// O cursor do próximo `?since=`: o maior `updated_at` da listagem menos `margin_secs`. A margem
+/// cobre a transação que confirmou depois de outra com `updated_at` maior (o `now()` do servidor é
+/// o início da transação): reler o que já estava certo é barato, perder uma mudança não é.
+/// Compara datas de verdade, porque o servidor omite os microssegundos quando zero.
+pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<String> {
     items
         .iter()
         .filter_map(|item| item.updated_at.as_deref())
-        .filter_map(|text| {
-            chrono::DateTime::parse_from_rfc3339(text)
-                .ok()
-                .map(|at| (at, text))
+        .filter_map(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+        .max()
+        .map(|latest| {
+            (latest.with_timezone(&chrono::Utc) - chrono::Duration::seconds(margin_secs))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string()
         })
-        .max_by_key(|(at, _)| *at)
-        .map(|(_, text)| text.to_string())
 }
 
 /// O início de uma gravação (`recorded_at`, RFC 3339) no fuso `zone`, como `AAAA-MM-DDTHH:MM:SS`.
@@ -401,7 +403,7 @@ mod tests {
     }
 
     #[test]
-    fn o_maior_updated_at_compara_datas_e_nao_texto() {
+    fn o_cursor_e_o_maior_updated_at_menos_a_margem_comparando_datas() {
         // Como texto, "…:05Z" > "…:05.5Z" (o `Z` vem depois do `.`); como data, o segundo é maior.
         let items = [
             at(Some("2026-09-19T10:00:05Z")),
@@ -410,10 +412,19 @@ mod tests {
             at(Some("lixo")),
         ];
         assert_eq!(
-            latest_update(&items).as_deref(),
-            Some("2026-09-19T10:00:05.500000Z")
+            cursor_from(&items, 0).as_deref(),
+            Some("2026-09-19T10:00:05Z")
         );
-        assert_eq!(latest_update(&[at(None)]), None);
-        assert_eq!(latest_update(&[]), None);
+        assert_eq!(
+            cursor_from(&items, 120).as_deref(),
+            Some("2026-09-19T09:58:05Z")
+        );
+        // A margem atravessa a virada de dia.
+        assert_eq!(
+            cursor_from(&[at(Some("2026-09-19T00:01:00-03:00"))], 120).as_deref(),
+            Some("2026-09-19T02:59:00Z")
+        );
+        assert_eq!(cursor_from(&[at(None)], 120), None);
+        assert_eq!(cursor_from(&[], 120), None);
     }
 }

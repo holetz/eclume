@@ -94,30 +94,47 @@ própria pessoa (sem o marcador) **nunca** é sobrescrito.
 Thread própria (`eclume-mirror`, a cada 60 s e a cada mudança de configuração), para uma
 biblioteca grande não atrasar o upload das gravações.
 
-1. `GET /collections`, e `GET /recordings?since=<cursor>` (o cursor é o maior `updated_at`
-   lido, guardado **no manifesto**: apagar ou trocar a pasta refaz tudo). Na primeira passada a
-   listagem já é a biblioteca inteira.
+1. `GET /collections` (uma grafia só por nome, sem distinguir maiúsculas: "Clientes" e "clientes"
+   são a mesma pasta no Windows e no macOS) e `GET /recordings?since=<cursor>`. O cursor é o maior
+   `updated_at` lido **menos 2 minutos** (o `now()` do servidor é o início da transação, então uma
+   confirmada depois de outra com `updated_at` maior não pode ser pulada) e fica **no manifesto**:
+   apagar ou trocar a pasta refaz tudo. Na primeira passada a listagem já é a biblioteca inteira.
 2. Para cada gravação com transcrição: `GET /recordings/{id}/summary` e, se ligadas,
-   `GET /transcripts?recording_id=`. Uma falha numa gravação não para as outras, e **o cursor não
-   avança** (o próximo ciclo repete, sem custo: a escrita é idempotente).
+   `GET /transcripts?recording_id=`. Uma falha numa gravação não para as outras: ela vai para a
+   lista de **pendentes** do manifesto e o **cursor avança do mesmo jeito**; o ciclo seguinte repete
+   só as pendentes, nunca a biblioteca inteira. A escrita é idempotente.
    **Servidor sem o escopo das transcrições** (403 `insufficient_scope`, um servidor anterior ao
    contrato 2.8.0 ou um token que a migração 018 ainda não alcançou): a primeira recusa vale para o
    ciclo todo, os resumos são escritos, o cursor avança e a aba avisa que falta atualizar o
-   servidor. A varredura completa as transcrições que ficaram faltando quando o escopo chegar.
+   servidor. Uma gravação que já tinha `.jsonl` **fica como está** (degradar é não atualizar, não
+   apagar). A varredura completa as transcrições que faltavam quando o escopo chegar.
 3. **Varredura** a cada 6 h e em "Sincronizar agora": lista a biblioteca inteira, traz o que o
-   manifesto ainda não tem e apaga o que saiu do servidor. Só ela apaga; o ciclo incremental nunca.
-4. Escreve o `AGENTS.md` e grava o manifesto.
+   manifesto ainda não tem e **apaga as gravações que saíram do servidor**. Só a varredura e a
+   passada completa (primeira vez, mudança de layout ou da opção de transcrições) apagam gravações
+   inteiras; o ciclo incremental só move ou tira os arquivos de uma gravação que mudou (Collection
+   ou início) e nunca esquece uma gravação.
+4. **Mudou a opção "Incluir as transcrições"** (o manifesto guarda com qual estava): o ciclo
+   seguinte refaz tudo, escrevendo ou tirando os `.jsonl` e o link `transcript` dos `.md`.
+5. Escreve o `AGENTS.md` (uma falha nele é só registrada no log) e grava o manifesto **sempre**,
+   mesmo depois de um erro: o que já foi escrito não pode ficar sem registro.
+
+Para o cursor ver as mudanças, o servidor move `recordings.updated_at` quando: um resumo termina,
+é editado ou é apagado; a transcrição é editada (locutor, segmento, mesclagem); a Collection é
+renomeada ou excluída; e nas mudanças de campo que já existiam.
 
 ## Sobrescrita e segurança
 
 - **O servidor manda.** O arquivo é reescrito quando o conteúdo em disco difere (hash SHA-256); uma
   edição local num arquivo do app é sobrescrita no ciclo seguinte. Sem mudança, nada é escrito.
-- **Só o que o manifesto lista é movido ou apagado** (título ou Collection mudou, gravação
-  removida, ou início da gravação mudou). Arquivos da pessoa na pasta, e pastas que os contenham, ficam. Um caminho do
+- **Só o que o manifesto lista é movido ou apagado** (Collection ou início da gravação mudou,
+  gravação removida). Arquivos da pessoa na pasta, e pastas que os contenham, ficam. Um caminho do
   manifesto que fuja da raiz (`..`, absoluto) é recusado. Um manifesto ilegível recomeça vazio e
   **não apaga nada**.
-- A escrita é atômica (arquivo temporário com ponto e renomeação). A raiz não pode ser a raiz do
-  disco.
+- A escrita é atômica (arquivo temporário com ponto e renomeação; se a renomeação falhar, como no
+  Windows com o arquivo aberto, o temporário é removido). A raiz não pode ser a raiz do disco nem
+  a pasta pessoal (uma Collection "Documents" escreveria em `~/Documents`). Links simbólicos
+  dentro da pasta escolhida não são seguidos de propósito; **não** aponte a pasta para dentro de
+  um diretório que contenha links para fora dela.
 
 ## O que o servidor oferece (contrato 2.8.0)
 

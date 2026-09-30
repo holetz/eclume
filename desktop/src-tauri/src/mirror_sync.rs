@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use eclume_mirror::{Mirror, MirrorItem, Segment, Speaker, Summary, Transcript};
+use eclume_mirror::{Applied, Mirror, MirrorItem, Segment, Speaker, Summary, Transcript};
 use eclume_recorder::now_ms;
 use eclume_sync::api::{self, CollectionInfo, LibraryRecording};
 use eclume_sync::{Client, LibrarySummary, MissingScope};
@@ -138,48 +138,72 @@ pub fn to_item(
     }
 }
 
+/// Margem do cursor `since`, em segundos: cobre a transação que confirma depois de outra com
+/// `updated_at` maior (o `now()` do servidor é o início da transação).
+const CURSOR_MARGIN_SECS: i64 = 120;
+
+/// Os nomes de Collection por id, com uma grafia só por nome: "Clientes" e "clientes" viram a
+/// mesma pasta em Windows e macOS, então todas usam a primeira (em ordem de nome e id).
+fn collection_names(mut collections: Vec<CollectionInfo>) -> HashMap<String, String> {
+    collections.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+    let mut canonical: HashMap<String, String> = HashMap::new();
+    let mut names = HashMap::new();
+    for collection in collections {
+        let spelled = canonical
+            .entry(collection.name.to_lowercase())
+            .or_insert_with(|| collection.name.clone())
+            .clone();
+        names.insert(collection.id, spelled);
+    }
+    names
+}
+
 /// Um ciclo: lê o que mudou (ou tudo, na primeira passada), escreve, e numa varredura apaga o que
-/// saiu do servidor. O manifesto e o `AGENTS.md` são gravados no fim.
+/// saiu do servidor. O manifesto é sempre gravado no fim, mesmo depois de um erro: os arquivos
+/// já escritos não podem ficar sem registro.
 pub fn sync_library(
     source: &dyn Source,
     mirror: &mut Mirror,
     transcripts: bool,
     sweep: bool,
 ) -> Result<Report> {
-    let names: HashMap<String, String> = source
-        .collections()?
-        .into_iter()
-        .map(|collection| (collection.id, collection.name))
-        .collect();
-    // Arquivos de outro desenho de pasta e nome: relê tudo, e o manifesto move e apaga os antigos.
-    let since = if mirror.layout_outdated() {
+    let names = collection_names(source.collections()?);
+    // Arquivos de outro desenho de pasta e nome, ou escritos com a opção de transcrições de
+    // antes: relê tudo, e o manifesto move e apaga o que ficou para trás.
+    let since = if mirror.needs_rebuild(transcripts) {
         None
     } else {
         mirror.since().map(str::to_string)
     };
     let changed = source.library(since.as_deref())?;
-    let latest = api::latest_update(&changed);
+    let cursor = api::cursor_from(&changed, CURSOR_MARGIN_SECS);
+    let mut pending = mirror.pending().clone();
 
-    // Primeira passada: a listagem já é a biblioteca inteira. Depois, só a varredura pede a
-    // inteira, para achar o que saiu do servidor e o que o manifesto ainda não tem.
+    // Primeira passada: a listagem já é a biblioteca inteira. Depois, a varredura (e as
+    // gravações que falharam antes) pede a inteira, para achar o que saiu do servidor, o que o
+    // manifesto ainda não tem e as pendentes.
     let mut todo = changed;
     let mut present: Option<Vec<String>> = None;
     if since.is_none() {
         present = Some(todo.iter().map(|r| r.id.clone()).collect());
-    } else if sweep {
+    } else if sweep || !pending.is_empty() {
         let all = source.library(None)?;
-        present = Some(all.iter().map(|r| r.id.clone()).collect());
+        if sweep {
+            present = Some(all.iter().map(|r| r.id.clone()).collect());
+        }
         for recording in all {
-            // O que o manifesto não tem, e as transcrições que ficaram faltando (um servidor sem
-            // o escopo, antes): a varredura as completa quando o servidor passa a permitir.
-            let missing = match mirror.entry(&recording.id) {
-                None => true,
-                Some(entry) => {
-                    transcripts
-                        && recording.transcript_id.is_some()
-                        && entry.transcript_revision.is_none()
-                }
-            };
+            // O que o manifesto não tem, as transcrições que ficaram faltando (um servidor sem o
+            // escopo, antes) e as pendentes; só a varredura completa as transcrições.
+            let missing = pending.contains(&recording.id)
+                || (sweep
+                    && match mirror.entry(&recording.id) {
+                        None => true,
+                        Some(entry) => {
+                            transcripts
+                                && recording.transcript_id.is_some()
+                                && entry.transcript_revision.is_none()
+                        }
+                    });
             if missing && !todo.iter().any(|r| r.id == recording.id) {
                 todo.push(recording);
             }
@@ -191,7 +215,12 @@ pub fn sync_library(
     let mut transcripts_on = transcripts;
     for recording in &todo {
         report.recordings += 1;
-        let read = |transcripts_on: &mut bool, denied: &mut bool| -> Result<MirrorItem> {
+        // Uma gravação que já tinha `.jsonl` e agora é recusada fica como está: degradar é não
+        // atualizar, não apagar.
+        let had_transcript = mirror
+            .entry(&recording.id)
+            .is_some_and(|entry| entry.transcript_revision.is_some());
+        let read = |transcripts_on: &mut bool, denied: &mut bool| -> Result<Option<MirrorItem>> {
             let summary = if recording.transcript_id.is_some() {
                 source.current_summary(&recording.id)?
             } else {
@@ -211,44 +240,69 @@ pub fn sync_library(
             } else {
                 None
             };
+            if *denied && had_transcript {
+                return Ok(None);
+            }
             let local_start = recording
                 .recorded_at
                 .as_deref()
                 .and_then(|at| source.local_start(at));
-            Ok(to_item(recording, local_start, &names, summary, transcript))
+            Ok(Some(to_item(
+                recording,
+                local_start,
+                &names,
+                summary,
+                transcript,
+            )))
         };
-        match read(&mut transcripts_on, &mut report.transcripts_denied)
-            .and_then(|item| mirror.apply(&item))
-        {
+        let outcome = match read(&mut transcripts_on, &mut report.transcripts_denied) {
+            Ok(Some(item)) => mirror.apply(&item),
+            Ok(None) => Ok(Applied::default()),
+            Err(err) => Err(err),
+        };
+        match outcome {
             Ok(applied) => {
+                pending.remove(&recording.id);
                 report.written += applied.written;
                 report.unchanged += applied.unchanged;
                 report.removed += applied.removed;
             }
             Err(err) => {
                 log::warn!("pasta sincronizada: gravação {}: {err:#}", recording.id);
+                pending.insert(recording.id.clone());
                 report.failed += 1;
             }
         }
     }
+    let mut fatal = None;
     if let Some(ids) = present {
         let keep = ids.into_iter().collect();
-        report.removed += mirror.retain_only(&keep)?.removed;
-    }
-    if report.failed == 0 {
-        if let Some(latest) = latest {
-            mirror.set_since(Some(latest));
-        } else if since.is_none() {
-            // Biblioteca vazia: o próximo ciclo já é incremental.
-            mirror.set_since(Some("1970-01-01T00:00:00Z".to_string()));
+        match mirror.retain_only(&keep) {
+            Ok(applied) => report.removed += applied.removed,
+            Err(err) => fatal = Some(err),
         }
     }
-    if report.failed == 0 {
-        mirror.mark_layout_current();
+    // O cursor avança mesmo com falhas: as gravações que falharam ficam em `pending` e são elas
+    // que o ciclo seguinte repete, não a biblioteca inteira.
+    if let Some(cursor) = cursor {
+        mirror.set_since(Some(cursor));
+    } else if since.is_none() {
+        // Biblioteca vazia: o próximo ciclo já é incremental.
+        mirror.set_since(Some("1970-01-01T00:00:00Z".to_string()));
     }
-    mirror.write_agents(transcripts)?;
+    mirror.set_pending(pending);
+    mirror.mark_layout_current();
+    mirror.set_transcripts(transcripts);
+    if let Err(err) = mirror.write_agents(transcripts) {
+        // Uma pasta com o nome do arquivo, ou um arquivo travado: o `AGENTS.md` não é motivo
+        // para perder o registro do que já foi escrito.
+        log::warn!("pasta sincronizada: AGENTS.md: {err:#}");
+    }
     mirror.save()?;
-    Ok(report)
+    match fatal {
+        Some(err) => Err(err),
+        None => Ok(report),
+    }
 }
 
 /// O que a aba mostra além do "sincronizada": nada quando tudo passou, ou o que ficou de fora.
@@ -536,14 +590,14 @@ mod tests {
             ]
         );
         assert!(dir.join("AGENTS.md").exists());
-        assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
+        assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
 
         // O segundo ciclo lê a partir do cursor (inclusivo: só a última) e não reescreve nada.
         let second = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((second.recordings, second.written), (1, 0));
         assert_eq!(
             fake.calls.borrow().last().unwrap(),
-            "library since=Some(\"2026-09-19T12:00:00Z\")"
+            "library since=Some(\"2026-09-19T11:58:00Z\")"
         );
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -622,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn falha_numa_gravacao_nao_avanca_o_cursor_e_as_outras_seguem() {
+    fn falha_numa_gravacao_vira_pendencia_e_nao_faz_reler_a_biblioteca_inteira() {
         let dir = tmp("falha");
         let fake = fake();
         fake.broken_transcript
@@ -631,12 +685,124 @@ mod tests {
         let mut mirror = Mirror::open(&dir).unwrap();
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((report.failed, report.written), (1, 2));
-        assert_eq!(mirror.since(), None);
-        // Consertada, a próxima passada refaz tudo e o cursor avança.
+        // O cursor avança e a que falhou fica pendente: é ela que se repete, não tudo.
+        assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
+        assert!(mirror.pending().contains("aaaaaaaa-1"));
+        assert!(status_note(&report).unwrap().contains("1 gravações"));
+
+        // Ainda quebrada: outro ciclo tenta só a pendente, sem reler a biblioteca do início.
+        fake.calls.borrow_mut().clear();
+        let still = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!((still.failed, still.recordings), (1, 2));
+        assert_eq!(
+            fake.calls.borrow().first().unwrap(),
+            "library since=Some(\"2026-09-19T11:58:00Z\")"
+        );
+
+        // Consertada, a pendente entra e a fila esvazia.
         fake.broken_transcript.borrow_mut().clear();
         let again = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((again.failed, again.written), (0, 4));
-        assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
+        assert!(mirror.pending().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn ligar_e_desligar_as_transcricoes_refaz_a_pasta_nos_dois_sentidos() {
+        let dir = tmp("liga-desliga");
+        let fake = fake();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!(
+            listed(&dir)
+                .iter()
+                .filter(|f| f.ends_with(".jsonl"))
+                .count(),
+            3
+        );
+
+        // Desligada: mesmo sem nada novo no servidor, os `.jsonl` saem e o `.md` perde o link.
+        sync_library(&fake, &mut mirror, false, false).unwrap();
+        assert!(listed(&dir).iter().all(|f| f.ends_with(".md")));
+        let md =
+            std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md"))
+                .unwrap();
+        assert!(!md.contains("transcript:"));
+        assert!(!std::fs::read_to_string(dir.join("AGENTS.md"))
+            .unwrap()
+            .contains("jsonl"));
+
+        // Ligada de novo: voltam na hora, sem esperar a varredura de 6 h.
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!(
+            listed(&dir)
+                .iter()
+                .filter(|f| f.ends_with(".jsonl"))
+                .count(),
+            3
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn colecoes_que_so_diferem_em_maiusculas_usam_uma_grafia_so() {
+        let names = collection_names(vec![
+            CollectionInfo {
+                id: "2".into(),
+                name: "clientes".into(),
+            },
+            CollectionInfo {
+                id: "1".into(),
+                name: "Clientes".into(),
+            },
+            CollectionInfo {
+                id: "3".into(),
+                name: "Interno".into(),
+            },
+        ]);
+        assert_eq!(names["1"], "Clientes");
+        assert_eq!(names["2"], "Clientes");
+        assert_eq!(names["3"], "Interno");
+    }
+
+    #[test]
+    fn sem_o_escopo_o_jsonl_que_ja_existia_fica_como_esta() {
+        let dir = tmp("escopo-preserva");
+        let fake = fake();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        let jsonl = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.jsonl");
+        assert!(jsonl.exists());
+
+        // O resumo muda, mas o servidor passa a recusar as transcrições: o `.jsonl` não some e o
+        // `.md` (com o link para ele) não é reescrito sem transcrição.
+        *fake.denied_transcripts.borrow_mut() = true;
+        fake.summaries
+            .borrow_mut()
+            .insert("bbbbbbbb-2".into(), summary(2));
+        fake.recordings.borrow_mut()[1].updated_at = Some("2026-09-20T09:00:00Z".into());
+        let report = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert!(report.transcripts_denied);
+        assert!(jsonl.exists());
+        let md = std::fs::read_to_string(jsonl.with_extension("md")).unwrap();
+        assert!(md.contains("transcript:") && md.contains("summary_version: 1"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn o_manifesto_e_gravado_mesmo_com_o_agents_md_travado() {
+        let dir = tmp("agents-travado");
+        let fake = fake();
+        // Uma pasta no lugar do arquivo: escrever o `AGENTS.md` falha em todo ciclo.
+        std::fs::create_dir_all(dir.join("AGENTS.md")).unwrap();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        let report = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!(report.failed, 0);
+        let reopened = Mirror::open(&dir).unwrap();
+        assert_eq!(reopened.known_ids().len(), 2);
+        assert!(reopened.since().is_some());
+        // O próximo ciclo é incremental: o erro do `AGENTS.md` não força reler tudo.
+        assert!(!reopened.needs_rebuild(true));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -656,7 +822,7 @@ mod tests {
         // A primeira recusa vale para o ciclo todo: uma chamada só, não uma por gravação.
         assert_eq!(*fake.transcript_calls.borrow(), 1);
         // O cursor avança (não se relê tudo a cada minuto) e a aba explica o que faltou.
-        assert_eq!(mirror.since(), Some("2026-09-19T12:00:00Z"));
+        assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
         let nota = status_note(&report).unwrap();
         assert!(nota.contains("transcrições") && nota.contains("contrato 2.8.0"));
         assert!(!nota.contains("não puderam ser lidas"));
@@ -743,13 +909,13 @@ mod tests {
         std::fs::write(&manifesto, serde_json::to_vec(&json).unwrap()).unwrap();
 
         let mut mirror = Mirror::open(&dir).unwrap();
-        assert!(mirror.layout_outdated());
+        assert!(mirror.needs_rebuild(true));
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
         // Tudo foi relido (não só o que mudou desde o cursor) e o arquivo antigo se foi.
         assert_eq!(report.recordings, 3);
         assert!(!dir.join(antigo_rel).exists());
         assert!(novo.exists());
-        assert!(!mirror.layout_outdated());
+        assert!(!mirror.needs_rebuild(true));
         // O ciclo seguinte volta a ser incremental.
         let next = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((next.recordings, next.written), (1, 0));

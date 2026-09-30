@@ -1,7 +1,7 @@
 //! O manifesto `.eclume-sync.json` da raiz: o que o app escreveu, por gravação. É o que permite
 //! mover e apagar só o que é dele. Começa com ponto, então o Obsidian não o mostra.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -37,9 +37,14 @@ pub struct Manifest {
     pub version: u32,
     #[serde(default)]
     pub recordings: BTreeMap<String, Entry>,
-    /// SHA-256 do `AGENTS.md` que o app escreveu.
+    /// Gravações que falharam ao ler e esperam nova tentativa: o cursor avança mesmo com falha, e
+    /// são elas, não a biblioteca inteira, que o ciclo seguinte repete.
     #[serde(default)]
-    pub agents_sha256: Option<String>,
+    pub pending: BTreeSet<String>,
+    /// Se as transcrições estavam ligadas quando os arquivos foram escritos; ausente é "não sei".
+    /// Mudar a opção faz o ciclo seguinte refazer tudo (escreve ou tira os `.jsonl`).
+    #[serde(default)]
+    pub transcripts: Option<bool>,
     /// O layout com que os arquivos foram escritos; ausente (manifesto antigo) é `0`.
     #[serde(default)]
     pub layout: u32,
@@ -54,7 +59,8 @@ impl Default for Manifest {
         Self {
             version: VERSION,
             recordings: BTreeMap::new(),
-            agents_sha256: None,
+            pending: BTreeSet::new(),
+            transcripts: None,
             layout: 0,
             since: None,
         }
@@ -89,7 +95,12 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         .unwrap_or_default();
     let tmp = path.with_file_name(format!(".{name}.tmp"));
     fs::write(&tmp, bytes).with_context(|| format!("escrever {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("renomear para {}", path.display()))?;
+    if let Err(error) = fs::rename(&tmp, path) {
+        // No Windows a renomeação falha com o arquivo aberto (Obsidian, antivírus, OneDrive):
+        // não deixa o temporário órfão.
+        let _ = fs::remove_file(&tmp);
+        return Err(error).with_context(|| format!("renomear para {}", path.display()));
+    }
     Ok(())
 }
 

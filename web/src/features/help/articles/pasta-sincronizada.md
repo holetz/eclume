@@ -15,10 +15,11 @@ de notas ou com um agente.
 
 No app desktop, abra **Configurações**, aba **Pasta**:
 
-1. Ligue **Sincronizar resumos numa pasta**.
-2. Escolha a pasta de destino com **Escolher pasta…**.
+1. Escolha a pasta de destino com **Escolher pasta…**. Use uma pasta só para isto, não a sua pasta
+   pessoal.
+2. Ligue **Sincronizar resumos numa pasta**.
 3. Deixe **Incluir as transcrições** ligado se quiser os arquivos `.jsonl`, ou desligue para ficar só
-   com os resumos.
+   com os resumos. Mudar essa opção refaz a pasta no ciclo seguinte.
 
 O app sincroniza a cada minuto e ao ligar. **Sincronizar agora** pede um ciclo na hora e confere a
 biblioteca inteira, inclusive o que foi apagado no eclume. A primeira vez copia tudo e pode demorar

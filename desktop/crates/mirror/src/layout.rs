@@ -121,7 +121,10 @@ pub fn paths(item: &MirrorItem, extension: &str) -> Vec<String> {
         dirs.push(NO_COLLECTION.to_string());
     }
     dirs.sort();
-    dirs.dedup();
+    // Windows e macOS não distinguem maiúsculas em nomes de pasta: "Clientes" e "clientes" são a
+    // mesma pasta, e listá-las duas vezes faria uma remoção apagar o arquivo da outra.
+    let mut seen = std::collections::HashSet::new();
+    dirs.retain(|dir| seen.insert(dir.to_lowercase()));
     dirs.into_iter()
         .map(|dir| format!("{dir}/{month}/{base}.{extension}"))
         .collect()
@@ -264,6 +267,18 @@ mod tests {
         assert_eq!(
             paths(&it, "md"),
             ["Clientes/2026-09/2026-09-18_1400_01928f3a.md"]
+        );
+    }
+
+    #[test]
+    fn colecoes_que_so_diferem_em_maiusculas_sao_uma_pasta() {
+        let it = item("Ata", &["clientes", "Clientes", "Interno"]);
+        assert_eq!(
+            paths(&it, "md"),
+            [
+                "Clientes/2026-09/2026-09-18_1100_01928f3a.md",
+                "Interno/2026-09/2026-09-18_1100_01928f3a.md"
+            ]
         );
     }
 
