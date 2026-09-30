@@ -290,6 +290,19 @@ pub struct SettingsInput {
     pub note_silence_s: Option<u32>,
 }
 
+/// Como está a pasta sincronizada, para a aba da janela.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct MirrorStatus {
+    /// Há um ciclo em curso.
+    pub running: bool,
+    /// Quando o último ciclo terminou bem (ms desde a época); `None` antes do primeiro.
+    pub last_sync_ms: Option<i64>,
+    /// O que deu errado no último ciclo, em palavras.
+    pub last_error: Option<String>,
+    /// O que o último ciclo fez.
+    pub last: Option<crate::mirror_sync::Report>,
+}
+
 /// Quanto dura, no máximo, o teste de nível de uma fonte.
 pub const SOURCE_TEST: Duration = Duration::from_secs(10);
 
@@ -311,6 +324,8 @@ struct Inner {
     auto: AutoRecorder,
     notice: Option<String>,
     sync_notice: Option<String>,
+    /// A pasta sincronizada: o ciclo em curso e o resultado do último.
+    mirror: MirrorStatus,
     /// Como ficou o registro de cada atalho global.
     shortcut_registrations: Registrations,
     /// Como os atalhos chegam ao app nesta sessão.
@@ -441,6 +456,7 @@ impl AppState {
                 auto: AutoRecorder::default(),
                 notice: None,
                 sync_notice: None,
+                mirror: MirrorStatus::default(),
                 shortcut_registrations: Registrations::new(),
                 shortcut_mode: ShortcutMode::default(),
                 importing: None,
@@ -757,6 +773,17 @@ impl AppState {
     /// Se o sync avisa quando o resumo de uma gravação enviada fica pronto.
     pub fn notify_summary(&self) -> Result<bool> {
         Ok(self.inner()?.config.notify_summary)
+    }
+
+    /// O estado da pasta sincronizada para a janela.
+    pub fn mirror_status(&self) -> Result<MirrorStatus> {
+        Ok(self.inner()?.mirror.clone())
+    }
+
+    /// Atualiza o estado da pasta sincronizada.
+    pub fn update_mirror(&self, change: impl FnOnce(&mut MirrorStatus)) -> Result<()> {
+        change(&mut self.inner()?.mirror);
+        Ok(())
     }
 
     /// A pasta sincronizada: se está ligada, onde e se leva as transcrições.

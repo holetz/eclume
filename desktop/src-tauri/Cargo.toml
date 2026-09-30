@@ -18,6 +18,7 @@ eclume-audio-capture = { path = "../crates/audio-capture" }
 eclume-detect = { path = "../crates/detect" }
 eclume-import = { path = "../crates/import" }
 eclume-recorder = { path = "../crates/recorder" }
+eclume-mirror = { path = "../crates/mirror" }
 eclume-sync = { path = "../crates/sync" }
 anyhow = "1"
 env_logger = "0.11"

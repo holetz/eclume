@@ -63,6 +63,15 @@ impl Mirror {
         self.manifest.recordings.keys().cloned().collect()
     }
 
+    /// O cursor do próximo `?since=`; `None` na primeira passada.
+    pub fn since(&self) -> Option<&str> {
+        self.manifest.since.as_deref()
+    }
+
+    pub fn set_since(&mut self, since: Option<String>) {
+        self.manifest.since = since;
+    }
+
     pub fn save(&self) -> Result<()> {
         self.manifest.save(&self.root)
     }
@@ -387,6 +396,26 @@ mod tests {
             (applied.written, applied.unchanged, applied.removed),
             (0, 2, 0)
         );
+    }
+
+    #[test]
+    fn o_cursor_viaja_com_a_pasta() {
+        let tmp = Tmp::new("reconcile-since");
+        let mut mirror = Mirror::open(tmp.path()).unwrap();
+        assert_eq!(mirror.since(), None);
+        mirror.set_since(Some("2026-09-19T10:00:05Z".into()));
+        mirror.save().unwrap();
+        assert_eq!(
+            Mirror::open(tmp.path()).unwrap().since(),
+            Some("2026-09-19T10:00:05Z")
+        );
+        // Manifesto de antes do cursor (sem o campo) lê como "primeira passada".
+        fs::write(
+            tmp.path().join(crate::manifest::FILE),
+            br#"{"version": 1, "recordings": {}}"#,
+        )
+        .unwrap();
+        assert_eq!(Mirror::open(tmp.path()).unwrap().since(), None);
     }
 
     #[test]

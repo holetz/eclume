@@ -315,3 +315,55 @@ pub struct TranscriptPage {
     #[serde(default)]
     pub next_cursor: Option<String>,
 }
+
+/// O maior `updated_at` de uma listagem, como veio do servidor: o cursor do próximo `?since=`
+/// (inclusivo). Compara datas de verdade, porque o servidor omite os microssegundos quando zero.
+pub fn latest_update(items: &[LibraryRecording]) -> Option<String> {
+    items
+        .iter()
+        .filter_map(|item| item.updated_at.as_deref())
+        .filter_map(|text| {
+            chrono::DateTime::parse_from_rfc3339(text)
+                .ok()
+                .map(|at| (at, text))
+        })
+        .max_by_key(|(at, _)| *at)
+        .map(|(_, text)| text.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(updated_at: Option<&str>) -> LibraryRecording {
+        LibraryRecording {
+            id: "r".into(),
+            title: String::new(),
+            status: String::new(),
+            recorded_at: None,
+            created_at: None,
+            updated_at: updated_at.map(str::to_string),
+            collection_ids: vec![],
+            transcript_id: None,
+            agenda_type: None,
+            pipeline: vec![],
+        }
+    }
+
+    #[test]
+    fn o_maior_updated_at_compara_datas_e_nao_texto() {
+        // Como texto, "…:05Z" > "…:05.5Z" (o `Z` vem depois do `.`); como data, o segundo é maior.
+        let items = [
+            at(Some("2026-09-19T10:00:05Z")),
+            at(None),
+            at(Some("2026-09-19T10:00:05.500000Z")),
+            at(Some("lixo")),
+        ];
+        assert_eq!(
+            latest_update(&items).as_deref(),
+            Some("2026-09-19T10:00:05.500000Z")
+        );
+        assert_eq!(latest_update(&[at(None)]), None);
+        assert_eq!(latest_update(&[]), None);
+    }
+}

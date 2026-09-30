@@ -36,6 +36,10 @@ pub struct Manifest {
     /// SHA-256 do `AGENTS.md` que o app escreveu.
     #[serde(default)]
     pub agents_sha256: Option<String>,
+    /// O maior `updated_at` já espelhado: o `?since=` do próximo ciclo. Vive aqui, e não no
+    /// estado do app, para que apagar a pasta (ou trocá-la) refaça tudo.
+    #[serde(default)]
+    pub since: Option<String>,
 }
 
 impl Default for Manifest {
@@ -44,6 +48,7 @@ impl Default for Manifest {
             version: VERSION,
             recordings: BTreeMap::new(),
             agents_sha256: None,
+            since: None,
         }
     }
 }

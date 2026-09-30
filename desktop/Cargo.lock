@@ -1409,6 +1409,7 @@ dependencies = [
  "eclume-audio-capture",
  "eclume-detect",
  "eclume-import",
+ "eclume-mirror",
  "eclume-recorder",
  "eclume-sync",
  "env_logger",
