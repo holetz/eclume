@@ -50,6 +50,15 @@ Windows se prepara por [estacao-windows.md](estacao-windows.md):
   os gerou, porque o próximo `remote-run` sobrescreve a cópia do host com a local.
 - O `cmake` (exigido pela libopus embutida do desktop) está em `~/.local/bin`, instalado por
   `uv tool install cmake`, sem apt.
+- **O rsync preserva a data de modificação.** Um arquivo editado aqui **antes** de o host terminar
+  um build anterior chega ao host com data mais velha que o artefato dele, e o cargo o considera
+  atualizado: o teste roda contra o código antigo, e o erro aparece longe da causa (uma função
+  "não encontrada" que existe). Dê `touch` nos arquivos alterados (`touch crates/*/src/*.rs`)
+  antes do `remote-run`.
+- **O release do desktop compila do commit, não da árvore** (`git archive`): o que não foi
+  commitado não entra. O ensaio (sem `--publicar`) não exige push nem versão nova e deixa os
+  instaladores em `~/eclume-build/release/dist-<versão>`; o script recusa começar com o disco do
+  host em 90% ou mais.
 - Disco: pode com `docker builder prune -f --filter until=720h` quando apertar.
 
 ## 1. IP fixo e SSH
