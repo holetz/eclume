@@ -157,3 +157,15 @@ def test_corrigir_segmento(owned: dict[str, Any], services: Services):
     assert api.patch(f"{base}/segments/seg-0002", json={"speaker_id": "S9"}).status_code == 422
     assert api.patch(f"{base}/segments/seg-0002", json={"text": None}).status_code == 422
     assert api.patch(f"{base}/segments/seg-0002", json={}).status_code == 422
+
+
+def test_editar_a_transcricao_move_o_updated_at_da_gravacao(owned: dict[str, Any]):
+    """A pasta sincronizada lista por `recordings.updated_at`: uma correção precisa reaparecer no `?since=`."""
+    api, base = owned["api"], owned["base"]
+    recording_url = f"/api/v1/recordings/{owned['recording']['id']}"
+    before = api.get(recording_url).json()["updated_at"]
+    assert api.patch(f"{base}/speakers/S3", json={"label": "Joana Prado"}).status_code == 200
+    after = api.get(recording_url).json()["updated_at"]
+    assert after > before
+    listed = api.get("/api/v1/recordings", params={"since": before}).json()["items"]
+    assert owned["recording"]["id"] in [item["id"] for item in listed]

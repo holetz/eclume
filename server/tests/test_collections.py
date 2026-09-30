@@ -102,3 +102,28 @@ def test_tags_das_gravacoes_do_usuario(as_user: Callable[[Account], Api], make_u
         "items": [{"name": "cliente-a", "count": 2}, {"name": "entrevista", "count": 1}]
     }
     assert bob.get("/api/v1/tags").json() == {"items": [{"name": "interno", "count": 1}]}
+
+
+def test_renomear_a_colecao_move_o_updated_at_das_gravacoes_dela(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    """O nome é a subpasta da pasta sincronizada do desktop: as gravações precisam reaparecer no `?since=`."""
+    api = as_user(make_user())
+    a = api.post("/api/v1/collections", json={"name": "Clientes"}).json()
+    outra = api.post("/api/v1/collections", json={"name": "Interno"}).json()
+    dentro = upload_file(api, audio_bytes(100), collection_ids=[a["id"]])
+    fora = upload_file(api, audio_bytes(101), collection_ids=[outra["id"]])
+
+    def stamp(recording_id: str) -> str:
+        return api.get(f"/api/v1/recordings/{recording_id}").json()["updated_at"]
+
+    antes_dentro, antes_fora = stamp(dentro["id"]), stamp(fora["id"])
+    # Só a descrição muda: nada a refazer na pasta.
+    api.patch(f"/api/v1/collections/{a['id']}", json={"description": "Contas"})
+    assert stamp(dentro["id"]) == antes_dentro
+
+    assert api.patch(f"/api/v1/collections/{a['id']}", json={"name": "Clientes 2026"}).status_code == 200
+    assert stamp(dentro["id"]) > antes_dentro
+    assert stamp(fora["id"]) == antes_fora
+    listed = api.get("/api/v1/recordings", params={"since": antes_dentro}).json()["items"]
+    assert dentro["id"] in [r["id"] for r in listed]

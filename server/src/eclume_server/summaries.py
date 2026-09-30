@@ -252,6 +252,24 @@ async def summary_state(conn: AsyncConnection, transcript_id: UUID) -> dict[str,
     }
 
 
+async def touch_recording(conn: AsyncConnection, transcript_id: UUID) -> None:
+    """Move `updated_at` da gravação e da transcrição quando o resumo atual muda.
+
+    O `?since=` de `GET /recordings` e `GET /transcripts` é como o desktop percebe que a pasta
+    sincronizada precisa de um resumo novo; sem isto um resumo refeito passava despercebido.
+    """
+    now = func.now()
+    recording_id = (
+        update(t.transcripts)
+        .where(t.transcripts.c.id == transcript_id)
+        .values(updated_at=now)
+        .returning(t.transcripts.c.recording_id)
+    )
+    row = (await conn.execute(recording_id)).first()
+    if row is not None:
+        await conn.execute(update(t.recordings).where(t.recordings.c.id == row[0]).values(updated_at=now))
+
+
 async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do conteúdo e de quem a fez
     conn: AsyncConnection,
     *,
@@ -290,7 +308,9 @@ async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do
         "created_by": created_by,
         "completed_at": func.now(),
     }
-    return (await conn.execute(insert(t.summaries).values(**values).returning(t.summaries))).mappings().one()
+    created = (await conn.execute(insert(t.summaries).values(**values).returning(t.summaries))).mappings().one()
+    await touch_recording(conn, transcript["id"])
+    return created
 
 
 async def edit_summary(
@@ -673,9 +693,11 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
         if following > summary["version"] + 1:
             values["version"] = following
         s = t.summaries.c
-        await conn.execute(
+        finished = await conn.execute(
             update(t.summaries).where(s.id == summary_id, s.status.in_(["queued", "running"])).values(**values)
         )
+        if finished.rowcount:
+            await touch_recording(conn, summary["transcript_id"])
         await _finish_step(conn, summary_id, "done", None)
     return "done"
 

@@ -1,4 +1,6 @@
-# Verificação sob demanda do app desktop no Windows: só `cargo check`, disparado à mão
+# Verificação sob demanda do app desktop no Windows: `cargo check` do workspace e os testes dos
+# crates de lógica pura (`eclume-mirror`, `eclume-sync`: nomes de arquivo, caminhos e o cliente),
+# disparado à mão
 # (`gh workflow run desktop-plataformas.yml`). Não roda em PR nem em push: com o repositório
 # privado, o minuto de Windows custa 2×, e o macOS (10×) fica fora até o repositório ficar
 # público. O job Linux do `ci.yml` segue sendo a prova de cada PR; os instaladores saem do
@@ -29,3 +31,4 @@ jobs:
         with:
           workspaces: desktop
       - run: cargo check --manifest-path desktop/Cargo.toml --workspace --all-targets --locked
+      - run: cargo test --manifest-path desktop/Cargo.toml -p eclume-mirror -p eclume-sync --locked

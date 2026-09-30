@@ -5,7 +5,7 @@ paginas: [colecoes, biblioteca]
 relacionados: [campos-em-toda-gravacao, buscar-nas-gravacoes, configurar-tipo-de-agenda]
 termos: [tag, tags, coleção, coleções, agrupar, organizar, pasta]
 ordem: 7
-atualizado: 2026-09-27
+atualizado: 2026-09-29
 ---
 Tags e coleções organizam as gravações de jeitos diferentes, e uma gravação pode ter várias de
 cada.
@@ -26,6 +26,8 @@ várias reuniões. Ela tem nome e descrição, e nada entra nela sozinho.
 - Crie e renomeie em [Coleções](/colecoes).
 - Ponha uma gravação numa coleção pelo painel de campos da gravação.
 - Excluir uma coleção não apaga as gravações: elas só saem da coleção.
+- No app desktop, as coleções também viram **subpastas** da pasta sincronizada. Veja
+  [Sincronize seus resumos numa pasta](/ajuda/pasta-sincronizada).
 
 ## Na biblioteca e na busca
 

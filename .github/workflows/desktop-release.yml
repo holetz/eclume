@@ -19,9 +19,9 @@ on:
         type: boolean
         default: false
       windows:
-        description: "Incluir o Windows (2× o custo do Linux)"
+        description: "Incluir o Windows (2× o custo do Linux; desmarque para só Linux)"
         type: boolean
-        default: false
+        default: true
       notas:
         description: "Notas do release, que o app mostra no aviso \"Atualizado para X\""
         type: string

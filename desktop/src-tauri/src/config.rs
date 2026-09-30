@@ -131,6 +131,9 @@ pub struct Config {
     /// Avisar quando o resumo automático de uma gravação enviada fica pronto.
     #[serde(default = "default_true")]
     pub notify_summary: bool,
+    /// A pasta local que espelha os resumos e as transcrições da biblioteca.
+    #[serde(default)]
+    pub mirror: MirrorConfig,
     /// O microfone pelo nome; `null` é o padrão do sistema e `"none"`, nenhum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mic: Option<String>,
@@ -149,6 +152,57 @@ pub struct Config {
     /// pessoa fecha o aviso "Atualizado para X".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_update: Option<PendingUpdate>,
+}
+
+/// A pasta sincronizada: resumos em Markdown e transcrições em JSONL, uma subpasta por Collection
+/// (contrato em docs/standards/code/desktop-pasta-sincronizada.md). Desligada até a pessoa
+/// escolher a pasta.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MirrorConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// A raiz do espelho; `null` até a pessoa escolher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<PathBuf>,
+    /// Espelhar também as transcrições (`.jsonl`).
+    #[serde(default = "default_true")]
+    pub transcripts: bool,
+}
+
+impl Default for MirrorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            dir: None,
+            transcripts: true,
+        }
+    }
+}
+
+impl MirrorConfig {
+    fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        let Some(dir) = &self.dir else {
+            bail!("Escolha a pasta dos resumos para ligar a sincronização");
+        };
+        if !dir.is_absolute() {
+            bail!("A pasta dos resumos precisa ser um caminho completo");
+        }
+        if dir.parent().is_none() {
+            bail!("Escolha uma pasta, não a raiz do disco");
+        }
+        if dir.is_file() {
+            bail!("A pasta dos resumos é um arquivo");
+        }
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+        if home.is_some_and(|home| Path::new(&home) == dir.as_path()) {
+            // Uma Collection chamada "Documents" escreveria em ~/Documents.
+            bail!("Escolha uma subpasta, não a pasta pessoal");
+        }
+        Ok(())
+    }
 }
 
 /// Uma atualização instalada pelo updater: a versão e as notas do release (`body` do
@@ -208,6 +262,7 @@ impl Default for Config {
             language: None,
             theme: default_theme(),
             notify_summary: true,
+            mirror: MirrorConfig::default(),
             mic: None,
             system_source: default_system_source(),
             last_version: None,
@@ -312,6 +367,7 @@ impl Config {
                 bail!("idioma da transcrição: use pt, es ou en, ou Automático");
             }
         }
+        self.mirror.validate()?;
         if self.mic.as_deref() == Some(SOURCE_NONE) && self.system_source == SOURCE_NONE {
             bail!("Escolha ao menos uma fonte de áudio");
         }
@@ -356,6 +412,43 @@ mod tests {
         assert_eq!((lido.theme.as_str(), lido.notify_summary), ("dark", false));
         config.theme = "sepia".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn pasta_sincronizada_vem_desligada_e_config_antiga_le() {
+        let config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.mirror, MirrorConfig::default());
+        assert!(!config.mirror.enabled);
+        assert!(config.mirror.transcripts);
+        assert_eq!(config.mirror.dir, None);
+        assert!(!serde_json::to_string(&config).unwrap().contains("\"dir\""));
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn ligar_a_pasta_exige_um_caminho_completo_que_nao_seja_a_raiz() {
+        let dir = std::env::temp_dir();
+        let mut config = Config::default();
+        config.mirror.enabled = true;
+        assert!(config.validate().is_err());
+        config.mirror.dir = Some(PathBuf::from("relativa/pasta"));
+        assert!(config.validate().is_err());
+        config.mirror.dir = dir.ancestors().last().map(Path::to_path_buf);
+        assert!(config.validate().is_err());
+        // A pasta pessoal também é recusada: as Collections viram subpastas dela.
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            config.mirror.dir = Some(PathBuf::from(home));
+            assert!(config.validate().is_err());
+        }
+        config.mirror.dir = Some(dir.join("eclume-resumos"));
+        config.validate().unwrap();
+        let json = serde_json::to_string(&config).unwrap();
+        let lido: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(lido.mirror, config.mirror);
+        // Desligada, a pasta não é conferida.
+        config.mirror.enabled = false;
+        config.mirror.dir = Some(PathBuf::from("relativa"));
+        config.validate().unwrap();
     }
 
     #[test]

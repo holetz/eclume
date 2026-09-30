@@ -7,8 +7,8 @@ guarda a fila local e a sobe ao servidor com upload resumível, e fica na bandej
 primeira execução, a pessoa entra com e-mail e senha no servidor embutido no instalador (ou achado
 na rede por mDNS), com a CA fixada pela impressão digital.
 
-Os instaladores saem do host, por `bash deploy/release-desktop.sh` (Linux; Windows com
-`--windows`; macOS fora enquanto o repositório for privado), ou do workflow `desktop-release` à
+Os instaladores saem do host, por `bash deploy/release-desktop.sh` (Linux e Windows; o Windows
+sai a menos que se passe `--sem-windows`; macOS fora enquanto o repositório for privado), ou do workflow `desktop-release` à
 mão, e o app se atualiza sozinho pelo updater do Tauri; o processo está em
 [docs/standards/code/desktop-distribuicao.md](../docs/standards/code/desktop-distribuicao.md) e o
 passo a passo para o usuário, em [INSTALACAO.md](INSTALACAO.md).

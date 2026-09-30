@@ -52,6 +52,15 @@ describe('coleções', () => {
     expect(screen.getByText(/Coleção agrupa gravações; tag marca assuntos\. As duas convivem/)).toBeInTheDocument()
   })
 
+  it('avisa que as coleções também organizam a pasta sincronizada do desktop, com link para a ajuda', async () => {
+    mockCollections()
+    renderApp('/colecoes')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
+    expect(screen.getByText(/as coleções também organizam a pasta sincronizada/)).toBeInTheDocument()
+    expect(screen.getByText(/cada uma vira uma subpasta/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/pasta-sincronizada')
+  })
+
   it('lista com contagem e leva às gravações da coleção', async () => {
     mockCollections()
     renderApp('/colecoes')

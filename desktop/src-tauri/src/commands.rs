@@ -167,6 +167,8 @@ pub fn save_settings(
         if let Err(err) = crate::sync::sync_now(&app) {
             log::error!("{err:#}");
         }
+        // Pasta sincronizada ligada ou trocada: um ciclo já.
+        crate::mirror_sync::nudge(&app, false);
     }
     crate::refresh_ui(&app);
     to_js(result.and_then(|_| state.settings()))
@@ -399,6 +401,31 @@ pub fn pick_ca_file(app: AppHandle) -> Option<String> {
         .blocking_pick_file()
         .and_then(|file| file.into_path().ok())
         .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// "Escolher pasta…" da pasta sincronizada: o diálogo nativo de pasta; `null` quando a pessoa
+/// desiste.
+#[tauri::command(async)]
+pub fn pick_mirror_dir(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Pasta dos resumos")
+        .blocking_pick_folder()
+        .and_then(|folder| folder.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// O estado da pasta sincronizada: ciclo em curso, último resultado e erro.
+#[tauri::command]
+pub fn mirror_status(state: State<'_, AppState>) -> CommandResult<crate::state::MirrorStatus> {
+    to_js(state.mirror_status())
+}
+
+/// "Sincronizar agora" da pasta sincronizada: um ciclo já, conferindo também a biblioteca inteira.
+#[tauri::command]
+pub fn mirror_sync_now(app: AppHandle) {
+    crate::mirror_sync::nudge(&app, true);
 }
 
 /// "Criar conta": abre o cadastro do servidor escolhido no navegador.

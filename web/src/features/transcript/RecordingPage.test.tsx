@@ -30,6 +30,15 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     expect(document.querySelector('aside.chat')).toHaveTextContent('Ajustar o resumo')
   })
 
+  it('mostra a referência curta da gravação sob o título, com o id completo na dica', async () => {
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
+    const ref = title.nextElementSibling as HTMLElement
+    expect(ref).toHaveTextContent(`ref. ${RECORDING.replace(/-/g, '').slice(0, 8)}`)
+    expect(ref).toHaveAttribute('title', `ID completo: ${RECORDING}`)
+  })
+
   it('etapa pulada ou que falhou diz o motivo, e a data do envio aparece no kicker', async () => {
     const recording = fixtures.recordingTranscribed()
     recording.recorded_at_source = 'upload'

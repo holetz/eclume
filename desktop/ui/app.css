@@ -103,6 +103,9 @@
 
 .tabs-flush {
   border-bottom: 0;
+  /* Cinco abas cabem em 380 px com o vão menor; se faltar largura, quebram em vez de rolar. */
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .tray-section-list {

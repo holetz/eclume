@@ -23,7 +23,7 @@ host**, sem Actions. Plataformas:
 | Plataforma | Estado |
 |---|---|
 | Linux | sai em todo release (AppImage e deb) |
-| Windows | **opcional e desligado por padrão** (`--windows` no host, `windows: true` no workflow) |
+| Windows | sai em todo release (NSIS); `--sem-windows` no host ou `windows: false` no workflow o deixam de fora |
 | macOS | **fora** até o repositório ficar público (o minuto de macOS custa 10×) |
 
 Uma plataforma fora do release some do `latest.json`, e os clientes dela ficam na versão que têm.
@@ -62,11 +62,11 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   para os builds seguintes serem incrementais. O script recusa começar com o disco do host em
   `ECLUME_DISK_LIMIT` (90%) ou mais, e uma trava (`~/eclume-build/release/.trava`) impede dois
   releases ao mesmo tempo.
-- **Windows** (`--windows`): compilação cruzada no contêiner de `desktop/build-windows.Dockerfile`
+- **Windows** (padrão; `--sem-windows` omite): compilação cruzada no contêiner de `desktop/build-windows.Dockerfile`
   (`nsis`, `lld`/`llvm` 18, o target `x86_64-pc-windows-msvc` e o `cargo-xwin`), com
   `tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis`. Sai só o
-  NSIS: o MSI exige o WiX, que só roda no Windows. O primeiro `--windows` ainda não rodou; ele é o
-  que prova a imagem e o libopus compilado cruzado.
+  NSIS: o MSI exige o WiX, que só roda no Windows. A imagem e o libopus compilado cruzado foram
+  provados no ensaio de holetz/eclume#68 (o NSIS saiu do host).
 - Os manifestos saem no host, por `manifestos_release.py` (com `desktop/INSTALACAO.md` copiado), e
   o `SHA256SUMS` é conferido antes de publicar. `--publicar` cria o GitHub Release pelo `gh` do
   host; `--notas` vira o `notes` do `latest.json` e o texto do aviso "Atualizado para X" (vazio,
@@ -76,11 +76,12 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 
 - Dispara **só** por `workflow_dispatch`: a tag que o release no host cria não o dispara. Faz o
   mesmo release no GitHub Actions — Linux sempre; Windows (`nsis,msi`, em `windows-latest`) com
-  a entrada `windows: true`, desligada por padrão porque o minuto custa 2×. `publicar: false`
+  a entrada `windows`, ligada por padrão (o minuto custa 2×; desmarque para só Linux). `publicar: false`
   (padrão) é ensaio — os artefatos ficam no run.
 - A CLI do Tauri roda por `npx @tauri-apps/cli@2 build --ci --bundles <lista>`, sem
   `tauri-action`: o `latest.json` dela apontaria para URLs privadas do GitHub.
-- `desktop-plataformas.yml` (à mão) faz só o `cargo check` em `windows-latest`.
+- `desktop-plataformas.yml` (à mão) faz o `cargo check` do workspace e roda os testes de
+  `eclume-mirror` e `eclume-sync` em `windows-latest`.
 
 ## Servidor embutido no instalador
 

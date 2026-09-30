@@ -229,6 +229,12 @@ pub struct SettingsView {
     pub theme: String,
     /// Avisar quando o resumo automático fica pronto.
     pub notify_summary: bool,
+    /// A pasta sincronizada está ligada.
+    pub mirror_enabled: bool,
+    /// A raiz da pasta sincronizada; `None` até a pessoa escolher.
+    pub mirror_dir: Option<PathBuf>,
+    /// Espelhar também as transcrições.
+    pub mirror_transcripts: bool,
     /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
     pub note_silence_s: Option<u32>,
 }
@@ -270,9 +276,31 @@ pub struct SettingsInput {
     /// Ausente mantém o de hoje.
     #[serde(default)]
     pub notify_summary: Option<bool>,
+    /// Liga ou desliga a pasta sincronizada; ausente mantém o de hoje.
+    #[serde(default)]
+    pub mirror_enabled: Option<bool>,
+    /// A raiz da pasta sincronizada, `""` para limpar; ausente mantém a de hoje.
+    #[serde(default)]
+    pub mirror_dir: Option<String>,
+    /// Espelhar as transcrições; ausente mantém o de hoje.
+    #[serde(default)]
+    pub mirror_transcripts: Option<bool>,
     /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
+}
+
+/// Como está a pasta sincronizada, para a aba da janela.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct MirrorStatus {
+    /// Há um ciclo em curso.
+    pub running: bool,
+    /// Quando o último ciclo terminou bem (ms desde a época); `None` antes do primeiro.
+    pub last_sync_ms: Option<i64>,
+    /// O que deu errado no último ciclo, em palavras.
+    pub last_error: Option<String>,
+    /// O que o último ciclo fez.
+    pub last: Option<crate::mirror_sync::Report>,
 }
 
 /// Quanto dura, no máximo, o teste de nível de uma fonte.
@@ -296,6 +324,8 @@ struct Inner {
     auto: AutoRecorder,
     notice: Option<String>,
     sync_notice: Option<String>,
+    /// A pasta sincronizada: o ciclo em curso e o resultado do último.
+    mirror: MirrorStatus,
     /// Como ficou o registro de cada atalho global.
     shortcut_registrations: Registrations,
     /// Como os atalhos chegam ao app nesta sessão.
@@ -426,6 +456,7 @@ impl AppState {
                 auto: AutoRecorder::default(),
                 notice: None,
                 sync_notice: None,
+                mirror: MirrorStatus::default(),
                 shortcut_registrations: Registrations::new(),
                 shortcut_mode: ShortcutMode::default(),
                 importing: None,
@@ -744,6 +775,22 @@ impl AppState {
         Ok(self.inner()?.config.notify_summary)
     }
 
+    /// O estado da pasta sincronizada para a janela.
+    pub fn mirror_status(&self) -> Result<MirrorStatus> {
+        Ok(self.inner()?.mirror.clone())
+    }
+
+    /// Atualiza o estado da pasta sincronizada.
+    pub fn update_mirror(&self, change: impl FnOnce(&mut MirrorStatus)) -> Result<()> {
+        change(&mut self.inner()?.mirror);
+        Ok(())
+    }
+
+    /// A pasta sincronizada: se está ligada, onde e se leva as transcrições.
+    pub fn mirror_config(&self) -> Result<config::MirrorConfig> {
+        Ok(self.inner()?.config.mirror.clone())
+    }
+
     /// O idioma da transcrição que os uploads pedem; `None` deixa o do servidor.
     pub fn language(&self) -> Result<Option<String>> {
         Ok(self.inner()?.config.language.clone())
@@ -966,6 +1013,9 @@ impl AppState {
             language: config.language.clone(),
             theme: config.theme.clone(),
             notify_summary: config.notify_summary,
+            mirror_enabled: config.mirror.enabled,
+            mirror_dir: config.mirror.dir.clone(),
+            mirror_transcripts: config.mirror.transcripts,
             note_silence_s: config.note_silence_s,
             shortcut_mode: inner.shortcut_mode.clone(),
             shortcuts: ShortcutAction::ALL
@@ -1009,6 +1059,15 @@ impl AppState {
         }
         if let Some(notify) = input.notify_summary {
             next.notify_summary = notify;
+        }
+        if let Some(enabled) = input.mirror_enabled {
+            next.mirror.enabled = enabled;
+        }
+        if let Some(dir) = input.mirror_dir {
+            next.mirror.dir = non_empty(Some(dir)).map(PathBuf::from);
+        }
+        if let Some(transcripts) = input.mirror_transcripts {
+            next.mirror.transcripts = transcripts;
         }
         if let Some(seconds) = input.note_silence_s {
             next.note_silence_s = (seconds > 0).then_some(seconds);
@@ -1246,6 +1305,9 @@ mod tests {
             language: None,
             theme: None,
             notify_summary: None,
+            mirror_enabled: None,
+            mirror_dir: None,
+            mirror_transcripts: None,
             note_silence_s: None,
         }
     }
@@ -1701,6 +1763,44 @@ mod tests {
         assert_eq!(outro.default_policy, Policy::Ignore);
         let teams = apps.iter().find(|a| a.app == AppKey::Teams).unwrap();
         assert_eq!(teams.default_policy, Policy::Ask);
+    }
+
+    #[test]
+    fn pasta_sincronizada_liga_com_pasta_e_ausente_mantem() {
+        let (state, dir) = state("espelho");
+        let view = state.settings().unwrap();
+        assert!(!view.mirror_enabled && view.mirror_transcripts);
+        assert_eq!(view.mirror_dir, None);
+
+        // Ligar sem pasta a config recusa, e nada é gravado.
+        let mut sem_pasta = settings_input(&state);
+        sem_pasta.mirror_enabled = Some(true);
+        assert!(state.save_settings(sem_pasta).is_err());
+        assert!(!state.settings().unwrap().mirror_enabled);
+
+        let pasta = dir.join("resumos");
+        let mut input = settings_input(&state);
+        input.mirror_enabled = Some(true);
+        input.mirror_dir = Some(pasta.to_string_lossy().into_owned());
+        input.mirror_transcripts = Some(false);
+        state.save_settings(input).unwrap();
+        let mirror = state.mirror_config().unwrap();
+        assert!(mirror.enabled && !mirror.transcripts);
+        assert_eq!(mirror.dir.as_deref(), Some(pasta.as_path()));
+        assert_eq!(Config::load(&dir.join("config.json")).mirror, mirror);
+
+        // Ausente mantém; "" limpa a pasta (e, ligada, a config recusa).
+        state.save_settings(settings_input(&state)).unwrap();
+        assert_eq!(state.mirror_config().unwrap(), mirror);
+        let mut limpa = settings_input(&state);
+        limpa.mirror_dir = Some(String::new());
+        assert!(state.save_settings(limpa).is_err());
+        let mut desliga = settings_input(&state);
+        desliga.mirror_enabled = Some(false);
+        desliga.mirror_dir = Some(String::new());
+        state.save_settings(desliga).unwrap();
+        assert_eq!(state.mirror_config().unwrap().dir, None);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

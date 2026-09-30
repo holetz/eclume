@@ -53,7 +53,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Quando basta um de
   vários, a operação declara um requisito `pat` por escopo e a rota usa `requires_any` (desde a
   2.4.0, `GET /agenda-types` aceita `summaries:read` ou `recordings:read`, para a credencial de
-  dispositivo escolher o tipo ao parar). Sessão tem todas as permissões do usuário.
+  dispositivo escolher o tipo ao parar). A credencial de dispositivo tem `recordings:read`,
+  `recordings:write`, `summaries:read` (2.6.0) e `transcripts:read` (2.8.0, a pasta sincronizada do
+  desktop). Sessão tem todas as permissões do usuário.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
@@ -76,7 +78,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
-  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Um cursor vale
+  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Desde a 2.8.0, um
+  resumo que termina ou é editado também move o `updated_at` da gravação e da transcrição, então
+  `?since=` percebe resumo novo ou refeito. Um cursor vale
   só para a ordenação (`sort`) que o gerou.
 - **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
   valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota

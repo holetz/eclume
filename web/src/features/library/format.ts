@@ -105,3 +105,11 @@ export function formatBytes(bytes: number): string {
   }
   return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${units[unit]}`
 }
+
+/**
+ * A referência curta de uma gravação: os 8 primeiros caracteres do id. É o sufixo do nome dos
+ * arquivos da pasta sincronizada do desktop, para ligar um arquivo à gravação.
+ */
+export function shortRef(id: string): string {
+  return id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
+}

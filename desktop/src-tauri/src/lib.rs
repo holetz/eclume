@@ -8,6 +8,7 @@ pub mod capture;
 mod commands;
 pub mod config;
 mod import;
+mod mirror_sync;
 mod notify;
 pub mod shortcuts;
 pub mod state;
@@ -250,6 +251,7 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
             sync::spawn(app.handle());
+            mirror_sync::spawn(app.handle());
             auto::spawn(app.handle().clone());
             sync::nudge(app.handle());
             updater::spawn(app.handle().clone());
@@ -309,6 +311,9 @@ pub fn run() {
             commands::test_connection,
             commands::open_signup,
             commands::pick_ca_file,
+            commands::pick_mirror_dir,
+            commands::mirror_status,
+            commands::mirror_sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app desktop do eclume");

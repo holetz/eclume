@@ -67,6 +67,7 @@ export function ligarMenu(app) {
   $("#ajuda-permissoes").addEventListener("click", () =>
     executar("open_help", { article: "permissoes-de-microfone" }),
   );
+  $("#ajuda-pasta").addEventListener("click", () => executar("open_help", { article: "pasta-sincronizada" }));
   $("#ajuda-atalhos").addEventListener("click", () => {
     abrir(false);
     app.ir("atalhos");

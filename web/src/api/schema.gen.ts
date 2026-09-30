@@ -208,8 +208,9 @@ export interface paths {
         /**
          * Entrar num aparelho com e-mail e senha
          * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
-         *     `kind: device` com `recordings:read`, `recordings:write` e, desde a 2.6.0,
-         *     `summaries:read` (o aviso de resumo pronto do app, com "Copiar"), sem validade e revogável
+         *     `kind: device` com `recordings:read`, `recordings:write`, desde a 2.6.0 `summaries:read`
+         *     (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.8.0, `transcripts:read` (a
+         *     pasta sincronizada do desktop lê transcrições), sem validade e revogável
          *     em `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
          *     conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
          *     vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
@@ -3424,7 +3425,10 @@ export interface components {
         Cursor: string;
         /** @description Itens por página. */
         Limit: number;
-        /** @description Só itens com `updated_at >= since` (inclusivo). */
+        /**
+         * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
+         *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+         */
         Since: string;
         /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
         PersonFilter: string;
@@ -4026,7 +4030,10 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Só itens com `updated_at >= since` (inclusivo). */
+                /**
+                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
+                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+                 */
                 since?: components["parameters"]["Since"];
                 /** @description `recorded_at >= from`. */
                 from?: string;
@@ -4604,7 +4611,10 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Só itens com `updated_at >= since` (inclusivo). */
+                /**
+                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
+                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+                 */
                 since?: components["parameters"]["Since"];
                 /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
                 person?: components["parameters"]["PersonFilter"];

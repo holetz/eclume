@@ -37,6 +37,10 @@ export function CollectionsPage() {
       <p className="text-muted">
         Coleção agrupa gravações; tag marca assuntos. As duas convivem, e uma gravação pode estar em várias coleções.
       </p>
+      <p className="text-muted">
+        No app desktop, as coleções também organizam a pasta sincronizada: cada uma vira uma subpasta com os
+        resumos e as transcrições. <Link to="/ajuda/pasta-sincronizada">Saiba como funciona</Link>.
+      </p>
 
       {collections.isPending && <p role="status">Carregando coleções…</p>}
       {collections.isError && (

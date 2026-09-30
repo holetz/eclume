@@ -26,9 +26,10 @@ if TYPE_CHECKING:
 
 PAIRING_TTL = timedelta(minutes=10)
 
-# Upload, marcadores e status das próprias gravações, e o resumo pronto para o aviso do app com
-# "Copiar"; sem validade, revogável na web.
-DEVICE_SCOPES = ("recordings:read", "recordings:write", "summaries:read")
+# Upload, marcadores e status das próprias gravações, o resumo pronto para o aviso do app com
+# "Copiar" e a leitura de resumos e transcrições para a pasta sincronizada do desktop; sem
+# validade, revogável na web.
+DEVICE_SCOPES = ("recordings:read", "recordings:write", "transcripts:read", "summaries:read")
 
 
 async def issue_credential(
