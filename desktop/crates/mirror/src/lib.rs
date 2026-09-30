@@ -7,9 +7,13 @@
 //! docs/standards/code/desktop-pasta-sincronizada.md.
 
 pub mod layout;
+pub mod manifest;
+pub mod reconcile;
 pub mod render;
 
 pub use layout::{base_name, collection_dir, slug, NO_COLLECTION};
+pub use manifest::Manifest;
+pub use reconcile::{Applied, Mirror};
 
 /// O que o espelho sabe de uma gravação para escrevê-la em disco. Sem rede nem Tauri: quem chama
 /// converte os tipos do `eclume-sync` nestes.
@@ -56,4 +60,38 @@ pub struct Segment {
     pub start_ms: u64,
     pub end_ms: u64,
     pub text: String,
+}
+
+/// Diretório temporário de teste, apagado ao sair de escopo.
+#[cfg(test)]
+pub(crate) mod testing {
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    pub struct Tmp(PathBuf);
+
+    impl Tmp {
+        pub fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "eclume-mirror-{name}-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        pub fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 }
