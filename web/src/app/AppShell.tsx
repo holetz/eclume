@@ -7,7 +7,7 @@ import { ImportProvider } from '../features/import/ImportProvider'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
 import { MenuButton, type MenuEntry } from './MenuButton'
-import { isItemActive, navGroups, type NavGroupEntry } from './nav'
+import { featuredItem, isItemActive, navGroups, type FeaturedItem, type NavGroupEntry } from './nav'
 import { ShellFrame } from './ShellFrame'
 
 export interface ShellUser {
@@ -41,6 +41,22 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
       ))}
     </div>
   ))
+}
+
+/** O item destacado (Perguntar): a ação primária do DS no topo da barra lateral, com o ícone dele. */
+function FeaturedLink({ item }: { item: FeaturedItem }) {
+  const { pathname } = useLocation()
+  const Icon = item.icon
+  return (
+    <Link
+      to={item.to}
+      className={`btn btn-primary ${styles.featured}`}
+      aria-current={isItemActive(item, pathname) ? 'page' : undefined}
+    >
+      <Icon size={16} aria-hidden="true" />
+      {item.label}
+    </Link>
+  )
 }
 
 /**
@@ -100,6 +116,7 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
 
 export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) {
   const { main } = navGroups()
+  const featured = featuredItem()
 
   return (
     <HelpProvider>
@@ -108,6 +125,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
         account={<Account user={user} onLogout={onLogout} loggingOut={loggingOut} />}
         sidebar={
           <nav aria-label="Principal" className={styles.nav}>
+            {featured && <FeaturedLink item={featured} />}
             <NavGroups groups={main} />
           </nav>
         }

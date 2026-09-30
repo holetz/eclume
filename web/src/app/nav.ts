@@ -2,24 +2,41 @@
 // engrenagem (Minhas configurações) e da ajuda. Todas as áreas estão ligadas: para acrescentar uma,
 // a spec dona registra o item aqui e a rota em routes.tsx, e `enabled: false` a mantém fora do menu
 // até ficar pronta. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem conta e
-// login próprios (/admin/entrar).
+// login próprios (/admin/entrar). Um item pode ser o destacado (`featured`): a barra lateral o desenha
+// antes dos grupos, como ação primária com ícone.
+import { MessageSquareText, type LucideIcon } from 'lucide-react'
+
 type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
 type NavSection = 'main' | 'header'
 
-interface NavItem {
+interface NavEntry {
   to: string
   label: string
-  group: NavGroup
   section: NavSection
   enabled: boolean
   /** Prefixos de rota que também acendem o item (a gravação pertence à Biblioteca). */
   matches?: string[]
 }
 
+interface GroupedItem extends NavEntry {
+  group: NavGroup
+  featured?: never
+}
+
+/** O item destacado da barra lateral: a ação primária, acima dos grupos, sem grupo nem título. */
+export interface FeaturedItem extends NavEntry {
+  featured: true
+  icon: LucideIcon
+  group?: never
+}
+
+type NavItem = GroupedItem | FeaturedItem
+
 export const NAV_ITEMS: readonly NavItem[] = [
+  // Perguntar é o primeiro da barra lateral, acima dos grupos; a rota segue sendo /perguntas.
+  { to: '/perguntas', label: 'Perguntar', section: 'main', enabled: true, featured: true, icon: MessageSquareText },
   { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
-  { to: '/perguntas', label: 'Perguntas', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
   // A coleção convive com a tag e fica em Organizar (holetz/eclume#38).
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
@@ -35,18 +52,26 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export interface NavGroupEntry {
   group: NavGroup
-  items: NavItem[]
+  items: GroupedItem[]
 }
 
-/** Itens ligados, agrupados na ordem da lista e separados por seção; grupos vazios somem. */
+/** O item destacado, quando ligado: a barra lateral o desenha antes dos grupos. */
+export function featuredItem(items: readonly NavItem[] = NAV_ITEMS): FeaturedItem | undefined {
+  return items.find((item): item is FeaturedItem => item.enabled && item.featured === true)
+}
+
+/**
+ * Itens ligados, agrupados na ordem da lista e separados por seção; grupos vazios somem. O destacado
+ * fica de fora: ele não pertence a grupo.
+ */
 export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSection, NavGroupEntry[]> {
-  const sections: Record<NavSection, Map<NavGroup, NavItem[]>> = { main: new Map(), header: new Map() }
+  const sections: Record<NavSection, Map<NavGroup, GroupedItem[]>> = { main: new Map(), header: new Map() }
   for (const item of items) {
-    if (!item.enabled) continue
+    if (!item.enabled || item.featured) continue
     const groups = sections[item.section]
     groups.set(item.group, [...(groups.get(item.group) ?? []), item])
   }
-  const entries = (groups: Map<NavGroup, NavItem[]>) =>
+  const entries = (groups: Map<NavGroup, GroupedItem[]>) =>
     [...groups].map(([group, list]) => ({ group, items: list }))
   return { main: entries(sections.main), header: entries(sections.header) }
 }
