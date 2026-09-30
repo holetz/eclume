@@ -36,3 +36,44 @@
   padding: var(--space-4) 0;
   color: var(--color-text-muted);
 }
+
+.badge {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rule {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+/* Os exemplos de regra, recolhidos: cada um com "Usar", que copia o texto para o campo. */
+.examples {
+  font-size: 13px;
+}
+
+.examples summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.examples ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.examples li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
