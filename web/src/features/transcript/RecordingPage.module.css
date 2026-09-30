@@ -45,6 +45,16 @@
   font-size: 32px;
 }
 
+/* A referência da gravação, discreta sob o título: é o sufixo do nome dos arquivos da pasta
+   sincronizada do desktop. */
+.ref {
+  justify-self: start;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

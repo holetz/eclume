@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
-import { formatBytes, formatDuration, recordingState } from './format'
+import { formatBytes, formatDuration, recordingState, shortRef } from './format'
 
 type Step = Schemas['PipelineStep']
 
@@ -68,5 +68,13 @@ describe('estado da gravação', () => {
     expect(busy(withSteps('transcribed', { summary: 'active' }))).toBe('Resumindo')
     // Transcrita, com uma etapa depois dela ainda na fila.
     expect(busy(withSteps('transcribed', { summary: 'pending' }))).toBe('Resumindo')
+  })
+})
+
+describe('shortRef', () => {
+  it('são os 8 primeiros caracteres do id, sem os hífens', () => {
+    expect(shortRef('01928f3a-1c00-7a00-8000-000000000101')).toBe('01928f3a')
+    expect(shortRef('a-b-c')).toBe('abc')
+    expect(shortRef('')).toBe('')
   })
 })

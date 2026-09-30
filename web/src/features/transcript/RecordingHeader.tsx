@@ -3,7 +3,7 @@ import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { shortDayLabel, timeLabel } from '../library/calendar'
-import { formatDuration } from '../library/format'
+import { formatDuration, shortRef } from '../library/format'
 import { ExportMenu } from './ExportMenu'
 import { useDeleteRecording } from './queries'
 import styles from './RecordingPage.module.css'
@@ -36,6 +36,9 @@ export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingH
       <div className={styles.titleBlock}>
         <span className="kicker">{recordingKicker(recording)}</span>
         <h1 className={styles.title}>{recording.title}</h1>
+        <span className={styles.ref} title={`ID completo: ${recording.id}`}>
+          ref. {shortRef(recording.id)}
+        </span>
       </div>
       <div className={styles.actions}>
         <ExportMenu recordingId={recording.id} hasSummary={hasSummary} onError={setExportError} />
