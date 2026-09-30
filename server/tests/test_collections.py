@@ -127,3 +127,41 @@ def test_renomear_a_colecao_move_o_updated_at_das_gravacoes_dela(
     assert stamp(fora["id"]) == antes_fora
     listed = api.get("/api/v1/recordings", params={"since": antes_dentro}).json()["items"]
     assert dentro["id"] in [r["id"] for r in listed]
+
+
+def test_regra_da_colecao_e_mesclagem(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    rule = "Reuniões com alguém da empresa Agro Sul."
+    auto = api.post("/api/v1/collections", json={"name": "Agro Sul", "instructions": rule, "auto_assign": True})
+    assert auto.status_code == 201, auto.text
+    assert (auto.json()["instructions"], auto.json()["auto_assign"]) == (rule, True)
+    plain = api.post("/api/v1/collections", json={"name": "Clientes"}).json()
+    assert (plain["instructions"], plain["auto_assign"]) == ("", False)
+    assert api.post("/api/v1/collections", json={"name": "X", "instructions": "x" * 4001}).status_code == 422
+    turned = api.patch(f"/api/v1/collections/{plain['id']}", json={"auto_assign": True, "instructions": "Clientes."})
+    assert (turned.json()["auto_assign"], turned.json()["instructions"]) == (True, "Clientes.")
+    assert api.patch(f"/api/v1/collections/{plain['id']}", json={"auto_assign": None}).status_code == 422
+
+    both = upload_file(api, audio_bytes(100), collection_ids=[auto.json()["id"], plain["id"]])
+    only = upload_file(api, audio_bytes(100), collection_ids=[auto.json()["id"]])
+    merged = api.post(f"/api/v1/collections/{auto.json()['id']}/merge", json={"into": plain["id"]})
+    assert merged.status_code == 200, merged.text
+    assert (merged.json()["name"], merged.json()["recording_count"]) == ("Clientes", 2)
+    assert api.get(f"/api/v1/recordings/{both['id']}").json()["collection_ids"] == [plain["id"]]
+    assert api.get(f"/api/v1/recordings/{only['id']}").json()["collection_ids"] == [plain["id"]]
+    assert [c["name"] for c in api.get("/api/v1/collections").json()["items"]] == ["Clientes"]
+
+    assert api.post(f"/api/v1/collections/{plain['id']}/merge", json={"into": plain["id"]}).status_code == 422
+    foreign = as_user(make_user()).post("/api/v1/collections", json={"name": "Alheia"}).json()
+    refused = api.post(f"/api/v1/collections/{plain['id']}/merge", json={"into": foreign["id"]})
+    assert (refused.status_code, refused.json()["errors"][0]["field"]) == (422, "into")
+    assert api.post(f"/api/v1/collections/{foreign['id']}/merge", json={"into": plain["id"]}).status_code == 404
+
+
+def test_mexer_nas_colecoes_trava_a_origem(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    a = api.post("/api/v1/collections", json={"name": "A"}).json()
+    recording = upload_file(api, audio_bytes(100), collection_ids=[a["id"]])
+    assert recording["collections_origin"] is None
+    patched = api.patch(f"/api/v1/recordings/{recording['id']}", json={"collection_ids": []})
+    assert (patched.json()["collection_ids"], patched.json()["collections_origin"]) == ([], "edited")

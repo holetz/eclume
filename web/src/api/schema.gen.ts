@@ -1426,6 +1426,29 @@ export interface paths {
         patch: operations["updateCollection"];
         trace?: never;
     };
+    "/api/v1/collections/{collection_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: components["parameters"]["CollectionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mesclar uma coleção em outra
+         * @description As gravações da coleção passam para `into`, sem repetição, e a coleção é excluída; `into`
+         *     fica com o nome, a descrição e a regra dela. `into` igual à coleção, ou inexistente, é 422.
+         */
+        post: operations["mergeCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tags": {
         parameters: {
             query?: never;
@@ -2187,6 +2210,13 @@ export interface components {
             owner: components["schemas"]["UserRef"];
             tags: string[];
             collection_ids: string[];
+            /**
+             * @description De quem é a lista de coleções: `auto` (o agente, pelas coleções automáticas), `edited` (o
+             *     usuário mudou; o agente não mexe mais) ou `null` (vinda do envio, ou ainda sem escolha: o
+             *     agente só soma).
+             * @enum {string|null}
+             */
+            collections_origin: "auto" | "edited" | null;
             metadata: components["schemas"]["RecordingMetadata"];
             capture: components["schemas"]["Capture"] | null;
             /**
@@ -2446,6 +2476,13 @@ export interface components {
             id: string;
             name: string;
             description: string | null;
+            /**
+             * @description "Quando incluir": a regra que o agente segue para pôr a gravação na coleção. Pode falar
+             *     do assunto, do tipo de agenda e dos participantes (empresa, área, cargo, tags de pessoa).
+             */
+            instructions: string;
+            /** @description Com regra, o agente inclui as gravações depois da transcrição. */
+            auto_assign: boolean;
             recording_count: number;
             /** Format: date-time */
             created_at: string;
@@ -2455,10 +2492,21 @@ export interface components {
         CollectionCreate: {
             name: string;
             description?: string | null;
+            instructions?: string;
+            auto_assign?: boolean;
         };
         CollectionPatch: {
             name?: string;
             description?: string | null;
+            instructions?: string;
+            auto_assign?: boolean;
+        };
+        CollectionMerge: {
+            /**
+             * Format: uuid
+             * @description A coleção que recebe as gravações; outra que não a mesclada.
+             */
+            into: string;
         };
         CollectionPage: {
             items: components["schemas"]["Collection"][];
@@ -6058,6 +6106,39 @@ export interface operations {
         };
         responses: {
             /** @description Coleção atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Collection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    mergeCollection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                collection_id: components["parameters"]["CollectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionMerge"];
+            };
+        };
+        responses: {
+            /** @description A coleção que recebeu as gravações. */
             200: {
                 headers: {
                     [name: string]: unknown;

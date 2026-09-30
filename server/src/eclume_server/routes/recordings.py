@@ -157,6 +157,8 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
         if "collection_ids" in values:
             await check_collections(conn, values["collection_ids"])
             values["collection_ids"] = list(dict.fromkeys(values["collection_ids"]))
+            # O usuário mexeu nas coleções: o agente não as muda mais.
+            values["collections_origin"] = "edited"
         now = datetime.now(UTC)
         if values:
             await conn.execute(

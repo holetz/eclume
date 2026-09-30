@@ -119,6 +119,7 @@ def recording_json(row: Row, pipeline: list[Row], progress: tuple[str | None, fl
         "owner": user_ref(row["owner_id"], row["owner_name"]),
         "tags": list(row["tags"]),
         "collection_ids": [str(c) for c in row["collection_ids"]],
+        "collections_origin": row["collections_origin"],
         "metadata": row["metadata"],
         "capture": row["capture"],
         "agenda_type": agenda_type,

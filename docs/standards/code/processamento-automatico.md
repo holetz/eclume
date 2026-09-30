@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
-description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, os jobs detect_agenda_type e fill_fields com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql
+description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
+resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#33, holetz/eclume#76
+source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77
 maintainer: holetz
 ---
 
@@ -126,6 +126,16 @@ segue; uma falha inesperada fora da chamada ao agente também (`internal_error`,
   (`no_auto_fields`); sem provider `fields` → `skipped` (`no_provider`).
 - O título vai com a regra do assunto do tipo da gravação (`agenda_types.title_rule`), não com a
   do campo embutido.
+- **Contexto e coleções** (`fields.recording_context`): o prompt ganha o tipo de agenda da gravação
+  (`## Tipo de agenda da gravação`), os participantes identificados (as pessoas ligadas aos
+  locutores, com empresa, área, cargo e tags de pessoa) e, quando há, as coleções automáticas com
+  regra (`auto_assign` e `instructions`) como `C1..Cn` (`- C1: Nome — regra`), com `COLLECTIONS_TASK`
+  e a chave `"colecoes": ["C1", …]` no formato. Índice fora da lista é ignorado; em seções, a união.
+  Só coleções, sem campos elegíveis, também chamam o agente.
+- **Gravar as coleções** (`fields.apply_collections`), pela origem `recordings.collections_origin`:
+  `edited` (o usuário mudou pelo `PATCH`) → nada muda, e as coleções nem vão ao prompt; `auto` → as
+  escolhidas substituem as automáticas de antes, e as outras ficam; nula (vindas do envio, ou ainda
+  sem escolha) → só soma. Escolheu alguma, a origem vira `auto`. A etapa guarda `collections`.
 - No fim — preenchida, pulada ou falha —, `refresh_title` remonta o título pelo padrão do tipo. Ao
   terminar, o worker abre o resumo automático.
 - Uma chamada para todos os campos (`agents/extraction.py`), (nunca uma por campo),

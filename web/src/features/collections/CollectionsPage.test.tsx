@@ -11,8 +11,8 @@ afterEach(() => vi.unstubAllGlobals())
 const SERRA = '01928f3a-1c00-7a00-8000-000000000801'
 
 /** API de coleções com estado, como o servidor. */
-function mockCollections() {
-  let items: Schemas['Collection'][] = fixtures.collectionPage().items
+function mockCollections(initial: Schemas['Collection'][] = fixtures.collectionPage().items) {
+  let items = initial
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
     'GET /api/v1/collections': () => ({ items, next_cursor: null }),
@@ -30,6 +30,14 @@ function mockCollections() {
     'DELETE /api/v1/collections/:id': (_, { id }) => {
       items = items.filter((c) => c.id !== id)
       return empty()
+    },
+    'POST /api/v1/collections/:id/merge': async (request, { id }) => {
+      const { into } = (await request.json()) as { into: string }
+      const source = items.find((c) => c.id === id)!
+      items = items
+        .filter((c) => c.id !== id)
+        .map((c) => (c.id === into ? { ...c, recording_count: c.recording_count + source.recording_count } : c))
+      return items.find((c) => c.id === into)
     },
   })
 }
@@ -86,6 +94,8 @@ describe('coleções', () => {
     expect(await http.requests('POST /api/v1/collections')[0].json()).toEqual({
       name: 'Programa de lideranças',
       description: null,
+      instructions: '',
+      auto_assign: false,
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Editar Metalúrgica Serra Azul' }))
@@ -113,5 +123,46 @@ describe('coleções', () => {
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
     const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
     expect(query.getAll('collection')).toEqual([SERRA])
+  })
+
+  it('cria uma coleção automática com a regra, usando um exemplo', async () => {
+    const http = mockCollections()
+    renderApp('/colecoes')
+    const list = await screen.findByRole('list', { name: 'Coleções' })
+    expect(within(list).getByText('Automática')).toHaveClass('badge')
+    await userEvent.click(screen.getByRole('button', { name: 'Nova coleção' }))
+    const dialog = screen.getByRole('dialog', { name: 'Nova coleção' })
+    await userEvent.type(within(dialog).getByLabelText('Nome da coleção'), 'Agro Sul')
+    await userEvent.click(within(dialog).getByText('Exemplos de regras'))
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Usar o exemplo: Reuniões em que participa alguém da empresa Agro Sul.' }),
+    )
+    expect(within(dialog).getByLabelText('Quando incluir')).toHaveValue('Reuniões em que participa alguém da empresa Agro Sul.')
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Incluir automaticamente depois da transcrição' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Criar coleção' }))
+    await waitFor(() => expect(http.requests('POST /api/v1/collections')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/collections')[0].json()).toEqual({
+      name: 'Agro Sul',
+      description: null,
+      instructions: 'Reuniões em que participa alguém da empresa Agro Sul.',
+      auto_assign: true,
+    })
+  })
+
+  it('mescla uma coleção em outra escolhida na lista', async () => {
+    const [first] = fixtures.collectionPage().items
+    const second = { ...first, id: 'clientes', name: 'Clientes', auto_assign: false, instructions: '' }
+    const http = mockCollections([first, second])
+    renderApp('/colecoes')
+    await screen.findByRole('list', { name: 'Coleções' })
+    await userEvent.click(screen.getByRole('button', { name: `Mesclar ${first.name} em outra coleção` }))
+    const dialog = screen.getByRole('dialog', { name: `Mesclar ${first.name}` })
+    expect(within(dialog).getByLabelText('Mesclar em')).toHaveValue(second.id)
+    await userEvent.click(within(dialog).getByRole('button', { name: `Mesclar em ${second.name}` }))
+    await waitFor(() => expect(http.requests('POST /api/v1/collections/:id/merge')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/collections/:id/merge')[0].json()).toEqual({ into: second.id })
+    await waitFor(() =>
+      expect(within(screen.getByRole('list', { name: 'Coleções' })).queryByText(first.name)).not.toBeInTheDocument(),
+    )
   })
 })
