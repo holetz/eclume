@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-27
+timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72
 maintainer: holetz
 ---
 
@@ -282,9 +282,16 @@ desce; abaixo de 56rem, os campos também):
   sem tocar e rola até a fala.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido a cada 3 s com pendência) com a `.doc-bar` (tipo,
-  origem e versão; Copiar com título, Editar, Comparar com a gerada, Trocar tipo e Excluir resumo)
-  e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede um ("Escolha um
-  tipo de agenda para gerar o resumo.").
+  origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
+  Excluir resumo) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
+  um ("Escolha um tipo de agenda para gerar o resumo.").
+  **Regenerar** gera outra versão pelo tipo da gravação (`POST /transcripts/{id}/summaries` sem
+  `agenda_type_id`) e sempre confirma antes, porque a nova versão passa a ser a atual e uma edição à
+  mão deixa de ser a mostrada, embora fique guardada; fica desabilitado enquanto há geração em
+  andamento e, sem tipo, abre o diálogo de trocar o tipo. **Copiar com título** põe na área de
+  transferência `text/html` e `text/plain` (`copy-summary.ts`, o mesmo `react-markdown`, carregado
+  sob demanda): o título da gravação e os de seção saem em negrito, sem `#`, porque o Teams não
+  guarda o estilo de título ao colar; sem `ClipboardItem` cai no texto sem as hashtags dos títulos.
 - **Edição** (`SummaryEditor`): o Markdown num `textarea` na tipografia do `.doc`, salvo com
   `base_version` = a versão aberta. O 409 `summary_changed` guarda o rascunho e oferece "Ver a
   versão N" (a comparação do rascunho com a nova) e "Salvar sobre a versão N". "Voltar à gerada"
