@@ -126,3 +126,57 @@
   width: 100%;
   max-width: 24rem;
 }
+
+/* Organização, área, cargo, e-mail e telefone lado a lado no diálogo; uma coluna em tela estreita. */
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.personTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.newRowRest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.newRowRest :global(.input) {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+}
+
+/* O botão Colunas fica à direita da busca, com o popover ancorado nele. */
+.columns {
+  position: relative;
+  margin-left: auto;
+}
+
+.columns > :global(.btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.columnsPanel {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-3);
+}
+
+.columnsPanel legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+}

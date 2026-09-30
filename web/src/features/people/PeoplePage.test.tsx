@@ -28,7 +28,9 @@ describe('diretório de pessoas', () => {
     expect(rows).toHaveLength(4)
     expect(within(rows[2]).getByText('14')).toHaveClass('tabular')
     expect(within(table).getByRole('columnheader', { name: 'Amostras de voz' })).toBeInTheDocument()
-    expect(screen.queryByText(/organização/i)).not.toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: 'Organização' })).toBeInTheDocument()
+    // O e-mail quase nunca importa: começa escondido.
+    expect(within(table).queryByRole('columnheader', { name: 'E-mail' })).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar pessoas' }), 'raf')
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(3))
@@ -36,10 +38,11 @@ describe('diretório de pessoas', () => {
     expect(queries).toContain('raf')
   })
 
-  it('cadastra uma pessoa na linha de cadastro com Enter e continua na lista', async () => {
+  it('cadastra uma pessoa na linha de cadastro com nome e organização, com Enter', async () => {
     const created = { ...fixtures.person(), name: 'Rafael Lima' }
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/people/facets': () => ({ organizations: [], departments: [], tags: [] }),
       'GET /api/v1/people': () =>
         http.requests('POST /api/v1/people').length ? { items: [created], next_cursor: null } : { items: [], next_cursor: null },
       'POST /api/v1/people': () => created,
@@ -48,30 +51,50 @@ describe('diretório de pessoas', () => {
     expect(await screen.findByText('Nenhuma pessoa cadastrada ainda.')).toBeInTheDocument()
     const name = screen.getByRole('textbox', { name: 'Nome da nova pessoa' })
     await userEvent.type(name, 'Rafael Lima')
-    await userEvent.type(screen.getByRole('textbox', { name: 'E-mail da nova pessoa' }), 'rafael.lima@example.com{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Organização da nova pessoa' }), 'Serra Azul{Enter}')
     expect(await screen.findByRole('link', { name: 'Rafael Lima' })).toBeInTheDocument()
-    expect(await http.requests('POST /api/v1/people')[0].json()).toEqual({
-      name: 'Rafael Lima',
-      email: 'rafael.lima@example.com',
-      notes: null,
-    })
+    expect(await http.requests('POST /api/v1/people')[0].json()).toEqual({ name: 'Rafael Lima', organization: 'Serra Azul' })
     expect(name).toHaveValue('')
     expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).toBeInTheDocument()
   })
 
-  it('mostra o e-mail repetido na própria linha', async () => {
+  it('mostra o erro do cadastro na própria linha', async () => {
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people': () => fixtures.personPage(),
       'POST /api/v1/people': () => problem('conflict', 409),
     })
     renderApp('/pessoas')
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Nome da nova pessoa' }), 'Rafael')
-    const email = screen.getByRole('textbox', { name: 'E-mail da nova pessoa' })
-    await userEvent.type(email, 'rafael.lima@example.com')
+    const name = await screen.findByRole('textbox', { name: 'Nome da nova pessoa' })
+    await userEvent.type(name, 'Rafael')
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Já existe uma pessoa com este e-mail.')
-    expect(email).toHaveAttribute('aria-invalid', 'true')
-    expect(email.closest('tr')).toContainElement(screen.getByRole('alert'))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(name.closest('tr')).toContainElement(screen.getByRole('alert'))
+  })
+
+  it('escolhe as colunas no menu Colunas e lembra a escolha', async () => {
+    mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    const { unmount } = renderApp('/pessoas')
+    const table = await screen.findByRole('table', { name: 'Pessoas' })
+    await userEvent.click(screen.getByRole('button', { name: 'Colunas' }))
+    const panel = screen.getByRole('group', { name: 'Mostrar colunas' })
+    expect(within(panel).getByRole('checkbox', { name: 'E-mail' })).not.toBeChecked()
+    await userEvent.click(within(panel).getByRole('checkbox', { name: 'E-mail' }))
+    await userEvent.click(within(panel).getByRole('checkbox', { name: 'Amostras de voz' }))
+    expect(within(table).getByRole('columnheader', { name: 'E-mail' })).toBeInTheDocument()
+    expect(within(table).queryByRole('columnheader', { name: 'Amostras de voz' })).not.toBeInTheDocument()
+    expect(within(table).getByText('juliana.prado@example.com')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('group', { name: 'Mostrar colunas' })).not.toBeInTheDocument()
+
+    unmount()
+    renderApp('/pessoas')
+    const again = await screen.findByRole('table', { name: 'Pessoas' })
+    expect(within(again).getByRole('columnheader', { name: 'E-mail' })).toBeInTheDocument()
+    expect(within(again).queryByRole('columnheader', { name: 'Amostras de voz' })).not.toBeInTheDocument()
+    window.localStorage.clear()
   })
 })
