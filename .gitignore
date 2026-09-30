@@ -18,6 +18,9 @@ desktop/src-tauri/gen/
 .env
 *.env.local
 
+# Worktrees de subagentes do Claude Code (criados sob demanda, nunca versionados)
+.claude/worktrees/
+
 # SO / editor
 .DS_Store
 *.swp
