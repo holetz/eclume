@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86
 maintainer: holetz
 ---
 
@@ -393,6 +393,12 @@ desce; abaixo de 56rem, os campos também):
 
 ## Minhas configurações
 
+- **Conta** (`/config/conta`, o primeiro item da engrenagem): o nome e o e-mail, o painel "Trocar a
+  senha" (atual, nova e repetição; a repetição diferente e a senha curta não enviam, e a senha
+  atual errada aparece no campo) e a zona de perigo "Excluir a conta", com o `.alert-error` do que
+  é apagado e um `Dialog` que só habilita "Excluir minha conta" com a senha e a `.check` "Entendo
+  que tudo será apagado para sempre". Excluída, o app limpa o cache e volta a `/entrar` com o aviso
+  no `state`, que a tela de entrada mostra.
 - **Ambiente** (`/config/ambiente`, `features/environment/`, chave de ajuda `ambiente`) guarda as
   preferências deste navegador no `localStorage` (`app/preferences.ts`), sem conta nem servidor:
   tema (`theme.ts`), densidade (confortável ou compacta), movimento (seguir o sistema ou reduzir),
