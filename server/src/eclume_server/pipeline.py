@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 PREPROCESS_FAILED = "preprocess_failed"
 # Etapa do progresso do worker GPU em que a falha aconteceu → etapa do pipeline que ela derruba.
 FAILED_STEP = {"download": "preprocessing", "preprocess": "preprocessing"}
-STEPS = ("received", "preprocessing", "transcription", "fields", "agenda_type", "summary")
+STEPS = ("received", "preprocessing", "transcription", "agenda_type", "fields", "summary")
 FINISHED = ("done", "failed", "skipped")
 # Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
 GONE = "gravação apagada"

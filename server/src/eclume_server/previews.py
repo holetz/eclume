@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from eclume_server.agenda_types import render_title, title_values
 from eclume_server.agents import ProviderError
-from eclume_server.agents.extraction import FieldSpec, TypeSpec, detect_type, extract_fields
+from eclume_server.agents.extraction import MIN_CONFIDENCE, FieldSpec, TypeSpec, detect_type, extract_fields
 from eclume_server.agents.prompting import summarize
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
@@ -192,10 +192,24 @@ async def _agenda_type(ctx: dict[str, Any], owner_id: UUID, request: dict[str, A
         )
         values = await title_values(conn, recording, draft)
         transcript = await transcript_text(conn, recording["transcript_id"])
-    # O rascunho entra no lugar do tipo salvo de mesmo nome, ou no fim da lista.
-    types = [TypeSpec(name=row["name"], identify=row["identify"]) for row in saved if row["name"] != draft["name"]]
-    types.append(TypeSpec(name=draft["name"], identify=draft.get("identify", "")))
-    detection = await detect_type(detector, types, transcript)
+    # O rascunho entra no lugar do tipo salvo que edita (ou do de mesmo nome), ou no fim da lista. O tipo
+    # de reserva não concorre: ele fica quando nenhum serve ou a confiança é baixa, como na detecção.
+    edited = request.get("agenda_type_id")
+    replaced = next(
+        (row for row in saved if (str(row["id"]) == edited if edited else row["name"] == draft["name"])), None
+    )
+    draft_is_reserve = replaced is not None and replaced["is_fallback"]
+    reserve = next((row["name"] for row in saved if row["is_fallback"]), None)
+    others = [row for row in saved if not row["is_fallback"] and row is not replaced]
+    types = [TypeSpec(name=row["name"], identify=row["identify"]) for row in others]
+    if not draft_is_reserve:
+        types.append(TypeSpec(name=draft["name"], identify=draft.get("identify", "")))
+    detection = await detect_type(detector, types, transcript) if types else None
+    candidate = types[detection.index].name if detection is not None and detection.index is not None else None
+    unsure = detection is not None and detection.confidence is not None and detection.confidence < MIN_CONFIDENCE
+    fallback = candidate is None or unsure
+    reserve_name = draft["name"] if draft_is_reserve else (reserve or draft["name"])
+    detected_name = reserve_name if fallback else candidate
     summary = await summarize(summarizer, transcript, draft["summary_instructions"])
     title = recording["title"]
     if draft.get("title_pattern"):
@@ -204,9 +218,10 @@ async def _agenda_type(ctx: dict[str, Any], owner_id: UUID, request: dict[str, A
         {
             "recording_id": str(recording["id"]),
             "recording_title": recording["title"],
-            "detected": detection.index == len(types) - 1,
-            "detected_type_name": types[detection.index].name,
-            "confidence": detection.confidence,
+            "detected": detected_name == draft["name"],
+            "detected_type_name": detected_name,
+            "fallback": fallback,
+            "confidence": detection.confidence if detection is not None else None,
             "title": title,
             "tags": list(dict.fromkeys([*recording["tags"], *draft.get("default_tags", [])])),
             "summary_md": summary.text,

@@ -96,6 +96,38 @@ def test_previsualizar_um_tipo_numa_gravacao(user: Api, services: Services):
     # Nada foi gravado.
     assert "Mentoria" not in {t["name"] for t in user.get("/api/v1/agenda-types").json()["items"]}
     assert user.get(f"/api/v1/recordings/{recording['id']}").json()["title"] == recording["title"]
+    assert item["fallback"] is False
+
+
+def test_previa_com_pouca_confianca_e_do_tipo_padrao(user: Api, services: Services):
+    recording = _recording(user, services, "Conversa solta")
+    types = {t["name"]: t for t in user.get("/api/v1/agenda-types").json()["items"]}
+    unsure = json.dumps({"tipo": "T5", "confianca": 0.3, "motivo": "Talvez."})
+    created = user.post(
+        "/api/v1/agenda-types/preview", json={"agenda_type": MENTORING, "recording_id": recording["id"]}
+    )
+    (item,) = _finish(user, services, created, FakeAgents(replies={"agenda_detection": [unsure]}))["items"]
+    assert (item["detected"], item["fallback"], item["detected_type_name"]) == (False, True, "Geral")
+
+    # O rascunho do próprio tipo padrão não concorre: sem tipo que sirva, é ele que fica.
+    geral = {
+        k: types["Geral"][k] for k in ("name", "title_pattern", "identify", "default_tags", "summary_instructions")
+    }
+    nothing = json.dumps({"tipo": None, "confianca": 0.9, "motivo": "Nenhum serve."})
+    agents = FakeAgents(replies={"agenda_detection": [nothing]})
+    created = user.post(
+        "/api/v1/agenda-types/preview",
+        json={
+            "agenda_type": {**geral, "name": "Outros"},
+            "agenda_type_id": types["Geral"]["id"],
+            "recording_id": recording["id"],
+        },
+    )
+    (item,) = _finish(user, services, created, agents)["items"]
+    assert (item["detected"], item["fallback"], item["detected_type_name"]) == (True, True, "Outros")
+    detect_prompt = next(prompt for _, system, prompt in agents.calls if system == DETECT_SYSTEM)
+    assert "Geral" not in detect_prompt
+    assert "Outros" not in detect_prompt
 
 
 def test_sem_provider_a_previa_falha_com_motivo(

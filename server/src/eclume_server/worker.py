@@ -1,8 +1,8 @@
 """Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
 
 Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, roda as etapas por agente do pipeline (`fill_fields`,
-`detect_agenda_type` e o resumo automático), gera os resumos (`summarize`), responde o chat de ajuste
+`transcription_failed` —, roda as etapas por agente do pipeline (`detect_agenda_type`,
+`fill_fields` e o resumo automático), gera os resumos (`summarize`), responde o chat de ajuste
 do resumo (`summary_chat`), descarta uploads vencidos e marca como falha recuperável
 o job de transcrição que o worker GPU abandonou e a resposta do chat que nenhum job vai terminar
 (`reap_stalled_jobs`). Contrato em
@@ -21,7 +21,7 @@ from arq.connections import RedisSettings
 from arq.worker import func
 from sqlalchemy import delete, select, update
 
-from eclume_server.agenda_types import run_detect
+from eclume_server.agenda_types import ensure_type, run_detect
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
@@ -98,8 +98,8 @@ async def ingest_transcript(
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
     elif outcome.persisted:
-        # A cadeia por agente começa pelos campos, só quando esta ingestão gravou a transcrição.
-        await _enqueue_step(ctx, "fill_fields", recording_id, revision)
+        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição.
+        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
     return outcome.message
 
@@ -148,25 +148,32 @@ async def _run_step(
         return f"falhou: {INTERNAL_ERROR}"
 
 
-async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
-    """Preenche os campos automáticos da revisão e segue para a detecção do tipo."""
-    result = await _run_step(ctx, "fields", recording_id, revision, run_fill_fields)
+async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Escolhe e aplica o tipo de agenda da revisão (ou o de reserva) e segue para os campos."""
+    result = await _run_step(ctx, "agenda_type", recording_id, revision, run_detect)
     if result not in {GONE, STALE}:
-        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
-    log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
+        # Pulada ou falha, a gravação fica com o tipo de reserva: o resumo sempre tem um tipo. Nem uma
+        # falha aqui para a cadeia.
+        try:
+            async with system_tx(ctx["engine"]) as conn:
+                await ensure_type(conn, UUID(recording_id))
+        except Exception:
+            log.exception("detect_agenda_type %s: o tipo de reserva não foi aplicado", recording_id)
+        await _enqueue_step(ctx, "fill_fields", recording_id, revision)
+    log.info("detect_agenda_type %s (revisão %d): %s", recording_id, revision, result)
     return result
 
 
-async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
-    """Escolhe e aplica o tipo de agenda da revisão e abre o resumo automático pelo tipo."""
-    result = await _run_step(ctx, "agenda_type", recording_id, revision, run_detect)
+async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
+    """Preenche os campos automáticos da revisão e abre o resumo automático pelo tipo."""
+    result = await _run_step(ctx, "fields", recording_id, revision, run_fill_fields)
     if result not in {GONE, STALE}:
         async with system_tx(ctx["engine"]) as conn:
             summary_id = await start_auto_summary(conn, UUID(recording_id), revision)
         if summary_id is not None:
             await enqueue_summary(ctx["redis"], summary_id)
             result += f"; resumo automático {summary_id} na fila"
-    log.info("detect_agenda_type %s (revisão %d): %s", recording_id, revision, result)
+    log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
     return result
 
 

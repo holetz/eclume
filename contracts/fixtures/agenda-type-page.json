@@ -1,25 +1,40 @@
 {
   "items": [
     {
+      "id": "01928f3a-1c00-7a00-8000-000000000a00",
+      "name": "Geral",
+      "title_pattern": "{assunto}",
+      "title_instructions": "Um título curto, de até 8 palavras, que diga do que a conversa tratou. Sem data nem nomes de pessoas.",
+      "identify": "",
+      "default_tags": [],
+      "summary_instructions": "## Resumo\nDe duas a quatro frases sobre o que a conversa tratou.\n\n## Decisões\nUm item por decisão tomada. Sem decisões, escreva \"Nenhuma decisão registrada.\"\n\n## Próximos passos\nUm item por tarefa combinada: responsável, o quê e quando, quando ditos.",
+      "position": 0,
+      "fallback": true
+    },
+    {
       "id": "01928f3a-1c00-7a00-8000-000000000901",
       "name": "Reunião de equipe",
       "title_pattern": "Reunião de equipe · {assunto}",
+      "title_instructions": "",
       "identify": "Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa com cliente nem 1:1.",
       "default_tags": [
         "interno",
         "planejamento"
       ],
       "summary_instructions": "## Resumo\nDe duas a quatro frases sobre o que a reunião tratou.\n\n## Decisões\nUm item por decisão, com quem é o responsável.\n\n## Próximos passos\nUm item por tarefa: responsável, o quê e quando.",
-      "position": 1
+      "position": 1,
+      "fallback": false
     },
     {
       "id": "01928f3a-1c00-7a00-8000-000000000902",
       "name": "1:1",
       "title_pattern": null,
+      "title_instructions": "",
       "identify": "Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.",
       "default_tags": [],
       "summary_instructions": "## Pontos tratados\nUm item por assunto, em uma ou duas frases.\n\n## Combinados\nUm item por acompanhamento combinado: quem, o quê e até quando.",
-      "position": 2
+      "position": 2,
+      "fallback": false
     }
   ],
   "next_cursor": "WyIyIiwgIjAxOTI4ZjNhLTFjMDAtN2EwMC04MDAwLTAwMDAwMDAwMDkwMiJd"

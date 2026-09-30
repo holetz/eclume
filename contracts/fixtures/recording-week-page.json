@@ -70,20 +70,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-21T13:00:29Z",
-          "finished_at": "2026-09-21T13:00:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-21T13:00:39Z",
           "finished_at": "2026-09-21T13:00:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-21T13:00:29Z",
+          "finished_at": "2026-09-21T13:00:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -172,20 +172,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-21T17:47:29Z",
-          "finished_at": "2026-09-21T17:47:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-21T17:47:39Z",
           "finished_at": "2026-09-21T17:47:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-21T17:47:29Z",
+          "finished_at": "2026-09-21T17:47:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -274,20 +274,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-22T15:12:29Z",
-          "finished_at": "2026-09-22T15:12:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-22T15:12:39Z",
           "finished_at": "2026-09-22T15:12:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-22T15:12:29Z",
+          "finished_at": "2026-09-22T15:12:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -372,15 +372,6 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-22T19:33:29Z",
-          "finished_at": "2026-09-22T19:33:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "skipped",
           "started_at": "2026-09-22T19:33:39Z",
@@ -388,6 +379,15 @@
           "duration_ms": 0,
           "error": null,
           "reason": "no_types"
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-22T19:33:29Z",
+          "finished_at": "2026-09-22T19:33:38Z",
+          "duration_ms": 9000,
+          "error": null,
+          "reason": null
         },
         {
           "step": "summary",
@@ -470,15 +470,6 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-23T11:21:29Z",
-          "finished_at": "2026-09-23T11:21:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "skipped",
           "started_at": "2026-09-23T11:21:39Z",
@@ -486,6 +477,15 @@
           "duration_ms": 0,
           "error": null,
           "reason": "no_types"
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-23T11:21:29Z",
+          "finished_at": "2026-09-23T11:21:38Z",
+          "duration_ms": 9000,
+          "error": null,
+          "reason": null
         },
         {
           "step": "summary",
@@ -570,7 +570,7 @@
           "reason": null
         },
         {
-          "step": "fields",
+          "step": "agenda_type",
           "state": "pending",
           "started_at": null,
           "finished_at": null,
@@ -579,7 +579,7 @@
           "reason": null
         },
         {
-          "step": "agenda_type",
+          "step": "fields",
           "state": "pending",
           "started_at": null,
           "finished_at": null,
@@ -672,20 +672,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-24T13:14:29Z",
-          "finished_at": "2026-09-24T13:14:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-24T13:14:39Z",
           "finished_at": "2026-09-24T13:14:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-24T13:14:29Z",
+          "finished_at": "2026-09-24T13:14:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -774,20 +774,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-24T13:35:29Z",
-          "finished_at": "2026-09-24T13:35:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-24T13:35:39Z",
           "finished_at": "2026-09-24T13:35:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-24T13:35:29Z",
+          "finished_at": "2026-09-24T13:35:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -876,20 +876,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-25T14:49:29Z",
-          "finished_at": "2026-09-25T14:49:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-25T14:49:39Z",
           "finished_at": "2026-09-25T14:49:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-25T14:49:29Z",
+          "finished_at": "2026-09-25T14:49:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },
@@ -978,20 +978,20 @@
           "reason": null
         },
         {
-          "step": "fields",
-          "state": "done",
-          "started_at": "2026-09-26T14:11:29Z",
-          "finished_at": "2026-09-26T14:11:38Z",
-          "duration_ms": 9000,
-          "error": null,
-          "reason": null
-        },
-        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-26T14:11:39Z",
           "finished_at": "2026-09-26T14:11:43Z",
           "duration_ms": 4000,
+          "error": null,
+          "reason": null
+        },
+        {
+          "step": "fields",
+          "state": "done",
+          "started_at": "2026-09-26T14:11:29Z",
+          "finished_at": "2026-09-26T14:11:38Z",
+          "duration_ms": 9000,
           "error": null,
           "reason": null
         },

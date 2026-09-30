@@ -193,10 +193,10 @@ def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
     assert body["status"] == "failed"
     assert _states(body)["fields"] == "pending"
 
-    # A ingestão que grava abre a cadeia pelos campos.
+    # A ingestão que grava abre a cadeia pelo tipo de agenda.
     fresh = upload_file(api, audio_bytes(3300))
     run_gpu(services.settings)
-    assert _ingest_directly(services, fresh["id"]) == ["fill_fields"]
+    assert _ingest_directly(services, fresh["id"]) == ["detect_agenda_type"]
     run_cpu(services.settings)
 
 
@@ -333,8 +333,8 @@ def test_etapas_do_pipeline_por_revisao(
         "received",
         "preprocessing",
         "transcription",
-        "fields",
         "agenda_type",
+        "fields",
         "summary",
     ]
     assert _states(recording) == {

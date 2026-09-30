@@ -207,13 +207,14 @@ def test_etapas_das_ultimas_24h(
     run_gpu(services.settings)
     run_cpu(services.settings, FakeAgents(errors=[ProviderError("provider_auth", "Not logged in")]))
     body = admin.get(URL).json()
-    fields_failure = next(f for f in body["recent_failures"] if f["step"] == "fields")
-    assert (fields_failure["job_id"], fields_failure["retryable"], fields_failure["code"]) == (
+    # A cadeia começa pelo tipo de agenda: é a primeira etapa por agente a falhar.
+    type_failure = next(f for f in body["recent_failures"] if f["step"] == "agenda_type")
+    assert (type_failure["job_id"], type_failure["retryable"], type_failure["code"]) == (
         None,
         False,
         "provider_auth",
     )
-    assert {s["step"]: s for s in body["steps"]}["fields"]["failures"] >= 1
+    assert {s["step"]: s for s in body["steps"]}["agenda_type"]["failures"] >= 1
 
 
 def test_servicos(admin: Api, cache: redis.Redis):

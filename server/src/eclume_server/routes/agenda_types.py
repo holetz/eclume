@@ -1,7 +1,8 @@
 """Tipos de agenda do usuário: listar, criar, obter, editar e excluir.
 
-A conta nasce com os tipos padrão da plataforma (`eclume_seed_user_defaults`) e os muda à vontade.
-Excluir um tipo deixa sem tipo as gravações que o usavam; os resumos guardam nome e instruções.
+A conta nasce com os tipos padrão da plataforma (`eclume_seed_user_defaults`) e o tipo de reserva, e
+os muda à vontade. O tipo de reserva não sai (409 `fallback_agenda_type`). Excluir um tipo passa as
+gravações que o usavam para o tipo de reserva; os resumos guardam nome e instruções.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from eclume_server.agenda_types import (
     agenda_type_json,
     changes_of,
     create_values,
+    fallback_type,
     get_agenda_type,
     next_position,
 )
@@ -31,7 +33,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
 from eclume_server.previews import create_preview
-from eclume_server.problems import conflict, invalid_field, not_found
+from eclume_server.problems import conflict, invalid_field
 from eclume_server.routes.previews import check_transcribed
 
 router = APIRouter()
@@ -87,6 +89,8 @@ class AgendaTypePreviewRequest(BaseModel):
 
     agenda_type: AgendaTypeDraft
     recording_id: UUID
+    # O tipo salvo que o rascunho edita (o rascunho entra no lugar dele); sem ele, o de mesmo nome.
+    agenda_type_id: UUID | None = None
 
 
 @router.post("/agenda-types/preview", status_code=202)
@@ -94,7 +98,11 @@ async def preview_agenda_type(body: AgendaTypePreviewRequest, principal: Writer,
     """Mostra a detecção, o título, as tags e o resumo de um tipo em rascunho numa gravação."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await check_transcribed(conn, [body.recording_id], "recording_id")
-    request = {"agenda_type": create_values(body.agenda_type), "recording_id": str(body.recording_id)}
+    request = {
+        "agenda_type": create_values(body.agenda_type),
+        "recording_id": str(body.recording_id),
+        "agenda_type_id": str(body.agenda_type_id) if body.agenda_type_id else None,
+    }
     return await create_preview(ctx.queue.pool, principal.user_id, "agenda_type", request)
 
 
@@ -134,9 +142,32 @@ async def update_agenda_type(
 
 @router.delete("/agenda-types/{agenda_type_id}", status_code=204)
 async def delete_agenda_type(agenda_type_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui o tipo; as gravações que o usavam ficam sem tipo."""
+    """Exclui o tipo; as gravações que o usavam passam para o tipo de reserva, que não sai."""
+    r = t.recordings.c
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        result = await conn.execute(delete(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))
-    if result.rowcount == 0:
-        raise not_found("Tipo de agenda inexistente ou sem acesso.")
+        agenda_type = await get_agenda_type(conn, agenda_type_id)
+        if agenda_type["is_fallback"]:
+            raise conflict(
+                "O tipo padrão é usado quando nenhum outro se encaixa e não pode ser excluído.", "fallback_agenda_type"
+            )
+        reserve = await fallback_type(conn, principal.user_id)
+        if reserve is not None:
+            now = datetime.now(UTC)
+            moved = (
+                (
+                    await conn.execute(
+                        update(t.recordings)
+                        .where(r.agenda_type_id == agenda_type_id)
+                        .values(agenda_type_id=reserve["id"], agenda_type_origin="auto", updated_at=now)
+                        .returning(r.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if moved:
+                await conn.execute(
+                    update(t.transcripts).where(t.transcripts.c.recording_id.in_(moved)).values(updated_at=now)
+                )
+        await conn.execute(delete(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))
     return Response(status_code=204)

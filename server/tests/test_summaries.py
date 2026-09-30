@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 CLAUDE = {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet"}
-DEFAULT_TYPES = ["Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
+DEFAULT_TYPES = ["Geral", "Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 
 
 def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN401
@@ -83,7 +83,9 @@ def test_conta_nasce_com_os_tipos_de_agenda_padrao(team: dict[str, Any], service
     assert team_meeting["default_tags"] == ["interno", "planejamento"]
     assert team_meeting["identify"].startswith("Reunião recorrente da equipe interna")
     assert "## Próximos passos" in team_meeting["summary_instructions"]
-    assert all(item["from_default_id"] is not None for item in types.values())
+    # Os do admin guardam de onde vieram; o tipo padrão de reserva é da conta.
+    assert all(item["from_default_id"] is not None for name, item in types.items() if name != "Geral")
+    assert (types["Geral"]["is_fallback"], types["Geral"]["from_default_id"]) == (True, None)
 
 
 # --- providers ------------------------------------------------------------------------------------
@@ -182,8 +184,8 @@ def test_resumo_sob_demanda_versionado(
     ata = _types(services, owner_account)["Reunião de equipe"]
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
 
-    # A gravação não tem tipo: sem `agenda_type_id`, não há instruções.
-    assert owner.post(url, json={}).json()["errors"][0]["field"] == "agenda_type_id"
+    # A gravação ficou com o tipo padrão (sem agente de detecção): sem `agenda_type_id`, vale o dele.
+    assert owner.post(url, json={}).json()["errors"][0]["field"] == "provider_id"
     missing = owner.post(url, json={"agenda_type_id": ata["id"]})
     assert missing.status_code == 422
     assert missing.json()["errors"][0]["field"] == "provider_id"

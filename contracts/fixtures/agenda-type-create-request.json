@@ -1,6 +1,7 @@
 {
   "name": "Mentoria",
   "title_pattern": "Mentoria · {assunto}",
+  "title_instructions": "O nome da pessoa mentorada e o tema principal, em até 8 palavras.",
   "identify": "Conversa de acompanhamento com uma pessoa mentorada sobre carreira e desenvolvimento.",
   "default_tags": [
     "mentoria"

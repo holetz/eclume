@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import exists, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from eclume_server.agenda_types import refresh_title, title_rule
 from eclume_server.agents.extraction import (
     MAX_INSTRUCTIONS,
     MAX_KNOWN_TAGS,
@@ -288,12 +289,12 @@ async def known_tags(conn: AsyncConnection, owner_id: UUID) -> list[str]:
     return list((await conn.execute(query)).scalars())
 
 
-def spec(row: Row) -> FieldSpec:
-    """O campo como o agente o vê."""
+def spec(row: Row, title: str | None = None) -> FieldSpec:
+    """O campo como o agente o vê; o título segue a regra do assunto do tipo da gravação (`title`)."""
     return FieldSpec(
         key=row["key"],
         kind=row["kind"],
-        instructions=row["instructions"],
+        instructions=title if row["builtin"] == "title" and title else row["instructions"],
         options=tuple(row["options"]),
         max_item=MAX_TAG if row["builtin"] == "tags" else MAX_TEXT,
     )
@@ -302,8 +303,10 @@ def spec(row: Row) -> FieldSpec:
 async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:
     """O job `fill_fields`: preenche os campos automáticos da revisão e grava a etapa `fields`.
 
-    Roda com o papel de conexão, no worker CPU. Nunca sobrescreve um valor `edited` ou `accepted`.
-    Falha passageira volta à fila (`arq.Retry`); a definitiva deixa a etapa `failed`, e a cadeia segue.
+    Roda com o papel de conexão, no worker CPU, depois da detecção do tipo: o assunto do título segue
+    a regra do tipo da gravação, e no fim (preenchida, pulada ou falha) o título é remontado pelo
+    padrão do tipo. Nunca sobrescreve um valor `edited` ou `accepted`. Falha passageira volta à fila
+    (`arq.Retry`); a definitiva deixa a etapa `failed`, e a cadeia segue.
     """
     engine = ctx["engine"]
     async with system_tx(engine) as conn:
@@ -316,19 +319,21 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
             return STALE
         step = await get_step(conn, recording_id, revision, "fields")
         fields = await eligible_fields(conn, recording_id, recording["owner_id"])
-        if not fields:
-            await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": "no_auto_fields"})
-            return "sem campos automáticos"
-        provider = await provider_for(conn, "fields")
-        if provider is None:
-            await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": "no_provider"})
-            return "sem provider de campos"
+        skip = "no_auto_fields" if not fields else None
+        provider = await provider_for(conn, "fields") if fields else None
+        if fields and provider is None:
+            skip = "no_provider"
+        if skip is not None:
+            await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": skip})
+            await refresh_title(conn, recording_id)
+            return f"pulada: {skip}"
         provider_row, platform_key = await load_provider(conn, provider["id"])
         transcript_id = (
             await conn.execute(select(t.transcripts.c.id).where(t.transcripts.c.recording_id == recording_id))
         ).scalar_one()
         transcript = await transcript_text(conn, transcript_id)
         tags = await known_tags(conn, recording["owner_id"])
+        rule = await title_rule(conn, recording)
         started = step["started_at"] if step is not None and step["started_at"] else None
         detail = dict(step["detail"]) if step is not None else {}
         await set_step(conn, recording, revision, "fields", "active", detail=detail, started_at=started)
@@ -336,9 +341,11 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         ctx,
         AgentStep(recording, revision, "fields", started, detail),
         (provider_row, platform_key),
-        lambda provider: extract_fields(provider, [spec(row) for row in fields], tags, transcript),
+        lambda provider: extract_fields(provider, [spec(row, rule) for row in fields], tags, transcript),
     )
     if isinstance(outcome, str):
+        async with system_tx(engine) as conn:
+            await refresh_title(conn, recording_id)
         return outcome
     values, completion = outcome
     async with system_tx(engine) as conn:
@@ -360,6 +367,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
                 model=completion.model,
             )
             filled += written and value is not None
+        await refresh_title(conn, recording_id)
         await set_step(
             conn, recording, revision, "fields", "done", detail={"filled": filled, "model": completion.model}
         )

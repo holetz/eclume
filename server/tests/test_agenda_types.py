@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 URL = "/api/v1/agenda-types"
-DEFAULT_TYPES = ["Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
+# O tipo padrão (de reserva) vem primeiro; depois, os tipos padrão do admin.
+DEFAULT_TYPES = ["Geral", "Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 DRAFT = {
     "name": "Mentoria",
     "title_pattern": "Mentoria · {assunto}",
@@ -48,6 +49,27 @@ def test_a_conta_lista_os_tipos_padrao_na_ordem(user: Api):
     assert user.get(URL, params={"cursor": "lixo"}).status_code == 422
 
 
+def test_o_tipo_padrao_nao_sai_e_leva_a_regra_do_titulo(user: Api):
+    items = user.get(URL).json()["items"]
+    fallback = [item for item in items if item["fallback"]]
+    assert [item["name"] for item in fallback] == ["Geral"]
+    geral = fallback[0]
+    assert (geral["title_pattern"], geral["identify"], geral["position"]) == ("{assunto}", "", 0)
+    assert geral["title_instructions"].startswith("Um título curto")
+    assert all(item["title_instructions"] == "" for item in items if not item["fallback"])
+
+    refused = user.delete(f"{URL}/{geral['id']}")
+    assert (refused.status_code, refused.json()["code"]) == (409, "fallback_agenda_type")
+    renamed = user.patch(f"{URL}/{geral['id']}", json={"name": "Outros assuntos", "title_instructions": "Curto."})
+    assert renamed.status_code == 200, renamed.text
+    assert (renamed.json()["name"], renamed.json()["fallback"], renamed.json()["title_instructions"]) == (
+        "Outros assuntos",
+        True,
+        "Curto.",
+    )
+    assert user.patch(f"{URL}/{geral['id']}", json={"title_instructions": None}).status_code == 422
+
+
 def test_criar_editar_e_excluir_um_tipo(user: Api):
     created = user.post(URL, json=DRAFT)
     assert created.status_code == 201, created.text
@@ -62,7 +84,7 @@ def test_criar_editar_e_excluir_um_tipo(user: Api):
     assert user.post(URL, json={**DRAFT, "name": "X", "extra": 1}).status_code == 422
 
     first = user.post(URL, json={**DRAFT, "name": "Primeiro", "position": 0}).json()
-    assert _names(user)[0] == "Primeiro"
+    assert set(_names(user)[:2]) == {"Geral", "Primeiro"}
 
     patched = user.patch(f"{URL}/{body['id']}", json={"title_pattern": None, "default_tags": []})
     assert patched.status_code == 200, patched.text
@@ -140,10 +162,10 @@ def test_o_usuario_escolhe_o_tipo_da_gravacao(
     cleared = user.patch(url, json={"agenda_type_id": None})
     assert cleared.json()["agenda_type"] is None
 
-    # Excluir o tipo deixa a gravação sem tipo.
+    # Excluir o tipo passa a gravação para o tipo padrão.
     user.patch(url, json={"agenda_type_id": types["Nota de voz"]["id"]})
     assert user.delete(f"{URL}/{types['Nota de voz']['id']}").status_code == 204
-    assert user.get(url).json()["agenda_type"] is None
+    assert user.get(url).json()["agenda_type"] == {"id": types["Geral"]["id"], "name": "Geral", "origin": "auto"}
 
 
 # --- tipos padrão do admin ------------------------------------------------------------------------
@@ -178,7 +200,9 @@ def test_tipos_padrao_valem_para_contas_novas(
 ):
     del defaults
     listed = admin.get(ADMIN_URL).json()["items"]
-    assert [item["name"] for item in listed] == DEFAULT_TYPES
+    # O tipo padrão de reserva é de cada conta; o admin gere só os que distribui.
+    assert [item["name"] for item in listed] == DEFAULT_TYPES[1:]
+    assert all("fallback" not in item for item in listed)
     assert all(item["include_for_new_users"] for item in listed)
     before = as_user(make_user())
 
@@ -196,7 +220,7 @@ def test_tipos_padrao_valem_para_contas_novas(
     assert admin.patch(f"{ADMIN_URL}/{team['id']}", json={"include_for_new_users": None}).status_code == 422
 
     after = as_user(make_user())
-    assert _names(after) == [*DEFAULT_TYPES[:3], "Mentoria"]
+    assert _names(after) == [*DEFAULT_TYPES[:4], "Mentoria"]
     (copied,) = [item for item in after.get(URL).json()["items"] if item["name"] == "Reunião de equipe"]
     assert copied["identify"] == "Reunião interna."
     # Quem já tinha conta fica com as cópias dela.

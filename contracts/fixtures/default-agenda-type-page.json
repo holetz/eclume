@@ -4,6 +4,7 @@
       "id": "01928f3a-1c00-7a00-8000-000000000c01",
       "name": "Reunião de equipe",
       "title_pattern": "Reunião de equipe · {assunto}",
+      "title_instructions": "",
       "identify": "Reunião recorrente da equipe interna para planejar ou revisar trabalho. Não é conversa com cliente nem 1:1.",
       "default_tags": [
         "interno",
@@ -17,6 +18,7 @@
       "id": "01928f3a-1c00-7a00-8000-000000000c02",
       "name": "1:1",
       "title_pattern": null,
+      "title_instructions": "",
       "identify": "Conversa entre duas pessoas da mesma equipe sobre andamento, dificuldades e desenvolvimento.",
       "default_tags": [],
       "summary_instructions": "## Pontos tratados\nUm item por assunto, em uma ou duas frases.\n\n## Combinados\nUm item por acompanhamento combinado: quem, o quê e até quando.",
