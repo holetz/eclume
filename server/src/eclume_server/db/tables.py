@@ -130,6 +130,7 @@ recordings = Table(
     Column("subject", Text),
     Column("kind", Text, server_default=FetchedValue()),
     Column("recorded_at_source", Text, server_default=FetchedValue()),
+    Column("collections_origin", Text),
     _ts("created_at"),
     _ts("updated_at"),
 )
@@ -436,6 +437,9 @@ collections = Table(
     _uuid("owner_id"),
     Column("name", Text),
     Column("description", Text),
+    # 022_colecoes_automaticas
+    Column("instructions", Text, server_default=FetchedValue()),
+    Column("auto_assign", Boolean, server_default=FetchedValue()),
     _ts("created_at", server_default=FetchedValue()),
     _ts("updated_at", server_default=FetchedValue()),
 )

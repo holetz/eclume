@@ -22,6 +22,7 @@
   "kind": "meeting",
   "tags": [],
   "collection_ids": [],
+  "collections_origin": null,
   "metadata": {},
   "agenda_type": null,
   "job": {

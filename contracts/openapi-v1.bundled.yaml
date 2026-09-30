@@ -3120,6 +3120,47 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/collections/{collection_id}/merge:
+    parameters:
+    - $ref: '#/components/parameters/CollectionId'
+    post:
+      tags:
+      - organize
+      operationId: mergeCollection
+      summary: Mesclar uma coleção em outra
+      description: 'As gravações da coleção passam para `into`, sem repetição, e a coleção é excluída;
+        `into`
+
+        fica com o nome, a descrição e a regra dela. `into` igual à coleção, ou inexistente, é 422.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionMerge'
+      responses:
+        '200':
+          description: A coleção que recebeu as gravações.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/tags:
     get:
       tags:
@@ -4981,6 +5022,7 @@ components:
       - owner
       - tags
       - collection_ids
+      - collections_origin
       - metadata
       - capture
       - agenda_type
@@ -5038,6 +5080,22 @@ components:
           items:
             type: string
             format: uuid
+        collections_origin:
+          description: 'De quem é a lista de coleções: `auto` (o agente, pelas coleções automáticas),
+            `edited` (o
+
+            usuário mudou; o agente não mexe mais) ou `null` (vinda do envio, ou ainda sem escolha: o
+
+            agente só soma).
+
+            '
+          type:
+          - string
+          - 'null'
+          enum:
+          - auto
+          - edited
+          - null
         metadata:
           $ref: '#/components/schemas/RecordingMetadata'
         capture:
@@ -5693,6 +5751,8 @@ components:
       - id
       - name
       - description
+      - instructions
+      - auto_assign
       - recording_count
       - created_at
       - updated_at
@@ -5706,6 +5766,18 @@ components:
           type:
           - string
           - 'null'
+        instructions:
+          description: '"Quando incluir": a regra que o agente segue para pôr a gravação na coleção. Pode
+            falar
+
+            do assunto, do tipo de agenda e dos participantes (empresa, área, cargo, tags de pessoa).
+
+            '
+          type: string
+          maxLength: 4000
+        auto_assign:
+          description: Com regra, o agente inclui as gravações depois da transcrição.
+          type: boolean
         recording_count:
           type: integer
           minimum: 0
@@ -5727,6 +5799,11 @@ components:
           type:
           - string
           - 'null'
+        instructions:
+          type: string
+          maxLength: 4000
+        auto_assign:
+          type: boolean
     CollectionPatch:
       type: object
       minProperties: 1
@@ -5738,6 +5815,20 @@ components:
           type:
           - string
           - 'null'
+        instructions:
+          type: string
+          maxLength: 4000
+        auto_assign:
+          type: boolean
+    CollectionMerge:
+      type: object
+      required:
+      - into
+      properties:
+        into:
+          description: A coleção que recebe as gravações; outra que não a mesclada.
+          type: string
+          format: uuid
     CollectionPage:
       type: object
       required:
@@ -8608,6 +8699,7 @@ components:
         kind: meeting
         tags: []
         collection_ids: []
+        collections_origin: null
         metadata: {}
         agenda_type: null
         job:
@@ -8694,6 +8786,7 @@ components:
         - cliente-metalurgica
         collection_ids:
         - 01928f3a-1c00-7a00-8000-000000000801
+        collections_origin: null
         metadata:
           tipo_reuniao: alinhamento
           cliente: Metalúrgica Serra Azul
@@ -8781,6 +8874,7 @@ components:
           tags: []
           collection_ids:
           - 01928f3a-1c00-7a00-8000-000000000801
+          collections_origin: null
           metadata: {}
           capture: null
           agenda_type: null
@@ -8865,6 +8959,7 @@ components:
           - cliente-metalurgica
           collection_ids:
           - 01928f3a-1c00-7a00-8000-000000000801
+          collections_origin: null
           metadata:
             tipo_reuniao: alinhamento
             cliente: Metalúrgica Serra Azul
@@ -8953,6 +9048,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
@@ -9036,6 +9132,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
@@ -9119,6 +9216,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
@@ -9202,6 +9300,7 @@ components:
           kind: note
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type: null
           job:
@@ -9282,6 +9381,7 @@ components:
           kind: note
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type: null
           job:
@@ -9359,6 +9459,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type: null
           job:
@@ -9443,6 +9544,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
@@ -9526,6 +9628,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000902
@@ -9609,6 +9712,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000901
@@ -9692,6 +9796,7 @@ components:
           kind: meeting
           tags: []
           collection_ids: []
+          collections_origin: null
           metadata: {}
           agenda_type:
             id: 01928f3a-1c00-7a00-8000-000000000902
@@ -11224,6 +11329,8 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000801
           name: Metalúrgica Serra Azul
           description: Programa de lideranças 2026.
+          instructions: Reuniões em que participa alguém da empresa Metalúrgica Serra Azul.
+          auto_assign: true
           recording_count: 2
           created_at: '2026-09-12T11:30:00Z'
           updated_at: '2026-09-19T13:41:07Z'

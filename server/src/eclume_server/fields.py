@@ -21,8 +21,11 @@ from eclume_server.agents.extraction import (
     MAX_KNOWN_TAGS,
     MAX_TAG,
     MAX_TEXT,
+    CollectionSpec,
     FieldSpec,
-    extract_fields,
+    Participant,
+    RecordingContext,
+    extract,
 )
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
@@ -300,6 +303,89 @@ def spec(row: Row, title: str | None = None) -> FieldSpec:
     )
 
 
+async def recording_context(conn: AsyncConnection, recording: Row) -> tuple[RecordingContext, list[Row]]:
+    """O contexto da gravação para o agente e as coleções que ele pode escolher.
+
+    Coleções elegíveis: as automáticas com regra, se o usuário não mexeu nas coleções da gravação.
+    Participantes: as pessoas ligadas aos locutores, com os dados de cadastro.
+    """
+    agenda_type = None
+    if recording["agenda_type_id"] is not None:
+        agenda_type = (
+            await conn.execute(select(t.agenda_types.c.name).where(t.agenda_types.c.id == recording["agenda_type_id"]))
+        ).scalar()
+    p = t.people.c
+    people = (
+        (
+            await conn.execute(
+                select(p.name, p.company, p.department, p.job_title, p.tags)
+                .distinct()
+                .select_from(
+                    t.people.join(t.speakers, t.speakers.c.person_id == p.id).join(
+                        t.transcripts, t.transcripts.c.id == t.speakers.c.transcript_id
+                    )
+                )
+                .where(t.transcripts.c.recording_id == recording["id"])
+                .order_by(p.name)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    collections: list[Row] = []
+    if recording["collections_origin"] != "edited":
+        c = t.collections.c
+        collections = list(
+            (
+                await conn.execute(
+                    select(t.collections)
+                    .where(c.owner_id == recording["owner_id"], c.auto_assign, func.trim(c.instructions) != "")
+                    .order_by(func.lower(c.name), c.id)
+                )
+            )
+            .mappings()
+            .all()
+        )
+    context = RecordingContext(
+        agenda_type=agenda_type,
+        participants=tuple(
+            Participant(row["name"], row["company"], row["department"], row["job_title"], tuple(row["tags"]))
+            for row in people
+        ),
+        collections=tuple(CollectionSpec(row["name"], row["instructions"]) for row in collections),
+    )
+    return context, collections
+
+
+async def apply_collections(conn: AsyncConnection, recording_id: UUID, eligible: list[Row], chosen: list[UUID]) -> int:
+    """Grava as coleções que o agente escolheu entre as elegíveis; devolve quantas ficaram.
+
+    Origem `edited` (o usuário mexeu enquanto o agente trabalhava): nada muda. Origem `auto`: as
+    escolhidas substituem as automáticas de antes, e as outras ficam. Sem origem (o envio): só soma.
+    """
+    recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
+    if recording is None or recording["collections_origin"] == "edited":
+        return 0
+    current = list(recording["collection_ids"])
+    automatic = {row["id"] for row in eligible}
+    if recording["collections_origin"] == "auto":
+        current = [c for c in current if c not in automatic]
+    updated = list(dict.fromkeys([*current, *chosen]))
+    origin = "auto" if chosen or recording["collections_origin"] == "auto" else None
+    if updated != list(recording["collection_ids"]) or origin != recording["collections_origin"]:
+        now = func.now()
+        await conn.execute(
+            update(t.recordings)
+            .where(t.recordings.c.id == recording_id)
+            .values(collection_ids=updated, collections_origin=origin, updated_at=now)
+        )
+        # As coleções são as pastas do desktop: a transcrição reaparece no `?since=`.
+        await conn.execute(
+            update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now)
+        )
+    return len(chosen)
+
+
 async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:
     """O job `fill_fields`: preenche os campos automáticos da revisão e grava a etapa `fields`.
 
@@ -319,9 +405,11 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
             return STALE
         step = await get_step(conn, recording_id, revision, "fields")
         fields = await eligible_fields(conn, recording_id, recording["owner_id"])
-        skip = "no_auto_fields" if not fields else None
-        provider = await provider_for(conn, "fields") if fields else None
-        if fields and provider is None:
+        context, collections = await recording_context(conn, recording)
+        wanted = bool(fields or collections)
+        skip = "no_auto_fields" if not wanted else None
+        provider = await provider_for(conn, "fields") if wanted else None
+        if wanted and provider is None:
             skip = "no_provider"
         if skip is not None:
             await set_step(conn, recording, revision, "fields", "skipped", detail={"reason": skip})
@@ -341,13 +429,13 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         ctx,
         AgentStep(recording, revision, "fields", started, detail),
         (provider_row, platform_key),
-        lambda provider: extract_fields(provider, [spec(row, rule) for row in fields], tags, transcript),
+        lambda provider: extract(provider, [spec(row, rule) for row in fields], tags, transcript, context),
     )
     if isinstance(outcome, str):
         async with system_tx(engine) as conn:
             await refresh_title(conn, recording_id)
         return outcome
-    values, completion = outcome
+    values, completion = outcome.values, outcome.completion
     async with system_tx(engine) as conn:
         # O usuário pode ter escrito um valor enquanto o agente trabalhava: esse fica.
         still = {row["id"] for row in await eligible_fields(conn, recording_id, recording["owner_id"])}
@@ -367,11 +455,18 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
                 model=completion.model,
             )
             filled += written and value is not None
+        chosen = [collections[index]["id"] for index in outcome.collections]
+        placed = await apply_collections(conn, recording_id, collections, chosen) if collections else 0
         await refresh_title(conn, recording_id)
         await set_step(
-            conn, recording, revision, "fields", "done", detail={"filled": filled, "model": completion.model}
+            conn,
+            recording,
+            revision,
+            "fields",
+            "done",
+            detail={"filled": filled, "collections": placed, "model": completion.model},
         )
-    return f"{filled} campo(s) preenchido(s)"
+    return f"{filled} campo(s) preenchido(s), {placed} coleção(ões)"
 
 
 async def field_filters(conn: AsyncConnection, raw: list[str]) -> list[ColumnElement[bool]]:

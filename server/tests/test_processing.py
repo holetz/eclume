@@ -371,3 +371,62 @@ def test_resumo_automatico_apagado_antes_de_gerar_fecha_a_etapa(user: Api, servi
     run_cpu(services.settings)
     step = _step(user.get(path).json(), "summary")
     assert (step["state"], step["reason"]) == ("skipped", "summary_deleted")
+
+
+def test_colecoes_automaticas_pela_regra_com_participantes(user: Api, services: Services):
+    rule = "Reuniões em que participa alguém da empresa Agro Sul."
+    agro = user.post("/api/v1/collections", json={"name": "Agro Sul", "instructions": rule, "auto_assign": True}).json()
+    manual = user.post("/api/v1/collections", json={"name": "Manual", "instructions": "Nunca.", "auto_assign": False})
+    empty = user.post("/api/v1/collections", json={"name": "Sem regra", "auto_assign": True}).json()
+    kept = user.post("/api/v1/collections", json={"name": "Do envio"}).json()
+
+    # Sem participantes ainda: o agente vê as coleções automáticas com regra e escolhe a primeira.
+    agents = FakeAgents(replies={"fields": ['{"colecoes": ["C1", "C9", "x"]}']})
+    recording = _process(user, services, agents, collection_ids=[kept["id"]])
+    prompt = agents.of("fields")[0][2]
+    assert f"- C1: Agro Sul — {rule}" in prompt
+    assert "Manual" not in prompt
+    assert "Sem regra" not in prompt
+    assert "## Tipo de agenda da gravação\n\nReunião de equipe" in prompt
+    assert recording["collection_ids"] == [kept["id"], agro["id"]]
+    assert recording["collections_origin"] == "auto"
+    assert manual.status_code == 201
+    assert empty["auto_assign"] is True
+
+    # Com um participante ligado, a retranscrição leva os dados dele ao prompt; a escolha nova troca
+    # as automáticas e mantém a do envio.
+    person = user.post(
+        "/api/v1/people",
+        json={"name": "Bruna Reis", "company": "Agro Sul", "department": "Compras", "tags": ["cliente"]},
+    ).json()
+    linked = user.patch(
+        f"/api/v1/transcripts/{recording['transcript_id']}/speakers/S1", json={"person_id": person["id"]}
+    )
+    assert linked.status_code == 200, linked.text
+    user.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
+    run_gpu(services.settings)
+    agents = run_cpu(services.settings, FakeAgents(replies={"fields": ['{"colecoes": []}']}))
+    prompt = agents.of("fields")[0][2]
+    assert "- Bruna Reis — empresa: Agro Sul; área: Compras; tags: cliente" in prompt
+    body = user.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["collection_ids"] == [kept["id"]]
+
+    # O usuário mexeu: o agente não toca mais, e as coleções nem vão ao prompt.
+    user.patch(f"/api/v1/recordings/{recording['id']}", json={"collection_ids": [agro["id"]]})
+    user.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
+    run_gpu(services.settings)
+    agents = run_cpu(services.settings, FakeAgents(replies={"fields": ['{"colecoes": ["C1"]}']}))
+    assert "## Coleções" not in agents.of("fields")[0][2]
+    body = user.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert (body["collection_ids"], body["collections_origin"]) == ([agro["id"]], "edited")
+
+
+def test_so_colecoes_automaticas_tambem_chamam_o_agente(user: Api, services: Services):
+    for item in user.get("/api/v1/fields").json()["items"]:
+        user.patch(f"/api/v1/fields/{item['id']}", json={"auto_fill": False})
+    coll = user.post("/api/v1/collections", json={"name": "Tudo", "instructions": "Todas.", "auto_assign": True})
+    agents = FakeAgents(replies={"fields": ['{"colecoes": ["C1"]}']})
+    recording = _process(user, services, agents)
+    assert _step(recording, "fields")["state"] == "done"
+    assert recording["collection_ids"] == [coll.json()["id"]]
+    assert "## Campos" not in agents.of("fields")[0][2]

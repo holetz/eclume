@@ -21,6 +21,7 @@
       "collection_ids": [
         "01928f3a-1c00-7a00-8000-000000000801"
       ],
+      "collections_origin": null,
       "metadata": {},
       "capture": null,
       "agenda_type": null,
@@ -125,6 +126,7 @@
       "collection_ids": [
         "01928f3a-1c00-7a00-8000-000000000801"
       ],
+      "collections_origin": null,
       "metadata": {
         "tipo_reuniao": "alinhamento",
         "cliente": "Metalúrgica Serra Azul",

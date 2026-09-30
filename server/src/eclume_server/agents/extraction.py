@@ -1,7 +1,8 @@
-"""Extração por agente: o preenchimento dos campos e a detecção do tipo de agenda.
+"""Extração por agente: o preenchimento dos campos (e das coleções) e a detecção do tipo de agenda.
 
 Campos: uma chamada para todos, com a transcrição inteira; não cabendo na janela, uma chamada por
-seção (as de `prompting.split_sections`) e a mescla por tipo. Tipo: uma chamada com o início da
+seção (as de `prompting.split_sections`) e a mescla por tipo. A mesma chamada escolhe as coleções
+automáticas, com o tipo de agenda e os participantes da gravação como contexto. Tipo: uma chamada com o início da
 transcrição que cabe na janela. As respostas são só JSON; o que não abre é `provider_bad_output`,
 retentável. Contrato em docs/standards/code/processamento-automatico.md.
 """
@@ -65,19 +66,84 @@ def _describe(field: FieldSpec) -> str:
     return f"- {field.key} ({kind}): {rule}"
 
 
-def _expected(fields: list[FieldSpec]) -> str:
+@dataclass(frozen=True)
+class Participant:
+    """Uma pessoa do diretório ligada a um locutor da gravação, com os dados de cadastro."""
+
+    name: str
+    company: str | None = None
+    department: str | None = None
+    job_title: str | None = None
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CollectionSpec:
+    """Uma coleção automática: o nome e a regra ("quando incluir")."""
+
+    name: str
+    instructions: str
+
+
+@dataclass(frozen=True)
+class RecordingContext:
+    """O que o agente sabe da gravação além da transcrição: o tipo, os participantes e as coleções."""
+
+    agenda_type: str | None = None
+    participants: tuple[Participant, ...] = ()
+    collections: tuple[CollectionSpec, ...] = ()
+
+
+COLLECTIONS_TASK = (
+    "Inclua a gravação nas coleções cuja regra ela cumpre, e em nenhuma se nenhuma regra servir. As regras "
+    "podem falar do assunto da conversa, do tipo de agenda e dos participantes (empresa, área, cargo e tags "
+    "de pessoa); para eles, use as listas acima, não o que a conversa sugere."
+)
+
+
+def _participant(person: Participant) -> str:
+    details = [
+        f"{label}: {value}"
+        for label, value in (
+            ("empresa", person.company),
+            ("área", person.department),
+            ("cargo", person.job_title),
+            ("tags", ", ".join(person.tags)),
+        )
+        if value
+    ]
+    return f"- {person.name}" + (" — " + "; ".join(details) if details else "")
+
+
+def _expected(fields: list[FieldSpec], *, collections: bool) -> str:
     shapes = {"text": '"texto" ou null', "choice": '"uma das opções" ou null', "list": '["item", …] ou null'}
-    return "{" + ", ".join(f'"{f.key}": {shapes[f.kind]}' for f in fields) + "}"
+    items = [f'"{f.key}": {shapes[f.kind]}' for f in fields]
+    if collections:
+        items.append('"colecoes": ["C1", …] ou []')
+    return "{" + ", ".join(items) + "}"
 
 
-def fields_prompt(fields: list[FieldSpec], known_tags: list[str]) -> str:
-    """Prompt do usuário, depois da transcrição (`context`): a tarefa, os campos, as tags em uso e o formato."""
-    parts = [FIELDS_SYSTEM, "## Campos", "\n".join(_describe(field) for field in fields)]
+def fields_prompt(fields: list[FieldSpec], known_tags: list[str], context: RecordingContext | None = None) -> str:
+    """Prompt do usuário, depois da transcrição: a tarefa, os campos, as tags, o contexto e o formato.
+
+    O contexto é o tipo de agenda, os participantes e as coleções automáticas da gravação.
+    """
+    context = context or RecordingContext()
+    parts = [FIELDS_SYSTEM]
+    if fields:
+        parts += ["## Campos", "\n".join(_describe(field) for field in fields)]
     if known_tags:
         parts += ["## Tags que o usuário já usa", ", ".join(known_tags[:MAX_KNOWN_TAGS])]
+    if context.agenda_type:
+        parts += ["## Tipo de agenda da gravação", context.agenda_type]
+    if context.participants:
+        parts += ["## Participantes identificados", "\n".join(_participant(p) for p in context.participants)]
+    if context.collections:
+        listed = "\n".join(f"- C{n}: {c.name} — {c.instructions.strip()}" for n, c in enumerate(context.collections, 1))
+        parts += ["## Coleções", COLLECTIONS_TASK, listed]
     parts += [
         "## Formato da resposta",
-        _expected(fields),
+        _expected(fields, collections=bool(context.collections)),
     ]
     return "\n\n".join(parts)
 
@@ -122,11 +188,44 @@ def merge(field: FieldSpec, values: list[Any]) -> Any:  # noqa: ANN401
     return next(value for value in present if counts[value] == best)
 
 
+def chosen_collections(value: Any, count: int) -> list[int]:  # noqa: ANN401 — a resposta do agente
+    """Os índices (a partir de 0) das coleções escolhidas; o que não é `C<n>` da lista fica de fora."""
+    items = value if isinstance(value, list) else []
+    indexes = []
+    for item in items:
+        match = re.fullmatch(r"C(\d+)", str(item).strip())
+        if match and 1 <= int(match.group(1)) <= count:
+            indexes.append(int(match.group(1)) - 1)
+    return list(dict.fromkeys(indexes))
+
+
+@dataclass(frozen=True)
+class Extraction:
+    """O valor de cada campo, as coleções escolhidas (índices) e a última resposta."""
+
+    values: dict[str, Any]
+    collections: list[int]
+    completion: Completion
+
+
 async def extract_fields(
     provider: Provider, fields: list[FieldSpec], known_tags: list[str], transcript: TranscriptText
 ) -> tuple[dict[str, Any], Completion]:
     """O valor de cada campo (`None` = nada encontrado) e a última resposta (para o modelo)."""
-    prompt = fields_prompt(fields, known_tags)
+    result = await extract(provider, fields, known_tags, transcript)
+    return result.values, result.completion
+
+
+async def extract(
+    provider: Provider,
+    fields: list[FieldSpec],
+    known_tags: list[str],
+    transcript: TranscriptText,
+    context: RecordingContext | None = None,
+) -> Extraction:
+    """Os campos e as coleções da gravação; em seções, a mescla dos campos e a união das coleções."""
+    context = context or RecordingContext()
+    prompt = fields_prompt(fields, known_tags, context)
     budget = input_budget(provider, SHARED_SYSTEM, prompt)
     if budget < MIN_SECTION_TOKENS:
         raise ProviderError(CONTEXT_TOO_LONG, "A janela de contexto do provider é pequena demais para os campos.")
@@ -139,13 +238,16 @@ async def extract_fields(
             for start, end in split_sections(transcript.lines, budget - estimate_tokens(transcript.header))
         ]
     found: dict[str, list[Any]] = {field.key: [] for field in fields}
+    collections: list[int] = []
     completions = []
     for material in materials:
         completions.append(await provider.complete(SHARED_SYSTEM, prompt, context=transcript_block(material)))
         answer = parse_object(completions[-1].text)
         for field in fields:
             found[field.key].append(clean(field, answer.get(field.key)))
-    return {field.key: merge(field, found[field.key]) for field in fields}, completions[-1]
+        collections += chosen_collections(answer.get("colecoes"), len(context.collections))
+    values = {field.key: merge(field, found[field.key]) for field in fields}
+    return Extraction(values, list(dict.fromkeys(collections)), completions[-1])
 
 
 # --- detecção do tipo de agenda --------------------------------------------------------------------
