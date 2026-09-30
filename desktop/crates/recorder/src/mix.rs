@@ -181,11 +181,6 @@ impl Mixer {
         Ok(())
     }
 
-    /// Se todas as faixas terminaram.
-    pub fn all_ended(&self) -> bool {
-        self.lanes.iter().all(|lane| lane.ended)
-    }
-
     /// Devolve os blocos completos já mixáveis (múltiplo de [`FRAME`]).
     pub fn pop_ready(&mut self) -> Vec<f32> {
         let mut out = Vec::new();
@@ -373,9 +368,6 @@ mod tests {
         mixer.end(1).unwrap();
         mixer.push(0, &[0.1; FRAME * 2], 16_000).unwrap();
         assert_eq!(mixer.pop_ready().len(), FRAME * 2);
-        assert!(!mixer.all_ended());
-        mixer.end(0).unwrap();
-        assert!(mixer.all_ended());
     }
 
     #[test]

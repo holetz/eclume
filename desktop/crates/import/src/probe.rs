@@ -30,13 +30,6 @@ pub enum DateOrigin {
     FileMtime,
 }
 
-impl DateOrigin {
-    /// A data foi lida do próprio arquivo (e não deduzida da modificação).
-    pub fn from_file(self) -> bool {
-        self != Self::FileMtime
-    }
-}
-
 /// O que a tela de importação mostra antes de a pessoa confirmar.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Probe {
@@ -273,7 +266,6 @@ mod tests {
         assert!(probe.has_audio && probe.decodable);
         assert_eq!(probe.recorded_at, MVHD_MS);
         assert_eq!(probe.date_origin, DateOrigin::Mvhd);
-        assert!(probe.date_origin.from_file());
     }
 
     #[test]
@@ -298,7 +290,6 @@ mod tests {
         assert!(probe.has_audio && probe.decodable);
         assert_two_seconds(&probe);
         assert_eq!(probe.date_origin, DateOrigin::FileMtime);
-        assert!(!probe.date_origin.from_file());
         let modified = std::fs::metadata(&path)
             .unwrap()
             .modified()

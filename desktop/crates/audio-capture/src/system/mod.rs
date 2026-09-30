@@ -50,11 +50,6 @@ pub struct SystemSource {
 }
 
 impl SystemSource {
-    /// Abre a captura do áudio do sistema seguindo a saída em uso.
-    pub fn open() -> Result<Self> {
-        Self::open_target(None)
-    }
-
     /// Abre a captura do áudio que toca na saída de id `target` (ver [`list_output_devices`]);
     /// `None` segue a saída em uso. Se a saída pedida sumiu, segue a em uso com um aviso no log
     /// e em [`SystemSource::fell_back`].

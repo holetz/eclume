@@ -30,11 +30,6 @@ pub fn cerca_de(segundos: u64) -> String {
     }
 }
 
-/// Megabytes por hora a `bitrate` bits/s (os textos de Qualidade).
-pub fn mb_por_hora(bitrate: i32) -> u64 {
-    (u64::try_from(bitrate).unwrap_or(0) / 8 * 3_600 + 500_000) / 1_000_000
-}
-
 /// Uma leitura da bateria.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LeituraDeBateria {
@@ -148,8 +143,6 @@ mod tests {
         );
         assert_eq!(cerca_de(40 * 60), "cerca de 40 min");
         assert_eq!(cerca_de(30), "menos de 1 min");
-        assert_eq!(mb_por_hora(24_000), 11);
-        assert_eq!(mb_por_hora(48_000), 22);
     }
 
     #[test]

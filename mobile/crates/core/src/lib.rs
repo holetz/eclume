@@ -393,7 +393,6 @@ impl Core {
         Ok(())
     }
 
-    /// A leitura dos tipos de agenda, na rede do eclume.
     /// O servidor recusou a credencial (401 em qualquer chamada autenticada): volta a Entrar.
     pub fn perdeu_credencial(&mut self) -> Result<()> {
         self.conexao.perdeu_credencial()?;
