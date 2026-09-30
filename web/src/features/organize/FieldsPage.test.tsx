@@ -11,8 +11,11 @@ afterEach(() => vi.unstubAllGlobals())
 const CLIENTE = '01928f3a-1c00-7a00-8000-000000000d03'
 
 /** API de campos com estado, como o servidor. */
-function mockFields(overrides: Record<string, Parameters<typeof mockFetch>[0][string]> = {}) {
-  let items: Schemas['Field'][] = fixtures.fieldPage().items
+function mockFields(
+  overrides: Record<string, Parameters<typeof mockFetch>[0][string]> = {},
+  initial: Schemas['Field'][] = fixtures.fieldPage().items,
+) {
+  let items = initial
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
     'GET /api/v1/fields': () => ({ items, next_cursor: null }),
@@ -48,29 +51,55 @@ const list = () => screen.findByRole('list', { name: 'Campos' })
 const row = (name: string) => within(screen.getByRole('list', { name: 'Campos' })).getByRole('button', { name }).closest('li')!
 
 describe('campos personalizados', () => {
-  it('lista os campos sem o título, com o Automático, e abre o primeiro no painel', async () => {
+  it('lista só os campos do usuário, com o Automático, e abre o primeiro no painel', async () => {
     mockFields()
     renderApp('/config/campos')
     expect(await screen.findByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeInTheDocument()
     expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
     await list()
-    // O título vem dos tipos de agenda: não aparece aqui.
-    expect(within(screen.getByRole('list', { name: 'Campos' })).queryByRole('button', { name: 'Título' })).toBeNull()
-    expect(within(screen.getByRole('main')).getByRole('link', { name: 'Tipos de agenda' })).toHaveAttribute(
-      'href',
-      '/config/agendas',
-    )
-    expect(within(row('Tags')).getByText('Embutido · lista')).toBeInTheDocument()
+    // O título vem dos tipos de agenda e as tags têm cadastro próprio: nenhum dos dois aparece aqui.
+    const fields = within(screen.getByRole('list', { name: 'Campos' }))
+    expect(fields.getAllByRole('listitem').map((li) => within(li).getByRole('button').textContent)).toEqual([
+      'Cliente',
+      'Projeto',
+    ])
+    expect(fields.queryByRole('button', { name: 'Título' })).toBeNull()
+    expect(fields.queryByRole('button', { name: 'Tags' })).toBeNull()
+    expect(screen.queryByText(/Embutido/)).not.toBeInTheDocument()
+    const main = within(screen.getByRole('main'))
+    expect(main.getByRole('link', { name: 'Tipos de agenda' })).toHaveAttribute('href', '/config/agendas')
+    expect(main.getByRole('link', { name: 'Tags' })).toHaveAttribute('href', '/tags')
+    expect(main.getByText(/As tags se configuram em/)).toBeInTheDocument()
     expect(within(row('Cliente')).getByText('Seu campo · escolha')).toBeInTheDocument()
     expect(within(row('Cliente')).getByRole('checkbox', { name: 'Automático: Cliente' })).toBeChecked()
-    expect(within(row('Tags')).getByRole('button', { name: 'Tags' })).toHaveAttribute('aria-current', 'true')
+    expect(within(row('Cliente')).getByRole('button', { name: 'Cliente' })).toHaveAttribute('aria-current', 'true')
 
-    const panel = screen.getByRole('form', { name: 'Editar Tags' })
-    expect(within(panel).getByRole('radio', { name: 'Lista' })).toBeDisabled()
-    expect(within(panel).getByText('O tipo de um campo embutido não muda.')).toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Excluir campo' })).not.toBeInTheDocument()
+    const panel = screen.getByRole('form', { name: 'Editar Cliente' })
+    expect(within(panel).getByRole('radio', { name: 'Escolha' })).toBeChecked()
+    expect(within(panel).getByRole('radio', { name: 'Lista' })).toBeEnabled()
+    expect(within(panel).getByRole('button', { name: 'Excluir campo' })).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Sobre como escrever uma regra' })).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeDisabled()
+  })
+
+  it('sem campos do usuário, o texto ocupa o lugar da lista e o painel só abre pelo Novo campo', async () => {
+    const [title, tags] = fixtures.fieldPage().items
+    mockFields({}, [title, tags])
+    renderApp('/config/campos')
+    expect(await screen.findByText('Nenhum campo personalizado ainda. Crie um com Novo campo.')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Campos' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    expect(screen.queryByText(/não existe mais/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Novo campo' }))
+    expect(screen.getByRole('form', { name: 'Novo campo' })).toBeInTheDocument()
+  })
+
+  it('o endereço de um campo embutido (Tags) avisa que o campo não existe mais', async () => {
+    mockFields()
+    renderApp('/config/campos?campo=01928f3a-1c00-7a00-8000-000000000d02')
+    expect(await screen.findByText('Este campo não existe mais. Escolha outro na lista.')).toBeInTheDocument()
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
   })
 
   it('o Automático grava na hora e volta atrás se o servidor recusar', async () => {
@@ -141,22 +170,22 @@ describe('campos personalizados', () => {
     mockFields()
     renderApp('/config/campos')
     await list()
-    const panel = screen.getByRole('form', { name: 'Editar Tags' })
+    const panel = screen.getByRole('form', { name: 'Editar Cliente' })
     await userEvent.type(within(panel).getByLabelText('Como identificar'), ' Sem siglas.')
-    await userEvent.click(within(row('Cliente')).getByRole('button', { name: 'Cliente' }))
+    await userEvent.click(within(row('Projeto')).getByRole('button', { name: 'Projeto' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Descartar alterações?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Continuar editando' }))
-    expect(screen.getByRole('form', { name: 'Editar Tags' })).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Editar Cliente' })).toBeInTheDocument()
     expect(within(panel).getByLabelText('Como identificar')).toHaveValue(
-      'De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa. Sem siglas.',
+      'A empresa cliente de que a conversa trata; nenhuma, se for interna. Sem siglas.',
     )
 
-    await userEvent.click(within(row('Cliente')).getByRole('button', { name: 'Cliente' }))
+    await userEvent.click(within(row('Projeto')).getByRole('button', { name: 'Projeto' }))
     await userEvent.click(
       within(screen.getByRole('dialog', { name: 'Descartar alterações?' })).getByRole('button', { name: 'Descartar' }),
     )
-    expect(await screen.findByRole('form', { name: 'Editar Cliente' })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: 'Editar Projeto' })).toBeInTheDocument()
   })
 
   it('mostra o erro 422 no campo certo', async () => {
@@ -168,7 +197,7 @@ describe('campos personalizados', () => {
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     const name = within(panel).getByLabelText('Nome')
     await userEvent.clear(name)
-    await userEvent.type(name, 'Tags')
+    await userEvent.type(name, 'Projeto')
     await userEvent.click(within(panel).getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'))
     expect(name).toHaveAccessibleDescription('já existe um campo com este nome')
@@ -185,7 +214,7 @@ describe('campos personalizados', () => {
     await waitFor(() =>
       expect(within(screen.getByRole('list', { name: 'Campos' })).queryByText('Cliente')).not.toBeInTheDocument(),
     )
-    expect(await screen.findByRole('form', { name: 'Editar Tags' })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: 'Editar Projeto' })).toBeInTheDocument()
   })
 })
 
@@ -263,7 +292,7 @@ describe('testar numa gravação', () => {
   it('avisa quando ainda não há gravações transcritas', async () => {
     mockFields({ 'POST /api/v1/fields/preview': () => ({ ...queued(), status: 'done' }) })
     renderApp('/config/campos')
-    const panel = await screen.findByRole('form', { name: 'Editar Tags' })
+    const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
     expect(await within(panel).findByRole('status')).toHaveTextContent(
       'Você ainda não tem gravações transcritas para testar.',
