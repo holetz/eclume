@@ -51,8 +51,8 @@ describe('artigos da central de ajuda', () => {
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
   })
 
-  it('cobrem a central inteira: 36 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
-    expect(ARTICLES).toHaveLength(36)
+  it('cobrem a central inteira: 37 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+    expect(ARTICLES).toHaveLength(37)
     for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
     for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
       expect(articlesForPage(key).length, `chave ${key}`).toBeGreaterThanOrEqual(1)
@@ -94,6 +94,7 @@ describe('artigos da central de ajuda', () => {
     expect(article.headings.map((h) => h.text)).toEqual([
       'O que é uma impressão de voz',
       'Quando o eclume sugere uma pessoa',
+      'Atribuição automática',
       'Consentimento e remoção',
     ])
     expect(article.headings[0].id).toBe('o-que-e-uma-impressao-de-voz')

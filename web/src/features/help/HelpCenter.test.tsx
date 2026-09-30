@@ -80,7 +80,7 @@ describe('artigo da ajuda', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Como funcionam as sugestões por voz' })).toBeInTheDocument()
     const crumbs = screen.getByRole('link', { name: 'Transcrição e locutores' })
     expect(crumbs).toHaveAttribute('href', '/ajuda?topico=transcricao')
-    expect(screen.getByText('Atualizado em 27/09/2026')).toBeInTheDocument()
+    expect(screen.getByText('Atualizado em 30/09/2026')).toBeInTheDocument()
     expect(screen.getByText(/min de leitura$/)).toBeInTheDocument()
 
     const heading = screen.getByRole('heading', { level: 2, name: 'O que é uma impressão de voz' })
@@ -95,6 +95,7 @@ describe('artigo da ajuda', () => {
     expect(entries.map((a) => a.getAttribute('href'))).toEqual([
       '#o-que-e-uma-impressao-de-voz',
       '#quando-o-eclume-sugere-uma-pessoa',
+      '#atribuicao-automatica',
       '#consentimento-e-remocao',
     ])
     expect(entries[0]).toHaveAttribute('aria-current', 'true')

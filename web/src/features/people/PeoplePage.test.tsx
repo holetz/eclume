@@ -28,7 +28,7 @@ describe('diretório de pessoas', () => {
     expect(rows).toHaveLength(4)
     expect(within(rows[2]).getByText('14')).toHaveClass('tabular')
     expect(within(table).getByRole('columnheader', { name: 'Amostras de voz' })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: 'Organização' })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: 'Empresa' })).toBeInTheDocument()
     // O e-mail quase nunca importa: começa escondido.
     expect(within(table).queryByRole('columnheader', { name: 'E-mail' })).not.toBeInTheDocument()
 
@@ -38,11 +38,11 @@ describe('diretório de pessoas', () => {
     expect(queries).toContain('raf')
   })
 
-  it('cadastra uma pessoa na linha de cadastro com nome e organização, com Enter', async () => {
+  it('cadastra uma pessoa na linha de cadastro com nome e empresa, com Enter', async () => {
     const created = { ...fixtures.person(), name: 'Rafael Lima' }
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
-      'GET /api/v1/people/facets': () => ({ organizations: [], departments: [], tags: [] }),
+      'GET /api/v1/people/facets': () => ({ companies: [], departments: [], tags: [] }),
       'GET /api/v1/people': () =>
         http.requests('POST /api/v1/people').length ? { items: [created], next_cursor: null } : { items: [], next_cursor: null },
       'POST /api/v1/people': () => created,
@@ -51,9 +51,9 @@ describe('diretório de pessoas', () => {
     expect(await screen.findByText('Nenhuma pessoa cadastrada ainda.')).toBeInTheDocument()
     const name = screen.getByRole('textbox', { name: 'Nome da nova pessoa' })
     await userEvent.type(name, 'Rafael Lima')
-    await userEvent.type(screen.getByRole('combobox', { name: 'Organização da nova pessoa' }), 'Serra Azul{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Empresa da nova pessoa' }), 'Serra Azul{Enter}')
     expect(await screen.findByRole('link', { name: 'Rafael Lima' })).toBeInTheDocument()
-    expect(await http.requests('POST /api/v1/people')[0].json()).toEqual({ name: 'Rafael Lima', organization: 'Serra Azul' })
+    expect(await http.requests('POST /api/v1/people')[0].json()).toEqual({ name: 'Rafael Lima', company: 'Serra Azul' })
     expect(name).toHaveValue('')
     expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).toBeInTheDocument()
   })

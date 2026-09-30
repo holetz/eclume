@@ -870,26 +870,26 @@ paths:
             items:
               type: string
               pattern: "^[0-9a-fA-F-]{36}:.+$"
-        - name: person_organization
+        - name: person_company
           in: query
           description: >-
-            Organização de um participante (pessoa ligada a um locutor), sem acento nem caixa;
+            Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa;
             repetível. Os atributos `person_*` valem para uma mesma pessoa: com
-            `person_organization` e `person_tag`, alguém da organização e com a tag falou na gravação.
+            `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação.
           schema:
             type: array
             items:
               type: string
         - name: person_department
           in: query
-          description: Área de um participante, sem acento nem caixa; repetível (ver `person_organization`).
+          description: Área de um participante, sem acento nem caixa; repetível (ver `person_company`).
           schema:
             type: array
             items:
               type: string
         - name: person_tag
           in: query
-          description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_organization`).
+          description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`).
           schema:
             type: array
             items:
@@ -2530,10 +2530,10 @@ paths:
     get:
       tags: [people]
       operationId: listPersonFacets
-      summary: Organizações, áreas e tags de pessoa em uso
+      summary: Empresas, áreas e tags de pessoa em uso
       description: |
         Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
-        um. Organização e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+        um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
         usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
         Participantes da biblioteca.
       security:
@@ -4867,7 +4867,7 @@ components:
 
     Person:
       type: object
-      required: [id, name, email, notes, organization, department, job_title, phone, tags, transcript_count, last_seen_at, voice_sample_count, speaking_time_ms, created_at, updated_at]
+      required: [id, name, email, notes, company, department, job_title, phone, tags, transcript_count, last_seen_at, voice_sample_count, speaking_time_ms, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4879,11 +4879,11 @@ components:
           format: email
         notes:
           type: [string, "null"]
-        organization:
-          description: Organização (empresa, cooperativa, órgão) da pessoa.
+        company:
+          description: Empresa (empresa, cooperativa, órgão) da pessoa.
           type: [string, "null"]
         department:
-          description: Área ou departamento da pessoa na organização.
+          description: Área ou departamento da pessoa na empresa.
           type: [string, "null"]
         job_title:
           description: Cargo ou função.
@@ -4930,7 +4930,7 @@ components:
           format: email
         notes:
           type: [string, "null"]
-        organization:
+        company:
           type: [string, "null"]
           maxLength: 120
         department:
@@ -4963,7 +4963,7 @@ components:
           format: email
         notes:
           type: [string, "null"]
-        organization:
+        company:
           type: [string, "null"]
           maxLength: 120
         department:
@@ -4997,9 +4997,9 @@ components:
 
     PersonFacets:
       type: object
-      required: [organizations, departments, tags]
+      required: [companies, departments, tags]
       properties:
-        organizations:
+        companies:
           type: array
           items:
             $ref: "#/components/schemas/PersonFacetValue"

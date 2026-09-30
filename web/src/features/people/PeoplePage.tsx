@@ -107,11 +107,11 @@ export function PeoplePage() {
   )
 }
 
-/** A primeira linha da tabela: nome, organização e Adicionar. Enter num dos campos também envia. */
+/** A primeira linha da tabela: nome, empresa e Adicionar. Enter num dos campos também envia. */
 function NewPersonRow({ span }: { span: number }) {
   const create = useCreatePerson()
   const [name, setName] = useState('')
-  const [organization, setOrganization] = useState('')
+  const [company, setOrganization] = useState('')
   const nameInput = useRef<HTMLInputElement>(null)
   const errorId = useId()
   const listId = useId()
@@ -120,7 +120,7 @@ function NewPersonRow({ span }: { span: number }) {
   function submit() {
     if (!name.trim() || create.isPending) return
     create.mutate(
-      { name: name.trim(), organization: organization.trim() || null },
+      { name: name.trim(), company: company.trim() || null },
       {
         onSuccess: () => {
           setName('')
@@ -164,16 +164,16 @@ function NewPersonRow({ span }: { span: number }) {
         <div className={styles.newRowRest}>
           <input
             className="input"
-            placeholder="Organização (opcional)"
-            aria-label="Organização da nova pessoa"
+            placeholder="Empresa (opcional)"
+            aria-label="Empresa da nova pessoa"
             autoComplete="off"
             list={listId}
-            value={organization}
+            value={company}
             onKeyDown={onEnter}
             onChange={(event) => setOrganization(event.target.value)}
           />
           <datalist id={listId}>
-            {(facets.data?.organizations ?? []).map((item) => (
+            {(facets.data?.companies ?? []).map((item) => (
               <option key={item.value} value={item.value} />
             ))}
           </datalist>

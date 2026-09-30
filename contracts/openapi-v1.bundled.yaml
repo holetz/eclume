@@ -923,25 +923,25 @@ paths:
           items:
             type: string
             pattern: ^[0-9a-fA-F-]{36}:.+$
-      - name: person_organization
+      - name: person_company
         in: query
-        description: 'Organização de um participante (pessoa ligada a um locutor), sem acento nem caixa;
-          repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_organization` e
-          `person_tag`, alguém da organização e com a tag falou na gravação.'
+        description: 'Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível.
+          Os atributos `person_*` valem para uma mesma pessoa: com `person_company` e `person_tag`, alguém
+          da empresa e com a tag falou na gravação.'
         schema:
           type: array
           items:
             type: string
       - name: person_department
         in: query
-        description: Área de um participante, sem acento nem caixa; repetível (ver `person_organization`).
+        description: Área de um participante, sem acento nem caixa; repetível (ver `person_company`).
         schema:
           type: array
           items:
             type: string
       - name: person_tag
         in: query
-        description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_organization`).
+        description: Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`).
         schema:
           type: array
           items:
@@ -2726,11 +2726,11 @@ paths:
       tags:
       - people
       operationId: listPersonFacets
-      summary: Organizações, áreas e tags de pessoa em uso
+      summary: Empresas, áreas e tags de pessoa em uso
       description: 'Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam
         cada
 
-        um. Organização e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+        um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
 
         usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
 
@@ -5424,7 +5424,7 @@ components:
       - name
       - email
       - notes
-      - organization
+      - company
       - department
       - job_title
       - phone
@@ -5450,13 +5450,13 @@ components:
           type:
           - string
           - 'null'
-        organization:
-          description: Organização (empresa, cooperativa, órgão) da pessoa.
+        company:
+          description: Empresa (empresa, cooperativa, órgão) da pessoa.
           type:
           - string
           - 'null'
         department:
-          description: Área ou departamento da pessoa na organização.
+          description: Área ou departamento da pessoa na empresa.
           type:
           - string
           - 'null'
@@ -5515,7 +5515,7 @@ components:
           type:
           - string
           - 'null'
-        organization:
+        company:
           type:
           - string
           - 'null'
@@ -5559,7 +5559,7 @@ components:
           type:
           - string
           - 'null'
-        organization:
+        company:
           type:
           - string
           - 'null'
@@ -5603,11 +5603,11 @@ components:
     PersonFacets:
       type: object
       required:
-      - organizations
+      - companies
       - departments
       - tags
       properties:
-        organizations:
+        companies:
           type: array
           items:
             $ref: '#/components/schemas/PersonFacetValue'
@@ -10971,7 +10971,7 @@ components:
           name: Juliana Prado
           email: juliana.prado@example.com
           notes: Diretora de Pessoas da Metalúrgica Serra Azul.
-          organization: Metalúrgica Serra Azul
+          company: Metalúrgica Serra Azul
           department: Pessoas
           job_title: Diretora de Pessoas
           phone: null
@@ -10988,7 +10988,7 @@ components:
           name: Mariana Couto
           email: mariana.couto@example.com
           notes: Consultora EK.
-          organization: null
+          company: null
           department: null
           job_title: null
           phone: null
@@ -11003,7 +11003,7 @@ components:
           name: Rafael Lima
           email: rafael.lima@example.com
           notes: Gerente de RH da Metalúrgica Serra Azul.
-          organization: Metalúrgica Serra Azul
+          company: Metalúrgica Serra Azul
           department: Recursos Humanos
           job_title: Gerente de RH
           phone: null
@@ -11023,7 +11023,7 @@ components:
         name: Rafael Lima
         email: rafael.lima@example.com
         notes: Gerente de RH da Metalúrgica Serra Azul.
-        organization: Metalúrgica Serra Azul
+        company: Metalúrgica Serra Azul
         department: Recursos Humanos
         job_title: Gerente de RH
         phone: null
@@ -11041,7 +11041,7 @@ components:
         name: Juliana Prado
         email: juliana.prado@example.com
         notes: Diretora de Pessoas da Metalúrgica Serra Azul.
-        organization: Metalúrgica Serra Azul
+        company: Metalúrgica Serra Azul
         department: Pessoas
         tags:
         - cliente

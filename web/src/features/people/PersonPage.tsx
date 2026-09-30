@@ -72,7 +72,7 @@ function PersonDetail({ person }: { person: Person }) {
 
 /** O cadastro: onde a pessoa trabalha, as tags, os contatos e as notas; só o que foi preenchido. */
 function PersonIdentity({ person }: { person: Person }) {
-  const role = [person.job_title, person.department, person.organization].filter(Boolean).join(' · ')
+  const role = [person.job_title, person.department, person.company].filter(Boolean).join(' · ')
   const contacts = [person.email, person.phone].filter(Boolean).join(' · ')
   if (!role && !contacts && !person.notes && person.tags.length === 0) return null
   return (

@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75
 maintainer: holetz
 ---
 
@@ -219,8 +219,10 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   gravações deste período"); a Lista usa `sort=recorded_desc` e `limit=50`. As duas releem a cada
   3 s enquanto alguma gravação está em andamento.
 - **Painel de filtros** à direita (`.with-filters` e `.filters`, recolhível até 48px): Tipo,
-  Situação, Tags, Pessoas (o `PersonCombobox` em linha), Coleções (com "Gerenciar coleções") e um
-  grupo por campo próprio do usuário (escolha como `.check`, texto e lista como "Qualquer valor",
+  Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
+  pessoa, com os valores de `GET /people/facets`; `empresa`, `area` e `tag-pessoa` na URL, que
+  viram `person_company`, `person_department` e `person_tag`, e valem para uma mesma pessoa),
+  Coleções (com "Gerenciar coleções") e um grupo por campo próprio do usuário (escolha como `.check`, texto e lista como "Qualquer valor",
   aplicado no Enter ou ao sair). Os filtros vão na URL (ver as rotas) e viram os filtros
   repetíveis de `GET /recordings`; `STATUS_GROUPS` mapeia a Situação ao enum de `status` (Pronta =
   `transcribed`, Processando = `uploading`/`queued`/`processing`, Falhou = `failed`). Um grupo com
@@ -333,8 +335,13 @@ desce; abaixo de 56rem, os campos também):
   voz pendente aparece como "Parece ser <pessoa> — NN%", com Aceitar e Recusar; nunca é aplicada
   sozinha.
 - **Pessoas** (`/pessoas`) é a `table.table` do DS com busca em `?q=`, o cadastro em linha na
-  primeira linha (nome e e-mail, Enter envia, e-mail repetido aparece na linha) e as colunas nome,
-  e-mail, gravações e amostras de voz. A **pessoa** (`/pessoas/:id`) tem Editar e Excluir em
+  primeira linha (nome e empresa, com as empresas em uso num `datalist`; Enter envia, e o erro
+  aparece na linha) e as colunas que o usuário escolhe no botão **Colunas** (popover com uma
+  `.check` por coluna: empresa, área, cargo, tags, e-mail, telefone, gravações, amostras de voz e
+  última gravação). O nome é fixo; o padrão esconde e-mail, telefone, cargo e última gravação, e a
+  escolha fica em `eclume-pessoas-colunas` (`features/people/columns.ts`). A **pessoa**
+  (`/pessoas/:id`) mostra cargo · área · empresa, as tags de pessoa e os contatos, tem Editar (o
+  cadastro inteiro; empresa e área sugerem os valores de `GET /people/facets`) e Excluir em
   `Dialog`, três `.stat` (gravações, tempo de fala, amostras de voz) e as abas Gravações, Falas e Amostras de voz, com a escolhida em `?aba=`.
 - **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a aba Amostras de voz lista as
   amostras e tem "Esquecer a voz", com confirmação; não há consentimento por pessoa, que o aceite

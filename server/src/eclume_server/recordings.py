@@ -252,7 +252,7 @@ class Library:
     field: list[str] | None = None
     agenda_type: list[UUID] | None = None
     # Atributos de um mesmo participante (pessoa ligada a um locutor).
-    person_organization: list[str] | None = None
+    person_company: list[str] | None = None
     person_department: list[str] | None = None
     person_tag: list[str] | None = None
 
@@ -271,10 +271,10 @@ class Library:
         if self.status:
             # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
             conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
-        return conditions + self._organization()
+        return conditions + self._company()
 
-    def _organization(self) -> list[ColumnElement[bool]]:
-        """As condições de organização: tag, coleção, tipo, pessoa e atributos de um participante."""
+    def _company(self) -> list[ColumnElement[bool]]:
+        """As condições de empresa: tag, coleção, tipo, pessoa e atributos de um participante."""
         r = t.recordings.c
         conditions: list[ColumnElement[bool]] = []
         if self.tag:
@@ -285,7 +285,7 @@ class Library:
             conditions.append(_person_filter(self.person))
         if self.agenda_type:
             conditions.append(r.agenda_type_id.in_(self.agenda_type))
-        participant = attribute_conditions(self.person_organization, self.person_department, self.person_tag)
+        participant = attribute_conditions(self.person_company, self.person_department, self.person_tag)
         if participant:
             conditions.append(participant_filter(participant))
         return conditions

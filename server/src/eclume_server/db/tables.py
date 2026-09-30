@@ -416,7 +416,7 @@ people = Table(
     Column("notes", Text),
     Column("sort_name", Text, server_default=FetchedValue()),
     # 020_pessoas_enriquecidas
-    Column("organization", Text),
+    Column("company", Text),
     Column("department", Text),
     Column("job_title", Text),
     Column("phone", Text),

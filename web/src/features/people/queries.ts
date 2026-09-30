@@ -73,7 +73,7 @@ export function recordingAt(recordingId: string, ms: number): string {
   return `/gravacoes/${recordingId}?t=${Math.max(0, Math.floor(ms))}`
 }
 
-/** Organizações, áreas e tags de pessoa em uso: sugestões do cadastro e o filtro Participantes. */
+/** Empresas, áreas e tags de pessoa em uso: sugestões do cadastro e o filtro Participantes. */
 export function usePersonFacets() {
   return useQuery({
     queryKey: [...PEOPLE_KEY, 'facets'],

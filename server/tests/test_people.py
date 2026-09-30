@@ -197,7 +197,7 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
         "/api/v1/people",
         json={
             "name": "Rafael Lima",
-            "organization": "  Metalúrgica Serra Azul ",
+            "company": "  Metalúrgica Serra Azul ",
             "department": "RH",
             "job_title": "Gerente",
             "phone": "",
@@ -209,7 +209,7 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
         "/api/v1/people",
         json={
             "name": "Rafael Lima",
-            "organization": "  Metalúrgica Serra Azul ",
+            "company": "  Metalúrgica Serra Azul ",
             "department": "RH",
             "job_title": "Gerente",
             "phone": "",
@@ -218,7 +218,7 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
     )
     assert created.status_code == 201, created.text
     rafael = created.json()
-    assert (rafael["organization"], rafael["department"], rafael["job_title"], rafael["phone"]) == (
+    assert (rafael["company"], rafael["department"], rafael["job_title"], rafael["phone"]) == (
         "Metalúrgica Serra Azul",
         "RH",
         "Gerente",
@@ -226,21 +226,21 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
     )
     assert rafael["tags"] == ["cliente", "diretoria"]
     plain = api.post("/api/v1/people", json={"name": "Sem cadastro"}).json()
-    assert (plain["organization"], plain["tags"]) == (None, [])
+    assert (plain["company"], plain["tags"]) == (None, [])
 
     patched = api.patch(f"/api/v1/people/{rafael['id']}", json={"department": None, "tags": ["cliente"]})
     assert patched.status_code == 200, patched.text
     assert (patched.json()["department"], patched.json()["tags"]) == (None, ["cliente"])
     assert api.patch(f"/api/v1/people/{rafael['id']}", json={"tags": None}).status_code == 422
-    assert api.patch(f"/api/v1/people/{rafael['id']}", json={"organization": "x" * 121}).status_code == 422
+    assert api.patch(f"/api/v1/people/{rafael['id']}", json={"company": "x" * 121}).status_code == 422
 
-    api.post("/api/v1/people", json={"name": "Juliana", "organization": "metalurgica serra azul", "tags": ["Cliente"]})
-    api.post("/api/v1/people", json={"name": "Ana", "organization": "Metalúrgica Serra Azul", "department": "Pessoas"})
-    api.post("/api/v1/people", json={"name": "Bruno", "organization": "Agro Sul", "tags": ["fornecedor"]})
+    api.post("/api/v1/people", json={"name": "Juliana", "company": "metalurgica serra azul", "tags": ["Cliente"]})
+    api.post("/api/v1/people", json={"name": "Ana", "company": "Metalúrgica Serra Azul", "department": "Pessoas"})
+    api.post("/api/v1/people", json={"name": "Bruno", "company": "Agro Sul", "tags": ["fornecedor"]})
     facets = api.get("/api/v1/people/facets")
     assert facets.status_code == 200, facets.text
     body = facets.json()
-    assert body["organizations"] == [
+    assert body["companies"] == [
         {"value": "Agro Sul", "count": 1},
         {"value": "Metalúrgica Serra Azul", "count": 3},
     ]
@@ -248,4 +248,4 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
     assert body["tags"] == [{"value": "cliente", "count": 2}, {"value": "fornecedor", "count": 1}]
 
     other = as_user(make_user())
-    assert other.get("/api/v1/people/facets").json() == {"organizations": [], "departments": [], "tags": []}
+    assert other.get("/api/v1/people/facets").json() == {"companies": [], "departments": [], "tags": []}

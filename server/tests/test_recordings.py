@@ -118,9 +118,9 @@ def test_biblioteca_por_atributos_de_um_mesmo_participante(
     split = transcribed(api, services.settings)
     nobody = transcribed(api, services.settings)
     rafael = api.post(
-        "/api/v1/people", json={"name": "Rafael", "organization": "Metalúrgica Serra Azul", "tags": ["Cliente"]}
+        "/api/v1/people", json={"name": "Rafael", "company": "Metalúrgica Serra Azul", "tags": ["Cliente"]}
     ).json()
-    ana = api.post("/api/v1/people", json={"name": "Ana", "organization": "Metalúrgica Serra Azul"}).json()
+    ana = api.post("/api/v1/people", json={"name": "Ana", "company": "Metalúrgica Serra Azul"}).json()
     bruno = api.post("/api/v1/people", json={"name": "Bruno", "department": "RH", "tags": ["cliente"]}).json()
 
     def link(recording: dict[str, Any], speaker: str, person: dict[str, Any]) -> None:
@@ -130,17 +130,17 @@ def test_biblioteca_por_atributos_de_um_mesmo_participante(
         assert linked.status_code == 200, linked.text
 
     link(both, "S1", rafael)
-    # A organização e a tag estão na gravação, mas em pessoas diferentes.
+    # A empresa e a tag estão na gravação, mas em pessoas diferentes.
     link(split, "S1", ana)
     link(split, "S2", bruno)
 
     org = "metalurgica serra azul"
-    assert set(_ids(api, person_organization=org)) == {both["id"], split["id"]}
+    assert set(_ids(api, person_company=org)) == {both["id"], split["id"]}
     assert set(_ids(api, person_tag="CLIENTE")) == {both["id"], split["id"]}
-    assert _ids(api, person_organization=org, person_tag="cliente") == [both["id"]]
+    assert _ids(api, person_company=org, person_tag="cliente") == [both["id"]]
     assert _ids(api, person_department="rh") == [split["id"]]
     assert set(_ids(api, person_department=["rh", "Financeiro"], person_tag="cliente")) == {split["id"]}
-    assert _ids(api, person_organization="Outra") == []
+    assert _ids(api, person_company="Outra") == []
     assert nobody["id"] not in _ids(api, person_tag="cliente")
 
 

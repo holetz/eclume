@@ -83,7 +83,7 @@ async def list_recordings(
     collection: Annotated[list[UUID] | None, Query()] = None,
     person: Annotated[list[UUID] | None, Query()] = None,
     field: Many = None,
-    person_organization: Many = None,
+    person_company: Many = None,
     person_department: Many = None,
     person_tag: Many = None,
 ) -> dict[str, Any]:
@@ -102,7 +102,7 @@ async def list_recordings(
         collection,
         person,
         field,
-        person_organization=person_organization,
+        person_company=person_company,
         person_department=person_department,
         person_tag=person_tag,
     )

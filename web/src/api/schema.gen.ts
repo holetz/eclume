@@ -1251,9 +1251,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Organizações, áreas e tags de pessoa em uso
+         * Empresas, áreas e tags de pessoa em uso
          * @description Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
-         *     um. Organização e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
+         *     um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
          *     usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
          *     Participantes da biblioteca.
          */
@@ -2354,9 +2354,9 @@ export interface components {
             /** Format: email */
             email: string | null;
             notes: string | null;
-            /** @description Organização (empresa, cooperativa, órgão) da pessoa. */
-            organization: string | null;
-            /** @description Área ou departamento da pessoa na organização. */
+            /** @description Empresa (empresa, cooperativa, órgão) da pessoa. */
+            company: string | null;
+            /** @description Área ou departamento da pessoa na empresa. */
             department: string | null;
             /** @description Cargo ou função. */
             job_title: string | null;
@@ -2384,7 +2384,7 @@ export interface components {
             /** Format: email */
             email?: string | null;
             notes?: string | null;
-            organization?: string | null;
+            company?: string | null;
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
@@ -2396,7 +2396,7 @@ export interface components {
             /** Format: email */
             email?: string | null;
             notes?: string | null;
-            organization?: string | null;
+            company?: string | null;
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
@@ -2409,7 +2409,7 @@ export interface components {
             count: number;
         };
         PersonFacets: {
-            organizations: components["schemas"]["PersonFacetValue"][];
+            companies: components["schemas"]["PersonFacetValue"][];
             departments: components["schemas"]["PersonFacetValue"][];
             tags: components["schemas"]["PersonFacetValue"][];
         };
@@ -4197,11 +4197,11 @@ export interface operations {
                 person?: string[];
                 /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
                 field?: string[];
-                /** @description Organização de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_organization` e `person_tag`, alguém da organização e com a tag falou na gravação. */
-                person_organization?: string[];
-                /** @description Área de um participante, sem acento nem caixa; repetível (ver `person_organization`). */
+                /** @description Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação. */
+                person_company?: string[];
+                /** @description Área de um participante, sem acento nem caixa; repetível (ver `person_company`). */
                 person_department?: string[];
-                /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_organization`). */
+                /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`). */
                 person_tag?: string[];
             };
             header?: never;

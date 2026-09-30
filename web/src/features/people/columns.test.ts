@@ -11,9 +11,9 @@ describe('colunas de Pessoas', () => {
   })
 
   it('guarda a escolha na ordem da tabela e apaga a chave ao voltar ao padrão', () => {
-    savePersonColumns(['email', 'organization'])
-    expect(window.localStorage.getItem(STORAGE_KEYS.peopleColumns)).toBe('organization,email')
-    expect(readPersonColumns()).toEqual(['organization', 'email'])
+    savePersonColumns(['email', 'company'])
+    expect(window.localStorage.getItem(STORAGE_KEYS.peopleColumns)).toBe('company,email')
+    expect(readPersonColumns()).toEqual(['company', 'email'])
     savePersonColumns([...DEFAULT_PERSON_COLUMNS])
     expect(window.localStorage.getItem(STORAGE_KEYS.peopleColumns)).toBeNull()
   })

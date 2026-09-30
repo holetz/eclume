@@ -127,7 +127,7 @@
   max-width: 24rem;
 }
 
-/* Organização, área, cargo, e-mail e telefone lado a lado no diálogo; uma coluna em tela estreita. */
+/* Empresa, área, cargo, e-mail e telefone lado a lado no diálogo; uma coluna em tela estreita. */
 .formGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));

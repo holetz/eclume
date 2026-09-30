@@ -57,14 +57,14 @@ class PersonCreate(BaseModel):
     name: str = Field(min_length=1)
     email: str | None = None
     notes: str | None = None
-    organization: Attribute = None
+    company: Attribute = None
     department: Attribute = None
     job_title: Attribute = None
     phone: str | None = Field(default=None, max_length=40)
     tags: list[PersonTag] = Field(default_factory=list, max_length=MAX_PERSON_TAGS)
 
     _email = field_validator("email")(_optional_email)
-    _attributes = field_validator("organization", "department", "job_title", "phone")(clean_attribute)
+    _attributes = field_validator("company", "department", "job_title", "phone")(clean_attribute)
     _tags = field_validator("tags")(_clean_tags)
 
 
@@ -74,14 +74,14 @@ class PersonPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     email: str | None = None
     notes: str | None = None
-    organization: Attribute = None
+    company: Attribute = None
     department: Attribute = None
     job_title: Attribute = None
     phone: str | None = Field(default=None, max_length=40)
     tags: list[PersonTag] | None = Field(default=None, max_length=MAX_PERSON_TAGS)
 
     _email = field_validator("email")(_optional_email)
-    _attributes = field_validator("organization", "department", "job_title", "phone")(clean_attribute)
+    _attributes = field_validator("company", "department", "job_title", "phone")(clean_attribute)
     _tags = field_validator("tags")(_clean_tags)
 
 
@@ -105,7 +105,7 @@ async def list_people(
 
 @router.get("/people/facets")
 async def list_person_facets(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Organizações, áreas e tags de pessoa em uso, com quantas pessoas usam cada uma."""
+    """Empresas, áreas e tags de pessoa em uso, com quantas pessoas usam cada uma."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await facets(conn)
 

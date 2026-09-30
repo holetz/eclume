@@ -37,7 +37,7 @@ function group(name: string) {
 }
 
 describe('painel de filtros', () => {
-  it('filtra pelos participantes: organização, área e tag de um mesmo participante', async () => {
+  it('filtra pelos participantes: empresa, área e tag de um mesmo participante', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
@@ -46,7 +46,7 @@ describe('painel de filtros', () => {
       'GET /api/v1/fields': () => fixtures.fieldPage(),
       'GET /api/v1/people': () => fixtures.personPage(),
       'GET /api/v1/people/facets': () => ({
-        organizations: [
+        companies: [
           { value: 'Agro Sul', count: 1 },
           { value: 'Metalúrgica Serra Azul', count: 2 },
         ],
@@ -60,10 +60,10 @@ describe('painel de filtros', () => {
     await userEvent.click(within(participants).getByRole('checkbox', { name: 'Agro Sul' }))
     await userEvent.click(within(participants).getByRole('checkbox', { name: 'diretoria' }))
     await waitFor(() => expect(lastQuery(http).getAll('person_tag')).toEqual(['diretoria']))
-    expect(lastQuery(http).getAll('person_organization')).toEqual(['Agro Sul'])
+    expect(lastQuery(http).getAll('person_company')).toEqual(['Agro Sul'])
 
     await userEvent.click(within(participants).getByRole('checkbox', { name: 'Agro Sul' }))
-    await waitFor(() => expect(lastQuery(http).getAll('person_organization')).toEqual([]))
+    await waitFor(() => expect(lastQuery(http).getAll('person_company')).toEqual([]))
     expect(within(participants).getByRole('checkbox', { name: 'Agro Sul' })).not.toBeChecked()
   })
 

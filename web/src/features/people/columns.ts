@@ -3,7 +3,7 @@
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
 
 export type PersonColumn =
-  | 'organization'
+  | 'company'
   | 'department'
   | 'job_title'
   | 'tags'
@@ -15,7 +15,7 @@ export type PersonColumn =
 
 /** Todas as colunas, na ordem da tabela, com o rótulo do cabeçalho e do menu Colunas. */
 export const PERSON_COLUMNS: readonly { key: PersonColumn; label: string }[] = [
-  { key: 'organization', label: 'Organização' },
+  { key: 'company', label: 'Empresa' },
   { key: 'department', label: 'Área' },
   { key: 'job_title', label: 'Cargo' },
   { key: 'tags', label: 'Tags' },
@@ -28,7 +28,7 @@ export const PERSON_COLUMNS: readonly { key: PersonColumn; label: string }[] = [
 
 /** O padrão esconde e-mail, telefone, cargo e a última gravação: o e-mail quase nunca importa. */
 export const DEFAULT_PERSON_COLUMNS: readonly PersonColumn[] = [
-  'organization',
+  'company',
   'department',
   'tags',
   'transcript_count',

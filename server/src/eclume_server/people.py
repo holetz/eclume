@@ -60,7 +60,7 @@ def person_json(row: Row) -> dict[str, Any]:
         "name": row["name"],
         "email": row["email"],
         "notes": row["notes"],
-        "organization": row["organization"],
+        "company": row["company"],
         "department": row["department"],
         "job_title": row["job_title"],
         "phone": row["phone"],
@@ -102,7 +102,7 @@ def prefix_filter(q: str) -> ColumnElement[bool]:
 # --- atributos de cadastro (020_pessoas_enriquecidas) ------------------------------------------------
 
 # Os atributos de texto da pessoa e o teto de cada um.
-ATTRIBUTES = {"organization": 120, "department": 120, "job_title": 120, "phone": 40}
+ATTRIBUTES = {"company": 120, "department": 120, "job_title": 120, "phone": 40}
 MAX_PERSON_TAGS = 20
 MAX_PERSON_TAG = 64
 
@@ -130,13 +130,13 @@ def _matches(column: ColumnElement[str], values: list[str]) -> ColumnElement[boo
 
 
 def attribute_conditions(
-    organization: list[str] | None, department: list[str] | None, tag: list[str] | None
+    company: list[str] | None, department: list[str] | None, tag: list[str] | None
 ) -> list[ColumnElement[bool]]:
     """As condições sobre `people` de cada atributo pedido: OU dentro do atributo, E entre eles."""
     p = t.people.c
     conditions = []
-    if organization:
-        conditions.append(_matches(p.organization, organization))
+    if company:
+        conditions.append(_matches(p.company, company))
     if department:
         conditions.append(_matches(p.department, department))
     if tag:
@@ -160,13 +160,13 @@ def participant_filter(conditions: list[ColumnElement[bool]]) -> ColumnElement[b
 
 
 async def facets(conn: AsyncConnection) -> dict[str, list[dict[str, Any]]]:
-    """Os valores em uso de organização, área e tag de pessoa, com quantas pessoas usam cada um.
+    """Os valores em uso de empresa, área e tag de pessoa, com quantas pessoas usam cada um.
 
-    Organização e área se agrupam sem acento e sem caixa; o valor mostrado é a grafia mais usada.
+    Empresa e área se agrupam sem acento e sem caixa; o valor mostrado é a grafia mais usada.
     """
     p = t.people.c
     result: dict[str, list[dict[str, Any]]] = {}
-    for key, column in (("organizations", p.organization), ("departments", p.department)):
+    for key, column in (("companies", p.company), ("departments", p.department)):
         grouped = normalized(column)
         rows = await conn.execute(
             select(func.mode().within_group(column).label("value"), func.count().label("count"))

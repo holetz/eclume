@@ -29,7 +29,7 @@ export interface LibraryFilters {
   /** `<field_id>:<valor>`. */
   field: string[]
   /** Atributos de um mesmo participante (pessoa ligada a um locutor). */
-  personOrganization: string[]
+  personCompany: string[]
   personDepartment: string[]
   personTag: string[]
 }
@@ -41,7 +41,7 @@ const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
   person: 'pessoa',
   collection: 'colecao',
   field: 'campo',
-  personOrganization: 'organizacao',
+  personCompany: 'empresa',
   personDepartment: 'area',
   personTag: 'tag-pessoa',
 }
@@ -61,7 +61,7 @@ export function readFilters(params: URLSearchParams): LibraryFilters {
     person: all('person'),
     collection: all('collection'),
     field: all('field').filter((value) => /^[^:]+:.+$/.test(value)),
-    personOrganization: all('personOrganization'),
+    personCompany: all('personCompany'),
     personDepartment: all('personDepartment'),
     personTag: all('personTag'),
   }
@@ -89,7 +89,7 @@ export const NO_FILTERS: LibraryFilters = {
   person: [],
   collection: [],
   field: [],
-  personOrganization: [],
+  personCompany: [],
   personDepartment: [],
   personTag: [],
 }
@@ -113,7 +113,7 @@ export function filtersToQuery(filters: LibraryFilters): RecordingsQuery {
   if (filters.person.length) query.person = filters.person
   if (filters.collection.length) query.collection = filters.collection
   if (filters.field.length) query.field = filters.field
-  if (filters.personOrganization.length) query.person_organization = filters.personOrganization
+  if (filters.personCompany.length) query.person_company = filters.personCompany
   if (filters.personDepartment.length) query.person_department = filters.personDepartment
   if (filters.personTag.length) query.person_tag = filters.personTag
   return query

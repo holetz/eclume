@@ -8,7 +8,7 @@ export interface PersonFields {
   name: string
   email: string | null
   notes: string | null
-  organization: string | null
+  company: string | null
   department: string | null
   job_title: string | null
   phone: string | null
@@ -27,8 +27,8 @@ interface PersonFormProps {
 
 type TextKey = Exclude<keyof PersonFields, 'tags'>
 
-const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; label: string; type?: string; suggest?: 'organizations' | 'departments' }[] = [
-  { key: 'organization', label: 'Organização', suggest: 'organizations' },
+const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; label: string; type?: string; suggest?: 'companies' | 'departments' }[] = [
+  { key: 'company', label: 'Empresa', suggest: 'companies' },
   { key: 'department', label: 'Área', suggest: 'departments' },
   { key: 'job_title', label: 'Cargo' },
   { key: 'email', label: 'E-mail', type: 'email' },
@@ -36,8 +36,8 @@ const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; label: string; type?: st
 ]
 
 /**
- * Edição do cadastro de uma pessoa, no diálogo "Editar": nome, organização, área, cargo, e-mail,
- * telefone, tags de pessoa e notas. Organização e área sugerem os valores já usados; campos vazios
+ * Edição do cadastro de uma pessoa, no diálogo "Editar": nome, empresa, área, cargo, e-mail,
+ * telefone, tags de pessoa e notas. Empresa e área sugerem os valores já usados; campos vazios
  * viram `null`.
  */
 export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger }: PersonFormProps) {
@@ -45,7 +45,7 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
     name: initial.name,
     email: initial.email ?? '',
     notes: initial.notes ?? '',
-    organization: initial.organization ?? '',
+    company: initial.company ?? '',
     department: initial.department ?? '',
     job_title: initial.job_title ?? '',
     phone: initial.phone ?? '',
@@ -63,7 +63,7 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
       name: draft.name.trim(),
       email: orNull('email'),
       notes: orNull('notes'),
-      organization: orNull('organization'),
+      company: orNull('company'),
       department: orNull('department'),
       job_title: orNull('job_title'),
       phone: orNull('phone'),

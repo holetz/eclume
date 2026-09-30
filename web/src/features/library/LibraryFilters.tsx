@@ -94,16 +94,16 @@ function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field 
   )
 }
 
-type ParticipantKey = 'personOrganization' | 'personDepartment' | 'personTag'
+type ParticipantKey = 'personCompany' | 'personDepartment' | 'personTag'
 
 /**
- * Participantes: organização, área e tag de pessoa de quem falou na gravação, com os valores em uso
+ * Participantes: empresa, área e tag de pessoa de quem falou na gravação, com os valores em uso
  * no diretório. Combinados, valem para uma mesma pessoa.
  */
 function ParticipantFilter({ filters, onChange }: FilterProps) {
   const facets = usePersonFacets()
   const sections: { key: ParticipantKey; title: string; values: string[] }[] = [
-    { key: 'personOrganization', title: 'Organização', values: facets.data?.organizations.map((f) => f.value) ?? [] },
+    { key: 'personCompany', title: 'Empresa', values: facets.data?.companies.map((f) => f.value) ?? [] },
     { key: 'personDepartment', title: 'Área', values: facets.data?.departments.map((f) => f.value) ?? [] },
     { key: 'personTag', title: 'Tag da pessoa', values: facets.data?.tags.map((f) => f.value) ?? [] },
   ]
