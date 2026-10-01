@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92
 maintainer: holetz
 ---
 
@@ -234,6 +234,11 @@ O worker está "neste job" com heartbeat presente, `busy=1` e `job_id` igual a
 `transcribe:{recording_id}:{revision}` (ou sem `job_id`, worker antigo). O hash de progresso de
 outra revisão conta como ausente. O heartbeat é o sinal de vida; o progresso mede travamento.
 
+- **Deploy drena, não mata.** O `WorkerSettings` do GPU tem `job_completion_wait = job_timeout`:
+  no SIGTERM o arq para de pegar jobs e termina o atual, e os jobs na fila `eclume:gpu` seguem
+  para o worker novo. O `deploy.sh` lê `busy` no heartbeat e, com a GPU ocupada, espera até
+  `--espera-gpu` (30 min) antes de recriar o `worker-gpu` (`stop_grace_period: 40m`); ao fim da
+  espera recusa, salvo `--interromper-gpu`. Sem essa flag, um deploy não produz `worker_lost`.
 - **Duas observações.** Nada é marcado na primeira vez: a suspeita fica em
   `eclume:reaper:suspect:<_job_id>` (código e instante) e só vira falha se o mesmo diagnóstico
   durar a graça inteira. Isso cobre o worker que acabou de pegar o job e ainda não publicou

@@ -82,6 +82,10 @@ class WorkerSettings:
     max_jobs = 1
     max_tries = 1
     job_timeout = CONFIG.job_timeout_seconds
+    # No SIGTERM (deploy), o arq para de pegar jobs e espera o atual terminar até o teto do job: o
+    # deploy drena o worker GPU sem matar transcrição em curso. O `stop_grace_period` do compose
+    # cobre o `stop -t` do deploy.
+    job_completion_wait = CONFIG.job_timeout_seconds
     redis_settings = RedisSettings.from_dsn(CONFIG.redis_url)
     on_startup = startup
     on_shutdown = shutdown

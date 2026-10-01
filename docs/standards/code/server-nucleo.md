@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92
 maintainer: holetz
 ---
 
@@ -51,6 +51,15 @@ Tudo por ambiente (`eclume_server/config.py`):
 - Uma migration nova ganha o próximo número livre **na `main`**, não na branch: duas specs em
   paralelo não disputam o mesmo `NNN`. O runner aplica toda migration ainda não aplicada, então a
   ordem de chegada entre branches não importa.
+- **Expandir ou contrair, nunca as duas.** Toda migration é uma das duas (holetz/eclume#92):
+  *expandir* só acrescenta (tabela, coluna anulável ou com default, índice, função nova) e entra
+  junto com o código que a usa; *contrair* (remover, renomear, apertar restrição) só entra num
+  deploy **posterior** ao do código que deixou de depender do objeto. Assim o código do deploy
+  anterior roda sobre o schema novo: o `migrate` com server e workers antigos de pé é seguro e o
+  `deploy.sh --voltar` de um passo dispensa restaurar o banco. Não há `down`: além de um passo, o
+  caminho é o dump pré-deploy (`restaurar-backup.sh --banco`).
+- `eclume-server migrate --pendentes` lista as migrations que a árvore conhece e o banco não
+  aplicou, uma por linha, sem aplicar nada (`migrate.pending`).
 
 ## Papéis do banco
 

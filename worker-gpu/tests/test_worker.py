@@ -28,3 +28,5 @@ def test_worker_settings_do_contrato():
     [job] = WorkerSettings.functions
     assert job.name == "transcribe"
     assert job.max_tries == 1
+    # SIGTERM drena: termina o job em curso, até o teto dele, antes de parar.
+    assert WorkerSettings.job_completion_wait == WorkerSettings.job_timeout > 0
