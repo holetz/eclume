@@ -53,6 +53,10 @@ def revision_prefix(recording_id: UUID | str, revision: int) -> str:
     return f"{artifacts_prefix(recording_id)}r{revision}/"
 
 
+class StorageDeleteError(Exception):
+    """O `DeleteObjects` devolveu chaves que não saíram."""
+
+
 class MultipartGoneError(Exception):
     """O multipart upload não existe mais no bucket (`NoSuchUpload`: vencido ou abortado)."""
 
@@ -248,14 +252,17 @@ class Storage:
         )
 
     async def delete_keys(self, keys: list[str]) -> None:
-        """Apaga as chaves (as ausentes são ignoradas), em lotes do limite do S3."""
+        """Apaga as chaves (as ausentes são ignoradas), em lotes do limite do S3; a que falha levanta."""
 
         def delete() -> None:
             for start in range(0, len(keys), _DELETE_BATCH):
                 batch = keys[start : start + _DELETE_BATCH]
-                self._s3.delete_objects(
+                response = self._s3.delete_objects(
                     Bucket=self.bucket, Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True}
                 )
+                if errors := response.get("Errors"):
+                    msg = f"{len(errors)} chave(s) não saíram do bucket: {errors[0].get('Code')} em {errors[0].get('Key')}"
+                    raise StorageDeleteError(msg)
 
         if keys:
             await run_in_threadpool(delete)
