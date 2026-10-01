@@ -6,13 +6,15 @@
 # release para /downloads. Contrato: docs/standards/code/desktop-distribuicao.md.
 #
 # Uso: bash deploy/release-desktop.sh [--plan] [--context NOME] [--sem-windows] [--publicar]
-#                                     [--notas "texto"]
+#                                     [--notas "texto"] [--sem-gate "motivo"]
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
 #   --sem-windows  deixa o Windows de fora (por padrão o release inclui o instalador NSIS,
 #               compilado por compilação cruzada; `--windows` segue aceito e não muda nada).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
 #   --notas     notas do release, que o app mostra no aviso "Atualizado para X".
+#   --sem-gate  com --publicar, dispensa só o status eclume/gate = success no commit e deixa nele o
+#               rastro eclume/gate-dispensa com o motivo; o ensaio não exige gate.
 # Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
 # do repositório), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
@@ -27,6 +29,7 @@ PLAN_ONLY=0
 WINDOWS=1
 PUBLICAR=0
 NOTAS=""
+SEM_GATE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,7 +43,10 @@ while [[ $# -gt 0 ]]; do
     --notas)
       [[ $# -ge 2 ]] || { echo "--notas exige um texto." >&2; exit 2; }
       NOTAS="$2"; shift 2 ;;
-    --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
+    --sem-gate)
+      [[ $# -ge 2 && -n "${2// /}" ]] || { echo "--sem-gate exige o motivo." >&2; exit 2; }
+      SEM_GATE="$2"; shift 2 ;;
+    --help|-h) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -74,10 +80,18 @@ IMG_LINUX=eclume-desktop-build:24.04
 IMG_WINDOWS=eclume-desktop-build-windows:24.04
 
 # Pré-condições do --publicar: o release aponta para um commit que o GitHub tem, feito de uma árvore
-# limpa, e nunca sobrescreve uma tag.
+# limpa e provado pelo gate (status eclume/gate), e nunca sobrescreve uma tag.
 problemas=()
 [[ -z "$(git status --porcelain)" ]] || problemas+=("a árvore de trabalho tem mudanças; o release sai do commit $SHA, sem elas")
-gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null || problemas+=("o commit $SHA não está no GitHub (faça o push antes)")
+gate_ok=0
+if gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
+  gate_ok=1
+  gate="$(gh api "repos/$REPO/commits/$SHA/status" | python3 deploy/gate.py decidir)" || gate_ok=0
+  [[ "$gate_ok" -eq 1 || -n "$SEM_GATE" ]] \
+    || problemas+=("$gate (rode bash deploy/gate.sh ou dispense com --sem-gate \"motivo\")")
+else
+  problemas+=("o commit $SHA não está no GitHub (faça o push antes)")
+fi
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   problemas+=("o release $TAG já existe (suba a versão no tauri.conf.json)")
 fi
@@ -95,6 +109,12 @@ for p in "${problemas[@]}"; do echo "  aviso: $p" >&2; done
 
 if [[ "$PUBLICAR" -eq 1 && "${#problemas[@]}" -gt 0 ]]; then
   echo "Publicação recusada: ${problemas[*]}." >&2; exit 2
+fi
+if [[ "$PUBLICAR" -eq 1 && "$gate_ok" -eq 0 ]]; then
+  gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \
+    -f description="release $TAG: ${SEM_GATE:0:120}" --silent \
+    || { echo "Não consegui publicar o rastro eclume/gate-dispensa; publicação recusada." >&2; exit 2; }
+  echo "Gate dispensado: $SEM_GATE (rastro eclume/gate-dispensa no commit)." >&2
 fi
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: acima de ${DISK_LIMIT}%, release recusado." >&2; exit 3; }
 host "test -s $SECRETS/tauri-updater.key && test -s $SECRETS/tauri-updater.key.password" || {
