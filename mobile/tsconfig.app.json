@@ -18,5 +18,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["ui/src"]
+  "include": ["ui/src"],
+  "exclude": ["ui/src/styles/copia.test.ts"]
 }
