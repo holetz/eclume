@@ -1,0 +1,212 @@
+# Staging efêmero para o ensaio de restauração e as provas (projeto `eclume-staging`), no host GPU:
+#
+#   <ECLUME_DATA_DIR>/bin/staging.sh ensaio|subir|derrubar
+#
+# O mesmo desenho do `docker-compose.e2e.yml`, sobre o código do `main` (o staging.sh baixa o
+# tarball e roda o compose dele): Caddy só em 127.0.0.1:18444, worker de transcrição com
+# `ECLUME_ENGINE=cpu` na imagem `eclume-worker-gpu:prod` e `cpus` limitado (não disputa a GPU nem
+# a CPU da produção), sem `mdns` (anunciaria um segundo servidor na LAN) e dados que o `down -v`
+# apaga. Senhas próprias; só `ECLUME_ENCRYPTION_KEY` vem do `env.prod` restaurado, para que os
+# segredos cifrados no banco do backup (token do Claude, token do HF) só abram com a chave do backup.
+name: eclume-staging
+
+x-server-env: &server-env
+  ECLUME_DATABASE_URL: postgresql+asyncpg://eclume_server:staging-runtime@postgres:5432/eclume
+  ECLUME_REDIS_URL: redis://redis:6379/0
+  ECLUME_S3_ENDPOINT: http://minio:9000
+  ECLUME_S3_ACCESS_KEY: eclume
+  ECLUME_S3_SECRET_KEY: eclume-staging-secret
+  ECLUME_S3_BUCKET: eclume
+  ECLUME_SECRET_KEY: eclume-staging-secret-key
+  ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?vem do env.prod restaurado}
+  ECLUME_PUBLIC_URL: https://127.0.0.1:18444
+  ECLUME_COOKIE_SECURE: "true"
+  # As provas entram e criam contas muitas vezes por minuto do mesmo IP.
+  ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE: "10000"
+
+x-server-image: &server-image
+  image: eclume-server:staging
+  build:
+    context: ..
+    dockerfile: deploy/server.Dockerfile
+    labels: {org.eclume.image: "server-staging"}
+
+services:
+  caddy:
+    image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+    depends_on:
+      server: {condition: service_healthy}
+      web: {condition: service_started}
+    ports:
+      - "127.0.0.1:18444:8443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      # Os manifestos publicados da produção, só leitura (o smoke pede /downloads/latest.json).
+      - ${ECLUME_DATA_DIR:-/srv/eclume}/downloads:/srv/downloads:ro
+
+  web:
+    image: eclume-web:staging
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      labels: {org.eclume.image: "web-staging"}
+
+  server:
+    <<: *server-image
+    environment:
+      <<: *server-env
+      # A CA deste Caddy (staging.sh a copia depois da subida): a impressão digital do /server.
+      ECLUME_CA_FILE: /srv/staging-ca/ca.crt
+    volumes:
+      - ${ECLUME_STAGING_CA_DIR:-./staging-ca}:/srv/staging-ca:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker-cpu:
+    <<: *server-image
+    command: ["arq", "eclume_server.worker.WorkerSettings"]
+    environment:
+      <<: *server-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+
+  worker-agents:
+    <<: *server-image
+    command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
+    environment:
+      <<: *server-env
+      # Sem provider no banco restaurado, o resumo sai do `claude -p` com o token do env.prod.
+      CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+
+  worker:
+    image: eclume-worker-gpu:prod
+    environment:
+      ECLUME_ENGINE: cpu
+      ECLUME_DEVICE: cpu
+      ECLUME_REDIS_URL: redis://redis:6379/0
+      ECLUME_S3_ENDPOINT_URL: http://minio:9000
+      ECLUME_S3_ACCESS_KEY: eclume
+      ECLUME_S3_SECRET_KEY: eclume-staging-secret
+      ECLUME_S3_BUCKET: eclume
+      ECLUME_SECRET_KEY: eclume-staging-secret-key
+      ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?vem do env.prod restaurado}
+      PYTHONPATH: /src/engines:/src/worker
+    cpus: ${ECLUME_STAGING_CPUS:-1.5}
+    depends_on:
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    volumes:
+      # Os modelos da produção (como no gpu-test): o `small` da engine CPU não baixa a cada noite.
+      - ${ECLUME_DATA_DIR:-/srv/eclume}/models:/models
+      - ../engines/src:/src/engines:ro
+      - ../worker-gpu/src:/src/worker:ro
+
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    environment:
+      POSTGRES_USER: eclume
+      POSTGRES_PASSWORD: eclume-staging
+      POSTGRES_DB: eclume
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eclume -d eclume"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: eclume
+      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      MINIO_API_STALE_UPLOADS_EXPIRY: 192h
+      MINIO_ROOT_PASSWORD: eclume-staging-secret
+    volumes:
+      - minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # --- one-shots (perfil tools) ---
+
+  minio-init:
+    profiles: [tools]
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 eclume eclume-staging-secret >/dev/null && mc mb --ignore-existing local/eclume"]
+
+  # O migrador (superusuário) aplica o schema e liga o LOGIN de eclume_server, como na produção.
+  migrate:
+    <<: *server-image
+    profiles: [tools]
+    command: ["eclume-server", "migrate"]
+    environment:
+      <<: *server-env
+      ECLUME_DATABASE_URL: postgresql+asyncpg://eclume:eclume-staging@postgres:5432/eclume
+      ECLUME_RUNTIME_DB_PASSWORD: staging-runtime
+    depends_on:
+      postgres: {condition: service_healthy}
+
+configs:
+  caddyfile:
+    content: |
+      {
+        default_sni 127.0.0.1
+        auto_https disable_redirects
+        skip_install_trust
+      }
+      https://127.0.0.1:8443 {
+        tls internal
+        handle /api/* {
+          reverse_proxy server:8000
+        }
+        handle /media/* {
+          reverse_proxy server:8000
+        }
+        handle /mcp {
+          reverse_proxy server:8000
+        }
+        handle_path /downloads/* {
+          root * /srv/downloads
+          file_server {
+            hide .*
+          }
+        }
+        handle {
+          reverse_proxy web:80
+        }
+      }
+
+
+volumes:
+  # Banco e bucket restaurados: em disco (o bucket não cabe em tmpfs), apagados no `down -v`.
+  pg:
+  minio:

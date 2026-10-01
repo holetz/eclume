@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# A prova do app móvel no emulador headless do host (KVM), contra a produção: sobe o AVD
+# A prova do app móvel no emulador headless do host (KVM), contra o staging (`staging.sh subir`,
+# holetz/eclume#91; a prova escreve e recusa a URL de produção): sobe o AVD
 # eclume-35, instala o APK de depuração x86_64 com as permissões concedidas, roda
 # mobile/e2e/prova.mjs (Playwright `_android`) e, no fim, derruba o emulador. A limpeza das
 # gravações e do token da prova é do prova.mjs. Contrato: docs/standards/code/mobile-app.md.
 #
 # Uso, da raiz do repositório no host (depois do build de depuração):
 #   source ~/.config/eclume/android-env.sh
-#   ECLUME_SMOKE_PASSWORD=... bash mobile/scripts/prova-emulador.sh
+#   staging.sh subir            # conta e CA em ~/eclume-staging/conta
+#   bash mobile/scripts/prova-emulador.sh
 #   bash mobile/scripts/prova-emulador.sh --fumaca <apk>
 #
 # --fumaca: a fumaça do APK de release minificado (x86_64, do deploy/release-movel.sh), sem o
@@ -21,7 +23,19 @@ set -euo pipefail
 
 AVD="${AVD:-eclume-35}"
 PACOTE="io.github.holetz.eclume.movel"
-URL="${ECLUME_URL:-https://192.168.15.199:8443}"
+CONTA="${STAGING_DIR:-$HOME/eclume-staging}/conta"
+if [[ -z "${ECLUME_SMOKE_PASSWORD:-}" && -r "$CONTA" ]]; then
+  ECLUME_SMOKE_PASSWORD="$(sed -n 's/^ECLUME_PASSWORD=//p' "$CONTA")"
+  ECLUME_SMOKE_EMAIL="${ECLUME_SMOKE_EMAIL:-$(sed -n 's/^ECLUME_EMAIL=//p' "$CONTA")}"
+  ECLUME_CA="${ECLUME_CA:-$(sed -n 's/^ECLUME_CA=//p' "$CONTA")}"
+  export ECLUME_SMOKE_PASSWORD ECLUME_SMOKE_EMAIL
+fi
+URL="${ECLUME_URL:-https://127.0.0.1:18444}"
+for producao in https://192.168.15.199:8443 "${ECLUME_PUBLIC_URL:-}"; do
+  [[ -n "$producao" && "${URL%/}" == "${producao%/}" ]] || continue
+  echo "$URL é a produção: a prova escreve; use o staging (staging.sh subir)" >&2
+  exit 2
+done
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG="${TMPDIR:-/tmp}/eclume-emulador.log"
 
@@ -31,7 +45,7 @@ if [[ "${1:-}" == --fumaca ]]; then
   apk="$fumaca"
   [[ -f "$apk" ]] || { echo "APK não encontrado: $apk" >&2; exit 1; }
 else
-  : "${ECLUME_SMOKE_PASSWORD:?informe ECLUME_SMOKE_PASSWORD}"
+  : "${ECLUME_SMOKE_PASSWORD:?informe ECLUME_SMOKE_PASSWORD (ou rode staging.sh subir)}"
   apk=$(ls "$RAIZ"/mobile/src-tauri/gen/android/app/build/outputs/apk/*/debug/*.apk | head -n1)
   [[ -f "$apk" ]] || { echo "APK de depuração não encontrado; rode o tauri android build --debug" >&2; exit 1; }
 fi
@@ -90,8 +104,11 @@ if [[ -n "$fumaca" ]]; then
   exit 0
 fi
 
-ca="${TMPDIR:-/tmp}/eclume-root.crt"
-curl -fsSk "$URL/downloads/eclume-root.crt" -o "$ca"
+# O 127.0.0.1 do aparelho é o do host: o app e a prova chegam ao Caddy do staging.
+port="${URL##*:}"
+port="${port%%/*}"
+adb reverse "tcp:$port" "tcp:$port" >/dev/null
+ca="${ECLUME_CA:?informe ECLUME_CA (a CA do staging, em ~/eclume-staging/ca/ca.crt)}"
 
 cd "$RAIZ/mobile"
 # O driver Android do Playwright (um APK de instrumentação), que toca na notificação.

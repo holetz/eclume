@@ -7,7 +7,7 @@ tags: [code, mobile, android, release, apk, host]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#108
+source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#91, holetz/eclume#108
 maintainer: holetz
 ---
 
@@ -70,8 +70,14 @@ app e a conferência dos símbolos JNI (`mobile/scripts/simbolos_jni.py`: cada `
   uma keystore existente e imprime o SHA-256 do certificado, a versionar em
   `mobile/certificado-release.sha256`.
 - **Perdê-la impede atualizar os apps instalados**: o Android só instala por cima um APK assinado
-  pela mesma chave, e a saída é desinstalar e parear de novo. A cópia cifrada da keystore e da senha
-  fora do host (holetz/eclume#91) é pré-condição do primeiro release.
+  pela mesma chave, e a saída é desinstalar e parear de novo.
+- **Backup**: a keystore e a senha vão, com toda a pasta `/srv/eclume/secrets/`, no snapshot restic
+  cifrado do `deploy/backup.sh` (holetz/eclume#91), no repositório local e na cópia fora do host; o
+  ensaio noturno confere o sha256 dos arquivos restaurados, e um host novo os recebe de volta por
+  `restaurar-backup.sh --host-novo` ([deploy-producao.md](../../project/deploy-producao.md)). Um
+  secret do GitHub **não** é cópia recuperável: não se lê de volta. A cópia fora do host configurada
+  (`secrets/restic-fora.env`, com a senha do repositório guardada fora dele) é pré-condição do
+  primeiro release.
 - Ordem do primeiro release: identidade decidida (#17) → keystore criada com ela → SHA-256
   versionado → cópia fora do host → gate verde → `release-movel.sh --publicar` →
   `publicar-movel.sh`.

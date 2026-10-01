@@ -243,7 +243,10 @@ clientes baixam do próprio servidor eclume:
 - **Chave do updater (minisign):** a privada e a senha ficam em
   `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` (`chmod 600`), que o
   release no host lê; os mesmos valores estão nos secrets do GitHub `TAURI_SIGNING_PRIVATE_KEY` e
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` para o workflow manual. Nunca no repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` para o workflow manual — mas um secret do GitHub não se lê de
+  volta e não é cópia recuperável: a cópia é o snapshot restic cifrado de `secrets/` que o
+  `backup.sh` leva para fora do host ([deploy-producao.md](deploy-producao.md#backup-e-restauração)).
+  Nunca no repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
   reinstalar o app à mão em todos os clientes.
 
 Avisos da primeira instalação, detalhados para o usuário em

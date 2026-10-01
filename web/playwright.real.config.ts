@@ -2,6 +2,8 @@
 // eclume-e2e) subido por deploy/e2e-real.sh no host, que passa a URL e o admin descartável:
 //   ECLUME_E2E_URL, ECLUME_E2E_ADMIN_EMAIL, ECLUME_E2E_ADMIN_PASSWORD e ECLUME_E2E_AUDIO (WAV de fala).
 // O certificado é o da CA interna do Caddy efêmero: o navegador ignora o erro de TLS.
+// e2e-real/producao.spec.ts escolhe o próprio alvo: o staging (ECLUME_PROVA_URL, padrão
+// https://127.0.0.1:18444, deploy/staging.sh subir), nunca a produção.
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({

@@ -1,4 +1,4 @@
-"""Smoke do stack de produção do eclume, pela API pública, só com a biblioteca padrão.
+"""Smoke do stack do eclume, pela API pública, só com a biblioteca padrão.
 
 Prova o caminho inteiro: health, SPA, `/downloads/`, o cadastro aberto com o aviso, a sessão de
 admin (provider `claude-cli`), a sessão de usuário (upload multipart de um áudio, transcrição
@@ -6,8 +6,17 @@ diarizada na GPU e um resumo gerado pelo `claude -p` do host) e a gravação cen
 (holetz/eclume#34): edição à mão, chat de ajuste que lê a transcrição, volta à gerada, marcadores,
 biblioteca pelo intervalo do dia e os quatro formatos de exportação.
 
+O alvo padrão é o staging (`https://127.0.0.1:18444`, `staging.sh subir` no host; da estação,
+`ssh -L 18444:127.0.0.1:18444`), com a conta descartável de `~/eclume-staging/conta`:
+
+    python3 deploy/smoke_prod.py --ca ca.crt --email staging@eclume.invalid < senha
+
+Contra a produção (`ECLUME_PUBLIC_URL`, `https://192.168.15.199:8443`) só roda a parte de leitura —
+health, SPA, `/downloads/`, cadastro e sessão de admin — com `--somente-leitura`; sem ela, recusa
+com saída 2 antes de qualquer requisição:
+
     ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-      | python3 deploy/smoke_prod.py --ca eclume-root.crt
+      | python3 deploy/smoke_prod.py --url https://192.168.15.199:8443 --ca eclume-root.crt --somente-leitura
 
 Com `--pipeline`, prova o processamento automático (holetz/eclume#33): retranscreve a gravação
 (a de `--recording`, uma gravação real da biblioteca, ou a do áudio de fixture) e espera as seis
@@ -45,6 +54,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from email.message import Message
 
+STAGING = "https://127.0.0.1:18444"
+PRODUCAO = "https://192.168.15.199:8443"
 FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fixtures" / "duas-vozes.ogg"
 
 
@@ -358,10 +369,16 @@ def _states(recording: dict[str, Any]) -> str:
     return ", ".join(f"{step['step']}={step['state']}" for step in recording["pipeline"])
 
 
+def e_producao(url: str) -> bool:
+    """Se `url` aponta para a produção: a de `PRODUCAO` ou a de `ECLUME_PUBLIC_URL`."""
+    alvos = {PRODUCAO, os.environ.get("ECLUME_PUBLIC_URL") or PRODUCAO}
+    return urllib.parse.urlsplit(url).netloc.lower() in {urllib.parse.urlsplit(a).netloc.lower() for a in alvos}
+
+
 def main() -> int:
     """Roda o smoke e devolve o código de saída."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--url", default="https://192.168.15.199:8443")
+    parser.add_argument("--url", default=STAGING, help="padrão: o staging; a produção só com --somente-leitura")
     parser.add_argument("--ca", help="CA raiz do Caddy do eclume (padrão: as CAs do sistema)")
     parser.add_argument("--email", default="admin@example.com", help="e-mail das duas contas")
     parser.add_argument("--admin-email", help="e-mail da conta de admin (padrão: --email)")
@@ -369,7 +386,15 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=1200, help="espera máxima da transcrição, em segundos")
     parser.add_argument("--pipeline", action="store_true", help="prova as seis etapas do processamento automático")
     parser.add_argument("--recording", help="com --pipeline: a gravação a retranscrever (padrão: a do áudio)")
+    parser.add_argument(
+        "--somente-leitura",
+        action="store_true",
+        help="só health, SPA, /downloads/, cadastro e sessão de admin (o único modo aceito na produção)",
+    )
     args = parser.parse_args()
+    if e_producao(args.url) and not args.somente_leitura:
+        print(f"{args.url} é a produção: o smoke escreve dados; use o staging ou --somente-leitura.", file=sys.stderr)  # noqa: T201
+        return 2
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
     if not password:
         _fail("informe a senha pelo stdin ou por ECLUME_SMOKE_PASSWORD")
@@ -380,6 +405,9 @@ def main() -> int:
     admin_password = os.environ.get("ECLUME_SMOKE_ADMIN_PASSWORD") or password
     api.json("POST", "/api/v1/admin/auth/login", {"email": admin_email, "password": admin_password}, expect=(204,))
     _step(f"sessão de admin ok: {api.json('GET', '/api/v1/admin/me')['email']}")
+    if args.somente_leitura:
+        print("OK (somente leitura)")  # noqa: T201
+        return 0
     provider_id = _ensure_provider(api)
     api.json("POST", "/api/v1/auth/login", {"email": args.email, "password": password}, expect=(200, 204))
     me = api.json("GET", "/api/v1/me")

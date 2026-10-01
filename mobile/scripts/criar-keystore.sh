@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Cria, uma única vez, a keystore de release do app móvel no host: RSA 4096, validade de 30 anos,
 # alias `eclume`, em /srv/eclume/secrets/eclume-android.jks, com a senha aleatória em
-# /srv/eclume/secrets/android-keystore-password (os dois 0600, no backup do deploy). Perder a
+# /srv/eclume/secrets/android-keystore-password (os dois 0600; o backup.sh os leva no snapshot restic
+# cifrado de secrets/, local e fora do host, e um secret do GitHub não é cópia recuperável). Perder a
 # keystore impede atualizar os apps já instalados: o Android só instala por cima um APK assinado
 # pela mesma chave. Contrato: docs/standards/code/mobile-distribuicao.md.
 #
