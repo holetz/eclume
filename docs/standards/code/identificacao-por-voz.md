@@ -7,7 +7,7 @@ tags: [code, server, web, voz, lgpd, pgvector]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95
+source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95, holetz/eclume#97
 maintainer: holetz
 ---
 
@@ -114,9 +114,12 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 - **Aceite do aviso no lugar do consentimento por pessoa.** A conta nasce aceitando o aviso em
   vigor ([server-nucleo.md](server-nucleo.md)); pedir o consentimento de quem grava é
   responsabilidade de quem grava. A pessoa não tem estado de consentimento, termo nem histórico.
-- **Esquecer a voz de uma pessoa** (`DELETE /people/{id}/voiceprint`) apaga as amostras e as
-  sugestões pendentes dela, com um `DELETE` comum sob a RLS do dono (`voice.forget`): toda amostra
-  da pessoa está nas gravações do próprio dono. **Excluir a pessoa** leva tudo em cascata.
+- **Esquecer a voz de uma pessoa** (`DELETE /people/{id}/voiceprint`) apaga as amostras, as
+  sugestões pendentes e os `speaker_embeddings` dos locutores ligados a ela, com `DELETE` comuns
+  sob a RLS do dono (`voice.forget`): toda amostra da pessoa está nas gravações do próprio dono. O
+  vínculo locutor ↔ pessoa fica; sem o vetor, religar um desses locutores não recria a amostra, e
+  só uma retranscrição o recria (holetz/eclume#97 seguiu a recomendação da spec; a decisão final do
+  alcance é da dona). **Excluir a pessoa** leva tudo em cascata.
 - **Tirar uma amostra isolada** (`DELETE /people/{id}/voice-samples/{transcript_id}/{speaker_id}`)
   apaga só aquela amostra, sob a RLS do dono (`voice.forget_sample`); 404 se ela não existe ou é de
   outra conta. **O locutor segue ligado à pessoa**: a amostra sai da impressão, não o vínculo. Só uma
@@ -139,8 +142,10 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   amostras (locutores confirmados) ficam: esquecê-las é pela pessoa. Religar não traz os vetores
   antigos: só uma retranscrição os recria.
 - **Vale na ingestão.** Um job enfileirado com `embeddings: true` antes do desligamento chega ao
-  `ingest_transcript` depois dele: a ingestão relê a plataforma, não grava o vetor e apaga o
-  `speaker_embeddings.json` da revisão que chegou (a chave que o job traz).
+  `ingest_transcript` depois dele: a ingestão relê a plataforma e não grava o vetor.
+- **O JSON de embeddings não fica no bucket.** Guardado ou descartado o vetor, a ingestão põe o
+  `speaker_embeddings.json` da revisão que chegou (a chave que o job traz) na fila de exclusão do
+  bucket, na mesma transação; o dreno o apaga em até um minuto. A biometria vive só no banco.
 - **Excluir a gravação** apaga áudio, `recordings/{id}/` inteiro (transcrição bruta e
   embeddings de toda revisão), transcrição, locutores, segmentos, embeddings, amostras, sugestões, jobs e resumos
   (cascata no banco e `Storage.delete_recording` no bucket). Uma gravação excluída durante a

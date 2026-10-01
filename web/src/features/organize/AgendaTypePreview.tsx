@@ -6,9 +6,10 @@ import Markdown from 'react-markdown'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
-import { formatDate } from '../library/format'
+
 import styles from './Organize.module.css'
 import { agendaPreviewResult, type PreviewRun } from './usePreview'
+import { formatDate } from '../../shared/format'
 
 const RECENT = 20
 const NO_PROVIDER = 'Nenhum agente está configurado para esta pré-visualização. Peça a quem administra o servidor.'

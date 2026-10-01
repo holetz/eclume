@@ -1,10 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
+
+beforeAll(() => preloadRoute('/config/campos'))
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -71,7 +73,7 @@ describe('campos personalizados', () => {
     expect(main.getByRole('link', { name: 'Tags' })).toHaveAttribute('href', '/tags')
     expect(main.getByText(/As tags se configuram em/)).toBeInTheDocument()
     expect(within(row('Cliente')).getByText('Seu campo · escolha')).toBeInTheDocument()
-    expect(within(row('Cliente')).getByRole('checkbox', { name: 'Automático: Cliente' })).toBeChecked()
+    expect(within(row('Cliente')).getByRole('switch', { name: 'Automático: Cliente' })).toBeChecked()
     expect(within(row('Cliente')).getByRole('button', { name: 'Cliente' })).toHaveAttribute('aria-current', 'true')
 
     const panel = screen.getByRole('form', { name: 'Editar Cliente' })
@@ -108,7 +110,7 @@ describe('campos personalizados', () => {
     })
     renderApp('/config/campos')
     await list()
-    const toggle = within(row('Cliente')).getByRole('checkbox', { name: 'Automático: Cliente' })
+    const toggle = within(row('Cliente')).getByRole('switch', { name: 'Automático: Cliente' })
     await userEvent.click(toggle)
     expect(await http.requests('PATCH /api/v1/fields/:id')[0].json()).toEqual({ auto_fill: false })
     expect(await within(row('Cliente')).findByRole('alert')).toHaveTextContent('Não deu para mudar')

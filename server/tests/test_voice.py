@@ -9,7 +9,15 @@ from sqlalchemy import text
 
 from eclume_server.voice import DEFAULT_THRESHOLD
 from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
-from eclume_server_testing.fakes import DEFAULT_VOICES, contract_transcript, run_cpu, run_gpu, transcribed, voice
+from eclume_server_testing.fakes import (
+    DEFAULT_VOICES,
+    contract_transcript,
+    drain_storage,
+    run_cpu,
+    run_gpu,
+    transcribed,
+    voice,
+)
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -224,6 +232,23 @@ def test_esquecer_a_voz_apaga_amostras_e_sugestoes(ek: Conta):
     assert ek.owner.get(f"/api/v1/people/{rafael['id']}").status_code == 200
 
 
+def test_esquecer_a_voz_apaga_os_vetores_dos_locutores_ligados(ek: Conta, services: Services):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    linked, other = ek.transcript(), ek.transcript()
+    ek.link(linked, "S2", rafael["id"])
+    assert _embeddings(services, linked) == 3
+    assert ek.owner.delete(f"/api/v1/people/{rafael['id']}/voiceprint").status_code == 204
+    # Sai o vetor do locutor ligado à pessoa; o vínculo e os outros locutores ficam.
+    assert _embeddings(services, linked) == 2
+    assert _embeddings(services, other) == 3
+    assert ek.speakers(linked)["S2"]["person"]["id"] == rafael["id"]
+    # Religar o mesmo locutor não recria a amostra: o vetor não existe mais.
+    ek.link(linked, "S2", None)
+    ek.link(linked, "S2", rafael["id"])
+    assert ek.samples(rafael["id"]) == 0
+
+
 def test_remover_uma_amostra_e_ouvir_o_trecho(new_account: Callable[[], Conta]):
     ek, other = new_account(), new_account()
     ek.voice_on()
@@ -356,6 +381,20 @@ def test_desligar_purga_os_embeddings_da_plataforma_inteira(
     assert [key for key in _objects(services, "recordings/") if key.endswith("/speaker_embeddings.json")] == []
 
 
+def test_embeddings_saem_do_bucket_depois_de_ingerir(ek: Conta, services: Services):
+    ek.voice_on()
+    tid = ek.transcript()
+    rid = _recording_of(services, tid)
+    key = f"recordings/{rid}/r1/speaker_embeddings.json"
+    assert _embeddings(services, tid) == 3
+    # Na fila de exclusão desde a transação da ingestão; o vetor fica só no banco.
+    assert _sql(services, "SELECT count(*) FROM storage_deletions WHERE key = :k", k=key) == [(1,)]
+    drain_storage(services.settings)
+    assert _objects(services, key) == []
+    assert _objects(services, f"recordings/{rid}/r1/transcript.raw.json")
+    assert _embeddings(services, tid) == 3
+
+
 def test_ingestao_com_a_voz_desligada_no_meio_nao_guarda_embeddings(ek: Conta, services: Services):
     ek.voice_on()
     recording = upload_file(ek.owner, audio_bytes(2100))
@@ -369,6 +408,7 @@ def test_ingestao_com_a_voz_desligada_no_meio_nao_guarda_embeddings(ek: Conta, s
     tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
     assert _embeddings(services, tid) == 0
     assert _objects(services, f"recordings/{recording['id']}/r1/transcript.raw.json")
+    drain_storage(services.settings)
     assert _objects(services, f"recordings/{recording['id']}/r1/speaker_embeddings.json") == []
 
 
@@ -399,6 +439,8 @@ def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumo
 
     assert ek.owner.delete(f"/api/v1/recordings/{rid}").status_code == 204
     assert _sql(services, counts, t=tid, r=rid) == [(0, 0, 0, 0, 0, 0, 0)]
+    # Os objetos saem pela fila de exclusão, no dreno.
+    drain_storage(services.settings)
     assert _objects(services, audio_key) == []
     assert _objects(services, f"recordings/{rid}/") == []
 

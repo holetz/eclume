@@ -32,7 +32,7 @@ from eclume_server.recordings import enqueue_transcription, get_visible, insert_
 from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
-from eclume_server.storage import audio_key
+from eclume_server.storage import MultipartGoneError, audio_key
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -169,10 +169,24 @@ async def _get_upload(conn: AsyncConnection, upload_id: UUID, *, lock: bool = Fa
     return row
 
 
+def _expired() -> Exception:
+    return conflict("O upload expirou; comece outro.", code="upload_expired")
+
+
+async def _expire(ctx: AppContext, upload_id: UUID) -> None:
+    """O multipart sumiu do bucket (vencido no MinIO ou abortado): o upload fica `expired`."""
+    async with system_tx(ctx.engine) as conn:
+        await conn.execute(
+            update(t.uploads)
+            .where(t.uploads.c.id == upload_id, t.uploads.c.status == "in_progress")
+            .values(status="expired")
+        )
+
+
 def _require_open(row: Row) -> None:
     status = _status(row)
     if status == "expired":
-        raise conflict("O upload expirou; comece outro.", code="upload_expired")
+        raise _expired()
     if status != "in_progress":
         raise conflict(f"O upload está {status}.")
 
@@ -254,12 +268,16 @@ async def create_upload(
                 .first()
             )
             if open_upload is not None:
+                closed = "aborted"
                 if _status(open_upload) == "in_progress" and open_upload["size_bytes"] == body.size_bytes:
-                    return await _resume(ctx, request, open_upload)
-                await ctx.storage.abort_multipart(open_upload["audio_key"], open_upload["s3_upload_id"])
-                await conn.execute(
-                    update(t.uploads).where(t.uploads.c.id == open_upload["id"]).values(status="aborted")
-                )
+                    try:
+                        return await _resume(ctx, request, open_upload)
+                    except MultipartGoneError:
+                        # O multipart sumiu do bucket: este upload expira e outro começa.
+                        closed = "expired"
+                else:
+                    await ctx.storage.abort_multipart(open_upload["audio_key"], open_upload["s3_upload_id"])
+                await conn.execute(update(t.uploads).where(t.uploads.c.id == open_upload["id"]).values(status=closed))
 
             recording_id = uuid4()
             key = audio_key(principal.user_id, recording_id)
@@ -293,7 +311,12 @@ async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, 
     """Estado do upload, com as partes já confirmadas pelo armazenamento."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
-    return upload_json(row, await _received(ctx, row), [])
+    try:
+        received = await _received(ctx, row)
+    except MultipartGoneError:
+        await _expire(ctx, upload_id)
+        return upload_json({**row, "status": "expired"}, [], [])
+    return upload_json(row, received, [])
 
 
 @router.delete("/uploads/{upload_id}", status_code=204)
@@ -353,7 +376,11 @@ async def put_part(
     data = await request.body()
     if len(data) != expected:
         raise conflict(f"A parte {part_number} deve ter {expected} bytes.")
-    etag = await ctx.storage.upload_part(row["audio_key"], row["s3_upload_id"], part_number, data)
+    try:
+        etag = await ctx.storage.upload_part(row["audio_key"], row["s3_upload_id"], part_number, data)
+    except MultipartGoneError:
+        await _expire(ctx, upload_id)
+        raise _expired() from None
     return Response(status_code=200, headers={"ETag": etag})
 
 
@@ -361,18 +388,37 @@ async def put_part(
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição."""
     enqueue: tuple[str, dict[str, Any]] | None = None
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        row = await _get_upload(conn, upload_id, lock=True)
-        if row["status"] in {"completed", "deduplicated"}:
-            recording_id = row["recording_id"]
-        else:
-            _require_open(row)
-            await _check_parts(ctx, row, body)
-            recording_id, enqueue = await _finish(ctx, conn, row, principal)
-        recording = await get_visible(conn, recording_id)
+    try:
+        async with user_tx(ctx.engine, principal.user_id) as conn:
+            row = await _get_upload(conn, upload_id, lock=True)
+            if row["status"] in {"completed", "deduplicated"}:
+                recording_id = row["recording_id"]
+            else:
+                _require_open(row)
+                assembled = await _parts_or_assembled(ctx, row, body)
+                recording_id, enqueue = await _finish(ctx, conn, row, principal, assembled=assembled)
+            recording = await get_visible(conn, recording_id)
+    except MultipartGoneError:
+        await _expire(ctx, upload_id)
+        raise _expired() from None
     if enqueue is not None:
         await enqueue_transcription(ctx, recording_id, 1, *enqueue)
     return (await render(ctx, principal.user_id, [recording]))[0]
+
+
+async def _parts_or_assembled(ctx: AppContext, row: Row, body: UploadComplete) -> bool:
+    """Confere as partes; devolve `True` se o objeto já foi montado por um `complete` anterior.
+
+    Multipart sumido com o objeto presente é o `complete` cujo commit falhou depois de montar: segue
+    sem remontar. Sumido sem objeto é `MultipartGoneError` (o upload expira).
+    """
+    try:
+        await _check_parts(ctx, row, body)
+    except MultipartGoneError:
+        if not await ctx.storage.head_object(row["audio_key"]):
+            raise
+        return True
+    return False
 
 
 async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
@@ -423,11 +469,14 @@ async def _finish(
     conn: AsyncConnection,
     row: Row,
     principal: Principal,
+    *,
+    assembled: bool = False,
 ) -> tuple[UUID, tuple[str, dict[str, Any]] | None]:
-    """Fecha o multipart, confere o hash e grava gravação e job. Devolve o que enfileirar."""
+    """Fecha o multipart (se ainda não montado), confere o hash e grava gravação e job. Devolve o que enfileirar."""
     key = row["audio_key"]
-    parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
-    await ctx.storage.complete_multipart(key, row["s3_upload_id"], [(p.part_number, p.etag) for p in parts])
+    if not assembled:
+        parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
+        await ctx.storage.complete_multipart(key, row["s3_upload_id"], [(p.part_number, p.etag) for p in parts])
     actual = await ctx.storage.sha256(key)
     matches = actual == row["sha256"]
     requested = row["request"]

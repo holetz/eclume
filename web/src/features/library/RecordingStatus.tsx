@@ -1,5 +1,5 @@
 import type { Schemas } from '../../api/client'
-import { recordingState } from './format'
+import { recordingState } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 

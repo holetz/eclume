@@ -103,39 +103,6 @@
   gap: var(--space-2);
 }
 
-.combo {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.combo > button {
-  justify-self: start;
-}
-
-.options {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-1);
-  display: grid;
-  gap: 2px;
-  max-height: 14rem;
-  overflow-y: auto;
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
-}
-
-.option {
-  display: grid;
-  padding: var(--space-1) var(--space-2);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.option[aria-selected='true'] {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  outline: 1px solid var(--color-accent);
-}
-
 .buttons {
   display: flex;
   flex-wrap: wrap;
@@ -159,9 +126,4 @@
   padding: var(--space-1) var(--space-2);
   font-size: 14px;
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-}
-
-/* A lista do combobox some quando não há opção (o display do módulo venceria o atributo). */
-.options[hidden] {
-  display: none;
 }

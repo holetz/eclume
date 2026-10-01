@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
+    "budget": "node scripts/bundle-budget.mjs",
     "test:e2e": "playwright test",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "test:e2e:prod": "playwright test -c playwright.prod.config.ts",

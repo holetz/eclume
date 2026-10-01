@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { markersLabel } from '../library/calendar'
+
 import { placeMarkers, type Marker } from './markers'
 import { usePlayback, usePlaybackSelect } from './playback'
 import { SegmentMarker, SegmentRow } from './SegmentRow'
 import { findSegmentAt, speakerColorIndex, speakerName, type Transcript } from './segments'
 import { SpeakersPanel } from './SpeakersPanel'
 import styles from './TranscriptView.module.css'
+import { markersLabel } from '../../shared/format'
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 

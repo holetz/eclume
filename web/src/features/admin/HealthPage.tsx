@@ -1,10 +1,11 @@
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
-import { formatDateTime } from '../library/format'
+
 import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { formatDuration, labelOf, SERVICE_STATUS, SERVICES, STEP_ORDER, STEPS } from './labels'
 import { HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
+import { formatDateTime } from '../../shared/format'
 
 type Health = Schemas['AdminHealth']
 type Failure = Health['recent_failures'][number]

@@ -1,13 +1,26 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { empty, json, mockFetch } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
 
-afterEach(() => vi.unstubAllGlobals())
+beforeAll(() => preloadRoute('/app-movel', '/parear'))
 
 const SERVER_DATE = 'Sun, 27 Sep 2026 14:02:18 GMT'
+
+// Só a data e o `performance.now()` (a âncora da contagem) são falsos, no instante do servidor da
+// fixture: a validade não depende do relógio real. Os temporizadores ficam reais, para o React Query
+// e o Testing Library.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date', 'performance'] })
+  vi.setSystemTime(new Date(SERVER_DATE))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 function devicePage() {
   const page = fixtures.tokenPage()
@@ -45,7 +58,7 @@ describe('app móvel', () => {
     expect(qr.querySelectorAll('path').length).toBeGreaterThan(10)
     expect(qr.querySelector('path')).toHaveAttribute('fill', '#000')
     expect(screen.getByText('Toque em Ler um código')).toBeInTheDocument()
-    expect(screen.getByText(/Válido por 9:4\d/)).toBeInTheDocument()
+    expect(screen.getByText(/Válido por 9:42/)).toBeInTheDocument()
     expect(screen.getByText('K7Q-4MX')).toBeInTheDocument()
     expect(http.requests('POST /api/v1/devices/pairing-codes').length).toBeGreaterThanOrEqual(1)
   })

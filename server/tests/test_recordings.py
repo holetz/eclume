@@ -9,7 +9,7 @@ import redis
 from sqlalchemy import text
 
 from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.fakes import run_cpu, transcribed
+from eclume_server_testing.fakes import drain_storage, run_cpu, transcribed
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -190,6 +190,8 @@ def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Calla
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
     assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
     assert api.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
+    # O áudio sai pela fila de exclusão, no dreno.
+    drain_storage(services.settings)
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
 
 
@@ -246,6 +248,7 @@ def test_excluir_leva_resumo_chat_marcadores_e_audio(
         "chat": 0,
         "markers": 0,
     }
+    drain_storage(services.settings)
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
     # O resumo que estava na fila encontra a gravação apagada e não faz nada.
     agents = run_cpu(services.settings)

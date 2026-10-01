@@ -81,8 +81,24 @@ pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
     if response.status == 403 && code == " (insufficient_scope)" {
         return anyhow::Error::new(MissingScope::new(message));
     }
+    if response.status == 409 && code == " (upload_expired)" {
+        return anyhow::Error::new(UploadExpired(message));
+    }
     anyhow!(message)
 }
+
+/// O servidor deu o upload por vencido (409 `upload_expired`): o multipart sumiu do bucket. Quem
+/// sobe recomeça com um upload novo, uma vez.
+#[derive(Debug)]
+pub struct UploadExpired(String);
+
+impl std::fmt::Display for UploadExpired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for UploadExpired {}
 
 /// O servidor recusou porque o token não tem o escopo da operação (403 `insufficient_scope`): um
 /// servidor anterior ao contrato 2.8.0, ou um token que a migração ainda não alcançou. Quem chama
@@ -401,7 +417,8 @@ impl Client {
 
     /// Sobe o arquivo e devolve a gravação confirmada. `resume` é o upload guardado de uma
     /// tentativa anterior; `save_upload_id` persiste o upload em curso (ou o limpa, com `None`)
-    /// antes de qualquer parte subir, para a próxima tentativa retomar.
+    /// antes de qualquer parte subir, para a próxima tentativa retomar. Um 409 `upload_expired`
+    /// numa parte ou no `complete` limpa o upload guardado e recomeça do zero, uma vez.
     pub fn upload(
         &self,
         path: &Path,
@@ -430,16 +447,37 @@ impl Client {
                 if resume.is_some() {
                     save_upload_id(None)?;
                 }
-                let request = HttpRequest::new("POST", self.endpoint("/uploads")).json(create)?;
-                let upload: Upload = self.call_json("falha ao iniciar o upload", request)?;
-                if upload.status != api::status::IN_PROGRESS {
-                    return finished(upload);
+                match self.start_upload(create, save_upload_id)? {
+                    Ok(upload) => upload,
+                    Err(done) => return Ok(done),
                 }
-                save_upload_id(Some(&upload.id))?;
-                upload
             }
         };
-        self.send_parts(path, create.size_bytes, &upload)
+        match self.send_parts(path, create.size_bytes, &upload) {
+            Err(err) if err.downcast_ref::<UploadExpired>().is_some() => {
+                save_upload_id(None)?;
+                match self.start_upload(create, save_upload_id)? {
+                    Ok(upload) => self.send_parts(path, create.size_bytes, &upload),
+                    Err(done) => Ok(done),
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Abre um upload novo e o guarda; `Err` traz a gravação que o servidor já resolveu (dedup).
+    fn start_upload(
+        &self,
+        create: &UploadCreate,
+        save_upload_id: &mut dyn FnMut(Option<&str>) -> Result<()>,
+    ) -> Result<std::result::Result<Upload, Uploaded>> {
+        let request = HttpRequest::new("POST", self.endpoint("/uploads")).json(create)?;
+        let upload: Upload = self.call_json("falha ao iniciar o upload", request)?;
+        if upload.status != api::status::IN_PROGRESS {
+            return finished(upload).map(Err);
+        }
+        save_upload_id(Some(&upload.id))?;
+        Ok(Ok(upload))
     }
 
     fn send_parts(&self, path: &Path, size: u64, upload: &Upload) -> Result<Uploaded> {
@@ -1163,6 +1201,69 @@ mod tests {
                 deduplicated: false
             }
         );
+    }
+
+    fn expired() -> Result<HttpResponse> {
+        json(
+            409,
+            serde_json::json!({"code": "upload_expired", "detail": "O upload expirou; comece outro."}),
+        )
+    }
+
+    #[test]
+    fn upload_vencido_no_meio_recomeca_uma_vez() {
+        let parts = vec![part(1, BASE), part(2, BASE), part(3, BASE)];
+        let script = Script::default()
+            .expect(
+                "POST /api/v1/uploads",
+                json(201, upload("in_progress", parts.clone(), &[])),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/1", expired())
+            .expect(
+                "POST /api/v1/uploads",
+                json(201, upload("in_progress", parts, &[])),
+            )
+            .expect("PUT /api/v1/uploads/up-1/parts/1", etag("\"e1\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/2", etag("\"e2\""))
+            .expect("PUT /api/v1/uploads/up-1/parts/3", etag("\"e3\""))
+            .expect(
+                "POST /api/v1/uploads/up-1/complete",
+                json(201, serde_json::json!({"id": "rec-1"})),
+            );
+        let (client, _, _) = make_client(script);
+        let (path, create) = file();
+        let mut saved = Vec::new();
+        let uploaded = client
+            .upload(&path, &create, None, &mut |id| {
+                saved.push(id.map(str::to_string));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(uploaded.recording_id, "rec-1");
+        assert_eq!(saved, vec![Some("up-1".into()), None, Some("up-1".into())]);
+    }
+
+    #[test]
+    fn upload_vencido_de_novo_no_complete_vira_erro() {
+        let parts = vec![part(1, BASE), part(2, BASE), part(3, BASE)];
+        let mut script = Script::default();
+        for _ in 0..2 {
+            script = script
+                .expect(
+                    "POST /api/v1/uploads",
+                    json(201, upload("in_progress", parts.clone(), &[])),
+                )
+                .expect("PUT /api/v1/uploads/up-1/parts/1", etag("\"e1\""))
+                .expect("PUT /api/v1/uploads/up-1/parts/2", etag("\"e2\""))
+                .expect("PUT /api/v1/uploads/up-1/parts/3", etag("\"e3\""))
+                .expect("POST /api/v1/uploads/up-1/complete", expired());
+        }
+        let (client, _, _) = make_client(script);
+        let (path, create) = file();
+        let err = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap_err();
+        assert!(err.downcast_ref::<UploadExpired>().is_some(), "{err:#}");
     }
 
     #[test]

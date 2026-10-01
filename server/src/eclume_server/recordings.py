@@ -214,16 +214,16 @@ async def open_jobs_of(conn: AsyncConnection, owner_id: UUID) -> list[tuple[UUID
 async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID) -> None:
     """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
 
-    As FKs levam os filhos em cascata, o job em aberto inclusive; depois do commit, o worker GPU é
-    avisado para parar e liberar a GPU, e um resultado que ainda chegue encontra a gravação apagada
-    e não faz nada.
+    As FKs levam os filhos em cascata, o job em aberto inclusive; o gatilho da gravação põe o áudio
+    e `recordings/{id}/` na fila de exclusão do bucket na mesma transação (`storage_deletions.py`).
+    Depois do commit, o worker GPU é avisado para parar e liberar a GPU, e um resultado que ainda
+    chegue encontra a gravação apagada e não faz nada.
     """
     async with user_tx(ctx.engine, user_id) as conn:
         row = await lock_recording(conn, recording_id)
         await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
     if row["job_state"] in _OPEN:
         await ctx.queue.request_cancel([(recording_id, row["job_revision"])])
-    await ctx.storage.delete_recording(row["audio_key"], recording_id)
 
 
 async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[str, Any]]:

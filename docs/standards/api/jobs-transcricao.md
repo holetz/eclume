@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97
 maintainer: holetz
 ---
 
@@ -122,7 +122,9 @@ primeira fala. A engine não muda.
    segmentos, palavras e locutores com `label` "Locutor N", **sem** `person`/`suggestions`, que
    são do server.
 3. Grava também um `speaker_embeddings` com `{speaker_id: [float, ...]}` e `embedding_model`,
-   num arquivo à parte: `recordings/{recording_id}/r{revision}/speaker_embeddings.json`.
+   num arquivo à parte: `recordings/{recording_id}/r{revision}/speaker_embeddings.json`. O server
+   o põe na fila de exclusão do bucket na transação da ingestão, guardado ou descartado o vetor:
+   a biometria vive só no banco (holetz/eclume#97).
 4. Em seguida enfileira `ingest_transcript(recording_id, transcript_key, embeddings_key,
    engine_info)` em `eclume:default`, com `_job_id="ingest_transcript:{recording_id}:{revision}"`.
    O `engine_info` traz engine, modelo, `compute_type`, duração, tempo real e VRAM de pico.

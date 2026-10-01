@@ -1,12 +1,14 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { checkEnvironment, convertAudio, probeMedia, readRecordedAt } from '../lib/media-convert'
 import { fixtures } from '../test/fixtures'
 import { mockFetch, problem } from '../test/http'
-import { renderApp } from '../test/render'
+import { preloadRoute, renderApp } from '../test/render'
 import { ADMIN_ME_KEY } from '../features/admin/adminSession'
 import { ME_KEY } from './session'
+
+beforeAll(() => preloadRoute('/admin/saude'))
 
 vi.mock('../lib/media-convert', async (original) => ({
   ...(await original<typeof import('../lib/media-convert')>()),

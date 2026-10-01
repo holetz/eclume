@@ -42,6 +42,7 @@ from eclume_server.queue import (
 from eclume_server.resume import resume
 from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
 from eclume_server.storage import Storage
+from eclume_server.storage_deletions import drain, reconcile
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
 from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
 from eclume_server.transcripts import fail, ingest
@@ -64,6 +65,12 @@ INGEST_RETRY_DELAYS_S = (15, 60, 240)
 RETURN_MAX_TRIES = len(INGEST_RETRY_DELAYS_S) + 1
 # Códigos de pareamento vencidos sem uso somem depois disso (cron `expire_pairing_codes`).
 PAIRING_RETENTION = timedelta(days=1)
+# Sessões (de usuário e de admin) vencidas há mais disso somem (cron `purge_expired`).
+SESSION_RETENTION = timedelta(days=1)
+# Uploads terminais com mais disso somem: um app que retome depois recebe 404 e abre outro, que cai
+# no dedup por hash da gravação.
+UPLOAD_RETENTION = timedelta(days=30)
+TERMINAL_UPLOADS = ("completed", "deduplicated", "aborted", "expired")
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -328,10 +335,43 @@ async def expire_pairing_codes(ctx: dict[str, Any]) -> int:
         return await purge_pairing_codes(conn)
 
 
+async def purge_stale_rows(conn: AsyncConnection, now: datetime | None = None) -> dict[str, int]:
+    """Apaga sessões vencidas há mais de `SESSION_RETENTION` e uploads terminais com mais de `UPLOAD_RETENTION`."""
+    now = now or datetime.now(UTC)
+    removed = {}
+    for table in (t.sessions, t.admin_sessions):
+        result = await conn.execute(delete(table).where(table.c.expires_at < now - SESSION_RETENTION))
+        removed[table.name] = result.rowcount
+    uploads = t.uploads.c
+    result = await conn.execute(
+        delete(t.uploads).where(uploads.status.in_(TERMINAL_UPLOADS), uploads.created_at < now - UPLOAD_RETENTION)
+    )
+    removed["uploads"] = result.rowcount
+    return removed
+
+
+async def purge_expired(ctx: dict[str, Any]) -> int:
+    """Cron diário: retenção mínima de sessões e uploads; `api_tokens` ficam (o usuário vê os revogados)."""
+    async with system_tx(ctx["engine"]) as conn:
+        removed = await purge_stale_rows(conn)
+    log.info("purge_expired: %s", removed)
+    return sum(removed.values())
+
+
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
     return len(reaped) + await reap_stalled_chats(ctx["engine"])
+
+
+async def drain_storage_deletions(ctx: dict[str, Any]) -> int:
+    """Tira do bucket o que a fila de exclusão guarda (`storage_deletions.py`)."""
+    return await drain(ctx["engine"], ctx["storage"])
+
+
+async def reconcile_storage(ctx: dict[str, Any]) -> int:
+    """Põe na fila de exclusão o que está no bucket sem linha no banco há mais de 24 h."""
+    return await reconcile(ctx["engine"], ctx["storage"])
 
 
 async def resume_pipelines(ctx: dict[str, Any]) -> int:
@@ -371,9 +411,12 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
             cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
+            cron(purge_expired, hour=3, minute=40, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
             cron(resume_pipelines, minute=set(range(2, 60, 5)), run_at_startup=False, unique=True),
+            cron(drain_storage_deletions, second=30, run_at_startup=False, unique=True),
+            cron(reconcile_storage, weekday="sun", hour=4, minute=0, run_at_startup=False, unique=True),
         ],
         "queue_name": DEFAULT_QUEUE,
         "max_jobs": DEFAULT_MAX_JOBS,

@@ -21,6 +21,25 @@ export default defineConfig([
     },
   },
   {
+    // O painel admin é um app à parte: nenhuma feature do usuário o importa (src/test/boundaries.test.ts
+    // confere o mesmo, além dos ciclos entre features e de src/shared/).
+    files: ['src/features/**/*.{ts,tsx}'],
+    ignores: ['src/features/admin/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^\\.\\./(\\.\\./features/)?admin(/|$)',
+              message: 'Feature do usuário não importa features/admin/ (o painel admin é um app à parte).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // A biblioteca de conversão é autocontida: nada nela importa do app.
     files: ['src/lib/media-convert/**/*.ts'],
     rules: {

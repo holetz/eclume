@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { findSegmentAt, formatClock, speakerColorIndex, speakerName } from './segments'
+import { findSegmentAt, speakerColorIndex, speakerName } from './segments'
+import { formatClock } from '../../shared/format'
 
 const segments = [{ start_ms: 3200 }, { start_ms: 12_400 }, { start_ms: 24_600 }, { start_ms: 39_500 }]
 

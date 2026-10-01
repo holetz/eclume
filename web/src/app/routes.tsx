@@ -8,8 +8,20 @@ import { RootError, RouteError } from './RouteError'
 
 // A biblioteca e o login vão no bundle inicial; as outras áreas carregam sob demanda, cada uma no
 // seu chunk (o react-markdown dos resumos é o mais pesado; o conversor do import carrega com o modal).
-const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
-  lazy(() => load().then((module) => ({ default: module[name] })))
+// O `preload` carrega o chunk antes da rota montar: os testes o chamam no `beforeAll` (`preloadRoute`),
+// fora do tempo do `findBy`.
+const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => {
+  let loading: Promise<{ default: ComponentType }> | null = null
+  const preload = () => (loading ??= load().then((module) => ({ default: module[name] })))
+  return Object.assign(lazy(preload), { preload })
+}
+
+type LazyPage = ReturnType<typeof named>
+
+/** Os `preload` das páginas sob demanda de uma rota, no `handle` dela. */
+export interface RouteHandle {
+  preload?: () => Promise<unknown>
+}
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
@@ -33,12 +45,16 @@ const TokensPage = named(() => import('../features/tokens/TokensPage'), 'TokensP
 const SignupPage = named(() => import('../features/auth/SignupPage'), 'SignupPage')
 const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
 
-function page(Page: ComponentType) {
-  return (
-    <Suspense fallback={<p role="status">Carregando…</p>}>
-      <Page />
-    </Suspense>
-  )
+/** A rota de uma página sob demanda: o `Suspense` com "Carregando…" e o `preload` no `handle`. */
+function page(Page: LazyPage): Pick<RouteObject, 'element' | 'handle'> {
+  return {
+    element: (
+      <Suspense fallback={<p role="status">Carregando…</p>}>
+        <Page />
+      </Suspense>
+    ),
+    handle: { preload: Page.preload } satisfies RouteHandle,
+  }
 }
 
 // A mesma árvore serve o `createBrowserRouter` do app e o `createMemoryRouter` dos testes.
@@ -49,12 +65,12 @@ export const routes: RouteObject[] = [
     errorElement: <RootError />,
     children: [
       { path: '/entrar', element: <LoginPage /> },
-      { path: '/cadastro', element: page(SignupPage) },
+      { path: '/cadastro', ...page(SignupPage) },
       // Quem lê o QR com a câmera comum cai aqui, sem sessão.
-      { path: '/parear', element: page(PairPage) },
+      { path: '/parear', ...page(PairPage) },
       // O painel admin fica fora da sessão do usuário: conta, login e guarda próprios.
-      { path: '/admin/entrar', element: page(AdminSignInPage) },
-      { path: '/admin/*', element: page(AdminRoutes) },
+      { path: '/admin/entrar', ...page(AdminSignInPage) },
+      { path: '/admin/*', ...page(AdminRoutes) },
       {
         element: <RequireSession />,
         children: [
@@ -62,25 +78,25 @@ export const routes: RouteObject[] = [
             errorElement: <RouteError />,
             children: [
               { index: true, element: <LibraryPage /> },
-              { path: '/gravacoes/:id', element: page(RecordingPage) },
+              { path: '/gravacoes/:id', ...page(RecordingPage) },
               // Importar é o modal da biblioteca; a rota antiga abre o modal.
               { path: '/importar', element: <Navigate to="/?importar=1" replace /> },
-              { path: '/pessoas', element: page(PeoplePage) },
-              { path: '/pessoas/:id', element: page(PersonPage) },
-              { path: '/busca', element: page(SearchPage) },
-              { path: '/perguntas', element: page(ChatPage) },
-              { path: '/colecoes', element: page(CollectionsPage) },
-              { path: '/tags', element: page(TagsPage) },
-              { path: '/config/campos', element: page(FieldsPage) },
-              { path: '/config/agendas', element: page(AgendaTypesPage) },
-              { path: '/config/mcp', element: page(McpPage) },
-              { path: '/config/conta', element: page(AccountPage) },
-              { path: '/config/ambiente', element: page(EnvironmentPage) },
-              { path: '/tokens', element: page(TokensPage) },
-              { path: '/app-desktop', element: page(DesktopPage) },
-              { path: '/app-movel', element: page(MobilePage) },
-              { path: '/ajuda', element: page(HelpCenterPage) },
-              { path: '/ajuda/:slug', element: page(ArticlePage) },
+              { path: '/pessoas', ...page(PeoplePage) },
+              { path: '/pessoas/:id', ...page(PersonPage) },
+              { path: '/busca', ...page(SearchPage) },
+              { path: '/perguntas', ...page(ChatPage) },
+              { path: '/colecoes', ...page(CollectionsPage) },
+              { path: '/tags', ...page(TagsPage) },
+              { path: '/config/campos', ...page(FieldsPage) },
+              { path: '/config/agendas', ...page(AgendaTypesPage) },
+              { path: '/config/mcp', ...page(McpPage) },
+              { path: '/config/conta', ...page(AccountPage) },
+              { path: '/config/ambiente', ...page(EnvironmentPage) },
+              { path: '/tokens', ...page(TokensPage) },
+              { path: '/app-desktop', ...page(DesktopPage) },
+              { path: '/app-movel', ...page(MobilePage) },
+              { path: '/ajuda', ...page(HelpCenterPage) },
+              { path: '/ajuda/:slug', ...page(ArticlePage) },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

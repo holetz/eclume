@@ -7,13 +7,13 @@ import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { usePageTitle } from '../../app/usePageTitle'
-import { formatDate, formatDateTime, formatDuration } from '../library/format'
-import { formatClock } from '../transcript/segments'
+
 import styles from './People.module.css'
 import { PersonForm, type PersonFields } from './PersonForm'
 import { PEOPLE_KEY, recordingAt, usePerson, usePersonSegments, usePersonTranscripts, type Person } from './queries'
 import { useVoiceprint, type Voiceprint } from './voice'
 import { VoiceSection } from './VoiceSection'
+import { formatClock, formatDate, formatDateTime, formatDuration } from '../../shared/format'
 
 const TABS = [
   { key: 'gravacoes', label: 'Gravações' },

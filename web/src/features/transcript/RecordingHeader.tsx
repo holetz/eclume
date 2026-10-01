@@ -2,11 +2,11 @@ import { useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
-import { shortDayLabel, timeLabel } from '../library/calendar'
-import { formatDuration, shortRef } from '../library/format'
+
 import { ExportMenu } from './ExportMenu'
 import { useDeleteRecording } from './queries'
 import styles from './RecordingPage.module.css'
+import { formatDuration, shortDayLabel, shortRef, timeLabel } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
