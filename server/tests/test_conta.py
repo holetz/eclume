@@ -4,11 +4,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 import redis
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from eclume_server.accounts import NOTICE_VERSION
+from eclume_server.accounts import (
+    NOTICE_VERSION,
+    AccountError,
+    create_password_reset,
+    password_reset_info,
+    reset_password,
+)
 from eclume_server_testing.api import PASSWORD, audio_bytes, upload_file
 from eclume_server_testing.fakes import drain_storage
+from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -134,3 +144,59 @@ def test_admin_exclui_a_conta_e_libera_o_email(
         json={"name": "De volta", "email": account.email, "password": PASSWORD, "notice_version": NOTICE_VERSION},
     )
     assert again.status_code == 204, again.text
+
+
+def _secret(link: dict) -> str:
+    return link["url"].split("#", 1)[1]
+
+
+def test_link_de_redefinicao_e_de_uso_unico_e_encerra_as_sessoes(
+    client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    api = as_user(account)
+
+    async def new_link(conn: object) -> dict:
+        return await create_password_reset(conn, account.user_id, None, "https://eclume.test/")
+
+    old = run(services.sql(new_link))
+    link = run(services.sql(new_link))
+    assert link["url"].startswith("https://eclume.test/redefinir-senha#")
+
+    async def go() -> None:
+        engine = create_async_engine(services.settings.database_url)
+        try:
+            # Um link novo vence o anterior; conferir não consome.
+            assert await password_reset_info(engine, _secret(old)) is None
+            info = await password_reset_info(engine, _secret(link))
+            assert info == {"email": account.email, "expires_at": link["expires_at"]}
+            with pytest.raises(AccountError):
+                await reset_password(engine, _secret(link), "curta")
+            assert await password_reset_info(engine, _secret(link)) is not None
+            assert await reset_password(engine, _secret(link), NEW_PASSWORD)
+            assert not await reset_password(engine, _secret(link), NEW_PASSWORD)
+            assert await password_reset_info(engine, _secret(link)) is None
+            assert await password_reset_info(engine, "inexistente") is None
+        finally:
+            await engine.dispose()
+
+    run(go())
+    assert api.get("/api/v1/me").status_code == 401
+    client.cookies.clear()
+    assert client.post("/api/v1/auth/login", json={"email": account.email, "password": NEW_PASSWORD}).status_code == 204
+
+    expired = run(services.sql(new_link))
+
+    async def expire(conn: object) -> None:
+        await conn.execute(text("UPDATE password_resets SET expires_at = now() - interval '1 second'"))
+
+    run(services.sql(expire))
+
+    async def check() -> object:
+        engine = create_async_engine(services.settings.database_url)
+        try:
+            return await password_reset_info(engine, _secret(expired))
+        finally:
+            await engine.dispose()
+
+    assert run(check()) is None
