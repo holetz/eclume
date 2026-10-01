@@ -59,7 +59,7 @@ O que entrou em `main` depois da 0.1.0, antes de existir a norma de versionament
 - **Migrations**, nenhuma destrutiva: `024_exclusao_no_armazenamento`, `025_validade_da_chave`,
   `026_cotas_e_fila_justa`, `027_redefinicao_de_senha`, `028_conta_sem_amostras_de_voz` e
   `029_idioma_da_conta`.
-- **Variáveis novas** no `deploy/.env.prod`:
+- **Variáveis novas** no env de produção (o modelo é o `deploy/.env.prod.example`):
   - `ECLUME_CLAUDE_CLI` (`0` ou `1`), **obrigatória**: o deploy recusa um env que não a declare;
     `1` mantém a CLI do provider `claude-cli` na imagem.
   - `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD`, `ECLUME_REDIS_SERVER_PASSWORD` e
