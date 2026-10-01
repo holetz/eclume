@@ -75,14 +75,13 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
       </div>
       <FaixaDeRede rede={estado.rede} pendentes={estado.pendentes} />
       {armazenamento && (
-        <div className="alert alert-warning" style={{ margin: '12px 20px 0' }} role="status">
+        <div className="alert alert-warning alerta-no-topo" role="status">
           <span className="alert-title">Armazenamento quase cheio</span>
           <span>{armazenamento.restante.replace(/^cerca/, 'Cerca')} de gravação.</span>
           {armazenamento.sincronizadas_bytes > 0 && (
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ justifySelf: 'start', marginTop: 8 }}
+              className="btn btn-secondary btn-sm alinha-inicio margem-topo-2"
               onClick={excluirSincronizadas}
             >
               Excluir sincronizadas · {tamanho(armazenamento.sincronizadas_bytes)}

@@ -40,9 +40,9 @@ export function Endereco({
     return (
       <div className="m-body">
         <Voltar rotulo="Servidores" aoVoltar={() => rodar(() => ponte.cancelarCa())} />
-        <div className="m-section" style={{ gap: 8 }}>
+        <div className="m-section gap-2">
           <h1 className="m-title">Confira o servidor</h1>
-          <p style={{ margin: 0, fontSize: 15 }}>
+          <p className="sem-margem texto-15">
             Compare os blocos abaixo com os da web, em Minhas configurações → App móvel. Se forem os
             mesmos, o celular passa a confiar só neste servidor.
           </p>
@@ -86,7 +86,7 @@ export function Endereco({
   return (
     <div className="m-body">
       <Voltar rotulo="Servidores" aoVoltar={() => ir('/servidor')} />
-      <form className="m-section m-fill" style={{ gap: 16, alignContent: 'start' }} onSubmit={enviar}>
+      <form className="m-section m-fill gap-4 alinha-topo" onSubmit={enviar}>
         <h1 className="m-title">Digite o endereço</h1>
         <div className="field">
           <label htmlFor="endereco">Endereço do servidor</label>
@@ -108,8 +108,7 @@ export function Endereco({
         )}
         <button
           type="submit"
-          className="btn btn-primary"
-          style={{ justifyContent: 'flex-start' }}
+          className="btn btn-primary botao-inicio"
           disabled={ocupado || !endereco.trim()}
         >
           {ocupado ? 'Conectando…' : 'Continuar'}

@@ -48,12 +48,12 @@ export function Servidor({ ir }: { ir: (rota: string) => void }) {
 
   return (
     <div className="m-body">
-      <div className="m-section" style={{ paddingTop: 28, gap: 8 }}>
+      <div className="m-section topo-7 gap-2">
         <Marca tamanho={24} />
-        <h1 className="m-title" style={{ marginTop: 20 }}>
+        <h1 className="m-title margem-topo-5">
           Encontre o seu servidor
         </h1>
-        <p style={{ margin: 0, fontSize: 15 }}>O celular procura o eclume nesta rede Wi‑Fi.</p>
+        <p className="sem-margem texto-15">O celular procura o eclume nesta rede Wi‑Fi.</p>
       </div>
       <div className="m-section m-fill">
         <div className="linha-entre">
@@ -87,7 +87,7 @@ export function Servidor({ ir }: { ir: (rota: string) => void }) {
           </ul>
         ) : (
           !procurando && (
-            <p className="text-muted" style={{ margin: 0, fontSize: 14 }}>
+            <p className="text-muted sem-margem texto-14">
               Nenhum servidor respondeu. Confira se o celular está no Wi‑Fi do servidor, leia o código
               da web ou digite o endereço.
             </p>
@@ -99,19 +99,17 @@ export function Servidor({ ir }: { ir: (rota: string) => void }) {
           </p>
         )}
       </div>
-      <div className="m-section" style={{ gap: 8 }}>
+      <div className="m-section gap-2">
         <button
           type="button"
-          className="btn btn-secondary"
-          style={{ justifyContent: 'flex-start' }}
+          className="btn btn-secondary botao-inicio"
           onClick={() => ir('/ler-codigo')}
         >
           Ler um código da web
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
-          style={{ justifyContent: 'flex-start' }}
+          className="btn btn-ghost botao-inicio"
           onClick={() => ir('/servidor/endereco')}
         >
           Digitar o endereço

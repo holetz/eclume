@@ -43,11 +43,11 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
     <div className="sheet-backdrop">
       <form className="sheet" onSubmit={enviar} aria-labelledby="titulo-da-folha">
         <span className="sheet-grip" />
-        <div className="stack-curta" style={{ gap: 4 }}>
-          <h2 id="titulo-da-folha" className="m-title" style={{ fontSize: 24 }}>
+        <div className="stack-curta gap-1">
+          <h2 id="titulo-da-folha" className="m-title texto-24">
             Gravação salva
           </h2>
-          <span className="text-muted" style={{ fontSize: 14 }}>
+          <span className="text-muted texto-14">
             {duracao(folha.duracao_ms)} · {marcadores(folha.marcadores)} · neste celular
           </span>
         </div>
@@ -79,7 +79,7 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
             </div>
           </div>
         )}
-        <span className="text-muted" style={{ fontSize: 13 }}>
+        <span className="text-muted texto-13">
           O servidor preenche os outros campos ao transcrever.
         </span>
         {erro && (
@@ -88,13 +88,12 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
           </p>
         )}
         <div className="duas-colunas">
-          <button type="submit" className="btn btn-primary" style={{ justifyContent: 'flex-start' }}>
+          <button type="submit" className="btn btn-primary botao-inicio">
             Salvar
           </button>
           <button
             type="button"
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start' }}
+            className="btn btn-secondary botao-inicio"
             onClick={() => concluir(false)}
           >
             Pular

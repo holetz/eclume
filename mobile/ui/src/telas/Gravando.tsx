@@ -41,32 +41,32 @@ export function Gravando({ estado }: { estado: EstadoApp }) {
   const audioMs = sessao?.audio_ms ?? estado.folha?.duracao_ms ?? 0
   const bateria = estado.avisos.bateria
   return (
-    <div className="m-body" style={{ paddingBottom: 0 }}>
+    <div className="m-body sem-base">
       <div className="m-top">
         <span className="status-line" data-status={pausada ? 'paused' : 'recording'}>
           {pausada ? 'Pausado' : 'Gravando'}
         </span>
         {estado.espaco_livre && (
-          <span className="text-muted" style={{ fontSize: 13 }}>
+          <span className="text-muted texto-13">
             Espaço livre: {estado.espaco_livre}
           </span>
         )}
       </div>
       {sessao?.silenciada ? (
-        <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+        <div className="alert alert-warning margem-lateral" role="status">
           <span className="alert-title">Silenciado pelo sistema</span>
           <span>Uma chamada ou o sistema tomou o microfone. A gravação segue e volta sozinha.</span>
         </div>
       ) : (
         sessao?.microfone === 'reconectando' && (
-          <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+          <div className="alert alert-warning margem-lateral" role="status">
             <span className="alert-title">Microfone reconectando</span>
             <span>O microfone caiu. A gravação segue no mesmo arquivo enquanto ele volta.</span>
           </div>
         )
       )}
       {bateria && (
-        <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+        <div className="alert alert-warning margem-lateral" role="status">
           <span className="alert-title">Bateria em {bateria.pct} %</span>
           <span>
             {bateria.restante ? `Dá para ${bateria.restante}. ` : ''}A gravação fica salva se o celular
@@ -74,7 +74,7 @@ export function Gravando({ estado }: { estado: EstadoApp }) {
           </span>
         </div>
       )}
-      <div className="m-section" style={{ gap: 20, paddingTop: 24 }}>
+      <div className="m-section gap-5 topo-6">
         <span className="m-timer" aria-label="Tempo de áudio">
           {relogio(audioMs)}
         </span>
@@ -83,7 +83,7 @@ export function Gravando({ estado }: { estado: EstadoApp }) {
       <div className="m-section m-fill m-rolagem">
         <div className="linha-entre">
           <span className="kicker">Marcadores</span>
-          <span className="text-muted" style={{ fontSize: 12 }}>
+          <span className="text-muted texto-12">
             {marcadores.length}
           </span>
         </div>

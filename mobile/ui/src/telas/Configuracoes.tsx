@@ -8,8 +8,8 @@ const MB_POR_HORA: Record<Qualidade, number> = { padrao: 11, alta: 22 }
 
 function Linha({ titulo, sub, children }: { titulo: string; sub?: string; children?: ReactNode }) {
   return (
-    <li className="m-row" style={{ minHeight: 52, padding: '6px 0' }}>
-      <span className="m-row-title" style={{ fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+    <li className="m-row m-row-alta">
+      <span className="m-row-title m-row-title-corpo">
         {titulo}
       </span>
       {sub && <span className="m-row-sub">{sub}</span>}
@@ -104,16 +104,16 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
   return (
     <div className="m-body m-rolagem">
       <Voltar rotulo="Início" aoVoltar={() => ir('/')} />
-      <div className="m-section" style={{ paddingTop: 0 }}>
+      <div className="m-section sem-topo">
         <h1 className="m-title">Configurações</h1>
       </div>
       {dados && preferencias && (
-        <div className="m-section m-fill" style={{ gap: 12, paddingTop: 4 }}>
+        <div className="m-section m-fill gap-3 topo-1">
           <div className="m-group">
             <span className="kicker">Servidor</span>
             <ul className="m-rows">
               <Linha titulo="Endereço">
-                <span className="mono text-muted" style={{ fontSize: 14 }}>
+                <span className="mono text-muted texto-14">
                   {dados.servidor ? new URL(dados.servidor).host : '—'}
                 </span>
               </Linha>
@@ -165,7 +165,7 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
                 />
               </Linha>
               <Linha titulo="Neste celular">
-                <span className="text-muted" style={{ fontSize: 14 }}>
+                <span className="text-muted texto-14">
                   {tamanho(dados.uso_bytes)}
                   {espacoLivre ? ` · ${espacoLivre.replace(/^cerca de /, '')} livres` : ''}
                 </span>
@@ -174,7 +174,7 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
           </div>
         </div>
       )}
-      <div className="m-section" style={{ gap: 8 }}>
+      <div className="m-section gap-2">
         {erro && (
           <p className="erro" role="alert">
             {erro}
@@ -190,7 +190,7 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
               Desvincule este aparelho na web, em Minhas configurações → App móvel: o acesso dele não se
               revoga sozinho.
             </span>
-            <div className="duas-colunas" style={{ marginTop: 8 }}>
+            <div className="duas-colunas margem-topo-2">
               <button type="button" className="btn btn-secondary btn-danger" onClick={sair}>
                 Sair
               </button>
@@ -202,18 +202,17 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
         ) : (
           <button
             type="button"
-            className="btn btn-secondary btn-danger"
-            style={{ justifyContent: 'flex-start' }}
+            className="btn btn-secondary btn-danger botao-inicio"
             onClick={() => setConfirmandoSaida(true)}
           >
             Sair e esquecer o servidor
           </button>
         )}
-        <span className="text-muted" style={{ fontSize: 12 }}>
+        <span className="text-muted texto-12">
           eclume para Android · v{dados?.versao ?? ''}
         </span>
         {atualizacao && (
-          <button type="button" className="btn btn-primary" style={{ justifyContent: 'flex-start' }} onClick={atualizar}>
+          <button type="button" className="btn btn-primary botao-inicio" onClick={atualizar}>
             Nova versão disponível · v{atualizacao.versao}
           </button>
         )}
