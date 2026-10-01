@@ -354,9 +354,10 @@ struct Inner {
     source_test: Option<SourceTest>,
     /// A atualização a notificar nesta abertura (sai uma vez).
     update_to_notify: Option<PendingUpdate>,
-    /// Há credencial guardada (PAT ou de dispositivo); lido na abertura e a cada mudança, para a
-    /// consulta de 1 s não ir ao chaveiro.
-    has_token: bool,
+    /// Onde está a credencial guardada (PAT ou de dispositivo), se houver; lido na abertura e
+    /// atualizado ao entrar, sair e salvar, para a consulta de 1 s e as Configurações não irem ao
+    /// chaveiro.
+    token_source: Option<PatSource>,
     /// O servidor escolhido na primeira execução, esperando a pessoa entrar.
     prepared: Option<PreparedServer>,
     /// A CA do servidor não é mais a fixada: o sync para e a janela volta à primeira execução.
@@ -521,7 +522,7 @@ impl AppState {
         config: Config,
         pat: PatStore,
     ) -> Self {
-        let has_token = pat.load().ok().flatten().is_some();
+        let token_source = pat.load().ok().flatten().map(|(_, source)| source);
         Self {
             queue: Arc::new(Mutex::new(queue)),
             recorder,
@@ -543,7 +544,7 @@ impl AppState {
                 importing: None,
                 source_test: None,
                 update_to_notify: None,
-                has_token,
+                token_source,
                 prepared: None,
                 ca_changed: false,
             }),
@@ -1118,8 +1119,8 @@ impl AppState {
     }
 
     pub fn settings(&self) -> Result<SettingsView> {
-        let pat_source = self.pat.load()?.map(|(_, source)| source);
         let inner = self.inner()?;
+        let pat_source = inner.token_source;
         let config = &inner.config;
         Ok(SettingsView {
             web_url: config.web_url.clone(),
@@ -1226,31 +1227,36 @@ impl AppState {
             bail!("Saia da conta antes de trocar o servidor ou a CA");
         }
 
-        if input.clear_pat {
+        let saved = if input.clear_pat {
             self.pat.clear()?;
             next.account = None;
+            Some(None)
         } else if let Some(pat) = non_empty(input.pat) {
-            self.save_secret(&pat)?;
-        }
+            Some(Some(self.save_secret(&pat)?))
+        } else {
+            None
+        };
         next.save(&self.config_path)?;
-        let has_token = self.pat.load()?.is_some();
         let mut inner = self.inner()?;
-        inner.has_token = has_token;
+        if let Some(source) = saved {
+            inner.token_source = source;
+        }
         let action = inner.auto.on_config_change(&next.detection);
         inner.config = next;
         Ok(action)
     }
 
     /// Guarda a credencial no chaveiro; sem chaveiro, avisa que ela foi para o arquivo.
-    fn save_secret(&self, secret: &str) -> Result<()> {
-        if self.pat.save(secret)? == PatSource::File {
+    fn save_secret(&self, secret: &str) -> Result<PatSource> {
+        let source = self.pat.save(secret)?;
+        if source == PatSource::File {
             self.inner()?.notice = Some(
                 "chaveiro do sistema indisponível: a credencial ficou num arquivo só seu, no \
                  diretório de configuração"
                     .into(),
             );
         }
-        Ok(())
+        Ok(source)
     }
 
     /// Fixa a CA do servidor escolhido e o guarda para a pessoa entrar.
@@ -1289,7 +1295,7 @@ impl AppState {
     }
 
     fn apply_sign_in(&self, signed: SignedIn) -> Result<()> {
-        self.save_secret(&signed.secret)?;
+        let source = self.save_secret(&signed.secret)?;
         let mut next = self.inner()?.config.clone();
         next.web_url = signed.web_url;
         next.api_url = None;
@@ -1298,7 +1304,7 @@ impl AppState {
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
-        inner.has_token = true;
+        inner.token_source = Some(source);
         inner.prepared = None;
         inner.ca_changed = false;
         inner.sync_notice = None;
@@ -1313,7 +1319,7 @@ impl AppState {
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
-        inner.has_token = false;
+        inner.token_source = None;
         Ok(())
     }
 
@@ -1368,7 +1374,7 @@ fn connection(inner: &Inner) -> Connection {
     if inner.ca_changed {
         Connection::FirstRun
     } else {
-        inner.config.connection(inner.has_token)
+        inner.config.connection(inner.token_source.is_some())
     }
 }
 
