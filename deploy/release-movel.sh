@@ -12,7 +12,8 @@
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
-#   --notas     notas do release, que o app e a /app-movel mostram.
+#   --notas     notas do release, que o app e a /app-movel mostram; sem ele, a seção da versão no
+#               mobile/CHANGELOG.md (docs/standards/code/versionamento.md).
 #   --sem-gate  com --publicar, dispensa só o status eclume/gate = success no commit e deixa nele o
 #               rastro eclume/gate-dispensa com o motivo; o ensaio não exige gate.
 #   --sem-fumaca  pula a fumaça no emulador (só no ensaio; --publicar sempre a roda).
@@ -67,7 +68,8 @@ host() { ssh -o BatchMode=yes "$SSH" "$@"; }
 VERSAO="$(python3 -c "import json; print(json.load(open('mobile/src-tauri/tauri.conf.json'))['version'])")"
 TAG="mobile-v$VERSAO"
 SHA="$(git rev-parse HEAD)"
-NOTAS="${NOTAS:-eclume para Android $VERSAO}"
+[[ -n "$NOTAS" ]] || NOTAS="$(python3 deploy/versao.py notas movel "$VERSAO")" \
+  || { echo "Falta a seção [$VERSAO] no mobile/CHANGELOG.md: escreva-a ou passe --notas." >&2; exit 2; }
 
 # shellcheck disable=SC2016 # o $HOME é o do host
 HOME_HOST="$(host 'echo "$HOME"')"

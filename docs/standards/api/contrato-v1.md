@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127, holetz/eclume#128
 maintainer: holetz
 ---
 
@@ -215,6 +215,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Cada mudança** sobe `info.version` (e `schema_version` se tocar a transcrição), atualiza as
   fixtures, regenera o bundle e passa em `uv run pytest contracts/tests`, que a CI roda no job
   `contracts` junto com o smoke do mock.
+- **Linha própria.** O `info.version` não acompanha a versão do produto nem a dos apps
+  ([versionamento.md](../code/versionamento.md)): cada entrada do `CHANGELOG.md` do produto cita a
+  versão do contrato que leva, e as dos apps compatíveis.
 - **Quebra** vira `/api/v2` num `openapi-v2.yaml` próprio; a v1 segue servida na transição,
   anunciando o fim com `Deprecation` e `Sunset`.
 - **Campo obsoleto dentro da v1 é anotação, não remoção.** A propriedade ganha `deprecated: true`

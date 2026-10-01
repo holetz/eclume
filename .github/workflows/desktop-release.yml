@@ -23,7 +23,7 @@ on:
         type: boolean
         default: true
       notas:
-        description: "Notas do release, que o app mostra no aviso \"Atualizado para X\""
+        description: "Notas do release, que o app mostra no aviso \"Atualizado para X\" (vazio: a seção da versão no desktop/CHANGELOG.md)"
         type: string
         default: ""
 
@@ -165,9 +165,10 @@ jobs:
           NOTAS: ${{ inputs.notas }}
         run: |
           [ -n "$BASE_URL" ] || { echo "Defina a variável de repositório ECLUME_DOWNLOADS_URL." >&2; exit 1; }
+          [ -n "$NOTAS" ] || NOTAS="$(python3 deploy/versao.py notas desktop "$VERSAO")"
           cp desktop/INSTALACAO.md dist/
           python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSAO" \
-            --base-url "$BASE_URL" --notas "${NOTAS:-eclume desktop $VERSAO}"
+            --base-url "$BASE_URL" --notas "$NOTAS"
           cat dist/latest.json
           ls -la dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

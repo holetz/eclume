@@ -7,7 +7,7 @@ tags: [code, mobile, android, release, apk, host]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#91, holetz/eclume#108
+source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#91, holetz/eclume#108, holetz/eclume#128
 maintainer: holetz
 ---
 
@@ -21,7 +21,9 @@ produto. O iOS está fora do escopo, sem spec aberta.
 
 - A versão vive em `mobile/src-tauri/tauri.conf.json` (`version`) e no `[workspace.package]` de
   `mobile/Cargo.toml`, que andam juntos. O `versionCode` do Android sai da versão pelo Tauri.
-- A tag é `mobile-v<versão>`. O bump é do conclude da spec que muda o app, nunca de uma task.
+- A tag é `mobile-v<versão>`. O bump é do conclude da spec que muda o app, nunca de uma task, por
+  `deploy/versao.py definir movel <versão>` com a seção dela no `mobile/CHANGELOG.md`
+  ([versionamento.md](versionamento.md)).
 
 ## Release no host — `deploy/release-movel.sh`
 
@@ -92,7 +94,7 @@ Mudar um nome de campo exige mudar os dois.
 |---|---|
 | `versao` | a versão (`0.1.0`) |
 | `publicado_em` | ISO 8601 em UTC (`2026-09-27T18:30:05Z`) |
-| `notas` | o texto do release, que o app mostra em "Nova versão disponível" |
+| `notas` | o texto do release, que o app mostra em "Nova versão disponível": a seção da versão no `mobile/CHANGELOG.md` (`deploy/versao.py notas movel <versão>`), salvo `--notas` explícito; versão sem seção recusa o release |
 | `apk.arquivo` | `eclume-<versão>.apk` |
 | `apk.url` | caminho absoluto no servidor, `/downloads/movel/<versão>/eclume-<versão>.apk`: serve a qualquer endereço do servidor |
 | `apk.tamanho` | bytes |

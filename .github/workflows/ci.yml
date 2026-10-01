@@ -98,6 +98,20 @@ jobs:
               - "deploy/gate.py"
               - "deploy/test_gate.py"
               - ".github/workflows/desktop-release.yml"
+              # As três linhas de versão e os CHANGELOGs que o deploy/test_versao.py amarra.
+              - "deploy/versao.py"
+              - "deploy/test_versao.py"
+              - "CHANGELOG.md"
+              - "desktop/CHANGELOG.md"
+              - "mobile/CHANGELOG.md"
+              - "web/package.json"
+              - "web/package-lock.json"
+              - "desktop/**/Cargo.toml"
+              - "desktop/Cargo.lock"
+              - "desktop/src-tauri/tauri.conf.json"
+              - "mobile/**/Cargo.toml"
+              - "mobile/Cargo.lock"
+              - "mobile/src-tauri/tauri.conf.json"
             contracts:
               - *ci
               - *uv
