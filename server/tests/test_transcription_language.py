@@ -14,10 +14,14 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
+_sizes = iter(range(100, 10_000))
+
+
 def _job_language(api: Api, services: Services, **fields: str) -> str | None:
-    """Sobe um áudio e devolve o idioma que o job levou ao worker GPU."""
-    upload_file(api, audio_bytes(100), **fields)
+    """Sobe um áudio novo (sem deduplicar), transcreve e devolve o idioma que o job levou ao worker GPU."""
+    upload_file(api, audio_bytes(next(_sizes)), **fields)
     calls = run_gpu(services.settings)
+    run_cpu(services.settings)
     assert len(calls) == 1, calls
     return calls[0][2]["language"]
 
