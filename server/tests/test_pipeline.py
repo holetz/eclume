@@ -246,6 +246,31 @@ def test_worker_antigo_sem_revisao_no_job_id_ainda_ingere(
     assert api.get(f"/api/v1/recordings/{failed['id']}").json()["job"]["error"]["code"] == "gpu_oom"
 
 
+def test_retranscricao_apaga_artefatos_da_revisao_anterior(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3900))
+    rid = recording["id"]
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    s3, bucket = services.s3(), services.settings.s3_bucket
+
+    def listed() -> list[str]:
+        return sorted(
+            obj["Key"] for obj in s3.list_objects_v2(Bucket=bucket, Prefix=f"recordings/{rid}/").get("Contents", [])
+        )
+
+    assert listed() == [f"recordings/{rid}/r1/transcript.raw.json"]
+    # Uma chave antiga, sem revisão, também sai.
+    s3.put_object(Bucket=bucket, Key=f"recordings/{rid}/transcript.raw.json", Body=b"{}")
+
+    assert api.post(f"/api/v1/recordings/{rid}/retranscribe").status_code == 202
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert listed() == [f"recordings/{rid}/r2/transcript.raw.json"]
+
+
 def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):

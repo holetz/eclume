@@ -157,6 +157,7 @@ class Ingested:
     message: str
     persisted: bool = False
     gone: bool = False
+    revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -299,7 +300,11 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
             updated_at=now,
         )
     )
-    return Ingested(f"transcrição {transcript_id} gravada (revisão do job {job['revision']})", persisted=True)
+    return Ingested(
+        f"transcrição {transcript_id} gravada (revisão do job {job['revision']})",
+        persisted=True,
+        revision=job["revision"],
+    )
 
 
 async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed` e a revisão

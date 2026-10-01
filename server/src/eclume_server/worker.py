@@ -31,7 +31,7 @@ from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
 from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, return_revision, step_job_id
 from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
-from eclume_server.storage import Storage, embeddings_object_key
+from eclume_server.storage import Storage
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
 from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
 from eclume_server.transcripts import fail, ingest
@@ -104,10 +104,24 @@ async def ingest_transcript(
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
     elif outcome.persisted:
+        await _keep_only_revision(ctx["storage"], recording_id, outcome.revision)
         # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição.
         await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
     return outcome.message
+
+
+async def _keep_only_revision(storage: Storage, recording_id: str, revision: int | None) -> None:
+    """Depois do commit, o bucket guarda só os artefatos da revisão gravada; falhar aqui só vai ao log.
+
+    O que sobrar sai na próxima ingestão ou na exclusão da gravação.
+    """
+    if revision is None:
+        return
+    try:
+        await storage.delete_other_revisions(recording_id, revision)
+    except Exception:
+        log.exception("ingest_transcript %s: a limpeza das outras revisões falhou", recording_id)
 
 
 async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:
@@ -200,19 +214,17 @@ async def transcription_failed(
 
 
 async def purge_embedding_objects(ctx: dict[str, Any]) -> int:
-    """Apaga do bucket os `speaker_embeddings.json` de todas as gravações (voz desligada na plataforma).
+    """Apaga do bucket todo `speaker_embeddings.json` (voz desligada na plataforma).
 
-    Nada é apagado se a identificação por voz tiver sido religada nesse meio-tempo: os arquivos
-    novos já valem.
+    Lista `recordings/`: alcança toda revisão e as chaves antigas sem revisão. Nada é apagado se a
+    identificação por voz tiver sido religada nesse meio-tempo: os arquivos novos já valem.
     """
     async with system_tx(ctx["engine"]) as conn:
         if (await platform_voice(conn))["enabled"]:
             return 0
-        ids = (await conn.execute(select(t.recordings.c.id))).scalars()
-        keys = [embeddings_object_key(recording_id) for recording_id in ids]
-    await ctx["storage"].delete_keys(keys)
-    log.info("purge_embedding_objects: %d gravações", len(keys))
-    return len(keys)
+    deleted = await ctx["storage"].delete_embedding_objects()
+    log.info("purge_embedding_objects: %d arquivos", deleted)
+    return deleted
 
 
 async def summarize(ctx: dict[str, Any], summary_id: str) -> str:
