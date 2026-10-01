@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.11.0
+  version: 2.12.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -4113,6 +4113,12 @@ components:
         contract_version:
           description: Versão deste contrato que o servidor implementa (`info.version`).
           type: string
+        commit:
+          description: >-
+            Desde a 2.12.0: o SHA do git de que a imagem do servidor foi construída (o deploy o
+            grava). Ausente fora de uma imagem de produção.
+          type: string
+          pattern: "^[0-9a-f]{7,40}$"
 
     LoginRequest:
       type: object
