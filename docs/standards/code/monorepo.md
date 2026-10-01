@@ -27,6 +27,7 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
 | `contracts/` | OpenAPI v1 e JSON Schema da transcrição | — |
 | `deploy/` | compose de dev, de teste e de produção, imagens do server e do web, scripts de deploy e backup ([deploy-producao.md](../../project/deploy-producao.md)) | Docker compose |
 | `docs/` | bundle OKF | `cq knowledge` |
+| `design-system/` | o Design System do eclume, exportado do Claude Design e versionado: `styles.css` (a fonte das três cópias do `eclume.css`), componentes, exemplos e `sincronizar.py` ([web-design-system.md](web-design-system.md)) | Python da stdlib, no `uv run pytest` |
 
 ## Python — workspace uv
 
@@ -39,7 +40,10 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
   WhisperX, faster-whisper) entra como **extra** (`eclume-engines[whisperx]`/`[cpu]`,
   `eclume-worker[gpu]`/`[cpu]`): o `uv.lock` a resolve, mas `uv sync --all-packages` não a
   instala, e a CI e a máquina de dev seguem sem torch. Só a imagem do worker GPU instala `gpu`.
-- O ruff roda com `select = ["ALL"]`; um ignore novo entra com o motivo comentado ao lado.
+- O ruff roda com `select = ["ALL"]`; um ignore novo entra com o motivo comentado ao lado, e deixa
+  de fora a projeção gerada em `.design/build/`.
+- Os `testpaths` do pytest incluem `design-system`: o `test_sincronizar.py` falha quando uma cópia
+  do `eclume.css` diverge da fonte.
 
 ```bash
 uv sync --all-packages
@@ -239,7 +243,7 @@ Com o repositório privado, os minutos de Actions têm cota, então a CI só rod
 em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`
 (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo de que ele depende, foi tocado:
 mudança só de documentação (`docs/`, qualquer `.md`) liga só o `docs`; o `python` e o `web` também
-rodam com `contracts/`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
+rodam com `contracts/`, o `python` com `design-system/**` e as três cópias do `eclume.css`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
 `deploy/test_gate.py` e os workflows de release. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
 disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
 último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,

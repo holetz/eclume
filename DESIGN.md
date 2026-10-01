@@ -3,7 +3,7 @@
 # Run `/impeccable document` to propose changes, then `cq design import` to fold them into the source.
 version: "alpha"
 name: "eclume"
-description: "Linho e nogueira do ecossistema Jane: Archivo, raio zero, fios de 2px, terracota só para gravação e falha. Valores espelham o styles.css do repositório eclume-design (copiado em web/src/styles/eclume.css)."
+description: "Linho e nogueira do ecossistema Jane: Archivo, raio zero, fios de 2px, terracota só para gravação e falha. Valores espelham o design-system/styles.css (gerado em web/src/styles/eclume.css e nas outras duas cópias)."
 colors:
   background: "#F7F5F2"
   surface: "#ECE8E2"
@@ -194,7 +194,7 @@ quadrado de 6px, não com um ponto. Ícones Lucide com ponta e junção retas
 
 ## Components
 
-O vocabulário vem do `eclume-design`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
+O vocabulário vem do `design-system/styles.css`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
 transparente), `.input` em campos, `select` e `textarea`, `.card`, `.badge` e `.tag`, `.nav` e
 `.sidebar`, `.page-head`, `.kicker`, `.hr`. O web acrescenta só o que o DS não tem, em `app.css`.
 
@@ -249,7 +249,7 @@ para lá.
 
 ### Do
 
-- **Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS
+- **Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS
   Module da tela.
 - **Do** usar fios de 2px para estrutura e manter o raio zero.
 - **Do** reservar a terracota para gravação e falha.

@@ -479,7 +479,7 @@
     ],
     "rules": [],
     "dos": [
-      "**Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS",
+      "**Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS",
       "**Do** usar fios de 2px para estrutura e manter o raio zero.",
       "**Do** reservar a terracota para gravação e falha.",
       "**Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.",

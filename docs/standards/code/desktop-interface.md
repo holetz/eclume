@@ -7,14 +7,14 @@ tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130
 maintainer: holetz
 ---
 
 # Interface do app desktop no Design System
 
 A janela (520 × 600) e o menu da bandeja do app desktop seguem os frames de
-`examples/desktop.html` do Design System do eclume (`eclume-design`), na variante A onde o frame
+`design-system/examples/desktop.html`, do Design System do eclume, na variante A onde o frame
 marca "Pending stage 2". Os textos ficam em pt-BR. O mesmo DS vale para o web
 ([web-design-system.md](web-design-system.md)), e as duas cópias do CSS são uma só.
 
@@ -36,10 +36,11 @@ Na ordem do `index.html`:
 | `eclume.css` | cópia fiel do `styles.css` do DS sem o `@import` do Google Fonts; **byte a byte igual** a `web/src/styles/eclume.css` |
 | `app.css` | só produto: `.tray.tray-window` ocupando a janela inteira, as utilidades que os exemplos fazem por `style=""` (`.row`, `.stack`, `.grid-2`...), o medidor de 16 barras, os campos da primeira execução |
 
-- **Sincronizar** é `bash desktop/scripts/sincronizar_ds.sh [eclume-design]`: copia o
-  `eclume.css` do web (ou gera do `styles.css` do DS, sem ele) e baixa as fontes do `@fontsource`
-  por `npm pack` num diretório temporário, na mesma versão do web. Não depende de
-  `web/node_modules`. Ajuste de produto vai em `app.css`, nunca no `eclume.css`.
+- **Sincronizar.** O `desktop/ui/eclume.css` é gerado de `design-system/styles.css` pelo
+  `uv run python design-system/sincronizar.py`, junto das cópias do web e do celular
+  ([web-design-system.md](web-design-system.md)); o `bash desktop/scripts/sincronizar_ds.sh` só
+  baixa as fontes do `@fontsource` por `npm pack` num diretório temporário, na mesma versão do
+  web, sem depender de `web/node_modules`. Ajuste de produto vai em `app.css`, nunca no `eclume.css`.
 - **CSS com LF.** O `.gitattributes` fixa `*.css text eol=lf`: o teste de igualdade compara bytes,
   e um checkout Windows com `core.autocrlf=true` levaria o do web com CRLF.
 - **Tokens.** As classes do DS já usam `--color-rec` (terracota, reservada à gravação),

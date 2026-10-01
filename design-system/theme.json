@@ -1,0 +1,41 @@
+{
+  "name": "eclume",
+  "palette": {
+    "hue": 60,
+    "band": "light",
+    "scheme": "warm-neutral",
+    "sat": 0.2,
+    "bg": "#f7f5f2",
+    "surface": "#ece8e2",
+    "text": "#262420",
+    "accent": "#6f5a44",
+    "accent2": "#b8432c"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Archivo",
+      "class": "grotesque",
+      "weights": [
+        400,
+        600,
+        800
+      ]
+    },
+    "body": {
+      "family": "Archivo",
+      "class": "grotesque",
+      "weights": [
+        400,
+        600,
+        800
+      ]
+    }
+  },
+  "density": 1,
+  "radius": 0,
+  "layoutStyle": "grid",
+  "dividers": "strong",
+  "buttonAlign": "left",
+  "imageTreatment": "grayscale",
+  "photo": "modernist"
+}

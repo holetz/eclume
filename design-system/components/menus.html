@@ -1,0 +1,18 @@
+<!-- @dsCard group="Components" name="Menus, notifications and meter" subtitle="Tray menu, OS notification, voice level meter" viewport="820x560" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Menus</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:960px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-8) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-3)}.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-6);align-items:start}</style>
+</head>
+<body>
+<main class="demo">
+<div class="pair"><div class="stack"><div class="demo-head">Menu</div><div class="menu" role="menu"><span class="menu-item" aria-disabled="true">Idle · listening for meetings</span><div class="menu-sep"></div><button class="menu-item" role="menuitem">Start recording<kbd>⌘⇧R</kbd></button><button class="menu-item" role="menuitem" data-active>New note<kbd>⌘⇧N</kbd></button><button class="menu-item" role="menuitem">Import file…</button><div class="menu-sep"></div><button class="menu-item" role="menuitem">Open library</button><button class="menu-item" role="menuitem">Quit eclume<kbd>⌘Q</kbd></button></div></div>
+<div class="stack"><div class="demo-head">Notification</div><div class="toast"><img src="../assets/app-icon.svg" alt=""><strong>Note saved</strong><span>1 min 12 s · processing on the server</span></div><div class="toast"><img src="../assets/app-icon.svg" alt=""><strong>Meeting detected</strong><span>Zoom is using the microphone. Record it?</span><span class="toast-actions"><button type="button" class="btn btn-primary btn-sm">Record</button><button type="button" class="btn btn-secondary btn-sm">Not now</button></span></div>
+<div class="demo-head">Voice level</div><div class="row"><div class="meter"><i style="--h:30%"></i><i style="--h:55%"></i><i style="--h:80%"></i><i style="--h:65%"></i><i style="--h:90%"></i><i style="--h:45%"></i><i style="--h:70%"></i><i style="--h:35%"></i><i style="--h:20%"></i><i style="--h:12%" data-quiet></i><i style="--h:10%" data-quiet></i><i style="--h:10%" data-quiet></i><i style="--h:10%" data-quiet></i><i style="--h:10%" data-quiet></i></div><span class="mono" style="font-size:12px">Stops in 3 s</span></div></div></div>
+</main>
+</body>
+</html>

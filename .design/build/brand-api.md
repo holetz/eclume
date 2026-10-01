@@ -48,7 +48,7 @@
 | `spacing.2xl` | `dimension` | `32px` |  |
 | `sizes.control` | `dimension` | `36px` | Altura mínima de campo e botão. |
 | `layout.sidebar` | `dimension` | `240px` | Largura da barra lateral. |
-| `layout.content` | `dimension` | `1040px` | Largura do conteúdo no DS (eclume-design); o web a dispensa e usa a largura toda. |
+| `layout.content` | `dimension` | `1040px` | Largura do conteúdo no DS (design-system/styles.css); o web a dispensa e usa a largura toda. |
 | `layout.content-wide` | `dimension` | `1040px` | Quadro largo das mídias: a largura do conteúdo. |
 | `layout.reading` | `dimension` | `45rem` | Medida de leitura das mídias (relatórios). |
 | `strokes.control` | `dimension` | `1px` | Borda de controle. |

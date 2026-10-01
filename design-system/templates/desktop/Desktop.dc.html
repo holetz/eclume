@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Desktop window" description="Tauri main window (520 wide): record, new note, import, meeting detection, sync queue and account" -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div style="min-height:100vh;display:grid;place-items:center;padding:32px;background:var(--color-surface)">
+<div class="tray tray-window">
+<div class="tray-section">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span class="brand" style="font-size:18px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</span><button type="button" class="btn btn-ghost btn-icon" aria-label="Settings" style="width:28px;height:28px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"></path></svg></button></div>
+<span class="status-line" data-status="{{ status }}">{{ statusText }}</span>
+<button type="button" class="btn btn-rec btn-rec-lg" aria-pressed="{{ pressed }}" onClick="{{ toggle }}">{{ recLabel }}</button>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-secondary">New note</button><button type="button" class="btn btn-secondary">Import file…</button></div>
+</div>
+<sc-if value="{{ showDetect }}" hint-placeholder-val="{{ true }}">
+<div class="tray-section"><div class="alert alert-warning"><span class="alert-title">Meeting detected</span><span>Zoom is using the microphone. Record it?</span></div><div style="display:flex;gap:8px"><button type="button" class="btn btn-primary" onClick="{{ toggle }}">Record</button><button type="button" class="btn btn-secondary" onClick="{{ dismiss }}">Not now</button></div></div>
+</sc-if>
+<div class="tray-section"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="kicker">Sync queue</span><span class="text-muted" style="font-size:12px">2 of 3 synced</span></div>
+<ul class="queue"><li><span>Today, 09:00 · 54 min</span><span class="badge badge-progress">Syncing</span></li><li><span>Yesterday, 16:40 · 22 min</span><span class="badge badge-success">Synced</span></li><li><span>Yesterday, 11:05 · 1 h 03</span><span class="badge badge-success">Synced</span></li></ul></div>
+<div class="tray-section" style="gap:4px"><span style="font-size:13px"><strong>jane.doe@example.com</strong></span><span class="text-muted" style="font-size:12px">eclume at 192.168.15.199 · v0.5.0 · <a href="#">Sign out</a></span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:760},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;startRecording&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { recording: null, dismissed: false, secs: 872 };
+  componentDidMount() { this.applyTheme(); this.t = setInterval(() => { if (this.isRec()) this.setState(s => ({ secs: s.secs + 1 })); }, 1000); }
+  componentWillUnmount() { clearInterval(this.t); }
+  componentDidUpdate() { this.applyTheme(); }
+  applyTheme() {
+    const r = document.documentElement;
+    if ((this.props.theme ?? 'light') === 'dark') r.setAttribute('data-theme', 'dark'); else r.removeAttribute('data-theme');
+  }
+  isRec() { return this.state.recording ?? (this.props.startRecording ?? false); }
+  renderVals() {
+    const rec = this.isRec();
+    const s = this.state.secs, p = n => String(n).padStart(2, '0');
+    const time = `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
+    return {
+      status: rec ? 'recording' : 'idle',
+      statusText: rec ? 'Recording · Zoom' : 'Idle, listening for meetings',
+      pressed: rec ? 'true' : 'false',
+      recLabel: rec ? `Stop · ${time}` : 'Start recording',
+      showDetect: !rec && !this.state.dismissed,
+      toggle: () => this.setState({ recording: !rec, secs: rec ? this.state.secs : 0 }),
+      dismiss: () => this.setState({ dismissed: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

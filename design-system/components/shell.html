@@ -1,0 +1,21 @@
+<!-- @dsCard group="Components" name="App shell" subtitle="Grouped sidebar navigation" viewport="720x560" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — App shell</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:720px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-6) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-4)}.demo{max-width:none;padding:0}.shell{min-height:560px}</style>
+</head>
+<body>
+<main class="demo">
+<div class="shell"><aside class="sidebar"><a class="brand" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</a>
+<nav class="nav-group" aria-label="Recordings"><span class="nav-group-title">Recordings</span><a class="nav-link" href="#" aria-current="page">Library</a><a class="nav-link" href="#">Search</a><a class="nav-link" href="#">Import file</a></nav>
+<nav class="nav-group" aria-label="Organize"><span class="nav-group-title">Organize</span><a class="nav-link" href="#">People</a><a class="nav-link" href="#">Fields and rules</a><a class="nav-link" href="#">Agenda types</a></nav>
+<nav class="nav-group" aria-label="Account"><span class="nav-group-title">Account</span><a class="nav-link" href="#">Access tokens</a><a class="nav-link" href="#">Desktop app</a></nav>
+<div class="sidebar-footer"><div><strong>Jane Doe</strong><br><span class="text-muted">jane.doe@example.com</span></div><button type="button" class="btn btn-secondary">Sign out</button></div></aside>
+<div class="main" style="padding:var(--space-6)"><div class="page-head"><h1>Library</h1><button type="button" class="btn btn-primary">Import file</button></div><p class="text-muted">The current page gets a red square and ink in the deep accent. Groups are split by 1px rules and the sidebar by a 2px rule.</p></div></div>
+</main>
+</body>
+</html>
