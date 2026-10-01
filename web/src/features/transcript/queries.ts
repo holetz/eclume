@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { useEffect, useRef } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import { recordingState } from '../library/format'
 import { stepsDone, type PipelineStep } from './steps'
 import type { Transcript } from './segments'
@@ -20,7 +21,11 @@ export function useRecording(id: string) {
     queryKey: recordingKey(id),
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}', { params: { path: { recording_id: id } } })),
-    refetchInterval: (query) => (query.state.data && recordingState(query.state.data).state === 'busy' ? POLL_MS : false),
+    refetchOnWindowFocus: true,
+    refetchInterval: pollWhile(
+      (data: Schemas['Recording'] | undefined) => !!data && recordingState(data).state === 'busy',
+      POLL_MS,
+    ),
   })
 }
 

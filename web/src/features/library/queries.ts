@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import type { Range } from './calendar'
 import { filtersToQuery, type LibraryFilters } from './filters'
 import { recordingState } from './format'
@@ -24,7 +25,7 @@ interface RangeResult {
 
 /**
  * As gravações de um período (semana ou grade do mês), por início crescente, seguindo o cursor até o
- * fim ou até o teto. Enquanto alguma está em andamento, relê a cada 3 s.
+ * fim ou até o teto. Enquanto alguma está em andamento, relê no ritmo de `pollWhile` (3 s de início).
  */
 export function useLibraryRange(range: Range, filters: LibraryFilters, enabled = true) {
   const from = range.from.toISOString()
@@ -56,7 +57,9 @@ export function useLibraryRange(range: Range, filters: LibraryFilters, enabled =
       }
       return { items, truncated: true }
     },
-    refetchInterval: (query) => (anyBusy(query.state.data?.items) ? POLL_MS : false),
+    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    refetchOnWindowFocus: true,
+    refetchInterval: pollWhile<RangeResult>((data) => anyBusy(data?.items), POLL_MS),
   })
 }
 
@@ -89,6 +92,11 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
-    refetchInterval: (query) => (query.state.data?.pages.some((page) => anyBusy(page.items)) ? POLL_MS : false),
+    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    refetchOnWindowFocus: true,
+    refetchInterval: pollWhile<{ pages: { items: Recording[] }[] }>(
+      (data) => data?.pages.some((page) => anyBusy(page.items)) ?? false,
+      POLL_MS,
+    ),
   })
 }
