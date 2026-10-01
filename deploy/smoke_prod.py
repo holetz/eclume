@@ -1,8 +1,8 @@
 """Smoke do stack do eclume, pela API pública, só com a biblioteca padrão.
 
 Prova o caminho inteiro: health, SPA, `/downloads/`, o cadastro aberto com o aviso, a sessão de
-admin (provider `claude-cli`), a sessão de usuário (upload multipart de um áudio, transcrição
-diarizada na GPU e um resumo gerado pelo `claude -p` do host) e a gravação centrada no resumo
+admin (o provider de resumos já cadastrado, de qualquer tipo), a sessão de usuário (upload
+multipart de um áudio, transcrição diarizada na GPU e um resumo por esse provider) e a gravação centrada no resumo
 (holetz/eclume#34): edição à mão, chat de ajuste que lê a transcrição, volta à gerada, marcadores,
 biblioteca pelo intervalo do dia e os quatro formatos de exportação.
 
@@ -22,6 +22,10 @@ Com `--pipeline`, prova o processamento automático (holetz/eclume#33): retransc
 (a de `--recording`, uma gravação real da biblioteca, ou a do áudio de fixture) e espera as seis
 etapas do pipeline — recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo —
 todas `done`.
+
+O smoke não cadastra provider: usa o habilitado que declara `summaries` (o que o servidor usaria)
+ou, sem nenhum declarando, o habilitado sem finalidade; `--provider <id>` escolhe outro. Sem
+nenhum, falha dizendo o que cadastrar no painel (docs/standards/code/server-agentes.md).
 
 A senha vem do stdin (ou de `ECLUME_SMOKE_PASSWORD`) e serve às duas contas com o mesmo e-mail: a
 de admin e a de usuário, que a migration 008 separou com o mesmo hash. Depois de um
@@ -150,20 +154,38 @@ def _public_checks(api: Api) -> None:
     )
 
 
-def _ensure_provider(api: Api) -> str:
-    page = api.json("GET", "/api/v1/admin/agent-providers")
-    for item in page["items"]:
-        if item["kind"] == "claude-cli" and item["enabled"]:
-            _step(f"provider claude-cli já cadastrado ({item['name']})")
-            return item["id"]
-    created = api.json(
-        "POST",
-        "/api/v1/admin/agent-providers",
-        {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet", "enabled": True},
-        expect=(201,),
+def choose_provider(items: list[dict[str, Any]], wanted: str | None = None) -> dict[str, Any]:
+    """O provider do resumo: o pedido, o habilitado de `summaries` ou o habilitado sem finalidade.
+
+    `ValueError` com a mensagem para o operador quando nenhum serve.
+    """
+    if wanted is not None:
+        item = next((i for i in items if i["id"] == wanted), None)
+        if item is None:
+            raise ValueError(f"provider {wanted} não existe")
+        if not item["enabled"]:
+            raise ValueError(f"provider {item['name']} está desabilitado")
+        return item
+    enabled = [i for i in items if i["enabled"]]
+    for item in enabled:
+        if "summaries" in item["used_for"]:
+            return item
+    for item in enabled:
+        if not item["used_for"]:
+            return item
+    raise ValueError(
+        "nenhum provider habilitado para resumos: cadastre um no painel (Admin → Agentes) "
+        "com a finalidade summaries — ollama, openai-compatible, anthropic ou claude-cli"
     )
-    _step(f"provider claude-cli cadastrado, usado para: {', '.join(created['used_for']) or 'nada'}")
-    return created["id"]
+
+
+def _provider(api: Api, wanted: str | None) -> str:
+    try:
+        item = choose_provider(api.json("GET", "/api/v1/admin/agent-providers")["items"], wanted)
+    except ValueError as error:
+        _fail(str(error))
+    _step(f"provider de resumo: {item['name']} ({item['kind']}, {item['model']})")
+    return item["id"]
 
 
 def _upload(api: Api, audio: Path) -> str:
@@ -386,6 +408,7 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=1200, help="espera máxima da transcrição, em segundos")
     parser.add_argument("--pipeline", action="store_true", help="prova as seis etapas do processamento automático")
     parser.add_argument("--recording", help="com --pipeline: a gravação a retranscrever (padrão: a do áudio)")
+    parser.add_argument("--provider", help="id do provider do resumo (padrão: o de summaries)")
     parser.add_argument(
         "--somente-leitura",
         action="store_true",
@@ -408,7 +431,7 @@ def main() -> int:
     if args.somente_leitura:
         print("OK (somente leitura)")  # noqa: T201
         return 0
-    provider_id = _ensure_provider(api)
+    provider_id = _provider(api, args.provider)
     api.json("POST", "/api/v1/auth/login", {"email": args.email, "password": password}, expect=(200, 204))
     me = api.json("GET", "/api/v1/me")
     _step(f"sessão de usuário ok: {me['user']['email']} (aviso pendente: {me['notice_required']})")
