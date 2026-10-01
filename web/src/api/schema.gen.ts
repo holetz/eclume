@@ -243,6 +243,30 @@ export interface paths {
         patch: operations["updateVoiceAssignment"];
         trace?: never;
     };
+    "/api/v1/me/transcription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ler o idioma de transcrição preferido da conta
+         * @description Desde a 2.20.0. O idioma preferido da conta (`null` é o padrão do servidor) e o padrão do servidor (`platform_default`), para os clientes nomearem o idioma real. O idioma de um job sai, nesta ordem: o do arquivo, o da conta, o do servidor, `pt`. Sessão ou PAT com `recordings:read`.
+         */
+        get: operations["getTranscriptionPreference"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mudar o idioma de transcrição preferido da conta
+         * @description Desde a 2.20.0. `language` é um idioma, `auto` (a engine detecta) ou `null` (volta ao padrão do servidor). Vale para os próximos jobs; os que já estão na fila não mudam. Só sessão.
+         */
+        patch: operations["updateTranscriptionPreference"];
+        trace?: never;
+    };
     "/api/v1/me/tag-assignment": {
         parameters: {
             query?: never;
@@ -2323,6 +2347,17 @@ export interface components {
             /** @description Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra). */
             voiceprint_people: number;
         };
+        /** @description Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale quando a conta não escolhe. */
+        TranscriptionPreference: {
+            /** @description Idioma (BCP 47), `auto` (detectar) ou `null` (padrão do servidor). */
+            language: string | null;
+            /** @description O `asr.default_language` da plataforma (`pt` sem configuração); pode ser `auto`. */
+            platform_default: string;
+        };
+        TranscriptionPreferencePatch: {
+            /** @description Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor. */
+            language: string | null;
+        };
         VoiceAssignmentPatch: {
             enabled?: boolean;
             threshold?: number;
@@ -2514,7 +2549,7 @@ export interface components {
              */
             markers?: components["schemas"]["MarkerInput"][];
             duration_ms?: number;
-            /** @description Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção. */
+            /** @description Idioma esperado (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta e a gravação guarda o detectado). Sem valor, vale o idioma preferido da conta, depois o padrão do servidor. */
             language?: string;
             source?: components["schemas"]["Source"];
             capture?: components["schemas"]["Capture"];
@@ -2692,7 +2727,7 @@ export interface components {
             recorded_at_source: components["schemas"]["RecordedAtSource"];
             /** @description `null` até o áudio ser lido. */
             duration_ms: number | null;
-            /** @description Idioma pedido ou detectado. */
+            /** @description Idioma pedido ou detectado; `auto` só enquanto a detecção não roda. */
             language: string | null;
             size_bytes: number;
             content_type: string;
@@ -2776,6 +2811,7 @@ export interface components {
              */
             recorded_at?: string;
             kind?: components["schemas"]["RecordingKind"];
+            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
             language?: string;
             /** @description Substitui a lista inteira. */
             tags?: string[];
@@ -2795,6 +2831,7 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         RetranscribeRequest: {
+            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
             language?: string;
         };
         /** @description Resumo de listagem de uma transcrição (sem segmentos). */
@@ -4568,6 +4605,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoiceAssignment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getTranscriptionPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferência corrente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptionPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateTranscriptionPreference: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranscriptionPreferencePatch"];
+            };
+        };
+        responses: {
+            /** @description Preferência resultante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptionPreference"];
                 };
             };
             401: components["responses"]["Unauthorized"];

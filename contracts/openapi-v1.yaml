@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.19.0
+  version: 2.20.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -438,6 +438,70 @@ paths:
               examples:
                 padrao:
                   $ref: "#/components/examples/VoiceAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/transcription:
+    get:
+      tags: [recordings]
+      operationId: getTranscriptionPreference
+      summary: Ler o idioma de transcrição preferido da conta
+      description: >-
+        Desde a 2.20.0. O idioma preferido da conta (`null` é o padrão do servidor) e o padrão do
+        servidor (`platform_default`), para os clientes nomearem o idioma real. O idioma de um job
+        sai, nesta ordem: o do arquivo, o da conta, o do servidor, `pt`. Sessão ou PAT com
+        `recordings:read`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionPreference"
+              examples:
+                conta:
+                  $ref: "#/components/examples/TranscriptionPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [recordings]
+      operationId: updateTranscriptionPreference
+      summary: Mudar o idioma de transcrição preferido da conta
+      description: >-
+        Desde a 2.20.0. `language` é um idioma, `auto` (a engine detecta) ou `null` (volta ao padrão
+        do servidor). Vale para os próximos jobs; os que já estão na fila não mudam. Só sessão.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscriptionPreferencePatch"
+            examples:
+              ingles:
+                $ref: "#/components/examples/TranscriptionPreferencePatchRequest"
+      responses:
+        "200":
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionPreference"
+              examples:
+                conta:
+                  $ref: "#/components/examples/TranscriptionPreference"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4839,6 +4903,31 @@ components:
           type: integer
           minimum: 0
 
+    TranscriptionPreference:
+      description: >-
+        Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale
+        quando a conta não escolhe.
+      type: object
+      required: [language, platform_default]
+      properties:
+        language:
+          description: Idioma (BCP 47), `auto` (detectar) ou `null` (padrão do servidor).
+          type: [string, "null"]
+          pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
+        platform_default:
+          description: O `asr.default_language` da plataforma (`pt` sem configuração); pode ser `auto`.
+          type: string
+
+    TranscriptionPreferencePatch:
+      type: object
+      additionalProperties: false
+      required: [language]
+      properties:
+        language:
+          description: Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor.
+          type: [string, "null"]
+          pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
+
     VoiceAssignmentPatch:
       type: object
       additionalProperties: false
@@ -5174,9 +5263,11 @@ components:
           type: integer
           minimum: 0
         language:
-          description: Idioma esperado (BCP 47). Sem valor, vale o padrão da plataforma ou a detecção.
+          description: >-
+            Idioma esperado (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta e a gravação guarda
+            o detectado). Sem valor, vale o idioma preferido da conta, depois o padrão do servidor.
           type: string
-          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+          pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
         source:
           $ref: "#/components/schemas/Source"
         capture:
@@ -5487,7 +5578,7 @@ components:
           type: [integer, "null"]
           minimum: 0
         language:
-          description: Idioma pedido ou detectado.
+          description: Idioma pedido ou detectado; `auto` só enquanto a detecção não roda.
           type: [string, "null"]
         size_bytes:
           type: integer
@@ -5621,8 +5712,9 @@ components:
         kind:
           $ref: "#/components/schemas/RecordingKind"
         language:
+          description: Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta).
           type: string
-          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+          pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
         tags:
           description: Substitui a lista inteira.
           type: array
@@ -5660,8 +5752,9 @@ components:
       type: object
       properties:
         language:
+          description: Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta).
           type: string
-          pattern: "^[a-z]{2,3}(-[A-Z]{2})?$"
+          pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
 
     TranscriptSummary:
       description: Resumo de listagem de uma transcrição (sem segmentos).
@@ -8028,6 +8121,12 @@ components:
     VoiceAssignment:
       summary: Atribuição automática ligada, limiar 0,80
       externalValue: ./fixtures/voice-assignment.json
+    TranscriptionPreference:
+      summary: Conta em inglês, servidor em português
+      externalValue: ./fixtures/transcription-preference.json
+    TranscriptionPreferencePatchRequest:
+      summary: Transcrever em inglês por padrão
+      externalValue: ./fixtures/transcription-preference-patch-request.json
     VoiceAssignmentPatchRequest:
       summary: Subir o limiar para 0,80
       externalValue: ./fixtures/voice-assignment-patch-request.json
