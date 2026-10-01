@@ -18,10 +18,13 @@ x-restart: &restart
     driver: json-file
     options: {max-size: "10m", max-file: "3"}
 
+# Credencial por serviço (docs/standards/code/server-nucleo.md §Credenciais de Redis e MinIO): o
+# root do MinIO fica só no MinIO, no `minio-init` e nos scripts de backup do host; o Redis recusa
+# conexão sem usuário. Server e workers CPU usam `eclume-server`; o worker GPU, `eclume-gpu`.
 x-s3-server: &s3-server
   ECLUME_S3_ENDPOINT: http://minio:9000
-  ECLUME_S3_ACCESS_KEY: ${ECLUME_MINIO_USER:?defina em deploy/.env.prod}
-  ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD:?defina em deploy/.env.prod}
+  ECLUME_S3_ACCESS_KEY: eclume-server
+  ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_SERVER_PASSWORD:?defina em deploy/.env.prod}
   ECLUME_S3_BUCKET: eclume
 
 # Server e worker CPU conectam como `eclume_server`: sem superusuário, sem DDL, só DML; as
@@ -30,7 +33,7 @@ x-s3-server: &s3-server
 x-server-env: &server-env
   <<: *s3-server
   ECLUME_DATABASE_URL: postgresql+asyncpg://eclume_server:${ECLUME_RUNTIME_PG_PASSWORD:?defina em deploy/.env.prod}@postgres:5432/eclume
-  ECLUME_REDIS_URL: redis://redis:6379/0
+  ECLUME_REDIS_URL: redis://eclume-server:${ECLUME_REDIS_SERVER_PASSWORD:?defina em deploy/.env.prod}@redis:6379/0
   ECLUME_SECRET_KEY: ${ECLUME_SECRET_KEY:?defina em deploy/.env.prod}
   ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
   ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
@@ -144,10 +147,10 @@ services:
     # ficar livre até --espera-gpu (30 min) antes de parar, e este prazo o cobre.
     stop_grace_period: 40m
     environment:
-      ECLUME_REDIS_URL: redis://redis:6379/0
+      ECLUME_REDIS_URL: redis://eclume-gpu:${ECLUME_REDIS_GPU_PASSWORD:?defina em deploy/.env.prod}@redis:6379/0
       ECLUME_S3_ENDPOINT_URL: http://minio:9000
-      ECLUME_S3_ACCESS_KEY: ${ECLUME_MINIO_USER}
-      ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD}
+      ECLUME_S3_ACCESS_KEY: eclume-gpu
+      ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_GPU_PASSWORD:?defina em deploy/.env.prod}
       ECLUME_S3_BUCKET: eclume
       # A mesma do server: abre o token do HF que Administração → Segredos manda cifrado no job.
       ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
@@ -205,11 +208,17 @@ services:
   redis:
     <<: *restart
     image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    configs:
+      - source: redis-conf
+        target: /usr/local/etc/redis/redis.conf
+    environment:
+      # Só para o healthcheck e o `deploy.sh` (que lê o `busy` do worker GPU por `docker exec`).
+      ECLUME_REDIS_SERVER_PASSWORD: ${ECLUME_REDIS_SERVER_PASSWORD:?defina em deploy/.env.prod}
     volumes:
       - redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user eclume-server --pass \"$$ECLUME_REDIS_SERVER_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -243,7 +252,16 @@ services:
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER}
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD}
-    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc mb --ignore-existing local/eclume"]
+      MINIO_SERVER_PASSWORD: ${ECLUME_MINIO_SERVER_PASSWORD:?defina em deploy/.env.prod}
+      MINIO_GPU_PASSWORD: ${ECLUME_MINIO_GPU_PASSWORD:?defina em deploy/.env.prod}
+    configs:
+      - source: minio-init-sh
+        target: /minio-init.sh
+      - source: minio-policy-app
+        target: /policies/eclume-app.json
+      - source: minio-policy-gpu
+        target: /policies/eclume-fila-gpu.json
+    entrypoint: ["sh", "/minio-init.sh"]
 
   # O migrador: o superusuário aplica as migrations e liga o LOGIN de eclume_server com a senha dele.
   migrate:
@@ -270,6 +288,45 @@ services:
       - install -m 644 -o 1000 -g 1000 /data/caddy/pki/authorities/local/root.crt /downloads/eclume-root.crt && echo publicada /downloads/eclume-root.crt
 
 configs:
+  # ACL do Redis: `default` desligado; `eclume-server` com tudo menos os comandos perigosos (o INFO
+  # volta: o arq o lê ao subir); `eclume-gpu` só nas chaves da fila, da saúde e do progresso dele, e
+  # só lê o pedido de cancelamento.
+  redis-conf:
+    content: |
+      appendonly yes
+      user default off
+      user eclume-server on >${ECLUME_REDIS_SERVER_PASSWORD} ~* &* +@all -@dangerous +info
+      user eclume-gpu on >${ECLUME_REDIS_GPU_PASSWORD} resetchannels ~arq:* ~eclume:gpu* ~eclume:default ~eclume:progress:* %R~eclume:cancel:* +@all -@dangerous -@admin -@pubsub +info
+  # Bucket, usuários e políticas a cada deploy (idempotente): `user add` em usuário existente só
+  # troca a senha pela do env; a política é recriada por cima, sem apagar o usuário. A imagem do
+  # MinIO não tem grep nem sed: só sh e mc.
+  minio-init-sh:
+    content: |
+      set -eu
+      mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+      mc mb --ignore-existing local/eclume
+      for pair in "eclume-server:eclume-app:$$MINIO_SERVER_PASSWORD" "eclume-gpu:eclume-fila-gpu:$$MINIO_GPU_PASSWORD"; do
+        user="$${pair%%:*}"; rest="$${pair#*:}"; policy="$${rest%%:*}"; password="$${rest#*:}"
+        mc admin policy create local "$$policy" "/policies/$$policy.json" >/dev/null
+        mc admin user add local "$$user" "$$password" >/dev/null
+        case "$$(mc admin user info local "$$user")" in
+          *"$$policy"*) ;;
+          *) mc admin policy attach local "$$policy" --user "$$user" >/dev/null ;;
+        esac
+        echo "minio-init: $$user com $$policy"
+      done
+  minio-policy-app:
+    content: |
+      {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": ["s3:*"], "Resource": ["arn:aws:s3:::eclume", "arn:aws:s3:::eclume/*"]}
+      ]}
+  # O worker GPU lê o áudio original e escreve os artefatos; não lista nem apaga.
+  minio-policy-gpu:
+    content: |
+      {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::eclume/users/*/recordings/*/audio"]},
+        {"Effect": "Allow", "Action": ["s3:PutObject"], "Resource": ["arn:aws:s3:::eclume/recordings/*"]}
+      ]}
   # `tls internal`: certificado da CA local do Caddy. `default_sni`: quem acessa por IP não envia
   # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
   # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o

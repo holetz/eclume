@@ -1,0 +1,93 @@
+# ruff: noqa: INP001, S101, D103  # testes soltos do compose de produção; deploy/ não é pacote Python
+"""Regressão do isolamento do compose de produção: credenciais, redes e limites por serviço."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+COMPOSE = yaml.safe_load(Path(__file__).with_name("docker-compose.prod.yml").read_text(encoding="utf-8"))
+SERVICES: dict[str, dict[str, Any]] = COMPOSE["services"]
+CONFIGS: dict[str, dict[str, Any]] = COMPOSE["configs"]
+ENV_EXAMPLE = Path(__file__).with_name(".env.prod.example").read_text(encoding="utf-8")
+
+# Serviços da aplicação: nenhum vê a credencial root do MinIO.
+APP = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns", "web", "caddy")
+ROOT_USERS = ("minio", "minio-init")
+
+
+def _env(service: str) -> dict[str, str]:
+    return {key: str(value) for key, value in (SERVICES[service].get("environment") or {}).items()}
+
+
+def _acl(user: str) -> str:
+    content = CONFIGS["redis-conf"]["content"]
+    match = re.search(rf"^user {re.escape(user)} (.*)$", content, re.MULTILINE)
+    assert match, f"usuário {user} fora da ACL"
+    return match.group(1)
+
+
+@pytest.mark.parametrize("service", APP)
+def test_credencial_root_do_minio_fora_da_aplicacao(service: str) -> None:
+    values = " ".join(_env(service).values())
+    assert "ECLUME_MINIO_USER" not in values
+    assert "ECLUME_MINIO_PASSWORD}" not in values
+    assert "ECLUME_MINIO_PASSWORD:" not in values
+
+
+@pytest.mark.parametrize("service", ROOT_USERS)
+def test_credencial_root_so_no_minio_e_no_init(service: str) -> None:
+    assert "${ECLUME_MINIO_PASSWORD}" in _env(service).values()
+
+
+@pytest.mark.parametrize(
+    ("service", "redis_user", "s3_user", "s3_secret"),
+    [
+        ("server", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
+        ("worker-cpu", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
+        ("worker-agents", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
+        ("worker-gpu", "eclume-gpu", "eclume-gpu", "ECLUME_MINIO_GPU_PASSWORD"),
+    ],
+)
+def test_credencial_por_servico(service: str, redis_user: str, s3_user: str, s3_secret: str) -> None:
+    env = _env(service)
+    assert env["ECLUME_REDIS_URL"].startswith(f"redis://{redis_user}:")
+    assert env["ECLUME_S3_ACCESS_KEY"] == s3_user
+    assert s3_secret in env["ECLUME_S3_SECRET_KEY"]
+
+
+def test_credencial_redis_default_desligado() -> None:
+    assert re.search(r"^user default off$", CONFIGS["redis-conf"]["content"], re.MULTILINE)
+    assert "redis-conf" in {c["source"] for c in SERVICES["redis"]["configs"]}
+
+
+def test_credencial_redis_gpu_so_nas_chaves_dele() -> None:
+    rules = _acl("eclume-gpu").split()
+    keys = {rule for rule in rules if rule.startswith(("~", "%"))}
+    assert keys == {"~arq:*", "~eclume:gpu*", "~eclume:default", "~eclume:progress:*", "%R~eclume:cancel:*"}
+    assert {"-@dangerous", "-@admin"} <= set(rules)
+
+
+def test_credencial_minio_gpu_sem_apagar_nem_listar() -> None:
+    policy = CONFIGS["minio-policy-gpu"]["content"]
+    actions = set(re.findall(r'"(s3:\w+)"', policy))
+    assert actions == {"s3:GetObject", "s3:PutObject"}
+    assert "eclume/users/*/recordings/*/audio" in policy
+    assert "eclume/recordings/*" in policy
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ECLUME_MINIO_SERVER_PASSWORD",
+        "ECLUME_MINIO_GPU_PASSWORD",
+        "ECLUME_REDIS_SERVER_PASSWORD",
+        "ECLUME_REDIS_GPU_PASSWORD",
+    ],
+)
+def test_credencial_nova_no_env_de_exemplo(name: str) -> None:
+    assert re.search(rf"^{name}=troque-", ENV_EXAMPLE, re.MULTILINE)
