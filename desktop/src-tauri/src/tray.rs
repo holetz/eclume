@@ -335,6 +335,9 @@ pub fn note_title(view: &StatusView, now_ms: i64) -> Option<String> {
 /// reunião esperando resposta e quantas gravações faltam sincronizar.
 pub fn status_line(view: &StatusView, now_ms: i64) -> String {
     let mut parts = vec![view.status.label().to_string()];
+    if view.mic_lost && view.status == AppStatus::Recording {
+        parts.push("sem microfone".into());
+    }
     if let Some(title) = note_title(view, now_ms) {
         parts.push(title);
     } else if view.status == AppStatus::Recording {
@@ -424,6 +427,7 @@ mod tests {
             updated: None,
             connection: crate::config::Connection::Account,
             account: None,
+            mic_lost: false,
         }
     }
 
@@ -438,6 +442,9 @@ mod tests {
             status_line(&view(AppStatus::Syncing, 3), 0),
             "Sincronizando · 3 gravações a sincronizar"
         );
+        let mut without_mic = view(AppStatus::Recording, 0);
+        without_mic.mic_lost = true;
+        assert_eq!(status_line(&without_mic, 0), "Gravando · sem microfone");
         assert_eq!(toggle_label(AppStatus::Recording), "Parar gravação");
         assert_eq!(toggle_label(AppStatus::Idle), "Iniciar gravação");
     }

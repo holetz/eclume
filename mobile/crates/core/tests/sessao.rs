@@ -6,9 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use comum::{dirs_temp, Roteiro, TransportesFalsos};
+use eclume_mobile_core::sessao::EstadoMicrofone;
 use eclume_mobile_core::{Core, Selo};
 use eclume_recorder::source::SineSource;
-use eclume_recorder::{AudioSource, Queue, Source, Status};
+use eclume_recorder::{AudioSource, Queue, Source, SourceState, Status};
 
 /// Um seno entregue em tempo real, como um microfone: 10 ms por leitura.
 struct Microfone(SineSource);
@@ -133,4 +134,100 @@ fn limites_param_sem_espaco_e_avisam() {
     assert_eq!(parada.status, Status::Pending);
     assert!(core.estado().unwrap().sessao.is_none());
     assert!(core.estado().unwrap().avisos.bateria.is_none());
+}
+
+/// Um microfone que cai em `fora.0` e volta em `fora.1` (desde a abertura), como a fonte que se
+/// reconecta informa: silêncio e `Reconnecting` enquanto está fora.
+struct MicrofoneQueCai {
+    seno: Microfone,
+    aberto: std::time::Instant,
+    fora: (Duration, Duration),
+}
+
+impl AudioSource for MicrofoneQueCai {
+    fn sample_rate(&self) -> u32 {
+        self.seno.sample_rate()
+    }
+
+    fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+        let amostras = self.seno.read(timeout)?;
+        Some(match self.state() {
+            SourceState::Live => amostras,
+            SourceState::Reconnecting { .. } => vec![0.0; amostras.len()],
+        })
+    }
+
+    fn state(&self) -> SourceState {
+        let agora = self.aberto.elapsed();
+        if agora >= self.fora.0 && agora < self.fora.1 {
+            SourceState::Reconnecting {
+                since: self.aberto + self.fora.0,
+            }
+        } else {
+            SourceState::Live
+        }
+    }
+}
+
+#[test]
+fn microfone_que_cai_segue_gravando_e_vira_marcadores() {
+    let (dirs, _guard) = dirs_temp("microfone");
+    let mut core = abrir(dirs);
+    let fonte = MicrofoneQueCai {
+        seno: Microfone(SineSource::new(48_000, 440.0, 0.4, Duration::from_secs(60))),
+        aberto: std::time::Instant::now(),
+        fora: (Duration::from_millis(300), Duration::from_millis(6_000)),
+    };
+    core.gravar(Box::new(fonte)).unwrap();
+    std::thread::sleep(Duration::from_millis(800));
+    core.vigiar().unwrap();
+    let sessao = core.estado().unwrap().sessao.unwrap();
+    assert_eq!(sessao.microfone, EstadoMicrofone::Reconectando);
+    // Menos de 5 s fora: ainda sem marcador.
+    assert!(sessao.marcadores.is_empty());
+
+    std::thread::sleep(Duration::from_millis(4_800));
+    core.vigiar().unwrap();
+    let marcadores = core.estado().unwrap().sessao.unwrap().marcadores;
+    assert_eq!(marcadores.len(), 1);
+    assert_eq!(marcadores[0].note.as_deref(), Some("microfone perdido"));
+
+    std::thread::sleep(Duration::from_millis(700));
+    core.vigiar().unwrap();
+    let sessao = core.estado().unwrap().sessao.unwrap();
+    assert_eq!(sessao.microfone, EstadoMicrofone::Ok);
+    assert_eq!(sessao.marcadores.len(), 2);
+    assert_eq!(
+        sessao.marcadores[1].note.as_deref(),
+        Some("microfone de volta")
+    );
+    assert!(
+        core.verificar_limites().unwrap().is_none(),
+        "a gravação seguiu"
+    );
+    core.parar().unwrap();
+}
+
+#[test]
+fn silencio_imposto_pelo_sistema_aparece_e_marca() {
+    let (dirs, _guard) = dirs_temp("silenciada");
+    let mut core = abrir(dirs);
+    assert!(
+        core.silenciar(true).is_err(),
+        "sem gravação, nada a silenciar"
+    );
+    core.gravar(microfone(30)).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    core.silenciar(true).unwrap();
+    core.silenciar(true).unwrap();
+    let sessao = core.estado().unwrap().sessao.unwrap();
+    assert!(sessao.silenciada);
+    assert_eq!(sessao.marcadores.len(), 1);
+    assert_eq!(
+        sessao.marcadores[0].note.as_deref(),
+        Some("silenciado pelo sistema")
+    );
+    core.silenciar(false).unwrap();
+    assert!(!core.estado().unwrap().sessao.unwrap().silenciada);
+    core.parar().unwrap();
 }

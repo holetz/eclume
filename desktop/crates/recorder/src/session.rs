@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 
@@ -27,11 +27,13 @@ use crate::encode::{OggOpusWriter, DEFAULT_BITRATE};
 use crate::mix::{Mixer, TARGET_RATE};
 use crate::queue::{now_ms, Kind, Queue, QueuedRecording, Source};
 use crate::vad::{SilenceDetector, VadEvent, METER_BARS};
-use crate::AudioSource;
+use crate::{AudioSource, SourceState};
 
 /// Quanto cada leitura de fonte espera, no máximo, por amostras.
 const READ_TIMEOUT: Duration = Duration::from_millis(10);
 const PART_SUFFIX: &str = ".part";
+/// Intervalo mínimo entre dois avisos de descarte no log.
+const DROP_LOG_EVERY: Duration = Duration::from_secs(10);
 /// Tentativas de renomear o `.part` ao parar, com espera dobrando a partir de [`RENAME_WAIT`]
 /// (~3 s no total): no Windows, antivírus e indexador seguram o arquivo por instantes.
 const RENAME_ATTEMPTS: u32 = 5;
@@ -123,6 +125,10 @@ pub struct Progress {
     paused: AtomicBool,
     /// O nível RMS do último trecho mixado, em bits de `f32`.
     level: AtomicU32,
+    /// O estado de cada faixa (fonte), na ordem das fontes.
+    sources: Mutex<Vec<SourceState>>,
+    /// Amostras descartadas por anel cheio, somadas as faixas.
+    dropped: AtomicU64,
 }
 
 impl Default for Progress {
@@ -134,6 +140,8 @@ impl Default for Progress {
             meter: Mutex::new([0.0; METER_BARS]),
             paused: AtomicBool::new(false),
             level: AtomicU32::new(0),
+            sources: Mutex::new(Vec::new()),
+            dropped: AtomicU64::new(0),
         }
     }
 }
@@ -166,6 +174,30 @@ impl Progress {
             u64::MAX => None,
             ms => Some(ms),
         }
+    }
+
+    /// O estado de cada faixa, na ordem das fontes: uma faixa em
+    /// [`SourceState::Reconnecting`] está entregando silêncio enquanto o dispositivo volta.
+    pub fn source_states(&self) -> Vec<SourceState> {
+        self.sources
+            .lock()
+            .map_or_else(|_| Vec::new(), |states| states.clone())
+    }
+
+    /// Amostras descartadas por anel cheio até agora, somadas as faixas.
+    pub fn dropped_samples(&self) -> u64 {
+        self.dropped.load(Ordering::Acquire)
+    }
+
+    /// Copia o estado e os descartes das fontes; devolve o total de descartes.
+    fn track_sources(&self, sources: &[Box<dyn AudioSource>]) -> u64 {
+        if let Ok(mut states) = self.sources.lock() {
+            states.clear();
+            states.extend(sources.iter().map(|source| source.state()));
+        }
+        let dropped = sources.iter().map(|source| source.dropped_samples()).sum();
+        self.dropped.store(dropped, Ordering::Release);
+        dropped
     }
 
     /// Por que a gravação terminou; `None` enquanto grava.
@@ -361,6 +393,7 @@ impl ActiveRecording {
             duration_ms: self.progress.position_ms(),
             bytes,
             interrupted,
+            dropped: self.progress.dropped_samples(),
         })
     }
 }
@@ -374,6 +407,8 @@ pub struct Closed {
     duration_ms: i64,
     bytes: i64,
     interrupted: bool,
+    /// Amostras descartadas por anel cheio na gravação toda.
+    dropped: u64,
 }
 
 impl Closed {
@@ -391,6 +426,7 @@ impl Closed {
             duration_ms,
             bytes,
             interrupted,
+            dropped,
         } = self;
         queue.finish(&id, &final_path, now_ms(), duration_ms, bytes)?;
         if interrupted {
@@ -399,7 +435,9 @@ impl Closed {
         if ask_details {
             queue.set_details_pending(&id)?;
         }
-        log::info!("gravação {id} fechada: {duration_ms} ms, {bytes} bytes");
+        log::info!(
+            "gravação {id} fechada: {duration_ms} ms, {bytes} bytes, {dropped} amostras descartadas"
+        );
         queue
             .get(&id)?
             .context("a gravação sumiu da fila ao fechar")
@@ -436,6 +474,8 @@ fn record_until_done(
     let rates: Vec<u32> = sources.iter().map(|s| s.sample_rate()).collect();
     let mut mixer = Mixer::new(&rates)?;
     let mut live = vec![true; sources.len()];
+    // Descartes vão ao log no máximo a cada `DROP_LOG_EVERY`.
+    let mut drops_logged = (0u64, Instant::now());
 
     while !stop.load(Ordering::Acquire) && live.iter().any(|alive| *alive) {
         for (lane, source) in sources.iter_mut().enumerate() {
@@ -453,6 +493,11 @@ fn record_until_done(
                     mixer.end(lane)?;
                 }
             }
+        }
+        let dropped = progress.track_sources(&sources);
+        if dropped > drops_logged.0 && drops_logged.1.elapsed() >= DROP_LOG_EVERY {
+            log::warn!("{dropped} amostras descartadas por anel cheio até agora");
+            drops_logged = (dropped, Instant::now());
         }
         let ready = mixer.pop_ready();
         if progress.is_paused() {
@@ -649,6 +694,91 @@ mod tests {
         assert_eq!(progress.stop_reason(), Some(StopReason::Requested));
         assert_eq!(rec.status, Status::Pending);
         assert!(rec.duration_ms.unwrap() > 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Empurra 10 ms de tom a cada 10 ms no anel, até `until` (ou até `stop`), e o fecha.
+    fn feed(
+        mut writer: eclume_audio_capture::ring::RingWriter,
+        until: Duration,
+        stop: Arc<AtomicBool>,
+    ) {
+        std::thread::spawn(move || {
+            let started = Instant::now();
+            while started.elapsed() < until && !stop.load(Ordering::Acquire) {
+                writer.push_interleaved(160, 1, |i| (i as f32 * 0.1).sin() * 0.3);
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            writer.close();
+        });
+    }
+
+    #[test]
+    fn session_reconecta_o_microfone_que_caiu_sem_encerrar_a_faixa() {
+        use eclume_audio_capture::reconnect::{Opener, Reconnecting};
+        use eclume_audio_capture::ring;
+
+        let dir = temp_dir("reconecta");
+        let queue = Queue::open_in_memory().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        // O microfone toca 1 s, cai, e o dispositivo só volta 1,2 s depois da queda.
+        let (writer, first) = ring::channel(1 << 14, 16_000);
+        feed(writer, Duration::from_secs(1), Arc::clone(&stop));
+        let opened = Instant::now();
+        let mut first = Some(first);
+        let feeder_stop = Arc::clone(&stop);
+        let opener: Opener = Box::new(move || {
+            if let Some(first) = first.take() {
+                return Ok(first);
+            }
+            if opened.elapsed() < Duration::from_millis(2_200) {
+                return Err(anyhow!("microfone fora"));
+            }
+            let (writer, again) = ring::channel(1 << 14, 16_000);
+            feed(writer, Duration::from_secs(60), Arc::clone(&feeder_stop));
+            Ok(again)
+        });
+        let mic = Reconnecting::open(opener).unwrap();
+        let sources: Vec<Box<dyn AudioSource>> = vec![
+            Box::new(SineSource::new(48_000, 300.0, 0.3, Duration::from_secs(60))),
+            Box::new(mic),
+        ];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            sources,
+            StartOptions::MEETING,
+        )
+        .unwrap();
+        let started = Instant::now();
+
+        let mut saw_reconnecting = false;
+        while started.elapsed() < Duration::from_millis(4_000) {
+            let states = active.progress().source_states();
+            if let [SourceState::Live, SourceState::Reconnecting { .. }] = states.as_slice() {
+                saw_reconnecting = true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            saw_reconnecting,
+            "a faixa do microfone não passou por reconexão"
+        );
+        assert_eq!(
+            active.progress().source_states(),
+            vec![SourceState::Live, SourceState::Live]
+        );
+        assert!(!active.is_finished());
+        let elapsed_ms = i64::try_from(started.elapsed().as_millis()).unwrap();
+        let rec = active.stop(&queue).unwrap();
+        stop.store(true, Ordering::Release);
+        // O intervalo sem microfone entrou como silêncio: a duração segue o relógio.
+        let duration = rec.duration_ms.unwrap();
+        assert!(
+            duration > elapsed_ms * 8 / 10 && duration < elapsed_ms * 12 / 10,
+            "{duration} ms gravados em {elapsed_ms} ms"
+        );
+        assert!(!rec.interrupted);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

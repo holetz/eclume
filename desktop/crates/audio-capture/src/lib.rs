@@ -19,6 +19,7 @@ pub mod ring;
 
 #[cfg(feature = "mic")]
 mod mic;
+pub mod reconnect;
 #[cfg(feature = "backends")]
 mod system;
 
@@ -26,6 +27,15 @@ mod system;
 pub use mic::{InputDevices, MicSource, list_input_devices};
 #[cfg(feature = "backends")]
 pub use system::{OutputDevice, OutputDevices, SystemSource, list_output_devices};
+
+/// Como está uma fonte agora.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceState {
+    /// Entregando o áudio do dispositivo.
+    Live,
+    /// O dispositivo caiu em `since`; a fonte tenta reabri-lo e entrega silêncio enquanto isso.
+    Reconnecting { since: Instant },
+}
 
 /// Uma fonte de áudio mono que o gravador lê por puxada.
 pub trait AudioSource: Send {
@@ -39,6 +49,17 @@ pub trait AudioSource: Send {
     /// um monitor de sink suspenso). `None` significa que a fonte terminou e não vai entregar mais
     /// nada.
     fn read(&mut self, timeout: Duration) -> Option<Vec<f32>>;
+
+    /// Se a fonte está entregando o dispositivo ou reconectando. Fonte que não reconecta é
+    /// sempre [`SourceState::Live`].
+    fn state(&self) -> SourceState {
+        SourceState::Live
+    }
+
+    /// Amostras descartadas (anel cheio) desde o início.
+    fn dropped_samples(&self) -> u64 {
+        0
+    }
 }
 
 impl<T: AudioSource + ?Sized> AudioSource for Box<T> {
@@ -48,6 +69,14 @@ impl<T: AudioSource + ?Sized> AudioSource for Box<T> {
 
     fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
         (**self).read(timeout)
+    }
+
+    fn state(&self) -> SourceState {
+        (**self).state()
+    }
+
+    fn dropped_samples(&self) -> u64 {
+        (**self).dropped_samples()
     }
 }
 

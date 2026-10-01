@@ -126,6 +126,15 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
 - **Queda do processo:** o `.ogg.part` já tem as páginas Ogg em disco; na abertura seguinte o
   `session::recover` o acerta e a gravação aparece como "Interrompida". O serviço destruído com a
   gravação em curso para a gravação pela ponte.
+- **Troca de rota não encerra:** plugar ou tirar um fone com microfone (P2, USB-C, Bluetooth)
+  derruba o stream, e o `MicSource` se reconecta dentro da fonte
+  ([desktop-gravacao.md](desktop-gravacao.md) §Fontes): a gravação segue no mesmo arquivo, com
+  silêncio no meio. A reabertura acontece com o serviço de microfone em primeiro plano ativo (o
+  mesmo processo), o que o Android 14+ exige. O `EstadoSessao` traz `microfone` (`ok` ou
+  `reconectando`) e `silenciada`; o laço de `eventos.rs` chama `Core::vigiar` a cada 250 ms, que
+  marca "microfone perdido" (queda acima de 5 s, no instante da queda) e "microfone de volta", e
+  redesenha a notificação quando o microfone ou o silêncio mudam. A tela da gravação mostra a
+  faixa "Microfone reconectando" ou "Silenciado pelo sistema".
 
 ## Plugin nativo e serviço em primeiro plano
 
@@ -135,8 +144,8 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 | Peça | O que faz |
 |---|---|
 | `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico`, `atualizarServico`, `pararServico`, `descobrir(segundos)`, `estadoDoDispositivo`, `abrirInstalador(caminho)`; no `load`, acompanha a rede e agenda o `SyncWorker` |
-| `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao` |
-| `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h"; Pausar/Continuar, Marcador e Parar |
+| `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao`; na API 29+, `registerAudioRecordingCallback` enquanto grava (removido ao encerrar e no `onDestroy`): quando `isClientSilenced()` muda, `EclumeCore.acao("silenciado" \| "audivel")`, que marca "silenciado pelo sistema". Abaixo da API 29 não há sinal |
+| `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h", ou "Microfone desconectado · reconectando", ou "Silenciado pelo sistema"; Pausar/Continuar, Marcador e Parar |
 | `EclumeCore` | `external fun acao`, `estado` e `syncPendentes`, implementadas em `src-tauri/src/jni.rs` sobre o núcleo global; devolvem JSON |
 | `Descoberta` | `NsdManager` em `_eclume._tcp` (`registerServiceInfoCallback` na API 34+), TXT cru ao núcleo, que o interpreta por `discovery::parse` |
 | `Conectividade`, `Dispositivo` | Wi‑Fi não medido; bateria, espaço livre, `Build.MODEL` e os recortes de borda a borda em dp |
