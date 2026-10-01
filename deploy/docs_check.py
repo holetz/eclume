@@ -51,6 +51,12 @@ EXCECOES: tuple[Excecao, ...] = (
         "mobile/certificado-release.sha256",
         "versionado no primeiro release, com a keystore criada pela dona (#108 5.1)",
     ),
+    Excecao(
+        "docs/how-to/auto-hospedar.md", "deploy/.env.prod", "segredos gerados pelo deploy.sh --gerar-env; fora do git"
+    ),
+    Excecao(
+        "docs/how-to/desenvolver-sem-gpu.md", "deploy/.env", "criado pela pessoa a partir do .env.example; fora do git"
+    ),
     Excecao("docs/project/deploy-producao.md", "web/test-results/prod", "saída da prova de produção do Playwright"),
     Excecao(
         "docs/standards/agents/communication.md",
