@@ -58,11 +58,13 @@ O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook
   com dados em `/srv/eclume`, e os one-shots
   `minio-init`, `migrate` e `publish-ca` no perfil `tools`.
 - `server.Dockerfile`, `web.Dockerfile` e `web.Caddyfile`: as imagens `eclume-server:prod` e
-  `eclume-web:prod`, cada uma com o `.dockerignore` ao lado.
+  `eclume-web:prod`, cada uma com o `.dockerignore` ao lado. A CLI `claude` só entra na do server
+  com `ECLUME_CLAUDE_CLI=1` (obrigatória no `.env.prod`, 0 ou 1; esta produção usa 1).
 - `.env.prod.example`: as variáveis; `deploy.sh --gerar-env` cria o `deploy/.env.prod` real (600,
   fora do git).
 - `deploy.sh`: build no daemon do host pelo contexto Docker e subida em ordem; `bootstrap-admin.sh`:
-  a primeira conta de admin; `smoke_prod.py`: prova o caminho inteiro pela API pública;
+  a primeira conta de admin; `smoke_prod.py`: prova o caminho inteiro pela API pública,
+  com o provider de resumos já cadastrado (de qualquer tipo, ou `--provider <id>`);
   `smoke_mcp.py`: prova o servidor MCP com o SDK `mcp` e o pareamento de um aparelho.
 - `backup.sh` e `restaurar-backup.sh`: instalados em `/srv/eclume/bin/` pelo deploy; o backup
   roda no cron do host.

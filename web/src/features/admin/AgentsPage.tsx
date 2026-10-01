@@ -141,7 +141,7 @@ interface ProviderPanelProps {
 function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(provider?.name ?? '')
-  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? 'claude-cli')
+  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? (PROVIDER_KINDS[0].value as ProviderKind))
   const [model, setModel] = useState(provider?.model ?? '')
   const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? '')
   const [apiKey, setApiKey] = useState('')

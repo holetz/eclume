@@ -74,6 +74,17 @@ def problemas_workflow(texto: str, nome: str) -> list[str]:
     return problemas
 
 
+VARIAVEL = re.compile(r"\$\{[^}]+\}|\$\w+")
+
+
+def estagio_escolhido(imagem: str, estagios: set[str]) -> bool:
+    """`FROM estagio-${ARG}`: com variável, a referência é um estágio se casa algum deles."""
+    if "$" not in imagem:
+        return imagem in estagios
+    padrao = ".+".join(re.escape(parte) for parte in VARIAVEL.split(imagem))
+    return any(re.fullmatch(padrao, estagio) for estagio in estagios)
+
+
 def problemas_dockerfile(texto: str, nome: str) -> list[str]:
     """`FROM` e `COPY --from=` externos sem digest."""
     problemas = []
@@ -81,7 +92,7 @@ def problemas_dockerfile(texto: str, nome: str) -> list[str]:
     for n, linha in enumerate(texto.splitlines(), 1):
         if m := FROM.match(linha):
             imagem = m["imagem"]
-            if imagem not in estagios and not imagem_local(imagem) and not imagem_fixada(imagem):
+            if not estagio_escolhido(imagem, estagios) and not imagem_local(imagem) and not imagem_fixada(imagem):
                 problemas.append(f"{nome}:{n}: FROM {imagem} sem @sha256:")
             if m["estagio"]:
                 estagios.add(m["estagio"])

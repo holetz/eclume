@@ -32,11 +32,16 @@ export const PURPOSES: readonly Option[] = [
   { value: 'agenda_detection', label: 'Detecção do tipo de agenda' },
 ]
 
+/** O primeiro é o tipo que vem escolhido no cadastro: um que roda em casa, nunca a CLI proprietária. */
 export const PROVIDER_KINDS: readonly Option[] = [
-  { value: 'claude-cli', label: 'Claude Code do servidor', hint: 'Roda o claude -p no servidor, autenticado pelo token do Claude; sem endereço.' },
-  { value: 'anthropic', label: 'API da Anthropic', hint: 'Sem chave própria, usa o segredo anthropic_api_key.' },
-  { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter; exige o endereço.' },
   { value: 'ollama', label: 'Ollama', hint: 'Roda só com a fila da GPU vazia; exige o endereço.' },
+  { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter ou um servidor local; exige o endereço.' },
+  { value: 'anthropic', label: 'API da Anthropic', hint: 'Sem chave própria, usa o segredo anthropic_api_key.' },
+  {
+    value: 'claude-cli',
+    label: 'Claude Code do servidor',
+    hint: 'Roda o claude -p no servidor, autenticado pelo token do Claude; exige a imagem construída com a CLI (ECLUME_CLAUDE_CLI=1); sem endereço.',
+  },
 ]
 
 export const MODEL_PLACEHOLDERS: Record<string, string> = {

@@ -59,8 +59,10 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
   mount de um caminho da estação.
 - **As imagens do server e do web ficam em `deploy/`,** com `<Dockerfile>.dockerignore` ao lado
   filtrando o contexto da raiz. Uma imagem de server serve à API, ao worker CPU, às migrations e ao
-  CLI. Ela roda como uid 1000 (`HOME=/home/app`) e traz o binário nativo da CLI `claude`, fixado
-  na versão do host.
+  CLI. Ela roda como uid 1000 (`HOME=/home/app`). O binário nativo da CLI `claude`, de versão
+  fixada, só entra com `ECLUME_CLAUDE_CLI=1` no `deploy/.env.prod` (build arg; o padrão da imagem é
+  sem a CLI, [server-agentes.md](../standards/code/server-agentes.md#deploy)). Esta produção usa
+  `ECLUME_CLAUDE_CLI=1`; o `deploy.sh` recusa um env que não declare 0 ou 1.
 - **Redes por papel** (holetz/eclume#94): `borda` (caddy, web, server); `dados`, interna
   (postgres, redis, minio, server, worker-cpu, worker-agents, `minio-init`, `migrate`); `fila-gpu`,
   interna (redis, minio, worker-gpu); `saida` (worker-cpu, worker-agents e worker-gpu, que falam
@@ -200,6 +202,7 @@ host.
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
 | `ECLUME_SIGNUP_OPEN` | `true` (padrão): qualquer pessoa na LAN cria conta por `POST /api/v1/auth/signup`, com o aceite do aviso. `false` fecha o cadastro sem deploy de código: mude o env e recrie o server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
+| `ECLUME_CLAUDE_CLI` | obrigatória, `0` ou `1`: o build arg que põe a CLI `claude` na imagem do server. Esta produção usa `1` (o `claude-cli` é o provider dela); `0` constrói a imagem só com software livre e o `claude-cli` falha com `provider_not_configured` |
 | `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker de agentes (e, na transição, ao worker CPU) como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
 ### Admin, contas e provider
@@ -226,8 +229,16 @@ sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
   `ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password | "${P[@]}" run --rm -T migrate eclume-server admin set-password --email admin@example.com --password-stdin`
   (grave a nova senha no arquivo antes; `P` como em Operação). A senha da conta de usuário se troca pelo app.
 
-O provider padrão da plataforma é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
-roda o `claude -p` no worker de agentes com o token de longa duração. O smoke o cadastra se faltar.
+O provider desta produção é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), uma escolha
+deste host e não do produto: ele roda o `claude -p` no worker de agentes, na imagem construída com
+`ECLUME_CLAUDE_CLI=1`, com o token entregue pelo painel ou pelo env, sem montar a credencial do
+host. A matriz do que cada tipo exige está em [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige).
+O smoke não cadastra provider: prova o resumo com o que estiver cadastrado para `summaries`, de
+qualquer tipo, ou com o de `--provider <id>`.
+
+**Decisão pendente (holetz/eclume#129, tarefa 5.3):** se os termos da Anthropic permitem que o
+token de uma assinatura sirva as contas do eclume. Até a dona registrar a decisão aqui, o
+`claude-cli` segue como provider desta produção; a troca é recadastrar o provider no painel.
 
 **Token do Claude.** Num computador com o Claude Code logado na assinatura, `claude setup-token`
 abre a autorização no navegador e imprime o token (`sk-ant-oat01-…`). Cadastre-o no painel:
@@ -275,7 +286,8 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
 O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA (o `index.html` das rotas
 sem cache longo), o `404` sem `immutable` de um `/assets/*` que não existe (o chunk de um deploy
 anterior não pode voltar como `index.html` guardado por um ano), `/downloads/latest.json`
-e o cadastro aberto com o aviso, entra pela sessão de admin (garante o provider) e pela de
+e o cadastro aberto com o aviso, entra pela sessão de admin (escolhe o provider de resumos já
+cadastrado, sem cadastrar nenhum; falha dizendo o que cadastrar se não houver) e pela de
 usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
 quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
 multipart. Depois espera a transcrição com 2 locutores e um resumo `done`. Sobre essa gravação,

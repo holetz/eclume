@@ -38,5 +38,6 @@ O servidor tem uma GTX 1660 Super com 6 GB de VRAM, arquitetura Turing TU116 e s
 - **Configuração para a placa.** `large-v3-turbo` com `compute_type=int8_float16` (~2–3 GB) e
   pyannote `community-1` (~1 GB). O `fp16` puro fica evitado por causa do histórico de NaN na série
   GTX 16xx. Roda um job de GPU por vez, com descarga de modelos ociosos.
-- **Sem Ollama residente.** Um LLM local não cabe junto do ASR. A sumarização usa `claude -p` ou
-  uma API por padrão. O Ollama é opcional e só roda com a fila de ASR vazia.
+- **Sem Ollama residente.** Um LLM local não cabe junto do ASR. Esta produção resume com o
+  `claude -p` (imagem com `ECLUME_CLAUDE_CLI=1`); o produto não exige a CLI, e uma API ou o Ollama,
+  que só roda com a fila de ASR vazia, servem igual.
