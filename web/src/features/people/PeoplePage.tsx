@@ -5,11 +5,12 @@ import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
-import { formatDate } from '../library/format'
+
 import { AutoAssignCard } from './AutoAssignCard'
 import { PERSON_COLUMNS, readPersonColumns, savePersonColumns, type PersonColumn } from './columns'
 import styles from './People.module.css'
 import { useCreatePerson, usePeople, usePersonFacets, type Person } from './queries'
+import { formatDate } from '../../shared/format'
 
 export function PeoplePage() {
   useHelpTopic('pessoas')

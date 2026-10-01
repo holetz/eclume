@@ -1,6 +1,7 @@
-// Rótulos e formatos em pt-BR das gravações. Valores de enum desconhecidos (o contrato só cresce)
-// aparecem crus, sem quebrar a tela.
-import type { Schemas } from '../../api/client'
+// Rótulos e formatos em pt-BR sem dono de domínio, usados por mais de uma feature: estado e etapa da
+// gravação, datas, horas, durações, tamanhos e o relógio do áudio. Valores de enum desconhecidos (o
+// contrato só cresce) aparecem crus, sem quebrar a tela.
+import type { Schemas } from '../api/client'
 
 type Recording = Schemas['Recording']
 type Job = Schemas['Job']
@@ -112,4 +113,53 @@ export function formatBytes(bytes: number): string {
  */
 export function shortRef(id: string): string {
   return id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
+}
+
+const WEEKDAYS_SHORT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
+export const MONTHS = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+]
+
+/** Índice do dia da semana com a segunda em 0. */
+export function weekdayIndex(day: Date): number {
+  return (day.getDay() + 6) % 7
+}
+
+export function weekdayShort(day: Date): string {
+  return WEEKDAYS_SHORT[weekdayIndex(day)]
+}
+
+/** "sáb 26 set". */
+export function shortDayLabel(day: Date): string {
+  return `${weekdayShort(day)} ${day.getDate()} ${MONTHS[day.getMonth()].slice(0, 3)}`
+}
+
+/** "09:05". */
+export function timeLabel(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+export function markersLabel(count: number): string {
+  return count === 1 ? '1 marcador' : `${count} marcadores`
+}
+
+/** "02:46" ou, com `withHours`, "0:02:46". */
+export function formatClock(ms: number, withHours = false): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return withHours || hours > 0 ? `${hours}:${mmss}` : mmss
 }

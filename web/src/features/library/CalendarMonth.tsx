@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router'
 import type { Schemas } from '../../api/client'
-import { dayLabel, recordingTitle, sameDay, weekdayShort, type MonthCell } from './calendar'
+import { dayLabel, type MonthCell, recordingTitle, sameDay } from './calendar'
+import { weekdayShort } from '../../shared/format'
 import styles from './LibraryPage.module.css'
 
 type Recording = Schemas['Recording']

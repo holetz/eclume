@@ -1,8 +1,9 @@
 import type { Schemas } from '../../api/client'
-import { stageLabel } from '../library/format'
+
 import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
 import styles from './RecordingPage.module.css'
+import { stageLabel } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 

@@ -3,12 +3,13 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { formatDuration } from '../library/format'
+
 import { PEOPLE_KEY } from '../people/queries'
 import { PersonCombobox } from './PersonCombobox'
 import { transcriptKey, updateTranscriptCache } from './queries'
 import { speakerColorIndex, speakerName, type Speaker, type Transcript } from './segments'
 import styles from './SpeakersPanel.module.css'
+import { formatDuration } from '../../shared/format'
 
 export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
   const [merging, setMerging] = useState(false)

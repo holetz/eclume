@@ -5,9 +5,10 @@ import { PageHead } from '../../app/PageHead'
 import { DevicesList } from '../connect/DevicesList'
 import { useCreatePairingCode } from '../connect/pairing'
 import { PairingCode } from '../connect/PairingCode'
-import { formatBytes } from '../library/format'
+
 import styles from './DesktopPage.module.css'
 import { detectOs, PLATFORMS, TYPE_LABELS, useInstallers, type Installer, type Platform } from './installers'
+import { formatBytes } from '../../shared/format'
 
 export function DesktopPage() {
   useHelpTopic('app-desktop')
