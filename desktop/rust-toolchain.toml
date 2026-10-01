@@ -1,0 +1,7 @@
+# Rust do desktop: versão exata, a mesma de mobile/rust-toolchain.toml (deploy/test_fixacoes.py
+# confere). O rustup lê este arquivo na CI, nos workflows de release, na imagem de build
+# (desktop/build.Dockerfile) e na estação. Atualização: PR do Dependabot (rust-toolchain).
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
