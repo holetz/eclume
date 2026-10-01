@@ -7,7 +7,7 @@ tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#113, holetz/eclume#130, holetz/eclume#126
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#113, holetz/eclume#130, holetz/eclume#126, holetz/eclume#127
 maintainer: holetz
 ---
 
@@ -93,7 +93,11 @@ npm --prefix web run budget
 ```
 
 O `budget` roda depois do build: o JS inicial do `dist/index.html` não passa do teto em gzip de
-`web/bundle-budget.json`. Os testes de navegador ficam fora do `npm test`: os da conversão de mídia
+`web/bundle-budget.json`. O `build` também gera a referência da API (`dist/referencia-api.html` e
+`dist/referencia-api/`) do `contracts/openapi-v1.bundled.yaml`, por `web/scripts/referencia-api.mjs`
+([contrato-v1.md](../api/contrato-v1.md#referência-navegável)); é página à parte, fora do
+`index.html` e do orçamento. Por isso o contexto da imagem do web (`deploy/web.Dockerfile` e o
+`.dockerignore` ao lado) inclui o bundle, além de `contracts/fixtures/`. Os testes de navegador ficam fora do `npm test`: os da conversão de mídia
 e da transcrição longa (vitest browser mode no Google Chrome, no Firefox e no WebKit; o porquê e as
 fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o E2E Playwright do app
 contra o mock (todos os cenários no Chromium, o smoke `@smoke` no WebKit e no Firefox). Rodam no host de build ou localmente, com o mesmo comando sem o `remote-run` (no checkout, em

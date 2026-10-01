@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de API v1
-description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
+description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema, a referência navegável gerada do bundle e servida pelo web em /referencia-api.html — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127
 maintainer: holetz
 ---
 
@@ -179,6 +179,29 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   Sugestão por voz nunca é identidade até alguém confirmar: aceitar é o `PATCH` do locutor com
   `person_id`, recusar é o `DELETE` da sugestão
   ([identificacao-por-voz.md](../code/identificacao-por-voz.md)).
+
+## Referência navegável
+
+- **Todo servidor serve a referência do contrato que implementa** em `/referencia-api.html`: o
+  `npm run build` do web roda `web/scripts/referencia-api.mjs` depois do `vite build`, que gera
+  com o Redoc (`@redocly/cli build-docs`, telemetria desligada, modelo
+  `web/scripts/referencia-api.hbs`) um HTML do `contracts/openapi-v1.bundled.yaml`. O bundle entra
+  no contexto da imagem do web ([monorepo.md](../code/monorepo.md)), e o Caddy do web serve o
+  arquivo como qualquer outro do `dist`.
+- **Nada de fora da origem.** O modelo não carrega fontes externas (fontes do sistema, cores do
+  DS); o script do Redoc que o `build-docs` aponta para a CDN vira a cópia local do pacote `redoc`
+  (versão exata no `package.json`, conferida pelo `integrity` que o `build-docs` grava), e o
+  estado da página sai do `<script>` inline para `dist/referencia-api/estado.js`. O build falha se
+  o HTML ainda carregar recurso de outra origem (`src`, `srcset`, `<link href>`, `url()`,
+  `@import`); links de navegação nos exemplos não contam. A CSP desse caminho é a do web com
+  `style-src 'unsafe-inline'`, porque o Redoc injeta o CSS em `<style>`
+  ([frontend-web.md](../code/frontend-web.md)).
+- **O server não serve `/docs` nem `/redoc`** (`docs_url=None`, `redoc_url=None` no
+  `create_app`). O esquema que o FastAPI deriva das rotas não é o contrato (diverge em exemplos,
+  descrições, escopos e no `/mcp`), e as UIs dele buscam JS e fontes em CDN. A referência é
+  sempre a do bundle, na versão que o servidor roda.
+- **Quem leva à referência:** a tela Tokens de acesso, o artigo de ajuda `criar-token`, o guia
+  [integrar-com-a-api.md](../../how-to/integrar-com-a-api.md) e o `contracts/README.md`.
 
 ## Evolução: a v1 só cresce
 
