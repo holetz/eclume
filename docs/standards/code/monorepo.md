@@ -7,7 +7,7 @@ tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125
 maintainer: holetz
 ---
 
@@ -213,8 +213,8 @@ deixa de valer), o `[advisories] ignore` de `desktop/deny.toml` e `mobile/deny.t
 ## CI e gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` e `deploy/gate.sh`
 
 Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
-(`--lista` enumera os oito: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
-`windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
+(`--lista` enumera os nove: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
+`docs`, `windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
 mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
 serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam o mesmo script;
@@ -223,28 +223,40 @@ serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam 
 
 **CI (aviso, não requisito de publicação).** Jobs `ubuntu-24.04` independentes, em `pull_request`,
 em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
-`web-browser`, `desktop` e `mobile`, cada um com o seu setup (actions, apt, serviços de
+`web-browser`, `desktop`, `mobile` e `docs`, cada um com o seu setup (actions, apt, serviços de
 `deploy/docker-compose.test.yml` no `python`, mock no `contracts` e no `web-browser`, dependências do
 Chromium no `desktop`) e uma chamada a `bash deploy/pilares.sh <job>`. O `web-browser` usa o Google
 Chrome do runner (`E2E_CHANNEL=chrome`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
 a suíte do server nunca pular; o `desktop` imprime `df -h` e `free -m` antes do cargo.
 Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
-de documentação (`docs/`, `.design/`, `.impeccable/`, `.claude/`, os `.md` da raiz) não dispara o
-workflow, e o job `mudancas` (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo
-de que ele depende, foi tocado: o `python` e o `web` também rodam com `contracts/`, o `desktop` com
-`web/src/styles/eclume.css`, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
+em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`
+(`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo de que ele depende, foi tocado:
+mudança só de documentação (`docs/`, qualquer `.md`) liga só o `docs`; o `python` e o `web` também
+rodam com `contracts/`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
 `deploy/test_gate.py` e os workflows de release. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
 disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
 último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,
 acrescente o caminho ao filtro do job que a consome.
 
+**Documentação (pilar `docs`).** `cq knowledge validate` (a conformidade do bundle OKF, com o
+`cq` do repositório público `holetz/quenching` fixado por SHA — o da tag 6.3.0 —, por `ARG
+QUENCHING_SHA` no `deploy/gate.Dockerfile` e por checkout no job `docs`; `deploy/test_docs_check.py`
+confere que as duas referências são a mesma) e `deploy/docs_check.py`, que varre `docs/**/*.md`, os
+`.md` da raiz e os `README.md`/`INSTALACAO.md` dos pilares: link relativo (ou absoluto a partir da
+raiz) para arquivo que existe e, com `#`, para um título que existe (slug do GitHub); caminho em
+crase que começa por uma pasta de topo existe (`:linha` ignorado; curinga, `<`, `{`, `$`, comando e
+`node_modules` ficam de fora); e o glossário em ordem alfabética sem caixa nem acento. Um caminho
+citado que não existe de propósito (gerado em execução, de outro repositório, exemplo hipotético)
+entra em `EXCECOES`, no próprio script, com o motivo; a exceção que deixa de ser necessária também
+falha. Links para fora não são seguidos.
+
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
-commit para o host GPU e roda lá `deploy/gate-host.sh`: os oito pilares, cada um num contêiner da
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os nove pilares, cada um num contêiner da
 imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
 `eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
 execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
-commit: `pending` enquanto roda, `success` só com os oito pilares verdes numa execução completa,
+commit: `pending` enquanto roda, `success` só com os nove pilares verdes numa execução completa,
 `failure` nomeando os pilares que falharam e `error` quando o gate não consegue provar; o log fica em
 `~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
 uma parte e nunca publica. Os pilares `windows` (`cargo xwin clippy` do desktop para

@@ -4,10 +4,10 @@ title: Interface do app desktop no Design System
 description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125
 maintainer: holetz
 ---
 
@@ -136,10 +136,12 @@ Na ordem do `index.html`:
 
 ## Ajuda e atualização
 
-- O ícone de ajuda abre um `.menu`: "Primeiros passos" e "Permissões de microfone" (artigos em
-  `<web_url>/ajuda/<artigo>`), "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
+- O ícone de ajuda abre um `.menu`: "Primeiros passos" (o artigo `primeira-gravacao`) e
+  "Permissões de microfone" (`permissoes-de-microfone`), abertos em `<web_url>/ajuda/<artigo>`, "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
   problema…" (abre a pasta de logs, com a dica "Anexe o eclume.log": o servidor é local e não
-  há formulário) e a linha da versão.
+  há formulário) e a linha da versão. Todo artigo que a UI pede ao `open_help` tem de existir em
+  `web/src/features/help/articles/`: o teste `ui_assets` extrai os slugs de `desktop/ui/js` e
+  falha sem o `.md`, e o filtro `desktop` da CI inclui os artigos.
 - Depois de uma atualização automática, a principal mostra o `.alert-success` "Atualizado para
   X" com as notas do release até a pessoa fechar ([desktop-distribuicao.md](desktop-distribuicao.md)).
 
