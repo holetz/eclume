@@ -128,13 +128,18 @@ async def confirm_password(engine: AsyncEngine, user_id: UUID, password: str, me
 
 
 async def change_password(
-    engine: AsyncEngine, user_id: UUID, current: str, new: str, *, keep_session: UUID | None
+    engine: AsyncEngine,
+    user_id: UUID,
+    new: str,
+    *,
+    keep_session: UUID | None,
+    revoke_tokens: bool = False,
 ) -> None:
-    """Troca a senha da conta e encerra as outras sessões dela; senha atual errada é `WrongPasswordError`.
+    """Troca a senha da conta e encerra as outras sessões dela; confira antes a atual com `confirm_password`.
 
-    Os PATs continuam valendo: são credenciais à parte, revogáveis em Tokens.
+    Com `revoke_tokens`, revoga também os tokens da conta (credenciais de aparelho e PATs): quem troca
+    a senha por suspeita de vazamento encerra todo acesso.
     """
-    await confirm_password(engine, user_id, current, "senha atual incorreta")
     password_hash = await new_password_hash(new)
     async with system_tx(engine) as conn:
         await conn.execute(update(t.users).where(t.users.c.id == user_id).values(password_hash=password_hash))
@@ -142,6 +147,12 @@ async def change_password(
         if keep_session is not None:
             others = others.where(t.sessions.c.id != keep_session)
         await conn.execute(others)
+        if revoke_tokens:
+            await conn.execute(
+                update(t.api_tokens)
+                .where(t.api_tokens.c.user_id == user_id, t.api_tokens.c.revoked_at.is_(None))
+                .values(revoked_at=datetime.now(UTC))
+            )
 
 
 async def delete_user(conn: AsyncConnection, user_id: UUID) -> None:

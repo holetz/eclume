@@ -191,6 +191,7 @@ class PasswordChange(BaseModel):
 
     current_password: str = Field(min_length=1, max_length=1024)
     new_password: str = Field(min_length=1, max_length=1024)
+    revoke_tokens: bool = False
 
 
 class AccountDeletion(BaseModel):
@@ -212,10 +213,18 @@ def _clear_cookies(response: Response, ctx: AppContext) -> None:
 async def change_own_password(
     body: PasswordChange, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_password"))]
 ) -> Response:
-    """Troca a senha; as outras sessões da conta acabam e esta continua."""
+    """Troca a senha; as outras sessões da conta acabam e esta continua.
+
+    Com `revoke_tokens`, as credenciais de aparelho e os PATs da conta também são revogados.
+    """
     try:
+        await confirm_password(ctx.engine, principal.user_id, body.current_password, "senha atual incorreta")
         await change_password(
-            ctx.engine, principal.user_id, body.current_password, body.new_password, keep_session=principal.session_id
+            ctx.engine,
+            principal.user_id,
+            body.new_password,
+            keep_session=principal.session_id,
+            revoke_tokens=body.revoke_tokens,
         )
     except AccountError as exc:
         field = "current_password" if isinstance(exc, WrongPasswordError) else "new_password"
