@@ -16,3 +16,18 @@ RUN rustup target add x86_64-pc-windows-msvc \
 # build falha em "CMAKE_MAKE_PROGRAM is not set". Camada própria para não refazer o cargo-xwin.
 RUN apt-get update && apt-get install -y --no-install-recommends ninja-build \
  && rm -rf /var/lib/apt/lists/*
+# Assinatura Authenticode no Linux (desktop/scripts/assinar-windows.sh): o `jsign` (Java) assina
+# por qualquer fornecedor (serviço remoto, HSM na nuvem, token, PKCS#12), numa versão fixa com o
+# sha256 conferido; o `osslsigncode` confere assinatura e carimbo e o `7z` abre o instalador NSIS
+# para conferir os executáveis de dentro. Camada própria, para não refazer o resto.
+ARG JSIGN=7.5
+ARG JSIGN_SHA256=602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      default-jre-headless osslsigncode p7zip-full \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /opt/jsign \
+ && curl -fsSLo /opt/jsign/jsign.jar \
+      "https://github.com/ebourg/jsign/releases/download/${JSIGN}/jsign-${JSIGN}.jar" \
+ && echo "${JSIGN_SHA256}  /opt/jsign/jsign.jar" | sha256sum -c - \
+ && printf '#!/bin/sh\nexec java -jar /opt/jsign/jsign.jar "$@"\n' > /usr/local/bin/jsign \
+ && chmod 755 /usr/local/bin/jsign
