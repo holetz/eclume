@@ -27,6 +27,9 @@ export interface Marcador {
   created_at: number
 }
 
+/** `reconectando`: o microfone caiu e o núcleo tenta reabri-lo; o arquivo recebe silêncio. */
+export type EstadoMicrofone = 'ok' | 'reconectando'
+
 export interface EstadoSessao {
   id: string
   iniciada_em: number
@@ -34,6 +37,9 @@ export interface EstadoSessao {
   nivel: number
   pausada: boolean
   marcadores: Marcador[]
+  microfone: EstadoMicrofone
+  /** O sistema silenciou a captura (chamada, assistente de voz, bloqueio do microfone). */
+  silenciada: boolean
 }
 
 export interface Folha {
