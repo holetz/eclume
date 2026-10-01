@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Release do app desktop no host GPU, sem GitHub Actions: compila no daemon do host (contexto
-# Docker) em contêiner com CPU limitada, assina os pacotes do updater com a chave minisign que só
-# existe no host, monta latest.json, instaladores.json e SHA256SUMS e, com --publicar, cria o
-# GitHub Release desktop-v<versão> pelo gh do host. Depois, deploy/publicar-desktop.sh leva o
-# release para /downloads. Contrato: docs/standards/code/desktop-distribuicao.md.
+# Docker) em contêiner com CPU limitada e sem nenhum segredo montado; depois empacota, assinando os
+# executáveis Windows por Authenticode (quando o host tem a configuração em
+# $SECRETS/assinatura-windows/) e os pacotes do updater com a chave minisign que só existe no host;
+# confere a assinatura do instalador Windows, monta latest.json, instaladores.json e SHA256SUMS e,
+# com --publicar, cria o GitHub Release desktop-v<versão> pelo gh do host. Depois,
+# deploy/publicar-desktop.sh leva o release para /downloads.
+# Contrato: docs/standards/code/desktop-distribuicao.md.
 #
 # Uso: bash deploy/release-desktop.sh [--plan] [--context NOME] [--sem-windows] [--publicar]
-#                                     [--notas "texto"] [--sem-gate "motivo"]
+#                                     [--notas "texto"] [--sem-gate "motivo"] [--sem-assinatura]
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
 #   --sem-windows  deixa o Windows de fora (por padrão o release inclui o instalador NSIS,
@@ -15,6 +18,8 @@
 #   --notas     notas do release, que o app mostra no aviso "Atualizado para X".
 #   --sem-gate  com --publicar, dispensa só o status eclume/gate = success no commit e deixa nele o
 #               rastro eclume/gate-dispensa com o motivo; o ensaio não exige gate.
+#   --sem-assinatura  aceita publicar o instalador Windows sem assinatura de código quando o host
+#               não tem a configuração; sem ele, --publicar recusa (o ensaio só avisa).
 # Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
 # do repositório), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
@@ -30,6 +35,7 @@ WINDOWS=1
 PUBLICAR=0
 NOTAS=""
 SEM_GATE=""
+SEM_ASSINATURA=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,7 +52,8 @@ while [[ $# -gt 0 ]]; do
     --sem-gate)
       [[ $# -ge 2 && -n "${2// /}" ]] || { echo "--sem-gate exige o motivo." >&2; exit 2; }
       SEM_GATE="$2"; shift 2 ;;
-    --help|-h) sed -n '2,19p' "$0"; exit 0 ;;
+    --sem-assinatura) SEM_ASSINATURA=1; shift ;;
+    --help|-h) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -98,6 +105,22 @@ if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   problemas+=("o release $TAG já existe (suba a versão no tauri.conf.json)")
 fi
 
+# Assinatura Authenticode do Windows: a configuração do fornecedor vive só no host.
+ASSINATURA_DIR="$SECRETS/assinatura-windows"
+ASSINA=0
+if [[ "$WINDOWS" -eq 1 ]] && host "test -s '$ASSINATURA_DIR/assinatura.env'"; then
+  ASSINA=1
+fi
+if [[ "$WINDOWS" -eq 0 ]]; then
+  estado_assinatura="fora (sem o Windows)"
+elif [[ "$ASSINA" -eq 1 ]]; then
+  estado_assinatura="configurada ($ASSINATURA_DIR)"
+else
+  estado_assinatura="ausente: o instalador sai sem assinatura de código"
+  [[ "$SEM_ASSINATURA" -eq 1 ]] \
+    || problemas+=("instalador Windows sem assinatura (configure $ASSINATURA_DIR no host ou aceite com --sem-assinatura)")
+fi
+
 pct="$(host "df --output=pcent / | tail -n 1 | tr -dc 0-9")"
 
 # --- plano ----------------------------------------------------------------------------------------
@@ -105,6 +128,7 @@ echo "Versão $VERSAO · tag $TAG · commit $SHA" >&2
 echo "Alvos: ${ALVOS[*]} · $([[ "$PUBLICAR" -eq 1 ]] && echo "publica o GitHub Release" || echo "ensaio (não publica)")" >&2
 echo "Host: $SSH (contexto $CONTEXT) · código em $SRC · artefatos em $DIST" >&2
 echo "Servidor embutido: $SERVER_URL · CA $SERVER_CA" >&2
+echo "Código Windows: assinatura Windows $estado_assinatura" >&2
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%)" >&2
 for p in "${problemas[@]}"; do echo "  aviso: $p" >&2; done
 [[ "$PLAN_ONLY" -eq 0 ]] || exit 0
@@ -148,34 +172,71 @@ docker run --rm --cpus 2 -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/deskto
   nice -n 10 npm ci --ignore-scripts --no-audit --no-fund
 
 # $1: imagem · $2: pasta do target/ no host · $3: pasta extra montada em /tmp/.cache (ou vazio)
-# $4…: argumentos do `tauri build`. A chave entra só leitura e vira variável dentro do contêiner.
+# $4: "assina" para montar a configuração de assinatura do Windows (ou vazio) · $5: argumentos do
+# `tauri build` (alvo, runner) · $6: argumentos do `tauri bundle` (pacotes, alvo).
+# Dois tempos: a compilação, onde rodam os scripts de build de terceiros, não vê segredo nenhum; o
+# empacotamento recebe a chave do updater (só leitura, vira variável dentro do contêiner) e, no
+# Windows assinado, /run/assinatura com o signCommand do Tauri apontando para o assinador.
 compilar() {
-  local img="$1" target="$2" cache="$3"; shift 3
+  local img="$1" target="$2" cache="$3" assina="$4" build_args="$5" bundle_args="$6"
   host "mkdir -p '$target'"
   [[ -z "$cache" ]] || host "mkdir -p '$cache'"
-  docker run --rm --cpus 2 -u 1000:1000 \
-    -e HOME=/tmp -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target \
-    -e ECLUME_SERVER_URL="$SERVER_URL" -e ECLUME_SERVER_CA_SHA256="$SERVER_CA" \
-    -e APPIMAGE_EXTRACT_AND_RUN=1 -e NO_STRIP=true \
-    -v "$SRC:/src" -v "$target:/target" -v "$REGISTRY:/opt/cargo/registry" \
-    ${cache:+-v "$cache:/tmp/.cache"} \
+  local comum=(--rm --cpus 2 -u 1000:1000
+    -e HOME=/tmp -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target
+    -e ECLUME_SERVER_URL="$SERVER_URL" -e ECLUME_SERVER_CA_SHA256="$SERVER_CA"
+    -e APPIMAGE_EXTRACT_AND_RUN=1 -e NO_STRIP=true
+    -v "$SRC:/src" -v "$target:/target" -v "$REGISTRY:/opt/cargo/registry"
+    ${cache:+-v "$cache:/tmp/.cache"}
+    -w /src/desktop/src-tauri)
+  # shellcheck disable=SC2086 # os argumentos do tauri vêm separados por espaço
+  docker run "${comum[@]}" "$img" \
+    nice -n 10 npx --no-install tauri build --ci --no-bundle $build_args
+  local assinatura=() config=""
+  if [[ "$assina" == assina ]]; then
+    assinatura=(-v "$ASSINATURA_DIR:/run/assinatura:ro")
+    config='{"bundle":{"windows":{"signCommand":"bash /src/desktop/scripts/assinar-windows.sh %1"}}}'
+  fi
+  docker run "${comum[@]}" "${assinatura[@]}" \
     -v "$SECRETS/tauri-updater.key:/run/chave/key:ro" \
     -v "$SECRETS/tauri-updater.key.password:/run/chave/senha:ro" \
-    -w /src/desktop/src-tauri "$img" \
+    -e ECLUME_TAURI_CONFIG="$config" "$img" \
     bash -c 'export TAURI_SIGNING_PRIVATE_KEY="$(cat /run/chave/key)"
              export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat /run/chave/senha)"
-             exec nice -n 10 npx --no-install tauri build --ci "$@"' tauri "$@"
+             extra=(); [[ -z "$ECLUME_TAURI_CONFIG" ]] || extra=(--config "$ECLUME_TAURI_CONFIG")
+             exec nice -n 10 npx --no-install tauri bundle --ci "${extra[@]}" "$@"' tauri $bundle_args
 }
 
 echo "Compilando o Linux (AppImage e deb)…" >&2
-compilar "$IMG_LINUX" "$BASE/target-linux" "" --bundles appimage,deb
+compilar "$IMG_LINUX" "$BASE/target-linux" "" "" "" "--bundles appimage,deb"
 host "cd '$BASE/target-linux/release/bundle' && cp appimage/*_${VERSAO}_*.AppImage* deb/*_${VERSAO}_*.deb* '$DIST/'"
 
 if [[ "$WINDOWS" -eq 1 ]]; then
   echo "Compilando o Windows (NSIS, cruzado)…" >&2
-  compilar "$IMG_WINDOWS" "$BASE/target-windows" "$BASE/xwin-cache" \
-    --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
-  host "cp '$BASE/target-windows/x86_64-pc-windows-msvc/release/bundle/nsis/'*_${VERSAO}_*-setup.exe* '$DIST/'"
+  modo=""
+  [[ "$ASSINA" -eq 0 ]] || modo=assina
+  compilar "$IMG_WINDOWS" "$BASE/target-windows" "$BASE/xwin-cache" "$modo" \
+    "--runner cargo-xwin --target x86_64-pc-windows-msvc" \
+    "--target x86_64-pc-windows-msvc --bundles nsis"
+  NSIS="$BASE/target-windows/x86_64-pc-windows-msvc/release/bundle/nsis"
+  if [[ "$ASSINA" -eq 1 ]]; then
+    # Nenhum instalador sai com assinatura quebrada ou sem carimbo: o setup e os executáveis de
+    # dentro (extraídos pelo 7z) passam pela conferência, sem segredo nenhum montado.
+    echo "Conferindo a assinatura do instalador Windows…" >&2
+    docker run --rm -u 1000:1000 -e HOME=/tmp -v "$SRC:/src:ro" -v "$NSIS:/nsis:ro" "$IMG_WINDOWS" \
+      bash -c 'set -euo pipefail
+               assinar=/src/desktop/scripts/assinar-windows.sh
+               setup="$(ls /nsis/*_'"$VERSAO"'_*-setup.exe)"
+               bash "$assinar" --verificar "$setup"
+               dir="$(mktemp -d)"; 7z x -y -o"$dir" "$setup" >/dev/null
+               for nome in eclume-desktop.exe uninstall.exe; do
+                 achado="$(find "$dir" -iname "$nome" -print -quit)"
+                 [[ -n "$achado" ]] || { echo "$nome não está no instalador" >&2; exit 1; }
+                 bash "$assinar" --verificar "$achado"
+               done'
+  else
+    echo "Aviso: instalador Windows sem assinatura de código (sem $ASSINATURA_DIR no host)." >&2
+  fi
+  host "cp '$NSIS/'*_${VERSAO}_*-setup.exe* '$DIST/'"
 fi
 
 # --- manifestos e publicação ----------------------------------------------------------------------

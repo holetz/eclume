@@ -54,9 +54,13 @@ ou vídeo gravados fora do app entram por **Importar arquivo…** (ou arrastados
 ## Windows
 
 1. Baixe o `eclume_<versão>_x64-setup.exe` e abra.
-2. O app **não tem assinatura de código**, então o Windows mostra o aviso do SmartScreen
-   ("O Windows protegeu o computador"). Clique em **Mais informações** e depois em
-   **Executar assim mesmo**. O aviso aparece só na primeira vez.
+2. O instalador é **assinado** (assinatura de código Authenticode): o Windows mostra o nome do
+   editor no pedido de confirmação. Enquanto a assinatura ainda não tem reputação no SmartScreen,
+   pode aparecer o aviso "O Windows protegeu o computador", agora com o editor: clique em **Mais
+   informações** e depois em **Executar assim mesmo**. O aviso aparece só na primeira vez.
+   Para conferir a assinatura, clique com o botão direito no arquivo → **Propriedades** → aba
+   **Assinaturas digitais**: o nome do editor e a data do carimbo aparecem ali. Um instalador sem
+   essa aba veio de um release publicado sem assinatura (`--sem-assinatura`).
 3. O instalador instala para o seu usuário, sem pedir administrador, e cria o atalho no menu
    Iniciar. O app abre na bandeja, perto do relógio.
 
