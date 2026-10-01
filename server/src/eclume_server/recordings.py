@@ -140,6 +140,22 @@ async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa
     return row
 
 
+async def lock_recording(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa: ANN401
+    """Trava a linha da gravação num comando e relê o estado (job, transcrição) em outro, ou 404.
+
+    Todo caminho que cria uma revisão passa por aqui antes de olhar o job. Em comandos separados
+    porque, em READ COMMITTED, o comando que esperou o lock vê a versão nova só da linha travada:
+    a leitura junto da trava veria o job antigo, e dois pedidos simultâneos criariam duas revisões.
+    Sob `user_tx`, a trava respeita a RLS.
+    """
+    locked = (
+        await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id).with_for_update())
+    ).scalar()
+    if locked is None:
+        raise not_found("Gravação inexistente ou sem acesso.")
+    return await get_visible(conn, recording_id)
+
+
 async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID) -> None:
     """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
 

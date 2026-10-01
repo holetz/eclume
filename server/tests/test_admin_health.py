@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 import redis
+from sqlalchemy import text
 
 from eclume_server.agents.base import ProviderError
 from eclume_server.health import CPU_HEALTH_KEY, connected_assistants
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
+from eclume_server_testing.harness import run, while_recording_locked
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -287,3 +289,34 @@ def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(
     assert connected() == before + 1
     assert connected_assistants(1) == "1 assistente conectado nas últimas 24 h"
     assert connected_assistants(2) == "2 assistentes conectados nas últimas 24 h"
+
+
+def test_retentar_em_corrida_responde_409(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    member = as_user(make_user())
+    recording = upload_file(member, audio_bytes(1250))
+    run_gpu(services.settings, fail=True)
+    run_cpu(services.settings)
+    failed_job = member.get(f"/api/v1/recordings/{recording['id']}").json()["job"]
+    # O primeiro pedido segura a gravação e cria a revisão 2; o segundo, à espera do lock, recebe 409.
+    second = run(
+        while_recording_locked(
+            services,
+            recording["id"],
+            lambda: admin.post(f"/api/v1/admin/jobs/{failed_job['id']}/retry"),
+            "INSERT INTO transcription_jobs (owner_id, recording_id, revision, state, options) "
+            "SELECT owner_id, id, 2, 'queued', '{}' FROM recordings WHERE id = :id",
+            id=recording["id"],
+        )
+    )
+    assert second.status_code == 409, second.text
+    assert second.headers["content-type"].startswith("application/problem+json")
+
+    async def close(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text("UPDATE transcription_jobs SET state = 'failed' WHERE recording_id = :id AND revision = 2"),
+            {"id": recording["id"]},
+        )
+
+    run(services.sql(close))
