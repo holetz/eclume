@@ -2,22 +2,18 @@
 // gravação, datas, horas, durações, tamanhos e o relógio do áudio. Valores de enum desconhecidos (o
 // contrato só cresce) aparecem crus, sem quebrar a tela.
 import type { Schemas } from '../api/client'
+import { ESTADOS_APARELHO, ESTADOS_SERVIDOR, ETAPAS, type Tom } from '../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 type Job = Schemas['Job']
 
-type Tone = 'neutral' | 'progress' | 'success' | 'danger' | 'warning'
+type Tone = Tom
 
 type Step = Schemas['PipelineStep']['step']
 
-const STEP_BUSY: Partial<Record<string, string>> = {
-  received: 'Enviando',
-  preprocessing: 'Pré-processando',
-  transcription: 'Transcrevendo',
-  fields: 'Preenchendo campos',
-  agenda_type: 'Detectando o tipo',
-  summary: 'Resumindo',
-}
+const STEP_BUSY: Partial<Record<string, string>> = Object.fromEntries(
+  ETAPAS.map((item) => [item.etapa, item.andamento]),
+)
 
 const AFTER_TRANSCRIPTION: readonly Step[] = ['fields', 'agenda_type', 'summary']
 
@@ -31,31 +27,38 @@ interface RecordingState {
 
 /**
  * A etapa corrente em palavra, ou `null` quando nada anda: a etapa ativa, o envio ou o job, ou a
- * próxima etapa pendente depois da transcrição.
+ * próxima etapa pendente depois da transcrição. "Na fila" é só a espera pela transcrição.
  */
 function busyLabel(status: Recording['status'], steps: Schemas['PipelineStep'][]): string | null {
   const active = steps.find((item) => item.state === 'active')
   if (active) return STEP_BUSY[active.step] ?? active.step
-  if (status === 'uploading') return 'Enviando'
-  if (status === 'queued') return 'Na fila'
-  if (status === 'processing') return 'Transcrevendo'
+  if (status === 'uploading') return ESTADOS_APARELHO.uploading.rotulo
+  if (status === 'queued') return ESTADOS_SERVIDOR.na_fila.rotulo
+  if (status === 'processing') return STEP_BUSY.transcription ?? 'transcription'
   const pending = steps.find((item) => item.state === 'pending' && AFTER_TRANSCRIPTION.includes(item.step))
   return pending ? (STEP_BUSY[pending.step] ?? pending.step) : null
 }
 
 /**
- * O estado da gravação como a biblioteca o mostra, lido de `status` e do `pipeline`: falhou (a
- * gravação ou a etapa que a torna legível), em andamento (com a etapa corrente em palavra) ou pronta.
+ * O estado da gravação como a biblioteca o mostra, lido de `status` e do `pipeline`: cancelada (a
+ * gravação `failed` com uma etapa pulada por `cancelled`), falhou (a gravação ou a etapa que a torna
+ * legível), em andamento (com a etapa corrente em palavra) ou pronta.
  */
 export function recordingState(recording: Pick<Recording, 'status' | 'pipeline'>): RecordingState {
   const steps = recording.pipeline ?? []
   const failed = (step: Step) => steps.some((item) => item.step === step && item.state === 'failed')
+  if (recording.status === 'failed' && steps.some((item) => item.reason === 'cancelled')) {
+    const { rotulo, tom } = ESTADOS_SERVIDOR.cancelada
+    return { state: 'failed', label: rotulo, tone: tom, noSummary: false }
+  }
   if (recording.status === 'failed' || failed('transcription') || failed('preprocessing')) {
-    return { state: 'failed', label: 'Falhou', tone: 'danger', noSummary: false }
+    const { rotulo, tom } = ESTADOS_SERVIDOR.falhou
+    return { state: 'failed', label: rotulo, tone: tom, noSummary: false }
   }
   const label = busyLabel(recording.status, steps)
-  if (label) return { state: 'busy', label, tone: 'progress', noSummary: false }
-  return { state: 'ready', label: 'Pronta', tone: 'success', noSummary: failed('summary') }
+  if (label) return { state: 'busy', label, tone: ESTADOS_SERVIDOR.em_andamento.tom, noSummary: false }
+  const { rotulo, tom } = ESTADOS_SERVIDOR.pronta
+  return { state: 'ready', label: rotulo, tone: tom, noSummary: failed('summary') }
 }
 
 const STAGES: Record<string, string> = {

@@ -26,7 +26,7 @@ export const ESTADOS_APARELHO = {
  * @type {Record<'na_fila' | 'em_andamento' | 'pronta' | 'falhou' | 'cancelada', { rotulo: string, tom: Tom }>}
  */
 export const ESTADOS_SERVIDOR = {
-  na_fila: { rotulo: 'Na fila', tom: 'neutral' },
+  na_fila: { rotulo: 'Na fila', tom: 'progress' },
   em_andamento: { rotulo: 'Em andamento', tom: 'progress' },
   pronta: { rotulo: 'Pronta', tom: 'success' },
   falhou: { rotulo: 'Falhou', tom: 'danger' },
