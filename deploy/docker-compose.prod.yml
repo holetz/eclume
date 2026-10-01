@@ -54,6 +54,8 @@ x-server-env: &server-env
   # Descritor /api/v1/server e anúncio mDNS: o nome da instância e a CA raiz que os apps fixam.
   ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
   ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
+  # Próxima raiz durante a rotação (`ca_next_sha256`); o `publish-ca` a apaga na virada.
+  ECLUME_CA_NEXT_FILE: /srv/downloads/eclume-root-proxima.crt
 
 # `:prod` é o ponteiro de execução; `:<sha>` (ECLUME_COMMIT, que o deploy define a partir do SHA
 # construído) fica retido para o `--voltar`. Fora do deploy, a tag é `:sem-commit`.
@@ -84,6 +86,9 @@ services:
       - caddy-data:/data  # CA interna: perder isto troca a CA de todos os clientes
       - caddy-config:/config
       - ${ECLUME_DATA_DIR:?defina em deploy/.env.prod}/downloads:/srv/downloads:ro
+      # Só a raiz própria (`eclume-server ca gerar`): a pasta secrets também guarda o env de
+      # produção e a senha do admin.
+      - ${ECLUME_DATA_DIR}/secrets/ca:/etc/caddy/ca:ro
 
   web:
     <<: *restart
@@ -227,6 +232,7 @@ services:
       ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
       ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
       ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
+      ECLUME_CA_NEXT_FILE: /srv/downloads/eclume-root-proxima.crt
     volumes:
       - ${ECLUME_DATA_DIR}/downloads:/srv/downloads:ro
 
@@ -327,18 +333,33 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
 
-  # Copia a CA raiz do Caddy para /downloads/eclume-root.crt (clientes e LUMEA_ECLUME_CA_BUNDLE).
+  # Publica a raiz da CA ativa (`ECLUME_TLS_CA`) em /downloads/eclume-root.crt, um certificado só
+  # (clientes e LUMEA_ECLUME_CA_BUNDLE). Com a ativa `local` e a raiz própria gerada, a própria vai
+  # para /downloads/eclume-root-proxima.crt (rotação anunciada); com a ativa `eclume`, a próxima sai.
   publish-ca:
     network_mode: none
     profiles: [tools]
     image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     volumes:
       - caddy-data:/data:ro
+      - ${ECLUME_DATA_DIR}/secrets/ca:/ca:ro
       - ${ECLUME_DATA_DIR}/downloads:/downloads
     entrypoint:
       - sh
       - -c
-      - install -m 644 -o 1000 -g 1000 /data/caddy/pki/authorities/local/root.crt /downloads/eclume-root.crt && echo publicada /downloads/eclume-root.crt
+      - |
+        set -eu
+        if [ "${ECLUME_TLS_CA:-local}" = eclume ]; then
+          install -m 644 -o 1000 -g 1000 /ca/raiz.crt /downloads/eclume-root.crt
+          rm -f /downloads/eclume-root-proxima.crt
+        else
+          install -m 644 -o 1000 -g 1000 /data/caddy/pki/authorities/local/root.crt /downloads/eclume-root.crt
+          if [ -f /ca/raiz.crt ]; then
+            install -m 644 -o 1000 -g 1000 /ca/raiz.crt /downloads/eclume-root-proxima.crt
+            echo publicada /downloads/eclume-root-proxima.crt
+          fi
+        fi
+        echo "publicada /downloads/eclume-root.crt (CA ${ECLUME_TLS_CA:-local})"
 
 configs:
   # ACL do Redis: `default` desligado; `eclume-server` com tudo menos os comandos perigosos (o INFO
@@ -380,7 +401,10 @@ configs:
         {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::eclume/users/*/recordings/*/audio"]},
         {"Effect": "Allow", "Action": ["s3:PutObject"], "Resource": ["arn:aws:s3:::eclume/recordings/*"]}
       ]}
-  # `tls internal`: certificado da CA local do Caddy. `default_sni`: quem acessa por IP não envia
+  # `pki`: a CA `eclume` carrega a raiz própria com restrição de nome (secrets/ca) e emite
+  # intermediário e folhas sozinha; `local` é a raiz gerada pelo Caddy. `ECLUME_TLS_CA` escolhe a que
+  # emite (padrão `local`: a produção só vira quando o .env.prod disser `eclume`; a rotação está em
+  # docs/project/deploy-producao.md, "CA raiz nos clientes"). `default_sni`: quem acessa por IP não envia
   # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
   # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o
   # SPA. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou /downloads (a tela é
@@ -391,9 +415,22 @@ configs:
         default_sni ${ECLUME_PUBLIC_HOST:?defina em deploy/.env.prod}
         auto_https disable_redirects
         skip_install_trust
+        pki {
+          ca eclume {
+            name "eclume"
+            root {
+              cert /etc/caddy/ca/raiz.crt
+              key /etc/caddy/ca/raiz.key
+            }
+          }
+        }
       }
       https://${ECLUME_PUBLIC_HOST}:8443 {
-        tls internal
+        tls {
+          issuer internal {
+            ca ${ECLUME_TLS_CA:-local}
+          }
+        }
         # Cabeçalhos genéricos para o que não vem do web (/api, /media, /mcp, /downloads); `?` não
         # sobrescreve o que o upstream já mandou (a CSP inteira do web).
         header {
