@@ -25,7 +25,7 @@ from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.problems import rate_limited
-from eclume_server.queue import DEFAULT_QUEUE
+from eclume_server.queue import AGENT_QUEUE
 from eclume_server.summaries import (
     INTERNAL_ERROR,
     JOB_TIMEOUT_S,
@@ -90,7 +90,7 @@ async def create_preview(redis: ArqRedis, owner_id: UUID, kind: str, request: di
     await redis.expire(key, TTL_S)
     await redis.zadd(open_key(owner_id), {str(preview_id): time.time()})
     await redis.expire(open_key(owner_id), TTL_S)
-    await redis.enqueue_job("run_preview", str(preview_id), _job_id=f"preview:{preview_id}", _queue_name=DEFAULT_QUEUE)
+    await redis.enqueue_job("run_preview", str(preview_id), _job_id=f"preview:{preview_id}", _queue_name=AGENT_QUEUE)
     return {"id": str(preview_id), "kind": kind, "status": "queued", "items": [], "error": None}
 
 

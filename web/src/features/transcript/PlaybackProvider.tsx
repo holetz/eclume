@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { PlaybackContext, RATES, type Playback, type PlaybackError } from './playback'
+import { createPlaybackClock, PlaybackContext, RATES, type Playback, type PlaybackError } from './playback'
 
 interface PlaybackProviderProps {
   recordingId: string
@@ -20,7 +20,7 @@ const OPUS = 'audio/ogg; codecs=opus'
  */
 export function PlaybackProvider({ recordingId, durationMs, startMs = null, children }: PlaybackProviderProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [currentMs, setCurrentMs] = useState(startMs ?? 0)
+  const [clock] = useState(() => createPlaybackClock(startMs ?? 0))
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
   const [rate, setRate] = useState<number>(1)
@@ -40,14 +40,15 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, chil
 
   const seek = useCallback((ms: number, play = false) => {
     const audio = audioRef.current
-    setCurrentMs(ms)
+    // O player mostra o instante buscado antes de o áudio carregar.
+    clock.set(ms)
     if (!audio) return
     audio.currentTime = ms / 1000
     if (play) {
       wantsPlay.current = true
       audio.play().catch(() => {})
     }
-  }, [])
+  }, [clock])
 
   const toggle = useCallback(() => {
     const audio = audioRef.current
@@ -94,7 +95,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, chil
 
   const value = useMemo<Playback>(
     () => ({
-      currentMs,
+      clock,
       durationMs: loadedMs ?? durationMs ?? 0,
       playing,
       rate,
@@ -104,7 +105,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, chil
       error,
       retry,
     }),
-    [currentMs, loadedMs, durationMs, playing, rate, seek, toggle, cycleRate, error, retry],
+    [clock, loadedMs, durationMs, playing, rate, seek, toggle, cycleRate, error, retry],
   )
 
   return (
@@ -114,7 +115,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, chil
         preload="metadata"
         src={src}
         aria-label="Áudio da gravação"
-        onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)}
+        onTimeUpdate={(event) => clock.set(event.currentTarget.currentTime * 1000)}
         onPlay={() => setPlaying(true)}
         onPlaying={() => {
           // Tocou de novo: uma próxima expiração tem direito à sua renovação automática.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,14 @@ class FakeRedis:
         self.hashes: dict[str, dict] = {}
         self.history: list[tuple[str, int]] = []
         self.jobs: list[tuple[str, tuple, dict]] = []
+        self.keys: set[str] = set()
+
+    async def exists(self, key: str) -> int:
+        return int(key in self.keys)
+
+    async def delete(self, key: str) -> None:
+        self.hashes.pop(key, None)
+        self.keys.discard(key)
 
     async def hset(self, key: str, mapping: dict) -> None:
         self.hashes.setdefault(key, {}).update(mapping)
@@ -295,6 +304,57 @@ def test_ocupado_do_inicio_ao_fim_do_job(
     if desfecho != "download":
         assert ("preprocess", True, job_id) in seen
     assert (registry.busy, registry.current_job) == (False, None)
+
+
+CANCEL = f"eclume:cancel:{RECORDING}:3"
+
+
+def test_cancelado_antes_de_comecar_nem_baixa(tmp_path: Path):
+    store = SpyStore([], [])
+    ctx = contexto(tmp_path, store=store)
+    holder: list[EngineRegistry] = [ctx["engines"]]
+    store.registry = holder
+    ctx["redis"].keys.add(CANCEL)
+    assert rodar(ctx) == {"status": "cancelled"}
+    assert store.seen == []
+    assert ctx["redis"].jobs == []
+    assert ctx["engines"].busy is False
+
+
+class SlowEngine(FakeEngine):
+    """ASR longo: pede o cancelamento no primeiro lote e segue chamando a callback por lote."""
+
+    def __init__(self, name: str, redis: FakeRedis, **kwargs: Any) -> None:
+        super().__init__(name, **kwargs)
+        self.redis = redis
+        self.batches = 0
+
+    def transcribe(self, audio_path: Path, options: EngineOptions, progress: Any) -> EngineResult:
+        self.redis.keys.add(CANCEL)
+        for batch in range(500):
+            self.batches += 1
+            progress("asr", batch / 5)
+            time.sleep(0.01)
+        return super().transcribe(audio_path, options, progress)
+
+
+def test_cancelado_no_meio_do_asr_para_sem_retorno(tmp_path: Path):
+    ctx = contexto(tmp_path) | {"cancel_poll_s": 0.01}
+    engines: list[SlowEngine] = []
+
+    def factory(name: str, **kwargs: Any) -> SlowEngine:
+        engines.append(SlowEngine(name, ctx["redis"], **kwargs))
+        return engines[0]
+
+    ctx["engines"] = EngineRegistry(ctx["config"], factory=factory, hf_token=lambda: None)
+    assert rodar(ctx) == {"status": "cancelled"}
+    # Parou num lote do ASR, longe do fim, sem retorno ao server, sem hash e sem diretório de trabalho.
+    assert engines[0].batches < 500
+    assert ctx["redis"].jobs == []
+    assert f"eclume:progress:{RECORDING}" not in ctx["redis"].hashes
+    assert ctx["store"].saved == {}
+    assert not any((tmp_path / "work").iterdir())
+    assert (ctx["engines"].busy, ctx["engines"].current_job) == (False, None)
 
 
 def test_falha_da_engine_leva_o_codigo(tmp_path: Path):

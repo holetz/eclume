@@ -83,7 +83,7 @@ if [[ "$mode" == --teste ]]; then
 fi
 
 # --aplicar
-services=(server worker-cpu worker-gpu)
+services=(server worker-cpu worker-agents worker-gpu)
 ids=()
 for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
 echo "parando ${services[*]}"

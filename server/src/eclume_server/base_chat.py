@@ -27,7 +27,7 @@ from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import rate_limited
-from eclume_server.queue import DEFAULT_QUEUE
+from eclume_server.queue import AGENT_QUEUE
 from eclume_server.search import CONFIG, SearchFilters, search
 from eclume_server.summaries import (
     INTERNAL_ERROR,
@@ -107,7 +107,7 @@ async def create_chat(redis: ArqRedis, owner_id: UUID, message: str, history: li
     await redis.expire(key, TTL_S)
     await redis.zadd(open_key(owner_id), {str(chat_id): time.time()})
     await redis.expire(open_key(owner_id), TTL_S)
-    await redis.enqueue_job("base_chat", str(chat_id), _job_id=f"basechat:{chat_id}", _queue_name=DEFAULT_QUEUE)
+    await redis.enqueue_job("base_chat", str(chat_id), _job_id=f"basechat:{chat_id}", _queue_name=AGENT_QUEUE)
     return _view(chat_id, {"status": "queued"})
 
 

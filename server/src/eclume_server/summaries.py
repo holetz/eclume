@@ -504,7 +504,8 @@ async def _update_open(engine: AsyncEngine, summary_id: UUID, **values: Any) -> 
         )
 
 
-async def _fail(engine: AsyncEngine, summary_id: UUID, code: str, message: str, attempts: int) -> str:
+async def fail_summary(engine: AsyncEngine, summary_id: UUID, code: str, message: str, attempts: int) -> str:
+    """Marca o resumo em aberto como falho e fecha a etapa `summary` dele (o job e a retomada)."""
     await _update_open(
         engine,
         summary_id,
@@ -656,26 +657,26 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
         )
     attempts = summary["attempts"] + 1
     if provider_row is None or not provider_row["enabled"]:
-        return await _fail(
+        return await fail_summary(
             engine, summary_id, PROVIDER_NOT_CONFIGURED, "O provider foi removido ou desabilitado.", attempts
         )
     try:
         config = provider_config(ctx["settings"], provider_row, platform_key)
     except SecretDecryptError:
         message = "A chave de API do provider não abre com a chave de cifra atual; cadastre-a de novo."
-        return await _fail(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)
+        return await fail_summary(engine, summary_id, PROVIDER_NOT_CONFIGURED, message, attempts)
     factory = provider_factory(ctx)
     try:
         async with asyncio.timeout(JOB_TIMEOUT_S):
             completion = await summarize(factory(config), transcript, summary["instructions"])
     except TimeoutError:
         message = f"O resumo passou de {JOB_TIMEOUT_S // 60} min."
-        return await _fail(engine, summary_id, PROVIDER_TIMEOUT, message, attempts)
+        return await fail_summary(engine, summary_id, PROVIDER_TIMEOUT, message, attempts)
     except ProviderError as exc:
         return await _on_error(ctx, summary, config, exc, attempts)
     except Exception:
         log.exception("resumo %s: falha inesperada", summary_id)
-        return await _fail(engine, summary_id, INTERNAL_ERROR, "Falha inesperada ao gerar o resumo.", attempts)
+        return await fail_summary(engine, summary_id, INTERNAL_ERROR, "Falha inesperada ao gerar o resumo.", attempts)
     async with system_tx(engine) as conn:
         await lock_versions(conn, summary["transcript_id"])
         values: dict[str, Any] = {
@@ -717,5 +718,7 @@ async def _on_error(
         log.info("resumo %s: tentativa %d falhou (%s), nova tentativa", summary_id, attempts, exc.code)
         raise Retry(defer=defer)
     if exc.code == GPU_BUSY:
-        return await _fail(engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts)
-    return await _fail(engine, summary_id, exc.code, exc.message, attempts)
+        return await fail_summary(
+            engine, summary_id, GPU_BUSY, "A fila da GPU não esvaziou a tempo para o Ollama.", attempts
+        )
+    return await fail_summary(engine, summary_id, exc.code, exc.message, attempts)

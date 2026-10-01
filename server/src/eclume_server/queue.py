@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 GPU_QUEUE = "eclume:gpu"
+# Ingestão, falhas do worker GPU, purgas e crons: não divide vaga com chamada a agente.
 DEFAULT_QUEUE = "eclume:default"
+# Jobs por agente (tipo de agenda, campos, resumo, chats e pré-visualizações), no worker de agentes.
+AGENT_QUEUE = "eclume:agents"
 # Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
 GPU_HEALTH_KEY = "eclume:gpu:health"
 DEFAULT_LANGUAGE = "pt"
@@ -51,6 +54,15 @@ def summarize_job_id(summary_id: UUID | str) -> str:
 def summary_chat_job_id(message_id: UUID | str) -> str:
     """`_job_id` do `summary_chat`: um por resposta do chat."""
     return f"summary_chat:{message_id}"
+
+
+# Pedido de cancelamento de um `transcribe`, que o worker GPU confere (cooperativo).
+CANCEL_TTL_S = 7 * 24 * 3600
+
+
+def cancel_key(recording_id: UUID | str, revision: int) -> str:
+    """Chave que pede ao worker GPU para parar o `transcribe` da revisão."""
+    return f"eclume:cancel:{recording_id}:{revision}"
 
 
 def progress_key(recording_id: UUID | str) -> str:
@@ -106,10 +118,8 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
 
 
 async def enqueue_summary(pool: ArqRedis, summary_id: UUID | str) -> None:
-    """Enfileira o `summarize` de um resumo na fila do worker CPU."""
-    await pool.enqueue_job(
-        "summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=DEFAULT_QUEUE
-    )
+    """Enfileira o `summarize` de um resumo na fila do worker de agentes."""
+    await pool.enqueue_job("summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=AGENT_QUEUE)
 
 
 def job_progress(raw: dict[str, str] | None) -> tuple[str | None, float] | None:
@@ -153,14 +163,19 @@ class Queue:
         )
 
     async def enqueue_summarize(self, summary_id: UUID) -> None:
-        """Enfileira `summarize` no worker CPU; um job por resumo."""
+        """Enfileira `summarize` no worker de agentes; um job por resumo."""
         await enqueue_summary(self.pool, summary_id)
 
     async def enqueue_summary_chat(self, message_id: UUID) -> None:
-        """Enfileira `summary_chat` no worker CPU; um job por resposta do chat."""
+        """Enfileira `summary_chat` no worker de agentes; um job por resposta do chat."""
         await self.pool.enqueue_job(
-            "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=DEFAULT_QUEUE
+            "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=AGENT_QUEUE
         )
+
+    async def request_cancel(self, jobs: list[tuple[UUID, int]]) -> None:
+        """Pede ao worker GPU para parar os `transcribe` de `(gravação, revisão)`."""
+        for recording_id, revision in jobs:
+            await self.pool.set(cancel_key(recording_id, revision), "1", ex=CANCEL_TTL_S)
 
     async def enqueue_purge_embedding_objects(self) -> None:
         """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""

@@ -1,131 +1,86 @@
-import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
-import { errorMessage } from '../../api/problem'
-import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { markersLabel } from '../library/calendar'
-import { hms, placeMarkers, useMarkerMutations, type Marker } from './markers'
-import { usePlayback } from './playback'
-import { SegmentEditor } from './SegmentEditor'
-import { findSegmentAt, speakerColorIndex, speakerName, type Segment, type Transcript } from './segments'
+import { placeMarkers, type Marker } from './markers'
+import { usePlayback, usePlaybackSelect } from './playback'
+import { SegmentMarker, SegmentRow } from './SegmentRow'
+import { findSegmentAt, speakerColorIndex, speakerName, type Transcript } from './segments'
 import { SpeakersPanel } from './SpeakersPanel'
 import styles from './TranscriptView.module.css'
 
-const MAX_NOTE = 500
-
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
-/** A `.segment-marker` antes da fala: tempo, nota e dispositivo, com editar a nota e excluir. */
-function SegmentMarker({ marker, recordingId }: { marker: Marker; recordingId: string }) {
-  const { editNote, remove } = useMarkerMutations(recordingId)
-  const [editing, setEditing] = useState(false)
-  const [note, setNote] = useState(marker.note ?? '')
-  const [confirming, setConfirming] = useState(false)
-  const inputId = useId()
-  const at = hms(marker.at_ms)
+const NO_MARKERS: Marker[] = []
 
-  function save() {
-    const value = note.trim()
-    editNote.mutate({ id: marker.id, note: value || null }, { onSuccess: () => setEditing(false) })
-  }
-
-  return (
-    <div className="segment-marker" aria-label={`Marcador em ${at}`} role="group">
-      <span className="marker-count">{at}</span>
-      <span className="segment-marker-note">
-        {editing ? (
-          <>
-            <label htmlFor={inputId} className="visually-hidden">
-              Nota do marcador em {at}
-            </label>
-            <input
-              id={inputId}
-              className={`input ${styles.noteInput}`}
-              value={note}
-              maxLength={MAX_NOTE}
-              autoFocus
-              onChange={(event) => setNote(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') save()
-                if (event.key === 'Escape') setEditing(false)
-              }}
-            />
-            <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={editNote.isPending}>
-              Salvar
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <>
-            <b>{marker.note ?? 'Marcador'}</b>
-            {marker.device_name && <span>Marcado no {marker.device_name}</span>}
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setNote(marker.note ?? '')
-                setEditing(true)
-              }}
-            >
-              Editar nota
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
-              Excluir marcador
-            </button>
-          </>
-        )}
-        {editNote.isError && (
-          <span className="alert alert-error" role="alert">
-            {errorMessage(editNote.error)}
-          </span>
-        )}
-      </span>
-      {confirming && (
-        <ConfirmDialog
-          title="Excluir o marcador?"
-          confirmLabel="Excluir marcador"
-          busy={remove.isPending}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => remove.mutate(marker.id, { onSuccess: () => setConfirming(false) })}
-        >
-          <p>
-            O marcador em {at}
-            {marker.note ? ` ("${marker.note}")` : ''} sai da gravação.
-          </p>
-        </ConfirmDialog>
-      )}
-    </div>
-  )
+/**
+ * Se o elemento cruza a faixa central da janela (40% a 60% da altura); sem `IntersectionObserver`,
+ * conta como visível. A faixa, e não a janela inteira, porque o resumo vem logo abaixo da lista: quem
+ * lê o resumo ainda vê as últimas falas na borda, e isso não é estar acompanhando a transcrição.
+ */
+function useInView(ref: RefObject<HTMLElement | null>): boolean {
+  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+      rootMargin: '-40% 0px -40% 0px',
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return inView
 }
 
 function Segments({
   transcript,
   markers,
   recordingId,
+  anchorMs,
 }: {
   transcript: Transcript
   markers: Marker[]
   recordingId: string
+  anchorMs: number | null
 }) {
-  const { currentMs, seek } = usePlayback()
+  const { seek } = usePlayback()
   const listRef = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { segments, speakers } = transcript
-  const active = findSegmentAt(segments, currentMs)
-  const places = placeMarkers(segments, markers)
-  const markersAt = (index: number) => markers.filter((_, position) => places[position] === index)
+  // Só a troca de fala ativa renderiza a lista; o tick que não a troca não chega aqui.
+  const active = usePlaybackSelect((ms) => findSegmentAt(segments, ms))
+  // Nome e cor do locutor e os marcadores de cada fala, calculados uma vez por transcrição.
+  const who = useMemo(
+    () =>
+      segments.map((segment) => ({
+        name: speakerName(speakers.find((item) => item.id === segment.speaker_id)),
+        color: speakerColorIndex(speakers, segment.speaker_id),
+      })),
+    [segments, speakers],
+  )
+  const markersAt = useMemo(() => {
+    const byIndex = new Map<number, Marker[]>()
+    placeMarkers(segments, markers).forEach((index, position) => {
+      byIndex.set(index, [...(byIndex.get(index) ?? []), markers[position]])
+    })
+    return byIndex
+  }, [segments, markers])
 
+  const visible = useInView(listRef)
+  const anchored = useRef(false)
+
+  // Aberta pela URL com `?t=` (busca, fonte do chat, marcador): uma rolagem só até a fala do instante.
   useEffect(() => {
-    if (!follow || active < 0) return
-    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [active, follow])
+    if (anchored.current || anchorMs === null) return
+    anchored.current = true
+    const index = findSegmentAt(segments, anchorMs)
+    if (index >= 0) listRef.current?.children[index]?.scrollIntoView({ block: 'center' })
+  }, [anchorMs, segments])
 
-  function onSegmentClick(event: MouseEvent<HTMLDivElement>, segment: Segment) {
-    // Botões e campos dentro da fala têm ação própria; a fala em edição não toca.
-    if (editingId === segment.id || (event.target as HTMLElement).closest('button, textarea, input, a')) return
-    seek(segment.start_ms, true)
-  }
+  // Acompanhar o áudio só rola com a lista à vista: lendo o resumo ou usando o chat, a página fica.
+  useEffect(() => {
+    if (!follow || !visible || active < 0) return
+    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [active, follow, visible])
 
   return (
     <>
@@ -138,62 +93,24 @@ function Segments({
         <p className="text-muted">A transcrição não tem falas.</p>
       ) : (
         <div ref={listRef} role="list" aria-label="Falas">
-          {segments.map((segment, index) => {
-            const speaker = speakers.find((item) => item.id === segment.speaker_id)
-            const name = speakerName(speaker)
-            const clock = hms(segment.start_ms)
-            const color = speakerColorIndex(speakers, segment.speaker_id)
-            return (
-              <div key={segment.id} role="listitem" className={styles.item}>
-                {markersAt(index).map((marker) => (
-                  <SegmentMarker key={marker.id} marker={marker} recordingId={recordingId} />
-                ))}
-                <div
-                  className={`segment ${styles.segment}`}
-                  data-speaker={color}
-                  aria-current={index === active ? 'true' : undefined}
-                  onClick={(event) => onSegmentClick(event, segment)}
-                >
-                  <div className="segment-who">
-                    <span className={`speaker speaker-${color}`}>{name}</span>
-                    <button
-                      type="button"
-                      className={`timecode ${styles.timecode}`}
-                      onClick={() => seek(segment.start_ms, true)}
-                      aria-label={`Ouvir a partir de ${clock}, fala de ${name}`}
-                    >
-                      {clock}
-                    </button>
-                  </div>
-                  <div className={styles.body}>
-                    {editingId === segment.id ? (
-                      <SegmentEditor
-                        transcriptId={transcript.id}
-                        segment={segment}
-                        label={`Texto da fala de ${name} em ${clock}`}
-                        onClose={() => setEditingId(null)}
-                      />
-                    ) : (
-                      <>
-                        <p className="segment-text">{segment.text}</p>
-                        <button
-                          type="button"
-                          className={`btn btn-ghost btn-sm ${styles.edit}`}
-                          onClick={() => setEditingId(segment.id)}
-                          aria-label={`Corrigir a fala de ${name} em ${clock}`}
-                        >
-                          Corrigir
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {segments.map((segment, index) => (
+            <SegmentRow
+              key={segment.id}
+              segment={segment}
+              name={who[index].name}
+              color={who[index].color}
+              markers={markersAt.get(index) ?? NO_MARKERS}
+              active={index === active}
+              editing={editingId === segment.id}
+              transcriptId={transcript.id}
+              recordingId={recordingId}
+              onSeek={seek}
+              onEdit={setEditingId}
+            />
+          ))}
         </div>
       )}
-      {markersAt(segments.length).map((marker) => (
+      {(markersAt.get(segments.length) ?? NO_MARKERS).map((marker) => (
         <SegmentMarker key={marker.id} marker={marker} recordingId={recordingId} />
       ))}
     </>
@@ -204,6 +121,8 @@ interface TranscriptDisclosureProps {
   transcript: Transcript
   markers: Marker[]
   recordingId: string
+  /** O instante do `?t=` da URL, para a rolagem única até a fala dele. */
+  anchorMs?: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -216,6 +135,7 @@ export function TranscriptDisclosure({
   transcript,
   markers,
   recordingId,
+  anchorMs = null,
   open,
   onOpenChange,
 }: TranscriptDisclosureProps) {
@@ -244,7 +164,7 @@ export function TranscriptDisclosure({
       {open && (
         <div className={styles.view}>
           <SpeakersPanel transcript={transcript} />
-          <Segments transcript={transcript} markers={markers} recordingId={recordingId} />
+          <Segments transcript={transcript} markers={markers} recordingId={recordingId} anchorMs={anchorMs} />
         </div>
       )}
     </details>

@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96
 maintainer: holetz
 ---
 
@@ -19,10 +19,39 @@ mudá-lo é mudar os dois lados juntos.
 
 ## Filas
 
-Arq sobre Redis (`ECLUME_REDIS_URL`), com duas filas:
+Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
 
 - `eclume:gpu`, consumida só pelo `worker-gpu` com `max_jobs=1`;
-- `eclume:default`, consumida pelo worker CPU do pacote `server` (`eclume_server.worker`).
+- `eclume:default`, consumida pelo worker CPU do pacote `server` (`WorkerSettings`, `max_jobs`
+  explícito): `ingest_transcript`, `transcription_failed`, `purge_embedding_objects` e todos os
+  crons (reaper, retomada, uploads vencidos);
+- `eclume:agents`, consumida pelo worker de agentes (`AgentWorkerSettings`, serviço
+  `worker-agents`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, padrão 4): `detect_agenda_type`,
+  `fill_fields`, `summarize`, `summary_chat`, `base_chat` e `run_preview`. A ingestão não divide
+  vaga com chamada a agente. Na transição, o worker de `eclume:default` mantém as funções de agente
+  registradas por uma versão, para drenar o que já estava na fila dele.
+
+O worker GPU não muda de fila: os retornos continuam em `eclume:default`.
+
+## Cancelamento
+
+Cooperativo, por chave no Redis — não `Job.abort()`, que cancela a task mas deixa o ASR rodando
+na thread e libera a vaga de `max_jobs=1` com a GPU ainda ocupada.
+
+- **Quem cancela.** `POST /api/v1/recordings/{id}/cancel` (o dono, `recordings:write`; 409 sem
+  job `queued`/`running`), a exclusão da gravação (API, web e MCP) e a exclusão da conta. Numa
+  transação, travando a gravação antes de ler o job: job `cancelled` com `finished_at` e
+  `error_code` `cancelled` (recuperável), gravação `failed` e a etapa em curso — o
+  pré-processamento, se o progresso da revisão está em `download` ou `preprocess`; senão, a
+  transcrição — `skipped` com o motivo `cancelled`. Retranscrever é a volta.
+- **A chave.** Depois do commit, o server grava `eclume:cancel:{recording_id}:{revision}` (TTL 7
+  dias). Se a gravação falhar, só custa GPU: o resultado chega obsoleto e é descartado.
+- **O worker.** Confere a chave ao pegar o job (antes do download) e a cada ~5 s enquanto ele roda,
+  ligando um `threading.Event`; a callback de progresso, na thread da engine, levanta a interrupção
+  no próximo lote do ASR ou da diarização, e há checagem entre download, pré-processamento, ASR e
+  upload. O alinhamento e as passadas do ffmpeg não têm ponto de checagem: o pedido vale ao fim
+  deles. Cancelado, o job não enfileira retorno, apaga o hash de progresso e o diretório de
+  trabalho e só então libera a vaga. Um worker antigo ignora a chave e só deixa de cancelar.
 
 ## `transcribe` — o server enfileira
 
@@ -194,7 +223,8 @@ de progresso e o heartbeat:
 | arq `complete` com sucesso há até `ECLUME_JOB_STALL_SECONDS` (a ingestão pode estar na fila `eclume:default`) | nada |
 | arq `complete` com sucesso há mais de `ECLUME_JOB_STALL_SECONDS` e o job ainda aberto no banco (a ingestão se perdeu) | `ingest_failed` |
 | arq `complete` com falha (o retry do arq encerrou o job de um worker morto) | `worker_lost` |
-| sumido do arq (`not_found`) e sem hash de progresso | `job_lost` |
+| `queued` no banco, sumido do arq (`not_found`) e sem hash de progresso, pela primeira vez | reenfileirado com o mesmo `_job_id`, as `options` do job e o token do HF cifrado; marca `eclume:reaper:requeued:<_job_id>` (7 dias) |
+| sumido do arq (`not_found`) e sem hash de progresso, com a marca (ou já `running`) | `job_lost` |
 | progresso sem escrita há mais de `ECLUME_JOB_STALL_SECONDS` (1800 s), mesmo com worker vivo | `job_stalled` |
 | o worker não está neste job (heartbeat ausente, `busy=0`, ou `job_id` de outro `transcribe`) e o progresso da revisão ausente ou sem escrita há mais que a graça | `worker_lost` |
 
@@ -217,7 +247,8 @@ outra revisão conta como ausente. O heartbeat é o sinal de vida; o progresso m
   retenta a gravação de qualquer usuário por `POST /admin/jobs/{job_id}/retry`
   ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
   configuração atual. Não há retentativa automática do `transcribe`: repetiria um OOM ou um áudio
-  ruim em laço; só os jobs de retorno retentam a falha passageira.
+  ruim em laço; só os jobs de retorno retentam a falha passageira. A exceção é o `transcribe` cujo
+  enfileiramento se perdeu: ele nunca rodou, então volta à fila uma vez (tabela acima).
 - **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela; a ingestão que falha em
   `server/tests/test_pipeline.py`.
 

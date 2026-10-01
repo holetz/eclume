@@ -5,6 +5,12 @@ os canais separados), grava `transcript.raw.json` e `speaker_embeddings.json` da
 enfileira `ingest_transcript` em `eclume:default`. Em falha, enfileira `transcription_failed` com a
 etapa em que parou e retorna sem relançar: o retry é decisão do server, não do arq. Os dois retornos
 levam a revisão no `_job_id` (`{job}:{recording_id}:{revision}`); os argumentos são os de sempre.
+
+Cancelar é cooperativo: o server grava `eclume:cancel:{recording_id}:{revision}`; o job confere a
+chave ao começar e a cada `CANCEL_POLL_S` enquanto roda, e para no próximo ponto de checagem — a
+callback de progresso da engine (por lote do ASR e da diarização) e entre download,
+pré-processamento, ASR e upload. Cancelado, não enfileira retorno e apaga o hash de progresso e o
+diretório de trabalho antes de liberar a vaga.
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from eclume_engines.hf_token import resolve_hf_token
 from eclume_worker import __version__
 from eclume_worker.config import DEFAULT_QUEUE
 from eclume_worker.preprocess import PreprocessError, PreprocessResult, preprocess
-from eclume_worker.progress import ProgressReporter, overall_pct
+from eclume_worker.progress import ProgressReporter, overall_pct, progress_key
 from eclume_worker.secrets import SecretError, open_secret
 from eclume_worker.storage import ArtifactStore, embeddings_key, sha256_file, transcript_key
 from eclume_worker.transcript import build_embeddings, build_transcript
@@ -43,6 +49,34 @@ AUDIO_DOWNLOAD_FAILED = "audio_download_failed"
 UPLOAD_FAILED = "upload_failed"
 INTERNAL_ERROR = "internal_error"
 WARN_HF_TOKEN_UNDECRYPTABLE = "hf_token_undecryptable"  # noqa: S105 — código de aviso, não segredo
+# De quanto em quanto tempo o job em curso confere o pedido de cancelamento.
+CANCEL_POLL_S = 5.0
+
+
+class JobCancelledError(Exception):
+    """O dono cancelou o job (chave `eclume:cancel:…`): para sem retorno."""
+
+
+def cancel_key(recording_id: str, revision: int) -> str:
+    """Chave em que o server pede a parada do `transcribe` da revisão."""
+    return f"eclume:cancel:{recording_id}:{revision}"
+
+
+def _checkpoint(stop: threading.Event) -> None:
+    if stop.is_set():
+        raise JobCancelledError
+
+
+async def _watch_cancel(redis: Any, key: str, stop: threading.Event, every: float) -> None:  # noqa: ANN401 — ArqRedis
+    """Liga `stop` quando a chave de cancelamento aparece; uma falha do Redis só vai ao log."""
+    while not stop.is_set():
+        try:
+            if await redis.exists(key):
+                stop.set()
+                return
+        except Exception:
+            logger.exception("conferência do cancelamento falhou")
+        await asyncio.sleep(every)
 
 
 class JobFailedError(Exception):
@@ -258,13 +292,17 @@ def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOpt
 
 
 def _thread_progress(
-    reporter: ProgressReporter, loop: asyncio.AbstractEventLoop
+    reporter: ProgressReporter, loop: asyncio.AbstractEventLoop, stop: threading.Event
 ) -> tuple[Callable[[str, float], None], list[Any]]:
-    """Callback para a thread da engine: agenda no loop só quando o `pct` geral muda."""
+    """Callback para a thread da engine: agenda no loop só quando o `pct` geral muda.
+
+    Com o cancelamento pedido, levanta `JobCancelledError` na thread da engine, no próximo lote.
+    """
     futures: list[Any] = []
     last: list[tuple[str, int]] = []
 
     def progress(stage: str, stage_pct: float) -> None:
+        _checkpoint(stop)
         mark = (stage, overall_pct(stage, stage_pct))
         if last and last[-1] == mark:
             return
@@ -278,27 +316,44 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
     """Job `transcribe(recording_id, audio_key, options)` do contrato."""
     config: WorkerConfig = ctx["config"]
     registry: EngineRegistry = ctx["engines"]
+    redis = ctx["redis"]
     revision = parse_revision(ctx.get("job_id"))
     registry.current_job = ctx.get("job_id") or return_job_id("transcribe", recording_id, revision)
     try:
+        cancel = cancel_key(recording_id, revision)
+        if await redis.exists(cancel):
+            logger.info("gravação %s (revisão %s): cancelada antes de começar", recording_id, revision)
+            return {"status": "cancelled"}
+        stop = threading.Event()
+        watcher = asyncio.create_task(_watch_cancel(redis, cancel, stop, ctx.get("cancel_poll_s", CANCEL_POLL_S)))
         config.work_dir.mkdir(parents=True, exist_ok=True)
         workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
-        reporter = ProgressReporter(ctx["redis"], recording_id, revision)
+        reporter = ProgressReporter(redis, recording_id, revision)
         try:
-            return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
-        except JobFailedError as exc:
-            return await _fail(ctx["redis"], reporter, exc)
+            return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter, stop=stop)
         except Exception as exc:
+            # Cancelado, a engine pode ter embrulhado a interrupção num erro dela: vale o pedido.
+            if stop.is_set() or isinstance(exc, JobCancelledError):
+                return await _cancelled(redis, reporter)
+            if isinstance(exc, JobFailedError):
+                return await _fail(redis, reporter, exc)
             logger.exception("gravação %s: erro inesperado", recording_id)
-            failure = JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
-            return await _fail(ctx["redis"], reporter, failure)
+            return await _fail(redis, reporter, JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"))
         finally:
+            watcher.cancel()
             shutil.rmtree(workdir, ignore_errors=True)
     finally:
         registry.current_job = None
 
 
-async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha também lê
+async def _cancelled(redis: Any, reporter: ProgressReporter) -> dict:  # noqa: ANN401 — ArqRedis
+    """Sem retorno ao server (o job já está `cancelled` no banco); o hash de progresso sai."""
+    logger.info("gravação %s (revisão %s): cancelada em %s", reporter.recording_id, reporter.revision, reporter.stage)
+    await redis.delete(progress_key(reporter.recording_id))
+    return {"status": "cancelled"}
+
+
+async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha também lê e o cancelamento
     ctx: dict[str, Any],
     recording_id: str,
     audio_key: str,
@@ -306,6 +361,7 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
     workdir: Path,
     *,
     reporter: ProgressReporter,
+    stop: threading.Event,
 ) -> dict:
     started = time.monotonic()
     redis = ctx["redis"]
@@ -329,11 +385,13 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
     except Exception as exc:
         raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"falha ao baixar {audio_key}: {exc}") from exc
     await reporter.report("download", 100)
+    _checkpoint(stop)
 
     pre = await _preprocess(ctx["config"], reporter, audio_path, workdir, options.get("preprocess"))
+    _checkpoint(stop)
 
     hf_token, token_warnings = _platform_hf_token(ctx["config"], options.get("hf_token_encrypted"))
-    progress, futures = _thread_progress(reporter, asyncio.get_running_loop())
+    progress, futures = _thread_progress(reporter, asyncio.get_running_loop(), stop)
     engine_started = time.monotonic()
     run = functools.partial(
         registry.run, engine_name, progress=progress, base_url=options.get("endpoint_url"), hf_token=hf_token
@@ -344,6 +402,8 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
         raise JobFailedError(exc.code, exc.message) from exc
     finally:
         await asyncio.gather(*(asyncio.wrap_future(f) for f in futures), return_exceptions=True)
+    # O alinhamento não chama a callback: o pedido feito durante ele vale aqui.
+    _checkpoint(stop)
     processing_s = time.monotonic() - engine_started
     result.warnings[:0] = [*token_warnings, *pre.warnings]
     for warning in result.warnings:
@@ -370,6 +430,7 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
         raise JobFailedError(UPLOAD_FAILED, f"falha ao gravar os artefatos: {exc}") from exc
 
     info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at, pre)
+    _checkpoint(stop)
     # 100 antes do retorno: o server apaga o hash ao ingerir, e uma gravação depois o recriaria.
     await reporter.report("upload", 100)
     await redis.enqueue_job(

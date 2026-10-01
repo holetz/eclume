@@ -32,6 +32,7 @@ ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
+uv run arq eclume_server.worker.AgentWorkerSettings
 git config core.hooksPath .githooks
 bash deploy/gate.sh
 bash deploy/gate.sh --estado

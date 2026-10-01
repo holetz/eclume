@@ -20,7 +20,7 @@ from eclume_server import __version__
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
-from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress, progress_of_revision
+from eclume_server.queue import AGENT_QUEUE, DEFAULT_QUEUE, GPU_QUEUE, job_progress, progress_of_revision
 from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
@@ -46,6 +46,14 @@ PROBE_TIMEOUT_S = 2.0
 STORAGE_SLOW_S = 1.0
 # Chave de health-check do arq do worker CPU (`health_check_interval` no `worker_settings`).
 CPU_HEALTH_KEY = f"{DEFAULT_QUEUE}:health-check"
+# A do worker de agentes: a sonda `cpu_worker` exige as duas.
+AGENT_HEALTH_KEY = f"{AGENT_QUEUE}:health-check"
+
+
+class ProbeDownError(Exception):
+    """A sonda achou o serviço fora; a mensagem vira o `detail`."""
+
+
 # Tabelas do usuário: a RLS forçada em todas é o "RLS ativa" do Postgres.
 USER_TABLES = (
     "recordings",
@@ -184,6 +192,8 @@ async def _probe(name: str, check: Callable[[], Awaitable[str | None]], slow_s: 
     try:
         async with asyncio.timeout(PROBE_TIMEOUT_S):
             detail = await check()
+    except ProbeDownError as exc:
+        status, detail = "down", str(exc)
     except Exception as exc:  # noqa: BLE001 — qualquer falha da sonda é o serviço fora
         status, detail = "down", "sem resposta em 2 s" if isinstance(exc, TimeoutError) else type(exc).__name__
     else:
@@ -229,8 +239,11 @@ async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[di
         return beat.get("engine") or ""
 
     async def cpu_worker() -> None:
-        if not await ctx.queue.pool.exists(CPU_HEALTH_KEY):
-            raise LookupError
+        workers = ((CPU_HEALTH_KEY, DEFAULT_QUEUE), (AGENT_HEALTH_KEY, AGENT_QUEUE))
+        missing = [queue for key, queue in workers if not await ctx.queue.pool.exists(key)]
+        if missing:
+            msg = f"sem worker em {', '.join(missing)}"
+            raise ProbeDownError(msg)
 
     async def api() -> str:
         return __version__
@@ -261,7 +274,7 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
     now = datetime.now(UTC)
     beat = await ctx.queue.gpu_health()
     queues = []
-    for name in (GPU_QUEUE, DEFAULT_QUEUE):
+    for name in (GPU_QUEUE, DEFAULT_QUEUE, AGENT_QUEUE):
         queued, running = await ctx.queue.depth(name)
         queues.append({"name": name, "queued": queued, "running": running})
 

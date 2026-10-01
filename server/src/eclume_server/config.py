@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     job_grace_seconds: float = 120
     job_stall_seconds: float = 30 * 60
 
+    # Vagas do worker de agentes (`eclume:agents`): quantas chamadas a agente rodam juntas.
+    agent_max_jobs: int = 4
+
     upload_part_size: int = 8 * 1024 * 1024
     upload_ttl_days: int = 7
     part_url_ttl_seconds: int = 3600

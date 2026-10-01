@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import redis
+
 from eclume_server_testing.api import PASSWORD, audio_bytes, upload_file
 
 if TYPE_CHECKING:
@@ -70,3 +72,7 @@ def test_excluir_a_conta_apaga_tudo_e_so_dela(
     client.cookies.clear()
     assert client.post("/api/v1/auth/login", json={"email": account.email, "password": PASSWORD}).status_code == 401
     assert bystander.get(f"/api/v1/recordings/{kept['id']}").status_code == 200
+    # O job em aberto da conta excluída é cancelado; o de outra conta, não.
+    cache = redis.Redis.from_url(services.settings.redis_url)
+    assert cache.exists(f"eclume:cancel:{recording['id']}:1")
+    assert not cache.exists(f"eclume:cancel:{kept['id']}:1")

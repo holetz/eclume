@@ -2,12 +2,12 @@
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
 description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, o cadastro de tags (fixas por padrão ou autogerenciadas com limites), os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py, server/src/eclume_server/tags.py, server/src/eclume_server/routes/tags.py, server/src/eclume_server/db/migrations/023_cadastro_de_tags.sql
+resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/resume.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py, server/src/eclume_server/tags.py, server/src/eclume_server/routes/tags.py, server/src/eclume_server/db/migrations/023_cadastro_de_tags.sql
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78
+source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#96
 maintainer: holetz
 ---
 
@@ -28,16 +28,16 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
 | Etapa | Quem grava |
 |---|---|
 | `received` | `recordings.insert_job`, ao criar o job (upload, retranscrição, retentativa); `failed` com hash divergente |
-| `preprocessing` | a ingestão, pelo `engine_info.preprocess` do worker GPU |
-| `transcription` | a ingestão (`done`), a falha e o reaper (`failed`, com o erro do job) |
+| `preprocessing` | a ingestão, pelo `engine_info.preprocess` do worker GPU; o cancelamento no download ou no pré-processamento (`skipped`, `cancelled`) |
+| `transcription` | a ingestão (`done`), a falha e o reaper (`failed`, com o erro do job), o cancelamento (`skipped`, `cancelled`) |
 | `agenda_type` | o job `detect_agenda_type` |
 | `fields` | o job `fill_fields` |
 | `summary` | o resumo automático: `active` ao abrir, `done`/`failed` quando o `summarize` termina |
 
 - **Estados:** `pending`, `active`, `done`, `failed` e `skipped` (os do componente `.pipeline` do
   Design System). Pulada ou falha, a etapa diz por quê: `detail.reason` (`no_provider`,
-  `no_auto_fields`, `no_types`, `set_by_user`, `no_agenda_type`, `before_pipeline`) ou
-  `error_code`/`error_message`.
+  `no_auto_fields`, `no_types`, `set_by_user`, `no_agenda_type`, `before_pipeline`, `cancelled`
+  — a transcrição cancelada pelo dono nesta etapa) ou `error_code`/`error_message`.
 - `pipeline.set_step` faz upsert por `(recording_id, revision, step)`: `active` marca o início, um
   estado final marca o fim e mantém o início; `duration_ms` é coluna gerada.
 - **`Recording.pipeline`** são as seis etapas da maior revisão, em ordem; sem linha, `pending`.
@@ -129,10 +129,27 @@ mesmo id.
   refeita — se ainda não há o automático da mesma revisão por esse tipo. `null` tira o tipo e
   devolve a escolha à detecção.
 
+## Retomada
+
+Uma etapa que não chegou à fila (o Redis oscilou, ou o worker parou entre o commit e o
+enfileiramento) volta sozinha. O cron `resume_pipelines` (`resume.py`, a cada 5 min, `unique`, no
+worker de `eclume:default`) relê o banco e relança pelo `_job_id` determinístico, que o arq
+deduplica; não há outbox:
+
+- **A cadeia**, só na revisão atual com o job de transcrição `succeeded` há mais de 5 min: tipo de
+  agenda sem linha → `detect_agenda_type`; tipo final e campos sem linha → `fill_fields`; campos
+  finais e resumo sem linha → o resumo automático (`start_auto_summary` e `summarize`), sem refazer
+  os campos.
+- **Os resumos** `queued`/`running` há mais de 5 min: sumido do arq → reenfileirado; concluído no
+  arq com o resumo ainda aberto → `failed` (`internal_error`) e a etapa fechada. O que o arq ainda
+  conhece (na fila, adiado, rodando) nunca é tocado — o resumo que espera a GPU segue intacto.
+- Até 50 relançamentos por passada, os mais antigos primeiro, cada um num `log.warning`.
+
 ## Os jobs por agente
 
-O worker CPU encadeia `ingest_transcript → detect_agenda_type → fill_fields → summarize`, com
-`_job_id = "{job}:{recording_id}:{revision}"`. Só a ingestão que gravou a transcrição abre a cadeia:
+O worker de agentes (`eclume:agents`, holetz/eclume#96) encadeia `ingest_transcript → detect_agenda_type → fill_fields → summarize`, com
+`_job_id = "{job}:{recording_id}:{revision}"`; a ingestão, no worker de `eclume:default`, abre a
+cadeia enfileirando em `eclume:agents`. Só a ingestão que gravou a transcrição abre a cadeia:
 job já falho (pelo reaper) ou ingestão repetida não enfileiram o `detect_agenda_type`. O tipo vem
 antes dos campos porque o assunto do título segue a regra do tipo. Cada job resolve o provider pela finalidade
 (`provider_for`) e chama o agente por `summaries.call_agent_step`, que aplica as retentativas do

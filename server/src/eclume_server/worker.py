@@ -1,11 +1,13 @@
-"""Worker CPU do server (`arq eclume_server.worker.WorkerSettings`), fila `eclume:default`.
+"""Workers CPU do server: `eclume:default` (`WorkerSettings`) e `eclume:agents` (`AgentWorkerSettings`).
 
-Consome o que o worker GPU enfileira ao fim de um `transcribe` — `ingest_transcript` e
-`transcription_failed` —, roda as etapas por agente do pipeline (`detect_agenda_type`,
-`fill_fields` e o resumo automático), gera os resumos (`summarize`), responde o chat de ajuste
-do resumo (`summary_chat`), descarta uploads vencidos e marca como falha recuperável
-o job de transcrição que o worker GPU abandonou e a resposta do chat que nenhum job vai terminar
-(`reap_stalled_jobs`). Contrato em
+O de `eclume:default` consome o que o worker GPU enfileira ao fim de um `transcribe` —
+`ingest_transcript` e `transcription_failed` —, purga os embeddings e roda os crons: descarta
+uploads vencidos e marca como falha recuperável o job de transcrição que o worker GPU abandonou e a
+resposta do chat que nenhum job vai terminar (`reap_stalled_jobs`), e relança a etapa por agente
+ou o resumo que nunca chegou à fila (`resume_pipelines`). O de `eclume:agents`
+(`ECLUME_AGENT_MAX_JOBS` vagas) roda as etapas por agente do pipeline (`detect_agenda_type`,
+`fill_fields` e o resumo automático), gera os resumos (`summarize`), responde os chats e as
+pré-visualizações: a ingestão nunca espera atrás de uma chamada a agente. Contrato em
 docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
 """
 
@@ -29,7 +31,15 @@ from eclume_server.db.session import make_engine, system_tx
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
-from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, return_revision, step_job_id
+from eclume_server.queue import (
+    AGENT_QUEUE,
+    DEFAULT_QUEUE,
+    enqueue_summary,
+    progress_key,
+    return_revision,
+    step_job_id,
+)
+from eclume_server.resume import resume
 from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
 from eclume_server.storage import Storage
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
@@ -46,6 +56,8 @@ if TYPE_CHECKING:
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
+# Vagas do worker de `eclume:default` (o padrão do arq, explícito): só ingestão, falhas e varreduras.
+DEFAULT_MAX_JOBS = 10
 # Falha passageira de Postgres ou S3 nos jobs de retorno do worker GPU: 3 novas tentativas com
 # espera crescente (315 s no total, abaixo de `job_stall_seconds`, para o reaper não decidir antes).
 INGEST_RETRY_DELAYS_S = (15, 60, 240)
@@ -150,7 +162,7 @@ async def _keep_only_revision(storage: Storage, recording_id: str, revision: int
 
 async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:
     await ctx["redis"].enqueue_job(
-        job, recording_id, revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=DEFAULT_QUEUE
+        job, recording_id, revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=AGENT_QUEUE
     )
 
 
@@ -322,34 +334,49 @@ async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     return len(reaped) + await reap_stalled_chats(ctx["engine"])
 
 
+async def resume_pipelines(ctx: dict[str, Any]) -> int:
+    """Relança as etapas por agente e os resumos que nunca chegaram à fila (`resume.py`)."""
+    return len(await resume(ctx["engine"], ctx["redis"]))
+
+
+def _agent_functions() -> list[Any]:
+    return [
+        # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
+        # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
+        func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+        # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
+        func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+        func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
+        func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
+        # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
+        # nova tentativa só (contada em `summary_chat_messages.attempts`).
+        func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
+        # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
+        func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
+    ]
+
+
 def worker_settings(settings: Settings) -> dict[str, Any]:
-    """Parâmetros do `arq.Worker` para esta configuração."""
+    """Parâmetros do `arq.Worker` de `eclume:default` para esta configuração."""
     return {
         "functions": [
             # Só a falha passageira volta à fila (`Retry`); o resto termina na primeira tentativa.
             func(ingest_transcript, max_tries=RETURN_MAX_TRIES),
             func(transcription_failed, max_tries=RETURN_MAX_TRIES),
             purge_embedding_objects,
-            # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
-            # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
-            func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
-            # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
-            func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
-            func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
-            func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
-            # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
-            # nova tentativa só (contada em `summary_chat_messages.attempts`).
-            func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
-            # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
-            func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
+            # Transição: os jobs por agente que já estavam em `eclume:default` antes do worker de
+            # agentes existir ainda rodam aqui. Sai na versão seguinte.
+            *_agent_functions(),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
             cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
+            cron(resume_pipelines, minute=set(range(2, 60, 5)), run_at_startup=False, unique=True),
         ],
         "queue_name": DEFAULT_QUEUE,
+        "max_jobs": DEFAULT_MAX_JOBS,
         # A chave de health-check do arq (`eclume:default:health-check`) é a sonda da Saúde.
         "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
@@ -359,7 +386,24 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
     }
 
 
+def agent_worker_settings(settings: Settings) -> dict[str, Any]:
+    """Parâmetros do `arq.Worker` de `eclume:agents`: os jobs por agente, sem crons."""
+    return {
+        "functions": _agent_functions(),
+        "cron_jobs": None,
+        "queue_name": AGENT_QUEUE,
+        "max_jobs": settings.agent_max_jobs,
+        # `eclume:agents:health-check`, a segunda chave da sonda `cpu_worker` da Saúde.
+        "health_check_interval": 15,
+        "redis_settings": RedisSettings.from_dsn(settings.redis_url),
+        "on_startup": startup,
+        "on_shutdown": shutdown,
+        "ctx": {"settings": settings},
+    }
+
+
 _FROM_ENV = worker_settings(get_settings())
+_AGENTS_FROM_ENV = agent_worker_settings(get_settings())
 
 
 class WorkerSettings:
@@ -373,3 +417,18 @@ class WorkerSettings:
     on_startup = _FROM_ENV["on_startup"]
     on_shutdown = _FROM_ENV["on_shutdown"]
     ctx = _FROM_ENV["ctx"]
+    max_jobs = _FROM_ENV["max_jobs"]
+
+
+class AgentWorkerSettings:
+    """Entrada do CLI do arq para o worker de agentes (`arq eclume_server.worker.AgentWorkerSettings`)."""
+
+    functions = _AGENTS_FROM_ENV["functions"]
+    cron_jobs = _AGENTS_FROM_ENV["cron_jobs"]
+    queue_name = _AGENTS_FROM_ENV["queue_name"]
+    max_jobs = _AGENTS_FROM_ENV["max_jobs"]
+    health_check_interval = _AGENTS_FROM_ENV["health_check_interval"]
+    redis_settings = _AGENTS_FROM_ENV["redis_settings"]
+    on_startup = _AGENTS_FROM_ENV["on_startup"]
+    on_shutdown = _AGENTS_FROM_ENV["on_shutdown"]
+    ctx = _AGENTS_FROM_ENV["ctx"]

@@ -96,6 +96,7 @@ export function RecordingPage() {
               transcript={transcript.data}
               markers={markers.data ?? []}
               recordingId={data.id}
+              anchorMs={startMs}
               open={transcriptOpen}
               onOpenChange={setTranscriptOpen}
             />
