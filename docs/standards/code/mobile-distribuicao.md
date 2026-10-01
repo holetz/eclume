@@ -15,7 +15,7 @@ maintainer: holetz
 
 O app móvel ([mobile-app.md](mobile-app.md)) sai como um **APK assinado**, baixado do próprio
 servidor eclume. Não há loja: publicar na Google Play ou na App Store é decisão e conta da dona do
-produto. iOS tem spec própria.
+produto. O iOS está fora do escopo, sem spec aberta.
 
 ## Versão e tag
 
