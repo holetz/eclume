@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
+import { markAgendaTypesSeen } from '../../app/preferences'
 import { PageHead } from '../../app/PageHead'
 import { AgendaTypeEditor } from './AgendaTypeEditor'
 import styles from './Organize.module.css'
@@ -24,6 +26,7 @@ function summaryLabel(instructions: string): string {
 
 export function AgendaTypesPage() {
   useHelpTopic('agendas')
+  useEffect(markAgendaTypesSeen, [])
   const types = useAgendaTypes()
   // O tipo padrão fica no topo, com o selo; os outros na ordem do usuário.
   const items = [...(types.data?.items ?? [])].sort(

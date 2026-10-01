@@ -25,6 +25,14 @@ function mockLibrary(recordings: (request: Request) => unknown = () => fixtures.
   })
 }
 
+/** As consultas da biblioteca, sem a pergunta "a conta tem alguma?" do cartão Primeiros passos. */
+function libraryQueries(http: ReturnType<typeof mockLibrary>) {
+  return http
+    .requests('GET /api/v1/recordings')
+    .map((r) => new URL(r.url).searchParams)
+    .filter((query) => query.has('from') || query.get('limit') !== '1')
+}
+
 /** O item da semana pelo nome do link que o ocupa (o item leva a posição e o estado). */
 function event(name: RegExp | string) {
   return screen.getByRole('link', { name }).closest('[role="listitem"]') as HTMLElement
@@ -96,7 +104,7 @@ describe('biblioteca na semana', () => {
     expect(work).toEqual(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'])
     expect((document.querySelector('.cal-week') as HTMLElement).style.getPropertyValue('--cal-start')).toBe('0')
 
-    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    const query = libraryQueries(http)[0]
     expect(query.get('from')).toBe('2026-09-21T03:00:00.000Z')
     expect(query.get('to')).toBe('2026-09-28T03:00:00.000Z')
     expect(query.get('sort')).toBe('recorded_asc')
@@ -190,11 +198,15 @@ describe('biblioteca na semana', () => {
     expect(document.querySelector('.cal-week')).not.toBeNull()
   })
 
-  it('conta sem gravações convida a importar e a instalar o app', async () => {
+  it('conta sem gravações convida a importar, a instalar os apps e a conferir os tipos de agenda', async () => {
     const http = mockLibrary(() => ({ items: [], next_cursor: null }))
     renderApp(WEEK)
-    expect(await screen.findByRole('heading', { name: 'Nenhuma gravação ainda' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'app desktop' })).toHaveAttribute('href', '/app-desktop')
+    const heading = await screen.findByRole('heading', { name: 'Nenhuma gravação ainda' })
+    const empty = heading.closest('.card') as HTMLElement
+    expect(within(empty).getByRole('link', { name: 'app desktop' })).toHaveAttribute('href', '/app-desktop')
+    expect(within(empty).getByRole('link', { name: 'app do celular' })).toHaveAttribute('href', '/app-movel')
+    expect(within(empty).getByRole('link', { name: 'tipo de agenda' })).toHaveAttribute('href', '/config/agendas')
+    expect(within(empty).getByRole('button', { name: 'Importar arquivos' })).toBeInTheDocument()
     expect(document.querySelector('.cal-week')).toBeNull()
     // A pergunta "tem alguma?" vai sem período e sem filtro.
     const any = http.requests('GET /api/v1/recordings').map((r) => new URL(r.url).searchParams)
@@ -320,7 +332,7 @@ describe('biblioteca no mês e na lista', () => {
     expect(within(thursday).getAllByRole('link')).toHaveLength(3)
     expect(within(thursday).getByText('+1')).toBeInTheDocument()
 
-    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    const query = libraryQueries(http)[0]
     expect(query.get('from')).toBe('2026-08-31T03:00:00.000Z')
     expect(query.get('to')).toBe('2026-10-05T03:00:00.000Z')
 
@@ -364,7 +376,7 @@ describe('biblioteca no mês e na lista', () => {
     expect(within(monday).getByText('2 itens')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
 
-    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    const query = libraryQueries(http)[0]
     expect(query.get('sort')).toBe('recorded_desc')
     expect(query.get('limit')).toBe('50')
     expect(query.has('from')).toBe(false)

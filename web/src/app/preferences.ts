@@ -91,9 +91,27 @@ export function saveWorkHours({ start, end }: WorkHours): void {
   writeStored(STORAGE_KEYS.workHours, isDefault ? null : `${start}-${end}`)
 }
 
+/** O cartão Primeiros passos foi dispensado neste navegador. */
+export function readFirstStepsDismissed(): boolean {
+  return readStored(STORAGE_KEYS.firstStepsDismissed) === '1'
+}
+
+export function dismissFirstSteps(): void {
+  writeStored(STORAGE_KEYS.firstStepsDismissed, '1')
+}
+
+/** O passo "confira os tipos de agenda": a pessoa abriu Tipos de agenda neste navegador. */
+export function readAgendaTypesSeen(): boolean {
+  return readStored(STORAGE_KEYS.agendaTypesSeen) === '1'
+}
+
+export function markAgendaTypesSeen(): void {
+  writeStored(STORAGE_KEYS.agendaTypesSeen, '1')
+}
+
 /**
- * Volta densidade, movimento, expediente, abertura da biblioteca e o aviso do navegador ao padrão (o
- * tema é do theme.ts).
+ * Volta densidade, movimento, expediente, abertura da biblioteca, o aviso do navegador e o cartão
+ * Primeiros passos ao padrão (o tema é do theme.ts).
  */
 export function resetEnvironment(): void {
   for (const key of [
@@ -102,6 +120,8 @@ export function resetEnvironment(): void {
     STORAGE_KEYS.workHours,
     STORAGE_KEYS.libraryOpening,
     STORAGE_KEYS.notifyOutcomes,
+    STORAGE_KEYS.firstStepsDismissed,
+    STORAGE_KEYS.agendaTypesSeen,
   ]) {
     writeStored(key, null)
   }
