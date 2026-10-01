@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Result};
 use eclume_detect::{default_policy, Action, AppKey, AutoRecorder, Policy, Recording};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions, StopReason};
-use eclume_recorder::{AudioSource, Mixer, SilenceDetector};
+use eclume_recorder::{AudioSource, Mixer, SilenceDetector, SourceState};
 use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
@@ -67,6 +67,21 @@ pub enum NoteToggle {
     Started,
     /// Parou a nota em curso, que foi para a fila.
     Stopped(Box<QueuedRecording>),
+}
+
+/// Quanto o microfone pode ficar fora antes do aviso: a troca de perfil do Bluetooth costuma
+/// levar de 1 a 3 s.
+const MIC_LOST_AFTER: Duration = Duration::from_secs(5);
+/// O aviso da janela enquanto o microfone está fora.
+const MIC_LOST_NOTICE: &str = "gravando sem microfone: tentando reconectar";
+
+/// Uma transição do microfone da gravação em curso, vista por [`AppState::watch_sources`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MicChange {
+    /// Fora há mais de [`MIC_LOST_AFTER`].
+    Lost,
+    /// De volta depois de um [`MicChange::Lost`].
+    Back,
 }
 
 /// Uma gravação que terminou sozinha e foi fechada pelo reaper.
@@ -168,6 +183,8 @@ pub struct StatusView {
     /// Primeira execução, PAT antigo ou conta.
     pub connection: Connection,
     pub account: Option<Account>,
+    /// O microfone da gravação em curso está fora há mais de 5 s (reconectando).
+    pub mic_lost: bool,
 }
 
 /// "Testar conexão": quem o servidor reconhece e quando foi o último envio.
@@ -334,6 +351,8 @@ struct Inner {
     /// A gravação tirada de `active` e ainda fechando: o estado visível segue "Gravando",
     /// iniciar ou parar de novo é [`Busy`] e a varredura de órfãs a conta como viva.
     stopping: Option<Stopping>,
+    /// O microfone da gravação em curso está fora há mais de [`MIC_LOST_AFTER`].
+    mic_lost: bool,
     /// Quem iniciou `active`.
     origin: Option<Origin>,
     /// Há um início em curso (dispositivos abrindo), fora do lock.
@@ -531,6 +550,7 @@ impl AppState {
             inner: Mutex::new(Inner {
                 active: None,
                 stopping: None,
+                mic_lost: false,
                 origin: None,
                 starting: false,
                 syncing: false,
@@ -619,6 +639,7 @@ impl AppState {
             updated: inner.config.update_notice(CURRENT_VERSION).cloned(),
             connection: connection(&inner),
             account: inner.config.account.clone(),
+            mic_lost: inner.mic_lost,
         })
     }
 
@@ -734,6 +755,7 @@ impl AppState {
         inner.notice = (!opened.missing.is_empty())
             .then(|| format!("gravando sem {}", opened.missing.join("; ")));
         inner.active = Some(active);
+        inner.mic_lost = false;
         inner.origin = Some(origin);
         Ok(())
     }
@@ -763,6 +785,7 @@ impl AppState {
             .and_then(|closed| closed.deliver(&*self.lock_queue()?));
         let mut inner = self.inner()?;
         inner.stopping = None;
+        inner.mic_lost = false;
         inner.origin = None;
         if let Err(err) = &result {
             inner.notice = Some(format!("falha ao fechar a gravação: {err:#}"));
@@ -816,6 +839,50 @@ impl AppState {
                 }
             }
         }))
+    }
+
+    /// Vigia as fontes da gravação em curso: um microfone fora há mais de [`MIC_LOST_AFTER`] põe o
+    /// aviso na janela e o marcador "microfone perdido" no instante da queda; a volta limpa o aviso
+    /// e marca "microfone de volta". Chamada pelo reaper a cada segundo.
+    pub fn watch_sources(&self) -> Result<Option<MicChange>> {
+        let mut inner = self.inner()?;
+        let Some(active) = inner.active.as_ref() else {
+            return Ok(None);
+        };
+        let progress = active.progress();
+        let lost_since = progress
+            .source_states()
+            .into_iter()
+            .find_map(|state| match state {
+                SourceState::Reconnecting { since } => Some(since),
+                SourceState::Live => None,
+            });
+        let position_ms = progress.position_ms();
+        let id = active.id().to_string();
+        let change = match (lost_since, inner.mic_lost) {
+            (Some(since), false) if since.elapsed() >= MIC_LOST_AFTER => {
+                let out_ms = i64::try_from(since.elapsed().as_millis()).unwrap_or(i64::MAX);
+                let at_ms = position_ms.saturating_sub(out_ms).max(0);
+                self.lock_queue()?
+                    .add_marker(&id, at_ms, Some("microfone perdido"))?;
+                inner.mic_lost = true;
+                inner.notice = Some(MIC_LOST_NOTICE.into());
+                log::warn!("gravação {id}: microfone fora há {out_ms} ms");
+                MicChange::Lost
+            }
+            (None, true) => {
+                self.lock_queue()?
+                    .add_marker(&id, position_ms, Some("microfone de volta"))?;
+                inner.mic_lost = false;
+                if inner.notice.as_deref() == Some(MIC_LOST_NOTICE) {
+                    inner.notice = None;
+                }
+                log::info!("gravação {id}: microfone de volta");
+                MicChange::Back
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(change))
     }
 
     /// Fecha as gravações que ficaram em `recording` sem sessão viva (o `.part` estava preso ao
@@ -1446,6 +1513,94 @@ mod tests {
         fn drop(&mut self) {
             std::thread::sleep(Duration::from_secs(2));
         }
+    }
+
+    #[test]
+    fn estado_microfone_perdido_e_de_volta_viram_aviso_e_marcadores() {
+        use eclume_audio_capture::reconnect::{Opener, Reconnecting};
+        use eclume_audio_capture::ring;
+
+        /// Empurra 10 ms de tom a cada 10 ms até `stop` (ou `until`) e fecha o anel.
+        fn feed(mut writer: ring::RingWriter, until: Duration, stop: Arc<AtomicBool>) {
+            std::thread::spawn(move || {
+                let started = std::time::Instant::now();
+                while started.elapsed() < until && !stop.load(Ordering::Acquire) {
+                    writer.push_interleaved(160, 1, |i| (i as f32 * 0.1).sin() * 0.3);
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                writer.close();
+            });
+        }
+
+        let (state, dir) = state("microfone");
+        let stop = Arc::new(AtomicBool::new(false));
+        let back = Arc::new(AtomicBool::new(false));
+        let (writer, first) = ring::channel(1 << 14, 16_000);
+        feed(writer, Duration::from_millis(500), Arc::clone(&stop));
+        let mut first = Some(first);
+        let opener: Opener = {
+            let stop = Arc::clone(&stop);
+            let back = Arc::clone(&back);
+            Box::new(move || {
+                if let Some(first) = first.take() {
+                    return Ok(first);
+                }
+                if !back.load(Ordering::Acquire) {
+                    bail!("microfone fora");
+                }
+                let (writer, again) = ring::channel(1 << 14, 16_000);
+                feed(writer, Duration::from_secs(60), Arc::clone(&stop));
+                Ok(again)
+            })
+        };
+        let mic = Reconnecting::open(opener).unwrap();
+        state
+            .start_recording(|| {
+                Ok(OpenedSources {
+                    sources: vec![Box::new(mic)],
+                    missing: Vec::new(),
+                })
+            })
+            .unwrap();
+
+        // Fora por menos de 5 s: nada ainda.
+        std::thread::sleep(Duration::from_secs(2));
+        assert_eq!(state.watch_sources().unwrap(), None);
+        assert!(!state.view().unwrap().mic_lost);
+        let started = std::time::Instant::now();
+        let mut lost = None;
+        while lost.is_none() && started.elapsed() < Duration::from_secs(6) {
+            lost = state.watch_sources().unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(lost, Some(MicChange::Lost));
+        let view = state.view().unwrap();
+        assert!(view.mic_lost);
+        assert_eq!(view.notice.as_deref(), Some(MIC_LOST_NOTICE));
+        let marker = view.last_marker.unwrap();
+        assert_eq!(marker.note.as_deref(), Some("microfone perdido"));
+        // No instante da queda (~0,5 s de áudio), não no do aviso.
+        assert!(marker.at_ms < 1_500, "{} ms", marker.at_ms);
+
+        back.store(true, Ordering::Release);
+        let started = std::time::Instant::now();
+        let mut returned = None;
+        while returned.is_none() && started.elapsed() < Duration::from_secs(8) {
+            returned = state.watch_sources().unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(returned, Some(MicChange::Back));
+        let view = state.view().unwrap();
+        assert!(!view.mic_lost);
+        assert_eq!(view.notice, None);
+        assert_eq!(view.marker_count, 2);
+        assert_eq!(
+            view.last_marker.unwrap().note.as_deref(),
+            Some("microfone de volta")
+        );
+        state.stop_recording().unwrap();
+        stop.store(true, Ordering::Release);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
