@@ -2,14 +2,28 @@
 titulo: Grave sua primeira reunião
 topico: comecar
 paginas: [biblioteca, app-desktop]
-relacionados: [instalar-app-desktop, importar-arquivos, etapas-do-processamento]
-termos: [gravar, reunião, Teams, Meet, Zoom, microfone, áudio do computador]
+relacionados: [instalar-app-desktop, importar-arquivos, gravar-pelo-celular, etapas-do-processamento]
+termos: [gravar, reunião, Teams, Meet, Zoom, microfone, áudio do computador, primeiros passos]
 ordem: 1
-atualizado: 2026-09-27
+atualizado: 2026-10-01
 ---
 O jeito mais simples de gravar uma reunião é deixar o app desktop do eclume aberto no computador
 em que você participa dela. Ele cuida da gravação e do envio, e você só volta à biblioteca para
 ler o resumo.
+
+## Primeiros passos
+
+Enquanto a conta é nova, a biblioteca mostra o cartão **Primeiros passos**, com três passos:
+
+1. **Traga a primeira gravação:** importe um arquivo, grave com o app desktop ou
+   [pelo celular](/ajuda/gravar-pelo-celular).
+2. **Confira os tipos de agenda:** eles dão o título e o modelo do resumo de cada reunião. Veja
+   [Configure um tipo de agenda](/ajuda/configurar-tipo-de-agenda).
+3. **Ligue um locutor a uma pessoa:** na transcrição, diga quem é cada locutor. Veja
+   [Ligue um locutor a uma pessoa](/ajuda/ligar-locutor-a-pessoa).
+
+Cada passo fica marcado quando cumprido, e o cartão some sozinho com os três feitos. **Dispensar**
+o esconde neste navegador; **Restaurar os padrões**, em Ambiente, o traz de volta.
 
 ## Antes de começar
 

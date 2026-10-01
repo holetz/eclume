@@ -5,7 +5,7 @@ paginas: [gravacao]
 relacionados: [editar-resumo, versoes-do-resumo, conectar-assistente-mcp]
 termos: [chat, agente, ajustar, pedir, perguntar, reescrever, IA]
 ordem: 2
-atualizado: 2026-09-27
+atualizado: 2026-10-01
 ---
 O chat **Ajustar o resumo**, ao lado do resumo na página da gravação, pede mudanças ao agente do
 servidor em linguagem comum.
@@ -20,6 +20,18 @@ Escreva o que quer mudar, como faria com alguém que estava na reunião:
 
 O agente trabalha sobre o resumo atual e responde no chat. Quando a resposta muda o resumo, ela
 vira uma **versão nova**, marcada como chat.
+
+## Do resumo à regra
+
+O chat muda o resumo desta gravação. Para que as próximas já saiam assim, leve o ajuste à regra:
+
+- Depois de um ajuste que mudou o resumo, o chat oferece **Levar este pedido para as instruções do
+  tipo**. Ele abre o tipo de agenda da gravação com o seu pedido no fim das instruções do resumo.
+  Nada é salvo sozinho: revise o texto e salve.
+- O selo do tipo, acima do resumo, leva ao tipo em [Tipos de agenda](/config/agendas) para ajustar o
+  modelo.
+- Nos campos da gravação, **Editar a regra** abre o campo em
+  [Campos personalizados](/config/campos); o título leva ao tipo de agenda e as tags, a Tags.
 
 ## Quando o agente lê a transcrição
 
