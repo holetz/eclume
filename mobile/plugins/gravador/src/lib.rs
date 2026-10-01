@@ -83,6 +83,20 @@ impl<R: Runtime> Gravador<R> {
         Ok(())
     }
 
+    /// Agenda o trabalho de sync do WorkManager, que espera o Wi-Fi não medido (`atraso_ms`: o
+    /// prazo da folha "Gravação salva" ao parar; zero ao salvar). Encadeia depois de um sync em
+    /// curso, sem cancelá-lo.
+    pub fn agendar_sync(&self, atraso_ms: u64) -> Resultado<()> {
+        #[cfg(mobile)]
+        self.handle.run_mobile_plugin::<serde_json::Value>(
+            "agendarSync",
+            serde_json::json!({ "atrasoMs": atraso_ms }),
+        )?;
+        #[cfg(not(mobile))]
+        let _ = atraso_ms;
+        Ok(())
+    }
+
     /// Redesenha a notificação pelo estado atual do núcleo.
     pub fn atualizar_servico(&self) -> Resultado<()> {
         #[cfg(mobile)]

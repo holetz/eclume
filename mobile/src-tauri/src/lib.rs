@@ -89,6 +89,17 @@ pub(crate) mod servico {
         em_segundo_plano(app, "parar", |g| g.parar_servico(None));
     }
 
+    /// Agenda o sync do WorkManager para subir com o app fechado (fora da thread do comando).
+    pub fn agendar_sync<R: Runtime>(app: &AppHandle<R>, atraso: std::time::Duration) {
+        let app = app.clone();
+        let atraso_ms = u64::try_from(atraso.as_millis()).unwrap_or(u64::MAX);
+        std::thread::spawn(move || {
+            if let Err(err) = app.gravador().agendar_sync(atraso_ms) {
+                log::warn!("agendar o sync: {err}");
+            }
+        });
+    }
+
     /// A gravação parou sem pedido: o serviço avisa "A gravação parou" com o motivo e sai.
     pub fn parar_com_aviso<R: Runtime>(app: &AppHandle<R>, motivo: &'static str, duracao_ms: i64) {
         let app = app.clone();

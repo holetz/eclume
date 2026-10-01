@@ -11,6 +11,10 @@ use tauri::{AppHandle, Runtime};
 
 use crate::eventos;
 
+/// O prazo da folha "Gravação salva" (`DETAILS_WAIT_MS`), que segura o sync da gravação parada.
+const PRAZO_DA_FOLHA: std::time::Duration =
+    std::time::Duration::from_millis(eclume_recorder::queue::DETAILS_WAIT_MS.unsigned_abs());
+
 /// O erro de um comando, em texto para a UI mostrar.
 type Resultado<T> = Result<T, String>;
 
@@ -147,6 +151,9 @@ pub fn anotar_marcador<R: Runtime>(
 pub fn parar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
     let gravacao = com_nucleo(&app, Core::parar)?;
     crate::servico::parar(&app);
+    // A folha "Gravação salva" segura o sync até o prazo dela: o trabalho espera o mesmo prazo,
+    // para a gravação subir com o app fechado mesmo com a folha esquecida aberta.
+    crate::servico::agendar_sync(&app, PRAZO_DA_FOLHA);
     Ok(gravacao.id)
 }
 
@@ -160,8 +167,10 @@ pub fn salvar<R: Runtime>(
     com_nucleo(&app, |c| {
         c.salvar(&id, titulo.as_deref(), tipo_de_agenda_id.as_deref())
     })?;
-    // Ao parar, a sonda roda de novo: a gravação pode subir já.
+    // Ao parar, a sonda roda de novo: a gravação pode subir já, ou com o app fechado pelo
+    // trabalho de sync, no próximo Wi-Fi do eclume.
     eventos::ciclo_em_segundo_plano(&app, false);
+    crate::servico::agendar_sync(&app, std::time::Duration::ZERO);
     Ok(())
 }
 
