@@ -65,6 +65,7 @@ test('telas do usuário sem violação WCAG 2.1 A/AA, claro e escuro', async ({ 
     ['/pessoas', 'Pessoas'],
     ['/busca?q=turmas', 'Busca'],
     ['/config/campos', 'Campos personalizados'],
+    ['/config/automacao', 'Processamento automático'],
   ] as const) {
     await page.goto(path)
     await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible()

@@ -48,6 +48,7 @@ const VISTAS: Vista[] = [
       await page.locator('#importar-escolher').click()
     },
   },
+  { nome: 'config-geral', cenario: 'ocioso', pronta: '#tema .seg-opt', ir: aba('geral') },
   { nome: 'config-reunioes', cenario: 'ocioso', pronta: '#apps .list-row', ir: aba('reunioes') },
   { nome: 'config-audio', cenario: 'ocioso', pronta: '#atalhos .list-row', ir: aba('audio') },
   { nome: 'config-armazenamento', cenario: 'ocioso', pronta: '#espaco-usado:not(:empty)', ir: aba('armazenamento') },

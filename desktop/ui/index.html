@@ -257,7 +257,8 @@
           <h4 class="flush">Configurações</h4>
         </div>
         <div class="tabs tabs-flush" role="tablist">
-          <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="true">Reuniões</button>
+          <button type="button" class="tab" role="tab" data-aba="geral" aria-selected="true">Geral</button>
+          <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="false">Reuniões</button>
           <button type="button" class="tab" role="tab" data-aba="audio" aria-selected="false">Áudio</button>
           <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
           <button type="button" class="tab" role="tab" data-aba="pasta" aria-selected="false">Pasta</button>
@@ -271,24 +272,7 @@
         </div>
       </div>
 
-      <div data-painel="reunioes">
-        <div class="tray-section">
-          <label class="switch"><input type="checkbox" id="detectar" /><span class="track"></span>Detectar reuniões</label>
-          <span class="text-muted small"
-            >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
-          >
-        </div>
-        <div class="tray-section tray-section-list">
-          <div class="row row-between">
-            <span class="kicker">Quando uma reunião começa no</span>
-            <a href="#" class="small" id="restaurar-padroes">Restaurar padrões</a>
-          </div>
-          <div class="list" id="apps"></div>
-          <span class="text-muted small"
-            >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
-            parar.</span
-          >
-        </div>
+      <div data-painel="geral">
         <div class="tray-section">
           <span class="kicker">Aparência</span>
           <div class="list">
@@ -324,6 +308,26 @@
           >
           <span class="text-muted small"
             >De todas as gravações da conta: resumo pronto (com "Copiar"), pronta sem resumo ou com falha.</span
+          >
+        </div>
+      </div>
+
+      <div data-painel="reunioes" hidden>
+        <div class="tray-section">
+          <label class="switch"><input type="checkbox" id="detectar" /><span class="track"></span>Detectar reuniões</label>
+          <span class="text-muted small"
+            >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
+          >
+        </div>
+        <div class="tray-section tray-section-list">
+          <div class="row row-between">
+            <span class="kicker">Quando uma reunião começa no</span>
+            <a href="#" class="small" id="restaurar-padroes">Restaurar padrões</a>
+          </div>
+          <div class="list" id="apps"></div>
+          <span class="text-muted small"
+            >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
+            parar.</span
           >
         </div>
       </div>

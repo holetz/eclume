@@ -42,7 +42,7 @@ export function AgendaTypesPage() {
   return (
     <section className={styles.page}>
       <PageHead
-        kicker="Organizar"
+        kicker="Regras"
         title="Tipos de agenda"
         actions={
           <button type="button" className="btn btn-primary" onClick={() => select(NEW)}>

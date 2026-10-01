@@ -7,10 +7,23 @@ async function ultimaEntrada(page: Page): Promise<Entrada> {
   return page.evaluate(() => (window as unknown as { __mock: { estado: { ultimaEntrada: Entrada } } }).__mock.estado.ultimaEntrada)
 }
 
-test('Ctrl+, abre Reuniões com os 8 apps, o subtítulo do DS e a política de cada um', async ({ abrir }) => {
+test('Ctrl+, abre a aba Geral, com Aparência, Início e Avisos, e Reuniões fica só com a detecção', async ({ abrir }) => {
   const page = await abrir()
   await page.keyboard.press('Control+,')
   await expect(page.locator('[data-vista="configuracoes"]')).toBeVisible()
+  await expect(page.locator('[role="tab"]')).toHaveText(['Geral', 'Reuniões', 'Áudio', 'Armazenamento', 'Pasta', 'Servidor'])
+  await expect(page.locator('[data-aba="geral"]')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('[data-painel="geral"] .kicker')).toHaveText(['Aparência', 'Início', 'Avisos'])
+  await expect(page.locator('[data-painel="reunioes"]')).toBeHidden()
+  await page.locator('[data-aba="reunioes"]').click()
+  await expect(page.locator('[data-painel="geral"]')).toBeHidden()
+  await expect(page.locator('[data-painel="reunioes"] #tema, [data-painel="reunioes"] #avisar-resumo')).toHaveCount(0)
+})
+
+test('Reuniões tem os 8 apps, o subtítulo do DS e a política de cada um', async ({ abrir }) => {
+  const page = await abrir()
+  await page.keyboard.press('Control+,')
+  await page.locator('[data-aba="reunioes"]').click()
   await expect(page.locator('[data-aba="reunioes"]')).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator('#detectar')).toBeChecked()
   const linhas = page.locator('#apps .list-row')
@@ -32,7 +45,7 @@ test('Ctrl+, abre Reuniões com os 8 apps, o subtítulo do DS e a política de c
   await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
 })
 
-test('Reuniões: o aviso do fim do processamento vem ligado e desliga na hora', async ({ abrir }) => {
+test('Geral: o aviso do fim do processamento vem ligado e desliga na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await expect(page.locator('#avisar-resumo')).toBeChecked()
@@ -41,7 +54,7 @@ test('Reuniões: o aviso do fim do processamento vem ligado e desliga na hora', 
   expect((await ultimaEntrada(page)).notify_summary).toBe(false)
 })
 
-test('Início: iniciar com o computador vem ligado e desliga na hora', async ({ abrir }) => {
+test('Geral: iniciar com o computador vem ligado e desliga na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await expect(page.locator('#iniciar-com-o-sistema')).toBeChecked()
@@ -53,6 +66,7 @@ test('Início: iniciar com o computador vem ligado e desliga na hora', async ({ 
 test('mudar a política, desligar a detecção e restaurar os padrões salvam na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
+  await page.locator('[data-aba="reunioes"]').click()
   const zoom = page.locator('#apps .list-row[data-app="zoom"]')
   await zoom.locator('.seg-opt', { hasText: 'Gravar' }).click()
   await expect(zoom.locator('input[value="auto"]')).toBeChecked()
@@ -82,7 +96,7 @@ test('Armazenamento: retenção em três escolhas, pasta local, espaço e tentar
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="armazenamento"]').click()
   await expect(page.locator('[data-painel="armazenamento"]')).toBeVisible()
-  await expect(page.locator('[data-painel="reunioes"]')).toBeHidden()
+  await expect(page.locator('[data-painel="geral"]')).toBeHidden()
   await expect(page.locator('input[name="retencao"][value="dias"]')).toBeChecked()
   await expect(page.locator('#retencao-dias')).toHaveValue('7')
   await expect(page.locator('#pasta-local')).toHaveText('/home/ana/.local/share/eclume/gravacoes')

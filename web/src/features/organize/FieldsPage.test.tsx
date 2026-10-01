@@ -57,7 +57,7 @@ describe('campos personalizados', () => {
     mockFields()
     renderApp('/config/campos')
     expect(await screen.findByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeInTheDocument()
-    expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
+    expect(screen.getByText('Regras', { selector: '.kicker' })).toBeInTheDocument()
     await list()
     // O título vem dos tipos de agenda e as tags têm cadastro próprio: nenhum dos dois aparece aqui.
     const fields = within(screen.getByRole('list', { name: 'Campos' }))
@@ -69,9 +69,10 @@ describe('campos personalizados', () => {
     expect(fields.queryByRole('button', { name: 'Tags' })).toBeNull()
     expect(screen.queryByText(/Embutido/)).not.toBeInTheDocument()
     const main = within(screen.getByRole('main'))
-    expect(main.getByRole('link', { name: 'Tipos de agenda' })).toHaveAttribute('href', '/config/agendas')
-    expect(main.getByRole('link', { name: 'Tags' })).toHaveAttribute('href', '/tags')
-    expect(main.getByText(/As tags se configuram em/)).toBeInTheDocument()
+    // O texto aponta para a visão geral, e não para as telas de cada etapa.
+    expect(main.getByRole('link', { name: 'Processamento automático' })).toHaveAttribute('href', '/config/automacao')
+    expect(main.queryByRole('link', { name: 'Tipos de agenda' })).not.toBeInTheDocument()
+    expect(main.queryByRole('link', { name: 'Tags' })).not.toBeInTheDocument()
     expect(within(row('Cliente')).getByText('Seu campo · escolha')).toBeInTheDocument()
     expect(within(row('Cliente')).getByRole('switch', { name: 'Automático: Cliente' })).toBeChecked()
     expect(within(row('Cliente')).getByRole('button', { name: 'Cliente' })).toHaveAttribute('aria-current', 'true')

@@ -7,7 +7,7 @@ tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114, holetz/eclume#120
 maintainer: holetz
 ---
 
@@ -78,10 +78,10 @@ Na ordem do `index.html`:
 | `principal` | Main window, Voice note, Automatic recording, After an update | linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
 | `primeira-execucao` | First run | servidores conhecidos, conferência da impressão digital, e-mail e senha, e em "Avançado" o código de pareamento e o endereço |
 | `importar` | Import file | a data lida do arquivo escolhido com a origem e o progresso da conversão; a área de soltar recebe um arquivo arrastado ou abre o seletor de novo |
-| `configuracoes` | Settings · Meetings, Audio, Storage, Server | as quatro abas |
+| `configuracoes` | Settings · Meetings, Audio, Storage, Server | as seis abas, nesta ordem: Geral (Aparência, Início e Avisos; abre por padrão), Reuniões (detecção e política por app, com a parada automática), Áudio, Armazenamento, Pasta e Servidor; `app.ir("configuracoes", { aba })` abre outra |
 | `atalhos` | — (menu de ajuda) | a folha com os atalhos globais e os da janela |
 
-- **Tema.** "Aparência", na aba Reuniões, escolhe Sistema (o padrão), Claro ou Escuro
+- **Tema.** "Aparência", na aba Geral, escolhe Sistema (o padrão), Claro ou Escuro
   (`theme` na config, que o `status` também traz). Em Sistema, `data-theme` em `<html>` segue
   `prefers-color-scheme`, como o readme do DS pede, e acompanha a troca do sistema com o app
   aberto; Claro e Escuro vencem o sistema. O DS só tem o escuro sob `data-theme="dark"`, então o
@@ -130,7 +130,7 @@ Na ordem do `index.html`:
 
 ## Início com o computador
 
-- A aba de configurações tem a chave **Iniciar com o computador** (`#iniciar-com-o-sistema`, na
+- A aba Geral das configurações tem a chave **Iniciar com o computador** (`#iniciar-com-o-sistema`, na
   seção "Início", antes de "Avisos"), **ligada por padrão** e salva na hora como as outras.
 - A preferência é `Config.autostart` (padrão `true`, inclusive numa config de versão anterior). O
   app **concilia** o registro do sistema a ela a cada abertura e a cada salvar

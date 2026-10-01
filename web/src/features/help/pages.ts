@@ -10,6 +10,7 @@ export const HELP_PAGES = {
   pessoa: 'Pessoa',
   colecoes: 'Coleções',
   tags: 'Tags',
+  automacao: 'Processamento automático',
   campos: 'Campos personalizados',
   agendas: 'Tipos de agenda',
   mcp: 'Conexão MCP',

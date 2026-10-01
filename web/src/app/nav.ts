@@ -3,10 +3,14 @@
 // a spec dona registra o item aqui e a rota em routes.tsx, e `enabled: false` a mantém fora do menu
 // até ficar pronta. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem conta e
 // login próprios (/admin/entrar). Um item pode ser o destacado (`featured`): a barra lateral o desenha
-// antes dos grupos, como ação primária com ícone.
+// antes dos grupos, como ação primária com ícone. A barra lateral separa os dados da conta (Organizar)
+// das regras que agem sozinhas depois de cada gravação (Regras); a engrenagem agrupa os itens por
+// natureza (`part`), com um rótulo por parte.
 import { MessageSquareText, type LucideIcon } from 'lucide-react'
 
-type NavGroup = 'Gravações' | 'Organizar' | 'Minhas configurações' | 'Ajuda'
+type NavGroup = 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
+/** As partes da engrenagem, na ordem em que aparecem. */
+export type NavPart = 'Conta e privacidade' | 'Aparelhos' | 'Integrações' | 'Ambiente'
 type NavSection = 'main' | 'header'
 
 interface NavEntry {
@@ -16,6 +20,8 @@ interface NavEntry {
   enabled: boolean
   /** Prefixos de rota que também acendem o item (a gravação pertence à Biblioteca). */
   matches?: string[]
+  /** A parte da engrenagem em que o item mora (só na seção `header`). */
+  part?: NavPart
 }
 
 interface GroupedItem extends NavEntry {
@@ -45,14 +51,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
   // O cadastro de tags fica ao lado das coleções (holetz/eclume#78).
   { to: '/tags', label: 'Tags', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/campos', label: 'Campos personalizados', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/agendas', label: 'Tipos de agenda', group: 'Organizar', section: 'main', enabled: true },
-  { to: '/config/conta', label: 'Conta', group: 'Minhas configurações', section: 'header', enabled: true },
-  { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', section: 'header', enabled: true },
-  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', section: 'header', enabled: true },
-  { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', section: 'header', enabled: true },
-  { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', section: 'header', enabled: true },
-  { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', section: 'header', enabled: true },
+  // Regras: o que o eclume faz sozinho depois de cada gravação, com a visão geral à frente (holetz/eclume#120).
+  { to: '/config/automacao', label: 'Processamento automático', group: 'Regras', section: 'main', enabled: true },
+  { to: '/config/agendas', label: 'Tipos de agenda', group: 'Regras', section: 'main', enabled: true },
+  { to: '/config/campos', label: 'Campos personalizados', group: 'Regras', section: 'main', enabled: true },
+  { to: '/config/conta', label: 'Conta', group: 'Minhas configurações', part: 'Conta e privacidade', section: 'header', enabled: true },
+  { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', part: 'Aparelhos', section: 'header', enabled: true },
+  { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', part: 'Aparelhos', section: 'header', enabled: true },
+  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', part: 'Integrações', section: 'header', enabled: true },
+  { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', part: 'Integrações', section: 'header', enabled: true },
+  { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', part: 'Ambiente', section: 'header', enabled: true },
   { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'header', enabled: true },
 ]
 

@@ -155,6 +155,7 @@ for (const viewport of [DESKTOP, MOBILE]) {
 
     const routes = [
       { name: 'pessoas', route: '/pessoas', heading: 'Pessoas' },
+      { name: 'automacao', route: '/config/automacao', heading: 'Processamento automático' },
       { name: 'campos', route: '/config/campos', heading: 'Campos personalizados' },
       { name: 'tags', route: '/tags', heading: 'Tags' },
       { name: 'agendas', route: '/config/agendas', heading: 'Tipos de agenda' },

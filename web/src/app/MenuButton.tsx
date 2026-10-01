@@ -1,15 +1,19 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 
+export interface MenuAction {
+  key: string
+  label: ReactNode
+  /** Texto curto à direita (`<kbd>`), como o formato de exportação. */
+  kbd?: string
+  disabled?: boolean
+  onSelect: () => void
+}
+
 export type MenuEntry =
-  | {
-      key: string
-      label: ReactNode
-      /** Texto curto à direita (`<kbd>`), como o formato de exportação. */
-      kbd?: string
-      disabled?: boolean
-      onSelect: () => void
-    }
+  | MenuAction
   | 'separator'
+  /** Rótulo de uma parte do menu: não focável, separa e nomeia os itens que vêm abaixo. */
+  | { heading: string }
 
 interface MenuButtonProps {
   /** Conteúdo do botão (ícone e rótulo). */
@@ -24,7 +28,8 @@ interface MenuButtonProps {
 
 /**
  * Botão que abre um `.menu` do DS, com o teclado do padrão ARIA de menu: setas, Home/End, Enter ou
- * Espaço e Esc; o clique fora fecha. O item focado leva `data-active`.
+ * Espaço e Esc; o clique fora fecha. O item focado leva `data-active`. Um `{ heading }` rotula a parte
+ * que começa nele, como separador com nome: o teclado passa por cima dele.
  */
 export function MenuButton({ children, items, className = 'btn btn-secondary', label, buttonLabel }: MenuButtonProps) {
   const [open, setOpen] = useState(false)
@@ -34,7 +39,7 @@ export function MenuButton({ children, items, className = 'btn btn-secondary', l
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const buttonId = useId()
   const menuId = useId()
-  const actions = items.filter((item) => item !== 'separator')
+  const actions = items.filter((item): item is MenuAction => item !== 'separator' && !('heading' in item))
 
   useEffect(() => {
     if (!open) return
@@ -130,6 +135,12 @@ export function MenuButton({ children, items, className = 'btn btn-secondary', l
         >
           {items.map((item, position) => {
             if (item === 'separator') return <div key={`sep-${position}`} className="menu-sep" role="separator" />
+            if ('heading' in item)
+              return (
+                <div key={`heading-${position}`} className="menu-heading" role="separator" aria-label={item.heading}>
+                  {item.heading}
+                </div>
+              )
             const current = ++index
             return (
               <button

@@ -40,7 +40,10 @@ export function PeoplePage() {
           </HelpHint>
         }
       />
-      <p className="text-muted">Quem fala nas suas gravações. Ligue os locutores a elas na página da gravação.</p>
+      <p className="text-muted">
+        Quem fala nas suas gravações. Ligue os locutores a elas na página da gravação, ou deixe o eclume ligar pela
+        voz depois de cada gravação: veja o passo em <Link to="/config/automacao">Processamento automático</Link>.
+      </p>
       <AutoAssignCard />
 
       <div className="toolbar">

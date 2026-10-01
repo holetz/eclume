@@ -1,4 +1,5 @@
-// Configurações em abas, como o DS mostra: Reuniões (detecção e política por app), Áudio
+// Configurações em abas, como o DS mostra: Geral (aparência, início com o computador e avisos), aberta
+// por padrão; Reuniões (detecção e política por app, que inclui a parada automática), Áudio
 // (microfone, áudio do sistema, teste de nível de cada fonte, atalhos globais e parada por silêncio),
 // Armazenamento (retenção, pasta local, espaço e "Tentar de novo as falhas"), Sincronização (a pasta
 // que espelha resumos e transcrições, com o estado e "Sincronizar agora") e Servidor (a conta
@@ -641,7 +642,7 @@ export function montar(secao, app) {
         mostrarAviso(String(falha));
       }
       desenhar();
-      abrirAba(params?.aba ?? "reunioes");
+      abrirAba(params?.aba ?? "geral");
     },
   };
 }

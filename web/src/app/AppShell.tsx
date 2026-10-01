@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { lazy, Suspense, useId, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { CircleHelp, LogOut, Settings } from 'lucide-react'
 import styles from './AppShell.module.css'
@@ -7,13 +7,15 @@ import { ConnectionBanner } from './ConnectionBanner'
 import { useImportContext } from '../features/import/importContext'
 import { ImportProvider } from '../features/import/ImportProvider'
 import { useHasAnyRecording } from '../features/library/anyRecording'
-import { ConfirmDialog } from './ConfirmDialog'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
 import { MenuButton, type MenuEntry } from './MenuButton'
 import { featuredItem, isItemActive, navGroups, type FeaturedItem, type NavGroupEntry } from './nav'
 import { useProcessingWatch } from './processingWatch'
 import { ShellFrame } from './ShellFrame'
+
+// A confirmação de sair durante o envio é rara: carrega sob demanda, fora do JS inicial.
+const ConfirmDialog = lazy(() => import('./ConfirmDialog').then((module) => ({ default: module.ConfirmDialog })))
 
 export interface ShellUser {
   name: string
@@ -81,11 +83,15 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
   const { sending } = useImportContext()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const itemsOf = (group: string): MenuEntry[] =>
-    (header.find((entry) => entry.group === group)?.items ?? []).map((item) => ({
-      key: item.to,
-      label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
-      onSelect: () => navigate(item.to),
-    }))
+    (header.find((entry) => entry.group === group)?.items ?? []).flatMap((item, index, list) => {
+      const entry: MenuEntry = {
+        key: item.to,
+        label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
+        onSelect: () => navigate(item.to),
+      }
+      // Cada parte da engrenagem abre com o rótulo dela.
+      return item.part && item.part !== list[index - 1]?.part ? [{ heading: item.part }, entry] : [entry]
+    })
   const helpItems: MenuEntry[] = [
     { key: 'pagina', label: 'Ajuda desta página', kbd: '?', onSelect: () => help?.openHelp() },
     ...itemsOf('Ajuda'),
@@ -122,17 +128,19 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
         </button>
       </div>
       {confirmLogout && (
-        <ConfirmDialog
-          title="Sair durante o envio?"
-          confirmLabel="Sair"
-          onCancel={() => setConfirmLogout(false)}
-          onConfirm={() => {
-            setConfirmLogout(false)
-            onLogout()
-          }}
-        >
-          <p>O envio em andamento será interrompido.</p>
-        </ConfirmDialog>
+        <Suspense fallback={null}>
+          <ConfirmDialog
+            title="Sair durante o envio?"
+            confirmLabel="Sair"
+            onCancel={() => setConfirmLogout(false)}
+            onConfirm={() => {
+              setConfirmLogout(false)
+              onLogout()
+            }}
+          >
+            <p>O envio em andamento será interrompido.</p>
+          </ConfirmDialog>
+        </Suspense>
       )}
     </div>
   )

@@ -24,7 +24,7 @@ export function FieldsPage() {
   return (
     <section className={styles.page}>
       <PageHead
-        kicker="Organizar"
+        kicker="Regras"
         title="Campos personalizados"
         actions={
           <button type="button" className="btn btn-primary" onClick={() => select(NEW)}>
@@ -34,8 +34,8 @@ export function FieldsPage() {
       />
       <p className="text-muted">
         O que o eclume preenche em toda gravação depois da transcrição, cada campo com a regra que o agente
-        segue. O título vem do tipo de agenda da gravação: ajuste-o em{' '}
-        <Link to="/config/agendas">Tipos de agenda</Link>. As tags se configuram em <Link to="/tags">Tags</Link>.
+        segue. O título, as tags e o resto do que acontece sozinho depois de cada gravação estão em{' '}
+        <Link to="/config/automacao">Processamento automático</Link>.
       </p>
 
       {fields.isPending && <p role="status">Carregando campos…</p>}
