@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130
 maintainer: holetz
 ---
 
@@ -102,10 +102,26 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   confirmados há mais de 7 dias; "Excluir sincronizadas" (o aviso de pouco espaço) apaga já.
 - Os **tipos de agenda** da folha ficam em cache na config e são relidos quando a sonda roda
   (`GET /agenda-types`, que desde a 2.4.0 aceita o `recordings:read` da credencial de dispositivo).
-- **Em segundo plano**, o `SyncWorker` do WorkManager (periódico de 15 min e um único ao ganhar
-  Wi‑Fi, só `UNMETERED`) chama `syncPendentes` pela ponte (`ciclo_do_worker`), que parte do
-  Wi‑Fi não medido que o WorkManager garante (o processo aberto só para ele não tem a tela que o
-  avisaria) e faz a sonda antes de subir.
+- **Em segundo plano**, o `SyncWorker` do WorkManager (só `UNMETERED`) sobe com o app fechado.
+  Gatilhos: o periódico de 15 min e uma passada na abertura (`KEEP`), e `agendarSync` em Parar
+  (com o prazo da folha, 10 min), Salvar e Pular, no nome único `eclume-sync-ao-conectar` com
+  `APPEND_OR_REPLACE`: encadeia depois de um sync em curso, sem cancelá-lo. O worker é um
+  `CoroutineWorker`: `sondarPendentes` (sonda e pendentes, partindo do Wi‑Fi não medido que o
+  WorkManager garante) decide; na rede do eclume e com algo a subir, ele entra em **primeiro plano
+  `dataSync`** (canal `sync`, "Enviando N gravações"), fora do limite de 10 min do WorkManager; se o
+  Android recusar (Android 12+ sem a isenção de bateria), segue como trabalho comum. O sync
+  (`syncPendentes`, `ciclo_do_worker`) roda em `Dispatchers.IO`. O resultado é `success` quando
+  subiu tudo ou não havia o que subir, e **`retry`** quando o ciclo deu erro, foi interrompido ou
+  alguma gravação falhou (backoff exponencial a partir de 1 min; o backoff do núcleo decide que
+  falha está vencida).
+- **Interrupção por requisição:** o `Medidor` tem a marca `interrompido`, ligada por
+  `mudou_rede(false)` (o callback de rede do sistema, na hora, por `EclumeCore.rede`, também no
+  processo aberto só pelo worker, e a leitura de 5 s) e por `interromper_sync()` (o worker parado
+  pelo sistema: o cancelamento da corrotina chama `EclumeCore.interromperSync`), e desligada por
+  `preparar_sync` sob a trava do núcleo. Com ela, o `Contador` devolve `SyncInterrupted` (do
+  `eclume-recorder`) sem tocar a rede, o `Client` não retenta, e `sync_pending` devolve a gravação a
+  `pending` sem gastar tentativa (`Queue::release_claim`) e encerra a passada; o próximo Wi‑Fi
+  retoma das partes que faltam no servidor. O desktop não aciona a interrupção.
 
 ## Sessão de gravação
 
@@ -156,10 +172,10 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 | `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`; no `load`, acompanha a rede e agenda o `SyncWorker` |
 | `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao`; na API 29+, `registerAudioRecordingCallback` enquanto grava (removido ao encerrar e no `onDestroy`): quando `isClientSilenced()` muda, `EclumeCore.acao("silenciado" \| "audivel")`, que marca "silenciado pelo sistema". Abaixo da API 29 não há sinal |
 | `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h", ou "Microfone desconectado · reconectando", ou "Silenciado pelo sistema"; Pausar/Continuar, Marcador e Parar |
-| `EclumeCore` | `external fun acao`, `estado` e `syncPendentes`, implementadas em `src-tauri/src/jni.rs` sobre o núcleo global; devolvem JSON |
+| `EclumeCore` | `external fun acao`, `estado`, `syncPendentes` (com `interrompido`), `sondarPendentes`, `rede(wifiNaoMedido)` e `interromperSync`, implementadas em `src-tauri/src/jni.rs` sobre o núcleo global; devolvem JSON |
 | `Descoberta` | `NsdManager` em `_eclume._tcp` (`registerServiceInfoCallback` na API 34+), TXT cru ao núcleo, que o interpreta por `discovery::parse` |
 | `Conectividade`, `Dispositivo` | Wi‑Fi não medido; bateria, espaço livre, `Build.MODEL` e os recortes de borda a borda em dp |
-| `SyncWorker`, `Atualizador` | o sync do WorkManager; o instalador do sistema pelo `FileProvider` do app (o APK fica no cache) |
+| `SyncWorker`, `Atualizador` | o sync do WorkManager (`CoroutineWorker`, primeiro plano `dataSync` pelo `SystemForegroundService` com `foregroundServiceType="dataSync"` mesclado no manifesto, `agendarSync`); o instalador do sistema pelo `FileProvider` do app (o APK fica no cache) |
 
 - O Rust chama o plugin sempre **fora da thread do comando** (o Kotlin responde na thread de quem
   chama). `gravar` é `async`: numa thread de bloqueio, abre a gravação e espera o
@@ -176,7 +192,8 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   política o restringe). Antes do primeiro Gravar com `isencaoDeBateria: pedir`, o Início explica e
   oferece pedir; Configurações mostram o estado e oferecem pedir depois.
 - **Manifesto** (app e plugin): `RECORD_AUDIO`, `FOREGROUND_SERVICE`,
-  `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE`,
+  `FOREGROUND_SERVICE_MICROPHONE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`,
+  `ACCESS_NETWORK_STATE`,
   `INTERNET`, `REQUEST_INSTALL_PACKAGES`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `CAMERA` (do
   leitor de QR) e `ACCESS_LOCAL_NETWORK`,
   declarada à frente do `targetSdk 37`; `network_security_config` sem texto claro (o HTTP do
@@ -207,8 +224,9 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Permissões:** microfone negado mostra "Abrir configurações do app"; notificações bloqueadas
   viram a faixa "Notificações bloqueadas" no Início, com o mesmo botão.
 - **UI** (`mobile/ui/src`): React + TS, função do `EstadoApp` (`app/estado.ts`), com a ponte tipada
-  (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia fiel do DS (a camada mobile
-  `.m-*`), conferida contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
+  (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia do DS gerada de
+  `design-system/styles.css` pelo `design-system/sincronizar.py` (a camada mobile `.m-*`), conferida
+  pelo `test_sincronizar.py` e contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
   `tsconfig.node.json`, porque lê o arquivo do disco); ajustes de produto em `app.css`. Nenhum
   `style` fixo nas telas: espaços e tamanhos são classes do `app.css` com `--space-*` e os
   tamanhos do DS, e `style` só leva custom property (o `--h` das barras do medidor); o
@@ -232,10 +250,11 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 ## Testes e prova
 
 - **Núcleo** (`cargo test -p eclume-mobile-core`): a conexão pelos três caminhos, a rede, o sync
-  inteiro, a retenção, a atualização e a sessão, com um transporte roteirizado
+  inteiro (com o Wi‑Fi caindo entre as partes e a retomada), a sonda e o relatório do worker, a
+  retenção, a atualização e a sessão, com um transporte roteirizado
   (`crates/core/tests/comum`) e uma fonte sintética em tempo real no lugar do microfone.
-- **Plugin** (`./gradlew testDebugUnitTest` em `gen/android`): os textos da notificação e dos
-  avisos, as três respostas do núcleo (`RespostaDoNucleo`, com o `org.json` real só nos testes), as
+- **Plugin** (`./gradlew testDebugUnitTest` em `gen/android`): a decisão `success`/`retry` e o
+  primeiro plano do `SyncWorker`, os textos da notificação e dos avisos, as três respostas do núcleo (`RespostaDoNucleo`, com o `org.json` real só nos testes), as
   ações, a regra do Wi‑Fi, a bateria e a isenção, o TXT e a autoridade do `FileProvider`.
 - **App** (`cargo test -p eclume-mobile`): `responder` transforma erro e pânico em JSON, e o
   intervalo do laço por visibilidade.

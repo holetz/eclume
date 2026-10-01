@@ -28,6 +28,26 @@ pub trait MeetingDetector: Send {
     fn poll(&mut self) -> Option<MeetingEvent>;
 }
 
+/// O sync foi interrompido de propósito (a rede do eclume caiu, o sistema parou o trabalho de
+/// sync): não é falha da gravação. Qualquer transporte pode devolvê-lo; o cliente HTTP não o
+/// retenta, e [`sync_pending`] devolve a gravação a `pending` sem gastar tentativa e encerra a
+/// passada. Só o celular o aciona.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SyncInterrupted;
+
+impl std::fmt::Display for SyncInterrupted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("sync interrompido")
+    }
+}
+
+impl std::error::Error for SyncInterrupted {}
+
+/// Se a cadeia do erro traz um [`SyncInterrupted`].
+pub fn is_interrupted(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| cause.is::<SyncInterrupted>())
+}
+
 /// Resultado de uma passada de sync.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SyncReport {
@@ -37,7 +57,8 @@ pub struct SyncReport {
 
 /// Sincroniza, uma a uma, as gravações `pending` da fila. Cada falha fica registrada na própria
 /// gravação e não interrompe as demais; as falhas voltam à fila por [`Queue::retry_due`], no
-/// prazo do backoff que [`Queue::mark_failed`] agenda.
+/// prazo do backoff que [`Queue::mark_failed`] agenda. Um [`SyncInterrupted`] na cadeia do erro
+/// devolve a gravação a `pending` ([`Queue::release_claim`]) e encerra a passada.
 pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<SyncReport> {
     let mut report = SyncReport::default();
     loop {
@@ -50,6 +71,11 @@ pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<Syn
             Ok(remote_id) => {
                 lock(queue)?.mark_synced(&recording.id, &remote_id)?;
                 report.synced += 1;
+            }
+            Err(err) if is_interrupted(&err) => {
+                lock(queue)?.release_claim(&recording.id)?;
+                log::info!("sync interrompido; {} volta à fila", recording.id);
+                return Ok(report);
             }
             Err(err) => {
                 lock(queue)?.mark_failed(&recording.id, &format!("{err:#}"))?;
@@ -82,6 +108,51 @@ mod tests {
                 Ok(format!("srv-{}", recording.id))
             }
         }
+    }
+
+    /// Sobe a primeira e é interrompido na segunda.
+    struct InterruptedUploader;
+
+    impl Uploader for InterruptedUploader {
+        fn upload(&self, recording: &QueuedRecording) -> Result<String> {
+            if recording.id == "segunda" {
+                Err(anyhow::Error::new(SyncInterrupted).context("PUT da parte 2"))
+            } else {
+                Ok(format!("srv-{}", recording.id))
+            }
+        }
+    }
+
+    #[test]
+    fn sync_interrompido_devolve_a_gravacao_sem_gastar_tentativa() {
+        let queue = Queue::open_in_memory().unwrap();
+        for (i, id) in ["primeira", "segunda", "terceira"].iter().enumerate() {
+            let started = i as i64;
+            queue
+                .begin(id, Path::new("/tmp/x.ogg.part"), started)
+                .unwrap();
+            queue
+                .finish(id, Path::new("/tmp/x.ogg"), started + 1, 1, 1)
+                .unwrap();
+        }
+        let queue = Mutex::new(queue);
+
+        let report = sync_pending(&queue, &InterruptedUploader).unwrap();
+        assert_eq!(
+            report,
+            SyncReport {
+                synced: 1,
+                failed: 0
+            }
+        );
+        let queue = queue.into_inner().unwrap();
+        let segunda = queue.get("segunda").unwrap().unwrap();
+        assert_eq!(segunda.status, Status::Pending);
+        assert_eq!(segunda.attempts, 0);
+        assert_eq!(segunda.last_error, None);
+        // A passada parou: a terceira nem foi tentada.
+        let terceira = queue.get("terceira").unwrap().unwrap();
+        assert_eq!((terceira.status, terceira.attempts), (Status::Pending, 0));
     }
 
     #[test]

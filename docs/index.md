@@ -20,7 +20,7 @@ canônicos em inglês kebab-case; **a prosa segue o idioma do repositório (port
 
 - `standards/` = "como **NÓS** fazemos (atual)"; regra acordada mas não provada fica como `authority: background`.
 - `concepts/` = "o que **entendemos**" (explicativo, não vinculante).
-- A **caixa de tarefas** vive fora deste bundle, no workspace de specs gerido pelo Quenching (backend GitHub, `holetz/eclume`). O plano de construção é o épico `holetz/eclume#1`.
+- A **caixa de tarefas** vive fora deste bundle, no workspace de specs gerido pelo Quenching (backend GitHub, `holetz/eclume`). A direção do produto está em [vision/](vision/index.md); o épico `holetz/eclume#1` é o registro da primeira construção.
 - Homes ainda vazias — `catalog/`, `external/`, `tutorials/`, `how-to/`, `explanation/` — são instaladas quando o primeiro doc chegar.
 
 **Resolvendo um termo.** Palavra, sigla ou codinome desconhecido? Procure primeiro no

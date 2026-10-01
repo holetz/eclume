@@ -1,0 +1,35 @@
+<!-- @dsCard group="Components" name="Recording parts" subtitle="Pipeline, compact player, collapsed transcript, summary document, agent chat and filled fields" viewport="960x1000" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Recording parts</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:960px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-8) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-3)}.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-6);align-items:start}</style>
+</head>
+<body>
+<main class="demo">
+<div class="demo-head">Processing pipeline</div>
+<ol class="pipeline"><li data-state="done">Audio received</li><li data-state="done">Preprocessing</li><li data-state="done">Transcription</li><li data-state="active">Filling fields</li><li>Agenda type</li><li>Summary</li></ol>
+<ol class="pipeline" style="margin-top:12px"><li data-state="done">Audio received</li><li data-state="done">Preprocessing</li><li data-state="failed">Transcription failed</li><li data-state="skipped">Filling fields</li></ol>
+<div class="demo-head">Compact player and collapsed transcript</div>
+<div class="player"><button type="button" class="btn btn-primary btn-icon" aria-label="Play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z"></path></svg></button><span>00:03:27</span><progress class="progress" value="5" max="100"></progress><span class="text-muted">01:12:04</span><button type="button" class="btn btn-ghost btn-sm">1×</button></div>
+<details class="disclosure"><summary>Transcript<span class="text-muted">4 speakers · 612 segments</span></summary><div class="segment"><div class="segment-who"><span class="speaker speaker-1">Ana Ribeiro</span><span class="timecode">00:03:12</span></div><p class="segment-text">Let's start with the pilot numbers.</p></div></details>
+<div class="demo-head">Summary document and chat</div>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;border:2px solid var(--color-divider);min-height:440px">
+<div style="padding:var(--space-4)"><div class="doc-bar"><span class="tag tag-neutral">Template · Team meeting</span><span>Generated 11:42</span><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm">Edit</button><button type="button" class="btn btn-ghost btn-sm">Compare with generated</button></div>
+<div class="doc" style="margin-top:16px"><h2>Decisions</h2><ul><li>Access for the two waiting teams is the first priority.</li><li>Diego owns access this week.</li></ul><h2>Next steps</h2><ul><li>Carla brings the per-team breakdown on Thursday.</li></ul></div></div>
+<aside class="chat"><div class="chat-head"><strong>Adjust the summary</strong><span class="text-muted" style="font-size:12px">Works on the summary. Reads the transcript only when needed.</span></div>
+<div class="chat-log"><div class="msg msg-user"><span class="msg-who">You</span>Add who raised the backlog issue.</div><div class="msg msg-agent"><span class="msg-who">eclume</span><span class="msg-note">Read the transcript, 00:03:20–00:04:20</span>Added: "Bruno raised that the onboarding backlog doubled."</div></div>
+<div class="composer"><textarea class="input" placeholder="Ask for a change"></textarea><div class="composer-row"><span>Changes are kept as a new version</span><button type="button" class="btn btn-primary btn-sm">Send</button></div></div></aside></div>
+<div class="demo-head">Filled fields · auto until accepted or edited</div>
+<div class="props" style="max-width:360px">
+<div class="prop"><span class="prop-label">Title</span><span class="prop-value">Quarterly review · regional team <span class="origin">Auto</span></span><span class="prop-actions"><button type="button" class="btn btn-ghost btn-sm">Accept</button><button type="button" class="btn btn-ghost btn-sm">Edit</button></span></div>
+<div class="prop"><span class="prop-label">Tags</span><span class="prop-value"><span class="tag tag-accent">backlog</span><span class="tag tag-accent">access</span> <span class="origin">Auto</span></span><span class="prop-actions"><button type="button" class="btn btn-ghost btn-sm">Accept</button><button type="button" class="btn btn-ghost btn-sm">Edit</button></span></div>
+<div class="prop"><span class="prop-label">Agenda type</span><span class="prop-value">Team meeting <span class="origin">Auto</span></span><span class="prop-actions"><button type="button" class="btn btn-ghost btn-sm">Change</button></span></div>
+</div>
+<p class="note">The dashed <code>.origin</code> marks a value the server filled in. It disappears when the user accepts it and turns solid (<code>.origin-edited</code>) once they edit it.</p>
+</main>
+</body>
+</html>

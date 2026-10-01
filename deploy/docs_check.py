@@ -196,7 +196,11 @@ def arquivos(raiz: Path) -> list[Path]:
         *raiz.glob("*/README.md"),
         *raiz.glob("*/INSTALACAO.md"),
     }
-    return sorted(p for p in conjunto if "node_modules" not in p.parts)
+    # design-system/ é o export do Claude Design, versionado como veio (em inglês, com os caminhos do
+    # projeto de desenho); não é documentação do repositório. No Windows, `*/README.md` casaria o
+    # `readme.md` dele.
+    fora = {"node_modules", "design-system"}
+    return sorted(p for p in conjunto if not fora.intersection(p.relative_to(raiz).parts))
 
 
 def verificar(raiz: Path) -> list[str]:

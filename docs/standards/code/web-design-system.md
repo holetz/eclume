@@ -1,21 +1,22 @@
 ---
 type: standard
 title: Design System do eclume no web
-description: O web do eclume usa o Design System do eclume (o repositório eclume-design) como base visual única — eclume.css copiado fiel do styles.css, app.css só com o que o DS não tem, fontes Archivo e IBM Plex Mono servidas pelo build, ícones Lucide com ponta quadrada e tema escuro por data-theme — e este é o jeito de sincronizar, o mapa dos tokens antigos e as classes de produto.
+description: O web do eclume usa o Design System do eclume (versionado em design-system/) como base visual única — eclume.css gerado do styles.css pelo sincronizar.py, app.css só com o que o DS não tem, fontes Archivo e IBM Plex Mono servidas pelo build, ícones Lucide com ponta quadrada e tema escuro por data-theme — e este é o fluxo de uma mudança visual, o mapa dos tokens antigos e as classes de produto.
 resource: web/src/styles/**, web/src/main.tsx, web/src/app/theme.ts, web/src/app/Brand.tsx, web/public/favicon.svg, web/index.html, web/src/**/*.module.css
 tags: [code, web, design-system, css, tema, acessibilidade]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#36, holetz/eclume#122
+source: holetz/eclume#36, holetz/eclume#122, holetz/eclume#130
 maintainer: holetz
 ---
 
 # Design System do eclume no web
 
-O **Design System do eclume** é o repositório `eclume-design` (espelho local em
-`C:\Projetos\eclume-design`): `styles.css` com tokens e classes, `foundations/`, `components/`,
-`examples/` (as telas do mapa v6) e `templates/`. Ele é escrito em inglês; o produto fica em
+O **Design System do eclume** vive versionado em `design-system/`, na raiz do monorepo:
+`styles.css` com tokens e classes (a fonte única da interface), `foundations/`, `components/`,
+`examples/` (as telas do mapa v6), `templates/`, `assets/`, `theme.html`/`theme.json`, `readme.md`,
+`github.md` e `_ds_manifest.json`, como vieram do export do Claude Design. Ele é escrito em inglês; o produto fica em
 pt-BR, com as rotas de [frontend-web.md](frontend-web.md). O web não inventa visual: toma cor,
 fonte, espaçamento, raio e sombra dos tokens do DS e monta as telas com as classes dele.
 
@@ -31,22 +32,26 @@ shell deixava de valer no build de produção:
 | Arquivo | O que tem | Quem edita |
 |---|---|---|
 | `fonts.css` | `@fontsource/archivo` 400, 500, 600, 700 e 800 e `@fontsource/ibm-plex-mono` 400 e 500 | quem muda os pesos usados |
-| `eclume.css` | cópia fiel do `styles.css` do DS, menos o `@import` do Google Fonts | ninguém: só o sync |
+| `eclume.css` | gerado de `design-system/styles.css`, menos o `@import` do Google Fonts | ninguém: só o `sincronizar.py` |
 | `app.css` | a camada de produto, só o que o DS não define | as specs do web |
 
 - **`eclume.css` não se edita.** Ajuste de produto vai em `app.css` ou no CSS Module da tela. O
-  cabeçalho registra a origem e a data do sync. A camada mobile do DS (`.phone`, `.m-*`) vem junto,
+  cabeçalho fixo (sem data) registra a origem. A camada mobile do DS (`.phone`, `.m-*`) vem junto,
   inerte: a cópia fiel vale mais que a poda.
-- **Sincronizar com o `eclume-design`** é copiar o `styles.css` de novo e tirar a mesma linha:
+- **Uma mudança visual** muda `design-system/` — à mão ou pelo export do Claude Design, que
+  continua sendo onde se desenha, revisado como diff sobre a pasta — e regenera as três cópias
+  (`web/src/styles/eclume.css`, `desktop/ui/eclume.css`, `mobile/ui/src/styles/eclume.css`), no
+  mesmo commit da fonte:
 
   ```bash
-  { printf '/* Cópia fiel de eclume-design/styles.css (sync <data UTC>), sem o @import do Google Fonts:\n   as fontes vêm de fonts.css. Não edite: ajuste de produto vai em app.css. */\n'; \
-    sed '/fonts.googleapis.com/d' <eclume-design>/styles.css; } > web/src/styles/eclume.css
+  uv run python design-system/sincronizar.py          # escreve as três cópias
+  uv run python design-system/sincronizar.py --check  # só confere (roda no uv run pytest)
   ```
 
-  Depois, `npm --prefix web run build` e os screenshots da verificação visual (abaixo) mostram o
-  que mudou. Classe nova do DS fica disponível sem mais nada; classe renomeada quebra a tela que a
-  usava, e o E2E pega.
+  O `design-system/test_sincronizar.py` falha quando uma cópia diverge da fonte; o `ui_assets` do
+  desktop e o `copia.test.ts` do celular conferem as cópias contra a do web. Depois, `npm --prefix
+  web run build` e os screenshots da verificação visual (abaixo) mostram o que mudou. Classe nova do
+  DS fica disponível sem mais nada; classe renomeada quebra a tela que a usava, e o E2E pega.
 - **Sem CDN.** O servidor é auto-hospedado: o Vite copia os `.woff2` do `@fontsource` para
   `dist/assets` com hash e o Caddy os serve da mesma origem. O `@fontsource` declara as famílias
   `"Archivo"` e `"IBM Plex Mono"`, os mesmos nomes de `--font-heading`, `--font-body` e
@@ -130,7 +135,7 @@ troca do sistema enquanto a preferência for "Do sistema". No shell, a escolha �
 `rgb(30, 28, 25)` no escuro, campo da marca `rgb(111, 90, 68)`, Archivo 800 carregada, canto zero
 no `.btn-primary`, nenhuma requisição fora da origem e `?` abrindo a gaveta de ajuda) e roda no
 E2E de sempre. Com `E2E_SCREENSHOTS=1`, salva as telas em claro e escuro, a 1440×900 e 390×844,
-em `web/test-results/screens/app-*.png`; com `ECLUME_DS_DIR=<eclume-design>`, salva também os
+em `web/test-results/screens/app-*.png`, e também, do `design-system/` (ou de `ECLUME_DS_DIR`), os
 quadros de `examples/access.html` como `ds-*.png`, para a comparação lado a lado. Não há diff
 de pixels: a comparação é revisada.
 

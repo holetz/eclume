@@ -4,10 +4,9 @@ Para onde o eclume vai (estado-alvo, "o quê e por quê"), **sem cronograma**: u
 (`<area>.md`, `type: vision`).
 
 **Fronteira:** direção **não carrega prazo, marco nem ordem**. Uma tarefa concreta rumo a ela é uma
-spec no workspace do Quenching (hoje, as filhas do épico `holetz/eclume#1`); o que **já virou
-realidade** é destilado em [standards/](../standards/index.md).
+spec no workspace do Quenching (`cq specs list`); o que **já virou realidade** é destilado em
+[standards/](../standards/index.md).
 
-A direção de construção está no `## Proposal` e no `## Design` do épico `holetz/eclume#1`.
-
-- [product.md](product.md) — o registro do produto: usuários, propósito, posicionamento e
-  compromissos de marca, projetado no `PRODUCT.md` da raiz.
+- [product.md](product.md) — a visão do produto: o registro confirmado (usuários, propósito,
+  posicionamento, compromissos de marca e princípios), projetado no `PRODUCT.md` da raiz, e a
+  direção (estado-alvo, pilares que já são realidade ou ainda direção, e não-objetivos).

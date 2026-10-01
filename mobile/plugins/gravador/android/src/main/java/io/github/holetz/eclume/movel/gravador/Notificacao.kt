@@ -105,6 +105,7 @@ object Notificacao {
     const val ID_AVISO = 4202
     const val CANAL = "gravacao"
     const val CANAL_AVISOS = "avisos"
+    const val CANAL_SYNC = "sync"
 
     fun criarCanal(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -120,6 +121,25 @@ object Notificacao {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         gerente.createNotificationChannel(avisos)
+        val sync = NotificationChannel(CANAL_SYNC, "Envio das gravações", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "Mostra o envio das gravações ao servidor em segundo plano."
+            setSound(null, null)
+        }
+        gerente.createNotificationChannel(sync)
+    }
+
+    /** A notificação do `SyncWorker` em primeiro plano ("Enviando 2 gravações"). */
+    fun sincronizando(context: Context, texto: String): Notification {
+        criarCanal(context)
+        return NotificationCompat.Builder(context, CANAL_SYNC)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle(texto)
+            .setContentText("No Wi‑Fi do servidor eclume")
+            .setOngoing(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setContentIntent(abrirApp(context))
+            .build()
     }
 
     /** Posta um aviso no canal `avisos` (toca), que abre o app ao toque. */

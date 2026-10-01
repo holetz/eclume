@@ -196,8 +196,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Dependências de sistema do WebKit e do Firefox (Playwright)
-        run: npx --prefix web --yes playwright@1.63.0 install-deps webkit firefox
+      - name: Dependências de sistema do WebKit e do Firefox (Playwright do lockfile)
+        run: |
+          npm --prefix web ci
+          npx --prefix web --no-install playwright install-deps webkit firefox
       - name: Mock server (Prism)
         run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
       - run: bash deploy/pilares.sh web-browser
@@ -285,7 +287,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: holetz/quenching
-          ref: 9150af364e40ec7ca9c4f918cb60593e93ae4eea # 6.3.0
+          ref: a5e9b6af2d0649bd3bc1101d897e6ab2937fd0a9 # 6.3.0+681 (cq design)
           path: .quenching
       # Fora da árvore do eclume, para a checagem não varrer o quenching.
       - run: |
