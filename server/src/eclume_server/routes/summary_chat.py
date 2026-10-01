@@ -18,6 +18,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.problems import not_found
+from eclume_server.quotas import charge_agent
 from eclume_server.summaries import recording_transcript
 from eclume_server.summary_chat import abandon_reply, chat_message_json, open_request
 
@@ -41,6 +42,7 @@ async def send_summary_chat(
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await recording_transcript(conn, recording_id)
         request, reply = await open_request(conn, transcript, body.message, principal.user_id)
+        await charge_agent(conn, ctx.queue.pool, principal.user_id)
     try:
         await ctx.queue.enqueue_summary_chat(reply["id"])
     except Exception:

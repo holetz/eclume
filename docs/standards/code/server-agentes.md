@@ -7,7 +7,7 @@ tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, clau
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -144,6 +144,21 @@ cada um no tipo do dono, com o mesmo id. Os tipos, os tipos padrão do admin e a
 - **Automático:** é a última etapa do pipeline (`summaries.start_auto_summary`), depois da detecção
   do tipo: as instruções do tipo da gravação, o provider de `summaries` e `trigger: automatic`. O
   `summarize` fecha a etapa `summary`.
+
+## Cota de pedidos ao agente
+
+- Cada pedido **da pessoa** ao agente conta na cota `agent_requests_24h` (holetz/eclume#98):
+  gerar ou refazer resumo (`POST /transcripts/{id}/summaries` e a ferramenta `request_summary` do
+  MCP), o chat do resumo, o chat da base e as pré-visualizações (tipo de agenda e regra de campo).
+  O registro é um zset por conta no Redis (`eclume:quota:agent:{owner}`, o instante de cada
+  pedido), aparado a cada leitura numa janela móvel de 24 h. Estourada, **403** `quota_exceeded`
+  antes de enfileirar; nas rotas com transação, a recusa desfaz o que o pedido gravaria.
+- As etapas automáticas do pipeline (tipo de agenda, campos, resumo automático) não contam: já são
+  limitadas pela cota de minutos, uma por gravação, e falhar por cota deixaria gravação sem resumo
+  sem a pessoa ter pedido nada.
+- **Resumos em andamento:** a conta tem no máximo 3 resumos `queued`/`running`
+  (`quotas.MAX_OPEN_SUMMARIES`, contando os automáticos); o pedido seguinte recebe **429**
+  `rate_limited`, como as pré-visualizações.
 
 ## Versões e edição
 

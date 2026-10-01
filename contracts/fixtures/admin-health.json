@@ -162,5 +162,9 @@
       "detail": null,
       "latency_ms": null
     }
-  ]
+  ],
+  "held_jobs": {
+    "account_turn": 4,
+    "gpu_minutes": 1
+  }
 }

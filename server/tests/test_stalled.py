@@ -362,3 +362,18 @@ def test_transcricao_pronta_sem_ingestao_alem_do_teto_vira_ingest_failed(
     assert body["status"] == "failed"
     assert body["job"]["error"]["code"] == "ingest_failed"
     assert body["job"]["error"]["retryable"] is True
+
+
+def test_job_retido_na_vez_da_conta_nao_e_morto(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    _recording(api)
+    waiting = upload_file(api, audio_bytes(2000, seed="retido"))
+    # Sem despacho, o `transcribe` não está no arq: não é job sumido.
+    job_id = transcribe_job_id(waiting["id"], 1)
+    assert run(_with_redis(services, lambda pool: pool.zscore(GPU_QUEUE, job_id))) is None
+    now = datetime.now(UTC)
+    assert _sweep(services, now + LATER, waiting["id"]) is None
+    assert _sweep(services, now + LATER + AFTER_GRACE, waiting["id"]) is None
+    assert _state(api, waiting["id"])["status"] == "queued"

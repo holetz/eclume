@@ -149,6 +149,8 @@ def test_idioma_automatico_vai_nulo_ao_transcribe(
     upload_file(member, audio_bytes(1500), title="Idioma a detectar")
     ((_, _, options),) = run_gpu(services.settings)
     assert options["language"] is None
+    # Um `transcribe` por conta na GPU: o próximo entra depois da ingestão deste.
+    run_cpu(services.settings)
     # O idioma da gravação, quando dito, vence o automático.
     upload_file(member, audio_bytes(1600), title="Em inglês", language="en")
     ((_, _, options),) = run_gpu(services.settings)
@@ -182,3 +184,24 @@ def test_estado_antigo_sem_separacao_nao_trava_outro_bloco(admin: Api, services:
     assert admin.patch(URL, json={"preprocessing": {"denoise": {"strength": 0.4}}}).status_code == 200
     # Tocar a separação ainda exige a regra.
     assert admin.patch(URL, json={"diarization": {"min_speakers": 2}}).status_code == 422
+
+
+def test_cotas_padrao_mescladas_campo_a_campo(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    quotas = admin.get(URL).json()["quotas"]
+    assert quotas == {
+        "storage_bytes": 10 * 1024**3,
+        "file_bytes": 2 * 1024**3,
+        "open_uploads": 3,
+        "gpu_minutes_24h": 600,
+        "agent_requests_24h": 200,
+    }
+    patched = admin.patch(URL, json={"quotas": {"open_uploads": 1, "agent_requests_24h": None}})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["quotas"] == quotas | {"open_uploads": 1, "agent_requests_24h": None}
+    # A conta sem sobreposição segue o padrão novo.
+    effective = as_user(make_user()).get("/api/v1/me/usage").json()["quotas"]
+    assert (effective["open_uploads"], effective["agent_requests_24h"]) == (1, None)
+    assert admin.patch(URL, json={"quotas": {"open_uploads": -1}}).status_code == 422
+    assert admin.patch(URL, json={"quotas": {"desconhecida": 1}}).status_code == 422

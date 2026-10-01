@@ -53,6 +53,8 @@ users = Table(
     # 023_cadastro_de_tags
     Column("tag_mode", Text, server_default=FetchedValue()),
     Column("tag_new_limit", Integer, server_default=FetchedValue()),
+    # 026_cotas_e_fila_justa
+    Column("quotas", JSONB),
 )
 
 sessions = Table(
@@ -105,6 +107,7 @@ platform_settings = Table(
     Column("diarization", JSONB),
     Column("voice_identification", JSONB),
     Column("preprocessing", JSONB),
+    Column("quotas", JSONB),
     _ts("updated_at"),
     _uuid("updated_by"),
 )
@@ -190,6 +193,7 @@ transcription_jobs = Table(
     _ts("queued_at"),
     _ts("started_at"),
     _ts("finished_at"),
+    _ts("dispatched_at"),
 )
 
 transcripts = Table(

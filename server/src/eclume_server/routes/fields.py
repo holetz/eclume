@@ -34,6 +34,7 @@ from eclume_server.fields import (
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
 from eclume_server.previews import MAX_RECORDINGS, create_preview
 from eclume_server.problems import conflict, invalid_field, not_found
+from eclume_server.quotas import agent_limit
 from eclume_server.routes.previews import check_transcribed
 
 if TYPE_CHECKING:
@@ -96,8 +97,9 @@ async def preview_field(body: FieldPreviewRequest, principal: Writer, ctx: Ctx) 
     ids = list(dict.fromkeys(body.recording_ids))
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await check_transcribed(conn, ids, "recording_ids")
+        quota = await agent_limit(conn, principal.user_id)
     request = {"field": body.field.model_dump(), "recording_ids": [str(value) for value in ids]}
-    return await create_preview(ctx.queue.pool, principal.user_id, "field_rule", request)
+    return await create_preview(ctx.queue.pool, principal.user_id, "field_rule", request, agent_quota=quota)
 
 
 @router.get("/fields/{field_id}")

@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     login_failures_per_account: int = 100
     # Cadastro aberto (`POST /auth/signup`); `false` o fecha sem deploy de código.
     signup_open: bool = True
+    # Cadastros criados por IP numa janela móvel de 24 h (`ECLUME_SIGNUPS_PER_IP_PER_DAY`); o
+    # seguinte recebe 429 `rate_limited`. Só o cadastro criado conta.
+    signups_per_ip_per_day: int = 5
 
     # Cifra das chaves de API dos providers (base64 de 32 bytes). Sem valor, derivada de
     # `secret_key` por HKDF: trocar `secret_key` sem esta variável invalida as chaves guardadas.

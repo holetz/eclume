@@ -46,6 +46,8 @@ x-server-env: &server-env
   ECLUME_COOKIE_SECURE: "true"
   # Cadastro aberto na LAN; `false` fecha o POST /auth/signup sem deploy de código.
   ECLUME_SIGNUP_OPEN: ${ECLUME_SIGNUP_OPEN:-true}
+  # Cadastros criados por IP em 24 h; o seguinte recebe 429.
+  ECLUME_SIGNUPS_PER_IP_PER_DAY: ${ECLUME_SIGNUPS_PER_IP_PER_DAY:-5}
   # Job de transcrição morto: graça antes de confirmar e teto de progresso parado (segundos).
   ECLUME_JOB_GRACE_SECONDS: ${ECLUME_JOB_GRACE_SECONDS:-120}
   ECLUME_JOB_STALL_SECONDS: ${ECLUME_JOB_STALL_SECONDS:-1800}

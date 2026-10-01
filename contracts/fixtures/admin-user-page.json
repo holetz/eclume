@@ -9,7 +9,17 @@
       "last_login_at": "2026-09-18T13:55:02Z",
       "notice_version": null,
       "notice_accepted_at": null,
-      "recording_count": 37
+      "recording_count": 37,
+      "quotas": {
+        "storage_bytes": 21474836480,
+        "gpu_minutes_24h": null
+      },
+      "usage": {
+        "storage_bytes": 6012954214,
+        "open_uploads": 0,
+        "gpu_minutes_24h": 184,
+        "agent_requests_24h": 23
+      }
     },
     {
       "id": "01928f3a-1c00-7a00-8000-000000000102",
@@ -20,7 +30,14 @@
       "last_login_at": "2026-09-17T19:03:10Z",
       "notice_version": "1",
       "notice_accepted_at": "2026-09-28T12:00:00Z",
-      "recording_count": 12
+      "recording_count": 12,
+      "quotas": null,
+      "usage": {
+        "storage_bytes": 412316860,
+        "open_uploads": 1,
+        "gpu_minutes_24h": 0,
+        "agent_requests_24h": 2
+      }
     }
   ],
   "next_cursor": null

@@ -2,12 +2,12 @@
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
 description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg.
-resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
+resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/dispatch.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -32,6 +32,20 @@ Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
   registradas por uma versão, para drenar o que já estava na fila dele.
 
 O worker GPU não muda de fila: os retornos continuam em `eclume:default`.
+
+**Despacho na vez da conta (holetz/eclume#98).** A fila da GPU é justa sem mexer no arq: cada conta
+tem no máximo um `transcribe` em `eclume:gpu`. O job nasce `queued` sem
+`transcription_jobs.dispatched_at` — retido no banco — e `dispatch.next_for(owner)` o despacha:
+numa transação com `pg_advisory_xact_lock` da conta, se ela não tem job despachado em aberto e está
+dentro dos minutos de áudio de 24 h (`quotas.gpu_minutes_24h`, soma de `recordings.duration_ms` dos
+jobs despachados na janela), marca `dispatched_at` no retido mais antigo e o enfileira depois do
+commit, com o `_job_id` `transcribe:{recording_id}:{revision}`. Com um job por conta na fila FIFO do
+arq, o rodízio entre contas sai sozinho: dez arquivos de uma pessoa não atrasam o primeiro de
+outra. Despacham: o `complete` do upload, retranscrever, a retentativa do admin, `ingest_transcript`
+e `transcription_failed` (a GPU ficou livre para a conta) e o cron `dispatch_transcriptions` do
+worker CPU (a cada minuto, `unique`), rede para o que nenhum desses cobre — reaper, cancelamento,
+exclusão e a janela de minutos que reabre. A conta que passou dos minutos não perde nada: a
+gravação espera retida até a janela abrir. O worker GPU não lê o banco e não sabe do despacho.
 
 **Serialização (holetz/eclume#94).** Nenhum job nem resultado é desserializado com `pickle`
 irrestrito: `eclume_engines.fila` tem `serializar` (JSON, `default=str`, que nunca falha) e
@@ -242,11 +256,12 @@ biométrico (LGPD) sem consumidor.
 Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, restart, deploy)
 não enfileira `transcription_failed`. O server percebe sozinho: o cron `reap_stalled_jobs` do
 worker CPU (`eclume_server/stalled.py`, a cada minuto, `unique`) examina os jobs `queued`/`running`
-enfileirados há mais de `ECLUME_JOB_GRACE_SECONDS` (120 s) e cruza o estado do job no arq, o hash
+**despachados** há mais de `ECLUME_JOB_GRACE_SECONDS` (120 s) e cruza o estado do job no arq, o hash
 de progresso e o heartbeat:
 
 | Situação | Veredito |
 |---|---|
+| retido no banco, sem `dispatched_at` (aguarda a vez da conta ou a janela de minutos) | nada — não está no arq, não é job morto |
 | no arq `queued`/`deferred` (fila atrasada) | nada — fila não é falha |
 | arq `complete` com sucesso há até `ECLUME_JOB_STALL_SECONDS` (a ingestão pode estar na fila `eclume:default`) | nada |
 | arq `complete` com sucesso há mais de `ECLUME_JOB_STALL_SECONDS` e o job ainda aberto no banco (a ingestão se perdeu) | `ingest_failed` |

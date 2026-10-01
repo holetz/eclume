@@ -7,7 +7,7 @@ tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -56,7 +56,8 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
 
 - **Fonte única:** `platform_settings`, **uma linha** (`id boolean PRIMARY KEY DEFAULT true
   CHECK (id)`), com os blocos `asr`, `diarization`, `voice_identification` (`enabled`,
-  `suggestion_threshold`) e `preprocessing`, mais `updated_at` e `updated_by` (FK para `admins`).
+  `suggestion_threshold`), `preprocessing` e `quotas` (holetz/eclume#98, migration 026), mais
+  `updated_at` e `updated_by` (FK para `admins`).
   Os padrões moram nas migrations 008 e 011. O bloco `summarization` saiu na 011: o resumo
   automático segue o tipo de agenda e o provider de `summaries`
   ([processamento automático](processamento-automatico.md)).
@@ -113,12 +114,29 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   uma cópia do formato em `eclume_worker/secrets.py`; o segredo da plataforma vence `HF_TOKEN` e o
   arquivo montado. Não abrir não falha o job: aviso `hf_token_undecryptable` e o token do ambiente.
 
+- **Bloco `quotas`** (holetz/eclume#98): as cotas padrão de toda conta — `storage_bytes` (10 GiB),
+  `file_bytes` (2 GiB), `open_uploads` (3), `gpu_minutes_24h` (600) e `agent_requests_24h` (200);
+  `null` é sem limite. Mesclado campo a campo pelo mesmo `PATCH /admin/settings`, com inteiros
+  `>= 0` ou `null`. A conta da dona não é conhecida pela migration: ela se sobrepõe pelo painel
+  depois do deploy. Regras de uso em [server-nucleo.md](server-nucleo.md#upload-e-áudio) e
+  [server-agentes.md](server-agentes.md#cota-de-pedidos-ao-agente).
+
 ## Usuários (`/admin/users`)
 
 - A listagem devolve `AdminUser`: os dados da conta (`User`, com `notice_version` e
-  `notice_accepted_at`) mais `recording_count`, do mais novo para o mais antigo. Nada do conteúdo.
-- `PATCH /admin/users/{id}` aceita só `{active}`. Desativar apaga as sessões e revoga os PATs do
-  usuário; reativar devolve o acesso por um login novo. Usuário inexistente → 404.
+  `notice_accepted_at`), `recording_count`, o uso (`usage`: armazenamento, uploads abertos,
+  minutos de áudio e pedidos ao agente em 24 h, `quotas.usage`) e a sobreposição das cotas
+  (`quotas`, só os campos sobrepostos, ou `null`), do mais novo para o mais antigo. Nada do
+  conteúdo.
+- `PATCH /admin/users/{id}` aceita `active` e `quotas` (ao menos um). Desativar apaga as sessões e
+  revoga os PATs do usuário; reativar devolve o acesso por um login novo. `quotas` troca a
+  sobreposição inteira (`users.quotas`, JSONB): os campos enviados valem sobre o padrão, `null`
+  num campo é sem limite e `quotas: null` volta a conta ao padrão. Usuário inexistente → 404.
+- `DELETE /admin/users/{id}` exclui a conta (204; inexistente, 404) com `accounts.purge_user`, o
+  mesmo da exclusão pela própria pessoa, sem a senha e com o papel de conexão: as FKs levam tudo em
+  cascata, os gatilhos põem os objetos na fila de exclusão do bucket, os `transcribe` em aberto
+  recebem o pedido de cancelamento e o e-mail fica livre para um cadastro novo. O painel pede
+  confirmação digitando o e-mail.
 
 ## Saúde (`/admin/health`)
 
@@ -129,8 +147,13 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   [contrato de jobs](../api/jobs-transcricao.md).
 - **Filas:** por fila arq (`eclume:gpu`, `eclume:default`, `eclume:agents`), `running` = ids do zset com
   `arq:in-progress:<id>`, `queued` = o resto. São números da instância, sem ids nem conteúdo.
+- **Jobs retidos (`held_jobs`, holetz/eclume#98):** só números — `account_turn`, os jobs que
+  aguardam a vez da conta (ela já tem um `transcribe` na GPU), e `gpu_minutes`, os que aguardam a
+  janela de minutos de 24 h (`dispatch.held_counts`). O
+  [despacho na vez da conta](../api/jobs-transcricao.md#filas) explica a retenção.
 - **Jobs e falhas da plataforma**, lidos com o papel de conexão: `running_jobs` são os
-  `transcription_jobs` `queued`/`running` com etapa, progresso e o `updated_at` do hash de
+  `transcription_jobs` `queued`/`running` **despachados** (o retido conta em `held_jobs`, e por
+  isso o `queued_over_2h` do `saude --json` não alerta pela espera da vez) com etapa, progresso e o `updated_at` do hash de
   progresso; `recent_failures` são as últimas 20 etapas do pipeline `failed` em 24 h (todas as
   etapas), com `step`, e `job_id` e `retryable` só no pré-processamento e na transcrição, que são
   do job que o admin retenta (a falha passageira do [job morto](../api/jobs-transcricao.md#job-morto),

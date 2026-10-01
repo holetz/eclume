@@ -34,6 +34,7 @@ _TITLES = {
     "method_not_allowed": "Método não permitido",
     "payload_too_large": "Corpo grande demais",
     "upload_completing": "Upload sendo concluído",
+    "quota_exceeded": "Cota excedida",
     "internal_error": "Erro interno",
 }
 

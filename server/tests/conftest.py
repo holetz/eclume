@@ -28,6 +28,7 @@ _BLOCKS = (
     t.platform_settings.c.diarization,
     t.platform_settings.c.preprocessing,
     t.platform_settings.c.voice_identification,
+    t.platform_settings.c.quotas,
 )
 
 

@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -46,7 +46,11 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Fronteira do admin.** `/api/v1/admin/*` (menos o login) declara só `adminSessionCookie`:
   sessão de usuário, PAT ou nada ali dão **401** `unauthorized`. A sessão de admin é ignorada em
   qualquer outra rota. O admin vê só a plataforma (configuração, segredos, agentes, contas,
-  saúde); nenhuma rota de admin devolve conteúdo de usuário.
+  saúde); nenhuma rota de admin devolve conteúdo de usuário. Desde a 2.15.0, `AdminUser` traz o
+  uso da conta (`usage`) e a sobreposição das cotas (`quotas`, só os campos sobrepostos ou `null`),
+  `PATCH /admin/users/{id}` aceita `quotas` (troca a sobreposição inteira; `null` volta ao padrão)
+  com `active` opcional, e `DELETE /admin/users/{id}` (204; inexistente, 404) exclui a conta como
+  o `POST /me/delete`, sem a senha, e libera o e-mail.
 - **Escopos do PAT:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, a
   exclusão de gravação), `transcripts:read`,
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
@@ -90,6 +94,14 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível". Desde a
   2.14.0, qualquer operação pode responder **500** `internal_error` (o detalhe e o traceback ficam
   só no log, com o `X-Request-ID`).
+- **Cotas por conta** (2.15.0): armazenamento total, tamanho por arquivo, uploads abertos, minutos
+  de áudio e pedidos ao agente em 24 h (janela móvel); a cota efetiva é a sobreposição da conta
+  sobre o padrão da plataforma, `null` é sem limite. `GET /me/usage` (qualquer credencial, sem
+  escopo) devolve `{usage, quotas}`. Estourada, **403** `quota_exceeded` com `quota`, `limit` e
+  `used` — no `POST /uploads` novo (armazenamento, tamanho, abertos; deduplicar e retomar não
+  contam) e nos pedidos ao agente (gerar resumo, chat do resumo, chat da base, pré-visualizações).
+  Os minutos de áudio nunca recusam: a gravação espera na fila até a janela abrir. A conta tem no
+  máximo 3 resumos na fila ou rodando; além disso, **429** `rate_limited`.
 - **Teto do corpo** (2.14.0): **413** `payload_too_large` em qualquer operação com corpo, com
   `limit` (bytes), recusado pelo `Content-Length` antes de ler ou contado enquanto chega quando o
   cabeçalho falta. Tetos: 64 KiB nas rotas públicas de credencial (`/auth/*`, `/admin/auth/*`,

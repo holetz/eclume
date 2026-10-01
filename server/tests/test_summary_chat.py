@@ -13,7 +13,7 @@ from eclume_server.agents.base import ProviderError
 from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.db.session import make_engine
 from eclume_server.summary_chat import reap_stalled_chats
-from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
+from eclume_server_testing.api import agenda_types, audio_bytes, override_quotas, upload_file
 from eclume_server_testing.fakes import FakeAgents, contract_transcript, run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
@@ -231,3 +231,16 @@ def test_isolamento_e_exclusao(
     upload = upload_file(api, audio_bytes(100))
     missing = api.post(f"/api/v1/recordings/{upload['id']}/summary/chat", json={"message": "x"})
     assert (missing.status_code, missing.json()["code"]) == (409, "transcript_missing")
+
+
+def test_ajuste_conta_na_cota_de_pedidos_ao_agente(owner: dict[str, Any], services: Services):
+    recording_id = _recording(owner, services)
+    api: Api = owner["api"]
+    override_quotas(services, api, {"agent_requests_24h": 1})
+    _ask(api, recording_id)
+    run_cpu(services.settings, FakeAgents(replies={"chat": [_json(action="reply", message="Ok.", summary_md=None)]}))
+    refused = api.post(f"/api/v1/recordings/{recording_id}/summary/chat", json={"message": "De novo?"})
+    assert (refused.status_code, refused.json()["code"]) == (403, "quota_exceeded")
+    # A recusa não deixa pedido em aberto.
+    override_quotas(services, api, None)
+    _ask(api, recording_id, "De novo?")

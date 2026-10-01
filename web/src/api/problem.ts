@@ -44,6 +44,29 @@ const MESSAGES: Record<string, string> = {
   rate_limited: 'Muitas requisições seguidas. Aguarde um instante e tente de novo.',
 }
 
+function formatBytes(bytes: number): string {
+  const gib = bytes / 1024 ** 3
+  if (gib >= 1) return `${gib.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB`
+  return `${Math.round(bytes / 1024 ** 2).toLocaleString('pt-BR')} MB`
+}
+
+/** Mensagem da cota estourada (`quota_exceeded`), pelo `quota` e o `limit` do problem. */
+function quotaMessage(problem: Problem): string {
+  const limit = problem.limit ?? 0
+  switch (problem.quota) {
+    case 'file_bytes':
+      return `O arquivo passa do tamanho máximo da sua conta (${formatBytes(limit)}).`
+    case 'storage_bytes':
+      return `Seu armazenamento chegou ao limite de ${formatBytes(limit)}. Exclua gravações antigas para importar mais.`
+    case 'open_uploads':
+      return `Sua conta envia até ${limit} arquivos ao mesmo tempo. Espere um envio terminar e tente de novo.`
+    case 'agent_requests_24h':
+      return `Você chegou ao limite de ${limit} pedidos ao agente em 24 horas. Tente de novo mais tarde.`
+    default:
+      return 'Sua conta chegou a um limite de uso. Fale com a administração.'
+  }
+}
+
 /** Mensagem em pt-BR para qualquer erro vindo de uma chamada à API. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -52,6 +75,7 @@ export function errorMessage(error: unknown): string {
       const fields = problem.errors?.map((e) => `${e.field}: ${e.message}`).join('; ')
       return fields ? `Confira os campos — ${fields}.` : 'Confira os campos do formulário.'
     }
+    if (problem?.code === 'quota_exceeded') return quotaMessage(problem)
     if (problem && MESSAGES[problem.code]) return MESSAGES[problem.code]
     return problem?.detail ?? `O servidor respondeu com erro (HTTP ${error.status}).`
   }

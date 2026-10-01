@@ -28,6 +28,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
+from eclume_server.quotas import take_agent_request
 from eclume_server.search import CONFIG, SearchFilters, search
 from eclume_server.summaries import (
     INTERNAL_ERROR,
@@ -93,16 +94,24 @@ def _view(chat_id: UUID | str, state: dict[str, str]) -> dict[str, Any]:
     }
 
 
-async def create_chat(
-    redis: ArqRedis, owner_id: UUID, message: str, history: list[dict[str, str]], *, transcripts: bool
+async def create_chat(  # noqa: PLR0913 — o pedido, a credencial e a cota
+    redis: ArqRedis,
+    owner_id: UUID,
+    message: str,
+    history: list[dict[str, str]],
+    *,
+    transcripts: bool,
+    agent_quota: int | None,
 ) -> dict[str, Any]:
     """Guarda o pedido e enfileira `base_chat`; devolve o schema `BaseChat` na fila.
 
     `transcripts` diz se a credencial lê transcrições: sem isso, o agente só consulta resumos. Com
-    `MAX_OPEN` em aberto, 429 `rate_limited`.
+    `MAX_OPEN` em aberto, 429 `rate_limited`; o pedido conta na cota `agent_quota` de 24 h (403
+    `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
         raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+    await take_agent_request(redis, owner_id, agent_quota)
     chat_id = uuid4()
     key = chat_key(chat_id)
     request = json.dumps({"message": message, "history": history, "transcripts": transcripts}, ensure_ascii=False)

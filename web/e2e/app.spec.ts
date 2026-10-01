@@ -249,8 +249,8 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
     'Pré-processamento',
     'Transcrição',
     'Tipo de agenda',
-    'Campos preenchidos',
-    'Resumo pronto',
+    'Campos',
+    'Resumo',
   ])
   const summary = page.getByRole('region', { name: 'Resumo', exact: true })
   await expect(summary.getByText('Editado por você · versão 2')).toBeVisible()

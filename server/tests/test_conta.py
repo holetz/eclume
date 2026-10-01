@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import redis
 
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server_testing.api import PASSWORD, audio_bytes, upload_file
 from eclume_server_testing.fakes import drain_storage
 
@@ -104,3 +105,32 @@ def test_trocar_a_senha_com_revoke_tokens_revoga_aparelhos_e_pats(
     device_api = type(api)(api.client, token=paired.json()["secret"])
     assert device_api.get("/api/v1/me").status_code == 401
     assert api.get("/api/v1/me").status_code == 200
+
+
+def test_admin_exclui_a_conta_e_libera_o_email(
+    admin: Api,
+    client: TestClient,
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+):
+    account = make_user()
+    api = as_user(account)
+    recording = upload_file(api, audio_bytes(100, seed="admin-exclui"))
+    key = f"users/{account.user_id}/recordings/{recording['id']}/audio"
+
+    assert as_user(make_user()).delete(f"/api/v1/admin/users/{account.user_id}").status_code == 401
+    assert admin.delete(f"/api/v1/admin/users/{account.user_id}").status_code == 204
+    assert admin.delete(f"/api/v1/admin/users/{account.user_id}").status_code == 404
+    assert api.get("/api/v1/me").status_code == 401
+    drain_storage(services.settings)
+    s3 = services.s3()
+    assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
+    assert redis.Redis.from_url(services.settings.redis_url).exists(f"eclume:cancel:{recording['id']}:1")
+
+    client.cookies.clear()
+    again = client.post(
+        "/api/v1/auth/signup",
+        json={"name": "De volta", "email": account.email, "password": PASSWORD, "notice_version": NOTICE_VERSION},
+    )
+    assert again.status_code == 204, again.text

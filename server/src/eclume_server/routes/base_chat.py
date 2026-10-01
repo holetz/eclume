@@ -15,7 +15,9 @@ from pydantic import BaseModel, Field
 from eclume_server.auth import Principal, requires
 from eclume_server.base_chat import create_chat, get_chat
 from eclume_server.context import AppContext, get_ctx
+from eclume_server.db.session import user_tx
 from eclume_server.problems import not_found
+from eclume_server.quotas import agent_limit
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -42,7 +44,11 @@ async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> d
     history = [turn.model_dump() for turn in body.history]
     # Sessão e credencial de aparelho leem transcrições; um PAT, só com `transcripts:read`.
     transcripts = principal.method != "pat" or "transcripts:read" in principal.scopes
-    return await create_chat(ctx.queue.pool, principal.user_id, body.message, history, transcripts=transcripts)
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        quota = await agent_limit(conn, principal.user_id)
+    return await create_chat(
+        ctx.queue.pool, principal.user_id, body.message, history, transcripts=transcripts, agent_quota=quota
+    )
 
 
 @router.get("/base-chat/{chat_id}")

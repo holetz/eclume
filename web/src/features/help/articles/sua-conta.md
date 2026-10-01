@@ -3,9 +3,9 @@ titulo: Sua conta e quem vê suas gravações
 topico: comecar
 paginas: [biblioteca, ajuda, conta]
 relacionados: [primeira-gravacao, sugestoes-por-voz]
-termos: [conta, privacidade, quem vê, administrador, consentimento, aviso, cadastro, senha, trocar senha, excluir conta]
+termos: [conta, privacidade, quem vê, administrador, consentimento, aviso, cadastro, senha, trocar senha, excluir conta, limite, cota, armazenamento]
 ordem: 6
-atualizado: 2026-09-30
+atualizado: 2026-10-01
 ---
 Cada conta do eclume é um espaço próprio.
 
@@ -19,7 +19,18 @@ você não vê nada do que é dela.
 
 Quem administra o servidor cuida da configuração e da saúde do serviço: a transcrição, os agentes,
 o pré-processamento do áudio, a identificação por voz e os tipos de agenda que cada conta nova
-recebe. O painel de administração tem login próprio e não mostra títulos, transcrições nem resumos.
+recebe. O painel de administração tem login próprio e não mostra títulos, transcrições nem resumos:
+mostra só números de uso de cada conta. Quem administra também pode excluir uma conta, com tudo o
+que é dela.
+
+## Limites de uso
+
+Cada conta tem limites, definidos por quem administra o servidor: o espaço total das gravações, o
+tamanho de um arquivo, quantos arquivos sobem ao mesmo tempo, quantos minutos de áudio são
+transcritos em 24 horas e quantos pedidos ao agente (resumos, ajustes e perguntas) cabem em 24
+horas. Quando um limite é atingido, o eclume diz qual foi. Passar dos minutos de áudio não perde
+nada: a gravação espera na fila até a janela de 24 horas abrir. Os arquivos de várias pessoas se
+revezam na transcrição, um de cada conta por vez.
 
 ## O aviso que você aceitou
 

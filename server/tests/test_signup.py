@@ -128,3 +128,20 @@ def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
     assert me["user"]["notice_version"] == NOTICE_VERSION
     assert pat.get("/api/v1/me").json()["notice_required"] is False
     assert api.get("/api/v1/recordings").status_code == 200
+
+
+def test_teto_diario_de_cadastros_por_ip(services: Services):
+    import redis  # noqa: PLC0415
+
+    redis.Redis.from_url(services.settings.redis_url).delete("eclume:rl:signup_day:testclient")
+    settings = services.settings.model_copy(update={"signups_per_ip_per_day": 2})
+    with TestClient(create_app(settings), base_url="https://testserver") as client:
+        client.event_hooks["response"] = [CONFORMANCE.check]
+        # Só conta o cadastro criado: o recusado não gasta a vez.
+        assert client.post("/api/v1/auth/signup", json=_body(notice_version="v0")).status_code == 422
+        for _ in range(2):
+            assert client.post("/api/v1/auth/signup", json=_body()).status_code == 204
+            client.cookies.clear()
+        third = client.post("/api/v1/auth/signup", json=_body())
+        assert (third.status_code, third.json()["code"]) == (429, "rate_limited")
+        assert 0 < int(third.headers["Retry-After"]) <= 24 * 3600

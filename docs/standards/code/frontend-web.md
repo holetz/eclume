@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -26,6 +26,9 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - As chamadas passam por `api` (`src/api/client.ts`, `openapi-fetch`), tipadas pelo caminho.
   `unwrap()` devolve os dados ou lança `ApiError` com o `Problem`; a UI decide por
   `problem.code` e mostra `errorMessage()`, nunca o `title`.
+- `quota_exceeded` (holetz/eclume#98) tem mensagem por `quota`, com o `limit` do problem (bytes em
+  GB/MB): tamanho do arquivo, armazenamento cheio, uploads ao mesmo tempo e pedidos ao agente em
+  24 h. O Importar mostra essa mensagem no item recusado, como os demais erros de upload.
 - O `openapi-typescript` declara `typescript ^5` como peer; o `package.json` o sobrepõe com
   `overrides` para usar o TS do projeto.
 

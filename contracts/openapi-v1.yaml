@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.14.0
+  version: 2.15.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -18,6 +18,10 @@ info:
       da rota: 64 KiB nas rotas públicas de credencial `/auth/*`, `/admin/auth/*` e `/devices/*`,
       os bytes da parte no `PUT` de parte, 1 MiB no resto e no `/mcp`), também sem
       `Content-Length`.
+    - **Cotas por conta** (desde a 2.15.0): armazenamento, tamanho por arquivo, uploads abertos,
+      minutos de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403
+      `quota_exceeded` com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a
+      gravação espera na fila até a janela abrir.
     - Cada usuário tem a própria conta, isolada; não há organização. O painel admin usa uma
       conta e uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.
     - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores
@@ -256,6 +260,31 @@ paths:
               examples:
                 viaPat:
                   $ref: "#/components/examples/MeViaPat"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/me/usage:
+    get:
+      tags: [auth]
+      operationId: getMyUsage
+      summary: Uso e cotas da conta
+      description: |
+        Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta pelo
+        admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
+        agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+      security:
+        - sessionCookie: []
+        - pat: []
+      responses:
+        "200":
+          description: Uso e cotas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usage"
+              examples:
+                conta:
+                  $ref: "#/components/examples/MeUsage"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -717,6 +746,10 @@ paths:
         com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
         existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
         fixado pelo servidor e as URLs das primeiras partes.
+
+        Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
+        armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
+        `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
 
         Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
         por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
@@ -1434,7 +1467,8 @@ paths:
         agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
         leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
         pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
-        `transcript_missing`.
+        `transcript_missing`. Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h
+        (estourada, 403 `quota_exceeded`).
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -2048,6 +2082,10 @@ paths:
         Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
         resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
         `provider_id` e sem provider padrão habilitado na plataforma, também 422.
+
+        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+        `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+        `rate_limited`).
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -2080,6 +2118,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/v1/summaries/{summary_id}:
     parameters:
@@ -2292,6 +2332,8 @@ paths:
       description: |
         Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
         o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+        `quota_exceeded`).
       security:
         - sessionCookie: []
         - pat: ["summaries:write"]
@@ -2466,7 +2508,8 @@ paths:
       summary: Testar a regra de um campo
       description: |
         Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
-        mais recentes) com o provider de `fields`, sem gravar nada.
+        mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
+        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -2617,7 +2660,8 @@ paths:
         quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
         cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
         2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
-        pelos resumos (sessão e credencial de aparelho leem as duas).
+        pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
+        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
@@ -3752,8 +3796,10 @@ paths:
       operationId: updateUser
       security:
         - adminSessionCookie: []
-      summary: Desativar ou reativar um usuário
-      description: Desativar encerra as sessões e revoga os PATs do usuário.
+      summary: Desativar ou reativar um usuário, ou sobrepor as cotas dele
+      description: >-
+        Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas` troca a
+        sobreposição das cotas da conta.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -3777,6 +3823,28 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [admin]
+      operationId: deleteUser
+      security:
+        - adminSessionCookie: []
+      summary: Excluir um usuário e todos os dados dele
+      description: >-
+        Desde a 2.15.0. Exclui a conta como a exclusão pela própria pessoa (`POST /me/delete`), sem
+        a senha: gravações, transcrições, resumos e tudo o mais saem do banco, os objetos saem do
+        armazenamento pela fila de exclusão, a transcrição em curso é cancelada e o e-mail fica
+        livre para um cadastro novo.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Conta excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/admin/jobs/{job_id}/retry:
     post:
@@ -4047,6 +4115,8 @@ components:
         (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que
         ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`,
         `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial).
+        Desde a 2.15.0, cota da conta estourada (`code: quota_exceeded`, com `quota`, `limit` e
+        `used`).
       content:
         application/problem+json:
           schema:
@@ -4145,11 +4215,23 @@ components:
             `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
             aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
             vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-            vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`.
-            Códigos novos entram de forma aditiva.
+            vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
+            desde a 2.15.0, `quota_exceeded` (cota da conta estourada). Códigos novos entram de
+            forma aditiva.
           type: string
         limit:
-          description: Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0).
+          description: >-
+            Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com
+            `quota_exceeded`, o limite da cota (desde a 2.15.0).
+          type: integer
+        quota:
+          description: Com `quota_exceeded`, a cota estourada (desde a 2.15.0).
+          type: string
+          enum: [storage_bytes, file_bytes, open_uploads, agent_requests_24h]
+        used:
+          description: >-
+            Com `quota_exceeded`, o uso a que o pedido levaria (bytes, uploads abertos ou pedidos
+            em 24 h; em `file_bytes`, o tamanho do arquivo) (desde a 2.15.0).
           type: integer
         required_scopes:
           description: |
@@ -4319,9 +4401,22 @@ components:
           format: date-time
 
     AdminUser:
-      description: Conta de usuário vista pelo admin (o `User` mais a contagem de gravações).
+      description: >-
+        Conta de usuário vista pelo admin (o `User` mais a contagem de gravações e, desde a 2.15.0,
+        o uso e a sobreposição das cotas).
       type: object
-      required: [id, email, name, active, created_at, last_login_at, notice_version, notice_accepted_at, recording_count]
+      required:
+        - id
+        - email
+        - name
+        - active
+        - created_at
+        - last_login_at
+        - notice_version
+        - notice_accepted_at
+        - recording_count
+        - quotas
+        - usage
       properties:
         id:
           type: string
@@ -4347,14 +4442,55 @@ components:
         recording_count:
           type: integer
           minimum: 0
+        quotas:
+          description: >-
+            Só os campos que esta conta sobrepõe ao padrão da plataforma (`null` num campo é sem
+            limite); `null` quando a conta segue o padrão inteiro.
+          oneOf:
+            - $ref: "#/components/schemas/QuotasOverride"
+            - type: "null"
+        usage:
+          $ref: "#/components/schemas/UsageNow"
+
+    QuotasOverride:
+      description: >-
+        Cotas parciais (desde a 2.15.0): só os campos presentes valem; `null` num campo é sem
+        limite.
+      type: object
+      additionalProperties: false
+      properties:
+        storage_bytes:
+          type: [integer, "null"]
+          minimum: 0
+        file_bytes:
+          type: [integer, "null"]
+          minimum: 0
+        open_uploads:
+          type: [integer, "null"]
+          minimum: 0
+        gpu_minutes_24h:
+          type: [integer, "null"]
+          minimum: 0
+        agent_requests_24h:
+          type: [integer, "null"]
+          minimum: 0
 
     UserPatch:
+      description: Ao menos um campo; desde a 2.15.0, `active` é opcional e entra `quotas`.
       type: object
-      required: [active]
+      minProperties: 1
+      additionalProperties: false
       properties:
         active:
           description: "`false` desativa a conta, encerra as sessões e revoga os PATs."
           type: boolean
+        quotas:
+          description: >-
+            Troca a sobreposição inteira das cotas da conta pelos campos enviados (`null` num campo
+            é sem limite); `quotas: null` volta a conta ao padrão da plataforma.
+          oneOf:
+            - $ref: "#/components/schemas/QuotasOverride"
+            - type: "null"
 
     AdminUserPage:
       type: object
@@ -4396,6 +4532,64 @@ components:
           format: uuid
         name:
           type: string
+
+    Quotas:
+      description: >-
+        Cotas de uma conta (desde a 2.15.0); `null` é sem limite. Minutos de áudio transcritos e
+        pedidos ao agente contam numa janela móvel de 24 h.
+      type: object
+      required: [storage_bytes, file_bytes, open_uploads, gpu_minutes_24h, agent_requests_24h]
+      properties:
+        storage_bytes:
+          description: Armazenamento total (áudio das gravações mais uploads abertos), em bytes.
+          type: [integer, "null"]
+          minimum: 0
+        file_bytes:
+          description: Tamanho máximo de um arquivo, em bytes.
+          type: [integer, "null"]
+          minimum: 0
+        open_uploads:
+          description: Uploads abertos ao mesmo tempo.
+          type: [integer, "null"]
+          minimum: 0
+        gpu_minutes_24h:
+          description: >-
+            Minutos de áudio enviados à transcrição em 24 h. Passado o limite nada é recusado: a
+            gravação espera na fila até a janela abrir.
+          type: [integer, "null"]
+          minimum: 0
+        agent_requests_24h:
+          description: Pedidos da pessoa ao agente (resumos, chats, pré-visualizações) em 24 h.
+          type: [integer, "null"]
+          minimum: 0
+
+    UsageNow:
+      description: Uso corrente de uma conta (desde a 2.15.0).
+      type: object
+      required: [storage_bytes, open_uploads, gpu_minutes_24h, agent_requests_24h]
+      properties:
+        storage_bytes:
+          type: integer
+          minimum: 0
+        open_uploads:
+          type: integer
+          minimum: 0
+        gpu_minutes_24h:
+          type: integer
+          minimum: 0
+        agent_requests_24h:
+          type: integer
+          minimum: 0
+
+    Usage:
+      description: Uso e cota efetiva da conta (desde a 2.15.0).
+      type: object
+      required: [usage, quotas]
+      properties:
+        usage:
+          $ref: "#/components/schemas/UsageNow"
+        quotas:
+          $ref: "#/components/schemas/Quotas"
 
     Me:
       type: object
@@ -6984,7 +7178,7 @@ components:
 
     AdminSettings:
       type: object
-      required: [asr, diarization, voice_identification, preprocessing, updated_at, updated_by]
+      required: [asr, diarization, voice_identification, preprocessing, quotas, updated_at, updated_by]
       properties:
         asr:
           $ref: "#/components/schemas/AsrSettings"
@@ -6994,6 +7188,9 @@ components:
           $ref: "#/components/schemas/VoiceIdentificationSettings"
         preprocessing:
           $ref: "#/components/schemas/PreprocessingSettings"
+        quotas:
+          description: Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta.
+          $ref: "#/components/schemas/Quotas"
         updated_at:
           type: string
           format: date-time
@@ -7115,6 +7312,9 @@ components:
               properties:
                 enabled:
                   type: boolean
+        quotas:
+          description: Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite.
+          $ref: "#/components/schemas/QuotasOverride"
 
     AgentProvider:
       type: object
@@ -7438,8 +7638,24 @@ components:
               running:
                 type: integer
                 minimum: 0
+        held_jobs:
+          description: >-
+            Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os que
+            aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de
+            24 h. Só números.
+          type: object
+          required: [account_turn, gpu_minutes]
+          properties:
+            account_turn:
+              type: integer
+              minimum: 0
+            gpu_minutes:
+              type: integer
+              minimum: 0
         running_jobs:
-          description: Jobs de transcrição da plataforma ainda não concluídos, com o progresso.
+          description: >-
+            Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos, com o
+            progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`).
           type: array
           items:
             type: object
@@ -7483,6 +7699,9 @@ components:
     LoginRequest:
       summary: E-mail e senha
       externalValue: ./fixtures/login-request.json
+    MeUsage:
+      summary: Uso da conta abaixo das cotas padrão
+      externalValue: ./fixtures/me-usage.json
     MeViaPat:
       summary: Consultora autenticada pelo PAT do lumea
       externalValue: ./fixtures/me-via-pat.json

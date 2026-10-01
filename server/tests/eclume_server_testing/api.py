@@ -7,7 +7,7 @@ import secrets
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from eclume_server.accounts import NOTICE_VERSION, create_admin, create_user, new_password_hash
 from eclume_server.db import tables as t
@@ -178,3 +178,13 @@ def upload_file(api: Api, data: bytes, **fields: Any) -> dict[str, Any]:  # noqa
     completed = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": parts})
     assert completed.status_code == 201, completed.text
     return completed.json()
+
+
+def override_quotas(services: Services, api: Api, quotas: dict[str, Any] | None) -> None:
+    """Sobrepõe as cotas da conta do `api` (`users.quotas`; `None` volta ao padrão)."""
+    user_id = api.get("/api/v1/me").json()["user"]["id"]
+
+    async def write(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(quotas=quotas))
+
+    run(services.sql(write))

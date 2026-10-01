@@ -155,13 +155,14 @@ async def change_password(
             )
 
 
-async def delete_user(conn: AsyncConnection, user_id: UUID) -> None:
-    """Apaga a conta e tudo o que é dela (as FKs levam em cascata); confira antes a senha com `confirm_password`.
+async def purge_user(conn: AsyncConnection, user_id: UUID) -> bool:
+    """Apaga a conta e tudo o que é dela (as FKs levam em cascata); diz se a conta existia.
 
-    Os gatilhos das gravações e dos uploads em andamento põem os objetos na fila de exclusão do
-    bucket na mesma transação.
+    Na exclusão pela própria pessoa, confira antes a senha com `confirm_password`; o admin exclui
+    sem ela. Os gatilhos das gravações e dos uploads em andamento põem os objetos na fila de
+    exclusão do bucket na mesma transação.
     """
-    await conn.execute(delete(t.users).where(t.users.c.id == user_id))
+    return (await conn.execute(delete(t.users).where(t.users.c.id == user_id))).rowcount > 0
 
 
 async def create_admin(conn: AsyncConnection, *, email: str, name: str, password: str) -> UUID:
