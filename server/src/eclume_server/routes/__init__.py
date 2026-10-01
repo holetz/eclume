@@ -23,6 +23,7 @@ from eclume_server.routes import (
     markers,
     people,
     previews,
+    privacy,
     recordings,
     search,
     server_info,
@@ -46,6 +47,7 @@ def include_routes(app: FastAPI) -> None:
     for module in (
         auth,
         server_info,
+        privacy,
         devices,
         tokens,
         uploads,
