@@ -225,13 +225,18 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         }
         MENU_SHOW => crate::show_window(app),
         MENU_QUIT => {
-            let state = app.state::<AppState>();
-            if state.status().is_ok_and(|s| s == AppStatus::Recording) {
-                if let Err(err) = state.stop_recording() {
-                    log::error!("falha ao fechar a gravação ao sair: {err:#}");
+            // Fechar a gravação pode levar segundos (join, driver, `fsync`): fora da thread da UI,
+            // e o app sai ao fim.
+            let app = app.clone();
+            std::thread::spawn(move || {
+                let state = app.state::<AppState>();
+                if state.status().is_ok_and(|s| s == AppStatus::Recording) {
+                    if let Err(err) = state.stop_recording() {
+                        log::error!("falha ao fechar a gravação ao sair: {err:#}");
+                    }
                 }
-            }
-            app.exit(0);
+                app.exit(0);
+            });
         }
         _ => {}
     }
