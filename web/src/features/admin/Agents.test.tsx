@@ -12,6 +12,7 @@ afterEach(() => vi.unstubAllGlobals())
 function mockAgentsApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/admin/me': () => fixtures.adminMe(),
+    'GET /api/v1/privacy': () => fixtures.privacyInfo(),
     'GET /api/v1/admin/agent-providers': () => fixtures.agentProviderPage(),
     'GET /api/v1/admin/secrets': () => fixtures.secretList(),
     ...extra,
@@ -200,5 +201,14 @@ describe('Agentes', () => {
     mockAgentsApi({ 'GET /api/v1/admin/settings': () => fixtures.adminSettings() })
     renderApp('/admin/segredos')
     expect(await screen.findByRole('heading', { level: 1, name: 'Locutores' })).toBeInTheDocument()
+  })
+
+  it('avisa as finalidades que mandam dados para fora do servidor', async () => {
+    mockAgentsApi()
+    renderApp('/admin/agentes')
+    const note = await screen.findByRole('note', { name: 'Dados fora do servidor' })
+    expect(note).toHaveTextContent('resumos (Anthropic), chat (Anthropic)')
+    expect(note).toHaveTextContent('Conta › Privacidade e dados')
+    expect(note).not.toHaveTextContent('campos')
   })
 })

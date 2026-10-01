@@ -7,11 +7,12 @@ export type PrivacyInfo = Schemas['PrivacyInfo']
 
 /**
  * Para onde vai cada dado (`GET /privacy`, pública). O servidor classifica; as telas só mostram. A
- * configuração muda em runtime: sem `staleTime: Infinity`, ao contrário do descritor do servidor.
+ * configuração muda em runtime: sem `staleTime: Infinity`, ao contrário do descritor do servidor. O
+ * painel admin passa `revision` (o instante da configuração que acabou de ler) para reler depois de salvar.
  */
-export function usePrivacy() {
+export function usePrivacy(revision?: string | number) {
   return useQuery({
-    queryKey: ['privacy'],
+    queryKey: ['privacy', revision ?? null],
     queryFn: () => unwrap(api.GET('/api/v1/privacy')),
   })
 }
