@@ -7,7 +7,7 @@ tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117
 maintainer: holetz
 ---
 
@@ -165,6 +165,11 @@ decisão do usuário, então `auto` nunca é padrão.
   Linux, toast com botões no Windows, e no macOS o botão principal e o de fechar.
 - Sem o arquivo (a primeira abertura da versão que traz o aviso), as gravações já enviadas
   entram como avisadas: a atualização não dispara avisos de resumos antigos.
+- **A espera na fila** (holetz/eclume#117): a leitura das gravações enviadas há menos de 24 h
+  acontece mesmo com o aviso desligado. `Client::check_recording(id, read_summary)` faz o
+  `GET /recordings/{id}` uma vez e devolve o resumo (só pedido com o aviso ligado) e `job.queue`;
+  o laço guarda as esperas por id remoto em `StatusView.queue_waits`, e a fila de envio mostra,
+  sob a linha de uma gravação enviada, a frase de `fraseDaEspera` do vocabulário (`.fila-espera`).
 
 ## Conta e credencial
 

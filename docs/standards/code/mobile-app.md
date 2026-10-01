@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117
 maintainer: holetz
 ---
 
@@ -267,6 +267,10 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   `reason` (texto de `MOTIVOS`) de uma etapa pulada ou o `error.message` de uma que falhou. A
   `Etapa` do núcleo (`sync.rs`) traz `reason` e `error` com `#[serde(default)]`, da mesma leitura de
   `GET /recordings/{id}`.
+- **A espera na fila** (holetz/eclume#117): a mesma leitura traz `job.queue`; `buscar_etapas`
+  devolve `NoServidor { etapas, espera }`, o núcleo guarda os dois no cache do detalhe e o
+  `DetalheLocal` leva `espera`. Sob as etapas, o detalhe mostra em `role="status"` a frase de
+  `fraseDaEspera` do vocabulário, a mesma do web e do desktop.
 - **Diferença deliberada do DS:** o DS mostra "AAC 64 kbps" e "58 MB por hora"; o app grava Opus a
   24 ou 48 kbps (o formato que o server espera), e os textos mostram os números reais.
 

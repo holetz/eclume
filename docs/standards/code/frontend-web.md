@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117
 maintainer: holetz
 ---
 
@@ -384,6 +384,14 @@ desce; abaixo de 56rem, os campos também):
   lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada ou que falhou, o progresso do worker com a
   transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
   `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+- **A linha da espera** (holetz/eclume#117): com a gravação `queued`, o `Pipeline` mostra em
+  `role="status"` a frase de `fraseDaEspera(job.queue)` do vocabulário compartilhado — posição e
+  início estimado ("3ª na fila · começa em cerca de 12 min (estimativa)"), as gravações da própria
+  conta antes, a hora em que a janela de minutos libera ou "O processador está fora do ar desde
+  14:02; sua gravação está guardada e entra quando ele voltar". Sem `queue` (servidor anterior),
+  "Aguardando a vez na fila de transcrição.". A previsão vem sempre rotulada como estimativa; o
+  cartão da biblioteca segue "Na fila". Os textos são provisórios até a referência visual da
+  holetz/eclume#117 (tarefa 1.1).
 - **Reprodução compartilhada** (`PlaybackProvider`, `playback.ts`): um único `<audio>` liga o
   player compacto (tocar, trilha com `range` para teclado, um `.player-tick` por marcador, a
   velocidade 1×–2×), a `.marker-bar` (ficha por marcador, que toca dali, e "Marcado no
