@@ -236,7 +236,11 @@ describe('pré-visualizar numa gravação', () => {
     await userEvent.type(within(panel).getByLabelText('Nome'), ' e mentoria')
     await previewOn(panel, /^Alinhamento do programa de lideranças · /)
 
-    const recordings = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    // A lista da pré-visualização, sem a pergunta "a conta tem alguma?" (limit=1) do shell.
+    const [recordings] = http
+      .requests('GET /api/v1/recordings')
+      .map((r) => new URL(r.url).searchParams)
+      .filter((q) => q.get('limit') !== '1')
     expect(Object.fromEntries(recordings)).toEqual({ status: 'transcribed', sort: 'recorded_desc', limit: '20' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(within(panel).getByRole('status')).toHaveTextContent('Pré-visualizando na gravação…')

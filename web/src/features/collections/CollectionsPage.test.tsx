@@ -71,6 +71,15 @@ describe('coleções', () => {
     expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/pasta-sincronizada')
   })
 
+  it('sem coleções, ensina a incluir pela gravação ou pela regra', async () => {
+    mockCollections([])
+    renderApp('/colecoes')
+    const empty = await screen.findByText(/^Nenhuma coleção ainda\./)
+    expect(empty).toHaveTextContent(
+      'Crie uma com Nova coleção; as gravações entram pela página de cada gravação, em Coleções, ou sozinhas pela regra em Quando incluir.',
+    )
+  })
+
   it('lista com contagem e leva às gravações da coleção', async () => {
     mockCollections()
     renderApp('/colecoes')
@@ -123,7 +132,11 @@ describe('coleções', () => {
     })
     renderApp(`/?colecao=${SERRA}`)
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
-    const query = new URL(http.requests('GET /api/v1/recordings')[0].url).searchParams
+    // A primeira consulta da biblioteca, depois da pergunta "a conta tem alguma?" (limit=1) do shell.
+    const [query] = http
+      .requests('GET /api/v1/recordings')
+      .map((r) => new URL(r.url).searchParams)
+      .filter((q) => q.get('limit') !== '1')
     expect(query.getAll('collection')).toEqual([SERRA])
   })
 

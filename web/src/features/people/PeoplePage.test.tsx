@@ -50,7 +50,9 @@ describe('diretório de pessoas', () => {
       'POST /api/v1/people': () => created,
     })
     renderApp('/pessoas')
-    expect(await screen.findByText('Nenhuma pessoa cadastrada ainda.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/^Nenhuma pessoa ainda\. As pessoas nascem quando você liga um locutor a alguém/),
+    ).toHaveTextContent('ou se cadastram aqui, na linha acima.')
     const name = screen.getByRole('textbox', { name: 'Nome da nova pessoa' })
     await userEvent.type(name, 'Rafael Lima')
     await userEvent.type(screen.getByRole('combobox', { name: 'Empresa da nova pessoa' }), 'Serra Azul{Enter}')

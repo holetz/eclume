@@ -88,7 +88,9 @@ describe('campos personalizados', () => {
     const [title, tags] = fixtures.fieldPage().items
     mockFields({}, [title, tags])
     renderApp('/config/campos')
-    expect(await screen.findByText('Nenhum campo personalizado ainda. Crie um com Novo campo.')).toBeInTheDocument()
+    expect(await screen.findByText(/^Nenhum campo personalizado ainda\. Crie um com Novo campo: por exemplo,/)).toHaveTextContent(
+      'regra “A empresa cliente citada na reunião; vazio se nenhuma for citada”',
+    )
     expect(screen.queryByRole('list', { name: 'Campos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('form')).not.toBeInTheDocument()
     expect(screen.queryByText(/não existe mais/)).not.toBeInTheDocument()

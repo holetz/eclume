@@ -47,7 +47,10 @@ export function FieldsPage() {
       {fields.isSuccess && (
         <div className={`split ${styles.split}`}>
           {items.length === 0 ? (
-            <p className="text-muted">Nenhum campo personalizado ainda. Crie um com Novo campo.</p>
+            <p className="text-muted">
+              Nenhum campo personalizado ainda. Crie um com Novo campo: por exemplo, <strong>Cliente</strong>, com a
+              regra “A empresa cliente citada na reunião; vazio se nenhuma for citada”.
+            </p>
           ) : (
             <ul className={`list ${styles.list}`} aria-label="Campos">
               {items.map((field) => (
