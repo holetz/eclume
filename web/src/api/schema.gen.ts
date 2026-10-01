@@ -338,6 +338,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password-reset/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conferir um link de redefinição de senha
+         * @description Desde a 2.18.0. A página `/redefinir-senha` lê o segredo do fragmento da URL e o manda no
+         *     corpo; a resposta diz o e-mail da conta e até quando o link vale, sem consumir o link.
+         *     Link inexistente, vencido, já usado, vencido por um mais novo ou de conta desativada,
+         *     401 `invalid_reset_link`; tentativas demais do mesmo IP, 429 `rate_limited` com
+         *     `Retry-After`.
+         */
+        post: operations["checkPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redefinir a senha por um link gerado pelo admin
+         * @description Desde a 2.18.0. Troca a senha da conta do link (ao menos 12 caracteres, como no cadastro),
+         *     marca o link como usado e encerra todas as sessões da conta, sem abrir outra: a pessoa
+         *     entra de novo com a senha nova. Credenciais de aparelho e PATs seguem valendo. Link
+         *     inválido, 401 `invalid_reset_link`, como em `POST /auth/password-reset/check`; senha
+         *     curta, 422 `validation_failed` sem consumir o link.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/login": {
         parameters: {
             query?: never;
@@ -1930,9 +1978,31 @@ export interface paths {
         head?: never;
         /**
          * Desativar ou reativar um usuário, ou sobrepor as cotas dele
-         * @description Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
+         * @description Desativar encerra as sessões e revoga os PATs do usuário (desde a 2.18.0, também vence o link de redefinição de senha pendente). Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
          */
         patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gerar um link de redefinição de senha para um usuário
+         * @description Desde a 2.18.0. Link único, válido por 24 horas, que o admin entrega por fora a quem pediu: `<url pública>/redefinir-senha#<segredo>`, com o segredo no fragmento (não chega a logs nem ao `Referer`). O servidor guarda só o hash, e `url` só volta aqui. Um link novo vence os anteriores ainda não usados da conta; desativar a conta anula o link pendente. Conta desativada, 409 `conflict`. O admin nunca vê nem define a senha.
+         */
+        post: operations["createPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/jobs/{job_id}/retry": {
@@ -1994,8 +2064,9 @@ export interface components {
              *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
              *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
              *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
-             *     desde a 2.15.0, `quota_exceeded` (cota da conta estourada). Códigos novos entram de
-             *     forma aditiva.
+             *     desde a 2.15.0, `quota_exceeded` (cota da conta estourada); desde a 2.18.0,
+             *     `invalid_reset_link` (link de redefinição de senha inexistente, vencido ou usado).
+             *     Códigos novos entram de forma aditiva.
              */
             code: string;
             /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com `quota_exceeded`, o limite da cota (desde a 2.15.0). */
@@ -2043,6 +2114,36 @@ export interface components {
                 /** @enum {string} */
                 status: "ok" | "down";
             }[];
+        };
+        PasswordResetCheck: {
+            /** @description O segredo do link, lido do fragmento de `/redefinir-senha#<token>`. */
+            token: string;
+        };
+        PasswordReset: {
+            /** @description O segredo do link, como em `PasswordResetCheck`. */
+            token: string;
+            /**
+             * Format: password
+             * @description Ao menos 12 caracteres, como no cadastro.
+             */
+            new_password: string;
+        };
+        /** @description Desde a 2.18.0. O que a página de redefinição mostra de um link válido. */
+        PasswordResetInfo: {
+            /** Format: email */
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /** @description Desde a 2.18.0. O link de redefinição recém-gerado; `url` só volta na criação. */
+        PasswordResetLink: {
+            /**
+             * Format: uri
+             * @description `<url pública>/redefinir-senha#<segredo>`.
+             */
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         LoginRequest: {
             /** Format: email */
@@ -4576,6 +4677,60 @@ export interface operations {
                     "application/json": components["schemas"]["ServerInfo"];
                 };
             };
+        };
+    };
+    checkPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetCheck"];
+            };
+        };
+        responses: {
+            /** @description Link válido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetInfo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordReset"];
+            };
+        };
+        responses: {
+            /** @description Senha redefinida e sessões da conta encerradas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     deviceLogin: {
@@ -7480,6 +7635,35 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    createPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Link gerado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetLink"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     retryTranscriptionJob: {

@@ -31,6 +31,7 @@ _TITLES = {
     "signup_closed": "Cadastro fechado",
     "notice_required": "Aviso não aceito",
     "invalid_pairing_code": "Código de pareamento inválido",
+    "invalid_reset_link": "Link de redefinição inválido",
     "method_not_allowed": "Método não permitido",
     "payload_too_large": "Corpo grande demais",
     "upload_completing": "Upload sendo concluído",

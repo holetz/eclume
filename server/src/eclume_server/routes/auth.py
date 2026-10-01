@@ -1,4 +1,4 @@
-"""`health`, cadastro (`auth/signup`), sessão (`auth/login`, `auth/logout`), `me` e o aceite do aviso."""
+"""`health`, cadastro, sessão, redefinição de senha por link, `me` e o aceite do aviso."""
 
 from __future__ import annotations
 
@@ -24,7 +24,9 @@ from eclume_server.accounts import (
     new_password_hash,
     notice,
     password_login,
+    password_reset_info,
     purge_user,
+    reset_password,
 )
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
@@ -51,7 +53,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.17.0"
+CONTRACT_VERSION = "2.18.0"
 WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -185,6 +187,53 @@ async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, n
     response.set_cookie(SESSION_COOKIE, token, max_age=max_age, httponly=True, secure=secure, samesite="lax")
     response.set_cookie(CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure, samesite="lax")
     return response
+
+
+class PasswordResetCheck(BaseModel):
+    """Schema `PasswordResetCheck`."""
+
+    token: str = Field(min_length=1, max_length=128)
+
+
+class PasswordReset(BaseModel):
+    """Schema `PasswordReset`."""
+
+    token: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
+def _invalid_reset_link() -> ApiProblemError:
+    # Inexistente, vencido e usado dão a mesma resposta: a rota não serve de oráculo.
+    return ApiProblemError(
+        401,
+        "invalid_reset_link",
+        "Este link venceu ou já foi usado. Peça outro a quem administra o servidor.",
+        headers={"WWW-Authenticate": 'Bearer realm="eclume"'},
+    )
+
+
+ResetAttempts = Annotated[None, Depends(attempts("auth_password_reset"))]
+
+
+@router.post("/auth/password-reset/check")
+async def check_password_reset(body: PasswordResetCheck, ctx: Ctx, _: ResetAttempts) -> dict[str, Any]:
+    """O e-mail e a validade de um link de redefinição, sem consumi-lo."""
+    info = await password_reset_info(ctx.engine, body.token)
+    if info is None:
+        raise _invalid_reset_link()
+    return info
+
+
+@router.post("/auth/password-reset", status_code=204)
+async def reset_password_by_link(body: PasswordReset, ctx: Ctx, _: ResetAttempts) -> Response:
+    """Troca a senha pelo link e encerra todas as sessões da conta, sem abrir outra."""
+    try:
+        reset = await reset_password(ctx.engine, body.token, body.new_password)
+    except AccountError as exc:
+        raise invalid_field("new_password", str(exc)) from exc
+    if not reset:
+        raise _invalid_reset_link()
+    return Response(status_code=204)
 
 
 @router.post("/auth/logout", status_code=204)

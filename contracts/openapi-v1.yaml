@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.17.0
+  version: 2.18.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -605,6 +605,73 @@ paths:
               examples:
                 producao:
                   $ref: "#/components/examples/ServerInfo"
+
+  /api/v1/auth/password-reset/check:
+    post:
+      tags: [auth]
+      operationId: checkPasswordReset
+      summary: Conferir um link de redefinição de senha
+      description: |
+        Desde a 2.18.0. A página `/redefinir-senha` lê o segredo do fragmento da URL e o manda no
+        corpo; a resposta diz o e-mail da conta e até quando o link vale, sem consumir o link.
+        Link inexistente, vencido, já usado, vencido por um mais novo ou de conta desativada,
+        401 `invalid_reset_link`; tentativas demais do mesmo IP, 429 `rate_limited` com
+        `Retry-After`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetCheck"
+      responses:
+        "200":
+          description: Link válido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetInfo"
+              examples:
+                valido:
+                  $ref: "#/components/examples/PasswordResetInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+  /api/v1/auth/password-reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Redefinir a senha por um link gerado pelo admin
+      description: |
+        Desde a 2.18.0. Troca a senha da conta do link (ao menos 12 caracteres, como no cadastro),
+        marca o link como usado e encerra todas as sessões da conta, sem abrir outra: a pessoa
+        entra de novo com a senha nova. Credenciais de aparelho e PATs seguem valendo. Link
+        inválido, 401 `invalid_reset_link`, como em `POST /auth/password-reset/check`; senha
+        curta, 422 `validation_failed` sem consumir o link.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordReset"
+      responses:
+        "204":
+          description: Senha redefinida e sessões da conta encerradas.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/devices/login:
     post:
@@ -3801,8 +3868,9 @@ paths:
         - adminSessionCookie: []
       summary: Desativar ou reativar um usuário, ou sobrepor as cotas dele
       description: >-
-        Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas` troca a
-        sobreposição das cotas da conta.
+        Desativar encerra as sessões e revoga os PATs do usuário (desde a 2.18.0, também vence o
+        link de redefinição de senha pendente). Desde a 2.15.0, `quotas` troca a sobreposição das
+        cotas da conta.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -3848,6 +3916,42 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/users/{user_id}/password-reset:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    post:
+      tags: [admin]
+      operationId: createPasswordReset
+      security:
+        - adminSessionCookie: []
+      summary: Gerar um link de redefinição de senha para um usuário
+      description: >-
+        Desde a 2.18.0. Link único, válido por 24 horas, que o admin entrega por fora a quem pediu:
+        `<url pública>/redefinir-senha#<segredo>`, com o segredo no fragmento (não chega a logs nem
+        ao `Referer`). O servidor guarda só o hash, e `url` só volta aqui. Um link novo vence os
+        anteriores ainda não usados da conta; desativar a conta anula o link pendente. Conta
+        desativada, 409 `conflict`. O admin nunca vê nem define a senha.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "201":
+          description: Link gerado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetLink"
+              examples:
+                novo:
+                  $ref: "#/components/examples/PasswordResetLink"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/admin/jobs/{job_id}/retry:
     post:
@@ -4221,8 +4325,9 @@ components:
             aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
             vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
             vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
-            desde a 2.15.0, `quota_exceeded` (cota da conta estourada). Códigos novos entram de
-            forma aditiva.
+            desde a 2.15.0, `quota_exceeded` (cota da conta estourada); desde a 2.18.0,
+            `invalid_reset_link` (link de redefinição de senha inexistente, vencido ou usado).
+            Códigos novos entram de forma aditiva.
           type: string
         limit:
           description: >-
@@ -4316,6 +4421,60 @@ components:
               status:
                 type: string
                 enum: [ok, down]
+
+    PasswordResetCheck:
+      type: object
+      required: [token]
+      properties:
+        token:
+          description: O segredo do link, lido do fragmento de `/redefinir-senha#<token>`.
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+
+    PasswordReset:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          description: O segredo do link, como em `PasswordResetCheck`.
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+        new_password:
+          description: Ao menos 12 caracteres, como no cadastro.
+          type: string
+          minLength: 1
+          maxLength: 1024
+          format: password
+          writeOnly: true
+
+    PasswordResetInfo:
+      description: Desde a 2.18.0. O que a página de redefinição mostra de um link válido.
+      type: object
+      required: [email, expires_at]
+      properties:
+        email:
+          type: string
+          format: email
+        expires_at:
+          type: string
+          format: date-time
+
+    PasswordResetLink:
+      description: Desde a 2.18.0. O link de redefinição recém-gerado; `url` só volta na criação.
+      type: object
+      required: [url, expires_at]
+      properties:
+        url:
+          description: "`<url pública>/redefinir-senha#<segredo>`."
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
 
     LoginRequest:
       type: object
@@ -7763,6 +7922,12 @@ components:
     LoginRequest:
       summary: E-mail e senha
       externalValue: ./fixtures/login-request.json
+    PasswordResetInfo:
+      summary: Link válido de uma consultora
+      externalValue: ./fixtures/password-reset-info.json
+    PasswordResetLink:
+      summary: Link recém-gerado pelo admin
+      externalValue: ./fixtures/password-reset-link.json
     MeUsage:
       summary: Uso da conta abaixo das cotas padrão
       externalValue: ./fixtures/me-usage.json

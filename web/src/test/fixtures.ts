@@ -14,6 +14,8 @@ import markerPage from '../../../contracts/fixtures/marker-page.json'
 import meViaPat from '../../../contracts/fixtures/me-via-pat.json'
 import pairingCodeCreated from '../../../contracts/fixtures/pairing-code-created.json'
 import pairingCodeUsed from '../../../contracts/fixtures/pairing-code-used.json'
+import passwordResetInfo from '../../../contracts/fixtures/password-reset-info.json'
+import passwordResetLink from '../../../contracts/fixtures/password-reset-link.json'
 import personPage from '../../../contracts/fixtures/person-page.json'
 import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
 import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
@@ -62,6 +64,8 @@ export const fixtures = {
   }),
   signupInfo: fresh<Schemas['SignupInfo']>(signupInfo),
   signupRequest: fresh<Schemas['SignupRequest']>(signupRequest),
+  passwordResetInfo: fresh<Schemas['PasswordResetInfo']>(passwordResetInfo),
+  passwordResetLink: fresh<Schemas['PasswordResetLink']>(passwordResetLink),
   recordingPage: fresh<Schemas['RecordingPage']>(recordingPage),
   recordingQueued: fresh<Schemas['Recording']>(recordingQueued),
   recordingTranscribed: fresh<Schemas['Recording']>(recordingTranscribed),

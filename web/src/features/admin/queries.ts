@@ -88,6 +88,14 @@ export function useSetUserActive() {
   })
 }
 
+/** Gera o link de redefinição de senha da conta; a URL só volta nesta resposta. */
+export function useCreatePasswordReset() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.POST('/api/v1/admin/users/{user_id}/password-reset', { params: { path: { user_id: id } } })),
+  })
+}
+
 /** Retenta o job que falhou (a revisão seguinte da gravação); a Saúde se atualiza em seguida. */
 export function useRetryJob() {
   const queryClient = useQueryClient()

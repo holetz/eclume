@@ -43,6 +43,7 @@ const SearchPage = named(() => import('../features/search/SearchPage'), 'SearchP
 const TagsPage = named(() => import('../features/tags/TagsPage'), 'TagsPage')
 const TokensPage = named(() => import('../features/tokens/TokensPage'), 'TokensPage')
 const SignupPage = named(() => import('../features/auth/SignupPage'), 'SignupPage')
+const ResetPasswordPage = named(() => import('../features/auth/ResetPasswordPage'), 'ResetPasswordPage')
 const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
 
 /** A rota de uma página sob demanda: o `Suspense` com "Carregando…" e o `preload` no `handle`. */
@@ -66,6 +67,8 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/entrar', element: <LoginPage /> },
       { path: '/cadastro', ...page(SignupPage) },
+      // O link que o admin gera: o segredo vem no fragmento, lido antes de qualquer redirecionamento.
+      { path: '/redefinir-senha', ...page(ResetPasswordPage) },
       // Quem lê o QR com a câmera comum cai aqui, sem sessão.
       { path: '/parear', ...page(PairPage) },
       // O painel admin fica fora da sessão do usuário: conta, login e guarda próprios.

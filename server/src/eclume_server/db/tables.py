@@ -99,6 +99,18 @@ pairing_codes = Table(
     _ts("created_at", server_default=FetchedValue()),
 )
 
+password_resets = Table(
+    "password_resets",
+    metadata,
+    _pk(),
+    _uuid("user_id"),
+    Column("token_hash", Text),
+    _uuid("admin_id"),
+    _ts("expires_at"),
+    _ts("used_at"),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
 platform_settings = Table(
     "platform_settings",
     metadata,

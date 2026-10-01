@@ -1,8 +1,8 @@
 """Contas de usuário vistas pelo admin (`/admin/users`). Só a sessão de admin.
 
 O admin lê só dados da conta, a contagem de gravações e o uso, nunca o conteúdo; muda `active` e a
-sobreposição das cotas, e exclui a conta. Roda com o papel de conexão: as contas não são do admin
-para a RLS.
+sobreposição das cotas, gera o link de redefinição de senha (nunca vê nem define a senha) e exclui a
+conta. Roda com o papel de conexão: as contas não são do admin para a RLS.
 """
 
 from __future__ import annotations
@@ -11,20 +11,21 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, null, select, tuple_, update
 
-from eclume_server.accounts import purge_user
-from eclume_server.auth import require_admin
+from eclume_server.accounts import create_password_reset, expire_password_resets, purge_user
+from eclume_server.auth import Admin, require_admin
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
-from eclume_server.problems import invalid_field, not_found
+from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.quotas import usage
 from eclume_server.recordings import open_jobs_of
 from eclume_server.serialize import Row, user_json
+from eclume_server.server_info import server_info
 from eclume_server.settings_admin import QuotasPatch
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ async def list_users(ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict
 async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any]:
     """Desativa ou reativa a conta e troca a sobreposição das cotas.
 
-    Desativar encerra as sessões e revoga os PATs do usuário.
+    Desativar encerra as sessões, revoga os PATs e vence o link de redefinição pendente do usuário.
     """
     sent = body.model_dump(exclude_unset=True)
     if not sent:
@@ -99,6 +100,7 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
             raise not_found("Usuário inexistente.")
         if body.active is False:
             await conn.execute(delete(t.sessions).where(t.sessions.c.user_id == user_id))
+            await expire_password_resets(conn, user_id)
             await conn.execute(
                 update(t.api_tokens)
                 .where(t.api_tokens.c.user_id == user_id, t.api_tokens.c.revoked_at.is_(None))
@@ -106,6 +108,19 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
             )
         row = (await conn.execute(_users().where(t.users.c.id == user_id))).mappings().one()
         return await admin_user_json(conn, ctx, row)
+
+
+@router.post("/users/{user_id}/password-reset", status_code=201)
+async def create_user_password_reset(user_id: UUID, request: Request, admin: Admin, ctx: Ctx) -> dict[str, Any]:
+    """Link de redefinição de senha da conta, válido por 24 h, com a URL pública do servidor."""
+    url = server_info(ctx.settings, str(request.base_url))["url"]
+    async with system_tx(ctx.engine) as conn:
+        active = (await conn.execute(select(t.users.c.active).where(t.users.c.id == user_id))).scalar()
+        if active is None:
+            raise not_found("Usuário inexistente.")
+        if not active:
+            raise conflict("Conta desativada não recebe link de redefinição.")
+        return await create_password_reset(conn, user_id, admin.admin_id, url)
 
 
 @router.delete("/users/{user_id}", status_code=204)

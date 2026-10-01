@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { safeReturnPath } from '../../app/session'
@@ -113,6 +113,15 @@ describe('login', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Cada palavra, guardada em casa.' })).toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveClass('auth')
     expect(screen.getByRole('link', { name: 'Criar conta' })).toHaveAttribute('href', '/cadastro')
+  })
+
+  it('orienta quem esqueceu a senha e mostra o aviso de senha redefinida', async () => {
+    mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
+    const { router } = renderApp('/entrar')
+    expect(await screen.findByText('Esqueceu a senha? Peça um link a quem administra o servidor.')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    await act(() => router.navigate('/entrar', { state: { notice: 'Senha redefinida. Entre com a nova.' } }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Senha redefinida. Entre com a nova.')
   })
 
   it('só aceita volta para caminho interno', () => {
