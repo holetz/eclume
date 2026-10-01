@@ -150,6 +150,8 @@ def test_validacao_escopo_e_limite_por_conta(
 
 def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Services):
     pat = user.pat("summaries:read")
+    # Esvazia a fila: perguntas deixadas por outros testes consumiriam as respostas do roteiro.
+    run_cpu(services.settings)
     agents = FakeAgents(
         replies={
             "base_chat": [
@@ -164,8 +166,7 @@ def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Servi
     run_cpu(services.settings, agents)
     done = pat.get(f"/api/v1/base-chat/{created.json()['id']}").json()
     assert (done["status"], done["answer"], done["queries"]) == ("done", "Só pelos resumos.", 0)
-    # Só as chamadas desta pergunta: o worker também drena perguntas deixadas na fila por outros testes.
-    calls = [call for call in agents.of("base_chat") if "Qual o orçamento?" in call[2]]
+    calls = agents.of("base_chat")
     assert len(calls) == 2
     assert all(system == BASE_CHAT_SUMMARIES_SYSTEM for _, system, _ in calls)
     assert "search_transcripts" not in calls[0][1]
