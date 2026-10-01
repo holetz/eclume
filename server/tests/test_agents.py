@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from typing import TYPE_CHECKING, Any
 
@@ -60,7 +61,7 @@ import json, os, sys, time
 record = os.environ["FAKE_CLAUDE_RECORD"]
 prompt = sys.stdin.read()
 with open(record, "w") as fh:
-    json.dump({{"argv": sys.argv[1:], "stdin": prompt, "cwd": os.getcwd()}}, fh)
+    json.dump({{"argv": sys.argv[1:], "stdin": prompt, "cwd": os.getcwd(), "pid": os.getpid()}}, fh)
 mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
 if mode == "ok":
     print(json.dumps({{"type": "result", "subtype": "success", "is_error": False, "result": "# Ata\\n\\n- decidido",
@@ -114,6 +115,30 @@ def test_claude_cli_roda_sem_ferramentas_e_com_o_prompt_no_stdin(fake_claude: Fa
     assert "--strict-mcp-config" in argv
     # O agente roda num diretório vazio, sem CLAUDE.md de projeto nenhum.
     assert "eclume-claude-" in seen["cwd"]
+
+
+def test_claude_cli_cancelado_mata_o_processo(fake_claude: FakeClaude):
+    provider, record = fake_claude("slow")
+
+    async def go() -> int:
+        task = asyncio.create_task(provider.complete("sistema", "a transcrição"))
+        pid = None
+        for _ in range(250):
+            try:
+                pid = json.loads(record.read_text())["pid"]
+                break
+            except (OSError, ValueError):
+                await asyncio.sleep(0.02)
+        assert pid is not None
+        # O timeout do arq (ou a parada do worker) cancela a task do job.
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return pid
+
+    pid = run(go())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
 
 
 def test_claude_cli_sem_credencial_nem_chama_a_cli(fake_claude: FakeClaude, tmp_path: Path):
