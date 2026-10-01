@@ -95,6 +95,28 @@ async def next_for_recording(engine: AsyncEngine, redis: ArqRedis, recording_id:
     return None if owner_id is None else await next_for(engine, redis, owner_id)
 
 
+async def held_counts(conn: AsyncConnection) -> dict[str, int]:
+    """Jobs retidos (só números): os que aguardam a vez da conta e os que aguardam a janela de minutos.
+
+    O retido de uma conta sem job despachado e dentro dos minutos conta como na vez da conta: o
+    próximo despacho (ou o cron) o leva.
+    """
+    jobs = t.transcription_jobs.c
+    held = {"account_turn": 0, "gpu_minutes": 0}
+    rows = await conn.execute(
+        select(jobs.owner_id, func.count())
+        .where(jobs.state == "queued", jobs.dispatched_at.is_(None))
+        .group_by(jobs.owner_id)
+    )
+    for owner_id, count in rows.all():
+        busy = (
+            await conn.execute(select(jobs.id).where(*_jobs_open(owner_id), jobs.dispatched_at.is_not(None)))
+        ).first()
+        waiting_window = busy is None and not await within_gpu_minutes(conn, owner_id)
+        held["gpu_minutes" if waiting_window else "account_turn"] += count
+    return held
+
+
 async def dispatch_waiting(engine: AsyncEngine, redis: ArqRedis) -> list[UUID]:
     """Rede de segurança: tenta o despacho de toda conta com job retido; devolve o que despachou."""
     jobs = t.transcription_jobs.c

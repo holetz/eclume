@@ -4089,8 +4089,9 @@ paths:
       operationId: updateUser
       security:
       - adminSessionCookie: []
-      summary: Desativar ou reativar um usuário
-      description: Desativar encerra as sessões e revoga os PATs do usuário.
+      summary: Desativar ou reativar um usuário, ou sobrepor as cotas dele
+      description: Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas`
+        troca a sobreposição das cotas da conta.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -4114,6 +4115,28 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags:
+      - admin
+      operationId: deleteUser
+      security:
+      - adminSessionCookie: []
+      summary: Excluir um usuário e todos os dados dele
+      description: 'Desde a 2.15.0. Exclui a conta como a exclusão pela própria pessoa (`POST /me/delete`),
+        sem a senha: gravações, transcrições, resumos e tudo o mais saem do banco, os objetos saem do
+        armazenamento pela fila de exclusão, a transcrição em curso é cancelada e o e-mail fica livre
+        para um cadastro novo.'
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Conta excluída.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/admin/jobs/{job_id}/retry:
     post:
       tags:
@@ -4727,7 +4750,8 @@ components:
           - 'null'
           format: date-time
     AdminUser:
-      description: Conta de usuário vista pelo admin (o `User` mais a contagem de gravações).
+      description: Conta de usuário vista pelo admin (o `User` mais a contagem de gravações e, desde a
+        2.15.0, o uso e a sobreposição das cotas).
       type: object
       required:
       - id
@@ -4739,6 +4763,8 @@ components:
       - notice_version
       - notice_accepted_at
       - recording_count
+      - quotas
+      - usage
       properties:
         id:
           type: string
@@ -4770,14 +4796,60 @@ components:
         recording_count:
           type: integer
           minimum: 0
-    UserPatch:
+        quotas:
+          description: Só os campos que esta conta sobrepõe ao padrão da plataforma (`null` num campo
+            é sem limite); `null` quando a conta segue o padrão inteiro.
+          oneOf:
+          - $ref: '#/components/schemas/QuotasOverride'
+          - type: 'null'
+        usage:
+          $ref: '#/components/schemas/UsageNow'
+    QuotasOverride:
+      description: 'Cotas parciais (desde a 2.15.0): só os campos presentes valem; `null` num campo é
+        sem limite.'
       type: object
-      required:
-      - active
+      additionalProperties: false
+      properties:
+        storage_bytes:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        file_bytes:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        open_uploads:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        gpu_minutes_24h:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        agent_requests_24h:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    UserPatch:
+      description: Ao menos um campo; desde a 2.15.0, `active` é opcional e entra `quotas`.
+      type: object
+      minProperties: 1
+      additionalProperties: false
       properties:
         active:
           description: '`false` desativa a conta, encerra as sessões e revoga os PATs.'
           type: boolean
+        quotas:
+          description: 'Troca a sobreposição inteira das cotas da conta pelos campos enviados (`null`
+            num campo é sem limite); `quotas: null` volta a conta ao padrão da plataforma.'
+          oneOf:
+          - $ref: '#/components/schemas/QuotasOverride'
+          - type: 'null'
     AdminUserPage:
       type: object
       required:
@@ -8179,6 +8251,7 @@ components:
       - diarization
       - voice_identification
       - preprocessing
+      - quotas
       - updated_at
       - updated_by
       properties:
@@ -8190,6 +8263,9 @@ components:
           $ref: '#/components/schemas/VoiceIdentificationSettings'
         preprocessing:
           $ref: '#/components/schemas/PreprocessingSettings'
+        quotas:
+          description: Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta.
+          $ref: '#/components/schemas/Quotas'
         updated_at:
           type: string
           format: date-time
@@ -8327,6 +8403,9 @@ components:
               properties:
                 enabled:
                   type: boolean
+        quotas:
+          description: Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite.
+          $ref: '#/components/schemas/QuotasOverride'
     AgentProvider:
       type: object
       required:
@@ -8783,8 +8862,24 @@ components:
               running:
                 type: integer
                 minimum: 0
+        held_jobs:
+          description: 'Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os
+            que aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de
+            24 h. Só números.'
+          type: object
+          required:
+          - account_turn
+          - gpu_minutes
+          properties:
+            account_turn:
+              type: integer
+              minimum: 0
+            gpu_minutes:
+              type: integer
+              minimum: 0
         running_jobs:
-          description: Jobs de transcrição da plataforma ainda não concluídos, com o progresso.
+          description: Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos,
+            com o progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`).
           type: array
           items:
             type: object
@@ -12284,6 +12379,12 @@ components:
             threshold_db: -50
           split_channels:
             enabled: false
+        quotas:
+          storage_bytes: 10737418240
+          file_bytes: 2147483648
+          open_uploads: 3
+          gpu_minutes_24h: 600
+          agent_requests_24h: 200
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
           id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -12368,6 +12469,14 @@ components:
           notice_version: null
           notice_accepted_at: null
           recording_count: 37
+          quotas:
+            storage_bytes: 21474836480
+            gpu_minutes_24h: null
+          usage:
+            storage_bytes: 6012954214
+            open_uploads: 0
+            gpu_minutes_24h: 184
+            agent_requests_24h: 23
         - id: 01928f3a-1c00-7a00-8000-000000000102
           email: paulo.andrade@example.com
           name: Paulo Andrade
@@ -12377,6 +12486,12 @@ components:
           notice_version: '1'
           notice_accepted_at: '2026-09-28T12:00:00Z'
           recording_count: 12
+          quotas: null
+          usage:
+            storage_bytes: 412316860
+            open_uploads: 1
+            gpu_minutes_24h: 0
+            agent_requests_24h: 2
         next_cursor: null
     AdminHealth:
       summary: Um job rodando na GPU
@@ -12496,6 +12611,9 @@ components:
           status: absent
           detail: null
           latency_ms: null
+        held_jobs:
+          account_turn: 4
+          gpu_minutes: 1
     SpeakerSuggestionRejected:
       summary: Locutor 2 sem a sugestão recusada
       value:

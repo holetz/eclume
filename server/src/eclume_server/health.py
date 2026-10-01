@@ -19,6 +19,7 @@ from sqlalchemy import Boolean, Column, MetaData, Table, Text, func, select
 from eclume_server import __version__
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.dispatch import held_counts
 from eclume_server.pagination import iso
 from eclume_server.queue import AGENT_QUEUE, DEFAULT_QUEUE, GPU_QUEUE, job_progress, progress_of_revision
 from eclume_server.stalled import is_retryable
@@ -311,7 +312,14 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
     # Com o papel de conexão: os jobs são de todos os usuários.
     async with system_tx(ctx.engine) as conn:
         open_jobs = (
-            (await conn.execute(select(jobs).where(jobs.c.state.in_(["queued", "running"])).order_by(jobs.c.queued_at)))
+            # Só os despachados: o retido no banco (vez da conta, janela de minutos) conta em `held_jobs`.
+            (
+                await conn.execute(
+                    select(jobs)
+                    .where(jobs.c.state.in_(["queued", "running"]), jobs.c.dispatched_at.is_not(None))
+                    .order_by(jobs.c.queued_at)
+                )
+            )
             .mappings()
             .all()
         )
@@ -320,6 +328,7 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
             jobs.c.finished_at >= now - FAILURE_WINDOW,
         )
         failed_count = (await conn.execute(select(func.count()).select_from(jobs).where(*failed_filter))).scalar_one()
+        held = await held_counts(conn)
         steps = await steps_json(conn, now - FAILURE_WINDOW)
         failures = await failures_json(conn, now - FAILURE_WINDOW)
     services = await services_json(ctx, beat)
@@ -354,4 +363,5 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
         "worker": worker_json(beat),
         "queues": queues,
         "running_jobs": running_jobs,
+        "held_jobs": held,
     }

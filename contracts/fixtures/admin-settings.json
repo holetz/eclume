@@ -39,6 +39,13 @@
       "enabled": false
     }
   },
+  "quotas": {
+    "storage_bytes": 10737418240,
+    "file_bytes": 2147483648,
+    "open_uploads": 3,
+    "gpu_minutes_24h": 600,
+    "agent_requests_24h": 200
+  },
   "updated_at": "2026-09-14T18:25:00Z",
   "updated_by": {
     "id": "01928f3a-1c00-7a00-8000-000000000a01",

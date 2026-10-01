@@ -21,10 +21,10 @@ from eclume_server.accounts import (
     change_password,
     confirm_password,
     create_user,
-    delete_user,
     new_password_hash,
     notice,
     password_login,
+    purge_user,
 )
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
@@ -258,7 +258,7 @@ async def delete_own_account(
         raise invalid_field("password", str(exc)) from exc
     async with system_tx(ctx.engine) as conn:
         open_jobs = await open_jobs_of(conn, principal.user_id)
-        await delete_user(conn, principal.user_id)
+        await purge_user(conn, principal.user_id)
     # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
     await ctx.queue.request_cancel(open_jobs)
     response = Response(status_code=204)

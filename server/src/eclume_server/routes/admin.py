@@ -1,26 +1,34 @@
 """Contas de usuário vistas pelo admin (`/admin/users`). Só a sessão de admin.
 
-O admin lê só dados da conta e a contagem de gravações, nunca o conteúdo; muda só `active`.
-Roda com o papel de conexão: as contas não são do admin para a RLS.
+O admin lê só dados da conta, a contagem de gravações e o uso, nunca o conteúdo; muda `active` e a
+sobreposição das cotas, e exclui a conta. Roda com o papel de conexão: as contas não são do admin
+para a RLS.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-from sqlalchemy import delete, func, select, tuple_, update
+from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, func, null, select, tuple_, update
 
+from eclume_server.accounts import purge_user
 from eclume_server.auth import require_admin
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
-from eclume_server.problems import not_found
+from eclume_server.problems import invalid_field, not_found
+from eclume_server.quotas import usage
+from eclume_server.recordings import open_jobs_of
 from eclume_server.serialize import Row, user_json
+from eclume_server.settings_admin import QuotasPatch
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -35,14 +43,22 @@ _recording_count = (
 
 
 class UserPatch(BaseModel):
-    """Schema `UserPatch`."""
+    """Schema `UserPatch`: `quotas` troca a sobreposição inteira (`null` volta ao padrão)."""
 
-    active: bool
+    model_config = ConfigDict(extra="forbid")
+
+    active: bool | None = None
+    quotas: QuotasPatch | None = None
 
 
-def admin_user_json(row: Row) -> dict[str, Any]:
-    """Schema `AdminUser`."""
-    return {**user_json(row), "recording_count": row["recording_count"]}
+async def admin_user_json(conn: AsyncConnection, ctx: AppContext, row: Row) -> dict[str, Any]:
+    """Schema `AdminUser`: com o uso da conta e a sobreposição das cotas."""
+    return {
+        **user_json(row),
+        "recording_count": row["recording_count"],
+        "quotas": row["quotas"],
+        "usage": (await usage(conn, ctx.queue.pool, row["id"]))["usage"],
+    }
 
 
 def _users() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
@@ -57,17 +73,31 @@ async def list_users(ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict
         query = query.where(tuple_(t.users.c.created_at, t.users.c.id) < decode_cursor(cursor))
     async with system_tx(ctx.engine) as conn:
         rows = (await conn.execute(query)).mappings().all()
-    return page([admin_user_json(row) for row in rows], list(rows), limit, "created_at")
+        items = [await admin_user_json(conn, ctx, row) for row in rows[:limit]]
+    return page(items, list(rows), limit, "created_at")
 
 
 @router.patch("/users/{user_id}")
 async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any]:
-    """Desativa ou reativa a conta; desativar encerra as sessões e revoga os PATs do usuário."""
+    """Desativa ou reativa a conta e troca a sobreposição das cotas.
+
+    Desativar encerra as sessões e revoga os PATs do usuário.
+    """
+    sent = body.model_dump(exclude_unset=True)
+    if not sent:
+        raise invalid_field("body", "informe ao menos um campo")
+    if sent.get("active", False) is None:
+        raise invalid_field("active", "não pode ser nulo")
+    values: dict[str, Any] = {}
+    if "active" in sent:
+        values["active"] = body.active
+    if "quotas" in sent:
+        values["quotas"] = null() if body.quotas is None else body.quotas.model_dump(exclude_unset=True)
     async with system_tx(ctx.engine) as conn:
-        changed = await conn.execute(update(t.users).where(t.users.c.id == user_id).values(active=body.active))
+        changed = await conn.execute(update(t.users).where(t.users.c.id == user_id).values(**values))
         if changed.rowcount == 0:
             raise not_found("Usuário inexistente.")
-        if not body.active:
+        if body.active is False:
             await conn.execute(delete(t.sessions).where(t.sessions.c.user_id == user_id))
             await conn.execute(
                 update(t.api_tokens)
@@ -75,4 +105,19 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
                 .values(revoked_at=datetime.now(UTC))
             )
         row = (await conn.execute(_users().where(t.users.c.id == user_id))).mappings().one()
-    return admin_user_json(row)
+        return await admin_user_json(conn, ctx, row)
+
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(user_id: UUID, ctx: Ctx) -> Response:
+    """Exclui a conta e todos os dados dela, como a exclusão pela própria pessoa, sem a senha.
+
+    Os objetos saem do bucket pela fila de exclusão; o e-mail fica livre para um cadastro novo.
+    """
+    async with system_tx(ctx.engine) as conn:
+        open_jobs = await open_jobs_of(conn, user_id)
+        if not await purge_user(conn, user_id):
+            raise not_found("Usuário inexistente.")
+    # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
+    await ctx.queue.request_cancel(open_jobs)
+    return Response(status_code=204)

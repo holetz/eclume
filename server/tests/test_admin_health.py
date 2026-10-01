@@ -330,3 +330,29 @@ def test_retentar_em_corrida_responde_409(
         )
 
     run(services.sql(close))
+
+
+def test_jobs_retidos_por_vez_da_conta_e_por_janela(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    before = admin.get(URL).json()["held_jobs"]
+    busy = as_user(make_user())
+    first = upload_file(busy, audio_bytes(1500, seed="vez-1"))
+    upload_file(busy, audio_bytes(1500, seed="vez-2"))
+    body = admin.get(URL).json()
+    assert body["held_jobs"]["account_turn"] == before["account_turn"] + 1
+    # O retido não aparece como job em andamento: só o despachado.
+    listed = {job["recording_id"] for job in body["running_jobs"]}
+    assert first["id"] in listed
+
+    out_of_minutes = as_user(make_user())
+
+    async def exhaust(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text("UPDATE users SET quotas = '{\"gpu_minutes_24h\": 0}' WHERE email = :e"),
+            {"e": out_of_minutes.get("/api/v1/me").json()["user"]["email"]},
+        )
+
+    run(services.sql(exhaust))
+    upload_file(out_of_minutes, audio_bytes(1500, seed="janela"))
+    assert admin.get(URL).json()["held_jobs"]["gpu_minutes"] == before["gpu_minutes"] + 1

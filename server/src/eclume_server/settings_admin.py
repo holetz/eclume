@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from eclume_server.serialize import Row
 
-BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing")
+BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing", "quotas")
 # O `float16` puro é recusado: a série GTX 16xx dá NaN nele, e a engine o troca (worker-gpu.md).
 COMPUTE_TYPES = ("int8_float16", "int8", "int8_float32", "float32")
 # O único pipeline de diarização que a engine `whisperx-local` sabe carregar.
@@ -122,6 +122,16 @@ class VoiceIdentificationPatch(_Block):
     suggestion_threshold: float | None = Field(default=None, ge=0, le=1)
 
 
+class QuotasPatch(_Block):
+    """Bloco `quotas` do `AdminSettingsPatch` e a sobreposição por conta: `null` é sem limite."""
+
+    storage_bytes: int | None = Field(default=None, ge=0)
+    file_bytes: int | None = Field(default=None, ge=0)
+    open_uploads: int | None = Field(default=None, ge=0)
+    gpu_minutes_24h: int | None = Field(default=None, ge=0)
+    agent_requests_24h: int | None = Field(default=None, ge=0)
+
+
 class AdminSettingsPatch(_Block):
     """Schema `AdminSettingsPatch`: cada bloco é mesclado campo a campo."""
 
@@ -129,6 +139,7 @@ class AdminSettingsPatch(_Block):
     diarization: DiarizationPatch | None = None
     voice_identification: VoiceIdentificationPatch | None = None
     preprocessing: PreprocessingPatch | None = None
+    quotas: QuotasPatch | None = None
 
 
 # Campos que o schema aceita como `null`; os demais, enviados como `null`, são 422.
@@ -137,6 +148,7 @@ _NULLABLE = {
     "diarization": {"min_speakers", "max_speakers"},
     "voice_identification": set(),
     "preprocessing": set(),
+    "quotas": set(QuotasPatch.model_fields),
 }
 
 

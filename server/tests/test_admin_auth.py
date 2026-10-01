@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
-from eclume_server_testing.api import PASSWORD, Api, admin_login, new_admin
+from eclume_server_testing.api import PASSWORD, Api, admin_login, audio_bytes, new_admin, upload_file
+from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
@@ -95,3 +96,41 @@ def test_admin_desativado_nao_entra(client: TestClient, services: Services):
     client.cookies.clear()
     login = client.post("/api/v1/admin/auth/login", json={"email": account.email, "password": PASSWORD})
     assert login.status_code == 401
+
+
+def test_uso_e_sobreposicao_das_cotas_em_usuarios(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    api = as_user(account)
+    upload_file(api, audio_bytes(4096, seed="uso-admin"))
+    url = f"/api/v1/admin/users/{account.user_id}"
+
+    def listed() -> dict[str, Any]:
+        pages = admin.get("/api/v1/admin/users").json()["items"]
+        return next(item for item in pages if item["id"] == str(account.user_id))
+
+    row = listed()
+    assert row["quotas"] is None
+    assert (row["usage"]["storage_bytes"], row["usage"]["open_uploads"]) == (4096, 0)
+
+    changed = admin.patch(url, json={"quotas": {"storage_bytes": 1000, "gpu_minutes_24h": None}})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["quotas"] == {"storage_bytes": 1000, "gpu_minutes_24h": None}
+    assert changed.json()["active"] is True
+    effective = api.get("/api/v1/me/usage").json()["quotas"]
+    assert (effective["storage_bytes"], effective["gpu_minutes_24h"], effective["open_uploads"]) == (1000, None, 3)
+    refused = api.post(
+        "/api/v1/uploads",
+        json={"filename": "a.opus", "content_type": "audio/ogg", "size_bytes": 10, "sha256": "0" * 64},
+    )
+    assert (refused.status_code, refused.json()["quota"]) == (403, "storage_bytes")
+
+    assert admin.patch(url, json={"quotas": {"storage_bytes": -1}}).status_code == 422
+    assert admin.patch(url, json={"quotas": {"outra": 1}}).status_code == 422
+    assert admin.patch(url, json={}).status_code == 422
+    assert admin.patch(url, json={"quotas": None}).json()["quotas"] is None
+    assert listed()["quotas"] is None
+    # A transcrição da gravação não fica na fila para a Saúde de outro teste.
+    run_gpu(services.settings)
+    run_cpu(services.settings)
