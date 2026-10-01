@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120
 maintainer: holetz
 ---
 
@@ -163,9 +163,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
   acessível; o título da tela segue
   "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
-  biblioteca) e Organizar (Pessoas, Coleções, Campos personalizados, Tipos de agenda); a `header` vai para
-  os menus do cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App
-  desktop, App móvel) e Ajuda (Central de ajuda). Uma área nova entra desligada, com a rota do mapa
+  biblioteca), Organizar, com os dados da conta (Pessoas, Coleções, Tags), e Regras, com o que age
+  sozinho depois de cada gravação (Processamento automático, Tipos de agenda, Campos
+  personalizados); as rotas não mudam com o grupo. A `header` vai para os menus do cabeçalho:
+  Minhas configurações e Ajuda (Central de ajuda). Na engrenagem, cada item tem a sua parte
+  (`part`), na ordem **Conta e privacidade** (Conta), **Aparelhos** (App desktop, App móvel),
+  **Integrações** (Conexão MCP, Tokens de acesso) e **Ambiente**; o `AppShell` abre cada parte com
+  um `{ heading }` do `MenuButton`, um `role="separator"` com `aria-label` e o texto em
+  `.menu-heading` (`app.css`), que o teclado não foca. Submenus aninhados não entram, pelo custo
+  de teclado e de toque. Uma área nova entra desligada, com a rota do mapa
   de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só
   `<nav aria-label="Principal">`; cada grupo é um `role="group"` rotulado pelo título, e o destaque
   fica fora deles. Não há item "Painel admin": a conta de usuário não tem papel, e o painel se abre
@@ -581,6 +587,18 @@ desce; abaixo de 56rem, os campos também):
   agente", com Nova tag, Editar (409 `tag_exists` sugere mesclar), "Mesclar em…" e Excluir em
   `Dialog`. "Campos personalizados" lista só os campos do usuário: o título vem dos tipos de agenda
   e as tags, desta tela.
+- **Processamento automático** (`/config/automacao`, `organize/AutomationPage.tsx`, chave de ajuda
+  `automacao`, primeiro item de Regras): a visão geral, na ordem do pipeline de
+  [processamento-automatico.md](processamento-automatico.md), do que acontece sozinho depois de
+  cada gravação, numa `<ol class="list">` de `.list-row`: pré-processamento e transcrição (da
+  plataforma, sem link), locutores pela voz (`/me/voice-assignment`, "Voz: liga sozinho a partir
+  de 75%"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
+  com `auto_fill`), tags (`/me/tag-assignment`, "Tags: só as cadastradas (N)"), coleções com
+  regra (`/collections` com `auto_assign`) e resumo (tipos com `summary_instructions`). Cada etapa
+  mostra o estado e um link "Configurar" (rotulado pela tela de destino); a página só lê, e as
+  chaves continuam no `TagAssignmentCard`, no `AutoAssignCard` e na regra da coleção. A falha de
+  uma consulta aparece só na etapa dela. Campos, Tags, Pessoas e Coleções apontam para ela no
+  texto de abertura, e Campos personalizados e Tipos de agenda usam o kicker "Regras".
 
 ## Minhas configurações
 
