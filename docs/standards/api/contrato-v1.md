@@ -4,10 +4,10 @@ title: Contrato de API v1
 description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100
 maintainer: holetz
 ---
 
@@ -126,6 +126,15 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `contracts` junto com o smoke do mock.
 - **Quebra** vira `/api/v2` num `openapi-v2.yaml` próprio; a v1 segue servida na transição,
   anunciando o fim com `Deprecation` e `Sunset`.
+- **Campo obsoleto dentro da v1 é anotação, não remoção.** A propriedade ganha `deprecated: true`
+  (OpenAPI 3.1 e JSON Schema 2020-12) e uma descrição que diz o que ela vale hoje e onde sai; segue
+  em `required` e preenchida, e o minor sobe como em toda mudança. `contracts/tests` fixa a lista
+  (`DEPRECATED_V1`) e falha se um obsoleto sair de `required` ou perder a marca. Os clientes não
+  leem campo obsoleto em código novo (o `schema.gen.ts` do web os marca `@deprecated`).
+- **O que a `/api/v2` remove** (obsoletos desde a 2.11.0 e o schema 1.2 da transcrição,
+  holetz/eclume#100): `Recording.owner`, `TranscriptSummary.owner`, `Transcript.owner`,
+  `VoiceSample.created_by`, `Summary.created_by` e `SummaryChatMessage.created_by` — resquícios do
+  modelo com organização; com cada conta isolada, valem sempre o próprio usuário.
 - **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
   removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
   e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes

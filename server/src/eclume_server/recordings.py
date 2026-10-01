@@ -15,7 +15,7 @@ from eclume_server.people import attribute_conditions, participant_filter
 from eclume_server.pipeline import FAILED_STEP, load_pipelines, pipeline_json, set_step
 from eclume_server.problems import conflict, not_found
 from eclume_server.queue import progress_of_revision, transcribe_options
-from eclume_server.serialize import Row, user_ref
+from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
 from eclume_server.stalled import CANCELLED, is_retryable
 
@@ -44,17 +44,19 @@ _markers = (
 
 
 def recording_select() -> Select:
-    """Gravações com dono, tipo de agenda, job mais recente, transcrição e marcadores (sob a RLS)."""
+    """Gravações com tipo de agenda, job mais recente, transcrição e marcadores (sob a RLS).
+
+    `owner_name` é o nome do usuário da transação (`requester_name`): só ele vê as gravações.
+    """
     return select(
         t.recordings,
-        t.users.c.name.label("owner_name"),
+        requester_name().label("owner_name"),
         t.agenda_types.c.name.label("agenda_type_name"),
         t.transcripts.c.id.label("transcript_id"),
         _markers.c.marker_count,
         *(column.label(f"job_{column.name}") for column in _job.c),
     ).select_from(
-        t.recordings.join(t.users, t.users.c.id == t.recordings.c.owner_id)
-        .outerjoin(t.agenda_types, t.agenda_types.c.id == t.recordings.c.agenda_type_id)
+        t.recordings.outerjoin(t.agenda_types, t.agenda_types.c.id == t.recordings.c.agenda_type_id)
         .outerjoin(_job, true())
         .outerjoin(t.transcripts, t.transcripts.c.recording_id == t.recordings.c.id)
         .join(_markers, true())
@@ -352,10 +354,10 @@ class Library:
         if self.status:
             # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
             conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
-        return conditions + self._company()
+        return conditions + self._organizing()
 
-    def _company(self) -> list[ColumnElement[bool]]:
-        """As condições de empresa: tag, coleção, tipo, pessoa e atributos de um participante."""
+    def _organizing(self) -> list[ColumnElement[bool]]:
+        """As condições de organização: tag, coleção, tipo, pessoa e atributos de um participante."""
         r = t.recordings.c
         conditions: list[ColumnElement[bool]] = []
         if self.tag:

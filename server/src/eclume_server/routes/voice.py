@@ -67,11 +67,10 @@ _SAMPLES = text(
     """
     SELECT s.transcript_id, r.id AS recording_id, r.title AS recording_title, s.speaker_id, s.model,
            s.talk_ms, excerpt.start_ms AS excerpt_start_ms, excerpt.end_ms AS excerpt_end_ms,
-           s.created_by, u.name AS created_by_name, s.created_at
+           s.created_by, (SELECT name FROM users WHERE id = eclume_user()) AS created_by_name, s.created_at
     FROM voice_samples s
     LEFT JOIN transcripts tr ON tr.id = s.transcript_id
     LEFT JOIN recordings r ON r.id = tr.recording_id
-    LEFT JOIN users u ON u.id = s.created_by
     -- A fala mais longa do locutor: o trecho para ouvir a amostra.
     LEFT JOIN LATERAL (
         SELECT g.start_ms, g.end_ms FROM segments g
