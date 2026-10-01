@@ -44,7 +44,15 @@ class FormatadorJson(logging.Formatter):
 
 
 def contexto_do_job(job: str | None, gravacao: str | None = None, rev: int | None = None) -> None:
-    """Define os campos do job no contexto atual (a task do arq tem o próprio contexto)."""
+    """Define os campos do job no contexto atual (cada job do arq roda na própria task).
+
+    Sem `gravacao`, lê gravação e revisão do `_job_id` `{job}:{recording_id}:{revision}`; um id em
+    outra forma (resumo, varredura, id aleatório do arq) só preenche `job_id`.
+    """
+    if gravacao is None and job:
+        partes = job.split(":")
+        if len(partes) == 3 and partes[2].isdigit():  # noqa: PLR2004 — as três partes do id
+            gravacao, rev = partes[1], int(partes[2])
     job_id.set(job)
     recording_id.set(gravacao)
     revision.set(rev)

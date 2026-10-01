@@ -65,3 +65,18 @@ def test_excecao_vai_no_campo_exc():
         logging.getLogger("eclume_engines.x").exception("falhou")
     (linha,) = _linhas(stream)
     assert "ValueError" in linha["exc"]
+
+
+def test_contexto_lido_do_job_id():
+    stream = io.StringIO()
+    registro.configurar_logs(stream=stream)
+    registro.contexto_do_job("ingest_transcript:rec-7:3")
+    logging.getLogger("eclume_server.worker").info("a")
+    registro.contexto_do_job("summarize:abc")
+    logging.getLogger("eclume_server.worker").info("b")
+    registro.contexto_do_job(None)
+    primeira, segunda = _linhas(stream)
+    assert primeira["recording_id"] == "rec-7"
+    assert primeira["revision"] == 3
+    assert segunda["job_id"] == "summarize:abc"
+    assert "recording_id" not in segunda

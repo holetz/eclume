@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import exists, insert, select, update
 
+from eclume_engines.registro import configurar_logs
 from eclume_server.accounts import AccountError, create_admin, set_admin_password
 from eclume_server.config import get_settings
 from eclume_server.db import tables as t
@@ -178,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Ponto de entrada do script `eclume-server`."""
     args = build_parser().parse_args(argv)
+    configurar_logs()
     try:
         if args.command == "migrate":
             asyncio.run(_pending() if args.pendentes else _migrate())
