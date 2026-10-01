@@ -3,7 +3,7 @@ titulo: Sua conta e quem vê suas gravações
 topico: comecar
 paginas: [biblioteca, ajuda, conta]
 relacionados: [primeira-gravacao, sugestoes-por-voz]
-termos: [conta, privacidade, quem vê, administrador, consentimento, aviso, cadastro, senha, trocar senha, excluir conta, limite, cota, armazenamento]
+termos: [conta, privacidade, quem vê, administrador, consentimento, aviso, cadastro, senha, trocar senha, esqueci a senha, redefinir senha, excluir conta, limite, cota, armazenamento]
 ordem: 6
 atualizado: 2026-10-01
 ---
@@ -47,6 +47,17 @@ padrão), os aplicativos desktop e celular ligados à conta e os tokens de acess
 cada aparelho pede login de novo: é o que convém quando você suspeita que a senha vazou.
 Desmarcada, aparelhos e tokens continuam valendo e se revogam um a um em
 [Tokens de acesso](/tokens).
+
+## Esqueceu a senha
+
+O eclume não envia e-mail. Peça a quem administra o servidor um link para redefinir a senha:
+quem administra confirma que é você e entrega o link por fora (pessoalmente, por telefone ou por
+mensagem). O link vale por 24 horas e uma só vez, e um link novo anula o anterior. Ao abri-lo, você
+vê o e-mail da conta e digita a senha nova duas vezes, com ao menos 12 caracteres; depois, entra
+com ela. Usar o link encerra todas as sessões abertas desta conta, em qualquer navegador. Os
+aplicativos desktop e celular e os tokens de acesso continuam valendo; se suspeitar de acesso
+indevido, revogue-os em [Tokens de acesso](/tokens). Quem administra nunca vê nem define a sua
+senha.
 
 ## Excluir a conta
 
