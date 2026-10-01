@@ -264,12 +264,24 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   Playwright `_android`, a tela bloqueada e a rede pelo `adb` e a notificação pelo `uiautomator`.
   Contra a produção, com a conta de smoke (`/srv/eclume/secrets/smoke-password`): entra pelo
   endereço conferindo a impressão digital com o `/server`, grava, marca pela tela e pela
-  notificação, fica 60 s com a tela bloqueada e o serviço de microfone em primeiro plano, sai da
-  rede (e espera o app notar, porque o emulador ainda alcança o servidor pelos dados móveis), para
-  e dá título, volta, confere a gravação no servidor (`source: mobile`, dois marcadores) e a
-  recuperação depois de `am force-stop` (a gravação fica salva, `interrompida` ou já
-  `sincronizada`). Parte do Wi‑Fi ligado, que o AVD guarda de uma prova que caiu no meio. A
+  notificação, fica 60 s com a tela bloqueada e em **Doze forçado** (`dumpsys battery unplug`,
+  `dumpsys deviceidle force-idle`, depois `unforce` e `reset`) com o serviço de microfone em
+  primeiro plano e o tempo de áudio andando, sai da rede (e espera o app notar, porque o emulador
+  ainda alcança o servidor pelos dados móveis), para e dá título, e volta à rede **com o app
+  morto** (Home, `am kill`, Wi‑Fi ligado, o id do job do `SyncWorker` pelo `dumpsys jobscheduler` e
+  `cmd jobscheduler run -f`) até a gravação aparecer no servidor sem abrir o app (`source: mobile`,
+  dois marcadores); por fim, a recuperação depois de `am force-stop` (a gravação fica salva,
+  `interrompida` ou já `sincronizada`). Parte do Wi‑Fi ligado, que o AVD guarda de uma prova que caiu no meio. A
   limpeza apaga as gravações da prova e revoga o token do aparelho.
+- **Pilar `android` do gate** ([monorepo.md](monorepo.md)): o APK de release minificado com uma
+  chave descartável, `testDebugUnitTest` e `lintRelease` do plugin e do app e a ponte JNI conferida
+  por `mobile/scripts/simbolos_jni.py` na `.so` e no dex.
+- **Fumaça do APK de release** (`prova-emulador.sh --fumaca <apk x86_64>`, no `release-movel.sh`):
+  abre, força o job do `SyncWorker` e exige o log do sync, sem `UnsatisfiedLinkError`,
+  `ClassNotFoundException` nem `FATAL EXCEPTION` ([mobile-distribuicao.md](mobile-distribuicao.md)).
+- **Áudio:** o microfone do emulador entrega silêncio; a captação de um som conhecido pelo
+  `-allow-host-audio` com uma fonte virtual do PulseAudio é experimento pendente, e até lá o
+  conteúdo do áudio é passo humano no aparelho.
 - **Aparelho real:** o celular, com a depuração USB ligada, vai numa porta USB do host (cabo de
   dados, modo MTP). O APK de depuração da prova só traz `x86_64`; para o aparelho, compile
   `npm --prefix mobile run tauri -- android build --debug --apk --target aarch64` no host e
