@@ -313,7 +313,10 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
             200,
             serde_json::json!({"id": "rec-remoto", "pipeline": [
                 {"step": "received", "state": "done"},
-                {"step": "transcription", "state": "active"}
+                {"step": "transcription", "state": "active"},
+                {"step": "summary", "state": "skipped", "reason": "no_provider", "error": null},
+                {"step": "fields", "state": "failed",
+                 "error": {"code": "provider_timeout", "message": "O agente não respondeu."}}
             ]}),
         ),
     );
@@ -326,6 +329,12 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
         .any(|(k, v)| k == "Authorization" && v == "Bearer eclp_x"));
     let etapas = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
     assert_eq!(etapas[1].state, "active");
+    assert_eq!(etapas[1].reason, None);
+    assert_eq!(etapas[2].reason.as_deref(), Some("no_provider"));
+    assert_eq!(
+        etapas[3].error.as_ref().map(|e| e.message.as_str()),
+        Some("O agente não respondeu.")
+    );
 }
 
 #[test]

@@ -82,6 +82,17 @@
   color: var(--color-text-muted);
 }
 
+/* O motivo de cada etapa pulada ou que falhou, em texto sob a barra (nunca só no `title`). */
+.pipelineReasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .progress {
   max-width: 24rem;
 }

@@ -5,7 +5,7 @@ paginas: [gravacao]
 relacionados: [por-que-falhou, etapas-do-processamento, corrigir-transcricao]
 termos: [tentar de novo, retranscrever, refazer, reprocessar, falha]
 ordem: 4
-atualizado: 2026-09-27
+atualizado: 2026-10-01
 ---
 Uma etapa que falhou quase sempre pode rodar de novo pela própria página da gravação.
 
@@ -27,5 +27,5 @@ Os valores automáticos e o tipo escolhido pelo agente são recalculados sobre a
   pelo tipo novo.
 - **Campos:** preencha ou corrija o valor à mão. Um valor editado nunca é sobrescrito depois.
 
-Se a mesma etapa falhar de novo, avise quem administra o servidor: o motivo aparece na barra de
-etapas.
+Se a mesma etapa falhar de novo, avise quem administra o servidor: o motivo aparece em texto
+embaixo da barra de etapas.
