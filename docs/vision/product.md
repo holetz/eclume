@@ -23,7 +23,7 @@ Quem grava reuniões de trabalho e precisa reencontrá-las (cada usuário com es
 
 ## Product Purpose
 
-Gravar reuniões, transcrever na GPU do próprio servidor, separar e reconhecer locutores, organizar por pessoa, localizar pela busca e resumir com o template do usuário — sem áudio saindo da casa.
+Gravar reuniões, transcrever na GPU do próprio servidor, separar e reconhecer locutores, organizar por pessoa, localizar pela busca e resumir pelo tipo de agenda, com os agentes que o admin configura.
 
 ## Positioning
 
