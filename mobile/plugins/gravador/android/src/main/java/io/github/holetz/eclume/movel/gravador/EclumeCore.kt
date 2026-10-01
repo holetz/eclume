@@ -18,7 +18,22 @@ object EclumeCore {
     @JvmStatic
     external fun estado(): String
 
-    /** Abre o núcleo com a pasta de dados do app (se preciso), sonda e sobe o que estiver pendente. */
+    /**
+     * Abre o núcleo com a pasta de dados do app (se preciso), sonda e sobe o que estiver pendente;
+     * o JSON diz `sincronizadas`, `falhas` e `interrompido`.
+     */
     @JvmStatic
     external fun syncPendentes(base: String): String
+
+    /** Antes do sync do worker: `na_rede`, `pendentes` e `bytes`. */
+    @JvmStatic
+    external fun sondarPendentes(base: String): String
+
+    /** O callback de rede do sistema: sem o Wi-Fi não medido, o sync em curso para. */
+    @JvmStatic
+    external fun rede(wifiNaoMedido: Boolean): String
+
+    /** O worker foi parado: o upload para na próxima requisição. */
+    @JvmStatic
+    external fun interromperSync(): String
 }
