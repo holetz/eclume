@@ -49,7 +49,7 @@ export function Servidor({ ir }: { ir: (rota: string) => void }) {
   return (
     <div className="m-body">
       <div className="m-section topo-7 gap-2">
-        <Marca tamanho={24} />
+        <Marca grande />
         <h1 className="m-title margem-topo-5">
           Encontre o seu servidor
         </h1>
