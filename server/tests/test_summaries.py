@@ -479,6 +479,33 @@ def test_resumo_novo_move_o_updated_at_da_gravacao(team: dict[str, Any], service
     assert stamp() > after_edit
 
 
+def _summary_step_vs_recording(services: Services, transcript_id: str) -> tuple[str, bool]:
+    """O estado da etapa `summary` e se o `updated_at` da gravação não ficou antes do fim dela."""
+    ((state, moved),) = _sql(
+        services,
+        "SELECT s.state, r.updated_at >= s.finished_at FROM pipeline_steps s"
+        " JOIN recordings r ON r.id = s.recording_id JOIN transcripts tr ON tr.recording_id = r.id"
+        " WHERE tr.id = :t AND s.step = 'summary'",
+        t=transcript_id,
+    )
+    return state, moved
+
+
+def test_resumo_que_falha_ou_e_pulado_move_o_updated_at_da_gravacao(team: dict[str, Any], services: Services):
+    """O `?since=` dos clientes vê o fim da etapa de resumo mesmo sem resumo novo."""
+    owner: Api = team["member"]
+    one_on_one = _types(services, team["member_account"])["1:1"]
+
+    # Sem provider de resumos, a etapa é pulada.
+    skipped = _transcribed(owner, services, agenda_type_id=one_on_one["id"])
+    assert _summary_step_vs_recording(services, skipped) == ("skipped", True)
+
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    down = [ProviderError(codes.PROVIDER_AUTH, "Not logged in")] * 8
+    failed = _transcribed(owner, services, FakeAgents(errors=down), agenda_type_id=one_on_one["id"])
+    assert _summary_step_vs_recording(services, failed) == ("failed", True)
+
+
 def test_apagar_o_resumo_move_o_updated_at_da_gravacao(team: dict[str, Any], services: Services):
     """Um `.md` já espelhado precisa sair da pasta: apagar versões também reaparece no `?since=`."""
     owner: Api = team["member"]

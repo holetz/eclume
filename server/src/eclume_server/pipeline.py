@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from eclume_server.db import tables as t
@@ -28,6 +28,8 @@ PREPROCESS_FAILED = "preprocess_failed"
 FAILED_STEP = {"download": "preprocessing", "preprocess": "preprocessing"}
 STEPS = ("received", "preprocessing", "transcription", "agenda_type", "fields", "summary")
 FINISHED = ("done", "failed", "skipped")
+# Desfechos da etapa `summary` sem resumo novo que o `?since=` precisa enxergar.
+UNSUMMARIZED = ("failed", "skipped")
 # Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
 GONE = "gravação apagada"
 STALE = "revisão antiga"
@@ -73,6 +75,16 @@ async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
         .values(owner_id=recording["owner_id"], recording_id=recording["id"], revision=revision, step=step, **values)
         .on_conflict_do_update(index_elements=[ps.c.recording_id, ps.c.revision, ps.c.step], set_=update_values)
     )
+    if step == "summary" and state in UNSUMMARIZED:
+        await mark_recording_changed(conn, recording["id"])
+
+
+async def mark_recording_changed(conn: AsyncConnection, recording_id: UUID) -> None:
+    """Move `updated_at` da gravação: o `?since=` dos clientes vê o resumo que falha ou é pulado.
+
+    Só a gravação: o `updated_at` da transcrição se move só com resumo novo, para não acordar o lumea.
+    """
+    await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=func.now()))
 
 
 def _step_json(step: str, row: Row | None) -> dict[str, Any]:
