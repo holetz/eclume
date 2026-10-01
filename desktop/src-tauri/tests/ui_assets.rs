@@ -43,7 +43,7 @@ fn eclume_css_e_a_mesma_copia_do_web() {
         assert!(
             desktop == read(&web),
             "desktop/ui/eclume.css difere de web/src/styles/eclume.css: rode \
-             desktop/scripts/sincronizar_ds.sh"
+             uv run python design-system/sincronizar.py"
         );
     }
 }
