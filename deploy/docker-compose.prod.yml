@@ -94,11 +94,28 @@ services:
       start_period: 10s
 
   # Fila eclume:default: ingestão das transcrições, resumos (claude -p) e expiração de uploads.
+  # Fila eclume:default: ingestão, falhas do worker GPU, purgas e crons (reaper e retomada).
   worker-cpu:
     <<: [*restart, *server-image]
     command: ["arq", "eclume_server.worker.WorkerSettings"]
     environment:
       <<: *server-env
+      # Transição (holetz/eclume#96): os jobs por agente que ainda estavam em eclume:default rodam
+      # aqui com o claude -p. Sai junto com as funções de agente do WorkerSettings.
+      CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+
+  # Fila eclume:agents: tipo de agenda, campos, resumos, chats e pré-visualizações, com
+  # ECLUME_AGENT_MAX_JOBS vagas; a ingestão não espera atrás deles.
+  worker-agents:
+    <<: [*restart, *server-image]
+    command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
+    environment:
+      <<: *server-env
+      ECLUME_AGENT_MAX_JOBS: ${ECLUME_AGENT_MAX_JOBS:-4}
       # Token de longa duração do `claude setup-token` (provider claude-cli). Não se renova, então
       # nada disputa a sessão OAuth do host. Vazio = claude-cli falha com provider_not_configured.
       CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
@@ -194,6 +211,8 @@ services:
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER}
+      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD}
     volumes:
       - minio:/data

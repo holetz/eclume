@@ -121,12 +121,13 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
 
     A identificação por voz vale no momento da ingestão: um job enfileirado antes do desligamento
-    não guarda o vetor, e o `speaker_embeddings.json` que ele produziu sai do bucket.
+    não guarda o vetor. Guardado ou descartado o vetor, o `speaker_embeddings.json` (biometria) entra
+    na fila de exclusão do bucket nesta mesma transação: o vetor vive só no banco.
     """
     if not embeddings_key:
         return None, {}
+    await conn.execute(insert(t.storage_deletions).values(key=embeddings_key))
     if not keep or not (await platform_voice(conn))["enabled"]:
-        await storage.delete_keys([embeddings_key])
         return None, {}
     model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
     for sid, vector in vectors.items():

@@ -449,6 +449,16 @@ impl Core {
         self.sessao.marcar(&self.fila, nota)
     }
 
+    /// Vigia o microfone da gravação em curso (marcadores de queda e volta); o laço do app chama.
+    pub fn vigiar(&mut self) -> Result<()> {
+        self.sessao.vigiar(&self.fila)
+    }
+
+    /// O sistema silenciou (`true`) ou devolveu a captura, pelo `AudioRecordingCallback`.
+    pub fn silenciar(&mut self, silenciada: bool) -> Result<()> {
+        self.sessao.silenciar(&self.fila, silenciada)
+    }
+
     pub fn anotar_marcador(&self, client_id: &str, nota: Option<&str>) -> Result<Marker> {
         Sessao::anotar(&self.fila, client_id, nota)
     }

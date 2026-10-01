@@ -130,16 +130,16 @@ impl RingSource {
         self.stop = Some(Box::new(stop));
         self
     }
-
-    /// Amostras descartadas por anel cheio desde o início.
-    pub fn dropped_samples(&self) -> usize {
-        self.shared.dropped.load(Ordering::Relaxed)
-    }
 }
 
 impl AudioSource for RingSource {
     fn sample_rate(&self) -> u32 {
         self.shared.sample_rate.load(Ordering::Acquire)
+    }
+
+    /// Amostras descartadas por anel cheio desde o início.
+    fn dropped_samples(&self) -> u64 {
+        self.shared.dropped.load(Ordering::Relaxed) as u64
     }
 
     fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {

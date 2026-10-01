@@ -36,6 +36,8 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER:-eclume}
+      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD:-eclume-dev-secret}
     ports:
       - "127.0.0.1:${ECLUME_MINIO_PORT:-9000}:9000"

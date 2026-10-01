@@ -599,6 +599,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recordings/{recording_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar a transcrição em curso ou na fila
+         * @description Desde a 2.10.0. O job `queued`/`running` da gravação termina `cancelled`, a gravação fica
+         *     `failed` com `Job.error.code` `cancelled` (recuperável) e a etapa em curso fica `skipped`
+         *     com `reason` `cancelled`. O worker GPU para no próximo ponto de checagem e libera a GPU;
+         *     "Transcrever de novo" (`/retranscribe`) é a volta. Sem job em aberto, 409.
+         */
+        post: operations["cancelRecordingTranscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/recordings/{recording_id}/summary": {
         parameters: {
             query?: never;
@@ -2295,7 +2320,7 @@ export interface components {
             progress: number;
             attempts: number;
             error: {
-                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. */
+                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. Desde a 2.10.0, `cancelled`: o dono cancelou a transcrição (ou excluiu a gravação); recuperável, com `state` `cancelled`. */
                 code: string;
                 message: string;
                 /** @description A falha é passageira (worker perdido, job sumido ou parado, ingestão falha, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
@@ -2402,7 +2427,8 @@ export interface components {
             } | null;
             /**
              * @description Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
-             *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+             *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
+             *     transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
              */
             reason: string | null;
         };
@@ -4746,6 +4772,35 @@ export interface operations {
         };
         responses: {
             /** @description Job na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recording"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelRecordingTranscription: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcrição cancelada; a gravação com o job `cancelled`. */
             202: {
                 headers: {
                     [name: string]: unknown;

@@ -89,6 +89,11 @@ jobs:
               - "worker-gpu/**"
               - "contracts/**"
               - "mobile/scripts/**"
+              # A fonte do DS e as três cópias geradas dela (design-system/test_sincronizar.py).
+              - "design-system/**"
+              - "web/src/styles/eclume.css"
+              - "desktop/ui/eclume.css"
+              - "mobile/ui/src/styles/eclume.css"
               - "deploy/docker-compose.test.yml"
               - "deploy/gate.py"
               - "deploy/test_gate.py"

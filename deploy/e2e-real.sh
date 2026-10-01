@@ -83,7 +83,7 @@ echo "Subindo o stack eclume-e2e…" >&2
 "${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres redis minio
 "${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm migrate
-"${COMPOSE[@]}" up -d --wait --wait-timeout 180 server worker-cpu worker web caddy
+"${COMPOSE[@]}" up -d --wait --wait-timeout 180 server worker-cpu worker-agents worker web caddy
 
 ADMIN_EMAIL="admin-e2e@eclume.invalid"
 ADMIN_PASSWORD="$(openssl rand -hex 16)"
@@ -99,6 +99,6 @@ ECLUME_E2E_URL=https://127.0.0.1:18443 ECLUME_E2E_ADMIN_EMAIL="$ADMIN_EMAIL" ECL
   npm --prefix web run test:e2e:real || {
     status=$?
     echo "E2E falhou; logs do worker e do worker CPU:" >&2
-    "${COMPOSE[@]}" logs --tail 60 worker worker-cpu >&2 || true
+    "${COMPOSE[@]}" logs --tail 60 worker worker-cpu worker-agents >&2 || true
     exit "$status"
   }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import redis
 from sqlalchemy import text
@@ -160,6 +160,89 @@ def test_retomada_pelo_hash_e_pelo_get(as_user: Callable[[Account], Api], make_u
     done = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": first + rest})
     assert done.status_code == 201
     assert api.post(f"/api/v1/uploads/{upload['id']}/part-urls", json={"part_numbers": [1]}).status_code == 409
+
+
+def _multipart(services: Services, upload_id: str) -> tuple[str, str]:
+    async def go(conn: Any) -> Any:  # noqa: ANN401
+        query = text("SELECT audio_key, s3_upload_id FROM uploads WHERE id = :u")
+        return (await conn.execute(query, {"u": upload_id})).one()
+
+    return tuple(run(services.sql(go)))
+
+
+def _lose_multipart(services: Services, upload_id: str) -> None:
+    """O multipart some do bucket (o MinIO o venceu ou alguém o abortou)."""
+    key, s3_upload_id = _multipart(services, upload_id)
+    services.s3().abort_multipart_upload(Bucket=services.settings.s3_bucket, Key=key, UploadId=s3_upload_id)
+
+
+def test_multipart_sumido_e_expired_e_o_mesmo_hash_abre_outro(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    data = audio_bytes(1200)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    _lose_multipart(services, upload["id"])
+
+    state = api.get(f"/api/v1/uploads/{upload['id']}")
+    assert state.status_code == 200
+    assert (state.json()["status"], state.json()["parts_received"]) == ("expired", [])
+    again = api.post("/api/v1/uploads", json=_body(data))
+    assert again.status_code == 201
+    assert again.json()["id"] != upload["id"]
+    assert again.json()["status"] == "in_progress"
+
+
+def test_retomada_por_hash_com_multipart_sumido_abre_outro(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    data = audio_bytes(1300)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    _lose_multipart(services, upload["id"])
+    again = api.post("/api/v1/uploads", json=_body(data))
+    assert again.status_code == 201
+    assert again.json()["id"] != upload["id"]
+    assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "expired"
+
+
+def test_parte_e_complete_com_multipart_sumido_respondem_409_upload_expired(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    data = audio_bytes(1400)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    _lose_multipart(services, upload["id"])
+    part = upload["parts"][0]
+    put = api.client.put(part["url"], content=data, headers=part["headers"])
+    assert (put.status_code, put.json()["code"]) == (409, "upload_expired")
+
+    other = api.post("/api/v1/uploads", json=_body(audio_bytes(1500))).json()
+    sent = put_parts(api, other, audio_bytes(1500))
+    _lose_multipart(services, other["id"])
+    done = api.post(f"/api/v1/uploads/{other['id']}/complete", json={"parts": sent})
+    assert (done.status_code, done.json()["code"]) == (409, "upload_expired")
+    assert api.get(f"/api/v1/uploads/{other['id']}").json()["status"] == "expired"
+
+
+def test_complete_repetido_depois_do_objeto_montado_conclui(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    data = audio_bytes(1600)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    sent = put_parts(api, upload, data)
+    # O `complete` anterior montou o objeto, mas o commit falhou: o upload segue `in_progress`.
+    key, s3_upload_id = _multipart(services, upload["id"])
+    services.s3().complete_multipart_upload(
+        Bucket=services.settings.s3_bucket,
+        Key=key,
+        UploadId=s3_upload_id,
+        MultipartUpload={"Parts": [{"PartNumber": p["part_number"], "ETag": p["etag"]} for p in sent]},
+    )
+    done = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": sent})
+    assert done.status_code == 201, done.text
+    assert done.json()["status"] == "queued"
 
 
 def test_hash_divergente_vira_falha_do_job(

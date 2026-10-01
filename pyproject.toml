@@ -27,6 +27,8 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# Projeção gerada pelo `cq design build` (conferida pelo `--check`), não código do eclume.
+extend-exclude = [".design/build"]
 src = [
   "engines/src",
   "engines/tests",

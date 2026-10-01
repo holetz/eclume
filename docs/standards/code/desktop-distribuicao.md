@@ -2,19 +2,22 @@
 type: standard
 title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, release no host pelo deploy/release-desktop.sh (Linux; Windows opcional por compilação cruzada; macOS fora enquanto o repositório for privado) e o workflow desktop-release como alternativa manual, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
-resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
+resource: desktop/scripts/assinar-windows.sh, desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109
 maintainer: holetz
 ---
 
 # Distribuição do app desktop
 
-O app desktop sai em instaladores **sem assinatura de código** (não há certificado) e se atualiza sozinho pelo updater do Tauri, cujo pacote é assinado com uma
-**chave minisign própria**. Como o repositório é privado, os clientes nunca baixam do GitHub:
+O app desktop sai em instaladores que se atualizam sozinhos pelo updater do Tauri, cujo pacote é
+assinado com uma **chave minisign própria**. O instalador Windows sai com **assinatura de código
+Authenticode** (com carimbo de tempo) sempre que o host tem a configuração do fornecedor
+(§Assinatura de código do Windows); sem ela, sai sem assinatura, e publicar assim exige
+`--sem-assinatura`. Linux não tem assinatura de código. Como o repositório é privado, os clientes nunca baixam do GitHub:
 baixam do próprio servidor eclume, em `https://192.168.15.199:8443/downloads/`.
 
 Enquanto o repositório for privado, os minutos do GitHub Actions têm cota, e o release sai **do
@@ -23,7 +26,7 @@ host**, sem Actions. Plataformas:
 | Plataforma | Estado |
 |---|---|
 | Linux | sai em todo release (AppImage e deb) |
-| Windows | sai em todo release (NSIS); `--sem-windows` no host ou `windows: false` no workflow o deixam de fora |
+| Windows | sai em todo release (NSIS), assinado por Authenticode quando o host tem a configuração; `--sem-windows` no host ou `windows: false` no workflow o deixam de fora |
 | macOS | **fora** até o repositório ficar público (o minuto de macOS custa 10×) |
 
 Uma plataforma fora do release some do `latest.json`, e os clientes dela ficam na versão que têm.
@@ -60,6 +63,15 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   `--sem-gate "<motivo>"` dispensa só o status e publica no commit o rastro
   `eclume/gate-dispensa` = `failure` com o motivo; árvore limpa e commit no GitHub seguem exigidos. Sem `--publicar` é **ensaio**: os
   artefatos ficam em `~/eclume-build/release/dist-<versão>/` no host e nada é publicado.
+- **Compilar sem segredos, empacotar com eles.** Cada alvo roda em dois contêineres: `tauri build
+  --no-bundle` sem nenhum segredo montado (é onde rodam os scripts de build das crates de
+  terceiros) e `tauri bundle` com a chave do updater e, no Windows assinado, a configuração de
+  assinatura em `/run/assinatura` (só leitura) e `--config` com o `bundle.windows.signCommand`.
+  O `tauri.conf.json` não tem `signCommand`: builds locais e do Actions não tentam assinar.
+- **Conferência antes de publicar:** com assinatura, o release confere o setup e, extraídos pelo
+  `7z`, o `eclume-desktop.exe` e o `uninstall.exe` (`assinar-windows.sh --verificar`); qualquer
+  falha para o release. Sem configuração, o ensaio avisa "instalador Windows sem assinatura", o
+  `--plan` mostra `assinatura Windows ausente`, e `--publicar` recusa sem `--sem-assinatura`.
 - A imagem de build sai de `desktop/build.Dockerfile` com o contexto mínimo (só o
   `desktop/rust-toolchain.toml`): Ubuntu 24.04 e Node por digest, o Rust do arquivo, e a tag
   `eclume-desktop-build:<versão do Rust>` (a Windows idem, com o `cargo-xwin` de versão fixada).
@@ -213,6 +225,31 @@ abertura seguinte.
   2026-09-25 com `desktop-v0.1.1` publicada: `versão 0.1.1 disponível` → `rewriting AppImage` →
   `versão 0.1.1 instalada` em ~1 s, o arquivo passou a ter o SHA-256 do AppImage 0.1.1 e o app
   reabriu na versão nova.
+
+## Assinatura de código do Windows
+
+- **Ferramenta:** o `jsign` (versão fixa, sha256 conferido no build da imagem
+  `eclume-desktop-build-windows`, com o Java headless), que assina no Linux por `--storetype`:
+  `TRUSTEDSIGNING` (Azure Artifact Signing), `AZUREKEYVAULT`, os HSMs na nuvem das ACs comerciais,
+  `PKCS11` (token físico) e `PKCS12` (teste). Desde 2023 a chave de um certificado de assinatura de
+  código público fica em hardware, então um `.pfx` comum não é o caso normal. O `osslsigncode`
+  confere, e o `7z` abre o instalador. O Tauri chama `desktop/scripts/assinar-windows.sh %1` pelo
+  `signCommand` para cada executável **antes** de gerar os artefatos do updater: o `.sig` minisign
+  do `latest.json` vale para o instalador já assinado.
+- **Configuração no host**, como a chave do updater: `/srv/eclume/secrets/assinatura-windows/`
+  (`chmod 600`, do uid 1000) com `assinatura.env` (`JSIGN_STORETYPE`, `JSIGN_KEYSTORE`,
+  `JSIGN_ALIAS`, `JSIGN_CERTFILE` quando o keystore não traz a cadeia, `JSIGN_TSAURL`) e a senha ou
+  o token: o arquivo `storepass` ou `JSIGN_STOREPASS_CMD`, um comando que imprime um token de curta
+  duração; mais os arquivos que o fornecedor pedir (caminhos relativos são relativos à pasta). A
+  pasta entra só leitura em `/run/assinatura` e nunca passa pela estação. **Nunca** no repositório.
+- **Sempre SHA-256 e com carimbo RFC 3161:** sem `JSIGN_TSAURL`, ou com a autoridade de carimbo
+  fora, a assinatura falha (o `jsign` tenta 3 vezes). A senha vai ao `jsign` por arquivo
+  temporário, fora da linha de comando.
+- **Trocar de fornecedor** é trocar o `assinatura.env` (e os arquivos dele) no host, sem mudar o
+  script nem o release. Um fornecedor que não caiba no `jsign` vira um modo novo no mesmo script.
+- `assinar-windows.sh --autoteste` assina e confere um stub do NSIS com um PKCS#12 autoassinado e
+  confere que um executável sem assinatura é recusado.
+- O workflow `desktop-release.yml` (alternativa no Actions) segue **sem** assinatura.
 
 ## Chave do updater
 

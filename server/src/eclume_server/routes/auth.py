@@ -29,6 +29,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.ratelimit import attempts, count_login
+from eclume_server.recordings import open_jobs_of
 from eclume_server.security import new_session_token, sha256_hex
 from eclume_server.serialize import user_json
 
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.9.0"
+CONTRACT_VERSION = "2.10.0"
 WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -202,14 +203,15 @@ async def change_own_password(
 async def delete_own_account(
     body: AccountDeletion, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_delete"))]
 ) -> Response:
-    """Exclui a conta e todos os dados dela, com os áudios do armazenamento; encerra a sessão."""
+    """Exclui a conta e todos os dados dela; os objetos saem do bucket pela fila de exclusão. Encerra a sessão."""
     try:
         async with system_tx(ctx.engine) as conn:
-            objects = await delete_user(conn, principal.user_id, body.password)
+            open_jobs = await open_jobs_of(conn, principal.user_id)
+            await delete_user(conn, principal.user_id, body.password)
     except AccountError as exc:
         raise invalid_field("password", str(exc)) from exc
-    for key, recording_id in objects:
-        await ctx.storage.delete_recording(key, recording_id)
+    # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
+    await ctx.queue.request_cancel(open_jobs)
     response = Response(status_code=204)
     _clear_cookies(response, ctx)
     return response

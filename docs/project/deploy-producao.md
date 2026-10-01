@@ -21,7 +21,8 @@ compartilhado com o lumea (443) e com os serviços pessoais do usuário, que o d
 LAN ──► :8443 caddy (tls internal) ─┬─ /api/*, /media/*  ──► server:8000 (uvicorn)
                                     ├─ /downloads/*      ──► /srv/eclume/downloads (somente leitura)
                                     └─ resto             ──► web:80 (SPA)
-server ──► postgres · redis · minio ◄── worker-cpu (eclume:default, claude -p)
+server ──► postgres · redis · minio ◄── worker-cpu (eclume:default: ingestão, reaper, retomada)
+                         redis ◄──────── worker-agents (eclume:agents, claude -p)
                          redis ◄──────── worker-gpu (eclume:gpu, WhisperX na GTX 1660 SUPER)
 ```
 
@@ -35,11 +36,12 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 | `web` | `eclume-web:prod` (`deploy/web.Dockerfile`) | SPA estática, servida por um Caddy mínimo com fallback para o `index.html` |
 | `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
 | `mdns` | `eclume-server:prod` | `eclume-server announce`: anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
-| `worker-cpu` | `eclume-server:prod` | `arq eclume_server.worker.WorkerSettings`: ingestão, resumos, expiração de uploads |
+| `worker-cpu` | `eclume-server:prod` | `arq eclume_server.worker.WorkerSettings`: ingestão, purgas, reaper, retomada e expiração de uploads |
+| `worker-agents` | `eclume-server:prod` | `arq eclume_server.worker.AgentWorkerSettings`: tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` (4) vagas e o `claude -p` |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1` ([worker-gpu.md](worker-gpu.md)) |
 | `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
-| `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens) |
+| `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
 
 One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket), `migrate`
 (`eclume-server migrate`, como o superusuário, que também liga o `LOGIN` de `eclume_server` com `ECLUME_RUNTIME_PG_PASSWORD`) e `publish-ca` (copia a CA para `/downloads/`).
@@ -99,7 +101,7 @@ O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do e
 4. Constrói `server`, `web` e `worker-gpu` no daemon do host (`--services` restringe;
    `--sem-build` pula). Com o lock inalterado, o worker GPU sai do cache em segundos.
 5. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
-   `up --wait server worker-cpu worker-gpu web` → `up --force-recreate --wait caddy`. Os one-shots
+   `up --wait server worker-cpu worker-agents worker-gpu web` → `up --force-recreate --wait caddy`. Os one-shots
    ficam fora do `--wait`, que trata a saída 0 de um serviço que ninguém espera como falha. O
    Caddy é sempre recriado porque o compose não recria um container quando só o
    `configs.content` muda. A CA está no volume e sobrevive.
@@ -139,7 +141,7 @@ host.
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, a base das URLs devolvidas ao cliente |
 | `ECLUME_SIGNUP_OPEN` | `true` (padrão): qualquer pessoa na LAN cria conta por `POST /api/v1/auth/signup`, com o aceite do aviso. `false` fecha o cadastro sem deploy de código: mude o env e recrie o server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
-| `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker CPU como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
+| `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker de agentes (e, na transição, ao worker CPU) como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
 ### Admin, contas e provider
 
@@ -166,7 +168,7 @@ sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
   (grave a nova senha no arquivo antes; `P` como em Operação). A senha da conta de usuário se troca pelo app.
 
 O provider padrão da plataforma é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), que
-roda o `claude -p` no worker CPU com o token de longa duração. O smoke o cadastra se faltar.
+roda o `claude -p` no worker de agentes com o token de longa duração. O smoke o cadastra se faltar.
 
 **Token do Claude.** Num computador com o Claude Code logado na assinatura, `claude setup-token`
 abre a autorização no navegador e imprime o token (`sk-ant-oat01-…`). Cadastre-o no painel:

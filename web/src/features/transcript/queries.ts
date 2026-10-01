@@ -52,6 +52,19 @@ export function useRefreshOnPipeline(recording: Schemas['Recording'] | undefined
   }, [queryClient, recording])
 }
 
+/** Cancela a transcrição em curso ou na fila; a gravação volta como o servidor a deixou (`failed`). */
+export function useCancelTranscription(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/v1/recordings/{recording_id}/cancel', { params: { path: { recording_id: id } } })),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(recordingKey(id), updated)
+      void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+    },
+  })
+}
+
 /** Exclui a gravação: tira do cache tudo o que é dela e relê a biblioteca. */
 export function useDeleteRecording(recording: Pick<Schemas['Recording'], 'id' | 'transcript_id'>) {
   const queryClient = useQueryClient()

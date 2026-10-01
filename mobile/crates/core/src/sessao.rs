@@ -2,13 +2,31 @@
 //! microfone, marcar pelo tempo de áudio, parar deixando a folha "Gravação salva" segurar o sync
 //! e salvar título e tipo de agenda. A queda do processo é acertada por `recuperar` na abertura
 //! seguinte ("A gravação fica salva se o celular desligar").
+//!
+//! O microfone que cai (fone plugado ou tirado, Bluetooth) se reconecta dentro da fonte
+//! (`eclume_audio_capture::reconnect`): a gravação segue no mesmo arquivo, com silêncio no meio, e
+//! a sessão mostra `microfone: reconectando`. Uma queda acima de 5 s e a volta viram marcadores
+//! automáticos, assim como o silêncio imposto pelo sistema (API 29+, `silenciada`).
 
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use eclume_recorder::session::{self, ActiveRecording, RecorderConfig, StartOptions};
-use eclume_recorder::{AudioSource, Marker, Queue, QueuedRecording};
+use eclume_recorder::{AudioSource, Marker, Queue, QueuedRecording, SourceState};
 use serde::Serialize;
+
+/// Quanto o microfone pode ficar fora antes do marcador "microfone perdido".
+const MICROFONE_FORA_APOS: Duration = Duration::from_secs(5);
+
+/// Como está o microfone da gravação em curso.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EstadoMicrofone {
+    Ok,
+    /// Caiu e a fonte tenta reabrir; o arquivo recebe silêncio enquanto isso.
+    Reconectando,
+}
 
 /// A gravação em curso, como a UI e a notificação a mostram.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -22,12 +40,18 @@ pub struct EstadoSessao {
     pub nivel: f32,
     pub pausada: bool,
     pub marcadores: Vec<Marker>,
+    pub microfone: EstadoMicrofone,
+    /// O sistema silenciou a captura (chamada, assistente de voz, bloqueio do microfone).
+    pub silenciada: bool,
 }
 
 /// A sessão: no máximo uma gravação por vez.
 #[derive(Default)]
 pub struct Sessao {
     ativa: Option<ActiveRecording>,
+    /// A queda do microfone já virou marcador.
+    microfone_marcado: bool,
+    silenciada: bool,
 }
 
 fn trancar(fila: &Mutex<Queue>) -> Result<MutexGuard<'_, Queue>> {
@@ -53,7 +77,59 @@ impl Sessao {
         let ativa = session::start(config, &*trancar(fila)?, vec![fonte], StartOptions::MEETING)?;
         let id = ativa.id().to_string();
         self.ativa = Some(ativa);
+        self.microfone_marcado = false;
+        self.silenciada = false;
         Ok(id)
+    }
+
+    /// Desde quando o microfone está fora, se está.
+    fn microfone_fora_desde(&self) -> Option<std::time::Instant> {
+        self.ativa
+            .as_ref()?
+            .progress()
+            .source_states()
+            .into_iter()
+            .find_map(|estado| match estado {
+                SourceState::Reconnecting { since } => Some(since),
+                SourceState::Live => None,
+            })
+    }
+
+    /// Vigia o microfone (chamada pelo laço do app): uma queda acima de 5 s marca "microfone
+    /// perdido" no instante da queda, e a volta marca "microfone de volta".
+    pub fn vigiar(&mut self, fila: &Mutex<Queue>) -> Result<()> {
+        let Some(ativa) = &self.ativa else {
+            return Ok(());
+        };
+        let audio_ms = ativa.audio_ms();
+        match (self.microfone_fora_desde(), self.microfone_marcado) {
+            (Some(desde), false) if desde.elapsed() >= MICROFONE_FORA_APOS => {
+                let fora_ms = i64::try_from(desde.elapsed().as_millis()).unwrap_or(i64::MAX);
+                let em = audio_ms.saturating_sub(fora_ms).max(0);
+                trancar(fila)?.add_marker(ativa.id(), em, Some("microfone perdido"))?;
+                self.microfone_marcado = true;
+            }
+            (None, true) => {
+                trancar(fila)?.add_marker(ativa.id(), audio_ms, Some("microfone de volta"))?;
+                self.microfone_marcado = false;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// O sistema silenciou (ou devolveu) a captura; silenciar marca "silenciado pelo sistema".
+    pub fn silenciar(&mut self, fila: &Mutex<Queue>, silenciada: bool) -> Result<()> {
+        let ativa = self.ativa()?;
+        if silenciada && !self.silenciada {
+            trancar(fila)?.add_marker(
+                ativa.id(),
+                ativa.audio_ms(),
+                Some("silenciado pelo sistema"),
+            )?;
+        }
+        self.silenciada = silenciada;
+        Ok(())
     }
 
     fn ativa(&self) -> Result<&ActiveRecording> {
@@ -120,6 +196,12 @@ impl Sessao {
             nivel: ativa.level(),
             pausada: ativa.is_paused(),
             marcadores: trancar(fila)?.markers(ativa.id())?,
+            microfone: if self.microfone_fora_desde().is_some() {
+                EstadoMicrofone::Reconectando
+            } else {
+                EstadoMicrofone::Ok
+            },
+            silenciada: self.silenciada,
         }))
     }
 }
