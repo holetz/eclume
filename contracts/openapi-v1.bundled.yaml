@@ -1578,7 +1578,9 @@ paths:
 
         pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
 
-        `transcript_missing`.
+        `transcript_missing`. Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h
+
+        (estourada, 403 `quota_exceeded`).
 
         '
       security:
@@ -2244,6 +2246,13 @@ paths:
 
         `provider_id` e sem provider padrão habilitado na plataforma, também 422.
 
+
+        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+
+        `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+
+        `rate_limited`).
+
         '
       security:
       - sessionCookie: []
@@ -2278,6 +2287,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/summaries/{summary_id}:
     parameters:
     - $ref: '#/components/parameters/SummaryId'
@@ -2509,6 +2520,10 @@ paths:
 
         o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
 
+        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+
+        `quota_exceeded`).
+
         '
       security:
       - sessionCookie: []
@@ -2702,7 +2717,9 @@ paths:
       description: 'Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas,
         ou as 3
 
-        mais recentes) com o provider de `fields`, sem gravar nada.
+        mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
+
+        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
 
         '
       security:
@@ -2871,7 +2888,9 @@ paths:
 
         2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
 
-        pelos resumos (sessão e credencial de aparelho leem as duas).
+        pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
+
+        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
 
         '
       security:

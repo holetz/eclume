@@ -25,6 +25,7 @@ from eclume_server.fields import builtin_fields, field_json, get_field, recordin
 from eclume_server.markers import list_markers, marker_json
 from eclume_server.pagination import decode_position, encode_position
 from eclume_server.problems import ApiProblemError
+from eclume_server.quotas import charge_agent, check_open_summaries
 from eclume_server.recordings import Library, delete_recording_of, get_visible, list_library, render
 from eclume_server.search import SearchFilters, search
 from eclume_server.summaries import (
@@ -348,6 +349,7 @@ def _write_tools(server: MCPServer) -> None:
                 else:
                     agenda_type = await summary_agenda_type(conn, transcript, None)
                     provider = await summary_provider(conn, None)
+                    await check_open_summaries(conn, principal.user_id)
                     row = await create_summary(
                         conn,
                         transcript=transcript,
@@ -356,6 +358,7 @@ def _write_tools(server: MCPServer) -> None:
                         trigger="manual",
                         created_by=principal.user_id,
                     )
+                await charge_agent(conn, app.queue.pool, principal.user_id)
         if instruction and instruction.strip():
             await app.queue.enqueue_summary_chat(reply["id"])
             return {"recording_id": recording_id, "mode": "chat", "pending_id": str(reply["id"])}

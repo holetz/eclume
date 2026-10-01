@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import text
-
 from eclume_server.quotas import merge
-from eclume_server_testing.api import audio_bytes, upload_file
-from eclume_server_testing.harness import run
+from eclume_server_testing.api import audio_bytes, override_quotas, upload_file
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -19,16 +15,6 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 KIB = 1024
-
-
-def _override(services: Services, account: Account, quotas: dict[str, Any] | None) -> None:
-    async def write(conn: Any) -> None:  # noqa: ANN401
-        await conn.execute(
-            text("UPDATE users SET quotas = CAST(:q AS jsonb) WHERE id = :id"),
-            {"q": json.dumps(quotas) if quotas is not None else None, "id": account.user_id},
-        )
-
-    run(services.sql(write))
 
 
 def _create(api: Api, data: bytes) -> Any:  # noqa: ANN401
@@ -82,7 +68,7 @@ def test_upload_recusado_por_cota(
     account = make_user()
     api = as_user(account)
 
-    _override(services, account, {"file_bytes": 16 * KIB})
+    override_quotas(services, api, {"file_bytes": 16 * KIB})
     big = _create(api, audio_bytes(32 * KIB, seed="grande"))
     assert big.status_code == 403
     assert big.json() | {"detail": None} == big.json() | {
@@ -93,13 +79,13 @@ def test_upload_recusado_por_cota(
         "detail": None,
     }
 
-    _override(services, account, {"open_uploads": 1})
+    override_quotas(services, api, {"open_uploads": 1})
     assert _create(api, audio_bytes(8 * KIB, seed="um")).status_code == 201
     second = _create(api, audio_bytes(8 * KIB, seed="dois"))
     assert second.status_code == 403
     assert (second.json()["quota"], second.json()["used"]) == ("open_uploads", 2)
 
-    _override(services, account, {"open_uploads": None, "storage_bytes": 20 * KIB})
+    override_quotas(services, api, {"open_uploads": None, "storage_bytes": 20 * KIB})
     full = _create(api, audio_bytes(16 * KIB, seed="tres"))
     assert full.status_code == 403
     assert (full.json()["quota"], full.json()["used"]) == ("storage_bytes", 24 * KIB)
@@ -107,5 +93,5 @@ def test_upload_recusado_por_cota(
     # Retomar o mesmo arquivo não é upload novo: não passa pela cota.
     assert _create(api, audio_bytes(8 * KIB, seed="um")).status_code == 201
 
-    _override(services, account, None)
+    override_quotas(services, api, None)
     assert _create(api, audio_bytes(16 * KIB, seed="tres")).status_code == 201

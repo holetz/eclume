@@ -26,6 +26,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
+from eclume_server.quotas import take_agent_request
 from eclume_server.summaries import (
     INTERNAL_ERROR,
     JOB_TIMEOUT_S,
@@ -74,13 +75,17 @@ async def _open_count(redis: ArqRedis, owner_id: UUID) -> int:
     return await redis.zcard(key)
 
 
-async def create_preview(redis: ArqRedis, owner_id: UUID, kind: str, request: dict[str, Any]) -> dict[str, Any]:
+async def create_preview(
+    redis: ArqRedis, owner_id: UUID, kind: str, request: dict[str, Any], *, agent_quota: int | None
+) -> dict[str, Any]:
     """Guarda o pedido e enfileira `run_preview`; devolve o schema `Preview` na fila.
 
-    Com `MAX_OPEN` em aberto, 429 `rate_limited`.
+    Com `MAX_OPEN` em aberto, 429 `rate_limited`; o pedido conta na cota `agent_quota` de 24 h (403
+    `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
         raise rate_limited(f"Já há {MAX_OPEN} pré-visualizações em andamento; espere uma terminar.")
+    await take_agent_request(redis, owner_id, agent_quota)
     preview_id = uuid4()
     key = preview_key(preview_id)
     await redis.hset(

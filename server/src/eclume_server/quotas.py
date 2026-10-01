@@ -18,7 +18,7 @@ from uuid import uuid4
 from sqlalchemy import func, select
 
 from eclume_server.db import tables as t
-from eclume_server.problems import ApiProblemError
+from eclume_server.problems import ApiProblemError, rate_limited
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 FIELDS = ("storage_bytes", "file_bytes", "open_uploads", "gpu_minutes_24h", "agent_requests_24h")
 WINDOW_S = 24 * 3600
+# Resumos na fila ou rodando por conta: cada um ocupa o agente.
+MAX_OPEN_SUMMARIES = 3
 
 
 def quota_exceeded(quota: str, limit: int, used: int) -> ApiProblemError:
@@ -137,9 +139,13 @@ async def within_gpu_minutes(conn: AsyncConnection, owner_id: UUID) -> bool:
     return limit is None or await gpu_minutes_used(conn, owner_id) < limit
 
 
-async def take_agent_request(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> None:
+async def agent_limit(conn: AsyncConnection, owner_id: UUID) -> int | None:
+    """Cota efetiva de pedidos ao agente em 24 h."""
+    return (await effective(conn, owner_id))["agent_requests_24h"]
+
+
+async def take_agent_request(redis: ArqRedis, owner_id: UUID, limit: int | None) -> None:
     """Conta um pedido da pessoa ao agente; estourada a cota de 24 h, 403 `quota_exceeded`."""
-    limit = (await effective(conn, owner_id))["agent_requests_24h"]
     if limit is not None:
         used = await agent_requests_used(redis, owner_id)
         if used + 1 > limit:
@@ -147,3 +153,18 @@ async def take_agent_request(conn: AsyncConnection, redis: ArqRedis, owner_id: U
     key = agent_key(owner_id)
     await redis.zadd(key, {str(uuid4()): time.time()})
     await redis.expire(key, WINDOW_S)
+
+
+async def charge_agent(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> None:
+    """`take_agent_request` com a cota efetiva da conta."""
+    await take_agent_request(redis, owner_id, await agent_limit(conn, owner_id))
+
+
+async def check_open_summaries(conn: AsyncConnection, owner_id: UUID) -> None:
+    """Com `MAX_OPEN_SUMMARIES` resumos na fila ou rodando, 429 `rate_limited`."""
+    s = t.summaries.c
+    count = (
+        await conn.execute(select(func.count()).where(s.owner_id == owner_id, s.status.in_(("queued", "running"))))
+    ).scalar_one()
+    if count >= MAX_OPEN_SUMMARIES:
+        raise rate_limited(f"Já há {MAX_OPEN_SUMMARIES} resumos em andamento; espere um terminar.")

@@ -34,6 +34,7 @@ from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
 from eclume_server.previews import create_preview
 from eclume_server.problems import conflict, invalid_field
+from eclume_server.quotas import agent_limit
 from eclume_server.routes.previews import check_transcribed
 from eclume_server.tags import adopt
 
@@ -101,12 +102,13 @@ async def preview_agenda_type(body: AgendaTypePreviewRequest, principal: Writer,
     """Mostra a detecção, o título, as tags e o resumo de um tipo em rascunho numa gravação."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await check_transcribed(conn, [body.recording_id], "recording_id")
+        quota = await agent_limit(conn, principal.user_id)
     request = {
         "agenda_type": create_values(body.agenda_type),
         "recording_id": str(body.recording_id),
         "agenda_type_id": str(body.agenda_type_id) if body.agenda_type_id else None,
     }
-    return await create_preview(ctx.queue.pool, principal.user_id, "agenda_type", request)
+    return await create_preview(ctx.queue.pool, principal.user_id, "agenda_type", request, agent_quota=quota)
 
 
 @router.get("/agenda-types/{agenda_type_id}")

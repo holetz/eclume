@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import ProviderError
 from eclume_server.db.session import enter_user_context
-from eclume_server_testing.api import agenda_types, audio_bytes, upload_file
+from eclume_server_testing.api import agenda_types, audio_bytes, override_quotas, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
@@ -500,3 +500,26 @@ def test_apagar_o_resumo_move_o_updated_at_da_gravacao(team: dict[str, Any], ser
 
     assert owner.delete(url).status_code == 204
     assert stamp() > after_one
+
+
+def test_tres_resumos_em_andamento_e_cota_de_pedidos(team: dict[str, Any], services: Services):
+    owner: Api = team["member"]
+    team["admin"].post("/api/v1/admin/agent-providers", json=CLAUDE)
+    url = f"/api/v1/transcripts/{_transcribed(owner, services)}/summaries"
+    one_on_one = _types(services, team["member_account"])["1:1"]
+    for _ in range(3):
+        assert owner.post(url, json={"agenda_type_id": one_on_one["id"]}).status_code == 202
+    fourth = owner.post(url, json={"agenda_type_id": one_on_one["id"]})
+    assert (fourth.status_code, fourth.json()["code"]) == (429, "rate_limited")
+    # O limite é por conta.
+    stranger_url = f"/api/v1/transcripts/{_transcribed(team['stranger'], services)}/summaries"
+    stranger_type = _types(services, team["stranger_account"])["1:1"]
+    assert team["stranger"].post(stranger_url, json={"agenda_type_id": stranger_type["id"]}).status_code == 202
+    run_cpu(services.settings)
+
+    # Os três pedidos contaram na cota de 24 h; o automático, não.
+    override_quotas(services, owner, {"agent_requests_24h": 3})
+    refused = owner.post(url, json={"agenda_type_id": one_on_one["id"]})
+    assert (refused.status_code, refused.json()["code"], refused.json()["used"]) == (403, "quota_exceeded", 4)
+    # A recusa não deixa versão na fila.
+    assert [item["status"] for item in owner.get(url).json()["items"]] == ["done"] * 4

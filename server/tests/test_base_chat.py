@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from eclume_server.agents.base_chat import BASE_CHAT_SUMMARIES_SYSTEM, correction
-from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.api import audio_bytes, override_quotas, upload_file
 from eclume_server_testing.fakes import FakeAgents, contract_transcript, run_cpu, run_gpu
 
 if TYPE_CHECKING:
@@ -171,3 +171,15 @@ def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Servi
     assert all(system == BASE_CHAT_SUMMARIES_SYSTEM for _, system, _ in calls)
     assert "search_transcripts" not in calls[0][1]
     assert correction(transcripts=False) in calls[1][2]
+
+
+def test_pergunta_conta_na_cota_de_pedidos_ao_agente(user: Api, services: Services):
+    override_quotas(services, user, {"agent_requests_24h": 1})
+    assert _ask(user).status_code == 202
+    run_cpu(services.settings)
+    refused = _ask(user)
+    assert (refused.status_code, refused.json()["code"], refused.json()["quota"]) == (
+        403,
+        "quota_exceeded",
+        "agent_requests_24h",
+    )

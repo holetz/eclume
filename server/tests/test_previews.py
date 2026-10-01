@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
-from eclume_server_testing.api import audio_bytes, upload_file
+from eclume_server_testing.api import audio_bytes, override_quotas, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
 
 if TYPE_CHECKING:
@@ -170,5 +170,24 @@ def test_no_maximo_tres_em_aberto_por_conta(
     assert as_user(make_user()).post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
     # Terminadas, liberam a vez.
     run_cpu(services.settings)
+    assert user.post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
+    run_cpu(services.settings)
+
+
+def test_previa_conta_na_cota_de_pedidos_ao_agente(user: Api, services: Services):
+    _recording(user, services, "Reunião A")
+    override_quotas(services, user, {"agent_requests_24h": 1})
+    assert user.post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
+    run_cpu(services.settings)
+    second = user.post("/api/v1/fields/preview", json={"field": CLIENT})
+    assert second.status_code == 403
+    assert (second.json()["code"], second.json()["quota"], second.json()["limit"], second.json()["used"]) == (
+        "quota_exceeded",
+        "agent_requests_24h",
+        1,
+        2,
+    )
+    assert user.get("/api/v1/me/usage").json()["usage"]["agent_requests_24h"] == 1
+    override_quotas(services, user, {"agent_requests_24h": None})
     assert user.post("/api/v1/fields/preview", json={"field": CLIENT}).status_code == 202
     run_cpu(services.settings)

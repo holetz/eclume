@@ -19,6 +19,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit, decode_ordered_position, encode_position
 from eclume_server.problems import not_found
+from eclume_server.quotas import charge_agent, check_open_summaries
 from eclume_server.serialize import Row
 from eclume_server.summaries import (
     create_summary,
@@ -101,6 +102,7 @@ async def create_transcript_summary(
         transcript = await _transcript(conn, transcript_id)
         agenda_type = await summary_agenda_type(conn, transcript, body.agenda_type_id)
         provider = await summary_provider(conn, body.provider_id)
+        await check_open_summaries(conn, principal.user_id)
         row = await create_summary(
             conn,
             transcript=transcript,
@@ -109,6 +111,7 @@ async def create_transcript_summary(
             trigger="manual",
             created_by=principal.user_id,
         )
+        await charge_agent(conn, ctx.queue.pool, principal.user_id)
     await ctx.queue.enqueue_summarize(row["id"])
     return summary_json(row)
 
