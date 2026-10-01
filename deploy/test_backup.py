@@ -68,16 +68,12 @@ elif cmd == "run":
         elif "ls" in rest:
             print("[x] 5B audio.ogg")
         sys.exit(0)
-    sub = rest[0] if rest else ""
+    texto = " ".join(rest)
+    sub = "restore" if "restic restore" in texto else (rest[0] if rest else "")
     if sub == os.environ.get("FAKE_FALHA"):
         print(f"restic {sub}: falhou", file=sys.stderr)
         sys.exit(1)
-    if sub == "-c":
-        print("e3b0  secrets/env.prod\ne3b1  caddy/data/caddy/pki/authorities/local/root.key")
-    elif sub == "snapshots":
-        print(json.dumps([{"short_id": "aaaa1111", "time": "2026-09-30T03:30:00Z"},
-                          {"short_id": "bbbb2222", "time": "2026-10-01T03:30:00Z"}]))
-    elif "restore" in " ".join(rest):
+    if sub == "restore":
         out = mounts["/out"]
         for rel, txt in {"eclume/pg/roles.sql": "R", "eclume/pg/eclume.dump": "D",
                          "eclume/minio/rec/audio.ogg": "audio",
@@ -86,6 +82,11 @@ elif cmd == "run":
             p = out / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(txt)
+    elif sub == "-c":
+        print("e3b0  secrets/env.prod\ne3b1  caddy/data/caddy/pki/authorities/local/root.key")
+    elif sub == "snapshots":
+        print(json.dumps([{"short_id": "aaaa1111", "time": "2026-09-30T03:30:00Z"},
+                          {"short_id": "bbbb2222", "time": "2026-10-01T03:30:00Z"}]))
 """
 
 
@@ -217,3 +218,72 @@ def test_backup_sem_repositorio_inicializado_falha(host: Host) -> None:
 
     assert r.returncode != 0
     assert "deploy.sh" in host.estado("backup")["detalhe"]
+
+
+def test_restaurar_teste_le_o_snapshot_e_apaga_a_copia_em_claro(host: Host) -> None:
+    r = host.rodar("restaurar-backup.sh", "--teste")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "OK: restauração" in r.stdout
+    (restore,) = host.restic("sh")
+    assert "latest" in restore
+    assert "RESTIC_REPOSITORY=/repo" in restore
+    assert any(c[:2] == ["exec", "-i"] and "pg_restore" in c for c in host.chamadas())
+    assert not list((host.data / "backups").glob(".restaurar.*"))
+
+
+def test_restaurar_aplicar_exige_confirmacao(host: Host) -> None:
+    r = host.rodar("restaurar-backup.sh", "--aplicar", "latest")
+
+    assert r.returncode == 2
+    assert host.chamadas() == []
+
+
+def test_restaurar_aplicar_por_data_do_repositorio_fora(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("restaurar-backup.sh", "--repositorio", "fora", "--aplicar", "2026-10-01", "--confirmo")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (restore,) = host.restic("sh")
+    assert "bbbb2222" in restore
+    assert "--env-file" in restore
+    paradas = [c for c in host.chamadas() if c[0] == "stop"]
+    assert paradas
+    assert [c for c in host.chamadas() if c[0] == "start"]
+    assert "snapshot bbbb2222" in r.stdout
+
+
+def test_restaurar_repositorio_invalido(host: Host) -> None:
+    r = host.rodar("restaurar-backup.sh", "--repositorio", "nuvem", "--teste")
+
+    assert r.returncode == 2
+
+
+def test_restaurar_host_novo_devolve_secrets_e_pki(tmp_path: Path, host: Host) -> None:
+    pasta = tmp_path / "novo"
+    (pasta / "secrets").mkdir(parents=True)
+    (pasta / "secrets" / "restic-password").write_text("senha\n")
+    (pasta / "secrets" / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("restaurar-backup.sh", "--host-novo", str(pasta), FAKE_RUNNING="")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert (pasta / "secrets" / "env.prod").read_text().startswith("ECLUME_ENCRYPTION_KEY=")
+    assert (pasta / "secrets" / "restic-password").read_text() == "senha\n"
+    assert (pasta / "caddy" / "data" / "caddy" / "pki" / "authorities" / "local" / "root.key").exists()
+    assert sorted(p.name for p in pasta.iterdir()) == ["caddy", "secrets"]
+    (restore,) = host.restic("sh")
+    assert "--env-file" in restore
+    assert str(pasta / "secrets" / "restic-fora.env") in restore
+
+
+def test_restaurar_host_novo_sem_credencial_do_destino(tmp_path: Path, host: Host) -> None:
+    pasta = tmp_path / "novo"
+    (pasta / "secrets").mkdir(parents=True)
+    (pasta / "secrets" / "restic-password").write_text("senha\n")
+
+    r = host.rodar("restaurar-backup.sh", "--host-novo", str(pasta))
+
+    assert r.returncode == 1
+    assert "restic-fora.env" in r.stderr
