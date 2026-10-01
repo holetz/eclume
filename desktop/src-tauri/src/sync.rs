@@ -104,10 +104,10 @@ fn run_once(app: &AppHandle) -> Result<()> {
                     .map(|uploader| uploader.with_language(state.language().ok().flatten()));
                 let notice = match uploader {
                     Ok(uploader) => {
-                        state.set_syncing(true)?;
+                        let syncing = state.syncing();
                         crate::refresh_ui(app);
                         let report = sync_pending(state.queue(), &uploader);
-                        state.set_syncing(false)?;
+                        drop(syncing);
                         let report = report?;
                         log::info!("sync: {report:?}");
                         (report.failed > 0)

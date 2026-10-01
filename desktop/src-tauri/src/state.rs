@@ -433,6 +433,32 @@ fn non_empty(value: Option<String>) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// Uma flag de "em curso" (`syncing`, `mirror.running`, `importing`): ligada ao criar a guarda e
+/// desligada no `Drop`, que pega o estado mesmo envenenado. Flag de "em curso" só se liga assim.
+pub struct FlagGuard<'a> {
+    state: &'a AppState,
+    set: fn(&mut Inner, bool),
+}
+
+impl<'a> FlagGuard<'a> {
+    fn raise(state: &'a AppState, set: fn(&mut Inner, bool)) -> Self {
+        set(
+            &mut recover_poison(state.inner.lock(), "estado do app"),
+            true,
+        );
+        Self { state, set }
+    }
+}
+
+impl Drop for FlagGuard<'_> {
+    fn drop(&mut self) {
+        (self.set)(
+            &mut recover_poison(self.state.inner.lock(), "estado do app"),
+            false,
+        );
+    }
+}
+
 /// Um lock envenenado por pânico segue utilizável: o envenenamento vai para o log.
 fn recover_poison<'a, T>(
     lock: std::sync::LockResult<MutexGuard<'a, T>>,
@@ -816,10 +842,23 @@ impl AppState {
         Ok(inner.auto.answer(record, recording))
     }
 
-    /// Liga ou desliga o estado de sincronização.
-    pub fn set_syncing(&self, syncing: bool) -> Result<()> {
-        self.inner()?.syncing = syncing;
-        Ok(())
+    /// Liga "Sincronizando" até a guarda cair, mesmo que o trabalho entre em pânico.
+    pub fn syncing(&self) -> FlagGuard<'_> {
+        FlagGuard::raise(self, |inner, on| inner.syncing = on)
+    }
+
+    /// Liga "pasta sincronizada em curso" até a guarda cair, mesmo que o ciclo entre em pânico.
+    pub fn mirror_running(&self) -> FlagGuard<'_> {
+        FlagGuard::raise(self, |inner, on| inner.mirror.running = on)
+    }
+
+    /// Encerra a importação reservada por [`AppState::begin_import`] quando a guarda cair, mesmo
+    /// que a conversão entre em pânico.
+    pub fn import_guard(&self) -> FlagGuard<'_> {
+        FlagGuard {
+            state: self,
+            set: |inner, _| inner.importing = None,
+        }
     }
 
     /// O que impede o sync, ou o último erro dele (`None` quando tudo andou).
@@ -996,12 +1035,6 @@ impl AppState {
             cancel.store(true, Ordering::Relaxed);
         }
         Ok(())
-    }
-
-    pub fn end_import(&self) {
-        if let Ok(mut inner) = self.inner() {
-            inner.importing = None;
-        }
     }
 
     /// Converte `src` para `gravacoes/` (ou o copia) e o põe na fila, já pendente, com
@@ -1955,7 +1988,7 @@ mod tests {
                 |f| steps.push(f),
             )
             .unwrap();
-        state.end_import();
+        drop(state.import_guard());
         assert_eq!(steps.last(), Some(&1.0));
         assert_eq!(recording.status, Status::Pending);
         assert_eq!(recording.source, eclume_recorder::Source::Upload);
@@ -2008,7 +2041,7 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.is::<eclume_import::Cancelled>());
-        state.end_import();
+        drop(state.import_guard());
         assert!(state.begin_import().is_ok());
         assert!(state.recordings(10).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
@@ -2283,10 +2316,38 @@ mod tests {
     }
 
     #[test]
+    fn guarda_solta_cada_flag_mesmo_com_panico() {
+        let (state, _dir) = state("guardas");
+        let panics = |work: &dyn Fn()| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).unwrap_err();
+        };
+        panics(&|| {
+            let _syncing = state.syncing();
+            assert_eq!(state.status().unwrap(), AppStatus::Syncing);
+            panic!("sync quebrado");
+        });
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        panics(&|| {
+            let _running = state.mirror_running();
+            assert!(state.mirror_status().unwrap().running);
+            panic!("pasta quebrada");
+        });
+        assert!(!state.mirror_status().unwrap().running);
+        state.begin_import().unwrap();
+        panics(&|| {
+            let _importing = state.import_guard();
+            panic!("decodificador quebrado");
+        });
+        assert!(state.begin_import().is_ok());
+    }
+
+    #[test]
     fn estado_sincronizando_e_aviso_do_sync() {
         let (state, _dir) = state("sync");
-        state.set_syncing(true).unwrap();
+        let syncing = state.syncing();
         assert_eq!(state.status().unwrap(), AppStatus::Syncing);
+        drop(syncing);
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
         assert_eq!(AppStatus::Syncing.label(), "Sincronizando");
         state.set_sync_notice(Some("sem PAT".into())).unwrap();
         assert_eq!(
