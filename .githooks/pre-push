@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Dispara o gate de qualidade (deploy/gate.sh --fundo) para cada atualização de refs/heads/main
+# deste push, em segundo plano no host GPU, sem nunca bloquear o push: host fora do alcance vira
+# aviso. Ativação, uma vez por clone: git config core.hooksPath .githooks
+# `git push --no-verify` pula o hook. Contrato: docs/standards/code/monorepo.md.
+raiz="$(git rev-parse --show-toplevel)" || exit 0
+alvos="$(python3 "$raiz/deploy/gate.py" alvos-do-push)" || exit 0
+for sha in $alvos; do
+  bash "$raiz/deploy/gate.sh" --fundo "$sha" \
+    || echo "aviso: o gate de $sha não foi disparado; rode depois: bash deploy/gate.sh $sha" >&2
+done
+exit 0

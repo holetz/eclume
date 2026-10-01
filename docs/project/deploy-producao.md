@@ -88,7 +88,10 @@ bash deploy/bootstrap-admin.sh                 # uma vez: a conta de admin do pa
 O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do endpoint
 `ssh://` do contexto) para o que é do host. Em ordem:
 
-1. Recusa com o disco do host em 90% ou mais (`ECLUME_DISK_LIMIT`), antes e depois do build.
+1. Recusa, antes de qualquer escrita no host, uma árvore de trabalho suja, um HEAD que o GitHub não
+   tem e um HEAD sem o status `eclume/gate` = `success` do gate do host (`bash deploy/gate.sh`;
+   [monorepo.md](../standards/code/monorepo.md)). O `--plan` mostra o estado do gate sem recusar.
+   Recusa também com o disco do host em 90% ou mais (`ECLUME_DISK_LIMIT`), antes e depois do build.
 2. Cria as pastas de `/srv/eclume` e um `hf_token` vazio se faltar. Um arquivo ausente num bind
    mount viraria pasta.
 3. Guarda a cópia de `deploy/.env.prod` em `/srv/eclume/secrets/env.prod`, instala os scripts
@@ -106,6 +109,17 @@ O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do e
 
 Deploys de branches diferentes se sobrescrevem: o servidor e o web de produção são os do último
 deploy. O estado estável é o deploy de `main`; depois de testar um branch, volte a `main`.
+
+### Gate e dispensa
+
+O push do `main` dispara o gate no host sozinho (hook `.githooks/pre-push`); confira com
+`bash deploy/gate.sh --estado` antes do deploy. Um branch de teste precisa do gate no próprio SHA:
+publique o branch e rode `bash deploy/gate.sh` nele (uns 40 minutos no host), ou dispense.
+A dispensa é `bash deploy/deploy.sh --context gpu-host --sem-gate "<motivo>"`: vale só para essa
+invocação, dispensa só o status (árvore limpa e commit no GitHub continuam exigidos) e deixa no
+commit o status `eclume/gate-dispensa` com o motivo. Use-a só em emergência — uma correção de
+produção que não pode esperar o gate, ou o gate quebrado por algo fora do código (host, imagem,
+rede) — e rode o gate no mesmo SHA logo depois.
 
 ### Segredos
 

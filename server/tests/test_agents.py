@@ -82,6 +82,8 @@ FakeClaude = "Callable[..., tuple[ClaudeCliProvider, Path]]"
 
 @pytest.fixture
 def fake_claude(tmp_path: Path) -> Callable[..., tuple[ClaudeCliProvider, Path]]:
+    if sys.platform == "win32":
+        pytest.skip("o provider claude-cli só roda no contêiner Linux do server")
     script = tmp_path / "claude"
     script.write_text(FAKE_CLAUDE.format(python=sys.executable))
     script.chmod(0o755)

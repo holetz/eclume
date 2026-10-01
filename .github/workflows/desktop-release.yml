@@ -37,6 +37,9 @@ permissions:
 jobs:
   plano:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: read
     outputs:
       versao: ${{ steps.plano.outputs.versao }}
       tag: ${{ steps.plano.outputs.tag }}
@@ -69,6 +72,13 @@ jobs:
             echo "matriz=$matriz"
           } >> "$GITHUB_OUTPUT"
           echo "versão $versao, tag $tag, publicar=$PUBLICAR, matriz: $matriz"
+      # Publicar exige o gate do host verde neste commit (status eclume/gate); sem dispensa aqui:
+      # quem precisa dispensar publica pelo host (--sem-gate). Contrato: docs/standards/code/monorepo.md.
+      - name: Gate do commit
+        if: steps.plano.outputs.publicar == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" | python3 deploy/gate.py decidir
 
   build:
     needs: plano

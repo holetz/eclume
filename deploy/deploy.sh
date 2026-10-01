@@ -3,12 +3,14 @@
 # registry) e por SSH para o que é do host (pastas, disco, cópia do env, scripts de backup e cron).
 #
 # Uso: bash deploy/deploy.sh [--plan] [--context NOME] [--services "server web worker-gpu"]
-#                            [--sem-build] [--gerar-env]
-#   --plan        só mostra o que faria (somente leitura).
+#                            [--sem-build] [--gerar-env] [--sem-gate "motivo"]
+#   --plan        só mostra o que faria (somente leitura), com o estado do gate.
 #   --context     contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
 #   --services    imagens a construir (padrão: server web worker-gpu). O up sobe sempre o stack todo.
 #   --sem-build   não constrói nada; sobe as imagens que já estão no host.
 #   --gerar-env   cria deploy/.env.prod com segredos aleatórios e sai.
+#   --sem-gate    dispensa só o status eclume/gate = success no HEAD (árvore limpa e commit no GitHub
+#                 continuam exigidos) e deixa no commit o rastro eclume/gate-dispensa com o motivo.
 # Runbook: docs/project/deploy-producao.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,6 +22,8 @@ BUILD=(server web worker-gpu)
 PLAN_ONLY=0
 NO_BUILD=0
 GEN_ENV=0
+SEM_GATE=""
+REPO=holetz/eclume
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
 
 while [[ $# -gt 0 ]]; do
@@ -33,7 +37,10 @@ while [[ $# -gt 0 ]]; do
       read -r -a BUILD <<< "$2"; shift 2 ;;
     --sem-build) NO_BUILD=1; shift ;;
     --gerar-env) GEN_ENV=1; shift ;;
-    --help|-h) sed -n '2,12p' "$0"; exit 0 ;;
+    --sem-gate)
+      [[ $# -ge 2 && -n "${2// /}" ]] || { echo "--sem-gate exige o motivo." >&2; exit 2; }
+      SEM_GATE="$2"; shift 2 ;;
+    --help|-h) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -65,6 +72,30 @@ SSH="${ECLUME_SSH:-${endpoint#ssh://}}"
 [[ "$endpoint" == ssh://* || -n "${ECLUME_SSH:-}" ]] || {
   echo "O contexto $CONTEXT não é ssh:// ($endpoint); defina ECLUME_SSH=usuario@host." >&2; exit 2; }
 host() { ssh -o BatchMode=yes "$SSH" "$@"; }
+
+# --- gate: o que vai à produção é um commit publicado, limpo e provado ---------------------------
+SHA="$(git rev-parse HEAD)"
+problemas=()
+[[ -z "$(git status --porcelain)" ]] || problemas+=("a árvore de trabalho tem mudanças; o deploy sai do commit $SHA limpo")
+if gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
+  gate_ok=1
+  gate="$(gh api "repos/$REPO/commits/$SHA/status" | python3 deploy/gate.py decidir)" || gate_ok=0
+else
+  problemas+=("o commit $SHA não está no GitHub (faça o push antes)")
+  gate_ok=0
+  gate="eclume/gate sem leitura (commit fora do GitHub)"
+fi
+if [[ "$gate_ok" -eq 0 && -n "$SEM_GATE" ]]; then
+  gate="$gate · dispensado: $SEM_GATE"
+elif [[ "$gate_ok" -eq 0 ]]; then
+  problemas+=("$gate (rode bash deploy/gate.sh ou dispense com --sem-gate \"motivo\")")
+fi
+# Recusa antes de tocar no env e no host; o --plan só mostra.
+if [[ "$PLAN_ONLY" -eq 0 && "${#problemas[@]}" -gt 0 ]]; then
+  printf 'Deploy recusado:
+' >&2; printf '  - %s
+' "${problemas[@]}" >&2; exit 2
+fi
 
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
 
@@ -115,6 +146,8 @@ disk_pct() { host "df --output=pcent / | tail -n 1 | tr -dc 0-9"; }
 
 # --- plano ---------------------------------------------------------------------------------------
 pct="$(disk_pct)"
+echo "Commit $SHA · gate: $gate" >&2
+for p in "${problemas[@]}"; do echo "  aviso: $p" >&2; done
 echo "Daemon: contexto $CONTEXT · SSH: $SSH · dados: $DATA_DIR · URL: $PUBLIC_URL" >&2
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%)" >&2
 echo "Construir: ${BUILD[*]:-nada (--sem-build)}" >&2
@@ -126,6 +159,12 @@ done
 [[ "$PLAN_ONLY" -eq 0 ]] || exit 0
 
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: acima de ${DISK_LIMIT}%, deploy recusado." >&2; exit 3; }
+if [[ "$gate_ok" -eq 0 ]]; then
+  gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \
+    -f description="deploy: ${SEM_GATE:0:130}" --silent \
+    || { echo "Não consegui publicar o rastro eclume/gate-dispensa; deploy recusado." >&2; exit 2; }
+  echo "Gate dispensado: $SEM_GATE (rastro eclume/gate-dispensa no commit)." >&2
+fi
 
 # O Git Bash da estação Windows não tem flock: lá a trava é um diretório (mkdir é atômico).
 lock_dir="" ca=""

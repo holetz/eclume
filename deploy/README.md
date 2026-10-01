@@ -29,6 +29,25 @@ bash contracts/tests/smoke-mock.sh
 docker compose -f deploy/docker-compose.mock.yml down
 ```
 
+## Gate de qualidade
+
+O gate que libera deploy e releases (status `eclume/gate` no commit), com a norma em
+[monorepo.md](../docs/standards/code/monorepo.md):
+
+- `pilares.sh`: os comandos de prova de cada pilar (`--lista`), a fonte única da CI e do gate.
+- `gate.sh`: na estação, envia o `git archive` do commit para o host e roda o gate
+  (`--pilares`, `--fundo`, `--estado`, `--plan`); `gate-host.sh` é a parte do host e
+  `gate.Dockerfile` a imagem `eclume-gate:24.04` dos pilares.
+- `gate.py` (testes em `test_gate.py`): a decisão sobre o status, a descrição e os alvos do hook de
+  pre-push (`.githooks/pre-push`).
+
+```bash
+git config core.hooksPath .githooks       # uma vez por clone: o push do main dispara o gate
+bash deploy/gate.sh                       # gate completo no HEAD (publicado), em primeiro plano
+bash deploy/gate.sh --pilares python,web  # parte dos pilares, sem publicar
+bash deploy/gate.sh --estado              # status e fim do log no host
+```
+
 ## Produção
 
 O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook completo em

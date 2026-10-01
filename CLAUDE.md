@@ -32,13 +32,18 @@ ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
+git config core.hooksPath .githooks
+bash deploy/gate.sh
+bash deploy/gate.sh --estado
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
 cq knowledge validate
 ```
 
 - A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `contracts`, `web`, `web-browser`,
-  `desktop` e `mobile` em Linux a cada PR e push em `main`.
+  `desktop` e `mobile` em Linux a cada PR e push em `main`, cada um por `deploy/pilares.sh`.
+- O gate do host (`bash deploy/gate.sh`, status `eclume/gate`) roda os mesmos pilares mais o
+  `windows` e é o que libera deploy e releases; o hook de pre-push o dispara a cada push do `main`.
 - Mudanças de dependência exigem atualizar `pyproject.toml`/`uv.lock`, `web/package.json`/
   `web/package-lock.json` ou `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, conforme o pilar.
 - Destino de hospedagem: `192.168.15.199` (Ubuntu, GTX 1660 Super com 6 GB), acessado por

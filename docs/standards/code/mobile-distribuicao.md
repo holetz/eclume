@@ -4,10 +4,10 @@ title: Distribuição do app móvel
 description: Como o app móvel do eclume vira um APK e se atualiza — versão no tauri.conf.json, tag mobile-v<versão>, workflow mobile-release com APK universal assinado pela keystore de release (secrets ANDROID_KEYSTORE_*), conferido pelo apksigner, movel.json e SHA256SUMS, publicação em /srv/eclume/downloads/movel pelo deploy/publicar-movel.sh e a atualização dentro do app pela CA fixada.
 resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/INSTALACAO.md, .github/workflows/mobile-release.yml, deploy/publicar-movel.sh
 tags: [code, mobile, android, release, apk, ci]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41
+source: holetz/eclume#41, holetz/eclume#89
 maintainer: holetz
 ---
 
@@ -27,7 +27,8 @@ produto. iOS tem spec própria.
 
 Roda por tag `mobile-v*` ou à mão (`workflow_dispatch` com `publicar` e `notas`), nunca em PR:
 
-1. confere que a tag bate com a versão do `tauri.conf.json`;
+1. confere que a tag bate com a versão do `tauri.conf.json` e, quando vai publicar, que o commit tem
+   o status `eclume/gate` = `success` do gate do host ([monorepo.md](monorepo.md)), sem dispensa;
 2. num `ubuntu-24.04`, que já traz o SDK e o NDK (`ANDROID_NDK_LATEST_HOME`), instala o Java 21,
    o Node 22 e os alvos Rust `aarch64-linux-android` e `armv7-linux-androideabi`;
 3. decodifica a keystore de `ANDROID_KEYSTORE_B64` num arquivo temporário e grava

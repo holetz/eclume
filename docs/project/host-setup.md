@@ -195,6 +195,30 @@ scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
 A conferência da impressão digital e o uso pelo lumea (`LUMEA_ECLUME_CA_BUNDLE`) estão em
 [deploy-producao.md](deploy-producao.md#ca-raiz-nos-clientes).
 
+## Gate de qualidade (`~/eclume-gate`)
+
+O gate (`bash deploy/gate.sh` na estação; norma em
+[monorepo.md](../standards/code/monorepo.md)) roda no host, no usuário `holetz`:
+
+- `~/eclume-gate/src-<sha>-<época>`: a árvore extraída do `git archive`, apagada ao fim;
+  `~/eclume-gate/logs/<sha>.log`: o log de cada execução completa; `~/eclume-gate/.trava`: o
+  `flock` que enfileira as execuções.
+- `~/eclume-gate/cache`: target do cargo por pilar, registry do cargo, caches do uv, do npm, dos
+  navegadores do Playwright e do `cargo-xwin` (~15 GB depois de duas execuções; acima de
+  `ECLUME_GATE_CACHE_GB`, 25 GB, os target/ recomeçam). Para liberar disco, apague a pasta inteira:
+  a próxima execução reconstrói.
+- Imagens: `eclume-gate:24.04` (`deploy/gate.Dockerfile`), sobre `eclume-desktop-build-windows:24.04`
+  e `eclume-desktop-build:24.04`, que o gate constrói se faltarem. O primeiro build da imagem do
+  gate levou ~20 minutos.
+- Projeto compose `eclume-gate` (Postgres, Redis, MinIO e o mock em `127.0.0.1:55632`, `56579`,
+  `59200` e `4210`), derrubado com `down -v` ao fim; nunca toca o projeto `eclume`.
+- Limites por pilar: `--cpus 2`, `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido
+  foi ~2,6 GiB no link do desktop e do windows). Uma execução completa levou 16 a 21 minutos com a
+  produção de pé, e recusa com o disco em 90%.
+- O `gh` do host (conta `holetz`, escopo `repo`) publica o status `eclume/gate`; os contêineres dos
+  pilares não recebem o token. O NDK de `~/android-sdk/ndk/28.2.13676358` entra só leitura no
+  pilar `mobile`.
+
 ## Instaladores do desktop (sem assinatura de código)
 
 Os instaladores saem de `deploy/release-desktop.sh` (compila no host e cria a tag

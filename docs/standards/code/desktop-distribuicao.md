@@ -4,10 +4,10 @@ title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, release no host pelo deploy/release-desktop.sh (Linux; Windows opcional por compilação cruzada; macOS fora enquanto o repositório for privado) e o workflow desktop-release como alternativa manual, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
 resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89
 maintainer: holetz
 ---
 
@@ -44,7 +44,8 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   workspace cargo (`desktop/Cargo.toml`) acompanha por convenção, mas o release não o lê.
 - A tag é `desktop-v<versão>`, criada pelo próprio release (`gh release create --target <commit>`),
   nunca à mão: ela não dispara workflow nenhum.
-- Lançar uma versão: subir o `version`, fazer merge em `main`, publicar a `main` e rodar
+- Lançar uma versão: subir o `version`, fazer merge em `main`, publicar a `main`, esperar o gate do
+  host (`eclume/gate` = `success` no commit; [monorepo.md](monorepo.md)) e rodar
   `bash deploy/release-desktop.sh --publicar --notas "<notas>"`.
 
 ## Release no host — `deploy/release-desktop.sh`
@@ -54,7 +55,10 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   impedimentos, sem escrever.
 - O código vai **do commit**, não da árvore de trabalho: `git archive HEAD` segue para
   `~/eclume-build/release/src` no host, recriada a cada release. Com `--publicar`, o script recusa
-  árvore suja, commit que o GitHub não tem e tag que já existe. Sem `--publicar` é **ensaio**: os
+  árvore suja, commit que o GitHub não tem, commit sem o status `eclume/gate` = `success` (o gate
+  do host) e tag que já existe. A dispensa do gate é explícita e por invocação:
+  `--sem-gate "<motivo>"` dispensa só o status e publica no commit o rastro
+  `eclume/gate-dispensa` = `failure` com o motivo; árvore limpa e commit no GitHub seguem exigidos. Sem `--publicar` é **ensaio**: os
   artefatos ficam em `~/eclume-build/release/dist-<versão>/` no host e nada é publicado.
 - O build roda no contêiner de `desktop/build.Dockerfile` (`eclume-desktop-build:24.04`) com
   `--cpus 2`, `CARGO_BUILD_JOBS=2` e `nice`, como o uid 1000; `target/` (`target-linux`,
@@ -77,10 +81,14 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - Dispara **só** por `workflow_dispatch`: a tag que o release no host cria não o dispara. Faz o
   mesmo release no GitHub Actions — Linux sempre; Windows (`nsis,msi`, em `windows-latest`) com
   a entrada `windows`, ligada por padrão (o minuto custa 2×; desmarque para só Linux). `publicar: false`
-  (padrão) é ensaio — os artefatos ficam no run.
+  (padrão) é ensaio — os artefatos ficam no run. Para publicar, o job `plano` confere
+  `eclume/gate` = `success` no commit (permissão `statuses: read`, `deploy/gate.py decidir`) e
+  falha sem ele; aqui não há dispensa — quem precisa dispensar publica pelo host.
 - A CLI do Tauri roda por `npx @tauri-apps/cli@2 build --ci --bundles <lista>`, sem
   `tauri-action`: o `latest.json` dela apontaria para URLs privadas do GitHub.
-- `desktop-plataformas.yml` (à mão) faz o `cargo check` do workspace e roda os testes de
+- O código só-Windows compila e passa no `clippy -D warnings` a cada gate do host, por compilação
+  cruzada (pilar `windows`). A prova de **execução** num Windows de verdade segue manual:
+  `desktop-plataformas.yml` (à mão) faz o `cargo check` do workspace e roda os testes de
   `eclume-mirror` e `eclume-sync` em `windows-latest`.
 
 ## Servidor embutido no instalador
