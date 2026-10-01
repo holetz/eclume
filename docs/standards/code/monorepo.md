@@ -7,7 +7,7 @@ tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#113, holetz/eclume#130
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#113, holetz/eclume#130, holetz/eclume#126
 maintainer: holetz
 ---
 
@@ -15,6 +15,13 @@ maintainer: holetz
 
 O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própria toolchain. Não há
 `packages/`: o nome da pasta é o nome da peça no épico `holetz/eclume#1`.
+
+**O host de build é opção, não requisito.** `remote-run <dir> '<comando>'` sincroniza o checkout
+para o host de build da consultoria e roda o comando lá, para poupar uma estação fraca. Todo
+`remote-run` desta norma tem o equivalente local: o mesmo comando, rodado em `<dir>` do checkout
+(com o Chrome, o Docker ou o SDK Android que ele pede instalados). O caminho completo sem GPU e sem
+o host, com a tabela dos equivalentes, está em
+[desenvolver-sem-gpu.md](../../how-to/desenvolver-sem-gpu.md).
 
 | Pilar | O que é | Toolchain |
 |---|---|---|
@@ -89,7 +96,8 @@ O `budget` roda depois do build: o JS inicial do `dist/index.html` não passa do
 `web/bundle-budget.json`. Os testes de navegador ficam fora do `npm test`: os da conversão de mídia
 e da transcrição longa (vitest browser mode no Google Chrome, no Firefox e no WebKit; o porquê e as
 fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o E2E Playwright do app
-contra o mock (todos os cenários no Chromium, o smoke `@smoke` no WebKit e no Firefox). Localmente, rodam no host de build; o E2E precisa do mock
+contra o mock (todos os cenários no Chromium, o smoke `@smoke` no WebKit e no Firefox). Rodam no host de build ou localmente, com o mesmo comando sem o `remote-run` (no checkout, em
+`web/` ou na raiz); o E2E precisa do mock
 no ar, e `ECLUME_MOCK_URL` indica a porta quando a 4010 está ocupada.
 
 ```bash

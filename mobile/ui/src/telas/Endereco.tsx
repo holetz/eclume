@@ -96,7 +96,7 @@ export function Endereco({
             inputMode="url"
             autoCapitalize="none"
             autoCorrect="off"
-            placeholder="192.168.15.199:8443"
+            placeholder="servidor.local:8443"
             value={endereco}
             onChange={(e) => setEndereco(e.target.value)}
           />

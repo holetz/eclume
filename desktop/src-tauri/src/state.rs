@@ -944,11 +944,16 @@ impl AppState {
             return Ok(None);
         };
         let inner = self.inner()?;
+        let api_url = inner.config.effective_api_url(
+            std::env::var(config::API_URL_ENV).ok(),
+            std::env::var(config::WEB_URL_ENV).ok(),
+        );
+        // Sem servidor escolhido não há para onde subir.
+        if api_url.is_empty() {
+            return Ok(None);
+        }
         Ok(Some(UploaderConfig {
-            api_url: inner.config.effective_api_url(
-                std::env::var(config::API_URL_ENV).ok(),
-                std::env::var(config::WEB_URL_ENV).ok(),
-            ),
+            api_url,
             pat,
             ca_path: inner.config.ca_path.clone(),
             client_version: CLIENT_VERSION.to_string(),
@@ -1176,8 +1181,13 @@ impl AppState {
         self.lock_queue()?.list(limit)
     }
 
+    /// O servidor em vigor; erro claro num build sem servidor embutido antes da primeira execução.
     pub fn web_url(&self) -> Result<String> {
-        Ok(self.view()?.web_url)
+        let url = self.view()?.web_url;
+        if url.is_empty() {
+            bail!("servidor não configurado");
+        }
+        Ok(url)
     }
 
     /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].

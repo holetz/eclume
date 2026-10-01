@@ -161,9 +161,10 @@ jobs:
       - name: Montar latest.json, instaladores.json e SHA256SUMS
         env:
           VERSAO: ${{ needs.plano.outputs.versao }}
-          BASE_URL: ${{ vars.ECLUME_DOWNLOADS_URL || 'https://192.168.15.199:8443/downloads' }}
+          BASE_URL: ${{ vars.ECLUME_DOWNLOADS_URL }}
           NOTAS: ${{ inputs.notas }}
         run: |
+          [ -n "$BASE_URL" ] || { echo "Defina a variável de repositório ECLUME_DOWNLOADS_URL." >&2; exit 1; }
           cp desktop/INSTALACAO.md dist/
           python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSAO" \
             --base-url "$BASE_URL" --notas "${NOTAS:-eclume desktop $VERSAO}"

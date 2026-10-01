@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126
 maintainer: holetz
 ---
 
@@ -285,11 +285,16 @@ outra revisão conta como ausente. O heartbeat é o sinal de vida; o progresso m
 - **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela; a ingestão que falha em
   `server/tests/test_pipeline.py`.
 
-## Dev sem GPU
+## Sem GPU: dev e produção
 
-`ECLUME_ENGINE=cpu` (faster-whisper `small` int8, sem alinhamento, diarização opcional). Os testes
-do server usam um worker fake que publica um `transcript.raw.json` de fixture de
-`contracts/fixtures/`.
+`ECLUME_ENGINE=cpu` (faster-whisper `small` int8, sem alinhamento e **sem diarização**: o raw sai
+com um locutor). Vale no dev ([desenvolver-sem-gpu.md](../../how-to/desenvolver-sem-gpu.md)), no
+E2E e também **em produção** num host sem GPU NVIDIA: `deploy/deploy.sh --sem-gpu` acrescenta
+`deploy/docker-compose.cpu.yml`, que define `ECLUME_ENGINE=cpu` e `ECLUME_DEVICE=cpu` no
+`worker-gpu` e zera a reserva de GPU dele (`deploy: !reset {}`, Compose 2.24+), com a mesma
+imagem. A fila, o contrato do job e o raw são os mesmos; o heartbeat sai sem os campos da NVML
+([auto-hospedar.md](../../how-to/auto-hospedar.md#sem-gpu)). Os testes do server usam um worker
+fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
 
 ## Como o server cumpre a sua parte
 

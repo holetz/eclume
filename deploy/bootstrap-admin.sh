@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Cria a primeira conta de admin do painel no stack de produção, uma vez só.
 #
-#   bash deploy/bootstrap-admin.sh [--context gpu-host] [--email E] [--name NOME]
+#   bash deploy/bootstrap-admin.sh --context NOME --email E [--name NOME]
+#
+# O contexto (ou $ECLUME_DOCKER_CONTEXT) e o e-mail (ou $ECLUME_ADMIN_EMAIL) não têm padrão.
 #
 # A senha é gerada NO HOST, em <ECLUME_DATA_DIR>/secrets/admin-password (600), e passa ao
 # `eclume-server admin create --password-stdin` por um pipe: nunca é gravada na estação.
@@ -11,18 +13,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
-EMAIL=admin@example.com
+CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
+EMAIL="${ECLUME_ADMIN_EMAIL:-}"
 NAME="Administração EK"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --context) CONTEXT="${2:?}"; shift 2 ;;
     --email) EMAIL="${2:?}"; shift 2 ;;
     --name) NAME="${2:?}"; shift 2 ;;
-    --help|-h) sed -n '2,9p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
+[[ -n "$CONTEXT" ]] || { echo "Falta o contexto Docker do host: --context NOME ou ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
+[[ -n "$EMAIL" ]] || { echo "Falta o e-mail do admin: --email E ou ECLUME_ADMIN_EMAIL." >&2; exit 2; }
 
 export DOCKER_CONTEXT="$CONTEXT"
 unset DOCKER_HOST

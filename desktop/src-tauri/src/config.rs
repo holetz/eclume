@@ -9,9 +9,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::shortcuts::Shortcuts;
 
-/// Endereço do eclume web quando o build não embutiu servidor nenhum (build local, e a
-/// `config.json` de uma versão anterior sem `web_url`).
-pub const DEFAULT_WEB_URL: &str = "https://192.168.15.199:8443";
 /// Variável de ambiente que sobrepõe `web_url` sem mexer no arquivo.
 pub const WEB_URL_ENV: &str = "ECLUME_WEB_URL";
 /// Variável de ambiente que sobrepõe o endereço da API (dev, com web e API separados).
@@ -98,6 +95,7 @@ pub enum Connection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Endereço do servidor do eclume: o eclume web (item da bandeja) e, sem `api_url`, a API.
+    /// Vazio num build sem servidor embutido até a primeira execução escolher um.
     #[serde(default = "default_web_url")]
     pub web_url: String,
     /// A conta em que este computador entrou; `null` antes de entrar e com um PAT antigo.
@@ -239,9 +237,11 @@ fn system_source_or_legacy<'de, D: Deserializer<'de>>(
     })
 }
 
-/// O servidor embutido, ou o padrão de um build sem servidor.
+/// O servidor embutido; um build sem servidor embutido começa sem servidor (vazio).
 fn default_web_url() -> String {
-    embedded_server().map_or_else(|| DEFAULT_WEB_URL.to_string(), |server| server.url)
+    embedded_server()
+        .map(|server| server.url)
+        .unwrap_or_default()
 }
 
 fn default_retention_days() -> Option<u32> {
@@ -380,9 +380,12 @@ impl Config {
             .unwrap_or_else(|| self.effective_web_url(web_env))
     }
 
-    /// Confere o que a janela pode mandar: endereços, CA legível e retenção no limite.
+    /// Confere o que a janela pode mandar: endereços, CA legível e retenção no limite. O
+    /// servidor vazio é o "ainda sem servidor" de um build sem servidor embutido.
     pub fn validate(&self) -> Result<()> {
-        validate_web_url(&self.web_url)?;
+        if !self.web_url.is_empty() {
+            validate_web_url(&self.web_url)?;
+        }
         if let Some(api_url) = &self.api_url {
             validate_web_url(api_url).context("endereço da API")?;
         }
@@ -526,10 +529,18 @@ mod tests {
     }
 
     #[test]
-    fn config_padrao_aponta_para_o_servidor_embutido_ou_o_host() {
-        let expected = embedded_server().map_or(DEFAULT_WEB_URL.to_string(), |s| s.url);
+    fn config_padrao_aponta_para_o_servidor_embutido_ou_nenhum() {
+        let expected = embedded_server().map(|s| s.url).unwrap_or_default();
         assert_eq!(Config::default().web_url, expected);
-        assert_eq!(DEFAULT_WEB_URL, "https://192.168.15.199:8443");
+        // Sem servidor, a config segue válida: a primeira execução escolhe um.
+        let sem_servidor = Config {
+            web_url: String::new(),
+            ..Config::default()
+        };
+        assert!(sem_servidor.validate().is_ok());
+        // A config antiga sem `web_url` recebe o padrão do build (o embutido dos instaladores).
+        let antiga: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(antiga.web_url, expected);
     }
 
     #[test]
@@ -584,7 +595,7 @@ mod tests {
         let back: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
         assert_eq!(back.account, config.account);
         let legacy: Config =
-            serde_json::from_str(r#"{"web_url": "https://192.168.15.199:8443"}"#).unwrap();
+            serde_json::from_str(r#"{"web_url": "https://eclume.exemplo:8443"}"#).unwrap();
         assert_eq!(legacy.account, None);
     }
 

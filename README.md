@@ -26,9 +26,16 @@ agente que o admin da plataforma configurar. Cada usuário tem o próprio espaç
   produção no host GPU e os scripts de deploy, backup e release do desktop.
 - **docs/**: o conhecimento do projeto, num bundle OKF.
 
+## Auto-hospedagem
+
+Para subir o eclume num servidor seu, com ou sem GPU, siga
+[docs/how-to/auto-hospedar.md](docs/how-to/auto-hospedar.md).
+
 ## Desenvolvimento
 
-Os comandos de build, lint e teste de cada peça estão em
+Do clone a uma gravação transcrita numa máquina sem GPU:
+[docs/how-to/desenvolver-sem-gpu.md](docs/how-to/desenvolver-sem-gpu.md). Os comandos de build,
+lint e teste de cada peça estão em
 [docs/standards/code/monorepo.md](docs/standards/code/monorepo.md).
 
 ## Licença

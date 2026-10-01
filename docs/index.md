@@ -14,6 +14,7 @@ canônicos em inglês kebab-case; **a prosa segue o idioma do repositório (port
 * [standards/](standards/index.md) — como **NÓS** fazemos (contratos e convenções atuais), por assunto; regra acordada mas não provada fica aqui como `authority: background`
 * [vision/](vision/index.md) — direção por área, sem prazo
 * [concepts/](concepts/index.md) — conhecimento genérico que sustentamos; inclui o [glossário](glossary.md)
+* [how-to/](how-to/index.md) — receitas para qualquer instalação: auto-hospedar e desenvolver sem GPU
 * [project/](project/index.md) — o manual deste repositório: referências de mercado e o runbook do host
 
 ## Fronteiras
@@ -21,7 +22,7 @@ canônicos em inglês kebab-case; **a prosa segue o idioma do repositório (port
 - `standards/` = "como **NÓS** fazemos (atual)"; regra acordada mas não provada fica como `authority: background`.
 - `concepts/` = "o que **entendemos**" (explicativo, não vinculante).
 - A **caixa de tarefas** vive fora deste bundle, no workspace de specs gerido pelo Quenching (backend GitHub, `holetz/eclume`). A direção do produto está em [vision/](vision/index.md); o épico `holetz/eclume#1` é o registro da primeira construção.
-- Homes ainda vazias — `catalog/`, `external/`, `tutorials/`, `how-to/`, `explanation/` — são instaladas quando o primeiro doc chegar.
+- Homes ainda vazias — `catalog/`, `external/`, `tutorials/`, `explanation/` — são instaladas quando o primeiro doc chegar.
 
 **Resolvendo um termo.** Palavra, sigla ou codinome desconhecido? Procure primeiro no
 [glossário](glossary.md): `grep -i '<termo>' docs/glossary.md`.

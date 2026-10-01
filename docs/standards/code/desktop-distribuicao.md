@@ -7,7 +7,7 @@ tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126
 maintainer: holetz
 ---
 
@@ -18,7 +18,8 @@ assinado com uma **chave minisign própria**. O instalador Windows sai com **ass
 Authenticode** (com carimbo de tempo) sempre que o host tem a configuração do fornecedor
 (§Assinatura de código do Windows); sem ela, sai sem assinatura, e publicar assim exige
 `--sem-assinatura`. Linux não tem assinatura de código. Como o repositório é privado, os clientes nunca baixam do GitHub:
-baixam do próprio servidor eclume, em `https://192.168.15.199:8443/downloads/`.
+baixam do próprio servidor eclume, em `https://<servidor>:8443/downloads/` (o
+`ECLUME_DOWNLOADS_URL` do release).
 
 Enquanto o repositório for privado, os minutos do GitHub Actions têm cota, e o release sai **do
 host**, sem Actions. Plataformas:
@@ -49,12 +50,14 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   nunca à mão: ela não dispara workflow nenhum.
 - Lançar uma versão: subir o `version`, fazer merge em `main`, publicar a `main`, esperar o gate do
   host (`eclume/gate` = `success` no commit; [monorepo.md](monorepo.md)) e rodar
-  `bash deploy/release-desktop.sh --publicar --notas "<notas>"`.
+  `bash deploy/release-desktop.sh --context <contexto> --publicar --notas "<notas>"`.
 
 ## Release no host — `deploy/release-desktop.sh`
 
-- Roda **na estação** e opera o host pelo contexto Docker (`gpu-host`) e por SSH, como o
-  `deploy/deploy.sh`. `--plan` só mostra versão, tag, commit, alvos, pastas, disco e os
+- Roda **na estação** e opera o host pelo contexto Docker e por SSH, como o `deploy/deploy.sh`. O
+  contexto não tem padrão (`--context` ou `ECLUME_DOCKER_CONTEXT`; nesta produção, `gpu-host`), e
+  sem `ECLUME_DOWNLOADS_URL` (do ambiente ou da variável do repositório) o script recusa: um padrão
+  publicaria o updater apontando para o servidor de outra pessoa. `--plan` só mostra versão, tag, commit, alvos, pastas, disco e os
   impedimentos, sem escrever.
 - O código vai **do commit**, não da árvore de trabalho: `git archive HEAD` segue para
   `~/eclume-build/release/src` no host, recriada a cada release. Com `--publicar`, o script recusa
@@ -123,7 +126,11 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - A primeira execução mostra o embutido como "Veio com este instalador" e fixa a CA pela
   impressão digital, sem a pessoa digitar endereço
   ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)). O `web_url` padrão de uma config
-  nova é o embutido; o `https://192.168.15.199:8443` só vale num build sem servidor embutido.
+  nova é o embutido. Um build sem servidor embutido **começa sem servidor** (`web_url` vazio): não
+  há endereço padrão, os comandos que precisam do servidor respondem "servidor não configurado" e
+  o sync não sobe nada até a primeira execução escolher um (achado por mDNS ou digitado). A
+  `config.json` antiga sem `web_url` recebe o padrão do build — o embutido, em todo instalador
+  publicado.
 
 | Plataforma | Onde compila | Saída |
 |---|---|---|
@@ -160,8 +167,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 ## Manifestos
 
 `manifestos_release.py` grava na pasta do release, com URLs absolutas
-`<base>/<versão>/<arquivo>` (base na variável de repositório `ECLUME_DOWNLOADS_URL`, padrão
-`https://192.168.15.199:8443/downloads`):
+`<base>/<versão>/<arquivo>` (base em `ECLUME_DOWNLOADS_URL`, obrigatória, sem padrão):
 
 - **`latest.json`** — o manifesto do updater: `version`, `notes`, `pub_date` e `platforms` com
   `url` e `signature` (conteúdo do `.sig`). Chaves por instalador (`windows-x86_64-nsis`,
@@ -200,7 +206,9 @@ abertura seguinte.
 
 - `desktop/src-tauri/src/updater.rs` checa `<web_url>/downloads/latest.json` 30 s depois de abrir e
   a cada 6 h; o `web_url` é o da config do app, então trocar o endereço do servidor não exige
-  release. O `endpoints` do `tauri.conf.json` é só o padrão.
+  release. O `endpoints` do `tauri.conf.json` só existe porque o plugin exige um valor: é neutro
+  (`https://eclume.invalid/downloads/latest.json`) e o `updater.rs` sempre o troca pelo do
+  `web_url`; sem servidor configurado, não há checagem.
 - Só baixa e instala com o app **ocioso** (nem gravando, nem sincronizando) e só reinicia se
   continuar ocioso. No Windows, o instalador roda em modo `passive` e reabre o app. Build de
   depuração não se atualiza.

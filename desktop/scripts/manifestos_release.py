@@ -13,7 +13,7 @@ As URLs ficam em `<base>/<versão>/<arquivo>`, que é onde `deploy/publicar-desk
 
 Uso:
     python3 desktop/scripts/manifestos_release.py --artefatos <pasta> --versao 0.1.0 \
-        --base-url https://192.168.15.199:8443/downloads [--notas "texto"]
+        --base-url https://<servidor>:8443/downloads [--notas "texto"]
 """
 
 from __future__ import annotations

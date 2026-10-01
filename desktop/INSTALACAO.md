@@ -4,8 +4,8 @@ O app desktop grava as reuniões (microfone e áudio do computador) e as envia p
 eclume. Ele fica na bandeja do sistema. O release sai para Windows e Linux; o macOS fica fora
 enquanto o repositório for privado.
 
-Os instaladores ficam na página de download do eclume, em
-`https://192.168.15.199:8443/downloads/`. Escolha o arquivo da sua plataforma:
+Os instaladores ficam na página de download deste servidor eclume, em
+`https://<endereço-do-servidor>:8443/downloads/` (a pasta em que você leu este guia). Escolha o arquivo da sua plataforma:
 
 | Plataforma | Arquivo recomendado | Alternativa |
 |---|---|---|
@@ -18,7 +18,7 @@ download (`sha256sum -c SHA256SUMS` no Linux, `Get-FileHash <arquivo>` no PowerS
 ## Depois de instalar: entrar
 
 Na primeira vez, o app abre a tela **Bem-vindo** e já mostra o servidor: "eclume em
-192.168.15.199 · Veio com este instalador". Entre com o **e-mail e a senha** da sua conta no
+<endereço do servidor> · Veio com este instalador". Entre com o **e-mail e a senha** da sua conta no
 eclume. Sem conta, "Crie uma na web" abre o cadastro.
 
 - O app confia no certificado do servidor sozinho: ele baixa a CA do eclume e confere a
