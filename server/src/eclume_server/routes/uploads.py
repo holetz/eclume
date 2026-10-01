@@ -6,11 +6,13 @@ pré-assinado do S3 (`?expires=&sig=`): a URL se autoriza sozinha e dispensa cre
 
 from __future__ import annotations
 
+import asyncio
 import math
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePath
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Path, Request, Response
@@ -27,12 +29,28 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.fields import mark_edited
 from eclume_server.markers import MAX_BATCH, MarkerInput, upsert_markers
 from eclume_server.pagination import iso
-from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized, validation_failed
+from eclume_server.problems import (
+    ApiProblemError,
+    conflict,
+    forbidden,
+    invalid_field,
+    not_found,
+    payload_too_large,
+    unauthorized,
+    validation_failed,
+)
 from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
 from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
 from eclume_server.storage import MultipartGoneError, audio_key
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+COMPLETING_TTL_S = 120
+COMPLETING_RENEW_S = 30
+COMPLETING_RETRY_S = 5
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -373,7 +391,7 @@ async def put_part(
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) != expected:
         raise conflict(f"A parte {part_number} deve ter {expected} bytes.")
-    data = await request.body()
+    data = await _read_part(request, expected)
     if len(data) != expected:
         raise conflict(f"A parte {part_number} deve ter {expected} bytes.")
     try:
@@ -384,26 +402,89 @@ async def put_part(
     return Response(status_code=200, headers={"ETag": etag})
 
 
+async def _read_part(request: Request, expected: int) -> bytes:
+    """O corpo da parte, lido em pedaços; passar de `expected` é 413 sem ler o resto."""
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > expected:
+            raise payload_too_large(expected)
+    return bytes(data)
+
+
+@asynccontextmanager
+async def _completing(ctx: AppContext, upload_id: UUID) -> AsyncIterator[None]:
+    """Trava de um `complete` em andamento, renovada enquanto o S3 trabalha.
+
+    Outro `complete` com a trava presa recebe 409 `upload_completing`; a trava de um processo morto
+    vence em `COMPLETING_TTL_S` e o próximo `complete` retoma (o passo do S3 é idempotente).
+    """
+    redis = ctx.queue.pool
+    key = f"eclume:upload:completing:{upload_id}"
+    token = uuid4().hex
+    if not await redis.set(key, token, nx=True, ex=COMPLETING_TTL_S):
+        raise ApiProblemError(
+            409,
+            "upload_completing",
+            "Outro pedido está concluindo este upload; tente de novo em instantes.",
+            headers={"Retry-After": str(COMPLETING_RETRY_S)},
+        )
+
+    async def renew() -> None:
+        while True:
+            await asyncio.sleep(COMPLETING_RENEW_S)
+            await redis.expire(key, COMPLETING_TTL_S)
+
+    renewal = asyncio.create_task(renew())
+    try:
+        yield
+    finally:
+        renewal.cancel()
+        if await redis.get(key) == token.encode():
+            await redis.delete(key)
+
+
 @router.post("/uploads/{upload_id}/complete", status_code=201)
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição."""
+    """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição.
+
+    Em três passos, sem S3 dentro de transação: lê o upload; sob a trava, monta o multipart e calcula
+    o hash; numa transação curta com `FOR UPDATE`, grava gravação e job.
+    """
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        row = await _get_upload(conn, upload_id)
+        if row["status"] in {"completed", "deduplicated"}:
+            return (await render(ctx, principal.user_id, [await get_visible(conn, row["recording_id"])]))[0]
+    _require_open(row)
     enqueue: tuple[str, dict[str, Any]] | None = None
-    try:
+    async with _completing(ctx, upload_id):
+        try:
+            actual = await _assemble(ctx, row, body)
+        except MultipartGoneError:
+            await _expire(ctx, upload_id)
+            raise _expired() from None
         async with user_tx(ctx.engine, principal.user_id) as conn:
             row = await _get_upload(conn, upload_id, lock=True)
             if row["status"] in {"completed", "deduplicated"}:
-                recording_id = row["recording_id"]
+                recording_id, discard = row["recording_id"], False
             else:
                 _require_open(row)
-                assembled = await _parts_or_assembled(ctx, row, body)
-                recording_id, enqueue = await _finish(ctx, conn, row, principal, assembled=assembled)
+                recording_id, enqueue, discard = await _finish(conn, row, principal, actual)
             recording = await get_visible(conn, recording_id)
-    except MultipartGoneError:
-        await _expire(ctx, upload_id)
-        raise _expired() from None
+    if discard:
+        await ctx.storage.delete_recording(row["audio_key"], row["new_recording_id"])
     if enqueue is not None:
         await enqueue_transcription(ctx, recording_id, 1, *enqueue)
     return (await render(ctx, principal.user_id, [recording]))[0]
+
+
+async def _assemble(ctx: AppContext, row: Row, body: UploadComplete) -> str:
+    """Fecha o multipart (se ainda não montado) e devolve o SHA-256 do objeto."""
+    key = row["audio_key"]
+    if not await _parts_or_assembled(ctx, row, body):
+        parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
+        await ctx.storage.complete_multipart(key, row["s3_upload_id"], [(p.part_number, p.etag) for p in parts])
+    return await ctx.storage.sha256(key)
 
 
 async def _parts_or_assembled(ctx: AppContext, row: Row, body: UploadComplete) -> bool:
@@ -465,19 +546,13 @@ def recorded_at_source(requested: dict[str, Any], source: str) -> str:
 
 
 async def _finish(
-    ctx: AppContext,
-    conn: AsyncConnection,
-    row: Row,
-    principal: Principal,
-    *,
-    assembled: bool = False,
-) -> tuple[UUID, tuple[str, dict[str, Any]] | None]:
-    """Fecha o multipart (se ainda não montado), confere o hash e grava gravação e job. Devolve o que enfileirar."""
+    conn: AsyncConnection, row: Row, principal: Principal, actual: str
+) -> tuple[UUID, tuple[str, dict[str, Any]] | None, bool]:
+    """Grava gravação e job do objeto montado com hash `actual`.
+
+    Devolve a gravação, o que enfileirar e se o objeto, duplicado, deve ser apagado depois do commit.
+    """
     key = row["audio_key"]
-    if not assembled:
-        parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
-        await ctx.storage.complete_multipart(key, row["s3_upload_id"], [(p.part_number, p.etag) for p in parts])
-    actual = await ctx.storage.sha256(key)
     matches = actual == row["sha256"]
     requested = row["request"]
     recording_id = row["new_recording_id"]
@@ -517,14 +592,13 @@ async def _finish(
     ).scalar()
     if duplicate is not None:
         # O conteúdo real já é de outra gravação do usuário: o upload vira deduplicado.
-        await ctx.storage.delete_recording(key, recording_id)
         await conn.execute(
             update(t.uploads)
             .where(t.uploads.c.id == row["id"])
             .values(status="deduplicated", recording_id=duplicate, completed_at=now)
         )
         await _add_markers(conn, duplicate, requested, principal)
-        return duplicate, None
+        return duplicate, None, True
     await conn.execute(insert(t.recordings).values(**values))
     await _add_markers(conn, recording_id, requested, principal)
     # Título e tags pedidos no upload são do usuário; sem título (o nome do arquivo), o automático o troca.
@@ -547,4 +621,4 @@ async def _finish(
         .where(t.uploads.c.id == row["id"])
         .values(status="completed", recording_id=recording_id, completed_at=now)
     )
-    return recording_id, ((key, options) if matches else None)
+    return recording_id, ((key, options) if matches else None), False
