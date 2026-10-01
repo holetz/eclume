@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import redis
 
 from eclume_server_testing.api import PASSWORD, audio_bytes, upload_file
+from eclume_server_testing.fakes import drain_storage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -68,6 +69,7 @@ def test_excluir_a_conta_apaga_tudo_e_so_dela(
     assert deleted.status_code == 204, deleted.text
     assert "eclume_session=" in deleted.headers.get("set-cookie", "")
     assert api.get("/api/v1/me").status_code == 401
+    drain_storage(services.settings)
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
     client.cookies.clear()
     assert client.post("/api/v1/auth/login", json={"email": account.email, "password": PASSWORD}).status_code == 401

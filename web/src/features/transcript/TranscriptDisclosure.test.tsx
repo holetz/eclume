@@ -1,9 +1,11 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
+
+beforeAll(() => preloadRoute('/gravacoes/x'))
 
 // Conta os renders de cada fala e da barra de marcadores, sem mudar o que renderizam.
 const renders = vi.hoisted(() => ({ rows: 0, markerBar: 0 }))

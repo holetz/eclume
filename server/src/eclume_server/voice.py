@@ -413,7 +413,18 @@ async def purge_embeddings(conn: AsyncConnection) -> tuple[int, int]:
 
 
 async def forget(conn: AsyncConnection, person_id: UUID) -> tuple[int, int]:
-    """Apaga as amostras e as sugestões pendentes da pessoa, sob a RLS do dono."""
+    """Apaga as amostras, as sugestões pendentes e os vetores dos locutores da pessoa, sob a RLS do dono.
+
+    O vínculo locutor ↔ pessoa fica; sem o vetor, religar um desses locutores não recria a amostra,
+    e só uma retranscrição o recria (holetz/eclume#97, recomendação da spec até a dona decidir).
+    """
+    await conn.execute(
+        text(
+            "DELETE FROM speaker_embeddings se USING speakers s"
+            " WHERE s.transcript_id = se.transcript_id AND s.speaker_id = se.speaker_id AND s.person_id = :person"
+        ),
+        {"person": person_id},
+    )
     samples = await conn.execute(delete(t.voice_samples).where(t.voice_samples.c.person_id == person_id))
     suggestions = await conn.execute(
         delete(t.speaker_suggestions).where(

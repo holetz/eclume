@@ -138,6 +138,20 @@ recordings = Table(
     _ts("updated_at"),
 )
 
+# Fila de exclusão no bucket (migration 024): só o papel de conexão a alcança.
+storage_deletions = Table(
+    "storage_deletions",
+    metadata,
+    _pk(),
+    Column("key", Text),
+    Column("prefix", Text),
+    Column("s3_upload_id", Text),
+    Column("attempts", Integer, server_default=FetchedValue()),
+    Column("last_error", Text),
+    _ts("next_attempt_at", server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
 uploads = Table(
     "uploads",
     metadata,

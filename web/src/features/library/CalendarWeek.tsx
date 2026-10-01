@@ -2,20 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { Link, useLocation } from 'react-router'
 import { ZoomIn, ZoomOut } from 'lucide-react'
 import type { Schemas } from '../../api/client'
-import {
-  dayLabel,
-  eventBox,
-  eventLabel,
-  lanes,
-  recordingTitle,
-  sameDay,
-  shortDuration,
-  timeLabel,
-  weekdayShort,
-} from './calendar'
+import { dayLabel, eventBox, eventLabel, lanes, recordingTitle, sameDay, shortDuration } from './calendar'
 import { readWorkHours } from '../../app/preferences'
-import { recordingState } from './format'
+
 import styles from './LibraryPage.module.css'
+import { recordingState, timeLabel, weekdayShort } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 

@@ -1,12 +1,14 @@
 import { focusManager } from '@tanstack/react-query'
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch, problem } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
 import { formatDuration } from './labels'
+
+beforeAll(() => preloadRoute('/admin/saude'))
 
 afterEach(() => {
   vi.useRealTimers()

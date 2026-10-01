@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97
 maintainer: holetz
 ---
 
@@ -213,7 +213,15 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   ninguém.
 - Partes de `ECLUME_UPLOAD_PART_SIZE` (8 MiB; última menor), no máximo 10 000; tamanho errado →
   409. `parts_received` vem do `ListParts`. As primeiras 100 URLs vêm na criação; o resto por
-  `part-urls`. Upload vale 7 dias; o worker CPU aborta os vencidos a cada 30 min.
+  `part-urls`. Upload vale 7 dias; o worker CPU aborta os vencidos a cada 30 min. O MinIO de todo
+  compose guarda o multipart incompleto por `MINIO_API_STALE_UPLOADS_EXPIRY=192h` (8 dias, acima
+  dos 7), para a retomada valer até o fim.
+- **Multipart sumido nunca é 500.** O `Storage` traduz `NoSuchUpload` em `MultipartGoneError`:
+  `GET /uploads/{id}` marca o upload `expired` e responde com ele; a retomada por hash marca o
+  antigo `expired` e abre outro; o `PUT` da parte e o `complete` marcam `expired` e respondem 409
+  `upload_expired`. No `complete`, multipart sumido com o objeto presente (`head_object`) é o
+  `complete` anterior cujo commit falhou: segue para o hash e a gravação sem remontar. O desktop e
+  o celular (`eclume-sync`) recomeçam o upload uma vez ao receber esse 409.
 - **Dedup e retomada por hash:** mesmo `sha256` de uma gravação do usuário → 200 `deduplicated`;
   de um upload `in_progress` dele → o mesmo upload, com URLs das partes que faltam.
 - **`complete`** fecha o multipart, relê o objeto em streaming para conferir o SHA-256 e cria
@@ -279,9 +287,27 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
 
 - `DELETE /recordings/{id}` apaga a linha da gravação e deixa o resto às FKs em cascata:
   transcrição, segmentos, locutores, embeddings, amostras de voz, versões do resumo, chat de
-  ajuste, marcadores, valores de campo e etapas do pipeline. Depois do commit, o áudio e os
-  artefatos saem do bucket. Um job ainda na fila (`summarize`, `summary_chat`, as etapas por
-  agente, `ingest_transcript`) encontra a linha apagada e termina sem efeito.
+  ajuste, marcadores, valores de campo e etapas do pipeline. Um job ainda na fila (`summarize`,
+  `summary_chat`, as etapas por agente, `ingest_transcript`) encontra a linha apagada e termina
+  sem efeito.
+- **Fila de exclusão no bucket** (`storage_deletions`, migration 024, sem RLS e sem GRANT para
+  `eclume_app`). Gatilhos `AFTER DELETE` `SECURITY DEFINER` enfileiram, na mesma transação do
+  `DELETE` (e da cascata): de `recordings`, o `audio_key` e o prefixo `recordings/{id}/`; de
+  `uploads` `in_progress`, o abort do multipart. Assim a rota, a ferramenta do MCP e a exclusão
+  da conta cobrem tudo sem tocar o S3 depois do commit. A ingestão enfileira o
+  `speaker_embeddings.json` da revisão na transação dela (biometria só no banco).
+- **Dreno** (`drain_storage_deletions`, cron de minuto, `unique`, worker de `eclume:default`): até
+  100 linhas vencidas com `FOR UPDATE SKIP LOCKED`; apaga a chave, lista e apaga o prefixo, aborta
+  o multipart (`NoSuchUpload` = feito) e tira a linha. Falha soma `attempts`, guarda `last_error`
+  e adia (1 min dobrando até 1 h). Nunca desiste: a linha parada é o sinal para a observabilidade.
+- **Reconciliação** (`reconcile_storage`, domingo 04:00, `unique`): enfileira todo objeto de
+  `users/`, `orgs/` e `recordings/` com mais de 24 h cuja chave não é `audio_key` de gravação
+  nenhuma (ou cujo `recordings/{id}/` não tem gravação), e todo multipart com mais de 24 h sem
+  upload `in_progress` com aquele `s3_upload_id`. A margem cobre o `complete` ainda sem commit.
+- **Retenção mínima** (`purge_expired`, diário): sessões de usuário e de admin vencidas há mais de
+  1 dia e uploads terminais (`completed`, `deduplicated`, `aborted`, `expired`) com mais de 30
+  dias. Um app que retome depois disso recebe 404, abre outro upload e cai no dedup por hash.
+  `api_tokens` ficam: o usuário vê os revogados.
 
 ## Pessoas, coleções e edição da transcrição
 

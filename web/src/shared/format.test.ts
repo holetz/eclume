@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Schemas } from '../../api/client'
-import { fixtures } from '../../test/fixtures'
+import type { Schemas } from '../api/client'
+import { fixtures } from '../test/fixtures'
 import { formatBytes, formatDuration, recordingState, shortRef } from './format'
 
 type Step = Schemas['PipelineStep']

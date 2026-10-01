@@ -9,6 +9,7 @@ import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
 import styles from './CollectionsPage.module.css'
 import { COLLECTIONS_KEY, useCollections, type Collection } from './queries'
+import { Switch } from '../../shared/Switch'
 
 interface CollectionFields {
   name: string
@@ -387,11 +388,9 @@ function CollectionForm({ initial, submitLabel, pending, error, onSubmit, onCanc
           </ul>
         </details>
       </div>
-      <label className="switch">
-        <input type="checkbox" checked={autoAssign} onChange={(e) => setAutoAssign(e.target.checked)} />
-        <span className="track" />
+      <Switch checked={autoAssign} onChange={setAutoAssign}>
         Incluir automaticamente depois da transcrição
-      </label>
+      </Switch>
       {autoAssign && !instructions.trim() && (
         <p className="field-hint" role="status">
           Sem regra, o agente não inclui nada nesta coleção.

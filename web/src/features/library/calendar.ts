@@ -1,31 +1,11 @@
 // A biblioteca no tempo: semanas de segunda a domingo e grade do mês, em datas locais do navegador,
 // e a posição de cada gravação na agenda (hora de início e duração, em horas).
 import type { Schemas } from '../../api/client'
-import { recordingState } from './format'
+import { markersLabel, MONTHS, recordingState, timeLabel, weekdayIndex } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
-const WEEKDAYS_SHORT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 const WEEKDAYS_LONG = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo']
-const MONTHS = [
-  'janeiro',
-  'fevereiro',
-  'março',
-  'abril',
-  'maio',
-  'junho',
-  'julho',
-  'agosto',
-  'setembro',
-  'outubro',
-  'novembro',
-  'dezembro',
-]
-
-/** Índice do dia da semana com a segunda em 0. */
-function weekdayIndex(day: Date): number {
-  return (day.getDay() + 6) % 7
-}
 
 function startOfDay(day: Date): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate())
@@ -87,18 +67,9 @@ export function monthGrid(day: Date): Range & { cells: MonthCell[] } {
   return { from, to: addDays(from, cells.length), cells }
 }
 
-export function weekdayShort(day: Date): string {
-  return WEEKDAYS_SHORT[weekdayIndex(day)]
-}
-
 /** "segunda, 21 de setembro". */
 export function dayLabel(day: Date): string {
   return `${WEEKDAYS_LONG[weekdayIndex(day)]}, ${day.getDate()} de ${MONTHS[day.getMonth()]}`
-}
-
-/** "sáb 26 set". */
-export function shortDayLabel(day: Date): string {
-  return `${weekdayShort(day)} ${day.getDate()} ${MONTHS[day.getMonth()].slice(0, 3)}`
 }
 
 /** "21–27 de setembro de 2026", "28 de setembro – 4 de outubro de 2026". */
@@ -118,11 +89,6 @@ export function monthTitle(day: Date): string {
   return `${month[0].toUpperCase()}${month.slice(1)} de ${day.getFullYear()}`
 }
 
-/** "09:00". */
-export function timeLabel(date: Date): string {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
 /** "58 min", "1 h 40", "2 h"; sem duração, "—". */
 export function shortDuration(ms: number | null): string {
   if (!ms) return '—'
@@ -135,10 +101,6 @@ export function shortDuration(ms: number | null): string {
 /** "Nota · Rascunho da pauta" para notas; o título como está para reuniões. */
 export function recordingTitle(recording: Pick<Recording, 'title' | 'kind'>): string {
   return recording.kind === 'note' ? `Nota · ${recording.title}` : recording.title
-}
-
-export function markersLabel(count: number): string {
-  return count === 1 ? '1 marcador' : `${count} marcadores`
 }
 
 /** O rótulo completo de uma gravação na agenda: título, hora, duração, estado e marcadores. */

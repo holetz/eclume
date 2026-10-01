@@ -7,7 +7,7 @@ tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#130
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#113, holetz/eclume#130
 maintainer: holetz
 ---
 
@@ -78,15 +78,18 @@ npm --prefix web run gen:api
 npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run build
+npm --prefix web run budget
 ```
 
-Os testes de navegador ficam fora do `npm test`: os da conversão de mídia (vitest browser mode,
-Chrome; o porquê e as fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o
-E2E Playwright do app contra o mock. Localmente, rodam no host de build; o E2E precisa do mock
+O `budget` roda depois do build: o JS inicial do `dist/index.html` não passa do teto em gzip de
+`web/bundle-budget.json`. Os testes de navegador ficam fora do `npm test`: os da conversão de mídia
+e da transcrição longa (vitest browser mode no Google Chrome, no Firefox e no WebKit; o porquê e as
+fixtures estão em [formato-audio-upload.md](formato-audio-upload.md)) e o E2E Playwright do app
+contra o mock (todos os cenários no Chromium, o smoke `@smoke` no WebKit e no Firefox). Localmente, rodam no host de build; o E2E precisa do mock
 no ar, e `ECLUME_MOCK_URL` indica a porta quando a 4010 está ocupada.
 
 ```bash
-remote-run web 'npx playwright install --with-deps chrome && npm run fixtures && npm run test:browser'
+remote-run web 'npx playwright install webkit firefox && npm run fixtures && npm run test:browser'
 remote-run . 'ECLUME_MOCK_PORT=4110 docker compose -p eclume-mock-web -f deploy/docker-compose.mock.yml up -d --wait && cd web && npx playwright install chromium && ECLUME_MOCK_URL=http://127.0.0.1:4110 npm run test:e2e'
 ```
 
@@ -215,7 +218,8 @@ deixa de valer), o `[advisories] ignore` de `desktop/deny.toml` e `mobile/deny.t
 
 Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
 (`--lista` enumera os nove: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
-`docs`, `windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
+`docs`, `windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` e o
+`budget` depois do build no `web`, `playwright install webkit firefox` no `web-browser` e
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
 mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
 serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam o mesmo script;
@@ -226,8 +230,10 @@ serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam 
 em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
 `web-browser`, `desktop`, `mobile` e `docs`, cada um com o seu setup (actions, apt, serviços de
 `deploy/docker-compose.test.yml` no `python`, mock no `contracts` e no `web-browser`, dependências do
-Chromium no `desktop`) e uma chamada a `bash deploy/pilares.sh <job>`. O `web-browser` usa o Google
-Chrome do runner (`E2E_CHANNEL=chrome`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
+Chromium no `desktop`, do WebKit e do Firefox no `web-browser`) e uma chamada a
+`bash deploy/pilares.sh <job>`. O `web-browser` usa o Google Chrome do runner (`E2E_CHANNEL=chrome`)
+e o WebKit e o Firefox do Playwright, com as dependências de sistema do `playwright install-deps`
+(no gate, já na `deploy/gate.Dockerfile`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
 a suíte do server nunca pular; o `desktop` imprime `df -h` e `free -m` antes do cargo.
 Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
 em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`

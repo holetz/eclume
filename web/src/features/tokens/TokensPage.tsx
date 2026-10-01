@@ -8,10 +8,11 @@ import { CopyValue } from '../../app/CopyValue'
 import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
-import { formatDate, formatDateTime } from '../library/format'
+
 import { PLATFORM_LABELS, summarizeScopes, TOKENS_KEY } from './scopes'
 import { TokenForm } from './TokenForm'
 import styles from './TokensPage.module.css'
+import { formatDate, formatDateTime } from '../../shared/format'
 
 type Token = Schemas['Token']
 

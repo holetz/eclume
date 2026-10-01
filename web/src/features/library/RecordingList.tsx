@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router'
 import type { Schemas } from '../../api/client'
-import { dayKey, recordingTitle, sameDay, shortDayLabel, shortDuration, timeLabel } from './calendar'
+import { dayKey, recordingTitle, sameDay, shortDuration } from './calendar'
+import { shortDayLabel, timeLabel } from '../../shared/format'
 import { StatusBadge } from './RecordingStatus'
 
 type Recording = Schemas['Recording']
