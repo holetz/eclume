@@ -2,12 +2,12 @@
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
 description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
-resource: server/**, deploy/docker-compose.test.yml
+resource: server/**, engines/src/eclume_engines/registro.py, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#93
 maintainer: holetz
 ---
 
@@ -39,6 +39,24 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_SIGNUP_OPEN` | `true` | cadastro aberto; `false` fecha o `POST /auth/signup` (403 `signup_closed`) sem deploy de código |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
+
+## Logs
+
+- **Formato:** API, CLI, `worker-cpu`, `worker-agents` e worker GPU escrevem uma linha JSON por
+  registro (`eclume_engines/registro.py`, `configurar_logs()`), com `ts` (RFC 3339 UTC), `level`,
+  `logger`, `msg`, `exc` quando houver exceção e, quando definidos, `request_id`, `recording_id`,
+  `revision` e `job_id`. Vale para `eclume_server.*`, `eclume_worker.*`, `eclume_engines.*`,
+  `uvicorn.*` e `arq.*`. API e workers escrevem no stdout (o `docker compose logs`); o CLI no
+  stderr, porque o stdout dele é dado (`saude --json`, `discover`).
+- **Contexto por `ContextVar`, não por argumento:** o middleware `RequestIdMiddleware` define
+  `request_id`; o `on_job_start` dos workers arq e o `transcribe` do worker GPU definem `job_id`,
+  `recording_id` e `revision`, lidos do `_job_id` `{job}:{recording_id}:{revision}`.
+- **`X-Request-ID`:** toda resposta HTTP da API o leva — o recebido, se tiver até 128 caracteres de
+  `[A-Za-z0-9._-]`, ou um novo (uuid4 hex) — e as linhas de log da requisição levam o mesmo valor.
+- **Log de acesso:** `eclume_server.acesso` grava método, caminho, status e duração. O
+  `uvicorn.access` fica calado.
+- **Nunca no log:** query string (as URLs de parte e de áudio são assinadas), cabeçalhos de
+  credencial, e-mail, título, texto de transcrição ou resumo, tokens e chaves.
 
 ## Persistência
 

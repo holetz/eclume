@@ -7,7 +7,7 @@ tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93
 maintainer: holetz
 ---
 
@@ -154,6 +154,23 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   | `mcp` | `absent` até holetz/eclume#35 |
 
   A cota do bucket não aparece: a API S3 não a expõe.
+- **Prontidão (`GET /api/v1/health/ready`, pública):** reaproveita as sondas `postgres`, `redis` e
+  `storage` acima (`check_*` em `health.py`, teto de 2 s, em paralelo) e responde 200 com tudo `ok`
+  ou 503 com o nome de quem caiu (`down`), sem latência nem mensagem de erro, porque é pública.
+  `/api/v1/health` segue estático (sinal de vida, `deploy.sh`, descritor). O healthcheck do
+  `server` no compose de produção é a prontidão.
+- **Sondas dos workers sem subir o worker:** `eclume-server sonda fila <default|agents>` sai 0 se a
+  chave `eclume:<fila>:health-check` existe; `python -m eclume_worker.health --sonda` faz o mesmo
+  com `eclume:gpu:health`. São os healthchecks de `worker-cpu`, `worker-agents` e `worker-gpu`
+  (30 s, 3 tentativas; `start_period` de 120 s no GPU).
+- **`eclume-server saude --json`:** a mesma `admin_health()` da tela, mais um `summary`
+  (`queued_over_2h`, `failed_last_24h`, `provider_auth_last_24h`, `services_down`) e o
+  `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). É o que o `vigia.sh` do host
+  lê por `docker exec`, para a Saúde e o alerta nunca discordarem; o log do CLI vai para o stderr.
+- **Vencimento do token do Claude:** `agent_providers.key_set_at` (migration 025) muda sempre que a
+  chave muda (criar, trocar, apagar). Um `sk-ant-oat…` vence `key_set_at + 365 dias`; as chaves
+  anteriores à migration receberam a data de criação do provider (o aviso só pode vir cedo). Token
+  só no `ECLUME_CLAUDE_OAUTH_TOKEN` do env não tem data: `unknown`.
 
 ## Retentativa (`POST /admin/jobs/{job_id}/retry`)
 
