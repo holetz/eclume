@@ -6,7 +6,10 @@ import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { renderApp } from '../../test/render'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  window.sessionStorage.clear()
+})
 
 async function fillLogin(password = 'segredo-forte') {
   await userEvent.type(await screen.findByLabelText('E-mail'), 'mariana.couto@example.com')
@@ -30,6 +33,50 @@ describe('login', () => {
     expect(screen.getByText('Mariana Couto')).toBeInTheDocument()
     const body = await http.requests('POST /api/v1/auth/login')[0].json()
     expect(body).toEqual({ email: 'mariana.couto@example.com', password: 'segredo-forte' })
+  })
+
+  it('entrar com outra conta apaga o cache e os rascunhos da anterior; a mesma conta os reencontra', async () => {
+    const draft = 'eclume-resumo-rascunho:gravacao-da-outra'
+    for (const [previous, kept] of [
+      ['outra-conta', false],
+      [fixtures.me().user.id, true],
+    ] as const) {
+      window.sessionStorage.setItem('eclume-conta', previous)
+      window.sessionStorage.setItem(draft, '{"base_version":1,"content_md":"# Da outra"}')
+      let loggedIn = false
+      mockFetch({
+        'GET /api/v1/me': () => (loggedIn ? fixtures.me() : problem('unauthorized', 401)),
+        'POST /api/v1/auth/login': () => {
+          loggedIn = true
+          return empty(204)
+        },
+        'GET /api/v1/tokens': () => ({ items: [], next_cursor: null }),
+      })
+      const { client, unmount } = renderApp('/entrar?volta=/ajuda')
+      client.setQueryData(['recordings', 'da-outra'], ['dado da outra conta'])
+      await fillLogin()
+      await screen.findByText('Mariana Couto')
+      expect(window.sessionStorage.getItem('eclume-conta')).toBe(fixtures.me().user.id)
+      expect(window.sessionStorage.getItem(draft) !== null).toBe(kept)
+      expect(client.getQueryData(['recordings', 'da-outra']) !== undefined).toBe(kept)
+      unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('um 401 com a sessão aberta apaga o cache de usuário e mantém os rascunhos da aba', async () => {
+    const draft = 'eclume-resumo-rascunho:gravacao-1'
+    window.sessionStorage.setItem(draft, '{"base_version":1,"content_md":"# Meu"}')
+    let loggedIn = true
+    mockFetch({ 'GET /api/v1/me': () => (loggedIn ? fixtures.me() : problem('unauthorized', 401)) })
+    const { client } = renderApp('/ajuda')
+    await screen.findByText('Mariana Couto')
+    client.setQueryData(['recordings', 'semana'], ['dado da conta'])
+    loggedIn = false
+    await client.refetchQueries({ queryKey: ['me'] })
+    expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
+    expect(client.getQueryData(['recordings', 'semana'])).toBeUndefined()
+    expect(window.sessionStorage.getItem(draft)).not.toBeNull()
   })
 
   it('credencial errada mostra o erro sem sair da página', async () => {
