@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { Dialog } from '../../app/Dialog'
+import { useLeaveGuard } from '../../app/useLeaveGuard'
 
 /** O valor da seleção para o rascunho de um item novo. */
 export const NEW = 'novo'
 
 /**
  * A seleção vive na URL (`?<param>=<id>` ou `novo`); com alterações não salvas, trocar de item pede
- * confirmação, e fechar a aba também (o aviso do navegador).
+ * confirmação, e sair da rota ou fechar a aba também (o guarda de saída).
  */
 export function useGuardedSelection(param: string) {
   const [params, setParams] = useSearchParams()
@@ -30,15 +31,10 @@ export function useGuardedSelection(param: string) {
     else apply(id)
   }
 
-  useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  const leaveDialog = useLeaveGuard(dirty)
 
   const discardDialog =
-    pending === undefined ? null : (
+    pending === undefined ? leaveDialog : (
       <Dialog
         title="Descartar alterações?"
         message="As alterações ainda não foram salvas."

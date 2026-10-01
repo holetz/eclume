@@ -7,12 +7,22 @@
 :80 {
 	root * /srv
 	encode zstd gzip
-	# Os assets do Vite têm hash no nome: cache longo. O resto (o index.html de toda rota do SPA)
-	# nunca é cacheado. O `header` roda antes do `try_files`, então casa o caminho original.
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-	@pages not path /assets/*
-	header @pages Cache-Control "no-cache"
-	try_files {path} /index.html
-	file_server
+	# Os assets do Vite têm hash no nome: cache longo, só para o arquivo que existe. Sem `try_files`,
+	# o asset ausente (chunk de um deploy anterior) é 404 sem cache, e o `import()` falha rápido e
+	# com motivo, em vez de guardar o index.html por um ano naquela URL.
+	handle /assets/* {
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	# O resto (o index.html de toda rota do SPA) nunca é cacheado.
+	handle {
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+	handle_errors {
+		header Cache-Control "no-store"
+		respond "{err.status_code} {err.status_text}" {err.status_code}
+	}
 }
