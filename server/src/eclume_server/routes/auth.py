@@ -86,9 +86,12 @@ def _check_notice(version: str) -> None:
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
-    """Saúde do serviço e versão do contrato."""
-    return {"status": "ok", "version": __version__, "contract_version": CONTRACT_VERSION}
+async def health(ctx: Ctx) -> dict[str, str]:
+    """Saúde do serviço, versão do contrato e, numa imagem de produção, o commit de que ela saiu."""
+    body = {"status": "ok", "version": __version__, "contract_version": CONTRACT_VERSION}
+    if ctx.settings.commit:
+        body["commit"] = ctx.settings.commit
+    return body
 
 
 @router.post("/auth/login", status_code=204)
