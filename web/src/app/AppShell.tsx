@@ -11,6 +11,7 @@ import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
 import { MenuButton, type MenuEntry } from './MenuButton'
 import { featuredItem, isItemActive, navGroups, type FeaturedItem, type NavGroupEntry } from './nav'
+import { useProcessingWatch } from './processingWatch'
 import { ShellFrame } from './ShellFrame'
 
 export interface ShellUser {
@@ -135,6 +136,7 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
 export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) {
   const { main } = navGroups()
   const featured = featuredItem()
+  useProcessingWatch()
 
   return (
     <HelpProvider>

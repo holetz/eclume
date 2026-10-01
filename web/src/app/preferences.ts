@@ -25,6 +25,15 @@ export function readMotion(): MotionPreference {
   return readStored(STORAGE_KEYS.motion) === 'reduce' ? 'reduce' : 'system'
 }
 
+/** O aviso do navegador no fim do processamento: ligado só por gesto, e só com a permissão dada. */
+export function readNotifyOutcomes(): boolean {
+  return readStored(STORAGE_KEYS.notifyOutcomes) === 'on'
+}
+
+export function saveNotifyOutcomes(on: boolean): void {
+  writeStored(STORAGE_KEYS.notifyOutcomes, on ? 'on' : null)
+}
+
 export function readLibraryOpening(): LibraryOpening {
   const value = readStored(STORAGE_KEYS.libraryOpening)
   return OPENINGS.find((opening) => opening === value) ?? 'ultima'
