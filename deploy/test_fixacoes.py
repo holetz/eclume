@@ -6,6 +6,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import yaml
+
 _spec = importlib.util.spec_from_file_location("fixacoes", Path(__file__).with_name("fixacoes.py"))
 assert _spec is not None
 assert _spec.loader is not None
@@ -174,3 +176,12 @@ def test_repo_dependabot() -> None:
 def test_repo_sem_problema_nenhum() -> None:
     """O conjunto: nenhuma fixação regrediu."""
     assert fixacoes.verificar(RAIZ) == []
+
+
+def test_repo_dependabot_semanal_agrupado_com_espera() -> None:
+    """Cada entrada do Dependabot é semanal, agrupada e espera 7 dias depois da publicação."""
+    config = yaml.safe_load((RAIZ / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    for entrada in config["updates"]:
+        assert entrada["schedule"]["interval"] == "weekly", entrada
+        assert entrada["cooldown"]["default-days"] == 7, entrada  # noqa: PLR2004
+        assert entrada["groups"], entrada
