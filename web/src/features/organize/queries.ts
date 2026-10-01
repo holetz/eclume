@@ -80,6 +80,11 @@ export function useDeleteField() {
   })
 }
 
+/** O `state` da navegação que leva um pedido do chat do resumo ao rascunho das instruções do tipo. */
+export interface InstructionsRequestState {
+  instructionsRequest: string
+}
+
 export function useAgendaTypes() {
   return useQuery({
     queryKey: AGENDA_TYPES_KEY,

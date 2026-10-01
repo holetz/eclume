@@ -4,10 +4,9 @@ import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { markAgendaTypesSeen } from '../../app/preferences'
 import { PageHead } from '../../app/PageHead'
-import type { InstructionsRequestState } from '../transcript/ChatPanel'
 import { AgendaTypeEditor } from './AgendaTypeEditor'
 import styles from './Organize.module.css'
-import { useAgendaTypes, type AgendaType } from './queries'
+import { useAgendaTypes, type AgendaType, type InstructionsRequestState } from './queries'
 import { NEW, useGuardedSelection } from './useGuardedSelection'
 
 const SUMMARY_LINE_MAX = 60

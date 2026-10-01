@@ -509,7 +509,7 @@ desce; abaixo de 56rem, os campos também):
   409 `chat_busy`) e sem resumo atual. Depois do último ajuste que mudou o resumo (`done` com
   `summary_id`), com a gravação num tipo, o painel oferece **Levar este pedido para as instruções do
   tipo**: abre `/config/agendas?tipo=` com o pedido no `state` da navegação
-  (`InstructionsRequestState`), e o `AgendaTypeEditor` o acrescenta ao fim do rascunho das
+  (`InstructionsRequestState`, em `organize/queries.ts` para o grafo de features seguir sem ciclo), e o `AgendaTypeEditor` o acrescenta ao fim do rascunho das
   instruções do resumo, com um `role=status` explicando, sem salvar; o rascunho sujo fica sob o
   "Descartar alterações?" e o guarda de saída.
 

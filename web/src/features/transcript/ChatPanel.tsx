@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
+import type { InstructionsRequestState } from '../organize/queries'
 import { ApiError, errorMessage } from '../../api/problem'
 import { isOpen, MAX_MESSAGE, readNote, useChat, useChatReply, useSendChat, type ChatMessage } from './chat'
 import styles from './RecordingPage.module.css'
@@ -45,11 +46,6 @@ interface ChatPanelProps {
   /** O tipo de agenda da gravação: depois de um ajuste, o pedido pode ir para as instruções dele. */
   agendaTypeId?: string | null
   className?: string
-}
-
-/** O `state` da navegação que leva um pedido do chat ao rascunho das instruções do tipo. */
-export interface InstructionsRequestState {
-  instructionsRequest: string
 }
 
 /** O `aside.chat` "Ajustar o resumo": histórico, notas de leitura da transcrição e o composer. */
