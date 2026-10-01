@@ -31,13 +31,11 @@ fn estado_atual() -> Option<EstadoApp> {
     }
 }
 
-/// Emite o estado se mudou desde o último (ou sempre, com `forcar`).
-fn emitir<R: Runtime>(app: &AppHandle<R>, forcar: bool) {
-    let Some(estado) = estado_atual() else {
-        return;
-    };
+/// Emite o estado se mudou desde o último (ou sempre, com `forcar`); devolve o estado lido.
+fn emitir<R: Runtime>(app: &AppHandle<R>, forcar: bool) -> Option<EstadoApp> {
+    let estado = estado_atual()?;
     let Ok(json) = serde_json::to_string(&estado) else {
-        return;
+        return Some(estado);
     };
     let mut ultimo = ULTIMO
         .lock()
@@ -49,11 +47,12 @@ fn emitir<R: Runtime>(app: &AppHandle<R>, forcar: bool) {
             log::warn!("falha ao emitir o estado: {err}");
         }
     }
+    Some(estado)
 }
 
 /// Avisa a UI do estado novo depois de um comando.
 pub fn avisar<R: Runtime>(app: &AppHandle<R>) {
-    emitir(app, false);
+    let _ = emitir(app, false);
 }
 
 /// Roda um ciclo de rede numa thread, se não há outro em curso (`agora`: "Sincronizar agora").
@@ -69,7 +68,7 @@ pub fn ciclo_em_segundo_plano<R: Runtime>(app: &AppHandle<R>, agora: bool) {
             }
         }
         EM_CICLO.store(false, Ordering::Release);
-        emitir(&app, false);
+        let _ = emitir(&app, false);
     });
 }
 
@@ -77,13 +76,20 @@ pub fn ciclo_em_segundo_plano<R: Runtime>(app: &AppHandle<R>, agora: bool) {
 pub fn iniciar_laco<R: Runtime>(app: AppHandle<R>) {
     std::thread::spawn(move || {
         let mut ultimo_ciclo = Instant::now();
+        // O microfone e o silêncio da gravação em curso, para redesenhar a notificação na troca.
+        let mut microfone = None;
         ciclo_em_segundo_plano(&app, false);
         loop {
             std::thread::sleep(TICK);
             let Some(nucleo) = core::global() else {
                 continue;
             };
-            let fechada = trancar(nucleo).and_then(|mut c| c.verificar_limites());
+            let fechada = trancar(nucleo).and_then(|mut c| {
+                if let Err(err) = c.vigiar() {
+                    log::warn!("vigiar o microfone: {err:#}");
+                }
+                c.verificar_limites()
+            });
             match fechada {
                 Ok(Some(gravacao)) => {
                     log::warn!("gravação {} fechada pelo limite", gravacao.id);
@@ -97,7 +103,14 @@ pub fn iniciar_laco<R: Runtime>(app: AppHandle<R>) {
                 ultimo_ciclo = Instant::now();
                 ciclo_em_segundo_plano(&app, false);
             }
-            emitir(&app, false);
+            let estado = emitir(&app, false);
+            let agora = estado
+                .and_then(|e| e.sessao)
+                .map(|s| (s.microfone, s.silenciada));
+            if agora.is_some() && agora != microfone {
+                crate::servico::atualizar(&app);
+            }
+            microfone = agora;
         }
     });
 }

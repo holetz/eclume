@@ -31,6 +31,11 @@ class NotificacaoTest {
     fun marcadoresEEspacoLivre() {
         assertEquals("2 marcadores · espaço para cerca de 9 h", TextosDaNotificacao.texto(gravando))
         assertEquals("1 marcador", TextosDaNotificacao.texto(gravando.copy(marcadores = 1, espacoLivre = null)))
+        assertEquals(
+            "Microfone desconectado · reconectando",
+            TextosDaNotificacao.texto(gravando.copy(reconectando = true)),
+        )
+        assertEquals("Silenciado pelo sistema", TextosDaNotificacao.texto(gravando.copy(silenciada = true)))
     }
 
     @Test

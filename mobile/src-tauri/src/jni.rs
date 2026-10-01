@@ -1,6 +1,7 @@
 //! A ponte Kotlin → Rust do plugin Android (`EclumeCore`): o caminho que não depende do WebView
 //! estar vivo. A notificação (Pausar, Marcador, Parar) chega por `acao`, e o `SyncWorker` do
-//! WorkManager, sem Activity, abre o núcleo por `syncPendentes`. Cada função devolve JSON.
+//! WorkManager, sem Activity, abre o núcleo por `syncPendentes`. O serviço avisa o silêncio
+//! imposto pelo sistema por `acao("silenciado" | "audivel")`. Cada função devolve JSON.
 
 use eclume_mobile_core::{self as core, trancar};
 use jni::objects::{JClass, JString};
@@ -42,6 +43,8 @@ fn executar(nome: &str) -> anyhow::Result<serde_json::Value> {
             "parar" => {
                 c.parar()?;
             }
+            "silenciado" => c.silenciar(true)?,
+            "audivel" => c.silenciar(false)?,
             outro => anyhow::bail!("ação desconhecida: {outro}"),
         }
     }

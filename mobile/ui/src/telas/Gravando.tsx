@@ -52,6 +52,19 @@ export function Gravando({ estado }: { estado: EstadoApp }) {
           </span>
         )}
       </div>
+      {sessao?.silenciada ? (
+        <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+          <span className="alert-title">Silenciado pelo sistema</span>
+          <span>Uma chamada ou o sistema tomou o microfone. A gravação segue e volta sozinha.</span>
+        </div>
+      ) : (
+        sessao?.microfone === 'reconectando' && (
+          <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+            <span className="alert-title">Microfone reconectando</span>
+            <span>O microfone caiu. A gravação segue no mesmo arquivo enquanto ele volta.</span>
+          </div>
+        )
+      )}
       {bateria && (
         <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
           <span className="alert-title">Bateria em {bateria.pct} %</span>

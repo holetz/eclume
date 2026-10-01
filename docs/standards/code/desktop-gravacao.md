@@ -44,7 +44,27 @@ sintético; a captura real vive em `eclume-audio-capture` (`desktop/crates/audio
   configurações também para o teste.
 - Toda fonte implementa `AudioSource`: `sample_rate()` e `read(timeout)`, que devolve amostras mono
   `f32` na taxa nativa — `Some(vec![])` quando o prazo vence sem amostras, `None` quando a fonte
-  acabou. A taxa pode mudar no meio da gravação e é relida a cada leitura.
+  acabou. A taxa pode mudar no meio da gravação e é relida a cada leitura. Dois métodos com
+  padrão completam o trait: `state()` (`SourceState::Live` ou `Reconnecting { since }`) e
+  `dropped_samples()` (descartes por anel cheio); o `impl` para `Box<T>` repassa os dois.
+- **O microfone se reconecta.** `MicSource` é um `Reconnecting` (`audio-capture/src/reconnect.rs`)
+  sobre o abridor do `cpal`: quando o anel fecha (erro do stream, dispositivo tirado, perfil
+  Bluetooth trocando), a fonte solta o anel velho numa thread à parte e reabre, também numa thread
+  à parte, com espera de 0,5 s dobrando até 5 s, sem desistir enquanto a gravação existir. Enquanto
+  reconecta, `read` entrega **silêncio no ritmo do relógio**, na última taxa: a faixa não fica para
+  trás, e duração, marcadores e as duas faixas seguem alinhados com a reunião. Cada tentativa
+  resolve a escolha de novo (o nome, senão o padrão com `fell_back`). Um seguidor confere a cada
+  2 s o microfone que deveria estar em uso (com "padrão do sistema", o padrão do SO; com um nome,
+  ele quando reaparece) e pede a troca depois de duas leituras seguidas, o critério do
+  `EndpointFollower` do áudio do sistema no Windows. O `None` de `read` segue significando fim de
+  verdade.
+- O laço de gravação copia o estado de cada faixa e os descartes para o `Progress`
+  (`source_states()`, `dropped_samples()`) a cada volta; descartes novos vão ao log no máximo a cada
+  10 s, e o total entra na linha "gravação X fechada".
+- **Microfone fora:** o reaper (1 s) chama `AppState::watch_sources()`. Uma perda acima de 5 s (a
+  troca de perfil do Bluetooth leva de 1 a 3 s) põe "gravando sem microfone: tentando reconectar"
+  na janela, "sem microfone" na linha da bandeja e a notificação "Microfone perdido · gravando sem a
+  sua voz, tentando reconectar"; a volta limpa o aviso.
 - Grava-se com o que abrir: uma fonte que falha vira aviso na janela ("gravando sem …"), e só é
   erro quando nenhuma abre.
 
@@ -128,6 +148,9 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 - Entradas: o botão "Marcador" da janela (com a nota do último marcador), o item "Adicionar
   marcador" da bandeja (só gravando) e o atalho global, que não abre nada nem notifica, para não
   atrapalhar a reunião. A dica da bandeja diz "3 marcadores".
+- **Marcadores automáticos:** a perda do microfone acima de 5 s marca "microfone perdido" no
+  instante da queda (a posição no áudio menos o tempo fora), e a volta marca "microfone de volta".
+  No celular, também "silenciado pelo sistema" ([mobile-app.md](mobile-app.md)).
 - Os marcadores sobem **junto do upload** (`UploadCreate.markers`), idempotentes pelo `client_id`:
   a retomada e o upload deduplicado reenviam os mesmos, e o servidor mescla sem duplicar
   (holetz/eclume#34).

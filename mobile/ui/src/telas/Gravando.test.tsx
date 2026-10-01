@@ -14,6 +14,8 @@ function sessao(parcial: Partial<EstadoSessao> = {}): EstadoSessao {
     nivel: 0.2,
     pausada: false,
     marcadores: [marcador(12 * 60_000 + 40_000, 'Decisão do orçamento'), marcador(31 * 60_000 + 5_000)],
+    microfone: 'ok',
+    silenciada: false,
     ...parcial,
   }
 }
@@ -55,6 +57,22 @@ describe('Gravando', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
     expect(ponte.anotarMarcador).toHaveBeenCalledWith(`m-${42 * 60_000 + 10_000}`, 'Tanaka entra')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Adicionar' })).not.toBeInTheDocument())
+  })
+
+  it('avisa do microfone reconectando e do silêncio imposto pelo sistema', async () => {
+    const ponte = abrir(estadoBase({ sessao: sessao() }))
+    expect(await screen.findByText('Gravando')).toBeInTheDocument()
+    expect(screen.queryByText('Microfone reconectando')).not.toBeInTheDocument()
+
+    act(() => ponte.emitir(estadoBase({ sessao: sessao({ microfone: 'reconectando' }) })))
+    expect(await screen.findByText('Microfone reconectando')).toBeInTheDocument()
+
+    act(() => ponte.emitir(estadoBase({ sessao: sessao({ microfone: 'reconectando', silenciada: true }) })))
+    expect(await screen.findByText('Silenciado pelo sistema')).toBeInTheDocument()
+    expect(screen.queryByText('Microfone reconectando')).not.toBeInTheDocument()
+
+    act(() => ponte.emitir(estadoBase({ sessao: sessao() })))
+    await waitFor(() => expect(screen.queryByText('Silenciado pelo sistema')).not.toBeInTheDocument())
   })
 
   it('avisa da bateria baixa', async () => {

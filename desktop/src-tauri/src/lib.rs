@@ -27,7 +27,7 @@ use tauri::{AppHandle, DragDropEvent, Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::state::{AppState, Busy, NoteToggle, Reaped};
+use crate::state::{AppState, Busy, MicChange, NoteToggle, Reaped};
 
 /// Nome exibido na janela e na bandeja do sistema.
 pub const APP_NAME: &str = "eclume";
@@ -259,6 +259,16 @@ fn spawn_reaper(app: AppHandle) {
 
 /// Uma passada do reaper.
 fn reap_once(app: &AppHandle, ticks: u64) {
+    match app.state::<AppState>().watch_sources() {
+        Ok(Some(change)) => {
+            if change == MicChange::Lost {
+                notify::mic_lost();
+            }
+            refresh_ui(app);
+        }
+        Ok(None) => {}
+        Err(err) => log::error!("falha ao vigiar as fontes da gravação: {err:#}"),
+    }
     match app.state::<AppState>().reap_finished() {
         Ok(Some(reaped)) => {
             match reaped {
