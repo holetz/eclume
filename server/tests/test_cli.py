@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import json
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -187,3 +189,37 @@ def test_sonda_fila_pela_chave_de_health_check(monkeypatch: pytest.MonkeyPatch, 
     finally:
         client.delete("eclume:default:health-check")
         cli.get_settings.cache_clear()
+
+
+def test_token_validity_pelo_cadastro_da_chave_oat():
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    oat = {"name": "Claude", "key": "sk-ant-oat01-x", "key_set_at": now - timedelta(days=340)}
+    api = {"name": "API", "key": "sk-ant-api03-x", "key_set_at": now - timedelta(days=400)}
+    validity = cli.token_validity([api, oat], now)
+    assert validity["status"] == "ok"
+    assert validity["provider"] == "Claude"
+    assert validity["days_left"] == 25
+    assert cli.token_validity([api], now) == {"status": "unknown", "expires_at": None, "days_left": None}
+
+
+def test_saude_json_resume_a_saude_e_o_token(
+    monkeypatch: pytest.MonkeyPatch, services: Services, admin: Api, capsys: pytest.CaptureFixture[str]
+):
+    created = admin.post(
+        "/api/v1/admin/agent-providers",
+        json={"name": "Claude", "kind": "claude-cli", "model": "sonnet", "api_key": "sk-ant-oat01-x"},
+    ).json()
+
+    async def age(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text("UPDATE agent_providers SET key_set_at = now() - interval '340 days' WHERE id = :id"),
+            {"id": created["id"]},
+        )
+
+    run(services.sql(age))
+    monkeypatch.setattr(cli, "get_settings", lambda: services.settings)
+    assert cli.main(["saude", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["claude_token"]["days_left"] in {24, 25}
+    assert set(report["summary"]) == {"queued_over_2h", "failed_last_24h", "provider_auth_last_24h", "services_down"}
+    assert "services" in report["health"]
