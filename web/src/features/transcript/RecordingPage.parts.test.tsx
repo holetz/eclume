@@ -152,3 +152,35 @@ describe('exportar', () => {
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
   })
 })
+
+describe('transcrever de novo em…', () => {
+  it('mostra o idioma e retranscreve em outro, com a confirmação do que muda', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'POST /api/v1/recordings/:id/retranscribe': () => fixtures.recordingQueued(),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    expect(await screen.findByText(/· Português/)).toHaveClass('kicker')
+    await user.click(screen.getByRole('button', { name: 'Transcrever de novo em…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Transcrever de novo?' })
+    expect(dialog).toHaveTextContent('as correções de texto feitas à mão se perdem')
+    const select = within(dialog).getByLabelText('Idioma')
+    expect(select).toHaveValue('pt')
+    await user.selectOptions(select, 'Inglês')
+    await user.click(within(dialog).getByRole('button', { name: 'Transcrever de novo' }))
+    await vi.waitFor(() => expect(http.requests('POST /api/v1/recordings/:id/retranscribe')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/recordings/:id/retranscribe')[0].json()).toEqual({ language: 'en' })
+  })
+
+  it('o pedido duplicado diz que já há uma transcrição em andamento', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi({
+      'POST /api/v1/recordings/:id/retranscribe': () => problem('conflict', 409),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await user.click(await screen.findByRole('button', { name: 'Transcrever de novo em…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Transcrever de novo?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Transcrever de novo' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Já há uma transcrição em andamento.')
+  })
+})
