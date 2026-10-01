@@ -132,7 +132,7 @@ for pilar in "${PILARES[@]}"; do
     --cpus 2 --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
     -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target \
     -e npm_config_cache=/tmp/.cache/npm -e UV_PYTHON_INSTALL_DIR=/tmp/.cache/uv-python \
-    -e UV_LINK_MODE=copy -e ANDROID_NDK_LATEST_HOME=/opt/ndk \
+    -e UV_LINK_MODE=copy -e ECLUME_ANDROID_NDK=/opt/ndk \
     -e ECLUME_TEST_DATABASE_URL=postgresql+asyncpg://eclume:eclume@postgres:5432/eclume \
     -e ECLUME_TEST_REDIS_URL=redis://redis:6379 -e ECLUME_TEST_S3_ENDPOINT=http://minio:9000 \
     "${mock[@]}" \

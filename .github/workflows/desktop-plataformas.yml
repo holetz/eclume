@@ -24,13 +24,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # O Rust de desktop/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
+      - name: Rust de desktop/rust-toolchain.toml
+        working-directory: desktop
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: desktop
-      - run: cargo check --manifest-path desktop/Cargo.toml --workspace --all-targets --locked
-      - run: cargo test --manifest-path desktop/Cargo.toml -p eclume-mirror -p eclume-sync --locked
+      # De dentro de desktop/, onde o rustup lê o rust-toolchain.toml.
+      - run: cargo check --workspace --all-targets --locked
+        working-directory: desktop
+      - run: cargo test -p eclume-mirror -p eclume-sync --locked
+        working-directory: desktop

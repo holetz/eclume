@@ -85,8 +85,8 @@ pilar_mobile() {
   run cargo clippy --workspace --locked -- -D warnings
   run cargo test --workspace --locked
   # O núcleo compila para o Android sem o gradle: prova a compilação cruzada do libopus (cmake) e
-  # do SQLite com o NDK de quem chama (o do runner na CI, o do host no gate).
-  local ndk="${ANDROID_NDK_LATEST_HOME:?ANDROID_NDK_LATEST_HOME aponta para o NDK}"
+  # do SQLite com o NDK fixado de quem chama (ECLUME_ANDROID_NDK: o do sdkmanager na CI, o do host no gate).
+  local ndk="${ECLUME_ANDROID_NDK:?ECLUME_ANDROID_NDK aponta para o NDK fixado}"
   local bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
   export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
   export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
