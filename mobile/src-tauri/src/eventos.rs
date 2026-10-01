@@ -1,6 +1,8 @@
-//! O evento `estado` e o laço do app: a UI é função do `EstadoApp`, que sai a cada 250 ms
-//! gravando e a cada mudança no resto. O mesmo laço fecha a gravação que bateu num limite e dispara
-//! o ciclo de rede (sonda, tipos de agenda e sync) quando ele cabe.
+//! O evento `estado` e o laço do app: a UI é função do `EstadoApp`, que sai a cada 250 ms com o
+//! app visível (o medidor precisa) e a cada mudança no resto. Invisível, o laço passa a 1 s e só
+//! confere os limites e o microfone, sem ler o estado nem emitir para o WebView; ao voltar a ficar
+//! visível, emite já no primeiro tick. O mesmo laço fecha a gravação que bateu num limite (o
+//! serviço avisa "A gravação parou") e dispara o ciclo de rede quando ele cabe.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -11,8 +13,9 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 /// O nome do evento que leva o `EstadoApp` à UI.
 pub const EVENTO_ESTADO: &str = "estado";
-/// O intervalo do laço.
-const TICK: Duration = Duration::from_millis(250);
+/// O intervalo do laço com o app visível e invisível.
+const TICK_VISIVEL: Duration = Duration::from_millis(250);
+const TICK_INVISIVEL: Duration = Duration::from_secs(1);
 /// De quanto em quanto tempo o laço tenta o ciclo de rede (ele mesmo decide se sonda ou sobe).
 const CICLO: Duration = Duration::from_secs(5);
 
@@ -72,45 +75,74 @@ pub fn ciclo_em_segundo_plano<R: Runtime>(app: &AppHandle<R>, agora: bool) {
     });
 }
 
+/// O intervalo do laço: 250 ms visível (o medidor e o relógio), 1 s invisível.
+fn intervalo(visivel: bool) -> Duration {
+    if visivel {
+        TICK_VISIVEL
+    } else {
+        TICK_INVISIVEL
+    }
+}
+
 /// O laço do app, numa thread própria.
 pub fn iniciar_laco<R: Runtime>(app: AppHandle<R>) {
     std::thread::spawn(move || {
         let mut ultimo_ciclo = Instant::now();
+        let mut estava_visivel = true;
         // O microfone e o silêncio da gravação em curso, para redesenhar a notificação na troca.
-        let mut microfone = None;
+        let mut sinais = None;
         ciclo_em_segundo_plano(&app, false);
         loop {
-            std::thread::sleep(TICK);
+            let visivel = core::global()
+                .and_then(|nucleo| trancar(nucleo).ok())
+                .is_none_or(|c| c.visivel());
+            std::thread::sleep(intervalo(visivel));
             let Some(nucleo) = core::global() else {
                 continue;
             };
-            let fechada = trancar(nucleo).and_then(|mut c| {
+            let passada = trancar(nucleo).and_then(|mut c| {
                 if let Err(err) = c.vigiar() {
                     log::warn!("vigiar o microfone: {err:#}");
                 }
-                c.verificar_limites()
+                let fechada = c.verificar_limites()?;
+                Ok((fechada, c.sinais_da_sessao()))
             });
-            match fechada {
-                Ok(Some(gravacao)) => {
-                    log::warn!("gravação {} fechada pelo limite", gravacao.id);
-                    crate::servico::parar(&app);
-                    ciclo_em_segundo_plano(&app, false);
+            match passada {
+                Ok((fechada, agora)) => {
+                    if let Some((gravacao, motivo)) = fechada {
+                        log::warn!("gravação {} parou sozinha: {motivo:?}", gravacao.id);
+                        crate::servico::parar_com_aviso(
+                            &app,
+                            motivo.texto(),
+                            gravacao.duration_ms.unwrap_or(0),
+                        );
+                        ciclo_em_segundo_plano(&app, false);
+                    } else if agora.is_some() && agora != sinais {
+                        crate::servico::atualizar(&app);
+                    }
+                    sinais = agora;
                 }
-                Ok(None) => {}
                 Err(err) => log::warn!("{err:#}"),
             }
             if ultimo_ciclo.elapsed() >= CICLO {
                 ultimo_ciclo = Instant::now();
                 ciclo_em_segundo_plano(&app, false);
             }
-            let estado = emitir(&app, false);
-            let agora = estado
-                .and_then(|e| e.sessao)
-                .map(|s| (s.microfone, s.silenciada));
-            if agora.is_some() && agora != microfone {
-                crate::servico::atualizar(&app);
+            if visivel {
+                let _ = emitir(&app, !estava_visivel);
             }
-            microfone = agora;
+            estava_visivel = visivel;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn laco_desacelera_com_o_app_invisivel() {
+        assert_eq!(intervalo(true), Duration::from_millis(250));
+        assert_eq!(intervalo(false), Duration::from_secs(1));
+    }
 }

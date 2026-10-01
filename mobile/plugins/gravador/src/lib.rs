@@ -60,7 +60,9 @@ impl<R: Runtime> Gravador<R> {
         self.handle.run_mobile_plugin(comando, ())
     }
 
-    /// Sobe o serviço em primeiro plano (o toque em Gravar, com a Activity visível).
+    /// Sobe o serviço em primeiro plano (o toque em Gravar, com a Activity visível) e espera: o
+    /// Kotlin só responde depois do `startForeground`, ou rejeita com o motivo da recusa
+    /// (`ForegroundServiceStartNotAllowedException`, `SecurityException`, prazo de 5 s).
     pub fn iniciar_servico(&self) -> Resultado<()> {
         #[cfg(mobile)]
         self.chamar::<serde_json::Value>("iniciarServico")?;
@@ -129,10 +131,21 @@ impl<R: Runtime> Gravador<R> {
         }
     }
 
-    /// Tira a notificação e para o serviço.
-    pub fn parar_servico(&self) -> Resultado<()> {
+    /// Tira a notificação e para o serviço. Com `parada` (a gravação parou sem pedido: o motivo e
+    /// o tempo salvo), o serviço avisa "A gravação parou" no canal de avisos antes de sair.
+    pub fn parar_servico(&self, parada: Option<(&str, i64)>) -> Resultado<()> {
         #[cfg(mobile)]
-        self.chamar::<serde_json::Value>("pararServico")?;
+        self.handle.run_mobile_plugin::<serde_json::Value>(
+            "pararServico",
+            match parada {
+                Some((motivo, duracao_ms)) => {
+                    serde_json::json!({ "motivo": motivo, "duracaoMs": duracao_ms })
+                }
+                None => serde_json::json!({}),
+            },
+        )?;
+        #[cfg(not(mobile))]
+        let _ = parada;
         Ok(())
     }
 }
