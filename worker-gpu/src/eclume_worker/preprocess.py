@@ -6,6 +6,11 @@ fixa: separar canais (só estéreo de duas fontes), 48 kHz, redução de ruído,
 e 16 kHz mono no fim; depois, o corte do silêncio do início e do fim, medido já normalizado. O
 áudio tratado vive só no diretório de trabalho: o bucket guarda o original, que o usuário ouve, e o
 deslocamento do corte volta às marcas de tempo. Contrato em docs/standards/api/jobs-transcricao.md.
+
+O contêiner é escolhido pelos bytes iniciais, numa lista permitida, e chega ao `ffprobe` e ao
+`ffmpeg` com `-f` explícito e `-protocol_whitelist file`: o ffmpeg nunca adivinha o formato, então
+playlist HLS, `concat`, SDP e afins não abrem nada além do próprio arquivo. Todo processo tem
+tempo limite.
 """
 
 from __future__ import annotations
@@ -32,6 +37,23 @@ _EDGE_S = 0.05
 _SILENCE_START = re.compile(r"silence_start: (-?[\d.]+)")
 _SILENCE_END = re.compile(r"silence_end: (-?[\d.]+)")
 _MEAN_VOLUME = re.compile(r"mean_volume: (-?[\d.]+|-inf) dB")
+
+PROBE_TIMEOUT_S = 60.0
+# Teto de cada ffmpeg: uma base mais a duração do áudio (tempo real), ou o máximo se ela é desconhecida.
+FFMPEG_BASE_TIMEOUT_S = 300.0
+FFMPEG_MAX_TIMEOUT_S = 4 * 3600.0
+_HEAD_BYTES = 12
+# O áudio tratado no diretório de trabalho é sempre WAV gerado aqui.
+_WAV = "wav"
+# Os contêineres permitidos: (posição, bytes mágicos, demuxer do ffmpeg). MPEG e ADTS vêm à parte.
+_MAGIC = (
+    (0, b"OggS", "ogg"),
+    (0, b"\x1a\x45\xdf\xa3", "matroska"),  # Matroska e WebM
+    (4, b"ftyp", "mov"),  # MP4, MOV, M4A
+    (0, b"RIFF", _WAV),  # com `WAVE` na posição 8
+    (0, b"fLaC", "flac"),
+    (0, b"ID3", "mp3"),
+)
 
 
 class PreprocessError(Exception):
@@ -74,8 +96,38 @@ class PreprocessResult:
         }
 
 
-def _run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", *args], capture_output=True, text=True, check=False)
+def demuxer(path: Path) -> str:
+    """O demuxer do ffmpeg para o contêiner pelos bytes iniciais; `PreprocessError` fora da lista."""
+    with path.open("rb") as audio:
+        head = audio.read(_HEAD_BYTES)
+    for offset, magic, fmt in _MAGIC:
+        if head[offset : offset + len(magic)] == magic and (fmt != _WAV or head[8:12] == b"WAVE"):
+            return fmt
+    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0:  # noqa: PLR2004 — sincronia MPEG
+        # Camada 00 é o cabeçalho ADTS (AAC); as demais, MPEG áudio (MP3).
+        return "aac" if head[1] & 0x06 == 0 else "mp3"
+    msg = f"contêiner fora da lista permitida (bytes iniciais {head[:8].hex()})"
+    raise PreprocessError(msg)
+
+
+def _input(path: Path, fmt: str) -> list[str]:
+    """A entrada com o demuxer explícito e só o protocolo `file`."""
+    return ["-protocol_whitelist", "file", "-f", fmt, "-i", f"file:{path}"]
+
+
+def _timeout(duration_ms: int | None) -> float:
+    if duration_ms is None:
+        return FFMPEG_MAX_TIMEOUT_S
+    return min(FFMPEG_BASE_TIMEOUT_S + duration_ms / 1000, FFMPEG_MAX_TIMEOUT_S)
+
+
+def _run(*args: str, timeout: float = FFMPEG_MAX_TIMEOUT_S) -> subprocess.CompletedProcess[str]:
+    """O ffmpeg; estourar o tempo limite é uma falha como outra (código -1)."""
+    command = ["ffmpeg", "-hide_banner", "-nostdin", *args]
+    try:
+        return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(command, -1, "", f"tempo limite de {timeout:g} s esgotado")
 
 
 def _tail(stderr: str) -> str:
@@ -85,32 +137,38 @@ def _tail(stderr: str) -> str:
 def ffmpeg_version() -> str | None:
     """A versão do ffmpeg (`6.1.1-3ubuntu5`), ou `None` sem ffmpeg."""
     try:
-        out = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, check=False).stdout
-    except OSError:
+        out = subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, text=True, check=False, timeout=PROBE_TIMEOUT_S
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
         return None
     match = re.match(r"ffmpeg version (\S+)", out)
     return match.group(1) if match else None
 
 
-def probe(path: Path) -> tuple[int, int | None]:
+def probe(path: Path, fmt: str) -> tuple[int, int | None]:
     """Canais do primeiro fluxo de áudio e a duração (ms) do arquivo; `PreprocessError` se não abre."""
-    result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=channels:format=duration",
-            "-of",
-            "json",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file",
+        "-f",
+        fmt,
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=channels:format=duration",
+        "-of",
+        "json",
+        f"file:{path}",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=PROBE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        msg = f"o áudio não abre: ffprobe passou de {PROBE_TIMEOUT_S:g} s"
+        raise PreprocessError(msg) from exc
     try:
         data = json.loads(result.stdout)
         channels = int(data["streams"][0]["channels"])
@@ -124,9 +182,9 @@ def probe(path: Path) -> tuple[int, int | None]:
     return channels, duration_ms
 
 
-def _dual_mono(path: Path) -> bool:
+def _dual_mono(path: Path, fmt: str, timeout: float) -> bool:
     """Os dois canais têm o mesmo sinal: a diferença entre eles é silêncio."""
-    result = _run("-i", str(path), "-af", "pan=mono|c0=c0-c1,volumedetect", "-f", "null", "-")
+    result = _run(*_input(path, fmt), "-af", "pan=mono|c0=c0-c1,volumedetect", "-f", "null", "-", timeout=timeout)
     match = _MEAN_VOLUME.search(result.stderr)
     return bool(match) and (match.group(1) == "-inf" or float(match.group(1)) < DUAL_MONO_DB)
 
@@ -165,11 +223,12 @@ def _chain(config: dict[str, Any], model: str | None, warnings: list[str]) -> tu
     return filters, steps
 
 
-def _render(src: Path, dst: Path, pick: str, filters: list[str]) -> subprocess.CompletedProcess[str]:
+def _render(  # noqa: PLR0913 — a entrada, a saída, a cadeia e o teto de cada chamada
+    src: Path, fmt: str, dst: Path, pick: str, filters: list[str], *, timeout: float
+) -> subprocess.CompletedProcess[str]:
     return _run(
         "-y",
-        "-i",
-        str(src),
+        *_input(src, fmt),
         "-af",
         ",".join([pick, *filters]),
         "-ac",
@@ -179,13 +238,20 @@ def _render(src: Path, dst: Path, pick: str, filters: list[str]) -> subprocess.C
         "-c:a",
         "pcm_s16le",
         str(dst),
+        timeout=timeout,
     )
 
 
-def _silences(path: Path, threshold_db: float, min_silence_s: float) -> tuple[float, float | None]:
+def _silences(path: Path, threshold_db: float, min_silence_s: float, timeout: float) -> tuple[float, float | None]:
     """`(início da fala, fim da fala ou None)` pelo `silencedetect` do arquivo já normalizado."""
     result = _run(
-        "-i", str(path), "-af", f"silencedetect=noise={threshold_db:g}dB:d={min_silence_s:g}", "-f", "null", "-"
+        *_input(path, _WAV),
+        "-af",
+        f"silencedetect=noise={threshold_db:g}dB:d={min_silence_s:g}",
+        "-f",
+        "null",
+        "-",
+        timeout=timeout,
     )
     starts = [float(v) for v in _SILENCE_START.findall(result.stderr)]
     ends = [float(v) for v in _SILENCE_END.findall(result.stderr)]
@@ -199,13 +265,13 @@ def _silences(path: Path, threshold_db: float, min_silence_s: float) -> tuple[fl
     return speech_start, speech_end
 
 
-def _trim(paths: list[Path], config: dict[str, Any]) -> tuple[float, dict[str, Any]]:
+def _trim(paths: list[Path], config: dict[str, Any], timeout: float) -> tuple[float, dict[str, Any]]:
     """Corta o mesmo intervalo de todos os arquivos; devolve o deslocamento (s) e a etapa."""
     trim = _enabled(config, "trim_silence")
     if trim is None:
         return 0.0, {"step": "trim_silence", "state": "skipped", "reason": "disabled"}
     threshold, minimum = float(trim["threshold_db"]), float(trim["min_silence_s"])
-    found = [_silences(path, threshold, minimum) for path in paths]
+    found = [_silences(path, threshold, minimum, timeout) for path in paths]
     start = min(begin for begin, _ in found)
     ends = [end for _, end in found]
     end = None if any(e is None for e in ends) else max(e for e in ends if e is not None)
@@ -221,7 +287,16 @@ def _trim(paths: list[Path], config: dict[str, Any]) -> tuple[float, dict[str, A
     # deslocamento), ou nenhum.
     trimmed = [path.with_name(path.stem + ".trim.wav") for path in paths]
     for path, target in zip(paths, trimmed, strict=True):
-        result = _run("-y", "-i", str(path), "-af", f"{window},asetpts=PTS-STARTPTS", "-c:a", "pcm_s16le", str(target))
+        result = _run(
+            "-y",
+            *_input(path, _WAV),
+            "-af",
+            f"{window},asetpts=PTS-STARTPTS",
+            "-c:a",
+            "pcm_s16le",
+            str(target),
+            timeout=timeout,
+        )
         if result.returncode != 0:
             for leftover in trimmed:
                 leftover.unlink(missing_ok=True)
@@ -235,11 +310,13 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
     """Trata `src` para o ASR; sem configuração (servidor antigo), só converte o formato.
 
     Falha da cadeia: refaz só o formato (16 kHz mono) e marca a etapa falha; se nem isso sai,
-    `PreprocessError`.
+    `PreprocessError`, como o contêiner fora da lista permitida.
     """
     started = time.monotonic()
     config = config or {}
-    channels, duration_ms = probe(src)
+    fmt = demuxer(src)
+    channels, duration_ms = probe(src, fmt)
+    timeout = _timeout(duration_ms)
     warnings: list[str] = []
     steps: list[dict[str, Any]] = [
         {"step": "resample", "state": "done", "params": {"rate": SAMPLE_RATE, "channels": 1}}
@@ -249,14 +326,14 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
         steps.append({"step": "split_channels", "state": "skipped", "reason": "disabled"})
     elif channels != 2:  # noqa: PLR2004 — só estéreo de duas fontes
         steps.append({"step": "split_channels", "state": "skipped", "reason": "not_stereo"})
-    elif _dual_mono(src):
+    elif _dual_mono(src, fmt, timeout):
         steps.append({"step": "split_channels", "state": "skipped", "reason": "dual_mono"})
     else:
         picks = ["pan=mono|c0=c0", "pan=mono|c0=c1"]
         steps.append({"step": "split_channels", "state": "done"})
     filters, chain_steps = _chain(config, model, warnings)
     paths = [workdir / f"pre.{n}.wav" for n in range(len(picks))]
-    results = [_render(src, path, pick, filters) for pick, path in zip(picks, paths, strict=True)]
+    results = [_render(src, fmt, path, pick, filters, timeout=timeout) for pick, path in zip(picks, paths, strict=True)]
     fallback = any(result.returncode != 0 for result in results)
     if fallback:
         error = _tail(next(r.stderr for r in results if r.returncode != 0))
@@ -265,14 +342,15 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
         ]
         warnings.append(PREPROCESS_FAILED)
         results = [
-            _render(src, path, pick, [f"aresample={SAMPLE_RATE}"]) for pick, path in zip(picks, paths, strict=True)
+            _render(src, fmt, path, pick, [f"aresample={SAMPLE_RATE}"], timeout=timeout)
+            for pick, path in zip(picks, paths, strict=True)
         ]
         failed = next((r for r in results if r.returncode != 0), None)
         if failed is not None:
             msg = f"o áudio não abre nem só convertido: {_tail(failed.stderr)}"
             raise PreprocessError(msg)
     steps += chain_steps
-    offset, trim_step = _trim(paths, config)
+    offset, trim_step = _trim(paths, config, timeout)
     steps.append(trim_step)
     return PreprocessResult(
         paths=paths,

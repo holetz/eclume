@@ -158,6 +158,8 @@ host "rm -rf '$DIST' && mkdir -p '$DIST'"
 
 # --- build ----------------------------------------------------------------------------------------
 export BUILDKIT_PROGRESS=plain
+# Teto de memória dos contêineres de build, ao lado das 2 CPUs: a produção divide o host.
+MEMORIA="${ECLUME_BUILD_MEMORY:-6g}"
 echo "Imagem $IMG_LINUX…" >&2
 docker build -q -t "$IMG_LINUX" -f desktop/build.Dockerfile desktop >/dev/null
 if [[ "$WINDOWS" -eq 1 ]]; then
@@ -168,7 +170,7 @@ fi
 # A CLI do Tauri sai de desktop/package-lock.json, instalada sem scripts num contêiner sem a chave
 # do updater; o build depois só a executa (npx --no-install).
 echo "CLI do Tauri (npm ci, sem a chave)…" >&2
-docker run --rm --cpus 2 -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/desktop "$IMG_LINUX" \
+docker run --rm --cpus 2 --memory "$MEMORIA" -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/desktop "$IMG_LINUX" \
   nice -n 10 npm ci --ignore-scripts --no-audit --no-fund
 
 # $1: imagem · $2: pasta do target/ no host · $3: pasta extra montada em /tmp/.cache (ou vazio)
@@ -181,7 +183,7 @@ compilar() {
   local img="$1" target="$2" cache="$3" assina="$4" build_args="$5" bundle_args="$6"
   host "mkdir -p '$target'"
   [[ -z "$cache" ]] || host "mkdir -p '$cache'"
-  local comum=(--rm --cpus 2 -u 1000:1000
+  local comum=(--rm --cpus 2 --memory "$MEMORIA" -u 1000:1000
     -e HOME=/tmp -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target
     -e ECLUME_SERVER_URL="$SERVER_URL" -e ECLUME_SERVER_CA_SHA256="$SERVER_CA"
     -e APPIMAGE_EXTRACT_AND_RUN=1 -e NO_STRIP=true
