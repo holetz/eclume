@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114
 maintainer: holetz
 ---
 
@@ -244,6 +244,15 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 | Recording detail | `#/gravacao/<id>` | o player local (protocolo de assets só em `$APPDATA/eclume/gravacoes`), os marcadores, as etapas no servidor, "Excluir deste celular" |
 | Settings | `#/configuracoes` | servidor, sincronização, qualidade, retenção, uso, sair, versão e "Nova versão disponível" |
 
+- **Estados e etapas pelo vocabulário compartilhado.** `ui/src/app/vocabulario.js` (e `.d.ts`) é
+  cópia byte a byte de `web/src/lib/vocabulario.js`, conferida por `vocabulario.test.ts` (pula sem
+  o web ao lado). Os selos da lista e do detalhe são os estados no aparelho, com o mesmo nome do
+  desktop (Gravando, Aguardando envio, Enviando, Enviada, Interrompida, Falhou o envio em perigo).
+  O detalhe mostra as seis etapas na ordem do servidor (tipo de agenda antes de campos), cada uma
+  com o estado em palavra quando não concluída, e a lista "Motivos das etapas" sob a barra com o
+  `reason` (texto de `MOTIVOS`) de uma etapa pulada ou o `error.message` de uma que falhou. A
+  `Etapa` do núcleo (`sync.rs`) traz `reason` e `error` com `#[serde(default)]`, da mesma leitura de
+  `GET /recordings/{id}`.
 - **Diferença deliberada do DS:** o DS mostra "AAC 64 kbps" e "58 MB por hora"; o app grava Opus a
   24 ou 48 kbps (o formato que o server espera), e os textos mostram os números reais.
 
