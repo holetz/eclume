@@ -392,13 +392,27 @@ configs:
       }
       https://${ECLUME_PUBLIC_HOST}:8443 {
         tls internal
+        # Cabeçalhos genéricos para o que não vem do web (/api, /media, /mcp, /downloads); `?` não
+        # sobrescreve o que o upstream já mandou (a CSP inteira do web).
+        header {
+          ?X-Content-Type-Options nosniff
+          ?Referrer-Policy no-referrer
+          ?Content-Security-Policy "frame-ancestors 'none'"
+        }
         handle /api/* {
+          # Rede grossa: o server recusa antes, com problem+json, acima do teto de cada rota.
+          request_body {
+            max_size 9MiB
+          }
           reverse_proxy server:8000
         }
         handle /media/* {
           reverse_proxy server:8000
         }
         handle /mcp {
+          request_body {
+            max_size 9MiB
+          }
           reverse_proxy server:8000
         }
         redir /downloads /downloads/ 308
