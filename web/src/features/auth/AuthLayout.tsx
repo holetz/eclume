@@ -3,7 +3,7 @@ import { Brand } from '../../app/Brand'
 
 const COPY = {
   user: {
-    title: 'Cada palavra, guardada em casa.',
+    title: 'Cada palavra, guardada no seu servidor.',
     tagline: 'Transcrição auto-hospedada para as suas próprias gravações.',
   },
   admin: {

@@ -23,6 +23,7 @@ describe('criar conta', () => {
     const http = mockFetch({
       'GET /api/v1/me': () => (signedUp ? fixtures.me() : problem('unauthorized', 401)),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
+      'GET /api/v1/privacy': () => fixtures.privacyInfo(),
       'POST /api/v1/auth/signup': () => {
         signedUp = true
         return empty(204)
@@ -35,6 +36,9 @@ describe('criar conta', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Criar sua conta' })).toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveClass('auth')
     expect(screen.getByText('Pelo menos 12 caracteres.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/os resumos e o chat são feitos fora dele, por Anthropic/),
+    ).toBeInTheDocument()
     await fillSignup()
     const submit = screen.getByRole('button', { name: 'Criar conta' })
     expect(submit).toBeDisabled()
@@ -121,5 +125,18 @@ describe('aceite do aviso em vigor', () => {
     await userEvent.click(submit)
     expect(await screen.findByRole('navigation', { name: 'Principal' })).toBeInTheDocument()
     expect(await http.requests('POST /api/v1/me/notice')[0].json()).toEqual({ notice_version: '1' })
+  })
+
+  it('sem destino externo, não mostra a linha do destino', async () => {
+    mockFetch({
+      'GET /api/v1/me': () => problem('unauthorized', 401),
+      'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
+      'GET /api/v1/privacy': () => ({
+        destinations: fixtures.privacyInfo().destinations.map((d) => ({ ...d, location: 'server', processor: null })),
+      }),
+    })
+    renderApp('/cadastro')
+    await fillSignup()
+    expect(screen.queryByText(/são feitos fora dele/)).not.toBeInTheDocument()
   })
 })
