@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "checks": [
+    { "name": "postgres", "status": "ok" },
+    { "name": "redis", "status": "ok" },
+    { "name": "storage", "status": "ok" }
+  ]
+}
