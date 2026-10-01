@@ -10,3 +10,5 @@ web/src/api/schema.gen.ts text eol=lf
 *.css text eol=lf
 # O wrapper do gradle do app móvel roda no host Linux.
 gradlew text eol=lf
+# Hooks versionados (core.hooksPath .githooks) rodam no bash do Git, também no Windows.
+.githooks/* text eol=lf
