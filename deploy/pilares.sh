@@ -50,12 +50,17 @@ pilar_web() {
   run npm --prefix web run lint
   run npm --prefix web test
   run npm --prefix web run build
+  # O JS inicial cabe no teto de web/bundle-budget.json.
+  run npm --prefix web run budget
 }
 
-# Navegador: a conversão de mídia (vitest browser mode) e o E2E contra o mock, no Google Chrome.
+# Navegador: a conversão de mídia e a transcrição longa (vitest browser mode) e o E2E contra o mock,
+# no Google Chrome e, no smoke e nos testes de navegador, no WebKit e no Firefox do Playwright. As
+# dependências de sistema dos motores vêm de quem chama (setup da CI, imagem do gate).
 pilar_web_browser() {
   export E2E_CHANNEL="${E2E_CHANNEL:-chrome}"
   run npm --prefix web ci
+  run npm --prefix web exec -- playwright install webkit firefox
   run npm --prefix web run fixtures
   run npm --prefix web run test:browser
   run npm --prefix web run test:e2e

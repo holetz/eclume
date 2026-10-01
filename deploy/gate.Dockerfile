@@ -13,11 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg python3 xz-utils wget gnupg \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7 /uv /uvx /usr/local/bin/
-# Google Chrome estável (decoders proprietários da conversão de mídia) e as libs do Chromium do
-# Playwright, que o `playwright install --with-deps` instalaria com root.
+# Google Chrome estável (decoders proprietários da conversão de mídia) e as libs do Chromium, do
+# WebKit e do Firefox do Playwright, que o `playwright install --with-deps` instalaria com root.
 RUN curl -fsSLo /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
  && apt-get update && apt-get install -y --no-install-recommends /tmp/chrome.deb \
- && npm install -g --no-audit --no-fund playwright@1.63.0 && playwright install-deps chromium \
+ && npm install -g --no-audit --no-fund playwright@1.63.0 && playwright install-deps chromium webkit firefox \
  && npm rm -g playwright && rm -rf /tmp/chrome.deb /var/lib/apt/lists/* /root/.npm
 # Auditoria de dependências (pilar `auditoria`): pip-audit sobre o Python do sistema e cargo-deny.
 RUN UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
