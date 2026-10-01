@@ -157,6 +157,55 @@ fn qr_pareia_sem_senha_e_sem_conferencia() {
 }
 
 #[test]
+fn token_fica_em_memoria_ate_sair_ou_ser_recusado() {
+    let (dirs, _guard) = dirs_temp("token-memoria");
+    let roteiro = Roteiro::default();
+    roteiro.responde(
+        "GET",
+        "/downloads/eclume-root.crt",
+        comum::texto(200, CA_PEM),
+    );
+    servidor_ok(&roteiro);
+    roteiro.responde("POST", "/api/v1/devices/pair", credencial());
+    let mut config = Config {
+        device_name: "Pixel 8".into(),
+        ..Config::default()
+    };
+    let transportes = Arc::new(TransportesFalsos(roteiro));
+    let mut conexao = Conexao::new(dirs.clone(), transportes.clone());
+    conexao
+        .parear(
+            &mut config,
+            &format!("{URL}/parear?codigo=K7Q4MX&ca={CA_SHA256}"),
+        )
+        .unwrap();
+    assert!(dirs.token().exists());
+
+    // Aberta de novo, a conexão lê o arquivo uma vez; depois, o estado não volta ao disco.
+    let mut reaberta = Conexao::new(dirs.clone(), transportes);
+    std::fs::remove_file(dirs.token()).unwrap();
+    assert!(matches!(
+        reaberta.estado(&config),
+        EstadoConexao::Conectado { .. }
+    ));
+    assert_eq!(reaberta.token().unwrap().as_deref(), Some("eclp_segredo"));
+
+    // Um 401 esquece o token da memória.
+    reaberta.perdeu_credencial().unwrap();
+    assert!(matches!(
+        reaberta.estado(&config),
+        EstadoConexao::SemCredencial { .. }
+    ));
+    assert_eq!(reaberta.token().unwrap(), None);
+
+    // Sair também.
+    assert_eq!(conexao.token().unwrap().as_deref(), Some("eclp_segredo"));
+    conexao.sair(&mut config).unwrap();
+    assert_eq!(conexao.token().unwrap(), None);
+    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+}
+
+#[test]
 fn ca_trocada_no_servidor_e_recusada_ao_confiar() {
     let (dirs, _guard) = dirs_temp("ca-trocada");
     let roteiro = Roteiro::default();
