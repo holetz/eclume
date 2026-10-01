@@ -25,6 +25,7 @@ export interface RouteHandle {
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
+const AutomationPage = named(() => import('../features/organize/AutomationPage'), 'AutomationPage')
 const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const ChatPage = named(() => import('../features/chat/ChatPage'), 'ChatPage')
@@ -90,6 +91,7 @@ export const routes: RouteObject[] = [
               { path: '/perguntas', ...page(ChatPage) },
               { path: '/colecoes', ...page(CollectionsPage) },
               { path: '/tags', ...page(TagsPage) },
+              { path: '/config/automacao', ...page(AutomationPage) },
               { path: '/config/campos', ...page(FieldsPage) },
               { path: '/config/agendas', ...page(AgendaTypesPage) },
               { path: '/config/mcp', ...page(McpPage) },
