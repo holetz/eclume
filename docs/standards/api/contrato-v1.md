@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93
 maintainer: holetz
 ---
 
@@ -61,7 +61,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
   conta tem até 2 perguntas em aberto (429 `rate_limited`). A resposta traz `sources`, só as
   gravações que o agente consultou. É aditivo: nenhuma rota existente mudou.
-- **Rotas públicas** (sem credencial): `GET /health`, `GET /server` (descritor: nome, endereço,
+- **Rotas públicas** (sem credencial): `GET /health` (estático, sinal de vida), `GET /health/ready`
+  (prontidão desde a 2.13.0: 200 ou 503 com só o nome e `ok`/`down` de Postgres, Redis e
+  armazenamento), `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
   de admin e `/devices/*`) têm limite de tentativas por IP (os logins também por conta):
