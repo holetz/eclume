@@ -14,7 +14,7 @@ from sqlalchemy import exists, insert, select, update
 from eclume_server.accounts import AccountError, create_admin, set_admin_password
 from eclume_server.config import get_settings
 from eclume_server.db import tables as t
-from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate
+from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate, pending
 from eclume_server.db.session import make_engine, system_tx
 from eclume_server.discovery import DiscoveryError, announce, discover
 from eclume_server.storage import Storage, audio_key
@@ -43,6 +43,16 @@ async def _migrate() -> None:
     print("aplicadas: " + (", ".join(applied) if applied else "nenhuma (schema em dia)"))  # noqa: T201
     if settings.runtime_db_password:
         print(f"papel {RUNTIME_ROLE} com LOGIN")  # noqa: T201
+
+
+async def _pending() -> None:
+    engine = make_engine(get_settings().database_url)
+    try:
+        versions = await pending(engine)
+    finally:
+        await engine.dispose()
+    for version in versions:
+        print(version)  # noqa: T201
 
 
 async def _create_admin(args: argparse.Namespace, password: str) -> None:
@@ -135,8 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     """Parser do CLI."""
     parser = argparse.ArgumentParser(prog="eclume-server", description="Administração do server do eclume.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser(
+    migrate_cmd = commands.add_parser(
         "migrate", help="aplica as migrations pendentes (e liga o papel eclume_server com ECLUME_RUNTIME_DB_PASSWORD)"
+    )
+    migrate_cmd.add_argument(
+        "--pendentes", action="store_true", help="só lista as migrations pendentes, uma por linha, sem aplicar"
     )
 
     commands.add_parser("announce", help="anuncia o servidor na rede local (mDNS _eclume._tcp) até ser interrompido")
@@ -167,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "migrate":
-            asyncio.run(_migrate())
+            asyncio.run(_pending() if args.pendentes else _migrate())
         elif args.command == "announce":
             asyncio.run(announce(get_settings()))
         elif args.command == "discover":

@@ -4,6 +4,8 @@
 #   restaurar-backup.sh --teste [<data>]            restaura num banco e num bucket temporários,
 #                                                   compara contagens com a produção e apaga tudo
 #   restaurar-backup.sh --aplicar <data> --confirmo substitui o banco e o bucket de produção
+#   restaurar-backup.sh --banco <dump> --confirmo   substitui só o banco, a partir de um dump
+#                                                   pré-deploy (backups/pre-deploy/*.dump)
 #
 # <data> é a do backup (AAAA-MM-DD); sem ela, o mais recente. --aplicar para server e workers,
 # recria o banco eclume a partir do dump, espelha o instantâneo de volta no bucket (sem apagar
@@ -20,19 +22,43 @@ case "$mode" in
     stamp="${2:?informe a data do backup}"
     [[ "${3:-}" == --confirmo ]] || { echo "--aplicar substitui a produção: repita com --confirmo." >&2; exit 2; }
     ;;
-  *) sed -n '2,10p' "$0"; exit 2 ;;
+  --banco)
+    dump="${2:?informe o dump pré-deploy}"
+    [[ "${3:-}" == --confirmo ]] || { echo "--banco substitui o banco de produção: repita com --confirmo." >&2; exit 2; }
+    ;;
+  *) sed -n '2,12p' "$0"; exit 2 ;;
 esac
+
+container() {
+  docker ps -q --filter label=com.docker.compose.project=eclume \
+    --filter "label=com.docker.compose.service=$1" | head -n 1
+}
+
+# --banco: só o banco, do dump que o deploy grava antes de aplicar migrations (holetz/eclume#92).
+# O bucket não muda: o dump é de minutos antes, e a fila de exclusão e a reconciliação acertam o resto.
+if [[ "$mode" == --banco ]]; then
+  [[ -s "$dump" ]] || { echo "falta $dump" >&2; exit 1; }
+  pg="$(container postgres)"
+  [[ -n "$pg" ]] || { echo "o postgres do projeto eclume não está rodando" >&2; exit 1; }
+  services=(server worker-cpu worker-agents worker-gpu)
+  ids=()
+  for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
+  echo "parando ${services[*]}"
+  [[ "${#ids[@]}" -eq 0 ]] || docker stop "${ids[@]}" >/dev/null
+  docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt -d postgres \
+    -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'eclume' and pid <> pg_backend_pid()" \
+    -c "drop database eclume" -c "create database eclume" >/dev/null
+  docker exec -i "$pg" pg_restore -U eclume -d eclume --exit-on-error < "$dump"
+  [[ "${#ids[@]}" -eq 0 ]] || docker start "${ids[@]}" >/dev/null
+  echo "OK: banco restaurado de $dump; suba as imagens do deploy correspondente (deploy.sh --voltar)"
+  exit 0
+fi
 [[ -n "$stamp" ]] || stamp="$(find "$DEST/pg" -name 'eclume-20*.dump' -printf '%f\n' | sort | tail -n 1 | sed 's/^eclume-//; s/\.dump$//')"
 dump="$DEST/pg/eclume-$stamp.dump"
 roles="$DEST/pg/roles-$stamp.sql"
 snapshot="$DEST/minio/$stamp"
 for f in "$dump" "$roles" "$snapshot"; do [[ -e "$f" ]] || { echo "falta $f" >&2; exit 1; }; done
 echo "backup de $stamp"
-
-container() {
-  docker ps -q --filter label=com.docker.compose.project=eclume \
-    --filter "label=com.docker.compose.service=$1" | head -n 1
-}
 pg="$(container postgres)"
 minio="$(container minio)"
 [[ -n "$pg" && -n "$minio" ]] || { echo "postgres ou minio do projeto eclume não está rodando" >&2; exit 1; }

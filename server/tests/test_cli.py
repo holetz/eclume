@@ -7,11 +7,13 @@ import secrets
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import make_url, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from eclume_server import cli
+from eclume_server.db.migrate import migration_files
 from eclume_server_testing.api import admin_login, audio_bytes, upload_file
-from eclume_server_testing.harness import run
+from eclume_server_testing.harness import DATABASE_URL, run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,6 +71,38 @@ def test_admin_set_password_troca_a_senha_e_encerra_as_sessoes(
 
     assert _run(monkeypatch, "senha-nova-e-bem-longa", "set-password", "--email", "ninguem@exemplo.com.br") == 2
     assert "inexistente" in capsys.readouterr().err
+
+
+def _as_owner(services: Services, statement: str, **params: object) -> None:
+    """Como o migrador (o papel de conexão não escreve em `schema_migrations`)."""
+
+    async def go() -> None:
+        engine = create_async_engine(make_url(DATABASE_URL).set(database=services.database))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(statement), params)
+        finally:
+            await engine.dispose()
+
+    run(go())
+
+
+def test_migrate_pendentes_lista_sem_aplicar(
+    monkeypatch: pytest.MonkeyPatch, services: Services, capsys: pytest.CaptureFixture[str]
+):
+    _env(monkeypatch, services)
+    assert cli.main(["migrate", "--pendentes"]) == 0
+    assert capsys.readouterr().out == ""
+    latest = migration_files()[-1].stem
+    _as_owner(services, "DELETE FROM schema_migrations WHERE version = :v", v=latest)
+    try:
+        assert cli.main(["migrate", "--pendentes"]) == 0
+        assert capsys.readouterr().out.splitlines() == [latest]
+        # Listar não aplica: segue pendente.
+        assert cli.main(["migrate", "--pendentes"]) == 0
+        assert capsys.readouterr().out.splitlines() == [latest]
+    finally:
+        _as_owner(services, "INSERT INTO schema_migrations (version) VALUES (:v)", v=latest)
 
 
 def test_migrate_sem_pendencias(
