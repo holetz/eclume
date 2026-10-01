@@ -494,6 +494,50 @@ def test_deixar_de_guardar_apaga_a_voz_so_da_conta(ek: Conta, new_account: Calla
     assert _keep(ek, keep=True)["sample_count"] == 0
 
 
+def test_conta_sem_amostras_nada_e_calculado_comparado_nem_guardado(ek: Conta, services: Services):
+    ek.voice_on()
+    ek.auto(enabled=True)
+    rafael = ek.person("Rafael Lima")
+    _keep(ek, keep=False)
+    recording = upload_file(ek.owner, audio_bytes(2100))
+    job = _sql(
+        services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
+    )
+    assert job == [("false",)]
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    first = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    assert _embeddings(services, first) == 0
+    ek.link(first, "S2", rafael["id"])
+    assert ek.samples(rafael["id"]) == 0
+    second = ek.transcript()
+    assert _embeddings(services, second) == 0
+    assert all(s["suggestions"] == [] and s["person"] is None for s in ek.speakers(second).values())
+
+
+def test_job_de_antes_de_deixar_de_guardar_nao_guarda_o_vetor(ek: Conta, services: Services):
+    ek.voice_on()
+    recording = upload_file(ek.owner, audio_bytes(2100))
+    job = _sql(
+        services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
+    )
+    assert job == [("true",)]
+    _keep(ek, keep=False)
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    assert _embeddings(services, tid) == 0
+    drain_storage(services.settings)
+    assert _embedding_objects(services, recording["id"]) == []
+
+
+def test_voltar_a_guardar_vale_para_as_proximas(ek: Conta, services: Services):
+    ek.voice_on()
+    _keep(ek, keep=False)
+    _keep(ek, keep=True)
+    assert _embeddings(services, ek.transcript()) == 3
+
+
 # --- atribuição automática de locutores ------------------------------------------------------------
 
 

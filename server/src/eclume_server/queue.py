@@ -96,8 +96,8 @@ def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str,
     return raw
 
 
-def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
-    """`options` do `transcribe`, da configuração da plataforma; o worker não lê o banco."""
+def transcribe_options(platform: Any, language: str | None, *, keep_samples: bool = True) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
+    """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco."""
     asr = platform["asr"]
     diarization = platform["diarization"]
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
@@ -114,8 +114,9 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
         "endpoint_url": asr.get("endpoint_url"),
         "diarize": bool(diarization.get("enabled")),
         "diarization_model": diarization.get("model"),
-        # Impressão de voz só com a identificação por voz ligada na plataforma (LGPD).
-        "embeddings": bool(platform["voice_identification"].get("enabled")),
+        # Impressão de voz só com a identificação por voz ligada na plataforma e a conta guardando
+        # amostras (LGPD).
+        "embeddings": keep_samples and bool(platform["voice_identification"].get("enabled")),
         # O tratamento do áudio antes do ASR; um worker antigo ignora a chave.
         "preprocess": platform["preprocessing"],
     }
