@@ -143,8 +143,9 @@ export interface paths {
          * Trocar a própria senha
          * @description Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
          *     do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
-         *     continua; os PATs continuam valendo. Só pela sessão do usuário, com o limite de tentativas
-         *     das credenciais.
+         *     continua. Com `revoke_tokens: true` (desde a 2.14.0), as credenciais de aparelho e os PATs
+         *     da conta também são revogados; ausente ou `false`, continuam valendo. Só pela sessão do
+         *     usuário, com o limite de tentativas das credenciais.
          */
         post: operations["changePassword"];
         delete?: never;
@@ -498,6 +499,8 @@ export interface paths {
          * Enviar uma parte pela API
          * @description Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT` num
          *     URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
+         *     `Content-Length` diferente do tamanho da parte é 409; sem o cabeçalho, o corpo é lido em
+         *     pedaços e passar do tamanho da parte é 413 `payload_too_large` (desde a 2.14.0).
          */
         put: operations["putUploadPart"];
         post?: never;
@@ -522,7 +525,9 @@ export interface paths {
          * Concluir o upload e enfileirar a transcrição
          * @description Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor confere
          *     o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
-         *     Repetir o `complete` de um upload já concluído devolve a mesma gravação.
+         *     Repetir o `complete` de um upload já concluído devolve a mesma gravação. Desde a 2.14.0,
+         *     outro `complete` do mesmo upload em andamento (o servidor montando o objeto e conferindo o
+         *     hash) responde 409 `upload_completing` com `Retry-After`: é passageiro, tente de novo.
          */
         post: operations["completeUpload"];
         delete?: never;
@@ -1314,7 +1319,9 @@ export interface paths {
          * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
          *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
          *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
-         *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429.
+         *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
+         *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
+         *     pelos resumos (sessão e credencial de aparelho leem as duas).
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1947,9 +1954,12 @@ export interface components {
              *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
              *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
              *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-             *     vigor). Códigos novos entram de forma aditiva.
+             *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`.
+             *     Códigos novos entram de forma aditiva.
              */
             code: string;
+            /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0). */
+            limit?: number;
             /**
              * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
              *     alternativos, as alternativas (basta um deles).
@@ -2776,6 +2786,12 @@ export interface components {
              * @description Ao menos 12 caracteres, como no cadastro.
              */
             new_password: string;
+            /**
+             * @description Desde a 2.14.0. `true` revoga também as credenciais de aparelho e os PATs da conta (os
+             *     aparelhos pedem login de novo); ausente vale `false`.
+             * @default false
+             */
+            revoke_tokens: boolean;
         };
         AccountDeletion: {
             /**
@@ -3861,7 +3877,25 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`; por IP e, nos logins, também por conta), com `Retry-After`. */
+        /** @description Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o teto em bytes. */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Falha inesperada do servidor (`code: internal_error`, desde a 2.14.0); o detalhe fica no log do servidor, com o `X-Request-ID` da resposta. */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`, por IP), com `Retry-After`. Nos logins por senha, desde a 2.14.0, contam só as falhas: por par (conta, IP), e um teto da conta que não barra IP que já entrou nela com sucesso; o sucesso zera o par. */
         TooManyRequests: {
             headers: {
                 /** @description Segundos até a janela de tentativas reabrir. */
@@ -3985,6 +4019,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4056,6 +4091,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4400,6 +4436,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4477,6 +4514,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4634,6 +4672,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
         };
     };
     completeUpload: {
@@ -4666,7 +4705,17 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description O upload expirou (`code: upload_expired`), não está mais aberto (`code: conflict`) ou outro `complete` dele está em andamento (`code: upload_completing`, desde a 2.14.0, com `Retry-After`). */
+            409: {
+                headers: {
+                    /** @description Com `upload_completing`, segundos até tentar de novo. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -6770,6 +6819,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

@@ -67,15 +67,21 @@ function PasswordSection() {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [repeat, setRepeat] = useState('')
-  const [done, setDone] = useState(false)
+  // Quem troca a senha por suspeita de vazamento quer encerrar todo acesso: marcada por padrão.
+  const [revokeTokens, setRevokeTokens] = useState(true)
+  const [done, setDone] = useState<'sessions' | 'all' | null>(null)
   const change = useMutation({
-    mutationFn: () =>
-      unwrap(api.POST('/api/v1/me/password', { body: { current_password: current, new_password: next } })),
-    onSuccess: () => {
+    mutationFn: (revoke: boolean) =>
+      unwrap(
+        api.POST('/api/v1/me/password', {
+          body: { current_password: current, new_password: next, revoke_tokens: revoke },
+        }),
+      ),
+    onSuccess: (_, revoke) => {
       setCurrent('')
       setNext('')
       setRepeat('')
-      setDone(true)
+      setDone(revoke ? 'all' : 'sessions')
     },
   })
   const mismatch = repeat !== '' && next !== repeat
@@ -88,8 +94,8 @@ function PasswordSection() {
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!canSubmit) return
-    setDone(false)
-    change.mutate()
+    setDone(null)
+    change.mutate(revokeTokens)
   }
 
   return (
@@ -147,6 +153,11 @@ function PasswordSection() {
           </span>
         )}
       </div>
+      <label className="check">
+        <input type="checkbox" checked={revokeTokens} onChange={(event) => setRevokeTokens(event.target.checked)} />
+        <span className="box" />
+        <span>Encerrar também aparelhos e tokens</span>
+      </label>
       {otherError && (
         <p className="alert alert-error" role="alert">
           {otherError}
@@ -154,7 +165,9 @@ function PasswordSection() {
       )}
       {done && (
         <p className="alert alert-success" role="status">
-          Senha trocada. As outras sessões abertas desta conta foram encerradas.
+          {done === 'all'
+            ? 'Senha trocada. As outras sessões, os aparelhos ligados e os tokens desta conta foram encerrados.'
+            : 'Senha trocada. As outras sessões abertas desta conta foram encerradas.'}
         </p>
       )}
       <div>
