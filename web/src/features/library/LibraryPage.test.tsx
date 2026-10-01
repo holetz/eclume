@@ -150,7 +150,7 @@ describe('biblioteca na semana', () => {
     mockLibrary()
     localStorage.setItem('eclume-expediente', '7-20')
     localStorage.setItem('eclume-biblioteca-abertura', 'semana')
-    localStorage.setItem('eclume-biblioteca-ultima', 'visao=lista')
+    localStorage.setItem(`eclume-biblioteca-ultima:${fixtures.me().user.id}`, 'visao=lista')
     renderApp('/')
 
     expect(await screen.findByRole('radio', { name: 'Semana' })).toBeChecked()
@@ -200,7 +200,7 @@ describe('biblioteca na semana', () => {
 
 describe('filtros e restauração da biblioteca', () => {
   const COLLECTION = '01928f3a-1c00-7a00-8000-000000000801'
-  const LAST = 'eclume-biblioteca-ultima'
+  const LAST = `eclume-biblioteca-ultima:${fixtures.me().user.id}`
   const VIEW_LABELS: Record<string, string> = { semana: 'Semana', mes: 'Mês', lista: 'Lista' }
 
   /** A query da última requisição de gravações do período (a que a tela mostra agora). */
@@ -226,6 +226,20 @@ describe('filtros e restauração da biblioteca', () => {
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
     expect(screen.getByText('21–27 de setembro de 2026')).toBeInTheDocument()
     expect(localStorage.getItem(LAST)).toBe('visao=semana&data=2026-09-21')
+  })
+
+  it('a última biblioteca é por conta: a de outra conta e a chave global antiga não voltam', async () => {
+    saturdayMorning()
+    mockLibrary()
+    localStorage.setItem('eclume-biblioteca-ultima', `colecao=${COLLECTION}`)
+    localStorage.setItem('eclume-biblioteca-ultima:outra-conta', 'visao=lista')
+    renderApp('/')
+
+    expect(await screen.findByRole('checkbox', { name: 'Metalúrgica Serra Azul' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
+    expect(localStorage.getItem('eclume-biblioteca-ultima')).toBeNull()
+    expect(localStorage.getItem('eclume-biblioteca-ultima:outra-conta')).toBe('visao=lista')
+    expect(localStorage.getItem(LAST)).toBeNull()
   })
 
   it.each(['semana', 'mes', 'lista'])('com a abertura "%s", marcar uma tag mantém a tag', async (opening) => {

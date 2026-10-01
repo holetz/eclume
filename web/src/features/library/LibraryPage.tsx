@@ -8,7 +8,8 @@ import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { readLibraryOpening } from '../../app/preferences'
-import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
+import { useMe } from '../../app/session'
+import { readLastLibrary, readStored, STORAGE_KEYS, writeLastLibrary, writeStored } from '../../app/storage'
 import { useImportContext } from '../import/importContext'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
 import { CalendarMonth } from './CalendarMonth'
@@ -75,22 +76,23 @@ export function LibraryPage() {
   // escolhida na tela Ambiente. A restauração acontece uma vez só: o `setParams` do roteador muda de
   // identidade a cada mudança da URL, e um efeito que o use sem essa trava sobrescreveria cada filtro.
   const [opening] = useState(readLibraryOpening)
+  const userId = useMe().data?.user.id ?? ''
   const [restoring, setRestoring] = useState(
-    () => params.size === 0 && (opening !== 'ultima' || Boolean(readStored(STORAGE_KEYS.lastLibrary))),
+    () => params.size === 0 && (opening !== 'ultima' || Boolean(readLastLibrary(userId))),
   )
   // A restauração termina quando a URL restaurada chega: dali em diante, filtro tirado é filtro tirado.
   if (restoring && params.size > 0) setRestoring(false)
   useEffect(() => {
     if (!restoring) return
-    const next = opening === 'ultima' ? (readStored(STORAGE_KEYS.lastLibrary) ?? '') : { visao: opening }
+    const next = opening === 'ultima' ? (readLastLibrary(userId) ?? '') : { visao: opening }
     setParams(new URLSearchParams(next), { replace: true })
-  }, [restoring, opening, setParams])
+  }, [restoring, opening, setParams, userId])
   // Tirar o último filtro deixa a URL vazia: a guardada também se limpa, senão ressuscitaria na próxima
   // visita. Durante a restauração a URL vazia é só a de partida, e a guardada ainda vai ser lida.
   useEffect(() => {
     if (restoring) return
-    writeStored(STORAGE_KEYS.lastLibrary, rememberedSearch(params) || null)
-  }, [restoring, params])
+    writeLastLibrary(userId, rememberedSearch(params) || null)
+  }, [restoring, params, userId])
 
   // O aviso que a gravação excluída deixa ao voltar para a biblioteca.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
