@@ -2,13 +2,17 @@
 //! servidor eclume em `<web_url>/downloads/`, e o pacote é verificado pela chave minisign do
 //! `tauri.conf.json` antes de instalar. Nunca instala nem reinicia durante gravação ou sync.
 //!
-//! A CA extra configurada para o sync (`ca_path`, a raiz do Caddy do eclume quando o cliente não a
-//! instalou no SO) vale também aqui: é somada às CAs do sistema no cliente HTTP do updater.
+//! O cliente HTTP do updater confia no servidor como o sync ([`AppState::trust`]): a CA fixada
+//! pela primeira execução é a única raiz (`tls_certs_only`); uma CA escolhida à mão é somada às do
+//! sistema (`tls_certs_merge`); sem CA própria, o cliente padrão. Uma CA fixada ilegível, ou com
+//! mais de um certificado, faz a checagem não rodar (fica no log), sem cair nas raízes do sistema.
+//! O pacote segue conferido pela minisign; o TLS fixado protege o `latest.json` e o download.
 
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use eclume_sync::transport::TrustMode;
 use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -25,11 +29,37 @@ fn endpoint(web_url: &str) -> Result<Url> {
     Url::parse(&url).with_context(|| format!("endereço de atualização inválido: {url}"))
 }
 
-/// Certificados da CA extra do sync; vazio sem `ca_path`.
-fn extra_roots(ca_path: Option<&Path>) -> Result<Vec<reqwest::Certificate>> {
-    let Some(path) = ca_path else {
-        return Ok(Vec::new());
-    };
+/// As raízes do cliente do updater.
+enum Roots {
+    /// Sem CA própria do servidor: o cliente padrão.
+    Default,
+    /// CA escolhida à mão: somada às do sistema.
+    Merge(Vec<reqwest::Certificate>),
+    /// CA fixada pela primeira execução: a única raiz.
+    Only(reqwest::Certificate),
+}
+
+/// As raízes pela confiança do sync; a CA fixada tem de ter exatamente um certificado.
+fn roots(trust: &TrustMode) -> Result<Roots> {
+    match trust {
+        TrustMode::PlatformPlus(None) => Ok(Roots::Default),
+        TrustMode::PlatformPlus(Some(path)) => Ok(Roots::Merge(read_certs(path)?)),
+        TrustMode::Pinned(path) => {
+            let mut certs = read_certs(path)?;
+            if certs.len() != 1 {
+                bail!(
+                    "a CA fixada em {} tem {} certificados; esperava exatamente um",
+                    path.display(),
+                    certs.len()
+                );
+            }
+            Ok(Roots::Only(certs.remove(0)))
+        }
+    }
+}
+
+/// Os certificados de um PEM; um arquivo sem nenhum é erro.
+fn read_certs(path: &Path) -> Result<Vec<reqwest::Certificate>> {
     let pem = std::fs::read(path)
         .with_context(|| format!("falha ao ler a CA extra em {}", path.display()))?;
     let certs = reqwest::Certificate::from_pem_bundle(&pem)
@@ -49,12 +79,20 @@ async fn check_and_install(app: &AppHandle) -> Result<bool> {
     let state = app.state::<AppState>();
     let url = endpoint(&state.web_url()?)?;
     let mut builder = app.updater_builder().endpoints(vec![url.clone()])?;
-    match extra_roots(state.ca_path()?.as_deref()) {
-        Ok(roots) if !roots.is_empty() => {
-            builder = builder.configure_client(move |client| client.tls_certs_merge(roots.clone()));
+    let trust = state.trust()?;
+    match roots(&trust) {
+        Ok(Roots::Default) => {}
+        Ok(Roots::Merge(certs)) => {
+            builder = builder.configure_client(move |client| client.tls_certs_merge(certs.clone()));
         }
-        Ok(_) => {}
-        // Uma CA ilegível não impede a checagem: as CAs do sistema ainda podem bastar.
+        Ok(Roots::Only(root)) => {
+            builder = builder.configure_client(move |client| client.tls_certs_only([root.clone()]));
+        }
+        // A CA fixada ilegível para a checagem: as raízes do sistema não a substituem.
+        Err(err) if matches!(trust, TrustMode::Pinned(_)) => {
+            return Err(err.context("atualização não consultada"));
+        }
+        // Uma CA escolhida à mão ilegível não impede a checagem: as do sistema ainda podem bastar.
         Err(err) => log::warn!("atualização sem a CA extra: {err:#}"),
     }
     let updater = builder.build()?;
@@ -119,7 +157,9 @@ pub fn spawn(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{endpoint, extra_roots};
+    use eclume_sync::transport::TrustMode;
+
+    use super::{endpoint, roots, Roots};
 
     const CA: &str = "-----BEGIN CERTIFICATE-----
 MIIBhTCCASugAwIBAgIUZq/L15v8O8Pr4T/lykPSvtBCcvUwCgYIKoZIzj0EAwIw
@@ -134,8 +174,11 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
 -----END CERTIFICATE-----\n";
 
     #[test]
-    fn sem_ca_extra_nao_ha_raiz_a_somar() {
-        assert!(extra_roots(None).unwrap().is_empty());
+    fn sem_ca_propria_usa_o_cliente_padrao() {
+        assert!(matches!(
+            roots(&TrustMode::PlatformPlus(None)),
+            Ok(Roots::Default)
+        ));
     }
 
     #[test]
@@ -143,11 +186,25 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
         let dir = std::env::temp_dir().join(format!("eclume-updater-ca-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("eclume-root.crt");
+        let chosen = || TrustMode::PlatformPlus(Some(path.clone()));
+        let pinned = || TrustMode::Pinned(path.clone());
+
+        std::fs::write(&path, CA).unwrap();
+        assert!(matches!(roots(&pinned()), Ok(Roots::Only(_))));
+
+        // À mão, os dois somam-se às do sistema; fixada, dois certificados são recusados.
         std::fs::write(&path, format!("{CA}{CA}")).unwrap();
-        assert_eq!(extra_roots(Some(&path)).unwrap().len(), 2);
+        let Ok(Roots::Merge(certs)) = roots(&chosen()) else {
+            panic!("a CA escolhida à mão soma-se às do sistema");
+        };
+        assert_eq!(certs.len(), 2);
+        assert!(roots(&pinned()).is_err());
+
         std::fs::write(&path, "sem certificado").unwrap();
-        assert!(extra_roots(Some(&path)).is_err());
-        assert!(extra_roots(Some(&dir.join("nao-existe.pem"))).is_err());
+        assert!(roots(&chosen()).is_err());
+        assert!(roots(&pinned()).is_err());
+        let missing = TrustMode::Pinned(dir.join("nao-existe.pem"));
+        assert!(roots(&missing).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -1239,11 +1239,6 @@ impl AppState {
         Ok(account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()))
     }
 
-    /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].
-    pub fn ca_path(&self) -> Result<Option<PathBuf>> {
-        Ok(self.inner()?.config.ca_path.clone())
-    }
-
     pub fn settings(&self) -> Result<SettingsView> {
         let inner = self.inner()?;
         let pat_source = inner.token_source;
