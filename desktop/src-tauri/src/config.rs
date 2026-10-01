@@ -308,27 +308,63 @@ impl Config {
             .flatten()
     }
 
-    /// Lê o arquivo; ausente ou inválido cai no padrão (inválido fica registrado no log).
+    /// Lê o arquivo; ausente ou ilegível cai no padrão (ver [`Config::load_checked`]).
     pub fn load(path: &Path) -> Self {
-        match std::fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
-                log::warn!(
-                    "config inválida em {}, usando o padrão: {err}",
-                    path.display()
-                );
-                Self::default()
-            }),
-            Err(_) => Self::default(),
+        Self::load_checked(path).0
+    }
+
+    /// Lê o arquivo; ausente cai no padrão. Ilegível, é guardado ao lado como
+    /// `config.json.ilegivel-<ms>` antes de o padrão valer, e o caminho da cópia volta junto para
+    /// a janela avisar.
+    pub fn load_checked(path: &Path) -> (Self, Option<PathBuf>) {
+        let problem = match std::fs::read_to_string(path) {
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(config) => return (config, None),
+                Err(err) => err.to_string(),
+            },
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return (Self::default(), None)
+            }
+            Err(err) => err.to_string(),
+        };
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis());
+        let copy = path.with_file_name(format!("{}.ilegivel-{ms}", file_name(path)));
+        log::warn!(
+            "config ilegível em {} ({problem}); guardada em {} e usando o padrão",
+            path.display(),
+            copy.display()
+        );
+        match std::fs::rename(path, &copy) {
+            Ok(()) => (Self::default(), Some(copy)),
+            Err(err) => {
+                log::warn!("falha ao guardar a config ilegível: {err}");
+                (Self::default(), None)
+            }
         }
     }
 
+    /// Grava por um temporário vizinho (`.config.json.tmp`), com `sync_all`, e renomeia: uma queda
+    /// no meio nunca deixa o arquivo pela metade. Falhando, o temporário é apagado.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)
                 .with_context(|| format!("falha ao criar {}", dir.display()))?;
         }
         let text = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, text).with_context(|| format!("falha ao gravar {}", path.display()))
+        let tmp = path.with_file_name(format!(".{}.tmp", file_name(path)));
+        let written = (|| {
+            let mut file = std::fs::File::create(&tmp)?;
+            std::io::Write::write_all(&mut file, text.as_bytes())?;
+            file.sync_all()?;
+            std::fs::rename(&tmp, path)
+        })();
+        if let Err(err) = written {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(err).with_context(|| format!("falha ao gravar {}", path.display()));
+        }
+        Ok(())
     }
 
     /// O endereço em vigor: o da variável de ambiente, se houver, senão o do arquivo.
@@ -395,6 +431,12 @@ pub fn validate_web_url(url: &str) -> Result<()> {
         }
         _ => bail!("endereço inválido: use http:// ou https:// seguido do host"),
     }
+}
+
+fn file_name(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -550,12 +592,41 @@ mod tests {
     fn config_ausente_ou_invalida_cai_no_padrao() {
         let dir = std::env::temp_dir().join(format!("eclume-config-{}", std::process::id()));
         let path = dir.join("config.json");
-        assert_eq!(Config::load(&path), Config::default());
+        assert_eq!(Config::load_checked(&path), (Config::default(), None));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, "{ quebrado").unwrap();
-        assert_eq!(Config::load(&path), Config::default());
+        let (config, copy) = Config::load_checked(&path);
+        assert_eq!(config, Config::default());
+        // O ilegível é guardado ao lado, com o conteúdo, antes de o padrão valer.
+        let copy = copy.unwrap();
+        assert!(copy
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("config.json.ilegivel-"));
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "{ quebrado");
+        assert!(!path.exists());
         std::fs::write(&path, "{}").unwrap();
+        assert_eq!(Config::load_checked(&path), (Config::default(), None));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn config_grava_por_temporario_sem_deixar_sobra() {
+        let dir = std::env::temp_dir().join(format!("eclume-config-tmp-{}", std::process::id()));
+        let path = dir.join("config.json");
+        Config::default().save(&path).unwrap();
         assert_eq!(Config::load(&path), Config::default());
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("config.json")]);
+        // Destino bloqueado (um diretório): a gravação falha e o temporário some.
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(Config::default().save(&path).is_err());
+        assert!(!dir.join(".config.json.tmp").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
