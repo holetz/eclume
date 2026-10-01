@@ -4,6 +4,8 @@ O núcleo não importa torch, WhisperX nem faster-whisper: cada engine pesada im
 dependências só ao transcrever, e elas vêm dos extras `whisperx` e `cpu` do pacote.
 """
 
+from importlib.metadata import version
+
 from eclume_engines.base import (
     Engine,
     EngineError,
@@ -14,7 +16,7 @@ from eclume_engines.base import (
 )
 from eclume_engines.factory import DEFAULT_ENGINE, ENGINES, UnknownEngineError, get_engine
 
-__version__ = "0.1.0"
+__version__ = version("eclume-engines")
 
 __all__ = [
     "DEFAULT_ENGINE",
