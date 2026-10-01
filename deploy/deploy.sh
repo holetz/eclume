@@ -2,13 +2,15 @@
 # Deploy de produção do eclume no host GPU, pelo contexto Docker (build no daemon do host, sem
 # registry) e por SSH para o que é do host (pastas, disco, cópia do env, scripts de backup e cron).
 #
-# Uso: bash deploy/deploy.sh [--plan] [--context NOME] [--services "server web worker-gpu"]
-#                            [--sem-build] [--gerar-env] [--sem-gate "motivo"]
+# Uso: bash deploy/deploy.sh --context NOME [--plan] [--services "server web worker-gpu"]
+#                            [--sem-gpu] [--sem-build] [--gerar-env] [--sem-gate "motivo"]
 #                            [--fora-do-main "motivo"] [--voltar SHA] [--substituir-env]
 #                            [--espera-gpu MINUTOS] [--interromper-gpu]
 #   --plan            só mostra o que faria (somente leitura): SHA em produção e alvo, commits entre
 #                     eles, migrations pendentes, env × host, GPU ocupada e o estado do gate.
-#   --context         contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
+#   --context         contexto Docker do host (ou $ECLUME_DOCKER_CONTEXT); obrigatório, sem padrão.
+#   --sem-gpu         host sem GPU NVIDIA: acrescenta deploy/docker-compose.cpu.yml (worker de
+#                     transcrição na engine cpu, sem reserva de GPU e sem diarização).
 #   --services        imagens a construir (padrão: server web worker-gpu). O up sobe sempre o stack todo.
 #   --sem-build       não constrói nada; sobe as imagens que já estão no host.
 #   --gerar-env       cria deploy/.env.prod com segredos aleatórios e sai (recusa se o host já tem um).
@@ -26,7 +28,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
+CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
+SEM_GPU=0
 ENV_FILE=deploy/.env.prod
 BUILD=(server web worker-gpu)
 IMAGES=(server web worker-gpu)
@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
     --services)
       [[ $# -ge 2 && -n "$2" ]] || { echo "--services exige uma lista." >&2; exit 2; }
       read -r -a BUILD <<< "$2"; shift 2 ;;
+    --sem-gpu) SEM_GPU=1; shift ;;
     --sem-build) NO_BUILD=1; shift ;;
     --gerar-env) GEN_ENV=1; shift ;;
     --sem-gate)
@@ -69,7 +73,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || { echo "--espera-gpu exige os minutos." >&2; exit 2; }
       ESPERA_GPU="$2"; shift 2 ;;
     --interromper-gpu) INTERROMPER_GPU=1; shift ;;
-    --help|-h) sed -n '2,26p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -77,6 +81,8 @@ for service in "${BUILD[@]}"; do
   case "$service" in server|web|worker-gpu) ;; *) echo "Imagem inválida: $service" >&2; exit 2 ;; esac
 done
 [[ "$NO_BUILD" -eq 0 && -z "$VOLTAR" ]] || BUILD=()
+# Sem padrão: um contexto implícito publicaria no host de outra pessoa.
+[[ -n "$CONTEXT" ]] || { echo "Falta o contexto Docker do host: --context NOME ou ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
 
 # Contexto remoto: DOCKER_CONTEXT vale para todo docker/compose abaixo; DOCKER_HOST o venceria.
 export DOCKER_CONTEXT="$CONTEXT"
@@ -86,6 +92,10 @@ SSH="${ECLUME_SSH:-${endpoint#ssh://}}"
 [[ "$endpoint" == ssh://* || -n "${ECLUME_SSH:-}" ]] || {
   echo "O contexto $CONTEXT não é ssh:// ($endpoint); defina ECLUME_SSH=usuario@host." >&2; exit 2; }
 host() { ssh -o BatchMode=yes "$SSH" "$@"; }
+# O `!reset` do docker-compose.cpu.yml e o `configs.content` do prod pedem o Compose 2.24+.
+compose_ver="$(docker compose version --short 2>/dev/null || echo 0)"
+"$PYTHON" -c 'import sys; v=[int(x) for x in sys.argv[1].lstrip("v").split("-")[0].split(".")[:2]]+[0]; sys.exit(0 if v[:2]>=[2,24] else 1)' "$compose_ver" \
+  || { echo "O Docker Compose $compose_ver é antigo: o deploy pede o 2.24 ou mais novo." >&2; exit 2; }
 
 # --- deploy/.env.prod ---------------------------------------------------------------------------
 if [[ "$GEN_ENV" -eq 1 ]]; then
@@ -235,6 +245,7 @@ else
 fi
 export ECLUME_COMMIT="$SHA"
 COMPOSE=(docker compose -p eclume -f "$TREE/deploy/docker-compose.prod.yml" --env-file "$COMPOSE_ENV")
+[[ "$SEM_GPU" -eq 0 ]] || COMPOSE+=(-f "$TREE/deploy/docker-compose.cpu.yml")
 service_id() { docker ps -q --filter label=com.docker.compose.project=eclume --filter "label=com.docker.compose.service=$1" | head -n 1; }
 
 pg="$(service_id postgres)"
@@ -448,6 +459,7 @@ flags=()
 [[ -z "$FORA_DO_MAIN" ]] || flags+=(--fora-do-main)
 [[ -z "$VOLTAR" ]] || flags+=(--voltar)
 [[ "$interrompeu" -eq 0 ]] || flags+=(--interromper-gpu)
+[[ "$SEM_GPU" -eq 0 ]] || flags+=(--sem-gpu)
 [[ "$gate_ok" -eq 1 ]] || flags+=(--sem-gate)
 [[ -z "$env_diverge" ]] || flags+=(--substituir-env)
 motivo="${FORA_DO_MAIN:-${SEM_GATE:--}}"
