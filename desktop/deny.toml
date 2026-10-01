@@ -3,4 +3,11 @@
 #   ignore = [{ id = "RUSTSEC-AAAA-NNNN", reason = "<motivo> · prazo AAAA-MM-DD" }]
 # Contrato: docs/standards/code/monorepo.md.
 [advisories]
-ignore = []
+# Crate sem manutenção só falha quando é dependência direta de um crate do workspace; as
+# transitivas (proc-macro-error, pela pilha GTK do Tauri) aparecem no log sem barrar.
+unmaintained = "workspace"
+ignore = [
+  # Double free em Consumer::skip/clear só quando o Drop de um elemento entra em pânico: o anel do
+  # eclume-audio-capture (src/ring.rs) guarda f32, que não tem Drop. Trocar para ringbuf 0.5.
+  { id = "RUSTSEC-2026-0293", reason = "elementos f32 sem Drop; subir o ringbuf para 0.5 · prazo 2026-12-31" },
+]
