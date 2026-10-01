@@ -7,6 +7,7 @@ import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
 import styles from './RecordingPage.module.css'
 import { stageLabel } from '../../shared/format'
+import { fraseDaEspera } from '../../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 
@@ -39,13 +40,18 @@ function CancelTranscription({ recording }: { recording: Recording }) {
   )
 }
 
-/** O progresso do worker enquanto a transcrição anda: etapa e %, no `.progress-row` do DS. */
+/**
+ * Na fila, por que a gravação espera (`job.queue`); andando, o progresso do worker: etapa e %, no
+ * `.progress-row` do DS.
+ */
 function TranscriptionProgress({ recording }: { recording: Recording }) {
   const job = recording.job
   if (recording.status === 'queued') {
     return (
       <>
-        <p className={styles.pipelineNote}>Aguardando a vez na fila de transcrição.</p>
+        <p className={styles.pipelineNote} role="status">
+          {fraseDaEspera(job?.queue) ?? 'Aguardando a vez na fila de transcrição.'}
+        </p>
         <CancelTranscription recording={recording} />
       </>
     )

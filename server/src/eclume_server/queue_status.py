@@ -77,6 +77,12 @@ async def pace(engine: AsyncEngine, redis: ArqRedis) -> tuple[float, float] | No
     return found
 
 
+def _wait(reason: str, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
+    """`Job.queue` sem o processador: o motivo (não é o `reason` de uma etapa pulada) e os campos dele."""
+    empty = {"ahead": None, "account_ahead": None, "estimated_start_at": None, "resumes_at": None}
+    return {"reason": reason} | empty | fields
+
+
 def _recording_of(job_id: str) -> str | None:
     """A gravação do `_job_id` `transcribe:{recording_id}:{revision}`."""
     parts = job_id.split(":")
@@ -137,7 +143,7 @@ class _Processor:
         estimated = None
         if ahead is not None and self.online and self.estimates is not None:
             estimated = iso(now + timedelta(milliseconds=sum(self.estimates[:ahead])))
-        return {"reason": "processor_queue", "ahead": ahead, "estimated_start_at": estimated}
+        return _wait("processor_queue", ahead=ahead, estimated_start_at=estimated)
 
 
 async def _resumes_at(conn: AsyncConnection, owner_id: UUID, limit: int) -> str | None:
@@ -180,9 +186,9 @@ async def _held(engine: AsyncEngine, owner_id: UUID) -> dict[str, dict[str, Any]
             continue
         # Sem job despachado e sem janela a esperar, o próximo despacho (ou o cron) o leva: vez da conta.
         if resumes_at is not None:
-            waits[str(job_id)] = {"reason": "quota_window", "resumes_at": resumes_at}
+            waits[str(job_id)] = _wait("quota_window", resumes_at=resumes_at)
         else:
-            waits[str(job_id)] = {"reason": "account_turn", "account_ahead": ahead}
+            waits[str(job_id)] = _wait("account_turn", account_ahead=ahead)
     return waits
 
 
@@ -208,10 +214,9 @@ async def waiting(engine: AsyncEngine, queue: Queue, rows: list[Row]) -> dict[UU
         held |= await _held(engine, owner_id)
     result = {}
     for row in rows:
-        base = {"ahead": None, "account_ahead": None, "estimated_start_at": None, "resumes_at": None}
         if row["job_dispatched_at"] is not None:
-            base |= processor.wait(transcribe_job_id(row["id"], row["job_revision"]), now)
+            base = processor.wait(transcribe_job_id(row["id"], row["job_revision"]), now)
         else:
-            base |= held.get(str(row["job_id"]), {"reason": "account_turn"})
+            base = held.get(str(row["job_id"]), _wait("account_turn"))
         result[row["id"]] = base | {"processor": processor.json()}
     return result

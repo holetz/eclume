@@ -261,7 +261,7 @@ describe('página da gravação', () => {
     renderApp(`/gravacoes/${failed.id}`)
     expect(await screen.findByText(/A falha foi passageira/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
-    expect(await screen.findByText('Aguardando a vez na fila de transcrição.')).toBeInTheDocument()
+    expect(await screen.findByText(/3ª na fila/)).toBeInTheDocument()
     expect(http.requests('POST /api/v1/recordings/:id/retranscribe')).toHaveLength(1)
   })
 
