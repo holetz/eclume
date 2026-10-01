@@ -80,6 +80,12 @@ decisão do usuário, então `auto` nunca é padrão.
   no Linux, toast com botões (`tauri-winrt-notification`, AUMID do app instalado ou o do
   PowerShell em dev) no Windows, `mac-notification-sys` no macOS — e fica também no menu da
   bandeja e na janela, porque o SO pode suprimir a notificação.
+- **Todo aviso no Windows** (a pergunta, gravando, reunião encerrada, nota salva, atualizado, "A
+  gravação parou") sai pelo toast com o AUMID do app instalado, com o nome e o ícone do eclume; o
+  AUMID do PowerShell só vale em dev (`tauri::is_dev()`). `notify-rust` fica para Linux e macOS.
+- **Prazo das ações no Linux:** a notificação com ações (a pergunta, o resumo pronto) espera no
+  máximo 15 min; vencido o prazo sem resposta, o app a fecha e a thread que esperava termina. A
+  pergunta e o resumo seguem na bandeja, na janela e no web.
 - Com a detecção desligada, o detector só acompanha até o fim a reunião que já tinha visto.
 - **Onde muda:** Configurações · Reuniões tem o `.switch` "Detectar reuniões" e os 8 apps, cada um
   com o `.seg` Gravar, Perguntar e Ignorar e o subtítulo do DS, e "Restaurar padrões" volta a
