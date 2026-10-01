@@ -110,6 +110,10 @@ inicio=$SECONDS
 for pilar in "${PILARES[@]}"; do
   echo "=== pilar $pilar · $(date -Is) ==="
   mkdir -p "$CACHE/target-$pilar"
+  # O mock só para os pilares que o têm na CI: com ECLUME_MOCK_URL, o teste do eclume-sync no
+  # desktop deixaria de pular e as URLs de parte das fixtures (127.0.0.1:4010) não chegam ao mock.
+  mock=()
+  case "$pilar" in contracts|web-browser) mock=(-e ECLUME_MOCK_URL=http://mock:4010) ;; esac
   t0=$SECONDS
   set +e
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
@@ -119,7 +123,7 @@ for pilar in "${PILARES[@]}"; do
     -e UV_LINK_MODE=copy -e ANDROID_NDK_LATEST_HOME=/opt/ndk \
     -e ECLUME_TEST_DATABASE_URL=postgresql+asyncpg://eclume:eclume@postgres:5432/eclume \
     -e ECLUME_TEST_REDIS_URL=redis://redis:6379 -e ECLUME_TEST_S3_ENDPOINT=http://minio:9000 \
-    -e ECLUME_MOCK_URL=http://mock:4010 \
+    "${mock[@]}" \
     -v "$SRC:/src" -v "$CACHE/target-$pilar:/target" -v "$CACHE/registry:/opt/cargo/registry" \
     -v "$CACHE/home:/tmp/.cache" -v "$NDK:/opt/ndk:ro" \
     -w /src "$IMG" nice -n 10 bash deploy/pilares.sh "$pilar"
