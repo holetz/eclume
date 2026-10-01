@@ -29,7 +29,14 @@ from sqlalchemy import select
 from eclume_engines.fila import desserializar
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, progress_of_revision, transcribe_job_id
+from eclume_server.queue import (
+    GPU_HEALTH_KEY,
+    GPU_LAST_SEEN_KEY,
+    GPU_QUEUE,
+    progress_key,
+    progress_of_revision,
+    transcribe_job_id,
+)
 from eclume_server.transcripts import fail
 
 if TYPE_CHECKING:
@@ -196,6 +203,11 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
     """Marca como falha recuperável os jobs sem quem os termine; devolve o que marcou, para o log."""
     now = now or datetime.now(UTC)
     grace = timedelta(seconds=settings.job_grace_seconds)
+    raw_beat = await redis.hgetall(GPU_HEALTH_KEY)
+    beat = _decode(raw_beat) if raw_beat else None
+    # O último visto, antes de olhar os jobs: é o "fora do ar desde" da espera (`queue_status.py`).
+    if beat is not None and beat.get("updated_at"):
+        await redis.set(GPU_LAST_SEEN_KEY, beat["updated_at"])
     jobs = t.transcription_jobs
     async with system_tx(engine) as conn:
         rows = (
@@ -209,8 +221,6 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
         ).all()
     if not rows:
         return []
-    raw_beat = await redis.hgetall(GPU_HEALTH_KEY)
-    beat = _decode(raw_beat) if raw_beat else None
     reaped = []
     for job_row_id, recording_id, revision, state, options in rows:
         job_key = transcribe_job_id(recording_id, revision)
