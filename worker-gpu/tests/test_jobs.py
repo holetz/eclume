@@ -245,6 +245,58 @@ def test_jobs_de_retorno_levam_a_revisao(tmp_path: Path, falha: str | None):
         assert set(ctx["store"].saved) == set(args[1:3])
 
 
+class SpyStore(FakeStore):
+    """Registra, a cada passo do job, o que o heartbeat publicaria."""
+
+    def __init__(self, registry: list[EngineRegistry], seen: list[tuple[str, bool, str | None]], **kw: Any) -> None:
+        super().__init__(**kw)
+        self.registry = registry
+        self.seen = seen
+
+    def download(self, key: str, dest: Path) -> None:
+        self.seen.append(("download", self.registry[0].busy, self.registry[0].current_job))
+        super().download(key, dest)
+
+
+@pytest.mark.parametrize("desfecho", ["sucesso", "download", "preprocess", "engine", "inesperado"])
+def test_ocupado_do_inicio_ao_fim_do_job(
+    tmp_path: Path, pre: FakePreprocess, monkeypatch: pytest.MonkeyPatch, desfecho: str
+):
+    seen: list[tuple[str, bool, str | None]] = []
+    holder: list[EngineRegistry] = []
+    store = SpyStore(holder, seen, fail_download=desfecho == "download")
+    error = {"engine": EngineError("out_of_memory", "VRAM"), "inesperado": KeyError("x")}.get(desfecho)
+    ctx = contexto(tmp_path, store=store, factory=Factory(error=error))
+    registry: EngineRegistry = ctx["engines"]
+    holder.append(registry)
+    if desfecho == "preprocess":
+        pre.error = PreprocessError("não abre")
+
+    def spy_pre(*args: Any) -> PreprocessResult:
+        seen.append(("preprocess", registry.busy, registry.current_job))
+        return pre(*args)
+
+    monkeypatch.setattr(jobs, "preprocess", spy_pre)
+    redis = ctx["redis"]
+    enqueue = redis.enqueue_job
+
+    async def spy_enqueue(name: str, *args: Any, **kwargs: Any) -> None:
+        seen.append((name, registry.busy, registry.current_job))
+        await enqueue(name, *args, **kwargs)
+
+    redis.enqueue_job = spy_enqueue
+    rodar(ctx)
+
+    job_id = f"transcribe:{RECORDING}:3"
+    retorno = "ingest_transcript" if desfecho == "sucesso" else "transcription_failed"
+    assert seen[0] == ("download", True, job_id)
+    assert seen[-1] == (retorno, True, job_id)
+    assert all(busy and current == job_id for _, busy, current in seen)
+    if desfecho != "download":
+        assert ("preprocess", True, job_id) in seen
+    assert (registry.busy, registry.current_job) == (False, None)
+
+
 def test_falha_da_engine_leva_o_codigo(tmp_path: Path):
     ctx = contexto(tmp_path, factory=Factory(error=EngineError("out_of_memory", "VRAM insuficiente")))
     rodar(ctx)

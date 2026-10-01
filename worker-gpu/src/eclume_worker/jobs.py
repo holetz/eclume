@@ -56,7 +56,7 @@ class JobFailedError(Exception):
 
 
 def return_job_id(job: str, recording_id: str, revision: int) -> str:
-    """`_job_id` de um job de retorno (`ingest_transcript`, `transcription_failed`) da revisão."""
+    """`_job_id` `{job}:{recording_id}:{revision}`: o do `transcribe` e o dos retornos da revisão."""
     return f"{job}:{recording_id}:{revision}"
 
 
@@ -87,6 +87,8 @@ class EngineRegistry:
         self._key: tuple[str, str | None] | None = None
         self._engine: Engine | None = None
         self._last_used = clock()
+        # O `_job_id` do `transcribe` em execução (do download ao enfileiramento do retorno).
+        self.current_job: str | None = None
         # A engine continua no registro depois da descarga ociosa (recarrega no próximo job); isto
         # diz se os modelos dela já foram descarregados desde o último uso.
         self._unloaded = False
@@ -102,8 +104,8 @@ class EngineRegistry:
 
     @property
     def busy(self) -> bool:
-        """Há um job usando a engine agora."""
-        return self._lock.locked()
+        """Há um `transcribe` em execução (ou a engine em uso)."""
+        return self.current_job is not None or self._lock.locked()
 
     def loaded_models(self) -> list[dict[str, Any]]:
         """Modelos residentes da engine, para o heartbeat; engines sem o método não declaram nenhum."""
@@ -275,18 +277,25 @@ def _thread_progress(
 async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any] | None) -> dict:
     """Job `transcribe(recording_id, audio_key, options)` do contrato."""
     config: WorkerConfig = ctx["config"]
-    config.work_dir.mkdir(parents=True, exist_ok=True)
-    workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
-    reporter = ProgressReporter(ctx["redis"], recording_id, parse_revision(ctx.get("job_id")))
+    registry: EngineRegistry = ctx["engines"]
+    revision = parse_revision(ctx.get("job_id"))
+    registry.current_job = ctx.get("job_id") or return_job_id("transcribe", recording_id, revision)
     try:
-        return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
-    except JobFailedError as exc:
-        return await _fail(ctx["redis"], reporter, exc)
-    except Exception as exc:
-        logger.exception("gravação %s: erro inesperado", recording_id)
-        return await _fail(ctx["redis"], reporter, JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"))
+        config.work_dir.mkdir(parents=True, exist_ok=True)
+        workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
+        reporter = ProgressReporter(ctx["redis"], recording_id, revision)
+        try:
+            return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
+        except JobFailedError as exc:
+            return await _fail(ctx["redis"], reporter, exc)
+        except Exception as exc:
+            logger.exception("gravação %s: erro inesperado", recording_id)
+            failure = JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
+            return await _fail(ctx["redis"], reporter, failure)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        registry.current_job = None
 
 
 async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha também lê
