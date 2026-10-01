@@ -146,6 +146,17 @@ describe('modal Importar', () => {
     expect(within(reopened).getByText(/Já estava na biblioteca ·/)).toBeInTheDocument()
   }, 20_000)
 
+  it('linha que falhou mostra o motivo em texto visível e tenta de novo', async () => {
+    vi.mocked(runUpload).mockRejectedValue(new Error('O servidor recusou o arquivo.'))
+    const { user, dialog } = await openWithFiles()
+    await user.click(within(dialog).getByRole('button', { name: 'Enviar 2 arquivos' }))
+    const failed = await within(dialog).findAllByText(/^Falhou o envio: O servidor recusou o arquivo\./)
+    expect(failed).toHaveLength(2)
+    expect(failed[0]).toBeVisible()
+    expect(failed[0]).not.toHaveAttribute('title')
+    expect(within(failed[0]).getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
+  })
+
   it('/importar leva ao modal aberto sobre a biblioteca', async () => {
     mockLibrary()
     renderApp('/importar')
