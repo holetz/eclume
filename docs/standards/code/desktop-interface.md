@@ -4,10 +4,10 @@ title: Interface do app desktop no Design System
 description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
-timestamp: 2026-09-28
+timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88
 maintainer: holetz
 ---
 
@@ -121,6 +121,18 @@ Na ordem do `index.html`:
   realocada (tauri-apps/tauri#13440); por isso o `Cargo.toml` fixa o Tauri em 2.12 ou mais, que
   traz o tao 0.37 com a correção. Não há barra de título própria em nenhum sistema.
 - Fechar esconde a janela (o app segue na bandeja), como nos outros sistemas.
+
+## Início com o computador
+
+- A aba de configurações tem a chave **Iniciar com o computador** (`#iniciar-com-o-sistema`, na
+  seção "Início", antes de "Avisos"), **ligada por padrão** e salva na hora como as outras.
+- A preferência é `Config.autostart` (padrão `true`, inclusive numa config de versão anterior). O
+  app **concilia** o registro do sistema a ela a cada abertura e a cada salvar
+  (`reconcile_autostart`), em vez de registrar uma vez: um caminho que mudou se corrige sozinho, e
+  quem desligou continua desligado depois de reabrir ou atualizar. Um build de desenvolvimento
+  (`debug_assertions`) não registra, e uma falha do sistema só vai ao log.
+- Iniciado pelo sistema (`--autostart`), o app sobe **só na bandeja**: a janela nasce escondida
+  e só abre pelo item da bandeja ou por um atalho.
 
 ## Ajuda e atualização
 
