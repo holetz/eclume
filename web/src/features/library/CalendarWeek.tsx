@@ -148,7 +148,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
     <div
       ref={scrollRef}
       className={styles.weekScroll}
-      style={measured ? { height } : undefined}
+      style={measured ? ({ '--altura-visivel': `${height}px` } as CSSProperties) : undefined}
       title="Ctrl + roda do mouse muda o zoom"
     >
       <div className={`cal-week ${styles.week}`} style={grid} aria-busy={busy || undefined}>

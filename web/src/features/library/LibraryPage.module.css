@@ -55,7 +55,9 @@
 }
 
 /* A semana rola dentro do próprio contêiner em tela estreita; a página não rola de lado. */
+/* A altura da janela da semana vem medida do componente (`--altura-visivel`); sem medida, a natural. */
 .weekScroll {
+  height: var(--altura-visivel, auto);
   overflow: auto;
   overscroll-behavior: contain;
 }
