@@ -5,7 +5,7 @@ import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { DENOISE_METHODS, fieldErrorsOf, labelOf, lastChangeText } from './labels'
 import { useAdminSettings, useUpdateSettings } from './queries'
-import { Switch } from './Switch'
+import { Switch } from '../../shared/Switch'
 
 type Settings = Schemas['AdminSettings']
 type Preprocessing = Schemas['PreprocessingSettings']

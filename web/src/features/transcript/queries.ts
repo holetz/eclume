@@ -3,9 +3,10 @@ import { useEffect, useRef } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
-import { recordingState } from '../library/format'
+
 import { stepsDone, type PipelineStep } from './steps'
 import type { Transcript } from './segments'
+import { recordingState } from '../../shared/format'
 
 const POLL_MS = 3000
 

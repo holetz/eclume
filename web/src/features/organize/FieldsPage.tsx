@@ -6,6 +6,7 @@ import { FieldEditor } from './FieldEditor'
 import styles from './Organize.module.css'
 import { KIND_LABELS, useFields, useSetAutoFill, type Field } from './queries'
 import { NEW, useGuardedSelection } from './useGuardedSelection'
+import { Switch } from '../../shared/Switch'
 
 export function FieldsPage() {
   useHelpTopic('campos')
@@ -95,16 +96,13 @@ function FieldRow({ field, selected, onSelect }: { field: Field; selected: boole
         Seu campo · {KIND_LABELS[field.kind].toLowerCase()}
       </span>
       <span className="list-row-actions">
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={field.auto_fill}
-            aria-label={`Automático: ${field.name}`}
-            onChange={(event) => setAutoFill.mutate({ id: field.id, autoFill: event.target.checked })}
-          />
-          <span className="track" />
+        <Switch
+          checked={field.auto_fill}
+          label={`Automático: ${field.name}`}
+          onChange={(autoFill) => setAutoFill.mutate({ id: field.id, autoFill })}
+        >
           <span aria-hidden="true">Automático</span>
-        </label>
+        </Switch>
         {setAutoFill.isError && (
           <span className={`field-hint ${styles.error}`} role="alert">
             Não deu para mudar. {errorMessage(setAutoFill.error)}

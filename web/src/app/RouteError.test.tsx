@@ -1,9 +1,11 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../test/fixtures'
 import { mockFetch } from '../test/http'
-import { renderApp } from '../test/render'
+import { preloadRoute, renderApp } from '../test/render'
+
+beforeAll(() => preloadRoute('/busca'))
 
 // A busca simula o chunk que não carregou depois de um deploy; o login, uma exceção comum fora do shell.
 vi.mock('../features/search/SearchPage', () => ({

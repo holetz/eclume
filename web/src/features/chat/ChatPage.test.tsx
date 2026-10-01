@@ -1,10 +1,12 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch, problem } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
 import { BASE_CHAT_POLL_MS } from './baseChat'
+
+beforeAll(() => preloadRoute('/perguntas'))
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
 afterEach(() => {

@@ -3,11 +3,11 @@ import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { useMe } from '../../app/session'
-import { stageLabel } from '../library/format'
 import { useCancelTranscription } from './queries'
 import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
 import styles from './RecordingPage.module.css'
+import { stageLabel } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 

@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113
 maintainer: holetz
 ---
 
@@ -70,6 +70,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 | `src/styles/` | `global.css` (entrada), `fonts.css`, `eclume.css` (cópia fiel do DS) e `app.css` (produto): [web-design-system.md](web-design-system.md) |
 | `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
 | `src/lib/media-convert/` | biblioteca de conversão, autocontida |
+| `src/shared/` | o que mais de uma feature usa e não tem dono de domínio: `format.ts` (estado e etapa da gravação, datas, horas, durações, tamanhos e o relógio do áudio) e o `Switch` do DS |
+
+- **Fronteiras entre features** (`src/test/boundaries.test.ts`, um teste da suíte): o grafo de
+  imports entre `src/features/*` (código de produção, sem testes) não tem ciclo; só o próprio
+  admin e `app/routes.tsx` importam `features/admin/` (o `eslint.config.js` veta o mesmo com
+  `no-restricted-imports`); e `src/shared/` não importa de `features/` nem de `app/`. Peça com
+  dono mora na dona (o `PersonCombobox`, com o seu CSS, em `features/people/`); importar o
+  `queries.ts` de outra feature continua permitido enquanto não fechar ciclo. Sem barril: quem
+  usa importa do arquivo que define.
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/parear`, `/gravacoes/:id`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/perguntas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
@@ -85,9 +94,13 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   - pessoa: `aba=gravacoes|falas|amostras`; Campos personalizados: `campo`; Tipos de agenda: `tipo`.
   A biblioteca mostra só as gravações do usuário: não há filtro Minhas/Compartilhadas.
 - **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
-  biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
-  (89 KB gzip). O chunk do WebCodecs (Mediabunny, ~560 KB) só carrega na conversão do import, e
-  o aviso de chunk grande do Vite que ainda aparece é dele.
+  biblioteca e do login, cada uma no seu chunk. O chunk do WebCodecs (Mediabunny, ~560 KB) só
+  carrega na conversão do import, e o aviso de chunk grande do Vite que ainda aparece é dele.
+- **Orçamento do JS inicial** (`npm run budget`, depois do build, no pilar `web`):
+  `scripts/bundle-budget.mjs` soma o `<script type="module">` e os `modulepreload` do
+  `dist/index.html` (bruto e gzip nível 9) e falha acima de `bundle-budget.json`
+  (`inicial_gzip_kb`). Medido em 2026-10-01: 26 arquivos, 450 KB (150 KB gzip), teto de 155 KB
+  gzip. Mudar o teto é editar o JSON no mesmo commit da mudança, com o motivo.
 - **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
   `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
   `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
@@ -329,8 +342,9 @@ desce; abaixo de 56rem, os campos também):
 - **Cabeçalho** (`RecordingHeader`): "← Biblioteca" volta à URL de onde a pessoa veio
   (`location.state.from`, posto pelos links do calendário, da lista e da busca); o kicker diz
   data, hora e duração ("· data do envio" quando `recorded_at_source` é `upload`); **Exportar** é
-  um `MenuButton` (TXT, SRT, MD — desabilitado sem resumo — e DOCX) que baixa por `fetch` e mostra o
-  `Problem` num alerta; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
+  um `MenuButton` (TXT, SRT, MD — desabilitado sem resumo — e DOCX) que baixa pelo cliente da API
+  (`parseAs: 'blob'`, nome do `Content-Disposition`) e mostra o `Problem` num alerta; um 401 no
+  export encerra a sessão como qualquer outra chamada; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
   volta com "Gravação excluída.".
 - **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts`): as seis etapas no `ol.pipeline`, o motivo
   de uma etapa pulada ou que falhou em texto acessível e em `title`, o progresso do worker com a
@@ -371,7 +385,7 @@ desce; abaixo de 56rem, os campos também):
     resumo logo abaixo, usando o chat), a troca de fala não rola a página. O padrão continua ligado.
   - **A medida é contrato**: `TranscriptDisclosure.test.tsx` conta renders sobre 3.000 falas (0 por
     tick sem troca, 2 na troca, a `.marker-bar` nenhum), e `TranscriptDisclosure.browser.test.tsx`
-    (`npm run test:browser`, Chrome no host) mede o commit por `React.Profiler`: mediana de 20
+    (`npm run test:browser`, no host) mede o commit por `React.Profiler`: mediana de 20
     ticks abaixo de 8 ms sem troca e de 16 ms com troca.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
@@ -548,6 +562,14 @@ Depois de recarregar, o import recomeça pela conversão.
   rota, com a mesma árvore `routes` num `createMemoryRouter` (o `useBlocker` só funciona dentro de
   um data router). O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
   `fetch` do Node).
+- **Sem depender do tempo de carga nem do relógio real.** Cada página sob demanda de `routes.tsx`
+  tem `preload()` no `handle` da rota, e `preloadRoute(...caminhos)` (`src/test/render.tsx`)
+  carrega os chunks das rotas que o arquivo monta: todo arquivo de teste que monta rota lazy o
+  chama no `beforeAll`, onde vale o `hookTimeout`, e não no tempo do primeiro `findBy`. Teste que
+  depende de data fixa o relógio só onde importa (`vi.useFakeTimers({ toFake: ['Date',
+  'performance'] })` com `vi.setSystemTime`, como a validade do App móvel), com os temporizadores
+  reais para o React Query e o Testing Library. A suíte passa três vezes seguidas na estação e no
+  host.
 - **Fuso fixo**: os unitários rodam em `America/Sao_Paulo` (`process.env.TZ` no `vite.config.ts`)
   e o Playwright também (`timezoneId`), o fuso das fixtures; a biblioteca posiciona pela hora local.
 - **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
@@ -574,8 +596,16 @@ Depois de recarregar, o import recomeça pela conversão.
   `e2e/visual-organizar.spec.ts` e `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
   ([web-design-system.md](web-design-system.md)); com `ECLUME_DS_DIR`, salvam também os quadros
   de `examples/*.html` para a comparação lado a lado.
-- A CI roda os unitários no job `web` e o E2E, junto dos testes de navegador da conversão, no
-  job `web-browser`.
+- **Três motores.** O E2E roda tudo no Chromium e, no WebKit e no Firefox do Playwright, só o
+  smoke (`@smoke` no título, com uma nova tentativa): cadastro, login, biblioteca, gravação com
+  copiar o resumo e o player (o relatório anota o `canPlayType` de Ogg Opus de cada motor) e um
+  import pequeno com um WAV gerado no teste, sem codec proprietário. Os testes de navegador
+  (`npm run test:browser`: a conversão, a data dos metadados e a transcrição longa) rodam no
+  Google Chrome, no Firefox e no WebKit; a conversão segue o caminho de cada motor (WebCodecs
+  quando decodifica a faixa e codifica Opus, a reserva ffmpeg.wasm quando não), e o que depende só
+  do WebCodecs é pulado com o motivo (o WebKit trava decodificando Vorbis).
+- A CI roda os unitários, o build e o orçamento no job `web` e o E2E, junto dos testes de
+  navegador, no job `web-browser`.
 - **E2E contra o backend real** (`npm run test:e2e:real`, `playwright.real.config.ts`,
   `e2e-real/`): nada simulado — login com os cookies do servidor, import com conversão no
   navegador e upload pelas URLs de parte assinadas, transcrição pelo worker e o resumo automático

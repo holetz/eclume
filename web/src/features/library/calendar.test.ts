@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  dayKey,
-  dayLabel,
-  eventBox,
-  lanes,
-  monthGrid,
-  monthTitle,
-  parseDayKey,
-  shortDayLabel,
-  weekRange,
-  weekTitle,
-} from './calendar'
+import { dayKey, dayLabel, eventBox, lanes, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
+import { shortDayLabel } from '../../shared/format'
 
 // Os testes rodam em America/Sao_Paulo (vite.config.ts), como as fixtures do mock.
 const local = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min)

@@ -3,10 +3,11 @@ import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
-import { formatDate, formatDuration } from '../library/format'
+
 import type { Person } from './queries'
 import { useDeleteVoiceSample, useDeleteVoiceprint, useVoiceprint, type Voiceprint } from './voice'
 import styles from './VoiceSection.module.css'
+import { formatDate, formatDuration } from '../../shared/format'
 
 /** A aba "Amostras de voz" da pessoa: ouvir e remover cada amostra da impressão de voz, e "Esquecer a voz". */
 export function VoiceSection({ person }: { person: Person }) {

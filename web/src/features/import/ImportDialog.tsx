@@ -3,10 +3,11 @@ import { useId, useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { Dialog } from '../../app/Dialog'
 import { checkEnvironment } from '../../lib/media-convert'
-import { formatBytes } from '../library/format'
+
 import styles from './ImportDialog.module.css'
 import { useImportContext } from './importContext'
 import type { ImportDate, ImportItem } from './useImportQueue'
+import { formatBytes } from '../../shared/format'
 
 const SOURCE_LABELS: Record<ImportDate['source'], string> = {
   metadata: 'Dos metadados do arquivo',

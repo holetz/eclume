@@ -12,7 +12,7 @@ import {
   useSaveDefaultAgendaType,
   useToggleDefaultAgendaType,
 } from './queries'
-import { Switch } from './Switch'
+import { Switch } from '../../shared/Switch'
 
 type AgendaType = Schemas['DefaultAgendaType']
 type Draft = Pick<
