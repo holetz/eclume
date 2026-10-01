@@ -50,7 +50,6 @@ describe('login', () => {
           loggedIn = true
           return empty(204)
         },
-        'GET /api/v1/tokens': () => ({ items: [], next_cursor: null }),
       })
       const { client, unmount } = renderApp('/entrar?volta=/ajuda')
       client.setQueryData(['recordings', 'da-outra'], ['dado da outra conta'])
