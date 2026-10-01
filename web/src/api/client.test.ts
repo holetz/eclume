@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { empty, json, mockFetch, problem } from '../test/http'
 import { CSRF_HEADER, createApiClient, isAdminUrl, onAdminUnauthorized, onUnauthorized, readCookie } from './client'
-import { ApiError, errorMessage, unwrap } from './problem'
+import { ApiError, errorMessage, type Problem, unwrap } from './problem'
 
 const me = { user: { id: 'u' } }
 
@@ -129,5 +129,16 @@ describe('errorMessage', () => {
     ).toBe('Falhou.')
     expect(errorMessage(new ApiError(502, null))).toMatch(/HTTP 502/)
     expect(errorMessage(new TypeError('Failed to fetch'))).toMatch(/Sem conexão/)
+  })
+
+  it('explica a cota estourada pela cota e pelo limite', () => {
+    const quota = (name: NonNullable<Problem['quota']>, limit: number) =>
+      errorMessage(
+        new ApiError(403, { type: 'x', title: 't', status: 403, code: 'quota_exceeded', quota: name, limit }),
+      )
+    expect(quota('file_bytes', 2 * 1024 ** 3)).toBe('O arquivo passa do tamanho máximo da sua conta (2 GB).')
+    expect(quota('storage_bytes', 10 * 1024 ** 3)).toMatch(/limite de 10 GB/)
+    expect(quota('open_uploads', 3)).toMatch(/até 3 arquivos ao mesmo tempo/)
+    expect(quota('agent_requests_24h', 200)).toMatch(/200 pedidos ao agente em 24 horas/)
   })
 })
