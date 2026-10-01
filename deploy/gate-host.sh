@@ -24,6 +24,9 @@ DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
 MEMORIA="${ECLUME_GATE_MEMORY:-4g}"
 CACHE_GB="${ECLUME_GATE_CACHE_GB:-25}"
 NDK="${ECLUME_GATE_NDK:-$HOME/android-sdk/ndk/28.2.13676358}"
+# O SDK e o JDK do mobile/scripts/android-sdk.sh, só leitura, para o pilar android.
+ANDROID_SDK="${ECLUME_GATE_ANDROID_SDK:-$HOME/android-sdk}"
+JDK="${ECLUME_GATE_JDK:-$HOME/jdk-21}"
 PROJETO=eclume-gate
 # As imagens levam na tag a versão do Rust de desktop/rust-toolchain.toml.
 RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml)"
@@ -51,7 +54,7 @@ fi
 
 CACHE="$GATE_DIR/cache"
 LOG="$GATE_DIR/logs/$SHA.log"
-mkdir -p "$CACHE/registry" "$CACHE/home" "$GATE_DIR/logs"
+mkdir -p "$CACHE/registry" "$CACHE/home" "$CACHE/gradle" "$GATE_DIR/logs"
 
 # Uma execução por vez no host; a segunda espera a primeira.
 exec 9>"$GATE_DIR/.trava"
@@ -133,11 +136,13 @@ for pilar in "${PILARES[@]}"; do
     -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target \
     -e npm_config_cache=/tmp/.cache/npm -e UV_PYTHON_INSTALL_DIR=/tmp/.cache/uv-python \
     -e UV_LINK_MODE=copy -e ECLUME_ANDROID_NDK=/opt/ndk \
+    -e ECLUME_ANDROID_SDK=/opt/android-sdk -e ECLUME_ANDROID_JDK=/opt/jdk -e GRADLE_USER_HOME=/opt/gradle \
     -e ECLUME_TEST_DATABASE_URL=postgresql+asyncpg://eclume:eclume@postgres:5432/eclume \
     -e ECLUME_TEST_REDIS_URL=redis://redis:6379 -e ECLUME_TEST_S3_ENDPOINT=http://minio:9000 \
     "${mock[@]}" \
     -v "$SRC:/src" -v "$CACHE/target-$pilar:/target" -v "$CACHE/registry:/opt/cargo/registry" \
     -v "$CACHE/home:/tmp/.cache" -v "$NDK:/opt/ndk:ro" \
+    -v "$ANDROID_SDK:/opt/android-sdk:ro" -v "$JDK:/opt/jdk:ro" -v "$CACHE/gradle:/opt/gradle" \
     -w /src "$IMG" nice -n 10 bash deploy/pilares.sh "$pilar"
   RESULTADO[$pilar]=$?
   set -e

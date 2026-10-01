@@ -32,5 +32,7 @@ RUN git init -q /opt/quenching && cd /opt/quenching \
  && git fetch -q --depth 1 https://github.com/holetz/quenching.git "$QUENCHING_SHA" \
  && git checkout -q FETCH_HEAD && rm -rf .git \
  && ln -s /opt/quenching/plugins/quenching/bin/cq /usr/local/bin/cq && cq --version
-# Núcleo do app móvel para o Android (o NDK chega do host, só leitura).
-RUN rustup target add aarch64-linux-android armv7-linux-androideabi && chmod -R a+rwX /opt/cargo /opt/rustup
+# Núcleo e app móvel para o Android (o NDK, o SDK e o JDK chegam do host, só leitura): os alvos
+# do APK de release (aarch64, armv7) e o do emulador (x86_64) do pilar android.
+RUN rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android \
+ && chmod -R a+rwX /opt/cargo /opt/rustup
