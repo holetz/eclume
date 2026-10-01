@@ -130,6 +130,27 @@ def test_heartbeat_fila_e_progresso(
     assert admin.get(URL).json()["running_jobs"] == []
 
 
+def test_saude_ignora_progresso_de_outra_revisao(
+    admin: Api,
+    cache: redis.Redis,
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+):
+    own = upload_file(as_user(make_user()), audio_bytes(1200))
+    cache.hset(
+        progress_key(own["id"]),
+        mapping={"revision": "2", "stage": "diarize", "pct": "78", "updated_at": "2026-09-25T12:00:01Z"},
+    )
+    try:
+        [job] = [j for j in admin.get(URL).json()["running_jobs"] if j["recording_id"] == own["id"]]
+        assert (job["state"], job["stage"], job["progress"], job["updated_at"]) == ("queued", None, None, None)
+    finally:
+        cache.delete(progress_key(own["id"]))
+        run_gpu(services.settings)
+        run_cpu(services.settings)
+
+
 def test_falhas_recentes_da_plataforma(
     admin: Api,
     as_user: Callable[[Account], Api],

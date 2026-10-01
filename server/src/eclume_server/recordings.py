@@ -153,7 +153,7 @@ async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID
 
 async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[str, Any]]:
     """Formas JSON, com as etapas do pipeline e o progresso do Redis para os jobs em aberto."""
-    open_jobs = [row["id"] for row in rows if row["job_state"] in {"queued", "running"}]
+    open_jobs = {row["id"]: row["job_revision"] for row in rows if row["job_state"] in {"queued", "running"}}
     progress = await ctx.queue.progress(open_jobs)
     async with user_tx(ctx.engine, user_id) as conn:
         pipelines = await load_pipelines(conn, [row["id"] for row in rows])

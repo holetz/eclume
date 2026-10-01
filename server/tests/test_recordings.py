@@ -294,6 +294,23 @@ def test_progresso_do_worker_aparece_no_job(
     assert api.get("/api/v1/recordings", params={"status": "queued"}).json()["items"] == []
 
 
+def test_progresso_de_outra_revisao_nao_aparece(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(100))
+    client = redis.Redis.from_url(services.settings.redis_url)
+    key = f"eclume:progress:{recording['id']}"
+    # O job em aberto é a revisão 1; o hash que sobrou é de outra revisão.
+    client.hset(key, mapping={"revision": "2", "stage": "diarize", "pct": "40", "updated_at": "2026-09-18T14:09:35Z"})
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "queued"
+    assert body["job"]["state"] == "queued"
+    assert (body["job"]["stage"], body["job"]["progress"]) == (None, 0.0)
+    client.hset(key, mapping={"revision": "1"})
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["job"]["progress"] == 0.4
+
+
 def test_retranscrever_so_sem_job_em_andamento(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):

@@ -20,7 +20,7 @@ from eclume_server import __version__
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
-from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress
+from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, job_progress, progress_of_revision
 from eclume_server.stalled import is_retryable
 
 if TYPE_CHECKING:
@@ -285,7 +285,7 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
 
     running_jobs = []
     for row in open_jobs:
-        raw = progress.get(row["recording_id"])
+        raw = progress_of_revision(progress.get(row["recording_id"]), row["revision"])
         stage, fraction = job_progress(raw) or (None, None)
         running_jobs.append(
             {
