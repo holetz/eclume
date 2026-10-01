@@ -11,13 +11,19 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 
 const NO_MARKERS: Marker[] = []
 
-/** Se o elemento cruza a janela; sem `IntersectionObserver`, conta como visível. */
+/**
+ * Se o elemento cruza a faixa central da janela (40% a 60% da altura); sem `IntersectionObserver`,
+ * conta como visível. A faixa, e não a janela inteira, porque o resumo vem logo abaixo da lista: quem
+ * lê o resumo ainda vê as últimas falas na borda, e isso não é estar acompanhando a transcrição.
+ */
 function useInView(ref: RefObject<HTMLElement | null>): boolean {
   const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
   useEffect(() => {
     const element = ref.current
     if (!element || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting))
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+      rootMargin: '-40% 0px -40% 0px',
+    })
     observer.observe(element)
     return () => observer.disconnect()
   }, [ref])
