@@ -1,4 +1,4 @@
-"""CLI `eclume-server`: migrations, contas de admin do painel, o anúncio mDNS e o armazenamento."""
+"""CLI `eclume-server`: migrations, contas de admin do painel, o anúncio mDNS, o armazenamento e a CA raiz."""
 
 from __future__ import annotations
 
@@ -6,8 +6,10 @@ import argparse
 import asyncio
 import getpass
 import json
+import os
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from redis.asyncio import Redis
@@ -16,6 +18,7 @@ from sqlalchemy import exists, insert, select, update
 from eclume_engines.registro import configurar_logs
 from eclume_server.accounts import AccountError, create_admin, set_admin_password
 from eclume_server.agents.base import PROVIDER_AUTH
+from eclume_server.ca import CaError, generate, generate_proof, sha256, split_names
 from eclume_server.config import get_settings
 from eclume_server.context import AppContext
 from eclume_server.crypto import decrypt
@@ -225,6 +228,15 @@ async def _health_report() -> dict[str, Any]:
     }
 
 
+def _ca_generate(args: argparse.Namespace) -> None:
+    if args.prova:
+        root = generate_proof(Path(args.prova))
+        print(f"prova em {args.prova}: raiz.crt, dentro.crt/key (127.0.0.1), fora.crt/key (127.0.0.2)")  # noqa: T201
+    else:
+        root = generate(Path(args.pasta), args.host or "", split_names(args.nomes))
+    print(f"sha256 {sha256(root)}")  # noqa: T201
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Parser do CLI."""
     parser = argparse.ArgumentParser(prog="eclume-server", description="Administração do server do eclume.")
@@ -257,6 +269,22 @@ def build_parser() -> argparse.ArgumentParser:
     probe_queue = probe.add_parser("fila", help="sai 0 se o worker arq da fila renovou o health-check (16 s)")
     probe_queue.add_argument("nome", help="fila sem o prefixo eclume: (default, agents)")
 
+    ca = commands.add_parser("ca", help="CA raiz própria do eclume").add_subparsers(dest="ca", required=True)
+    ca_generate = ca.add_parser(
+        "gerar", help="cria a raiz com restrição de nome (raiz.crt, raiz.key) e recusa sobrescrever"
+    )
+    target = ca_generate.add_mutually_exclusive_group(required=True)
+    target.add_argument("--pasta", help="destino da raiz (em produção, <ECLUME_DATA_DIR>/secrets/ca)")
+    target.add_argument("--prova", help="pasta da raiz descartável de 127.0.0.1 e dos folhas dentro e fora")
+    ca_generate.add_argument(
+        "--host", default=os.environ.get("ECLUME_PUBLIC_HOST"), help="IP ou nome permitido (ECLUME_PUBLIC_HOST)"
+    )
+    ca_generate.add_argument(
+        "--nomes",
+        default=os.environ.get("ECLUME_CA_NOMES"),
+        help="outros IPs ou nomes DNS permitidos, por vírgula ou espaço (ECLUME_CA_NOMES)",
+    )
+
     admin = commands.add_parser("admin", help="contas de admin do painel").add_subparsers(dest="admin", required=True)
     create = admin.add_parser("create", help="cria uma conta de admin (aplica as migrations)")
     create.add_argument("--email", required=True)
@@ -286,11 +314,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if asyncio.run(_queue_alive(args.nome)) else 1
         elif args.command == "storage":
             asyncio.run(_relocate(args.dry_run))
+        elif args.command == "ca":
+            _ca_generate(args)
         elif args.admin == "create":
             asyncio.run(_create_admin(args, _password(args.password_stdin)))
         else:
             asyncio.run(_set_admin_password(args, _password(args.password_stdin)))
-    except (AccountError, DiscoveryError) as exc:
+    except (AccountError, CaError, DiscoveryError) as exc:
         print(f"erro: {exc}", file=sys.stderr)  # noqa: T201
         return 2
     return 0
