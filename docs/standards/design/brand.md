@@ -7,7 +7,7 @@ tags: [design, brand, tokens]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: design-system/styles.css (gerado nas cópias pelo design-system/sincronizar.py), docs/standards/code/web-design-system.md e holetz/eclume#130
+source: design-system/styles.css (gerado nas cópias pelo design-system/sincronizar.py), docs/standards/code/web-design-system.md e holetz/eclume#130, holetz/eclume#122
 maintainer: holetz
 ---
 
@@ -39,11 +39,16 @@ tinta (`on-surface`) é quase preta e quente, e o texto secundário (`text-muted
   navegação ativo. `accent-ink` é a nogueira escura para kickers.
 - **Terracota (`recording`)** é semântica, não decorativa: gravação em curso e falha. Nunca vira
   um segundo acento de variedade.
-- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção.
+- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção. Como
+  texto, todos passam de 4,5:1 sobre o fundo e a superfície nos dois temas.
+- **Borda de controle (`control-border`) não é fio de estrutura.** Campo, caixa de seleção, botão
+  secundário e o trilho do switch desligado usam o linho 600, com pelo menos 3:1 sobre o fundo e a
+  superfície nos dois temas; o `divider` continua sendo o fio leve da estrutura. Escurecer o divisor
+  engrossaria todas as linhas da página.
 - Os locutores têm seis cores próprias em OKLCH (`--speaker-1` a `--speaker-6` no CSS), de mesma
   luminosidade, que não competem com a nogueira.
 - **Tema escuro** (`data-theme="dark"`): os tokens `dark-*` trocam fundo, superfície, tinta,
-  nogueira clara e terracota clara. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
+  nogueira clara, terracota clara, os estados, a tinta do acento, o realce e o divisor. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
 
 **Regra do acento único.** Um bloco tem no máximo um acento; a terracota só entra quando o estado
 de gravação ou falha estiver presente.
