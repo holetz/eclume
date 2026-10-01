@@ -8,8 +8,11 @@
 #
 # Uso: bash <árvore>/deploy/gate-host.sh --sha <sha> [--pilares a,b]
 #   --pilares  roda só esses pilares e não publica status (execução parcial).
-# Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_GATE_MEMORY (teto por contêiner),
-#            ECLUME_GATE_DIR (~/eclume-gate).
+# Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_GATE_MEMORY (teto por contêiner, 4g),
+#            ECLUME_GATE_CACHE_GB (orçamento dos caches, 25), ECLUME_GATE_DIR (~/eclume-gate).
+# Medido em 2026-10-01 (holetz/eclume#89), com a produção de pé: 16 a 21 minutos; pico de memória
+# de ~2,6 GiB (windows e desktop, no link), ~1,7 GiB no web-browser e < 1 GiB nos outros; ~15 GB de
+# caches depois de duas execuções.
 set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SRC"
@@ -18,7 +21,8 @@ REPO=holetz/eclume
 CONTEXTO=eclume/gate
 GATE_DIR="${ECLUME_GATE_DIR:-$HOME/eclume-gate}"
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
-MEMORIA="${ECLUME_GATE_MEMORY:-6g}"
+MEMORIA="${ECLUME_GATE_MEMORY:-4g}"
+CACHE_GB="${ECLUME_GATE_CACHE_GB:-25}"
 NDK="${ECLUME_GATE_NDK:-$HOME/android-sdk/ndk/28.2.13676358}"
 PROJETO=eclume-gate
 IMG=eclume-gate:24.04
@@ -93,6 +97,12 @@ publicar pending "rodando ${#PILARES[@]} pilares · log $LOG"
 pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%) · teto de memória por pilar: $MEMORIA"
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: gate recusado."; exit 3; }
+# Orçamento dos caches: acima dele, os target/ do cargo (a maior parte) recomeçam do zero.
+cache_gb="$(du -s --block-size=1G "$CACHE" | cut -f1)"
+if (( cache_gb > CACHE_GB )); then
+  echo "Caches em ${cache_gb} GB, acima de ${CACHE_GB} GB: apagando os target/ do cargo."
+  rm -rf "$CACHE"/target-*
+fi
 
 # --- imagens: as de base do release, se faltarem, e a do gate (camadas em cache) ------------------
 export BUILDKIT_PROGRESS=plain
