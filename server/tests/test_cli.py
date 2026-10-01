@@ -7,6 +7,7 @@ import secrets
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+import redis
 from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -172,3 +173,17 @@ def test_relocate_legacy_move_as_chaves_orgs_uma_vez(
     # Idempotente: na segunda vez, nada a mover além da que segue em andamento.
     assert cli.main(["storage", "relocate-legacy"]) == 0
     assert "movida" not in capsys.readouterr().out
+
+
+def test_sonda_fila_pela_chave_de_health_check(monkeypatch: pytest.MonkeyPatch, services: Services):
+    monkeypatch.setenv("ECLUME_REDIS_URL", services.settings.redis_url)
+    cli.get_settings.cache_clear()
+    client = redis.Redis.from_url(services.settings.redis_url)
+    client.delete("eclume:default:health-check")
+    assert cli.main(["sonda", "fila", "default"]) == 1
+    client.set("eclume:default:health-check", "j_complete=1", ex=16)
+    try:
+        assert cli.main(["sonda", "fila", "default"]) == 0
+    finally:
+        client.delete("eclume:default:health-check")
+        cli.get_settings.cache_clear()

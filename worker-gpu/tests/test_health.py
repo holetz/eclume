@@ -8,13 +8,15 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from eclume_engines import EngineOptions
-from eclume_worker import __version__
+from eclume_worker import __version__, health
 from eclume_worker.config import WorkerConfig
 from eclume_worker.health import HEALTH_KEY, HEALTH_TTL_SECONDS, heartbeat_fields, heartbeat_loop, publish, withdraw
 from eclume_worker.jobs import EngineRegistry
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 GPU = {
     "gpu_name": "NVIDIA GeForce GTX 1660 SUPER",
@@ -162,3 +164,27 @@ def test_loop_sobrevive_a_uma_falha(tmp_path: Path):
     asyncio.run(go())
     assert Flaky.calls >= 2  # a primeira falhou e a segunda publicou
     assert HEALTH_KEY in redis.hashes
+
+
+class _RedisDaSonda:
+    def __init__(self, keys: set[str]) -> None:
+        self.keys = keys
+
+    async def exists(self, key: str) -> int:
+        return int(key in self.keys)
+
+    async def aclose(self) -> None:
+        pass
+
+
+def test_sonda_sai_0_com_heartbeat_e_1_sem(monkeypatch: pytest.MonkeyPatch):
+    keys: set[str] = set()
+    monkeypatch.setattr(health.Redis, "from_url", staticmethod(lambda _url: _RedisDaSonda(keys)))
+    assert health.main(["--sonda"]) == 1
+    keys.add(HEALTH_KEY)
+    assert health.main(["--sonda"]) == 0
+
+
+def test_sonda_sai_1_sem_redis(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ECLUME_REDIS_URL", "redis://127.0.0.1:1/0")
+    assert health.main(["--sonda"]) == 1

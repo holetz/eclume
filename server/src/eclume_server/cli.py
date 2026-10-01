@@ -9,6 +9,7 @@ import json
 import sys
 from typing import TYPE_CHECKING
 
+from redis.asyncio import Redis
 from sqlalchemy import exists, insert, select, update
 
 from eclume_engines.registro import configurar_logs
@@ -142,6 +143,15 @@ def _discover(timeout: float) -> int:
     return 0
 
 
+async def _queue_alive(queue: str) -> bool:
+    """A chave `eclume:<fila>:health-check` que o arq do worker renova a cada 15 s existe."""
+    client = Redis.from_url(get_settings().redis_url)
+    try:
+        return bool(await client.exists(f"eclume:{queue}:health-check"))
+    finally:
+        await client.aclose()
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Parser do CLI."""
     parser = argparse.ArgumentParser(prog="eclume-server", description="Administração do server do eclume.")
@@ -165,6 +175,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     relocate.add_argument("--dry-run", action="store_true", help="só lista o que moveria")
 
+    probe = commands.add_parser("sonda", help="sondas do healthcheck dos contêineres").add_subparsers(
+        dest="sonda", required=True
+    )
+    probe_queue = probe.add_parser("fila", help="sai 0 se o worker arq da fila renovou o health-check (16 s)")
+    probe_queue.add_argument("nome", help="fila sem o prefixo eclume: (default, agents)")
+
     admin = commands.add_parser("admin", help="contas de admin do painel").add_subparsers(dest="admin", required=True)
     create = admin.add_parser("create", help="cria uma conta de admin (aplica as migrations)")
     create.add_argument("--email", required=True)
@@ -187,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(announce(get_settings()))
         elif args.command == "discover":
             return _discover(args.timeout)
+        elif args.command == "sonda":
+            return 0 if asyncio.run(_queue_alive(args.nome)) else 1
         elif args.command == "storage":
             asyncio.run(_relocate(args.dry_run))
         elif args.admin == "create":
