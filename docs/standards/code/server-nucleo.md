@@ -4,7 +4,7 @@ title: Núcleo do server — persistência, isolamento, autenticação, upload, 
 description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, deploy/docker-compose.test.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86
@@ -240,7 +240,7 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   e outra origem, `user`; sem `recorded_at`, `upload` (outra origem sem data → 422). Corrigir
   `recorded_at` no `PATCH` passa a origem a `user`. A migration 014 marcou `capture` nas
   gravações do desktop e `upload` no resto: o import web de antes não mandava data.
-- **`kind`**: `meeting` (padrão) ou `note` (nota por voz), no upload e no `PATCH`. A nota passa
+- **`kind`**: `meeting` (padrão) ou `note` (nota de voz), no upload e no `PATCH`. A nota passa
   pelo mesmo pipeline da reunião (detecção de tipo e resumo incluídos); a
   [processamento-automatico.md](processamento-automatico.md) não distingue as duas.
 - **Tipo escolhido no upload** (`agenda_type_id`, a folha "Agenda type" ao parar a gravação no

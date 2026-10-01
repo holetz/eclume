@@ -241,7 +241,7 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   a altura da tela por igual (mínimo de 96px por célula).
 - **Estado em palavra** (`recordingState()`, de `status` e do `pipeline`): falhou (régua de
   perigo), em andamento com a etapa corrente ("Resumindo", "Transcrevendo", "Na fila"...) ou pronta
-  (com "Sem resumo" quando a etapa do resumo falhou). Nota por voz tem a régua pontilhada;
+  (com "Sem resumo" quando a etapa do resumo falhou). Nota de voz tem a régua pontilhada;
   marcadores aparecem como `.marker-count`. O `aria-label` do evento diz tudo:
   "Reunião de equipe, 09:00, 58 min, Resumindo, 3 marcadores".
 - **Consulta** (`queries.ts`): o período vai em `GET /recordings` com `from`, `to`,
@@ -458,7 +458,7 @@ desce; abaixo de 56rem, os campos também):
   silêncio de 4 módulos e preto sobre branco nos dois temas. O conteúdo é o `pair_url` do
   contrato. `/parear` é a página pública onde cai quem lê o QR com a câmera comum: explica que o
   código é do app e não chama a API.
-- **Instaladores** (`desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
+- **Instaladores** (`web/src/features/desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
   (mesma origem, fora do `/api`), valida `versao` e `instaladores[]`
   ([desktop-distribuicao.md](desktop-distribuicao.md)) e mostra o `recomendado` de cada sistema,
   com o sistema atual primeiro; sem manifesto ou com ele inválido, os cartões dizem que os

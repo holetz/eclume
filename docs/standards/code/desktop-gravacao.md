@@ -1,10 +1,10 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
@@ -69,7 +69,7 @@ mais longa das outras, o caso de uma rajada atrasada. A fonte que volta a entreg
 depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amostra nova apagava o
 áudio do sistema depois da primeira pausa (holetz/eclume#28).
 
-## Nota por voz e parada por silêncio
+## Nota de voz e parada por silêncio
 
 - `AppState::start_note()` abre **só o microfone**, pelo mesmo `capture.rs` e com o dispositivo
   escolhido: uma nota é fala de quem grava, e o áudio do sistema traria música e notificações. A
