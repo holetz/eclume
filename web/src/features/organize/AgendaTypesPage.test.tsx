@@ -86,7 +86,7 @@ describe('tipos de agenda', () => {
     mockAgendaTypes()
     renderApp(`/config/agendas?tipo=${EQUIPE}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Tipos de agenda' })).toBeInTheDocument()
-    expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
+    expect(screen.getByText('Regras', { selector: '.kicker' })).toBeInTheDocument()
     await list()
     expect(within(row('Reunião de equipe')).getByText('Resumo: resumo, decisões, próximos passos')).toBeInTheDocument()
     expect(within(row('1:1')).getByText('Resumo: pontos tratados, combinados')).toBeInTheDocument()

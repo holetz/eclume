@@ -53,7 +53,8 @@ export function CollectionsPage() {
       <p className="text-muted">
         Coleção agrupa gravações; tag marca assuntos. As duas convivem, e uma gravação pode estar em várias coleções.
         Uma coleção com regra e <strong>Incluir automaticamente</strong> recebe as gravações que o agente
-        achar que cumprem a regra, depois da transcrição.
+        achar que cumprem a regra, depois da transcrição. Veja em que ponto isso acontece em{' '}
+        <Link to="/config/automacao">Processamento automático</Link>.
       </p>
       <p className="text-muted">
         No app desktop, as coleções também organizam a pasta sincronizada: cada uma vira uma subpasta com os

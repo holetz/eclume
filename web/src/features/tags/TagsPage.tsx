@@ -51,7 +51,8 @@ export function TagsPage() {
       <p className="text-muted">
         As tags marcam assuntos. Por padrão, o agente só usa as tags cadastradas aqui, e a descrição de cada uma
         (quando usar) vai junto para ele decidir. A tag que você escreve numa gravação entra no cadastro sozinha.{' '}
-        <Link to="/ajuda/tags-cadastradas">Saiba como funciona</Link>.
+        <Link to="/ajuda/tags-cadastradas">Saiba como funciona</Link>. Veja em que ponto as tags entram em{' '}
+        <Link to="/config/automacao">Processamento automático</Link>.
       </p>
 
       <TagAssignmentCard />
