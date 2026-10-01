@@ -7,7 +7,7 @@ tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102
 maintainer: holetz
 ---
 
@@ -236,9 +236,21 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
      (`UreqTransport::insecure`), usado **só** para esse arquivo e sem credencial;
   2. calcula o SHA-256 do DER do primeiro certificado e compara com a impressão digital esperada
      (a do instalador, do TXT ou do QR); divergiu, para antes de entrar;
-  3. guarda o PEM em `<config_dir>/servidor-pendente/servidor-ca.pem` e lê `GET /api/v1/server`
-     já com verificação: o `ca_sha256` do descritor precisa ser o mesmo;
-  4. ao entrar, o PEM passa a `<config_dir>/servidor-ca.pem`, que vira o `ca_path`.
+  3. guarda **só esse certificado** (`pin::root_from_pem` recorta o primeiro bloco e o relê com o
+     mesmo DER; certificados a mais nunca chegam ao disco) em
+     `<config_dir>/servidor-pendente/servidor-ca.pem` e lê `GET /api/v1/server` confiando só nele
+     (`TrustMode::Pinned`): o `ca_sha256` do descritor precisa ser o mesmo;
+  4. ao entrar (também em modo fixado), o PEM passa a `<config_dir>/servidor-ca.pem`, que vira o
+     `ca_path`; daí em diante tudo o que fala com o servidor (sync, aviso de resumo, espelho,
+     "Testar conexão" e updater) confia só nele, e uma cadeia que não leva a essa raiz é recusada
+     mesmo que o SO confie nela.
+- **Migração na abertura** (holetz/eclume#102): `AppState::open` chama `account::repair_pinned`,
+  que passa `pin::trim_saved` só no `ca_path` fixado pela primeira execução (nunca no escolhido à
+  mão). Um arquivo com mais de um certificado é regravado (temporário + `rename`) só com o
+  primeiro; o app apaga a credencial e a `account`, grava a config e entra no estado da CA trocada
+  (sync parado, primeira execução) com o aviso `pin::CA_TRIMMED`, que manda entrar de novo, trocar
+  a senha e desvincular a entrada antiga na web. Com um certificado só, o arquivo não é tocado e
+  ninguém precisa entrar de novo.
 - **Só o instalador dispensa a conferência** (`account::vouched_by_installer`): o TXT do mDNS não
   é autenticado, e qualquer máquina da rede pode anunciar outra CA. Com o endereço digitado ou
   anunciado (com ou sem `ca`), a tela mostra a impressão digital em `.code-block` ("Confira com
@@ -268,10 +280,12 @@ ele e não mudam o desktop.
   `RecorderConfig { source: Mobile, .. }`, e o `HttpUploader` não sabe de onde veio.
   `HttpUploader::with_device_name` troca o `capture.device_name` (no celular, o modelo do aparelho,
   não o hostname).
-- **`TrustMode`** (`transport.rs`): `PlatformPlus(ca_path?)` é o do desktop (verificador da
-  plataforma, ou as raízes nativas mais o PEM); `Pinned(ca_path)` confia **só** nos certificados do
-  PEM, sem as raízes do SO nem o `rustls-platform-verifier`, que no Android exige inicialização JNI
-  própria. `UreqTransport::with_trust(modo, user_agent, prazo)` aceita um prazo total menor que o
+- **`TrustMode`** (`transport.rs`): `PlatformPlus(ca_path?)` é o do desktop com CA escolhida à
+  mão ou sem CA própria do servidor (verificador da plataforma, ou as raízes nativas mais todos os
+  certificados do PEM); `Pinned(ca_path)` é o do desktop com a CA da primeira execução e o do
+  celular, e confia em **exatamente um** certificado (`transport::pinned_cert`; um PEM com mais de
+  um é erro que nomeia o arquivo), sem as raízes do SO nem o `rustls-platform-verifier`, que no
+  Android exige inicialização JNI própria. `UreqTransport::with_trust(modo, user_agent, prazo)` aceita um prazo total menor que o
   padrão de 600 s (a sonda da rede do celular usa 3 s); `UreqTransport::pinned` é o atalho do modo
   fixado.
 - **Feature `os-keyring`** (padrão): o `OsKeyring` e o crate `keyring` só entram com ela. Sem ela
@@ -295,9 +309,13 @@ ele e não mudam o desktop.
 | `ca_path` | — | PEM com a CA interna do Caddy: a fixada pela primeira execução ou uma escolhida em Servidor · Avançado ("Escolher…") |
 | `retention_days` | `7` | dias que o arquivo local fica depois da confirmação; `0` apaga logo, `null` guarda sempre |
 
-- **TLS:** sem `ca_path`, vale o verificador da plataforma, que enxerga a CA instalada no SO pelo
-  runbook do host. Com `ca_path`, as raízes nativas do SO mais os certificados do PEM. Um PEM
-  ilegível ou sem certificado é recusado ao salvar.
+- **TLS, pela origem do `ca_path`** (`account::trust_for`, que o `UploaderConfig.trust`, o
+  `Net::verified` e o `AppState::trust` seguem): a CA fixada pela primeira execução
+  (`<config_dir>/servidor-ca.pem`) é `Pinned`, só ela; uma CA escolhida à mão é `PlatformPlus`,
+  as raízes nativas do SO mais os certificados do PEM; sem `ca_path` (certificado público, ou
+  `http://` de dev), o verificador da plataforma, que enxerga a CA instalada no SO pelo runbook do
+  host. `AppState::trust` lê só a config, sem o chaveiro. Um PEM ilegível ou sem certificado é
+  recusado ao salvar.
 - **Retenção:** só linhas `synced` com `remote_id` perdem o arquivo, e a linha fica na fila com
   `purged_at`. Nada que o servidor não confirmou sai do disco.
 
@@ -306,9 +324,11 @@ ele e não mudam o desktop.
 - Unidade, sem SO: classificação com sinais mockados, debounce com relógio injetado, máquina de
   gravação automática, protocolo sobre um transporte roteirizado (upload novo, dedup, retomada,
   upload sumido, retentativa e `Retry-After`, `401` sem retentativa, URL pré-assinada renovada),
-  login e pareamento com as recusas, CA fixada (impressão digital, TOFU, descritor divergente),
-  o parser do TXT do mDNS, a conta no estado sobre uma rede roteirizada (`account::tests`:
-  entrar, sair, CA trocada, PAT antigo), PAT com chaveiro falso, retenção e config. A escuta mDNS
+  login e pareamento com as recusas, CA fixada (impressão digital, TOFU, descritor divergente,
+  PEM com dois certificados no download, na gravação, no `trim_saved` e no modo `Pinned`), o
+  parser do TXT do mDNS, a conta no estado sobre uma rede roteirizada (`account::tests`: entrar,
+  sair, CA trocada, PAT antigo, a confiança pela origem da CA e o `repair_pinned`), a migração na
+  abertura (`state::tests`), as raízes do updater, PAT com chaveiro falso, retenção e config. A escuta mDNS
   de verdade fica num teste `#[ignore]`.
 - Integração com o mock do contrato (`tests/mock.rs`), pulada sem `ECLUME_MOCK_URL`. As URLs de
   parte das fixtures apontam para `127.0.0.1:4010`, então o mock roda na mesma máquina dos
