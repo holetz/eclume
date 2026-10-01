@@ -60,7 +60,8 @@ impl HttpUploader {
         self
     }
 
-    /// O idioma da transcrição que os próximos uploads pedem; `None` deixa o do servidor.
+    /// O idioma da transcrição do aparelho, para a gravação sem idioma próprio; `None` deixa o da
+    /// conta.
     pub fn with_language(mut self, language: Option<String>) -> Self {
         self.language = language;
         self
@@ -104,7 +105,8 @@ impl HttpUploader {
                 })
                 .collect(),
             duration_ms: recording.duration_ms.and_then(|ms| u64::try_from(ms).ok()),
-            language: self.language.clone(),
+            // O da gravação, senão o do aparelho; sem nenhum, vale o da conta no servidor.
+            language: recording.language.clone().or_else(|| self.language.clone()),
             source: recording.source,
             capture: Capture {
                 meeting_app: recording.meeting_app.clone(),
@@ -329,6 +331,7 @@ mod tests {
                 "g1",
                 Some("Visita ao cliente"),
                 Some("7c0e2f7a-1b2c-4d5e-8f90-a1b2c3d4e5f6"),
+                None,
             )
             .unwrap();
         let marcador = queue.add_marker("g1", 42_000, Some("prazo")).unwrap();
@@ -361,6 +364,13 @@ mod tests {
             "ab".into(),
         );
         assert_eq!(serde_json::to_value(&create).unwrap()["language"], "es");
+
+        // O idioma escolhido para a gravação vence o do aparelho.
+        queue.save_details("g1", None, None, Some("auto")).unwrap();
+        let create = self::uploader()
+            .with_language(Some("es".into()))
+            .create_request(&queue.get("g1").unwrap().unwrap(), &[], 10, "ab".into());
+        assert_eq!(serde_json::to_value(&create).unwrap()["language"], "auto");
     }
 
     #[test]

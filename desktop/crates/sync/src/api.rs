@@ -46,7 +46,7 @@ pub struct UploadCreate {
     pub markers: Vec<MarkerInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// Idioma da transcrição (`pt`, `es`, `en`); sem valor, vale o padrão do servidor.
+    /// Idioma da transcrição (`pt`, `es`, `en` ou `auto`); sem valor, vale o idioma da conta.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     pub source: Source,

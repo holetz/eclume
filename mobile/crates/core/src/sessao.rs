@@ -177,7 +177,7 @@ impl Sessao {
         titulo: Option<&str>,
         tipo_de_agenda_id: Option<&str>,
     ) -> Result<()> {
-        trancar(fila)?.save_details(id, titulo, tipo_de_agenda_id)
+        trancar(fila)?.save_details(id, titulo, tipo_de_agenda_id, None)
     }
 
     /// Acerta, na abertura, a gravação que uma queda do processo deixou em `recording`.
