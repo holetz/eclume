@@ -6,13 +6,14 @@
 #
 # Uso: bash deploy/pilares.sh <pilar>     roda os comandos do pilar, parando no primeiro que falha
 #      bash deploy/pilares.sh --lista     enumera os pilares, um por linha
-# Pilares: python contracts web web-browser desktop mobile windows auditoria (os dois últimos só no gate).
+# Pilares: python contracts web web-browser desktop mobile docs windows auditoria (os dois últimos
+# só no gate).
 # Contrato: docs/standards/code/monorepo.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PILARES=(python contracts web web-browser desktop mobile windows auditoria)
+PILARES=(python contracts web web-browser desktop mobile docs windows auditoria)
 
 # Um grupo dobrável por comando no log da CI; no gate, só um cabeçalho.
 run() {
@@ -95,6 +96,13 @@ pilar_mobile() {
   run cargo check -p eclume-mobile-core --target aarch64-linux-android --locked
 }
 
+# A documentação: conformidade do bundle OKF (`cq`, do holetz/quenching na ref fixada no
+# gate.Dockerfile e no ci.yml) e links, âncoras, caminhos em crase e ordem do glossário.
+pilar_docs() {
+  run cq knowledge validate
+  run python3 deploy/docs_check.py
+}
+
 # O código só-Windows do desktop, por compilação cruzada (cargo-xwin). Só no gate: na CI o xwin
 # baixaria o SDK a cada execução.
 pilar_windows() {
@@ -129,6 +137,6 @@ pilar_auditoria() {
 
 case "${1:-}" in
   --lista) printf '%s\n' "${PILARES[@]}" ;;
-  python|contracts|web|web-browser|desktop|mobile|windows|auditoria) "pilar_${1//-/_}" ;;
+  python|contracts|web|web-browser|desktop|mobile|docs|windows|auditoria) "pilar_${1//-/_}" ;;
   *) echo "Uso: bash deploy/pilares.sh <$(IFS='|'; echo "${PILARES[*]}")> | --lista" >&2; exit 2 ;;
 esac

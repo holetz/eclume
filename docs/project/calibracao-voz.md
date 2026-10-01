@@ -4,7 +4,7 @@ title: Calibração do limiar de identificação por voz
 description: Como o limiar de sugestão por voz do eclume foi escolhido — 33 leitores reais do LibriVox em 127 reuniões sintéticas diarizadas pelo pyannote community-1 na GTX 1660 SUPER, taxas de falso positivo e falso negativo por limiar, por modo de comparação e por tempo de fala, e o limiar 0,55 com centroide normalizado.
 resource: worker-gpu/scripts/voice_calibration.py, server/src/eclume_server/voice.py
 tags: [voz, calibracao, limiar, pyannote, lgpd, benchmark]
-timestamp: 2026-09-25
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#15
@@ -112,8 +112,8 @@ worker de produção ocioso ao lado.
 - **Modo: centroide normalizado das amostras**, com o menor EER junto com o máximo. É uma
   agregação só no SQL, estável quando uma amostra é ruim, e não cresce em custo com o número de
   amostras. O "máximo" ganha pouco em FNR e perde em FPR.
-- **Limiar padrão: 0,55.** Com FPR de 0,17% por comparação, uma organização com 50 pessoas com
-  consentimento tem ~8% de chance de uma sugestão errada para um locutor desconhecido. A sugestão
+- **Limiar padrão: 0,55.** Com FPR de 0,17% por comparação, uma conta com 50 pessoas no
+  diretório tem ~8% de chance de uma sugestão errada para um locutor desconhecido. A sugestão
   só propõe, e recusar custa um clique; a atribuição automática usa um limiar próprio, mais alto
   (padrão 0,75, ~0,05% de FPR na tabela acima), que cada conta ajusta. Com FNR de ~4%, a pessoa certa quase sempre
   aparece. Abaixo de 0,50 o FPR triplica; acima de 0,60 quase não ganha precisão.
@@ -123,5 +123,4 @@ worker de produção ocioso ao lado.
 - **Audiolivro não é reunião.** Leitura limpa, sem sobreposição e com microfone próximo separa
   melhor que uma sala real. Em reuniões, os genuínos devem cair mais que os impostores subir. Por
   isso o limiar fica no ponto de FPR ≈ 0,1–0,2%, não no do EER, e o admin pode ajustá-lo em
-  Administração → Identificação por voz. A trilha de auditoria (`suggested`/`rejected`/
-  `accepted` com `score`) é a base para recalibrar com dados reais da organização.
+  Administração → Identificação por voz.

@@ -63,7 +63,7 @@ export function ligarMenu(app) {
       botao.focus();
     }
   });
-  $("#ajuda-primeiros-passos").addEventListener("click", () => executar("open_help", { article: "primeiros-passos" }));
+  $("#ajuda-primeiros-passos").addEventListener("click", () => executar("open_help", { article: "primeira-gravacao" }));
   $("#ajuda-permissoes").addEventListener("click", () =>
     executar("open_help", { article: "permissoes-de-microfone" }),
   );

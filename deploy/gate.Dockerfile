@@ -25,5 +25,12 @@ RUN UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
  && chmod -R a+rX /opt/uv-tools && pip-audit --version
 RUN cargo install --locked cargo-deny --version 0.20.2 && rm -rf /opt/cargo/registry \
  && chmod -R a+rwX /opt/cargo && cargo deny --version
+# O `cq` do pilar `docs`: o holetz/quenching público na ref fixada (a mesma do job `docs` do ci.yml;
+# deploy/test_docs_check.py confere).
+ARG QUENCHING_SHA=9150af364e40ec7ca9c4f918cb60593e93ae4eea
+RUN git init -q /opt/quenching && cd /opt/quenching \
+ && git fetch -q --depth 1 https://github.com/holetz/quenching.git "$QUENCHING_SHA" \
+ && git checkout -q FETCH_HEAD && rm -rf .git \
+ && ln -s /opt/quenching/plugins/quenching/bin/cq /usr/local/bin/cq && cq --version
 # Núcleo do app móvel para o Android (o NDK chega do host, só leitura).
 RUN rustup target add aarch64-linux-android armv7-linux-androideabi && chmod -R a+rwX /opt/cargo /opt/rustup
