@@ -250,8 +250,11 @@ async function principal() {
   // eclume, sobe logo depois da reabertura.
   const locais = () => pagina.evaluate(() => window.__TAURI_INTERNALS__.invoke('gravacoes'))
   const anteriores = new Set((await locais()).map((g) => g.id))
-  await pagina.getByRole('button', { name: /Gravar/ }).click()
+  // Esta gravação começa pelo atalho "Gravar agora" do ícone: o mesmo intent do shortcuts.xml.
+  adb('shell', 'am', 'start', '-a', `${PACOTE}.GRAVAR_AGORA`, '-n', `${PACOTE}/.MainActivity`)
   await pagina.getByText('Gravando', { exact: true }).waitFor({ timeout: 30_000 })
+  await ate('o serviço de microfone em primeiro plano', () => servicoEmPrimeiroPlano(), 30)
+  passo('gravando pelo atalho Gravar agora (GRAVAR_AGORA), com o serviço em primeiro plano')
   await esperar(5000)
   adb('shell', 'am', 'force-stop', PACOTE)
   passo('processo derrubado gravando (am force-stop)')
