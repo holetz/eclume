@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { Switch } from '../../shared/Switch'
 import styles from './People.module.css'
@@ -16,7 +17,20 @@ export function AutoAssignCard() {
   const assignment = useVoiceAssignment()
   // Sem identificação por voz na plataforma, a preferência não tem efeito: nem aparece.
   if (!assignment.data?.platform_enabled) return null
+  if (!assignment.data.keep_samples) return <NoSamplesNotice />
   return <AutoAssignForm assignment={assignment.data} />
+}
+
+/** A conta não guarda amostras de voz: nada é ligado nem sugerido pela voz. */
+function NoSamplesNotice() {
+  return (
+    <section className={styles.autoAssign} aria-label="Atribuição automática de locutores">
+      <p className="alert alert-info" role="status">
+        Esta conta não guarda amostras de voz, então nenhum locutor é ligado nem sugerido pela voz. Para mudar, vá
+        em <Link to="/config/conta">Conta › Privacidade e dados</Link>.
+      </p>
+    </section>
+  )
 }
 
 function AutoAssignForm({ assignment }: { assignment: VoiceAssignment }) {

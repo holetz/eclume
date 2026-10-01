@@ -23,6 +23,7 @@ import baseChatDone from '../../../contracts/fixtures/base-chat-done.json'
 import baseChatFailed from '../../../contracts/fixtures/base-chat-failed.json'
 import baseChatQueued from '../../../contracts/fixtures/base-chat-queued.json'
 import person from '../../../contracts/fixtures/person.json'
+import privacyInfo from '../../../contracts/fixtures/privacy-info.json'
 import recordingFieldValues from '../../../contracts/fixtures/recording-field-values.json'
 import recordingPage from '../../../contracts/fixtures/recording-page.json'
 import recordingQueued from '../../../contracts/fixtures/recording-queued.json'
@@ -90,6 +91,7 @@ export const fixtures = {
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),
   tokenCreated: fresh<Schemas['TokenCreated']>(tokenCreated),
   serverInfo: fresh<Schemas['ServerInfo']>(serverInfo),
+  privacyInfo: fresh<Schemas['PrivacyInfo']>(privacyInfo),
   pairingCodeCreated: fresh<Schemas['PairingCode']>(pairingCodeCreated),
   pairingCodeUsed: fresh<Schemas['PairingCode']>(pairingCodeUsed),
   uploadCreated: fresh<Schemas['Upload']>(uploadCreated),

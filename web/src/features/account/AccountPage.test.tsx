@@ -11,10 +11,16 @@ afterEach(() => vi.unstubAllGlobals())
 
 const NEW = 'uma-senha-nova-bem-longa'
 
+const base = {
+  'GET /api/v1/me': () => fixtures.me(),
+  'GET /api/v1/privacy': () => fixtures.privacyInfo(),
+  'GET /api/v1/me/voice-assignment': () => fixtures.voiceAssignment(),
+}
+
 describe('conta', () => {
   it('mostra a conta e troca a senha, conferindo a repetição', async () => {
     const http = mockFetch({
-      'GET /api/v1/me': () => fixtures.me(),
+      ...base,
       'POST /api/v1/me/password': () => empty(),
     })
     renderApp('/config/conta')
@@ -42,7 +48,7 @@ describe('conta', () => {
 
   it('troca a senha mantendo aparelhos e tokens quando a caixa é desmarcada', async () => {
     const http = mockFetch({
-      'GET /api/v1/me': () => fixtures.me(),
+      ...base,
       'POST /api/v1/me/password': () => empty(),
     })
     renderApp('/config/conta')
@@ -60,7 +66,7 @@ describe('conta', () => {
 
   it('mostra a senha atual errada no campo', async () => {
     mockFetch({
-      'GET /api/v1/me': () => fixtures.me(),
+      ...base,
       'POST /api/v1/me/password': () =>
         problem('validation_failed', 422, { errors: [{ field: 'current_password', message: 'senha atual incorreta' }] }),
     })
@@ -76,6 +82,7 @@ describe('conta', () => {
 
   it('exclui a conta só com a senha e a confirmação marcada, e volta à entrada com o aviso', async () => {
     const http = mockFetch({
+      ...base,
       'GET /api/v1/me': () => (http.requests('POST /api/v1/me/delete').length ? problem('unauthorized', 401) : fixtures.me()),
       'POST /api/v1/me/delete': async (request) => {
         const { password } = (await request.json()) as { password: string }
@@ -102,5 +109,57 @@ describe('conta', () => {
     expect(await screen.findByText('Sua conta foi excluída, com todos os dados dela.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
     expect(http.requests('POST /api/v1/me/delete')).toHaveLength(2)
+  })
+
+  it('mostra para onde vai cada dado e quanta voz a conta guarda', async () => {
+    mockFetch(base)
+    renderApp('/config/conta')
+    const section = await screen.findByRole('region', { name: 'Privacidade e dados' })
+    expect(await within(section).findByText('Resumos')).toBeInTheDocument()
+    const value = (term: string) => within(section).getByText(term).nextElementSibling
+    expect(value('Áudio e transcrição')).toHaveTextContent('Guardados neste servidor')
+    expect(value('Transcrição do áudio')).toHaveTextContent('Neste servidor')
+    expect(value('Resumos')).toHaveTextContent('Fora do servidor: Anthropic')
+    expect(value('Campos')).toHaveTextContent('Na rede local')
+    expect(value('Detecção do tipo de agenda')).toHaveTextContent('Desligado')
+    expect(within(section).getByText(/3 pessoas com impressão de voz, 7 amostras/)).toBeInTheDocument()
+    expect(within(section).getByRole('switch', { name: 'Guardar amostras de voz desta conta' })).toBeChecked()
+  })
+
+  it('deixar de guardar amostras pede confirmação antes de apagar', async () => {
+    const http = mockFetch({
+      ...base,
+      'PATCH /api/v1/me/voice-assignment': () => ({
+        ...fixtures.voiceAssignment(),
+        keep_samples: false,
+        sample_count: 0,
+        voiceprint_people: 0,
+      }),
+    })
+    renderApp('/config/conta')
+    const keep = await screen.findByRole('switch', { name: 'Guardar amostras de voz desta conta' })
+    await userEvent.click(keep)
+    const dialog = await screen.findByRole('dialog', { name: 'Deixar de guardar amostras de voz?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(http.requests('PATCH /api/v1/me/voice-assignment')).toHaveLength(0)
+    expect(keep).toBeChecked()
+
+    await userEvent.click(keep)
+    const again = await screen.findByRole('dialog', { name: 'Deixar de guardar amostras de voz?' })
+    await userEvent.click(within(again).getByRole('button', { name: 'Apagar e deixar de guardar' }))
+    await waitFor(() => expect(keep).not.toBeChecked())
+    expect(await http.requests('PATCH /api/v1/me/voice-assignment')[0].json()).toEqual({ keep_samples: false })
+    expect(screen.getByText(/0 pessoas com impressão de voz, 0 amostras/)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('sem identificação por voz na plataforma, mostra as contagens sem o interruptor', async () => {
+    mockFetch({
+      ...base,
+      'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), platform_enabled: false }),
+    })
+    renderApp('/config/conta')
+    expect(await screen.findByText(/pessoas com impressão de voz/)).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Guardar amostras de voz desta conta' })).not.toBeInTheDocument()
   })
 })

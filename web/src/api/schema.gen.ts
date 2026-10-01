@@ -238,7 +238,7 @@ export interface paths {
         head?: never;
         /**
          * Mudar a atribuição automática de locutores da conta
-         * @description Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão é 0,75.
+         * @description Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão é 0,75. Desde a 2.19.0, `keep_samples: false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta.
          */
         patch: operations["updateVoiceAssignment"];
         trace?: never;
@@ -330,6 +330,31 @@ export interface paths {
          *     aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
          */
         get: operations["getServerInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/privacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Para onde vai cada dado, conforme a configuração em vigor
+         * @description Desde a 2.19.0. Diz, para a transcrição e para cada finalidade de agente, se o dado é
+         *     processado neste servidor, na rede local ou fora dele, com o nome de quem processa quando
+         *     sai. Pública como `GET /server`, porque quem se cadastra precisa saber antes de aceitar o
+         *     aviso; nunca devolve endereço, modelo, chave nem o nome que o admin deu ao provider. A
+         *     configuração muda em runtime: o cliente não guarda a resposta por tempo indeterminado.
+         *     O áudio e a transcrição ficam sempre guardados neste servidor.
+         */
+        get: operations["getPrivacyInfo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2291,10 +2316,18 @@ export interface components {
             threshold: number;
             /** @description A identificação por voz está ligada na plataforma; desligada, nada é atribuído. */
             platform_enabled: boolean;
+            /** @description Desde a 2.19.0. A conta guarda amostras e impressões de voz (padrão `true`). Desligada, nada de voz da conta é calculado, comparado ou guardado; o desligamento apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta. */
+            keep_samples: boolean;
+            /** @description Desde a 2.19.0. Quantas amostras de voz a conta guarda. */
+            sample_count: number;
+            /** @description Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra). */
+            voiceprint_people: number;
         };
         VoiceAssignmentPatch: {
             enabled?: boolean;
             threshold?: number;
+            /** @description Desde a 2.19.0. `false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta; os arquivos de voz do armazenamento saem logo depois. `true` volta a guardar a partir das próximas transcrições, sem recuperar o que saiu. */
+            keep_samples?: boolean;
         };
         /** @description Cursor da próxima página, ou `null` na última. */
         NextCursor: string | null;
@@ -2344,6 +2377,26 @@ export interface components {
             version: string;
             /** @description Versão deste contrato que o servidor implementa. */
             contract_version: string;
+        };
+        /** @description Desde a 2.19.0. Para onde vai cada dado, conforme a configuração em vigor. */
+        PrivacyInfo: {
+            /** @description Um item por finalidade, na ordem de `DataPurpose`. */
+            destinations: components["schemas"]["DataDestination"][];
+        };
+        /**
+         * @description `transcription` é o áudio virando texto; as demais são as finalidades de agente (resumos, campos, chat e detecção do tipo de agenda).
+         * @enum {string}
+         */
+        DataPurpose: "transcription" | "summaries" | "fields" | "chat" | "agenda_detection";
+        DataDestination: {
+            purpose: components["schemas"]["DataPurpose"];
+            /**
+             * @description `server`: neste servidor; `local_network`: em outra máquina da rede local; `external`: fora do servidor e da rede; `disabled`: nenhum provider habilitado para a finalidade, e nada é enviado. Na dúvida, o servidor responde `external`.
+             * @enum {string}
+             */
+            location: "server" | "local_network" | "external" | "disabled";
+            /** @description Com `external`, quem processa: o fornecedor (por exemplo `Anthropic`) ou só o host do endereço (por exemplo `api.deepseek.com`); `null` nos demais. */
+            processor: string | null;
         };
         DeviceLogin: {
             /** Format: email */
@@ -4675,6 +4728,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerInfo"];
+                };
+            };
+        };
+    };
+    getPrivacyInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destinos em vigor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivacyInfo"];
                 };
             };
         };

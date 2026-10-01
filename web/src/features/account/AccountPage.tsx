@@ -3,10 +3,14 @@ import { useId, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
+import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
+import { locationLabel, PURPOSE_LABEL, usePrivacy } from '../../app/privacy'
 import { ME_KEY, useMe } from '../../app/session'
+import { Switch } from '../../shared/Switch'
+import { useUpdateVoiceAssignment, useVoiceAssignment, type VoiceAssignment } from '../people/queries'
 import styles from './Account.module.css'
 
 // A regra do cadastro: o servidor recusa senha mais curta (422 em `new_password`).
@@ -19,7 +23,7 @@ function fieldError(error: unknown, field: string): string | null {
   return errors.find((item) => item.field === field)?.message ?? null
 }
 
-/** Minhas configurações › Conta: os dados da conta, trocar a senha e excluir a conta. */
+/** Minhas configurações › Conta: os dados da conta, privacidade e dados, trocar a senha e excluir a conta. */
 export function AccountPage() {
   useHelpTopic('conta')
   const me = useMe()
@@ -37,6 +41,8 @@ export function AccountPage() {
           <dd className="mono">{user.email}</dd>
         </dl>
       )}
+
+      <PrivacySection />
 
       <PasswordSection />
 
@@ -59,6 +65,91 @@ export function AccountPage() {
 
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </section>
+  )
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/** Para onde vai cada dado, conforme a configuração deste servidor, e a voz que a conta guarda. */
+function PrivacySection() {
+  const privacy = usePrivacy()
+  const voice = useVoiceAssignment()
+
+  return (
+    <section className={`panel ${styles.form}`} aria-labelledby="privacidade">
+      <h4 id="privacidade">Privacidade e dados</h4>
+      <dl className={styles.identity}>
+        <div className={styles.row}>
+          <dt>Áudio e transcrição</dt>
+          <dd>Guardados neste servidor</dd>
+        </div>
+        {privacy.data?.destinations.map((destination) => (
+          <div key={destination.purpose} className={styles.row}>
+            <dt>{PURPOSE_LABEL[destination.purpose] ?? destination.purpose}</dt>
+            <dd>{locationLabel(destination)}</dd>
+          </div>
+        ))}
+      </dl>
+      {privacy.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(privacy.error)}
+        </p>
+      )}
+      <p className="text-muted">
+        Quem processa os resumos, os campos e o chat é o agente que a administração deste servidor escolheu. Fora do
+        servidor, o texto da transcrição vai para esse fornecedor; o áudio não sai.
+      </p>
+      {voice.data && <VoiceKeep assignment={voice.data} />}
+    </section>
+  )
+}
+
+function VoiceKeep({ assignment }: { assignment: VoiceAssignment }) {
+  const update = useUpdateVoiceAssignment()
+  const [confirming, setConfirming] = useState(false)
+  const kept = `${plural(assignment.voiceprint_people, 'pessoa', 'pessoas')} com impressão de voz, ${plural(
+    assignment.sample_count,
+    'amostra',
+    'amostras',
+  )}`
+
+  return (
+    <>
+      <p>Impressões de voz desta conta: {kept}.</p>
+      {assignment.platform_enabled && (
+        <Switch
+          checked={assignment.keep_samples}
+          disabled={update.isPending}
+          onChange={(keep) => (keep ? update.mutate({ keep_samples: true }) : setConfirming(true))}
+        >
+          Guardar amostras de voz desta conta
+        </Switch>
+      )}
+      {!assignment.keep_samples && (
+        <p className="text-muted">
+          Esta conta não guarda amostras de voz: nada de voz é calculado, comparado ou guardado nas próximas
+          gravações.
+        </p>
+      )}
+      {update.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(update.error)}
+        </p>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title="Deixar de guardar amostras de voz?"
+          confirmLabel="Apagar e deixar de guardar"
+          busy={update.isPending}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => update.mutate({ keep_samples: false }, { onSettled: () => setConfirming(false) })}
+        >
+          As {plural(assignment.sample_count, 'amostra', 'amostras')} e as impressões de voz desta conta são apagadas
+          agora, com as sugestões de pessoa pela voz. Os locutores já ligados às pessoas continuam ligados. Religar
+          depois não recupera o que saiu.
+        </ConfirmDialog>
+      )}
+    </>
   )
 }
 

@@ -56,4 +56,15 @@ describe('atribuição automática de locutores', () => {
     await screen.findByRole('table', { name: 'Pessoas' })
     expect(screen.queryByRole('region', { name: 'Atribuição automática de locutores' })).not.toBeInTheDocument()
   })
+
+  it('avisa, sem o interruptor, quando a conta não guarda amostras de voz', async () => {
+    mockFetch({
+      ...base,
+      'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), keep_samples: false }),
+    })
+    renderApp('/pessoas')
+    expect(await screen.findByText(/não guarda amostras de voz/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Conta › Privacidade e dados' })).toHaveAttribute('href', '/config/conta')
+    expect(screen.queryByRole('switch', { name: /automaticamente pela voz/ })).not.toBeInTheDocument()
+  })
 })
