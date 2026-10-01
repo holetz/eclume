@@ -156,19 +156,6 @@ class Queue:
         """Fecha o pool."""
         await self.pool.aclose()
 
-    async def enqueue_transcribe(
-        self, recording_id: UUID, revision: int, audio_key: str, options: dict[str, Any]
-    ) -> None:
-        """Enfileira `transcribe` na fila da GPU; o mesmo `_job_id` não duplica."""
-        await self.pool.enqueue_job(
-            "transcribe",
-            str(recording_id),
-            audio_key,
-            options,
-            _job_id=transcribe_job_id(recording_id, revision),
-            _queue_name=GPU_QUEUE,
-        )
-
     async def enqueue_summarize(self, summary_id: UUID) -> None:
         """Enfileira `summarize` no worker de agentes; um job por resumo."""
         await enqueue_summary(self.pool, summary_id)
