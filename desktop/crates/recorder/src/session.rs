@@ -327,11 +327,18 @@ impl ActiveRecording {
     }
 
     /// Para a gravação, fecha o arquivo e o entrega à fila como `pending` (com `details_pending`
-    /// quando a config pede título e tipo ao parar). Sempre fecha: um erro ou pânico da thread de
-    /// gravação vai para o log e a linha sai com `interrupted = 1`, a duração do que foi gravado e
-    /// o Ogg legível até a última página escrita. Só falha quando a fila falha ou o `.part` segue
-    /// preso depois das retentativas; aí a linha fica `recording` para [`recover_orphans`].
+    /// quando a config pede título e tipo ao parar): [`ActiveRecording::close`] seguido de
+    /// [`Closed::deliver`]. Sempre fecha: um erro ou pânico da thread de gravação vai para o log e
+    /// a linha sai com `interrupted = 1`, a duração do que foi gravado e o Ogg legível até a
+    /// última página escrita. Só falha quando a fila falha ou o `.part` segue preso depois das
+    /// retentativas; aí a linha fica `recording` para [`recover_orphans`].
     pub fn stop(self, queue: &Queue) -> Result<QueuedRecording> {
+        self.close()?.deliver(queue)
+    }
+
+    /// A parte lenta da parada, sem a fila: sinaliza, espera a thread de gravação (que solta os
+    /// dispositivos e faz o `fsync`) e renomeia o `.part`. Quem segura locks os solta antes dela.
+    pub fn close(self) -> Result<Closed> {
         self.stop.store(true, Ordering::Release);
         let interrupted = match self.worker.join() {
             Ok(Ok(_)) => false,
@@ -345,23 +352,56 @@ impl ActiveRecording {
                 true
             }
         };
-
         rename_retrying(&self.part_path, &self.final_path)?;
         let bytes = i64::try_from(std::fs::metadata(&self.final_path)?.len())?;
-        let duration_ms = self.progress.position_ms();
-        queue.finish(&self.id, &self.final_path, now_ms(), duration_ms, bytes)?;
+        Ok(Closed {
+            id: self.id,
+            final_path: self.final_path,
+            ask_details: self.ask_details,
+            duration_ms: self.progress.position_ms(),
+            bytes,
+            interrupted,
+        })
+    }
+}
+
+/// Uma gravação já fechada em disco, ainda em `recording` na fila até [`Closed::deliver`].
+#[derive(Debug)]
+pub struct Closed {
+    id: String,
+    final_path: PathBuf,
+    ask_details: bool,
+    duration_ms: i64,
+    bytes: i64,
+    interrupted: bool,
+}
+
+impl Closed {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Entrega a gravação fechada à fila: `pending`, com `interrupted` quando a gravação falhou e
+    /// `details_pending` quando a config pede título e tipo ao parar.
+    pub fn deliver(self, queue: &Queue) -> Result<QueuedRecording> {
+        let Self {
+            id,
+            final_path,
+            ask_details,
+            duration_ms,
+            bytes,
+            interrupted,
+        } = self;
+        queue.finish(&id, &final_path, now_ms(), duration_ms, bytes)?;
         if interrupted {
-            queue.mark_interrupted(&self.id)?;
+            queue.mark_interrupted(&id)?;
         }
-        if self.ask_details {
-            queue.set_details_pending(&self.id)?;
+        if ask_details {
+            queue.set_details_pending(&id)?;
         }
-        log::info!(
-            "gravação {} fechada: {duration_ms} ms, {bytes} bytes",
-            self.id
-        );
+        log::info!("gravação {id} fechada: {duration_ms} ms, {bytes} bytes");
         queue
-            .get(&self.id)?
+            .get(&id)?
             .context("a gravação sumiu da fila ao fechar")
     }
 }

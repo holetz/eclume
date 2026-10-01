@@ -96,11 +96,20 @@ pub fn spawn(app: AppHandle) {
         tokio::time::sleep(FIRST_CHECK).await;
         loop {
             if is_idle(&app) {
-                match check_and_install(&app).await {
+                // Cada checagem numa subtarefa: um pânico nela fica no log e o laço segue.
+                let check = {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move { check_and_install(&app).await })
+                };
+                match check.await {
                     // Linux e macOS: a versão nova vale depois de reabrir.
-                    Ok(true) if is_idle(&app) => app.restart(),
-                    Ok(_) => {}
-                    Err(err) => log::warn!("atualização: {err:#}"),
+                    Ok(Ok(true)) if is_idle(&app) => app.restart(),
+                    Ok(Ok(_)) => {}
+                    Ok(Err(err)) => log::warn!("atualização: {err:#}"),
+                    Err(tauri::Error::JoinError(err)) if err.is_panic() => {
+                        log::error!("pânico na checagem de atualização; a próxima segue no prazo");
+                    }
+                    Err(err) => log::warn!("checagem de atualização interrompida: {err}"),
                 }
             }
             tokio::time::sleep(INTERVAL).await;

@@ -332,6 +332,7 @@ pub fn spawn(app: &AppHandle) {
     let (tx, rx) = mpsc::channel::<bool>();
     app.manage(MirrorHandle(Mutex::new(tx)));
     let app = app.clone();
+    let mut backoff = crate::supervise::Backoff::default();
     let spawned = std::thread::Builder::new()
         .name("eclume-mirror".into())
         .spawn(move || loop {
@@ -343,9 +344,11 @@ pub fn spawn(app: &AppHandle) {
             // Vários cutucões seguidos valem um ciclo só.
             let forced = forced | rx.try_iter().any(|sweep| sweep);
             let due = now_ms() - LAST_SWEEP.load(Ordering::Relaxed) >= SWEEP_EVERY_MS;
-            if let Err(err) = tick(&app, forced || due) {
-                log::error!("falha na pasta sincronizada: {err:#}");
-            }
+            crate::supervise::pass(&mut backoff, "pasta sincronizada", || {
+                if let Err(err) = tick(&app, forced || due) {
+                    log::error!("falha na pasta sincronizada: {err:#}");
+                }
+            });
             crate::refresh_ui(&app);
         });
     if let Err(err) = spawned {
@@ -379,25 +382,23 @@ fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
         })?;
         return Ok(());
     };
-    state.update_mirror(|status| status.running = true)?;
+    let running = state.mirror_running();
     crate::refresh_ui(app);
     let result = Client::from_config(&uploader).and_then(|client| {
         let mut mirror = Mirror::open(&dir)?;
         sync_library(&client, &mut mirror, config.transcripts, sweep)
     });
+    drop(running);
     if result.is_ok() && sweep {
         LAST_SWEEP.store(now_ms(), Ordering::Relaxed);
     }
-    state.update_mirror(|status| {
-        status.running = false;
-        match &result {
-            Ok(report) => {
-                status.last_sync_ms = Some(now_ms());
-                status.last_error = status_note(report);
-                status.last = Some(*report);
-            }
-            Err(err) => status.last_error = Some(format!("{err:#}")),
+    state.update_mirror(|status| match &result {
+        Ok(report) => {
+            status.last_sync_ms = Some(now_ms());
+            status.last_error = status_note(report);
+            status.last = Some(*report);
         }
+        Err(err) => status.last_error = Some(format!("{err:#}")),
     })?;
     result.map(|_| ())
 }

@@ -322,8 +322,18 @@ struct SourceTest {
     running: Arc<AtomicBool>,
 }
 
+/// A gravação que está parando (join, desmontagem do driver e `fsync`, fora do lock).
+struct Stopping {
+    id: String,
+    started_at: i64,
+    kind: Kind,
+}
+
 struct Inner {
     active: Option<ActiveRecording>,
+    /// A gravação tirada de `active` e ainda fechando: o estado visível segue "Gravando",
+    /// iniciar ou parar de novo é [`Busy`] e a varredura de órfãs a conta como viva.
+    stopping: Option<Stopping>,
     /// Quem iniciou `active`.
     origin: Option<Origin>,
     /// Há um início em curso (dispositivos abrindo), fora do lock.
@@ -344,9 +354,10 @@ struct Inner {
     source_test: Option<SourceTest>,
     /// A atualização a notificar nesta abertura (sai uma vez).
     update_to_notify: Option<PendingUpdate>,
-    /// Há credencial guardada (PAT ou de dispositivo); lido na abertura e a cada mudança, para a
-    /// consulta de 1 s não ir ao chaveiro.
-    has_token: bool,
+    /// Onde está a credencial guardada (PAT ou de dispositivo), se houver; lido na abertura e
+    /// atualizado ao entrar, sair e salvar, para a consulta de 1 s e as Configurações não irem ao
+    /// chaveiro.
+    token_source: Option<PatSource>,
     /// O servidor escolhido na primeira execução, esperando a pessoa entrar.
     prepared: Option<PreparedServer>,
     /// A CA do servidor não é mais a fixada: o sync para e a janela volta à primeira execução.
@@ -354,6 +365,15 @@ struct Inner {
 }
 
 impl Inner {
+    /// Id, início e tipo da gravação em curso, também enquanto ela para.
+    fn current(&self) -> Option<(&str, i64, Kind)> {
+        match (&self.active, &self.stopping) {
+            (Some(active), _) => Some((active.id(), active.started_at(), active.kind())),
+            (None, Some(stopping)) => Some((&stopping.id, stopping.started_at, stopping.kind)),
+            (None, None) => None,
+        }
+    }
+
     fn recording(&self) -> Recording {
         match self.origin {
             None => Recording::Idle,
@@ -414,6 +434,43 @@ fn non_empty(value: Option<String>) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// Uma flag de "em curso" (`syncing`, `mirror.running`, `importing`): ligada ao criar a guarda e
+/// desligada no `Drop`, que pega o estado mesmo envenenado. Flag de "em curso" só se liga assim.
+pub struct FlagGuard<'a> {
+    state: &'a AppState,
+    set: fn(&mut Inner, bool),
+}
+
+impl<'a> FlagGuard<'a> {
+    fn raise(state: &'a AppState, set: fn(&mut Inner, bool)) -> Self {
+        set(
+            &mut recover_poison(state.inner.lock(), "estado do app"),
+            true,
+        );
+        Self { state, set }
+    }
+}
+
+impl Drop for FlagGuard<'_> {
+    fn drop(&mut self) {
+        (self.set)(
+            &mut recover_poison(self.state.inner.lock(), "estado do app"),
+            false,
+        );
+    }
+}
+
+/// Um lock envenenado por pânico segue utilizável: o envenenamento vai para o log.
+fn recover_poison<'a, T>(
+    lock: std::sync::LockResult<MutexGuard<'a, T>>,
+    what: &str,
+) -> MutexGuard<'a, T> {
+    lock.unwrap_or_else(|poisoned| {
+        log::error!("{what} envenenado por um pânico; seguindo com o último valor");
+        poisoned.into_inner()
+    })
+}
+
 impl AppState {
     /// Abre a fila em `data_dir`, recupera gravações interrompidas e lê a config e o PAT de
     /// `config_dir`. Um `.part` preso não impede a abertura: a linha fica para a varredura. A
@@ -465,7 +522,7 @@ impl AppState {
         config: Config,
         pat: PatStore,
     ) -> Self {
-        let has_token = pat.load().ok().flatten().is_some();
+        let token_source = pat.load().ok().flatten().map(|(_, source)| source);
         Self {
             queue: Arc::new(Mutex::new(queue)),
             recorder,
@@ -473,6 +530,7 @@ impl AppState {
             pat,
             inner: Mutex::new(Inner {
                 active: None,
+                stopping: None,
                 origin: None,
                 starting: false,
                 syncing: false,
@@ -486,7 +544,7 @@ impl AppState {
                 importing: None,
                 source_test: None,
                 update_to_notify: None,
-                has_token,
+                token_source,
                 prepared: None,
                 ca_changed: false,
             }),
@@ -497,16 +555,15 @@ impl AppState {
         self.config_path.parent().unwrap_or(Path::new("."))
     }
 
+    /// O estado do app. Envenenado por um pânico, segue acessível (com o aviso no log): `Inner` é
+    /// dado simples, sem invariante entre campos que um pânico deixe perigoso.
     fn inner(&self) -> Result<MutexGuard<'_, Inner>> {
-        self.inner
-            .lock()
-            .map_err(|_| anyhow!("estado do app envenenado por um pânico"))
+        Ok(recover_poison(self.inner.lock(), "estado do app"))
     }
 
+    /// A fila. Envenenada por um pânico, segue acessível: as escritas do SQLite são transacionais.
     fn lock_queue(&self) -> Result<MutexGuard<'_, Queue>> {
-        self.queue
-            .lock()
-            .map_err(|_| anyhow!("fila envenenada por um pânico"))
+        Ok(recover_poison(self.queue.lock(), "fila"))
     }
 
     /// A fila, para o laço de sync (`eclume_recorder::sync_pending`).
@@ -521,7 +578,7 @@ impl AppState {
 
     pub fn status(&self) -> Result<AppStatus> {
         let inner = self.inner()?;
-        Ok(if inner.active.is_some() {
+        Ok(if inner.current().is_some() {
             AppStatus::Recording
         } else if inner.syncing {
             AppStatus::Syncing
@@ -533,17 +590,18 @@ impl AppState {
     pub fn view(&self) -> Result<StatusView> {
         let status = self.status()?;
         let inner = self.inner()?;
-        let origin = inner.active.as_ref().and(inner.origin);
+        let current = inner.current();
+        let origin = current.and(inner.origin);
         let queue = self.lock_queue()?;
-        let markers = match &inner.active {
-            Some(active) => queue.markers(active.id())?,
+        let markers = match current {
+            Some((id, ..)) => queue.markers(id)?,
             None => Vec::new(),
         };
         Ok(StatusView {
             status,
-            recording_id: inner.active.as_ref().map(|a| a.id().to_string()),
-            recording_started_at: inner.active.as_ref().map(ActiveRecording::started_at),
-            recording_kind: inner.active.as_ref().map(ActiveRecording::kind),
+            recording_id: current.map(|(id, ..)| id.to_string()),
+            recording_started_at: current.map(|(_, started_at, _)| started_at),
+            recording_kind: current.map(|(.., kind)| kind),
             note_silence_s: inner.config.note_silence_s,
             theme: inner.config.theme.clone(),
             recording_auto: origin.is_some_and(|o| o.auto),
@@ -650,7 +708,7 @@ impl AppState {
     ) -> Result<()> {
         {
             let mut inner = self.inner()?;
-            if inner.active.is_some() || inner.starting {
+            if inner.active.is_some() || inner.stopping.is_some() || inner.starting {
                 return Err(Busy.into());
             }
             inner.starting = true;
@@ -680,15 +738,32 @@ impl AppState {
         Ok(())
     }
 
-    /// Para a gravação em andamento e a entrega à fila.
+    /// Para a gravação em andamento e a entrega à fila, em três tempos: sob o estado, tira
+    /// `active` e marca `stopping`; sem lock nenhum, fecha (join da thread, desmontagem do driver,
+    /// `fsync`, `rename`); com a fila, entrega. A janela e a bandeja seguem respondendo enquanto
+    /// isso; parar de novo no meio é [`Busy`].
     pub fn stop_recording(&self) -> Result<QueuedRecording> {
+        let active = {
+            let mut inner = self.inner()?;
+            let Some(active) = inner.active.take() else {
+                if inner.stopping.is_some() {
+                    return Err(Busy.into());
+                }
+                bail!("nenhuma gravação em andamento");
+            };
+            inner.stopping = Some(Stopping {
+                id: active.id().to_string(),
+                started_at: active.started_at(),
+                kind: active.kind(),
+            });
+            active
+        };
+        let result = active
+            .close()
+            .and_then(|closed| closed.deliver(&*self.lock_queue()?));
         let mut inner = self.inner()?;
-        let active = inner
-            .active
-            .take()
-            .ok_or_else(|| anyhow!("nenhuma gravação em andamento"))?;
+        inner.stopping = None;
         inner.origin = None;
-        let result = active.stop(&*self.lock_queue()?);
         if let Err(err) = &result {
             inner.notice = Some(format!("falha ao fechar a gravação: {err:#}"));
         }
@@ -697,7 +772,7 @@ impl AppState {
 
     /// Inicia (manual) ou para, conforme o estado.
     pub fn toggle_recording(&self, open: impl FnOnce() -> Result<OpenedSources>) -> Result<()> {
-        if self.inner()?.active.is_some() {
+        if self.inner()?.current().is_some() {
             self.stop_recording().map(|_| ())
         } else {
             self.start_recording(open)
@@ -748,7 +823,7 @@ impl AppState {
     /// gravação começa no meio dela (ordem estado → fila).
     pub fn sweep_orphans(&self) -> Result<usize> {
         let inner = self.inner()?;
-        let live: Vec<&str> = inner.active.iter().map(ActiveRecording::id).collect();
+        let live: Vec<&str> = inner.current().map(|(id, ..)| id).into_iter().collect();
         let recovered = session::recover_orphans(&*self.lock_queue()?, &live)?;
         Ok(recovered.len())
     }
@@ -768,10 +843,23 @@ impl AppState {
         Ok(inner.auto.answer(record, recording))
     }
 
-    /// Liga ou desliga o estado de sincronização.
-    pub fn set_syncing(&self, syncing: bool) -> Result<()> {
-        self.inner()?.syncing = syncing;
-        Ok(())
+    /// Liga "Sincronizando" até a guarda cair, mesmo que o trabalho entre em pânico.
+    pub fn syncing(&self) -> FlagGuard<'_> {
+        FlagGuard::raise(self, |inner, on| inner.syncing = on)
+    }
+
+    /// Liga "pasta sincronizada em curso" até a guarda cair, mesmo que o ciclo entre em pânico.
+    pub fn mirror_running(&self) -> FlagGuard<'_> {
+        FlagGuard::raise(self, |inner, on| inner.mirror.running = on)
+    }
+
+    /// Encerra a importação reservada por [`AppState::begin_import`] quando a guarda cair, mesmo
+    /// que a conversão entre em pânico.
+    pub fn import_guard(&self) -> FlagGuard<'_> {
+        FlagGuard {
+            state: self,
+            set: |inner, _| inner.importing = None,
+        }
     }
 
     /// O que impede o sync, ou o último erro dele (`None` quando tudo andou).
@@ -950,12 +1038,6 @@ impl AppState {
         Ok(())
     }
 
-    pub fn end_import(&self) {
-        if let Ok(mut inner) = self.inner() {
-            inner.importing = None;
-        }
-    }
-
     /// Converte `src` para `gravacoes/` (ou o copia) e o põe na fila, já pendente, com
     /// `source: upload`. `recorded_at` é o início confirmado ou digitado na janela.
     pub fn import_file(
@@ -1037,8 +1119,8 @@ impl AppState {
     }
 
     pub fn settings(&self) -> Result<SettingsView> {
-        let pat_source = self.pat.load()?.map(|(_, source)| source);
         let inner = self.inner()?;
+        let pat_source = inner.token_source;
         let config = &inner.config;
         Ok(SettingsView {
             web_url: config.web_url.clone(),
@@ -1145,31 +1227,36 @@ impl AppState {
             bail!("Saia da conta antes de trocar o servidor ou a CA");
         }
 
-        if input.clear_pat {
+        let saved = if input.clear_pat {
             self.pat.clear()?;
             next.account = None;
+            Some(None)
         } else if let Some(pat) = non_empty(input.pat) {
-            self.save_secret(&pat)?;
-        }
+            Some(Some(self.save_secret(&pat)?))
+        } else {
+            None
+        };
         next.save(&self.config_path)?;
-        let has_token = self.pat.load()?.is_some();
         let mut inner = self.inner()?;
-        inner.has_token = has_token;
+        if let Some(source) = saved {
+            inner.token_source = source;
+        }
         let action = inner.auto.on_config_change(&next.detection);
         inner.config = next;
         Ok(action)
     }
 
     /// Guarda a credencial no chaveiro; sem chaveiro, avisa que ela foi para o arquivo.
-    fn save_secret(&self, secret: &str) -> Result<()> {
-        if self.pat.save(secret)? == PatSource::File {
+    fn save_secret(&self, secret: &str) -> Result<PatSource> {
+        let source = self.pat.save(secret)?;
+        if source == PatSource::File {
             self.inner()?.notice = Some(
                 "chaveiro do sistema indisponível: a credencial ficou num arquivo só seu, no \
                  diretório de configuração"
                     .into(),
             );
         }
-        Ok(())
+        Ok(source)
     }
 
     /// Fixa a CA do servidor escolhido e o guarda para a pessoa entrar.
@@ -1208,7 +1295,7 @@ impl AppState {
     }
 
     fn apply_sign_in(&self, signed: SignedIn) -> Result<()> {
-        self.save_secret(&signed.secret)?;
+        let source = self.save_secret(&signed.secret)?;
         let mut next = self.inner()?.config.clone();
         next.web_url = signed.web_url;
         next.api_url = None;
@@ -1217,7 +1304,7 @@ impl AppState {
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
-        inner.has_token = true;
+        inner.token_source = Some(source);
         inner.prepared = None;
         inner.ca_changed = false;
         inner.sync_notice = None;
@@ -1232,7 +1319,7 @@ impl AppState {
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
-        inner.has_token = false;
+        inner.token_source = None;
         Ok(())
     }
 
@@ -1287,7 +1374,7 @@ fn connection(inner: &Inner) -> Connection {
     if inner.ca_changed {
         Connection::FirstRun
     } else {
-        inner.config.connection(inner.has_token)
+        inner.config.connection(inner.token_source.is_some())
     }
 }
 
@@ -1340,6 +1427,84 @@ mod tests {
             ))],
             missing: vec!["áudio do sistema: teste".into()],
         })
+    }
+
+    /// Uma fonte cujo descarte leva 2 s, como um driver lento ao soltar o dispositivo.
+    struct SlowDrop(SineSource);
+
+    impl eclume_recorder::AudioSource for SlowDrop {
+        fn sample_rate(&self) -> u32 {
+            self.0.sample_rate()
+        }
+
+        fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+            self.0.read(timeout)
+        }
+    }
+
+    impl Drop for SlowDrop {
+        fn drop(&mut self) {
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+
+    #[test]
+    fn estado_para_fora_do_lock() {
+        let (state, dir) = state("parada-lenta");
+        let state = Arc::new(state);
+        state
+            .start_recording(|| {
+                Ok(OpenedSources {
+                    sources: vec![Box::new(SlowDrop(SineSource::new(
+                        48_000,
+                        440.0,
+                        0.3,
+                        Duration::from_secs(30),
+                    )))],
+                    missing: Vec::new(),
+                })
+            })
+            .unwrap();
+        let stopping = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || state.stop_recording())
+        };
+        std::thread::sleep(Duration::from_millis(300));
+
+        let asked = std::time::Instant::now();
+        assert_eq!(state.status().unwrap(), AppStatus::Recording);
+        assert!(state.view().unwrap().recording_id.is_some());
+        assert!(asked.elapsed() < Duration::from_millis(100));
+        // Parar de novo, ou iniciar, no meio da parada é "ocupado".
+        assert!(state.stop_recording().unwrap_err().is::<Busy>());
+        assert!(state
+            .start_recording(|| sine_sources(1))
+            .unwrap_err()
+            .is::<Busy>());
+
+        let recording = stopping.join().unwrap().unwrap();
+        assert_eq!(recording.status, Status::Pending);
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_segue_acessivel_depois_de_um_panico() {
+        let (state, dir) = state("envenenado");
+        let state = Arc::new(state);
+        {
+            let state = Arc::clone(&state);
+            let _ = std::thread::spawn(move || {
+                let _inner = state.inner.lock().unwrap();
+                let _queue = state.queue.lock().unwrap();
+                panic!("pânico com os locks presos");
+            })
+            .join();
+        }
+        assert!(state.inner.is_poisoned());
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        assert!(state.view().is_ok());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn settings_input(state: &AppState) -> SettingsInput {
@@ -1829,7 +1994,7 @@ mod tests {
                 |f| steps.push(f),
             )
             .unwrap();
-        state.end_import();
+        drop(state.import_guard());
         assert_eq!(steps.last(), Some(&1.0));
         assert_eq!(recording.status, Status::Pending);
         assert_eq!(recording.source, eclume_recorder::Source::Upload);
@@ -1882,7 +2047,7 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.is::<eclume_import::Cancelled>());
-        state.end_import();
+        drop(state.import_guard());
         assert!(state.begin_import().is_ok());
         assert!(state.recordings(10).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
@@ -2157,10 +2322,38 @@ mod tests {
     }
 
     #[test]
+    fn guarda_solta_cada_flag_mesmo_com_panico() {
+        let (state, _dir) = state("guardas");
+        let panics = |work: &dyn Fn()| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).unwrap_err();
+        };
+        panics(&|| {
+            let _syncing = state.syncing();
+            assert_eq!(state.status().unwrap(), AppStatus::Syncing);
+            panic!("sync quebrado");
+        });
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        panics(&|| {
+            let _running = state.mirror_running();
+            assert!(state.mirror_status().unwrap().running);
+            panic!("pasta quebrada");
+        });
+        assert!(!state.mirror_status().unwrap().running);
+        state.begin_import().unwrap();
+        panics(&|| {
+            let _importing = state.import_guard();
+            panic!("decodificador quebrado");
+        });
+        assert!(state.begin_import().is_ok());
+    }
+
+    #[test]
     fn estado_sincronizando_e_aviso_do_sync() {
         let (state, _dir) = state("sync");
-        state.set_syncing(true).unwrap();
+        let syncing = state.syncing();
         assert_eq!(state.status().unwrap(), AppStatus::Syncing);
+        drop(syncing);
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
         assert_eq!(AppStatus::Syncing.label(), "Sincronizando");
         state.set_sync_notice(Some("sem PAT".into())).unwrap();
         assert_eq!(

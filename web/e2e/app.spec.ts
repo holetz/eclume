@@ -268,6 +268,52 @@ test('rascunho do resumo protegido: sair pede confirmação e recarregar reencon
   await expect(editor.getByRole('textbox')).toHaveValue('# Rascunho que não se perde')
 })
 
+test('transcrição longa: o ?t= leva à fala, a página não se mexe lendo o resumo e a fala distante está no DOM', async ({
+  page,
+}) => {
+  const COUNT = 3000
+  const STEP_MS = 4000
+  // O mock devolve a transcrição curta do exemplo: aqui ela vira 3.000 falas de 4 s.
+  await page.route('**/api/v1/transcripts/*', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const base = await response.json()
+    const segments = Array.from({ length: COUNT }, (_, index) => ({
+      ...base.segments[index % base.segments.length],
+      id: `fala-${index}`,
+      start_ms: index * STEP_MS,
+      end_ms: index * STEP_MS + STEP_MS - 1,
+      text: `Fala número ${index} da reunião longa.`,
+    }))
+    await route.fulfill({ response, json: { ...base, segments } })
+  })
+  await login(page)
+  await expect(page.getByRole('heading', { name: 'Biblioteca' })).toBeVisible()
+  await page.goto(`/gravacoes/01928f3a-1c00-7a00-8000-000000000401?t=${1500 * STEP_MS + 100}`)
+
+  const falas = page.getByRole('list', { name: 'Falas' })
+  await expect(falas.getByRole('listitem')).toHaveCount(COUNT)
+  await expect(falas.getByText('Fala número 1500 da reunião longa.')).toBeInViewport()
+  // A fala distante não é pintada, mas está no DOM (o Ctrl+F do navegador a acha).
+  await expect(falas.getByText('Fala número 2990 da reunião longa.')).toHaveCount(1)
+
+  // Lendo o resumo, os ticks do áudio não rolam a página: o resumo fica onde está na janela (o
+  // scrollY pode andar alguns pixels pela ancoragem de rolagem do navegador, quando falas acima ganham
+  // a altura real no lugar da intrínseca).
+  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
+  await summary.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  const top = () => summary.evaluate((el) => Math.round(el.getBoundingClientRect().top))
+  const before = await top()
+  for (const index of [1501, 1502, 1503]) {
+    await page.getByLabel('Áudio da gravação').evaluate((audio: HTMLAudioElement, ms) => {
+      Object.defineProperty(audio, 'currentTime', { configurable: true, get: () => ms / 1000, set: () => {} })
+      audio.dispatchEvent(new Event('timeupdate'))
+    }, index * STEP_MS + 100)
+    await expect(falas.getByRole('listitem').nth(index).locator('.segment')).toHaveAttribute('aria-current', 'true')
+  }
+  expect(Math.abs((await top()) - before)).toBeLessThanOrEqual(1)
+})
+
 test('busca com ficha de campo, gravação no segundo, pessoas, coleções e token contra o mock', async ({ page }) => {
   await login(page)
   const nav = page.getByRole('navigation', { name: 'Principal' })
