@@ -3,6 +3,9 @@ import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import {
   DEFAULT_WORK_HOURS,
+  enableNotifyOutcomes,
+  notifyOutcomesOn,
+  notifyPermission,
   readDensity,
   readLibraryOpening,
   readMotion,
@@ -11,6 +14,7 @@ import {
   saveDensity,
   saveLibraryOpening,
   saveMotion,
+  saveNotifyOutcomes,
   saveWorkHours,
   type DensityPreference,
   type LibraryOpening,
@@ -18,6 +22,7 @@ import {
   type WorkHours,
 } from '../../app/preferences'
 import { applyThemePreference, readThemePreference, type ThemePreference } from '../../app/theme'
+import { Switch } from '../../shared/Switch'
 import styles from './Environment.module.css'
 
 interface Option<T extends string> {
@@ -113,6 +118,8 @@ export function EnvironmentPage() {
   const [motion, setMotion] = useState(readMotion)
   const [opening, setOpening] = useState(readLibraryOpening)
   const [work, setWork] = useState(readWorkHours)
+  const [notify, setNotify] = useState(notifyOutcomesOn)
+  const [blocked, setBlocked] = useState(() => notifyPermission() === 'denied')
   const [notice, setNotice] = useState<string | null>(null)
 
   function changeWork(next: WorkHours) {
@@ -129,8 +136,23 @@ export function EnvironmentPage() {
     setMotion(readMotion())
     setOpening(readLibraryOpening())
     setWork(readWorkHours())
+    setNotify(false)
     setNotice('Tudo voltou ao padrão.')
   }
+
+  async function changeNotify(on: boolean) {
+    setNotice(null)
+    if (!on) {
+      saveNotifyOutcomes(false)
+      setNotify(false)
+      return
+    }
+    const permission = await enableNotifyOutcomes()
+    setNotify(permission === 'granted')
+    setBlocked(permission === 'denied')
+  }
+
+  const unsupported = notifyPermission() === 'unsupported'
 
   return (
     <section className={styles.page}>
@@ -232,6 +254,20 @@ export function EnvironmentPage() {
               setNotice(null)
             }}
           />
+        </section>
+
+        <section className="panel" aria-labelledby={`${id}-notices`}>
+          <h4 id={`${id}-notices`}>Avisos</h4>
+          <Switch checked={notify} disabled={unsupported} onChange={(on) => void changeNotify(on)}>
+            Avisar no navegador quando uma gravação terminar de processar
+          </Switch>
+          <span className="field-hint">
+            {unsupported
+              ? 'Este navegador não mostra avisos do sistema para este endereço.'
+              : blocked
+                ? 'O navegador bloqueou os avisos deste site: libere nas permissões do site e ligue de novo.'
+                : 'Resumo pronto, pronta sem resumo ou com falha, com a aba do eclume aberta. Com a aba em segundo plano, o título dela também conta os avisos.'}
+          </span>
         </section>
 
         <section className="panel" aria-labelledby={`${id}-keys`}>

@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router'
 import { api, type Schemas } from '../api/client'
 import { unwrap } from '../api/problem'
 import { motivo } from '../lib/vocabulario'
-import { readNotifyOutcomes } from './preferences'
+import { notifyOutcomesOn } from './preferences'
 import { setTitleCount } from './usePageTitle'
 
 type Recording = Schemas['Recording']
@@ -118,11 +118,6 @@ export function outcomeText({ outcome, title, reason }: Ended): { title: string;
   }
 }
 
-/** O navegador avisa: a pessoa ligou em Ambiente e a permissão continua dada. */
-export function canNotify(): boolean {
-  return readNotifyOutcomes() && typeof Notification !== 'undefined' && Notification.permission === 'granted'
-}
-
 async function listSince(since: string): Promise<Recording[]> {
   const items: Recording[] = []
   let cursor: string | null = null
@@ -187,7 +182,7 @@ export function useProcessingWatch(): void {
         unseen += fresh.length
         setTitleCount(unseen)
       }
-      if (canNotify()) fresh.forEach(notify)
+      if (notifyOutcomesOn()) fresh.forEach(notify)
     }
 
     const timer = window.setInterval(() => void tick(), WATCH_MS)

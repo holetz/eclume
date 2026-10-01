@@ -136,8 +136,20 @@ describe('modal Importar', () => {
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(before))
     expect(vi.mocked(runUpload).mock.calls[1][0].recordedAtSource).toBe('user')
 
+    // A linha enviada oferece ligar o aviso do navegador; a permissão só é pedida no clique.
+    const requestPermission = vi.fn(async () => 'granted' as const)
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission })
     await user.click(screen.getByRole('button', { name: 'Importar arquivos' }))
     const reopened = await screen.findByRole('dialog', { name: 'Importar arquivos' })
+    expect(requestPermission).not.toHaveBeenCalled()
+    const offers = within(reopened).getAllByRole('button', { name: 'Avisar quando ficar pronta' })
+    expect(offers).toHaveLength(1)
+    await user.click(offers[0])
+    expect(requestPermission).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem('eclume-aviso-navegador')).toBe('on')
+    await waitFor(() =>
+      expect(within(reopened).queryByRole('button', { name: 'Avisar quando ficar pronta' })).not.toBeInTheDocument(),
+    )
     expect(within(reopened).getAllByRole('link', { name: 'Abrir' }).map((link) => link.getAttribute('href'))).toEqual([
       '/gravacoes/01928f3a-1c00-7a00-8000-0000000004a1',
       '/gravacoes/01928f3a-1c00-7a00-8000-000000000401',

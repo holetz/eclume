@@ -34,6 +34,29 @@ export function saveNotifyOutcomes(on: boolean): void {
   writeStored(STORAGE_KEYS.notifyOutcomes, on ? 'on' : null)
 }
 
+export type NotifyPermission = NotificationPermission | 'unsupported'
+
+/** A permissão de notificação deste site; `unsupported` sem a API (navegador antigo, http). */
+export function notifyPermission(): NotifyPermission {
+  return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+}
+
+/** O aviso está valendo: ligado aqui e com a permissão dada. */
+export function notifyOutcomesOn(): boolean {
+  return readNotifyOutcomes() && notifyPermission() === 'granted'
+}
+
+/**
+ * Liga o aviso do navegador: pede a permissão (chamar só num gesto da pessoa, nunca ao carregar) e
+ * grava a escolha se ela for dada. Devolve a permissão resultante.
+ */
+export async function enableNotifyOutcomes(): Promise<NotifyPermission> {
+  if (notifyPermission() === 'unsupported') return 'unsupported'
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+  saveNotifyOutcomes(permission === 'granted')
+  return permission
+}
+
 export function readLibraryOpening(): LibraryOpening {
   const value = readStored(STORAGE_KEYS.libraryOpening)
   return OPENINGS.find((opening) => opening === value) ?? 'ultima'
@@ -68,9 +91,18 @@ export function saveWorkHours({ start, end }: WorkHours): void {
   writeStored(STORAGE_KEYS.workHours, isDefault ? null : `${start}-${end}`)
 }
 
-/** Volta densidade, movimento, expediente e abertura da biblioteca ao padrão (o tema é do theme.ts). */
+/**
+ * Volta densidade, movimento, expediente, abertura da biblioteca e o aviso do navegador ao padrão (o
+ * tema é do theme.ts).
+ */
 export function resetEnvironment(): void {
-  for (const key of [STORAGE_KEYS.density, STORAGE_KEYS.motion, STORAGE_KEYS.workHours, STORAGE_KEYS.libraryOpening]) {
+  for (const key of [
+    STORAGE_KEYS.density,
+    STORAGE_KEYS.motion,
+    STORAGE_KEYS.workHours,
+    STORAGE_KEYS.libraryOpening,
+    STORAGE_KEYS.notifyOutcomes,
+  ]) {
     writeStored(key, null)
   }
   applyEnvironment()

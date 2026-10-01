@@ -8,6 +8,7 @@ import styles from './ImportDialog.module.css'
 import { useImportContext } from './importContext'
 import type { ImportDate, ImportItem } from './useImportQueue'
 import { formatBytes } from '../../shared/format'
+import { enableNotifyOutcomes, notifyOutcomesOn, notifyPermission, type NotifyPermission } from '../../app/preferences'
 import { ESTADOS_APARELHO } from '../../lib/vocabulario.js'
 
 const SOURCE_LABELS: Record<ImportDate['source'], string> = {
@@ -36,6 +37,30 @@ const ANNOUNCED: Partial<Record<ImportItem['state']['kind'], string>> = {
   canceled: 'cancelado',
 }
 
+/**
+ * Na linha enviada, a oferta de ligar o aviso do navegador (um gesto, nunca ao carregar). Some com o
+ * aviso já ligado ou sem a API; negada, diz onde liberar.
+ */
+function NotifyOffer() {
+  const [permission, setPermission] = useState<NotifyPermission | 'on'>(() =>
+    notifyOutcomesOn() ? 'on' : notifyPermission(),
+  )
+  if (permission === 'on' || permission === 'unsupported') return null
+  if (permission === 'denied') return <> · O navegador bloqueou os avisos deste site</>
+  return (
+    <>
+      {' · '}
+      <button
+        type="button"
+        className={styles.linkButton}
+        onClick={() => void enableNotifyOutcomes().then((next) => setPermission(next === 'granted' ? 'on' : next))}
+      >
+        Avisar quando ficar pronta
+      </button>
+    </>
+  )
+}
+
 function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
   const { state } = item
   switch (state.kind) {
@@ -58,6 +83,7 @@ function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
         <>
           {state.deduplicated ? 'Já estava na biblioteca' : 'Enviado'} ·{' '}
           <Link to={`/gravacoes/${state.recordingId}`}>Abrir</Link>
+          {!state.deduplicated && <NotifyOffer />}
         </>
       )
     case 'error':
