@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98
 maintainer: holetz
 ---
 
@@ -40,6 +40,7 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_LOGIN_FAILURES_PER_PAIR`, `ECLUME_LOGIN_FAILURES_PER_ACCOUNT` | `10`, `100` | falhas de login por par (conta, IP) em 15 min e da conta em 1 h ([Autenticação](#autenticação)) |
 | `ECLUME_UPLOAD_PART_SIZE` | `8388608` | tamanho da parte do upload e teto do corpo do `PUT` de parte; acima de 9 MiB, subir também o `request_body` do Caddy de borda |
 | `ECLUME_SIGNUP_OPEN` | `true` | cadastro aberto; `false` fecha o `POST /auth/signup` (403 `signup_closed`) sem deploy de código |
+| `ECLUME_SIGNUPS_PER_IP_PER_DAY` | `5` | cadastros criados por IP em 24 h (janela móvel); o seguinte recebe 429 `rate_limited` |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
 
@@ -251,6 +252,11 @@ nas duas.
   marcados para contas novas e os campos embutidos, título e tags (`accounts.create_user`, que
   chama `eclume_seed_user_defaults`), e a sessão aberta,
   com os cookies do login. `GET /auth/signup` diz se o cadastro está aberto e devolve o aviso.
+- **Tetos:** além das tentativas por minuto e por IP (`attempts`), no máximo
+  `ECLUME_SIGNUPS_PER_IP_PER_DAY` (padrão 5) cadastros **criados** por IP numa janela móvel de
+  24 h (`ratelimit.check_signups`, zset `eclume:rl:signup_day:{ip}`); o seguinte recebe 429
+  `rate_limited` com `Retry-After` até o mais antigo sair da janela. O cadastro recusado (422, 409,
+  403) não conta (holetz/eclume#98).
 - **Erros:** cadastro fechado (`ECLUME_SIGNUP_OPEN=false`) → 403 `signup_closed`; e-mail já
   cadastrado (sem distinção de caixa, inclusive na corrida, pelo índice único) → 409 `email_taken`;
   aviso ausente ou fora da versão em vigor, senha curta, e-mail ou nome inválidos → 422.
@@ -278,12 +284,23 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   padrão: quem troca a senha por suspeita de vazamento espera que o acesso vazado acabe (reverte a
   decisão da #86 de manter os PATs).
 - **Excluir a conta:** `POST /me/delete` com `password` (`accounts.confirm_password`, depois
-  `accounts.delete_user`). Senha errada →
+  `accounts.purge_user`, o mesmo que o `DELETE /admin/users/{id}` usa sem a senha). Senha errada →
   422 em `password`, e nada muda. Apaga o usuário, e as FKs levam em cascata tudo o que é dele;
   depois do commit, a rota apaga os objetos de cada gravação no armazenamento
   (`storage.delete_recording`) e responde 204 com os cookies da sessão apagados, como o logout.
 
 ## Upload e áudio
+
+- **Cotas por conta** (holetz/eclume#98, `quotas.py`): a cota efetiva é `users.quotas` (só os
+  campos sobrepostos pelo admin) sobre `platform_settings.quotas`, campo a campo; `null` é sem
+  limite. O `POST /uploads` que abriria um upload **novo** confere, antes de criar o multipart, o
+  tamanho do arquivo (`file_bytes`), os uploads abertos (`open_uploads`, `in_progress` não
+  vencidos, contando o novo) e o armazenamento (`storage_bytes` = `recordings.size_bytes` + os
+  uploads abertos + o novo; artefatos da transcrição ficam de fora); estourado, **403**
+  `quota_exceeded` com `quota`, `limit` e `used`. Deduplicar e retomar não passam pela cota. Os
+  minutos de áudio (`gpu_minutes_24h`) nunca recusam: a soma de `recordings.duration_ms` dos jobs
+  despachados nas últimas 24 h decide o [despacho](../api/jobs-transcricao.md#filas), e a
+  gravação espera retida. `GET /me/usage` devolve `{usage, quotas}` a qualquer credencial.
 
 - **A URL de parte é o `PUT /api/v1/uploads/{id}/parts/{n}` da própria API**, assinada como um
   pré-assinado do S3 (`?expires=&sig=`, HMAC-SHA256 de `ECLUME_SECRET_KEY`, 1 h, nunca além do
