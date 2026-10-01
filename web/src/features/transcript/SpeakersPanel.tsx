@@ -5,7 +5,7 @@ import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 
 import { PEOPLE_KEY } from '../people/queries'
-import { PersonCombobox } from './PersonCombobox'
+import { PersonCombobox } from '../people/PersonCombobox'
 import { transcriptKey, updateTranscriptCache } from './queries'
 import { speakerColorIndex, speakerName, type Speaker, type Transcript } from './segments'
 import styles from './SpeakersPanel.module.css'

@@ -12,7 +12,7 @@ import { useUserFields } from '../library/queries'
 import { recordingAt, usePeopleOptions } from '../people/queries'
 import { useTags } from '../tags/queries'
 import { hms } from '../transcript/markers'
-import { PersonCombobox } from '../transcript/PersonCombobox'
+import { PersonCombobox } from '../people/PersonCombobox'
 import { speakerColorIndex, speakerName } from '../transcript/segments'
 import { FilterChip } from './FilterChip'
 import {

@@ -140,7 +140,7 @@ describe('coleções', () => {
       within(dialog).getByRole('button', { name: 'Usar o exemplo: Reuniões em que participa alguém da empresa Agro Sul.' }),
     )
     expect(within(dialog).getByLabelText('Quando incluir')).toHaveValue('Reuniões em que participa alguém da empresa Agro Sul.')
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Incluir automaticamente depois da transcrição' }))
+    await userEvent.click(within(dialog).getByRole('switch', { name: 'Incluir automaticamente depois da transcrição' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Criar coleção' }))
     await waitFor(() => expect(http.requests('POST /api/v1/collections')).toHaveLength(1))
     expect(await http.requests('POST /api/v1/collections')[0].json()).toEqual({
