@@ -41,6 +41,7 @@ const APP_ROUTES = [
   /^\/app-(desktop|movel)$/,
   /^\/ajuda$/,
   /^\/downloads\/[\w.-]+$/,
+  /^\/referencia-api\.html$/,
 ]
 
 const links = (markdown: string) => [...markdown.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1])

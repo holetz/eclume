@@ -44,7 +44,8 @@ export function TokensPage() {
         }
       />
       <p className={`text-muted ${styles.lead}`}>
-        Um token dá acesso à API em seu nome, limitado aos escopos escolhidos. Trate-o como uma senha. Para
+        Um token dá acesso à API em seu nome, limitado aos escopos escolhidos. Trate-o como uma senha. As rotas,
+        os escopos de cada uma e os formatos estão na <a href="/referencia-api.html">Referência da API</a>. Para
         assistentes de IA, use <Link to="/config/mcp">Conexão MCP</Link>. O app desktop e o celular entram com
         e-mail e senha ou com um código.
       </p>
