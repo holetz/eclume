@@ -5,9 +5,25 @@
 # keystore impede atualizar os apps já instalados: o Android só instala por cima um APK assinado
 # pela mesma chave. Contrato: docs/standards/code/mobile-distribuicao.md.
 #
-# Uso (da máquina de dev): ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/criar-keystore.sh
-# Depois, a dona do repositório grava os secrets do GitHub com o que o script imprime.
+# A keystore nunca sai do host: deploy/release-movel.sh a monta só leitura no contêiner do build.
+# O `-dname` (o titular, decidido com a identidade do app na holetz/eclume#17) é obrigatório.
+#
+# Uso (da máquina de dev):
+#   ssh holetz@192.168.15.199 'bash -s -- --dname "CN=eclume, O=<titular>, C=BR"' < mobile/scripts/criar-keystore.sh
+# Depois: versionar o SHA-256 impresso em mobile/certificado-release.sha256 e confirmar a cópia
+# cifrada da keystore e da senha fora do host (holetz/eclume#91).
 set -euo pipefail
+
+DNAME=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dname)
+      [[ $# -ge 2 && -n "$2" ]] || { echo "--dname exige o titular (CN=…, O=…, C=…)." >&2; exit 2; }
+      DNAME="$2"; shift 2 ;;
+    *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
+  esac
+done
+[[ -n "$DNAME" ]] || { echo "Informe o titular: --dname \"CN=eclume, O=<titular>, C=BR\" (holetz/eclume#17)." >&2; exit 2; }
 
 SEGREDOS="${SEGREDOS:-/srv/eclume/secrets}"
 KEYSTORE="$SEGREDOS/eclume-android.jks"
@@ -28,15 +44,18 @@ printf '%s' "$senha" >"$SENHA"
 "$KEYTOOL" -genkeypair -v -keystore "$KEYSTORE" -alias "$ALIAS" \
   -keyalg RSA -keysize 4096 -validity 10950 \
   -storepass "$senha" -keypass "$senha" \
-  -dname "CN=eclume, O=Jane Doe, C=BR" >/dev/null
+  -dname "$DNAME" >/dev/null
 chmod 600 "$KEYSTORE" "$SENHA"
 
-echo "keystore criada em $KEYSTORE (alias $ALIAS); senha em $SENHA."
-"$KEYTOOL" -list -v -keystore "$KEYSTORE" -storepass "$senha" -alias "$ALIAS" | grep -E 'SHA256:' || true
+echo "keystore criada em $KEYSTORE (alias $ALIAS, titular $DNAME); senha em $SENHA."
+sha=$("$KEYTOOL" -list -v -keystore "$KEYSTORE" -storepass "$senha" -alias "$ALIAS" \
+  | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | tr -d ':' | tr 'A-F' 'a-f')
 cat <<INSTRUCOES
 
-Grave os secrets do repositório (a dona do repositório confirma), da máquina de dev:
-  ssh holetz@192.168.15.199 'base64 -w0 $KEYSTORE' | gh secret set ANDROID_KEYSTORE_B64 -R holetz/eclume
-  ssh holetz@192.168.15.199 'cat $SENHA' | gh secret set ANDROID_KEYSTORE_PASSWORD -R holetz/eclume
-  gh secret set ANDROID_KEY_ALIAS -R holetz/eclume --body $ALIAS
+SHA-256 do certificado (público: sai no movel.json):
+  $sha
+
+1. Versione-o, da máquina de dev:  echo $sha > mobile/certificado-release.sha256
+2. Confirme a cópia cifrada da keystore e da senha fora do host (holetz/eclume#91): perder a chave
+   impede atualizar os apps instalados.
 INSTRUCOES
