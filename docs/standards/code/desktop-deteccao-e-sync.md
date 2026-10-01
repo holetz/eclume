@@ -126,11 +126,16 @@ decisão do usuário, então `auto` nunca é padrão.
 - **Credencial só na mesma origem:** `Authorization` vai nas URLs de parte da própria API e nunca numa
   URL pré-assinada de outra origem (o S3 recusa dois mecanismos de autenticação). Uma URL
   pré-assinada recusada com `403` é renovada por `part-urls` uma vez.
+- **Mensagens sem segredo:** toda mensagem de erro de `transport.rs` e o aviso de nova tentativa
+  de `protocol.rs` levam a URL por `redact` (esquema, host e caminho), sem a query string: a de
+  uma URL pré-assinada carrega a assinatura.
 - **Retentativa por requisição:** falha de rede, `408`, `429` e `5xx` tentam de novo até 3 vezes,
   com 1 s, 2 s e 4 s ou o `Retry-After` (teto de 60 s). `401`, `403`, `422` e o resto falham na
   hora, com o `code` e o `detail` do problem na mensagem.
 - **Retentativa na fila:** uma falha agenda `next_attempt_at` (30 s dobrando até 1 h);
   "Sincronizar agora" e salvar as configurações devolvem as falhas à fila na hora.
+- **"Sincronizando"** liga por guarda (`AppState::syncing`) e volta ao normal mesmo quando a
+  passada entra em pânico; o updater, que só roda ocioso, não fica parado por ela.
 - **Laço** (`src-tauri/src/sync.rs`): a cada 30 s, e quando uma gravação para, as configurações
   mudam, a pessoa entra ou pede, roda `retry_due` → `sync_pending` com o `HttpUploader` →
   retenção. Sem credencial, nada sobe e a janela diz "Entre para enviar 2 gravações". Depois de
