@@ -112,7 +112,7 @@ test('smoke: entrar, biblioteca, gravação com copiar e player, e import pequen
   await login(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
   await page.goto('/?visao=semana&data=2026-09-21')
-  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })).toBeVisible()
 
   const summary = page.getByRole('region', { name: 'Resumo', exact: true })
@@ -153,13 +153,12 @@ test('biblioteca na semana, no mês e na lista, com o filtro na requisição', a
   await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
   const monday = page.getByRole('list', { name: 'segunda, 21 de setembro' })
   await expect(monday.getByRole('listitem')).toHaveCount(2)
-  await expect(page.getByRole('listitem', { name: 'Planejamento semanal, 09:00, 58 min, 2 marcadores' })).toBeVisible()
-  await expect(page.getByRole('listitem', { name: /^1:1 Elisa \/ Ana/ })).toHaveAttribute('data-status', 'processing')
-  await expect(page.getByRole('listitem', { name: /^reuniao-03\.mkv/ })).toHaveAttribute('data-status', 'failed')
-  await expect(page.getByRole('listitem', { name: /^Nota · Ligação do fornecedor/ })).toHaveAttribute(
-    'data-kind',
-    'note',
-  )
+  await expect(page.getByRole('link', { name: 'Planejamento semanal, 09:00, 58 min, 2 marcadores' })).toBeVisible()
+  // O item da semana leva o estado; o link que o ocupa leva o nome.
+  const event = (name: RegExp) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name }) })
+  await expect(event(/^1:1 Elisa \/ Ana/)).toHaveAttribute('data-status', 'processing')
+  await expect(event(/^reuniao-03\.mkv/)).toHaveAttribute('data-status', 'failed')
+  await expect(event(/^Nota · Ligação do fornecedor/)).toHaveAttribute('data-kind', 'note')
   // A conta de usuário não tem papel: o painel admin não está no menu, nem o import (é o modal).
   const nav = page.getByRole('navigation', { name: 'Principal' })
   await expect(nav.getByRole('link', { name: 'Painel admin' })).toHaveCount(0)
@@ -239,7 +238,7 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
   })
   await login(page)
   await page.goto('/?visao=semana&data=2026-09-21')
-  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
 
   // O mock devolve a gravação transcrita do exemplo para qualquer id.
   await expect(page.getByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })).toBeVisible()
@@ -305,7 +304,7 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
 test('rascunho do resumo protegido: sair pede confirmação e recarregar reencontra o texto', async ({ page }) => {
   await login(page)
   await page.goto('/?visao=semana&data=2026-09-21')
-  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
   const summary = page.getByRole('region', { name: 'Resumo', exact: true })
   await summary.getByRole('button', { name: 'Editar' }).click()
   const editor = page.getByRole('region', { name: 'Editando o resumo' })
@@ -453,7 +452,7 @@ test('identificação por voz contra o mock', async ({ page }) => {
 
   // Gravação: a sugestão por voz do exemplo, com aceitar e recusar; recusar tira a sugestão.
   await page.goto('/?visao=semana&data=2026-09-21')
-  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
   await page.locator('details.disclosure > summary').click()
   const speakers = page.getByRole('region', { name: 'Locutores' })
   const suggestions = speakers.getByRole('list', { name: 'Sugestões por voz para Locutor 2' })

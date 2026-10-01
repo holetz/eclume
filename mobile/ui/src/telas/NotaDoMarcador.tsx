@@ -21,14 +21,13 @@ export function NotaDoMarcador({ marcador, aoTerminar }: { marcador: Marcador; a
 
   return (
     <form
-      className="m-section"
-      style={{ borderTop: '2px solid var(--color-divider)', gap: 8 }}
+      className="m-section borda-topo gap-2"
       onSubmit={adicionar}
     >
-      <label htmlFor="nota-do-marcador" style={{ fontSize: 12 }} className="text-muted">
+      <label htmlFor="nota-do-marcador" className="text-muted texto-12">
         Marcador em {relogio(marcador.at_ms)}
       </label>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8 }}>
+      <div className="campo-e-botao">
         <input
           id="nota-do-marcador"
           className="input"

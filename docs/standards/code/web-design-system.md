@@ -4,10 +4,10 @@ title: Design System do eclume no web
 description: O web do eclume usa o Design System do eclume (o repositório eclume-design) como base visual única — eclume.css copiado fiel do styles.css, app.css só com o que o DS não tem, fontes Archivo e IBM Plex Mono servidas pelo build, ícones Lucide com ponta quadrada e tema escuro por data-theme — e este é o jeito de sincronizar, o mapa dos tokens antigos e as classes de produto.
 resource: web/src/styles/**, web/src/main.tsx, web/src/app/theme.ts, web/src/app/Brand.tsx, web/public/favicon.svg, web/index.html, web/src/**/*.module.css
 tags: [code, web, design-system, css, tema, acessibilidade]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#36
+source: holetz/eclume#36, holetz/eclume#122
 maintainer: holetz
 ---
 
@@ -133,3 +133,24 @@ E2E de sempre. Com `E2E_SCREENSHOTS=1`, salva as telas em claro e escuro, a 1440
 em `web/test-results/screens/app-*.png`; com `ECLUME_DS_DIR=<eclume-design>`, salva também os
 quadros de `examples/access.html` como `ds-*.png`, para a comparação lado a lado. Não há diff
 de pixels: a comparação é revisada.
+
+## Acessibilidade
+
+- **Estilo por classe.** `style` no JSX só leva custom property (`--s`, `--lane`, `--altura-visivel`);
+  o resto vai para o CSS Module ou o `app.css`. O `no-restricted-syntax` do `eslint.config.js` do
+  web e do celular barra o resto, a mesma regra que o `ui_assets` do desktop impõe à UI estática.
+- **Evento da semana.** A coluna do dia é `role="list"`, e cada evento é um `div role="listitem"`
+  com o `.cal-event` (posição por `--s`, `--d`, `--lane`, estado nos `data-*`) e o `Link` ocupando a
+  caixa, com o `aria-label` do evento; o foco aparece no item por `:focus-within` (CSS de produto).
+- **Foco na troca de rota.** Depois da primeira troca de `pathname` dentro da moldura
+  (`ShellFrame`, contexto `pageFocus.ts`), o `PageHead` foca o próprio `h1` (`tabIndex={-1}`, sem
+  rolar, sem anel de foco); a primeira carga e a troca só de busca não movem o foco.
+- **Menu compacto.** Abrir foca o primeiro link da barra; Esc fecha e devolve o foco ao botão
+  Menu; clicar no link da rota atual fecha. Vale para o app e o admin (`ShellFrame`).
+- **axe no E2E** (`web/e2e/a11y.spec.ts`, `@axe-core/playwright`): entrar, biblioteca, gravação,
+  Pessoas, Busca, Campos e, no admin, Usuários e Saúde, nos temas claro e escuro, sem violação
+  WCAG 2.1 A/AA. Exceção única e temporária: o `.table th` do DS (60% do texto) não chega a 4,5:1
+  no claro; sai com a correção na fonte do DS (holetz/eclume#122). O contraste de borda de
+  controle (1.4.11), que o axe não mede, fica para o teste de tokens da mesma spec.
+- **Cópia fiel no celular.** `mobile/ui/src/styles/copia.test.ts` confere que o `eclume.css` do
+  celular é igual ao do web, como o `ui_assets` faz com o do desktop.

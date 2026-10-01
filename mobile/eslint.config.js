@@ -19,5 +19,17 @@ export default defineConfig([
       ecmaVersion: 2023,
       globals: globals.browser,
     },
+    rules: {
+      // Estilo por classe (app.css): `style` só leva custom property (`--h` do medidor), como o
+      // ui_assets do desktop exige da UI estática.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSXAttribute[name.name='style'] ObjectExpression > Property:not([key.type='Literal'][key.value=/^--/]):not([computed=true])",
+          message: 'Sem `style` fixo: use uma classe do app.css; `style` só com custom property (--nome).',
+        },
+      ],
+    },
   },
 ])

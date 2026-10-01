@@ -37,10 +37,10 @@ export function LerCodigo({ ir, voltarPara }: { ir: (rota: string) => void; volt
   return (
     <div className="m-body">
       <Voltar rotulo="Servidores" aoVoltar={() => ir(voltarPara)} />
-      <div className="m-section" style={{ gap: 8 }}>
+      <div className="m-section gap-2">
         <h1 className="m-title">Leia o código</h1>
       </div>
-      <div className="viewfinder" style={{ margin: '0 20px' }} aria-label="Câmera">
+      <div className="viewfinder margem-lateral" aria-label="Câmera">
         {lendo ? '' : 'câmera'}
       </div>
       <div className="m-section m-fill">

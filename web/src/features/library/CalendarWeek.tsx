@@ -148,7 +148,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
     <div
       ref={scrollRef}
       className={styles.weekScroll}
-      style={measured ? { height } : undefined}
+      style={measured ? ({ '--altura-visivel': `${height}px` } as CSSProperties) : undefined}
       title="Ctrl + roda do mouse muda o zoom"
     >
       <div className={`cal-week ${styles.week}`} style={grid} aria-busy={busy || undefined}>
@@ -195,27 +195,34 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
               const state = recordingState(recording)
               const style = { '--s': s, '--d': d, '--lane': lane, '--lanes': laneCount } as CSSProperties
               return (
-                <Link
+                // O item da lista leva a posição e o estado; o link ocupa a caixa e leva o nome.
+                <div
                   key={recording.id}
-                  to={`/gravacoes/${recording.id}`}
-                  state={{ from }}
                   role="listitem"
-                  className={`cal-event ${laneCount > 1 ? styles.laned : ''}`}
+                  className={`cal-event ${styles.event} ${laneCount > 1 ? styles.laned : ''}`}
                   style={style}
                   data-kind={recording.kind === 'note' ? 'note' : undefined}
                   data-status={state.state === 'busy' ? 'processing' : state.state === 'failed' ? 'failed' : undefined}
-                  aria-label={eventLabel(recording)}
                 >
-                  <strong>{recordingTitle(recording)}</strong>
-                  {recording.kind !== 'note' && (
-                    <span className="mono">
-                      {state.state === 'ready'
-                        ? `${timeLabel(new Date(recording.recorded_at))} · ${shortDuration(recording.duration_ms)}`
-                        : state.label}
-                    </span>
-                  )}
-                  {recording.marker_count > 0 && <span className={`marker-count ${styles.eventMarkers}`}>{recording.marker_count}</span>}
-                </Link>
+                  <Link
+                    to={`/gravacoes/${recording.id}`}
+                    state={{ from }}
+                    className={styles.eventLink}
+                    aria-label={eventLabel(recording)}
+                  >
+                    <strong>{recordingTitle(recording)}</strong>
+                    {recording.kind !== 'note' && (
+                      <span className="mono">
+                        {state.state === 'ready'
+                          ? `${timeLabel(new Date(recording.recorded_at))} · ${shortDuration(recording.duration_ms)}`
+                          : state.label}
+                      </span>
+                    )}
+                    {recording.marker_count > 0 && (
+                      <span className={`marker-count ${styles.eventMarkers}`}>{recording.marker_count}</span>
+                    )}
+                  </Link>
+                </div>
               )
             })}
           </div>

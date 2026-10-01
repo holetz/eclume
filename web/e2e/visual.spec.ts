@@ -193,7 +193,7 @@ test('biblioteca, gravação e busca seguem as classes do DS', async ({ page }) 
   expect(await style(page, '.with-filters', 'grid-template-columns')).toMatch(/ 48px$/)
   await page.getByRole('button', { name: 'Expandir filtros' }).click()
 
-  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
   await expect(page.locator('.doc')).toBeVisible()
   // A gravação: documento na tipografia do DS e o chat na coluna de 340px.
   expect(await style(page, '.doc', 'font-size')).toBe('16px')
@@ -240,7 +240,7 @@ for (const [viewport, tag] of [
     await shoot(page, `importar${tag}`)
 
     await page.goto(WEEK)
-    await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+    await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
     await expect(page.locator('.doc')).toBeVisible()
     await shoot(page, `gravacao${tag}`)
     await page.locator('details.disclosure > summary').click()
