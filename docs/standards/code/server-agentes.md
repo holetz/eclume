@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
-description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat).
+description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat); a matriz do que cada provider exige e a CLI claude opcional na imagem.
 resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py
 tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129
 maintainer: holetz
 ---
 
@@ -58,6 +58,23 @@ e `temperature` (só enviada quando definida); sem elas valem os padrões por ti
   precisa ser 0 — o arq mantém o job na fila até terminar, então zero é nada enfileirado nem
   rodando. Ocupada → `gpu_busy`, que o job adia 60 s sem gastar tentativa, até
   `options.ollama_wait_s` (padrão 2 h).
+
+### O que cada provider exige
+
+A norma não recomenda fornecedor: diz o que sai do servidor e o que cada tipo pede. A conta, a
+credencial e os termos de uso do fornecedor são de quem cadastra o provider; a escolha desta
+produção fica no runbook ([deploy em produção](../../project/deploy-producao.md)).
+
+| `kind` | O que sai do servidor | Imagem e host | Credencial e conta |
+|---|---|---|---|
+| `claude-cli` | transcrição e prompt para a Anthropic, pela CLI | a CLI `claude`, proprietária, só na imagem construída com `ECLUME_CLAUDE_CLI=1` | token do `claude setup-token` (conta Claude de quem gera) ou chave `sk-ant-api…` |
+| `anthropic` | transcrição e prompt para a API da Anthropic | nada além da imagem padrão | `api_key` da conta de API de quem cadastra (ou o segredo `anthropic_api_key`) |
+| `openai-compatible` | transcrição e prompt para o `base_url` | nada além da imagem padrão; o servidor do `base_url` é de quem cadastra | `api_key` do serviço, opcional num servidor local |
+| `ollama` | nada, se o `base_url` é um Ollama da LAN | um Ollama alcançável; na mesma GPU, só roda com a fila vazia | nenhuma |
+
+**Nada sai de casa** com o `ollama` na mesma GPU do ASR (ele cede a vez à fila `eclume:gpu`) ou
+com o `openai-compatible` apontado para um servidor OpenAI-compatível local (llama.cpp, vLLM,
+LM Studio, o `/v1` do Ollama). Os outros caminhos mandam a transcrição a um fornecedor externo.
 
 ### Erros tipados
 
@@ -261,12 +278,24 @@ sistema e as instruções.
 
 ## Deploy
 
-O worker de agentes (`worker-agents`) que roda `claude-cli` precisa da CLI `claude` no `PATH` (ou `ECLUME_CLAUDE_BIN`) e de
+A imagem do server (`deploy/server.Dockerfile`) **não leva a CLI `claude` por padrão**: só
+software de licença aberta entra no build sem opções. A CLI, de versão fixada, entra com o build arg
+`ECLUME_CLAUDE_CLI=1`, que escolhe o estágio `claudecli-1` em vez do vazio `claudecli-0`. Uma
+imagem sem a CLI cadastra o `claude-cli` normalmente e o job falha com `provider_not_configured`
+("Não foi possível executar claude"). O compose de produção passa o arg a partir do
+`deploy/.env.prod`, e o `deploy.sh` recusa um env que não declare `ECLUME_CLAUDE_CLI=0` ou `1`,
+para a produção não perder a CLI por omissão.
+
+Com a CLI na imagem, o worker de agentes (`worker-agents`) que roda `claude-cli` acha o `claude` no `PATH` (ou em `ECLUME_CLAUDE_BIN`) e precisa de
 `CLAUDE_CODE_OAUTH_TOKEN`, o token de longa duração que `claude setup-token` gera (1 ano, sem
-renovação). **Não monte a sessão OAuth do host** (`~/.claude/.credentials.json`): o `claude` do
+renovação), ou do token cadastrado no painel. **Não monte a sessão OAuth do host** (`~/.claude/.credentials.json`): o `claude` do
 host renova o token reescrevendo o arquivo (inode novo), o bind mount de arquivo único fica no
 inode antigo, e o container passa a renovar com um refresh token já rotacionado até falhar com
 `provider_auth` (holetz/eclume#28). Defina `ECLUME_ENCRYPTION_KEY` em produção.
+
+O `deploy/smoke_prod.py` prova o resumo com o provider que já estiver cadastrado — o habilitado
+de `summaries` ou, sem nenhum, o habilitado sem finalidade, ou o de `--provider` — de qualquer
+tipo, e não cadastra nenhum.
 
 ## Testes
 
