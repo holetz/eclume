@@ -83,7 +83,12 @@ pub fn iniciar_laco<R: Runtime>(app: AppHandle<R>) {
             let Some(nucleo) = core::global() else {
                 continue;
             };
-            let fechada = trancar(nucleo).and_then(|mut c| c.verificar_limites());
+            let fechada = trancar(nucleo).and_then(|mut c| {
+                if let Err(err) = c.vigiar() {
+                    log::warn!("vigiar o microfone: {err:#}");
+                }
+                c.verificar_limites()
+            });
             match fechada {
                 Ok(Some(gravacao)) => {
                     log::warn!("gravação {} fechada pelo limite", gravacao.id);
