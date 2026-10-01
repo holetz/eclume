@@ -11,7 +11,7 @@
 # Uso: bash deploy/release-desktop.sh [--plan] [--context NOME] [--sem-windows] [--publicar]
 #                                     [--notas "texto"] [--sem-gate "motivo"] [--sem-assinatura]
 #   --plan      só mostra o que faria (somente leitura).
-#   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
+#   --context   contexto Docker do host (ou $ECLUME_DOCKER_CONTEXT); obrigatório, sem padrão.
 #   --sem-windows  deixa o Windows de fora (por padrão o release inclui o instalador NSIS,
 #               compilado por compilação cruzada; `--windows` segue aceito e não muda nada).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
@@ -21,12 +21,12 @@
 #   --sem-assinatura  aceita publicar o instalador Windows sem assinatura de código quando o host
 #               não tem a configuração; sem ele, --publicar recusa (o ensaio só avisa).
 # Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
-# do repositório), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
+# do repositório; sem elas, recusa), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
+CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
 REPO=holetz/eclume
 SECRETS=/srv/eclume/secrets
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
@@ -58,6 +58,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -n "$CONTEXT" ]] || { echo "Falta o contexto Docker do host: --context NOME ou ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
 export DOCKER_CONTEXT="$CONTEXT"
 unset DOCKER_HOST
 endpoint="$(docker context inspect "$CONTEXT" --format '{{.Endpoints.docker.Host}}')"
@@ -75,8 +76,10 @@ ALVOS=(linux)
 [[ "$WINDOWS" -eq 0 ]] || ALVOS+=(windows)
 SERVER_URL="${ECLUME_SERVER_URL:-$(gh variable get ECLUME_SERVER_URL -R "$REPO")}"
 SERVER_CA="${ECLUME_SERVER_CA_SHA256:-$(gh variable get ECLUME_SERVER_CA_SHA256 -R "$REPO")}"
-# Como no workflow: a variável do repositório, se existir, ou o /downloads do host de produção.
-DOWNLOADS_URL="${ECLUME_DOWNLOADS_URL:-$(gh variable get ECLUME_DOWNLOADS_URL -R "$REPO" 2>/dev/null || echo https://192.168.15.199:8443/downloads)}"
+# Como no workflow: a variável do ambiente ou a do repositório; sem padrão, o updater apontaria
+# para o /downloads de outro servidor.
+DOWNLOADS_URL="${ECLUME_DOWNLOADS_URL:-$(gh variable get ECLUME_DOWNLOADS_URL -R "$REPO" 2>/dev/null || true)}"
+[[ -n "$DOWNLOADS_URL" ]] || { echo "Falta ECLUME_DOWNLOADS_URL (o /downloads do servidor que publica o desktop)." >&2; exit 2; }
 
 # shellcheck disable=SC2016 # o $HOME é o do host
 BASE="$(host 'echo "$HOME"')/eclume-build/release"

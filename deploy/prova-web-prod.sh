@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SSH_HOST="${ECLUME_PROD_SSH:-holetz@192.168.15.199}"
+SSH_HOST="${ECLUME_PROD_SSH:?defina ECLUME_PROD_SSH=usuario@host do staging}"
 export ECLUME_PROVA_URL="${ECLUME_PROVA_URL:-https://127.0.0.1:18444}"
 if [ -z "${ECLUME_PROD_PASSWORD:-}" ]; then
   conta="$(ssh "$SSH_HOST" cat eclume-staging/conta)"
