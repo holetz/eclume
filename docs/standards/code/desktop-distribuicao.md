@@ -7,7 +7,7 @@ tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126, holetz/eclume#102, holetz/eclume#101
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126, holetz/eclume#102, holetz/eclume#101, holetz/eclume#128
 maintainer: holetz
 ---
 
@@ -48,9 +48,12 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   workspace cargo (`desktop/Cargo.toml`) acompanha por convenção, mas o release não o lê.
 - A tag é `desktop-v<versão>`, criada pelo próprio release (`gh release create --target <commit>`),
   nunca à mão: ela não dispara workflow nenhum.
-- Lançar uma versão: subir o `version`, fazer merge em `main`, publicar a `main`, esperar o gate do
+- Quando a versão sobe e quem a sobe (o conclude da spec que muda o app, por
+  `deploy/versao.py definir desktop <versão>`, com a seção dela no `desktop/CHANGELOG.md`) está em
+  [versionamento.md](versionamento.md).
+- Lançar uma versão: com a versão e a seção dela em `main`, publicar a `main`, esperar o gate do
   host (`eclume/gate` = `success` no commit; [monorepo.md](monorepo.md)) e rodar
-  `bash deploy/release-desktop.sh --context <contexto> --publicar --notas "<notas>"`.
+  `bash deploy/release-desktop.sh --context <contexto> --publicar`.
 
 ## Release no host — `deploy/release-desktop.sh`
 
@@ -93,8 +96,10 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   provados no ensaio de holetz/eclume#68 (o NSIS saiu do host).
 - Os manifestos saem no host, por `manifestos_release.py` (com `desktop/INSTALACAO.md` copiado), e
   o `SHA256SUMS` é conferido antes de publicar. `--publicar` cria o GitHub Release pelo `gh` do
-  host; `--notas` vira o `notes` do `latest.json` e o texto do aviso "Atualizado para X" (vazio,
-  `eclume desktop <versão>`).
+  host. O `notes` do `latest.json`, que é o texto do aviso "Atualizado para X", é a seção da versão
+  no `desktop/CHANGELOG.md` (`python3 deploy/versao.py notas desktop <versão>`); `--notas` explícito
+  vence, e uma versão sem seção recusa o release. O workflow `desktop-release` faz o mesmo com o
+  input `notas` vazio.
 
 ## Workflow `desktop-release.yml` — a alternativa
 
