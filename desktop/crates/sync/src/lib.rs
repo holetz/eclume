@@ -14,7 +14,8 @@ pub mod uploader;
 pub use devices::{device_name, parse_pair_url, platform, Devices, PairUrl};
 pub use pat::{PatSource, PatStore};
 pub use protocol::{
-    Client, LibrarySummary, MissingScope, RetryPolicy, SummaryPoll, Uploaded, PAT_PREFIX,
+    Client, LibrarySummary, MissingScope, ProcessorStatus, QueueWait, RecordingCheck, RetryPolicy,
+    SummaryPoll, Uploaded, PAT_PREFIX,
 };
 pub use transport::{HttpRequest, HttpResponse, Transport, TrustMode, UreqTransport};
 pub use uploader::{HttpUploader, UploaderConfig};

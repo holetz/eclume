@@ -216,3 +216,10 @@
   color: var(--color-danger);
   font-size: 12px;
 }
+
+/* Por que a transcrição de uma gravação enviada espera no servidor (`Job.queue`). */
+.queue .fila-espera {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}

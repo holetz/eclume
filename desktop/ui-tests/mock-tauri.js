@@ -56,6 +56,7 @@
         web_url: "https://192.168.15.199:8443",
         notice: null,
         sync_notice: null,
+        queue_waits: {},
         updated: null,
         connection: "account",
         account: CONTA,
@@ -210,6 +211,20 @@
         gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
         gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
       ];
+    },
+    espera(e) {
+      const processador = { online: true, offline_since: null };
+      e.status.queue_waits = {
+        "srv-a": { reason: "account_turn", ahead: null, account_ahead: 2, estimated_start_at: null, resumes_at: null, processor: processador },
+        "srv-b": {
+          reason: "processor_queue",
+          ahead: 0,
+          account_ahead: null,
+          estimated_start_at: null,
+          resumes_at: null,
+          processor: { online: false, offline_since: null },
+        },
+      };
     },
     atualizado(e) {
       e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };

@@ -77,6 +77,16 @@ test('fila com as etiquetas do vocabulário, nota, importação e o erro visíve
   await expect(page.locator('#fila-resumo')).toHaveText('1 de 4 enviadas')
 })
 
+test('enviada com a transcrição na fila do servidor diz por que espera', async ({ abrir }) => {
+  const page = await abrir('espera')
+  const linhas = page.locator('#fila li')
+  await expect(linhas.nth(0).locator('.fila-espera')).toHaveText('Atrás de 2 gravações suas que chegaram antes.')
+  await expect(linhas.nth(1).locator('.fila-espera')).toHaveText(
+    'O processador está fora do ar; sua gravação está guardada e entra quando ele voltar.',
+  )
+  await expect(linhas.nth(2).locator('.fila-espera')).toHaveCount(0)
+})
+
 test('fila vazia com o aviso do envio', async ({ abrir }) => {
   const page = await abrir('vazio')
   await expect(page.locator('#linha-status')).toHaveText('Tudo enviado')
