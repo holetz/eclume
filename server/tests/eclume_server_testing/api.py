@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from eclume_server.accounts import NOTICE_VERSION, create_admin, create_user
+from eclume_server.accounts import NOTICE_VERSION, create_admin, create_user, new_password_hash
 from eclume_server.db import tables as t
 from eclume_server_testing.harness import run
 
@@ -110,7 +110,10 @@ def new_user(services: Services, *, name: str | None = None, notice_version: str
     name = name or f"Usuário {handle}"
 
     async def create(conn: Any) -> UUID:  # noqa: ANN401
-        return await create_user(conn, email=email, name=name, password=PASSWORD, notice_version=notice_version)
+        password_hash = await new_password_hash(PASSWORD)
+        return await create_user(
+            conn, email=email, name=name, password_hash=password_hash, notice_version=notice_version
+        )
 
     return Account(user_id=run(services.sql(create)), email=email, name=name)
 

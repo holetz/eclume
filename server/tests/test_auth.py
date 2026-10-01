@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
+import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from eclume_server import security
 from eclume_server.app import create_app
 from eclume_server.db.migrate import migrate
 from eclume_server_testing.api import PASSWORD, Api
@@ -299,3 +303,34 @@ def test_health_ready_503_nomeia_o_que_caiu(client: TestClient, monkeypatch: pyt
     checks = {c["name"]: c["status"] for c in response.json()["checks"]}
     assert checks == {"postgres": "ok", "redis": "ok", "storage": "down"}
     assert response.json()["status"] == "down"
+
+
+def test_argon2_lento_nao_trava_o_event_loop(
+    services: Services, make_user: Callable[..., Account], monkeypatch: pytest.MonkeyPatch
+):
+    account = make_user()
+    real = security.verify_password
+
+    def slow(password_hash: str | None, password: str) -> bool:
+        time.sleep(1.0)
+        return real(password_hash, password)
+
+    monkeypatch.setattr(security, "verify_password", slow)
+
+    async def go() -> tuple[int, int, float]:
+        app = create_app(services.settings)
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
+                login = asyncio.create_task(
+                    client.post("/api/v1/auth/login", json={"email": account.email, "password": PASSWORD})
+                )
+                await asyncio.sleep(0.2)
+                start = time.perf_counter()
+                health = await client.get("/api/v1/health")
+                elapsed = time.perf_counter() - start
+                return (await login).status_code, health.status_code, elapsed
+
+    login_status, health_status, elapsed = run(go())
+    assert (login_status, health_status) == (204, 200)
+    assert elapsed < 0.5

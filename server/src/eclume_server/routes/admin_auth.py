@@ -20,7 +20,13 @@ from eclume_server.pagination import iso
 from eclume_server.problems import unauthorized
 from eclume_server.ratelimit import attempts, count_login
 from eclume_server.routes.auth import LoginRequest
-from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
+from eclume_server.security import (
+    hash_password_async,
+    needs_rehash,
+    new_session_token,
+    sha256_hex,
+    verify_password_async,
+)
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -34,15 +40,17 @@ async def admin_login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(a
     async with system_tx(ctx.engine) as conn:
         query = select(t.admins).where(func.lower(t.admins.c.email) == body.email.lower())
         admin = (await conn.execute(query)).mappings().first()
-        if (
-            not verify_password(admin["password_hash"] if admin else None, body.password)
-            or not admin
-            or not admin["active"]
-        ):
-            raise unauthorized("E-mail ou senha incorretos.")
-        values: dict[str, Any] = {"last_login_at": now}
-        if needs_rehash(admin["password_hash"]):
-            values["password_hash"] = hash_password(body.password)
+    # O argon2 roda numa thread e fora da transação.
+    if (
+        not await verify_password_async(admin["password_hash"] if admin else None, body.password)
+        or not admin
+        or not admin["active"]
+    ):
+        raise unauthorized("E-mail ou senha incorretos.")
+    values: dict[str, Any] = {"last_login_at": now}
+    if needs_rehash(admin["password_hash"]):
+        values["password_hash"] = await hash_password_async(body.password)
+    async with system_tx(ctx.engine) as conn:
         await conn.execute(update(t.admins).where(t.admins.c.id == admin["id"]).values(**values))
         token, csrf = new_session_token(), new_session_token()
         ttl = timedelta(hours=ctx.settings.admin_session_ttl_hours)

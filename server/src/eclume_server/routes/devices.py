@@ -60,10 +60,10 @@ async def device_login(
     Conta sem o aceite do aviso em vigor não ganha credencial nova: 403 `notice_required`.
     """
     await count_login(ctx, "user", body.email)
+    user_id = await password_login(ctx.engine, body.email, body.password)
+    if user_id is None:
+        raise unauthorized(WRONG_PASSWORD)
     async with system_tx(ctx.engine) as conn:
-        user_id = await password_login(conn, body.email, body.password)
-        if user_id is None:
-            raise unauthorized(WRONG_PASSWORD)
         accepted = await conn.scalar(select(t.users.c.notice_version).where(t.users.c.id == user_id))
         if accepted != NOTICE_VERSION:
             raise notice_required()

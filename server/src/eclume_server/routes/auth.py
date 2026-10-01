@@ -19,8 +19,10 @@ from eclume_server.accounts import (
     EmailTakenError,
     WrongPasswordError,
     change_password,
+    confirm_password,
     create_user,
     delete_user,
+    new_password_hash,
     notice,
     password_login,
 )
@@ -107,10 +109,10 @@ async def health_ready(ctx: Ctx) -> JSONResponse:
 async def login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]) -> Response:
     """Abre sessão e define `eclume_session` (HttpOnly) e `eclume_csrf` (legível)."""
     await count_login(ctx, "user", body.email)
+    user_id = await password_login(ctx.engine, body.email, body.password)
+    if user_id is None:
+        raise unauthorized(WRONG_PASSWORD)
     async with system_tx(ctx.engine) as conn:
-        user_id = await password_login(conn, body.email, body.password)
-        if user_id is None:
-            raise unauthorized(WRONG_PASSWORD)
         return await _open_session(conn, ctx, user_id, datetime.now(UTC))
 
 
@@ -128,6 +130,7 @@ async def signup(body: SignupRequest, ctx: Ctx, _: Annotated[None, Depends(attem
     if not body.name.strip():
         raise invalid_field("name", "não pode ser vazio")
     _check_notice(body.notice_version)
+    password_hash = await new_password_hash(body.password)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
         try:
@@ -135,7 +138,7 @@ async def signup(body: SignupRequest, ctx: Ctx, _: Annotated[None, Depends(attem
                 conn,
                 email=body.email,
                 name=body.name.strip(),
-                password=body.password,
+                password_hash=password_hash,
                 notice_version=body.notice_version,
             )
         except EmailTakenError as exc:
@@ -201,10 +204,9 @@ async def change_own_password(
 ) -> Response:
     """Troca a senha; as outras sessões da conta acabam e esta continua."""
     try:
-        async with system_tx(ctx.engine) as conn:
-            await change_password(
-                conn, principal.user_id, body.current_password, body.new_password, keep_session=principal.session_id
-            )
+        await change_password(
+            ctx.engine, principal.user_id, body.current_password, body.new_password, keep_session=principal.session_id
+        )
     except AccountError as exc:
         field = "current_password" if isinstance(exc, WrongPasswordError) else "new_password"
         raise invalid_field(field, str(exc)) from exc
@@ -217,11 +219,12 @@ async def delete_own_account(
 ) -> Response:
     """Exclui a conta e todos os dados dela; os objetos saem do bucket pela fila de exclusão. Encerra a sessão."""
     try:
-        async with system_tx(ctx.engine) as conn:
-            open_jobs = await open_jobs_of(conn, principal.user_id)
-            await delete_user(conn, principal.user_id, body.password)
+        await confirm_password(ctx.engine, principal.user_id, body.password)
     except AccountError as exc:
         raise invalid_field("password", str(exc)) from exc
+    async with system_tx(ctx.engine) as conn:
+        open_jobs = await open_jobs_of(conn, principal.user_id)
+        await delete_user(conn, principal.user_id)
     # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
     await ctx.queue.request_cancel(open_jobs)
     response = Response(status_code=204)
