@@ -3,7 +3,8 @@
 O de `eclume:default` consome o que o worker GPU enfileira ao fim de um `transcribe` —
 `ingest_transcript` e `transcription_failed` —, purga os embeddings e roda os crons: descarta
 uploads vencidos e marca como falha recuperável o job de transcrição que o worker GPU abandonou e a
-resposta do chat que nenhum job vai terminar (`reap_stalled_jobs`). O de `eclume:agents`
+resposta do chat que nenhum job vai terminar (`reap_stalled_jobs`), e relança a etapa por agente
+ou o resumo que nunca chegou à fila (`resume_pipelines`). O de `eclume:agents`
 (`ECLUME_AGENT_MAX_JOBS` vagas) roda as etapas por agente do pipeline (`detect_agenda_type`,
 `fill_fields` e o resumo automático), gera os resumos (`summarize`), responde os chats e as
 pré-visualizações: a ingestão nunca espera atrás de uma chamada a agente. Contrato em
@@ -38,6 +39,7 @@ from eclume_server.queue import (
     return_revision,
     step_job_id,
 )
+from eclume_server.resume import resume
 from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
 from eclume_server.storage import Storage
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
@@ -332,6 +334,11 @@ async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     return len(reaped) + await reap_stalled_chats(ctx["engine"])
 
 
+async def resume_pipelines(ctx: dict[str, Any]) -> int:
+    """Relança as etapas por agente e os resumos que nunca chegaram à fila (`resume.py`)."""
+    return len(await resume(ctx["engine"], ctx["redis"]))
+
+
 def _agent_functions() -> list[Any]:
     return [
         # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
@@ -366,6 +373,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
+            cron(resume_pipelines, minute=set(range(2, 60, 5)), run_at_startup=False, unique=True),
         ],
         "queue_name": DEFAULT_QUEUE,
         "max_jobs": DEFAULT_MAX_JOBS,
