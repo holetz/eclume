@@ -356,3 +356,8 @@ def test_jobs_retidos_por_vez_da_conta_e_por_janela(
     run(services.sql(exhaust))
     upload_file(out_of_minutes, audio_bytes(1500, seed="janela"))
     assert admin.get(URL).json()["held_jobs"]["gpu_minutes"] == before["gpu_minutes"] + 1
+    # Drena a vez da conta ocupada: a fila da GPU não fica com job para outro teste.
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    run_gpu(services.settings)
+    run_cpu(services.settings)
