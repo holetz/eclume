@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Painel admin no server — conta de admin, configuração, segredos, usuários e saúde
-description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings com o pré-processamento, o idioma automático e a regra identificação ⇒ separação; merge por campo, validação e entrega ao worker pelas options do transcribe), os tipos de agenda padrão, segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar e desativar, a saúde com as filas, o worker GPU, as etapas do pipeline e as sondas dos serviços, e o CLI de contas de admin.
-resource: server/src/eclume_server/settings_admin.py, server/src/eclume_server/health.py, server/src/eclume_server/accounts.py, server/src/eclume_server/cli.py, server/src/eclume_server/routes/admin*.py, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, worker-gpu/src/eclume_worker/health.py, worker-gpu/src/eclume_worker/secrets.py
+description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings com o pré-processamento, o idioma automático e a regra identificação ⇒ separação; merge por campo, validação e entrega ao worker pelas options do transcribe), os tipos de agenda padrão, segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar, desativar e o link de redefinição de senha, a saúde com as filas, o worker GPU, as etapas do pipeline e as sondas dos serviços, e o CLI de contas de admin.
+resource: server/src/eclume_server/settings_admin.py, server/src/eclume_server/health.py, server/src/eclume_server/accounts.py, server/src/eclume_server/cli.py, server/src/eclume_server/routes/admin*.py, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, server/src/eclume_server/db/migrations/027_redefinicao_de_senha.sql, worker-gpu/src/eclume_worker/health.py, worker-gpu/src/eclume_worker/secrets.py
 tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93, holetz/eclume#98
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93, holetz/eclume#98, holetz/eclume#119
 maintainer: holetz
 ---
 
@@ -40,7 +40,7 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   de credencial comuns estão em [server-nucleo.md](server-nucleo.md#autenticação).
 - **As rotas de admin rodam em `system_tx`** (papel de conexão) e só tocam `platform_*`,
   `agent_providers`, `admins`, `admin_sessions`, `users` (lista, contagem de gravações por dono e
-  `active`), `sessions` e `api_tokens` (ao desativar), além da fila e dos jobs para Saúde e
+  `active`), `sessions` e `api_tokens` (ao desativar), `password_resets` (gerar e vencer o link), além da fila e dos jobs para Saúde e
   retentativa. **Nenhuma rota de admin devolve conteúdo de usuário:** título, transcrição ou pessoa.
 
 ## CLI de contas de admin
@@ -129,7 +129,7 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   (`quotas`, só os campos sobrepostos, ou `null`), do mais novo para o mais antigo. Nada do
   conteúdo.
 - `PATCH /admin/users/{id}` aceita `active` e `quotas` (ao menos um). Desativar apaga as sessões e
-  revoga os PATs do usuário; reativar devolve o acesso por um login novo. `quotas` troca a
+  revoga os PATs do usuário e vence o link de redefinição pendente; reativar devolve o acesso por um login novo. `quotas` troca a
   sobreposição inteira (`users.quotas`, JSONB): os campos enviados valem sobre o padrão, `null`
   num campo é sem limite e `quotas: null` volta a conta ao padrão. Usuário inexistente → 404.
 - `DELETE /admin/users/{id}` exclui a conta (204; inexistente, 404) com `accounts.purge_user`, o
@@ -137,6 +137,14 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   cascata, os gatilhos põem os objetos na fila de exclusão do bucket, os `transcribe` em aberto
   recebem o pedido de cancelamento e o e-mail fica livre para um cadastro novo. O painel pede
   confirmação digitando o e-mail.
+- `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`) gera o link de redefinição de
+  senha com `accounts.create_password_reset`: segredo de 32 bytes no fragmento de
+  `<url pública>/redefinir-senha#<segredo>`, com a URL de `server_info` (`ECLUME_PUBLIC_URL`, não
+  o `Host` do pedido), válido por 24 h, e `admin_id` de quem gerou. Gerar outro vence os pendentes
+  da conta; conta desativada → 409 `conflict`; inexistente → 404. O link só volta nesta resposta, e
+  o painel o mostra uma vez para o admin copiar e entregar por fora, depois de confirmar quem pede.
+  O admin nunca vê nem define a senha; o uso do link está em
+  [server-nucleo.md](server-nucleo.md#autenticação).
 
 ## Saúde (`/admin/health`)
 
