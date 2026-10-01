@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41
+source: holetz/eclume#41, holetz/eclume#122
 maintainer: holetz
 ---
 
@@ -176,7 +176,11 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   ciclo de rede a cada 5 s.
 - **UI** (`mobile/ui/src`): React + TS, função do `EstadoApp` (`app/estado.ts`), com a ponte tipada
   (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia fiel do DS (a camada mobile
-  `.m-*`); ajustes de produto em `app.css`. Tema por `data-theme` a partir do
+  `.m-*`), conferida contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
+  `tsconfig.node.json`, porque lê o arquivo do disco); ajustes de produto em `app.css`. Nenhum
+  `style` fixo nas telas: espaços e tamanhos são classes do `app.css` com `--space-*` e os
+  tamanhos do DS, e `style` só leva custom property (o `--h` das barras do medidor); o
+  `no-restricted-syntax` do `eslint.config.js` barra o resto. Tema por `data-theme` a partir do
   `prefers-color-scheme`; recortes em `--safe-top`/`--safe-bottom`; alvos de toque de 44 px ou mais.
 
 | Tela do DS | Rota | O que mostra |
