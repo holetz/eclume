@@ -41,25 +41,51 @@ describe('criar conta', () => {
     ).toBeInTheDocument()
     await fillSignup()
     const submit = screen.getByRole('button', { name: 'Criar conta' })
-    expect(submit).toBeDisabled()
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Sou responsável por pedir o consentimento das pessoas que gravo.' }),
-    )
-    expect(submit).toBeEnabled()
+    await userEvent.click(submit)
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Sou responsável por pedir o consentimento das pessoas que gravo.',
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('Para criar a conta, falta o aceite do aviso.')
+    expect(checkbox).toHaveFocus()
+    expect(http.requests('POST /api/v1/auth/signup')).toHaveLength(0)
+    await userEvent.click(checkbox)
     await userEvent.click(submit)
     expect(await screen.findByRole('heading', { level: 1, name: 'Biblioteca' })).toBeInTheDocument()
     expect(await http.requests('POST /api/v1/auth/signup')[0].json()).toEqual(request)
   })
 
-  it('senha curta não deixa enviar', async () => {
-    mockFetch({
+  it('senha curta não envia: diz o que falta e foca a senha', async () => {
+    const http = mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
     })
     renderApp('/cadastro')
     await fillSignup('curta')
     await userEvent.click(screen.getByRole('checkbox'))
-    expect(screen.getByRole('button', { name: 'Criar conta' })).toBeDisabled()
+    const submit = screen.getByRole('button', { name: 'Criar conta' })
+    expect(submit).toBeEnabled()
+    await userEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Para criar a conta, falta a senha com 12 caracteres.')
+    expect(screen.getByLabelText('Senha')).toHaveFocus()
+    expect(submit).toHaveAccessibleDescription('Para criar a conta, falta a senha com 12 caracteres.')
+    expect(http.requests('POST /api/v1/auth/signup')).toHaveLength(0)
+  })
+
+  it('formulário vazio lista tudo o que falta, foca o nome e atualiza a lista ao preencher', async () => {
+    mockFetch({
+      'GET /api/v1/me': () => problem('unauthorized', 401),
+      'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
+    })
+    renderApp('/cadastro')
+    await userEvent.click(await screen.findByRole('button', { name: 'Criar conta' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Para criar a conta, falta o nome, o e-mail, a senha com 12 caracteres e o aceite do aviso.',
+    )
+    expect(screen.getByLabelText('Nome')).toHaveFocus()
+    await userEvent.type(screen.getByLabelText('Nome'), request.name)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Para criar a conta, falta o e-mail, a senha com 12 caracteres e o aceite do aviso.',
+    )
   })
 
   it('e-mail já cadastrado mostra a mensagem sem sair da tela', async () => {
