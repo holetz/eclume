@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v5, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar e o título do servidor) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
+source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#118
 maintainer: holetz
 ---
 
@@ -170,11 +170,15 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
   `audio/ogg; codecs=opus`), e a tabela `markers (client_id PRIMARY KEY, recording_id, at_ms,
   note, created_at)`. O esquema v4 (`user_version = 4`) acrescenta `title` e `agenda_type_id`
   (escolhidos ao parar e levados no `UploadCreate`), `details_pending` (0/1) e o valor `mobile` em
-  `source`. Uma fila v1, v2 ou v3 ganha as colunas na abertura, sem perder linhas.
+  `source`. O esquema v5 (`user_version = 5`, holetz/eclume#118) acrescenta `server_title`, o
+  título que o servidor deu à gravação, lido da listagem por `?since=` (desktop) ou no ciclo de
+  rede e no detalhe (celular); a fila mostra o título dado ao parar, senão ele. Uma fila v1 a v4
+  ganha as colunas na abertura, sem perder linhas.
 - Métodos da v3: `set_kind`, `begin_import` (a importação já nasce `pending`,
   [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` e
   `markers(recording_id)`. Da v4: `set_source`, `set_details_pending`, `save_details(id, título,
-  tipo)` (vazios viram nulos; libera o sync; só antes do upload) e `release_details_pending`.
+  tipo)` (vazios viram nulos; libera o sync; só antes do upload) e `release_details_pending`. Da
+  v5: `set_server_title(remote_id, título)`, que devolve se mudou alguma linha.
 
 ```
 recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)

@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118
 maintainer: holetz
 ---
 
@@ -16,7 +16,8 @@ maintainer: holetz
 O celular é um **microfone portátil**: grava em Ogg/Opus mono 16 kHz com a tela bloqueada, marca
 instantes com nota opcional, guarda as gravações longe do servidor e sincroniza sozinho no Wi‑Fi
 da rede do servidor, com o mesmo upload retomável do desktop. **Não lê transcrição nem resumo**:
-isso é da web. Só Android: o iOS está fora do escopo, sem spec aberta (o plugin recusa o iOS em
+isso é da web, e o celular não notifica o fim do processamento (só fala com o servidor no Wi‑Fi do
+eclume; o aviso é do desktop e do web, holetz/eclume#118). Só Android: o iOS está fora do escopo, sem spec aberta (o plugin recusa o iOS em
 `mobile/plugins/gravador/src/lib.rs`; o núcleo, a UI com `data-os` e a interface do plugin não
 fecham a porta para um lado Swift). O layout e os comandos do pilar estão em
 [monorepo.md](monorepo.md#móvel--npm-e-workspace-cargo-em-mobile); a distribuição, em
@@ -169,7 +170,7 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 
 | Peça | O que faz |
 |---|---|
-| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`, `consumirAtalho` (`{gravar}`, `true` uma vez por toque no atalho); no `load`, acompanha a rede, agenda o `SyncWorker` e lê o atalho da partida a frio (`activity.intent`); no `onNewIntent`, o do app já aberto |
+| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`, `abrirUrl(url)`, `consumirAtalho` (`{gravar}`, `true` uma vez por toque no atalho); no `load`, acompanha a rede, agenda o `SyncWorker` e lê o atalho da partida a frio (`activity.intent`); no `onNewIntent`, o do app já aberto |
 | `Atalho` | a ação `io.github.holetz.eclume.movel.GRAVAR_AGORA` e a regra pura `ehGravarAgora(acao, flags)` (a ação, sem `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`), testada na JVM por `AtalhoTest` |
 | `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao`; na API 29+, `registerAudioRecordingCallback` enquanto grava (removido ao encerrar e no `onDestroy`): quando `isClientSilenced()` muda, `EclumeCore.acao("silenciado" \| "audivel")`, que marca "silenciado pelo sistema". Abaixo da API 29 não há sinal |
 | `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h", ou "Microfone desconectado · reconectando", ou "Silenciado pelo sistema"; Pausar/Continuar, Marcador e Parar |
@@ -218,7 +219,18 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   `continuar`, `marcar`, `anotar_marcador`, `parar`, `salvar`, `sincronizar_agora`, `gravacoes`,
   `gravacao` (com as etapas no servidor, em cache fora da rede), `excluir_local`,
   `excluir_sincronizadas`, `tipos_de_agenda`, `configuracoes`, `salvar_configuracoes`, `sair`,
-  `visibilidade`, `verificar_atualizacao` e `atualizar`.
+  `visibilidade`, `verificar_atualizacao`, `atualizar` e `abrir_na_web` (abre
+  `endereco_na_web` pelo `abrirUrl` do plugin).
+- **Título do servidor e "Abrir na web"** (holetz/eclume#118): o ciclo de rede, no máximo a cada
+  60 s (`INTERVALO_DOS_TITULOS_MS`), lê `GET /recordings?since=` (`sync::buscar_titulos`, todas as
+  páginas; a primeira a partir da enviada mais antiga ainda sem título, as seguintes do `since`
+  anterior, em memória) e grava cada título na fila v5 (`set_server_title`); abrir o detalhe faz o
+  mesmo com o `title` de `GET /recordings/{id}`. `GravacaoLocal.titulo_do_servidor` vai à lista e
+  ao detalhe, que mostram o título local, senão o do servidor, e só então "Sem título".
+  `DetalheLocal.endereco_na_web` é `<servidor pareado>/gravacoes/<id no servidor>`; com ele, o
+  detalhe tem **Abrir na web**, que abre o navegador do sistema (Intent `ACTION_VIEW`, como o
+  instalador) — o navegador precisa confiar na raiz do servidor (artigo
+  `certificado-do-servidor`).
 - **Evento `estado`** (`eventos.rs`): o `EstadoApp` completo (conexão, rede, sessão com
   `audio_ms`, nível e marcadores, folha, pendentes, avisos, espaço livre, versão), a cada mudança.
   O laço roda a 250 ms com o app visível (o medidor precisa) e a 1 s invisível (`visibilidade`,
