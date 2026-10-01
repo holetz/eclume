@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import App from '../app/App'
@@ -96,7 +96,7 @@ describe('Gravando', () => {
     expect(screen.getByText(/Dá para cerca de 50 min\. A gravação fica salva se o celular desligar\./)).toBeInTheDocument()
   })
 
-  it('para e a folha salva título e tipo de agenda, ou pula', async () => {
+  it('para e a folha salva título, tipo de agenda e idioma, ou pula', async () => {
     const ponte = abrir(estadoBase({ sessao: sessao() }))
     await userEvent.click(await screen.findByRole('button', { name: 'Parar' }))
     expect(ponte.parar).toHaveBeenCalled()
@@ -108,10 +108,17 @@ describe('Gravando', () => {
     expect(screen.getByLabelText('Título (opcional)')).toHaveAttribute('placeholder', 'sáb 26 set, 10:42')
     await userEvent.type(screen.getByLabelText('Título (opcional)'), 'Visita ao cliente')
     await userEvent.click(await screen.findByRole('button', { name: 'Visita ao cliente' }))
+    const idioma = await screen.findByLabelText('Idioma da transcrição')
+    expect(idioma).toHaveValue('')
+    expect(within(idioma).getByRole('option', { name: 'Padrão da conta: Português' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
-    expect(ponte.salvar).toHaveBeenCalledWith('g1', 'Visita ao cliente', 't2')
+    expect(ponte.salvar).toHaveBeenCalledWith('g1', 'Visita ao cliente', 't2', null)
+
+    await userEvent.selectOptions(idioma, 'Detectar automaticamente')
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(ponte.salvar).toHaveBeenLastCalledWith('g1', 'Visita ao cliente', 't2', 'auto')
 
     await userEvent.click(screen.getByRole('button', { name: 'Pular' }))
-    expect(ponte.salvar).toHaveBeenLastCalledWith('g1', null, null)
+    expect(ponte.salvar).toHaveBeenLastCalledWith('g1', null, null, null)
   })
 })
