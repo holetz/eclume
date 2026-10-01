@@ -6,6 +6,7 @@ const COMMANDS: &[&str] = &[
     "estado_do_dispositivo",
     "abrir_configuracoes_do_app",
     "pedir_isencao_de_bateria",
+    "consumir_atalho",
 ];
 
 fn main() {
