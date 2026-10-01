@@ -2,19 +2,21 @@ import { useEffect, type ReactNode } from 'react'
 import { useBlocker } from 'react-router'
 import { Dialog } from './Dialog'
 
-interface LeaveCopy {
+interface LeaveOptions {
   title: string
   message: ReactNode
+  /** Roda quando a pessoa confirma a saída, antes de navegar (ex.: apagar o rascunho guardado). */
+  onDiscard?: () => void
 }
 
-const DEFAULT_COPY: LeaveCopy = { title: 'Descartar alterações?', message: 'As alterações ainda não foram salvas.' }
+const DEFAULT_OPTIONS: LeaveOptions = { title: 'Descartar alterações?', message: 'As alterações ainda não foram salvas.' }
 
 /**
  * Guarda de saída de um formulário com alterações não salvas: fechar ou recarregar a aba dispara o
  * aviso do navegador, e ir para outra rota do app pede confirmação. Mudar só a busca ou o `#` da
  * mesma rota (o `?t=` da gravação, a seleção na URL) não pede nada. Devolve o diálogo a renderizar.
  */
-export function useLeaveGuard(dirty: boolean, copy: LeaveCopy = DEFAULT_COPY): ReactNode {
+export function useLeaveGuard(dirty: boolean, options: LeaveOptions = DEFAULT_OPTIONS): ReactNode {
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -28,15 +30,19 @@ export function useLeaveGuard(dirty: boolean, copy: LeaveCopy = DEFAULT_COPY): R
   if (blocker.state !== 'blocked') return null
   return (
     <Dialog
-      title={copy.title}
-      message={copy.message}
+      title={options.title}
+      message={options.message}
       onClose={() => blocker.reset()}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={() => blocker.reset()}>
             Continuar editando
           </button>
-          <button type="button" className="btn btn-danger" onClick={() => blocker.proceed()}>
+          <button type="button" className="btn btn-danger" onClick={() => {
+              options.onDiscard?.()
+              blocker.proceed()
+            }}
+          >
             Descartar
           </button>
         </>

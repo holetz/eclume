@@ -385,6 +385,22 @@ describe('edição do resumo', () => {
     expect(within(editor).getByRole('button', { name: 'Salvar sobre a versão 2' })).toBeInTheDocument()
   })
 
+  it('sair pela barra com rascunho pede confirmação, e continuar editando mantém o texto', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    const text = within(editor).getByRole('textbox')
+    await user.type(text, ' mais')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await user.click(within(nav).getByRole('link', { name: 'Biblioteca' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Descartar a edição?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Continuar editando' }))
+    expect(screen.queryByRole('dialog', { name: 'Descartar a edição?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Editando o resumo' })).toBeInTheDocument()
+    expect(text).toHaveValue(`${fixtures.summaryState().current!.content_md} mais`)
+  })
+
   it('volta à gerada com confirmação', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { useLeaveGuard } from '../../app/useLeaveGuard'
 import styles from './RecordingPage.module.css'
 import { isSummaryChanged, useSummaryMutations, useSummaryState, type SummaryState } from './summary'
 import { diffLines } from './summary-diff'
@@ -62,6 +63,11 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
   const [confirm, setConfirm] = useState<'discard' | 'revert' | null>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
   const changed = draft !== (opened?.content_md ?? '')
+  const leaveDialog = useLeaveGuard(changed, {
+    title: 'Descartar a edição?',
+    message: <p>As mudanças deste rascunho se perdem.</p>,
+    onDiscard: () => writeSummaryDraft(recording.id, null),
+  })
 
   // A área cresce com o conteúdo, como o documento.
   useLayoutEffect(() => {
@@ -205,6 +211,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
           )}
         </ConfirmDialog>
       )}
+      {leaveDialog}
     </section>
   )
 }
