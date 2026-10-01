@@ -101,6 +101,29 @@ describe('Usuários', () => {
     expect(screen.getByText('3 contas · 1 ativa')).toBeInTheDocument()
   })
 
+  it('gera o link de senha depois de confirmar e o mostra uma vez para copiar', async () => {
+    const link = fixtures.passwordResetLink()
+    const http = mockUsersApi({ 'POST /api/v1/admin/users/:id/password-reset': () => link })
+    renderApp('/admin/usuarios')
+    expect(await screen.findByRole('row', { name: /Júlia Araújo/ })).not.toHaveTextContent('Gerar link de senha')
+    await userEvent.click(screen.getByRole('button', { name: 'Gerar link de senha para Paulo Andrade' }))
+    const confirm = screen.getByRole('dialog', { name: 'Gerar link de senha para Paulo Andrade?' })
+    expect(confirm).toHaveTextContent('Confirme antes que é Paulo Andrade quem pede.')
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancelar' }))
+    expect(http.requests('POST /api/v1/admin/users/:id/password-reset')).toHaveLength(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Gerar link de senha para Paulo Andrade' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Gerar link' }))
+    const shown = await screen.findByRole('dialog', { name: 'Link de senha de Paulo Andrade' })
+    expect(within(shown).getByText(link.url)).toBeInTheDocument()
+    expect(shown).toHaveTextContent('Vale por 24 horas e uma só vez')
+    expect(within(shown).getByRole('button', { name: 'Copiar' })).toBeInTheDocument()
+    const request = http.requests('POST /api/v1/admin/users/:id/password-reset')[0]
+    expect(new URL(request.url).pathname).toBe(`/api/v1/admin/users/${PAULO_ID}/password-reset`)
+    await userEvent.click(within(shown).getByRole('button', { name: 'Fechar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('reativa na hora', async () => {
     const [, second] = pages()
     const http = mockUsersApi({ 'PATCH /api/v1/admin/users/:id': () => ({ ...second.items[0], active: true }) })

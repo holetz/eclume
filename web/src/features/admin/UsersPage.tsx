@@ -2,19 +2,22 @@ import { useId, useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { CopyValue } from '../../app/CopyValue'
+import { Dialog } from '../../app/Dialog'
 import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { foldText, formatShortDate } from './labels'
-import { useAllUsers, useSetUserActive } from './queries'
+import { useAllUsers, useCreatePasswordReset, useSetUserActive } from './queries'
 
 type User = Schemas['AdminUser']
 
-/** Contas de usuário da plataforma: quantas gravações cada uma tem, e desativar ou reativar. */
+/** Contas de usuário da plataforma: quantas gravações cada uma tem, desativar ou reativar e o link de senha. */
 export function UsersPage() {
   const users = useAllUsers()
   const setActive = useSetUserActive()
   const [query, setQuery] = useState('')
   const [confirming, setConfirming] = useState<User | null>(null)
+  const [resetting, setResetting] = useState<User | null>(null)
   const searchId = useId()
 
   const all = users.data ?? []
@@ -95,14 +98,24 @@ export function UsersPage() {
                       </td>
                       <td className={styles.actionsCell}>
                         {user.active ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            aria-label={`Desativar ${user.name}`}
-                            onClick={() => setConfirming(user)}
-                          >
-                            Desativar
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-label={`Gerar link de senha para ${user.name}`}
+                              onClick={() => setResetting(user)}
+                            >
+                              Gerar link de senha
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-label={`Desativar ${user.name}`}
+                              onClick={() => setConfirming(user)}
+                            >
+                              Desativar
+                            </button>
+                          </>
                         ) : (
                           <button
                             type="button"
@@ -134,6 +147,64 @@ export function UsersPage() {
           As sessões são encerradas e os tokens de acesso, revogados. As gravações ficam guardadas.
         </ConfirmDialog>
       )}
+      {resetting && <PasswordResetDialog user={resetting} onClose={() => setResetting(null)} />}
     </>
+  )
+}
+
+/**
+ * Gera o link de redefinição de senha depois de confirmar e o mostra uma vez para copiar. Gerar outro
+ * vence o anterior; o admin entrega o link por fora, depois de confirmar quem pede.
+ */
+function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => void }) {
+  const create = useCreatePasswordReset()
+  const link = create.data
+
+  if (link) {
+    return (
+      <Dialog
+        plain
+        title={`Link de senha de ${user.name}`}
+        message={`Copie e entregue por fora, pessoalmente, por telefone ou por mensagem, a ${user.name}. Vale por 24 horas e uma só vez; este link não aparece de novo.`}
+        onClose={onClose}
+        actions={
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Fechar
+          </button>
+        }
+      >
+        <CopyValue value={link.url} />
+      </Dialog>
+    )
+  }
+  return (
+    <Dialog
+      plain
+      title={`Gerar link de senha para ${user.name}?`}
+      message={`Confirme antes que é ${user.name} quem pede. Quem abrir o link define uma senha nova, e as sessões abertas da conta são encerradas. Um link anterior ainda não usado deixa de valer.`}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => create.mutate(user.id)}
+            disabled={create.isPending}
+            aria-busy={create.isPending}
+          >
+            Gerar link
+          </button>
+        </>
+      }
+    >
+      {create.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(create.error)}
+        </p>
+      )}
+    </Dialog>
   )
 }
