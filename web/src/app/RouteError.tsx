@@ -8,7 +8,7 @@ import { usePageTitle } from './usePageTitle'
 const CHUNK_FAILURE =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
-export function isChunkError(error: unknown): boolean {
+function isChunkError(error: unknown): boolean {
   return error instanceof Error && CHUNK_FAILURE.test(error.message)
 }
 
