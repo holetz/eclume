@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102
 maintainer: holetz
 ---
 
@@ -69,7 +69,16 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
      (`3F9A 12C4 …`) para conferir com a web antes de "Confiar".
 - Fixada a raiz, o transporte é `TrustMode::Pinned` (só o `ca.pem`), e o `GET /api/v1/server` já
   fixado confirma o `ca_sha256` antes de gravar o servidor na config. A raiz nova vai para
-  `ca.pem.novo` e só substitui o `ca.pem` depois dessa confirmação.
+  `ca.pem.novo` e só substitui o `ca.pem` depois dessa confirmação. O `ca.pem` tem **exatamente
+  um** certificado, o da impressão digital conferida: o `pin.rs` grava só o primeiro do
+  `eclume-root.crt`, e o modo fixado recusa um PEM com mais de um.
+- **Migração na abertura** (holetz/eclume#102): com servidor na config e `ca.pem` presente,
+  `Core::abrir` passa `pin::trim_saved` no `ca.pem`. Um arquivo com mais de um certificado é
+  regravado só com o primeiro, e a credencial é apagada com o motivo `pin::CA_TRIMMED`
+  (`Conexao::perdeu_credencial_por`), que manda entrar de novo, trocar a senha e desvincular a
+  entrada antiga na web. Com um certificado só, nada muda.
+- A fase `sem_credencial` leva um `motivo` opcional (fora do JSON quando vazio), que a tela Entrar
+  mostra num `.alert.alert-warning` acima do formulário; ele some depois de entrar.
 - Os comandos que falam com o servidor para conectar (`conectar_*`, `confiar_ca`, `entrar`,
   `parear`) são `async` e rodam numa thread de bloqueio, nunca na thread principal. Trocar de servidor apaga a
   credencial do anterior.
