@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../app/App'
@@ -28,19 +28,32 @@ describe('Detalhe da gravação', () => {
         etapas: [
           { step: 'received', state: 'done' },
           { step: 'preprocessing', state: 'done' },
-          { step: 'transcription', state: 'active' },
-          { step: 'fields', state: 'pending' },
-          { step: 'agenda_type', state: 'pending' },
+          { step: 'transcription', state: 'done' },
+          { step: 'fields', state: 'active' },
+          { step: 'agenda_type', state: 'skipped', reason: 'set_by_user' },
           { step: 'summary', state: 'pending' },
         ],
       }
     })
     expect(await screen.findByRole('heading', { name: 'Reunião semanal' })).toBeInTheDocument()
-    expect(screen.getByText('Sincronizada')).toBeInTheDocument()
+    expect(screen.getByText('Enviada')).toHaveClass('badge-success')
     expect(document.querySelector('audio')).toHaveAttribute('src', 'asset://localhost//data/eclume/gravacoes/g1.ogg')
     expect(screen.getByText('Início da pauta')).toBeInTheDocument()
-    expect(screen.getByText('Transcrição')).toHaveAttribute('data-state', 'active')
-    expect(screen.getByText('Resumo')).not.toHaveAttribute('data-state')
+    // As seis etapas na ordem do servidor, com o estado em palavra e o motivo visível sob a barra.
+    const etapas = within(screen.getByRole('list', { name: 'Etapas no servidor' })).getAllByRole('listitem')
+    expect(etapas.map((etapa) => etapa.textContent)).toEqual([
+      'Áudio recebido',
+      'Pré-processamento',
+      'Transcrição',
+      'Tipo de agenda · pulada',
+      'Preenchendo campos',
+      'Resumo · esperando',
+    ])
+    expect(etapas[4]).toHaveAttribute('data-state', 'active')
+    expect(etapas[5]).not.toHaveAttribute('data-state')
+    expect(within(screen.getByRole('list', { name: 'Motivos das etapas' })).getByRole('listitem')).toHaveTextContent(
+      'Tipo de agenda · pulada: o tipo foi escolhido por você',
+    )
     expect(screen.getByText('54 min · 10 MB · Opus 25 kbps · Reunião de equipe')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Excluir deste celular' }))
     expect(ponte.excluirLocal).toHaveBeenCalledWith('g1')
@@ -56,7 +69,7 @@ describe('Detalhe da gravação', () => {
         etapas: null,
       }
     })
-    expect(await screen.findByText('Aguardando')).toBeInTheDocument()
+    expect(await screen.findByText('Aguardando envio')).toBeInTheDocument()
     expect(screen.queryByText('No servidor')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Excluir deste celular' })).not.toBeInTheDocument()
   })

@@ -228,7 +228,7 @@ async function principal() {
   adb('shell', 'svc', 'wifi', 'enable')
   await ate(
     'a gravação sincronizada',
-    async () => (await pagina.getByText(TITULO).count()) > 0 && (await pagina.getByText('Sincronizada').count()) > 0,
+    async () => (await pagina.getByText(TITULO).count()) > 0 && (await pagina.getByText('Enviada').count()) > 0,
     120,
   )
   passo('de volta à rede: sincronizada')

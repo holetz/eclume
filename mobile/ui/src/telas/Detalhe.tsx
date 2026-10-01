@@ -5,19 +5,49 @@ import { Voltar } from '../app/Voltar'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
 import type { DetalheLocal, Etapa } from '../ponte/tipos'
 import { SeloDaGravacao } from './ListaDoCelular'
+import { ESTADOS_ETAPA, ETAPAS, motivo } from '../app/vocabulario.js'
 
-/** As etapas da #33 que o celular mostra, na ordem. */
-const ETAPAS: { step: string; nome: string }[] = [
-  { step: 'received', nome: 'Áudio recebido' },
-  { step: 'preprocessing', nome: 'Pré-processamento' },
-  { step: 'transcription', nome: 'Transcrição' },
-  { step: 'fields', nome: 'Campos preenchidos' },
-  { step: 'summary', nome: 'Resumo' },
-]
+/** A etapa em palavras, legível sem a cor: o nome quando concluída, o andamento quando ativa e "nome · estado" nas outras. */
+function rotuloDaEtapa(etapa: (typeof ETAPAS)[number], estado: Etapa | undefined): string {
+  if (!estado || estado.state === 'done') return etapa.nome
+  if (estado.state === 'active') return etapa.andamento
+  return `${etapa.nome} · ${ESTADOS_ETAPA[estado.state] ?? estado.state}`
+}
 
-function estadoDaEtapa(etapas: Etapa[] | null, step: string): Etapa['state'] | undefined {
-  const estado = etapas?.find((e) => e.step === step)?.state
-  return estado === 'pending' ? undefined : estado
+/** Por que a etapa foi pulada ou falhou; `null` nas outras. */
+function motivoDaEtapa(estado: Etapa | undefined): string | null {
+  if (estado?.state === 'failed') return estado.error?.message ?? null
+  if (estado?.state === 'skipped') return estado.reason ? motivo(estado.reason) : null
+  return null
+}
+
+/** As seis etapas na ordem do servidor, cada uma com o estado em palavra, e o motivo das puladas ou com falha. */
+function EtapasNoServidor({ etapas }: { etapas: Etapa[] | null }) {
+  const linhas = ETAPAS.map((etapa) => {
+    const estado = etapas?.find((e) => e.step === etapa.etapa)
+    return { etapa, estado, rotulo: rotuloDaEtapa(etapa, estado), motivo: motivoDaEtapa(estado) }
+  })
+  const motivos = linhas.filter((linha) => linha.motivo)
+  return (
+    <>
+      <ol className="pipeline" aria-label="Etapas no servidor">
+        {linhas.map(({ etapa, estado, rotulo }) => (
+          <li key={etapa.etapa} data-state={estado?.state === 'pending' ? undefined : estado?.state}>
+            {rotulo}
+          </li>
+        ))}
+      </ol>
+      {motivos.length > 0 && (
+        <ul className="motivos-das-etapas" aria-label="Motivos das etapas">
+          {motivos.map(({ etapa, rotulo, motivo: texto }) => (
+            <li key={etapa.etapa}>
+              {rotulo}: {texto}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
 }
 
 /** Kbps a partir do tamanho e da duração: "Opus 24 kbps". */
@@ -136,13 +166,7 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
           {gravacao.remote_id && (
             <div className="m-section gap-2">
               <span className="kicker">No servidor</span>
-              <ol className="pipeline">
-                {ETAPAS.map((etapa) => (
-                  <li key={etapa.step} data-state={estadoDaEtapa(detalhe.etapas, etapa.step)}>
-                    {etapa.nome}
-                  </li>
-                ))}
-              </ol>
+              <EtapasNoServidor etapas={detalhe.etapas} />
             </div>
           )}
           <div className="m-section m-fill gap-2">
