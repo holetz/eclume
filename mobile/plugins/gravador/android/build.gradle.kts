@@ -18,6 +18,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+    // O lint do release fecha o gate (pilar android): o que já existia na introdução fica no
+    // baseline; um aviso novo de erro falha.
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkReleaseBuilds = true
+    }
 }
 
 kotlin {

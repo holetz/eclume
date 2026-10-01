@@ -170,13 +170,19 @@ def test_cada_job_da_ci_chama_o_seu_pilar() -> None:
         assert f"pilares.sh {pilar}" not in (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
 
 
+def test_android_e_pilar_so_do_gate() -> None:
+    """O APK verificado (SDK do host, perto de 15 min) roda só no gate, depois dos outros."""
+    assert gate.PILARES[-1] == "android"
+    assert "android" in gate.SO_NO_GATE
+
+
 def test_pilares_sh_lista_os_mesmos_pilares_do_gate() -> None:
     """O `--lista` do `pilares.sh` e o `gate.PILARES` andam juntos."""
     texto = (RAIZ / "deploy" / "pilares.sh").read_text(encoding="utf-8")
     assert f"PILARES=({' '.join(gate.PILARES)})" in texto
 
 
-@pytest.mark.parametrize("arquivo", ["desktop-release.yml", "mobile-release.yml"])
+@pytest.mark.parametrize("arquivo", ["desktop-release.yml"])
 def test_workflows_de_release_conferem_o_gate_antes_de_publicar(arquivo: str) -> None:
     """Quando vão publicar, os releases pelo Actions conferem o `eclume/gate` do commit, sem dispensa."""
     jobs = yaml.safe_load((WORKFLOWS / arquivo).read_text(encoding="utf-8"))["jobs"]

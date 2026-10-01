@@ -164,8 +164,8 @@ do SQLite. O compilador e o linker do NDK entram por `CC_aarch64_linux_android`,
 `AR_aarch64_linux_android` e `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`; no host, o
 `android-env.sh` os exporta pelo nome, com o `bin` do NDK no fim do `PATH`. Não há
 `mobile/.cargo/config.toml`: um `CC` por nome nele valeria também dentro do `tauri android build`,
-que não o acha no `PATH` dele. O APK de release sai de `mobile-release.yml`
-([mobile-distribuicao.md](mobile-distribuicao.md)).
+que não o acha no `PATH` dele. O APK de release sai do host, por `deploy/release-movel.sh`
+([mobile-distribuicao.md](mobile-distribuicao.md)), e é provado a cada gate no pilar `android`.
 
 ## Serviços de apoio — `deploy/docker-compose.dev.yml`
 
@@ -221,14 +221,14 @@ deixa de valer), o `[advisories] ignore` de `desktop/deny.toml` e `mobile/deny.t
 ## CI e gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` e `deploy/gate.sh`
 
 Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
-(`--lista` enumera os nove: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
-`docs`, `windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` e o
+(`--lista` enumera os dez: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
+`docs`, `windows`, `auditoria` e `android`), com `--locked` no uv e no cargo, `gen:api -- --check` e o
 `budget` depois do build no `web`, `playwright install webkit firefox` no `web-browser` e
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
 mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
 serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam o mesmo script;
-`deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows` ou
-`auditoria` entrarem na CI.
+`deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows`,
+`auditoria` ou `android` entrarem na CI.
 
 **CI (aviso, não requisito de publicação).** Jobs `ubuntu-24.04` independentes, em `pull_request`,
 em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
@@ -264,21 +264,29 @@ do front de design (`.design/build/`, geradas do `.design/tokens.json`) são ver
 exceção `!.design/build/` no `.gitignore` e fora do ruff, e o `--check` acusa a deriva.
 
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
-commit para o host GPU e roda lá `deploy/gate-host.sh`: os nove pilares, cada um num contêiner da
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os dez pilares, cada um num contêiner da
 imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
 `eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
 execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
-commit: `pending` enquanto roda, `success` só com os nove pilares verdes numa execução completa,
+commit: `pending` enquanto roda, `success` só com os dez pilares verdes numa execução completa,
 `failure` nomeando os pilares que falharam e `error` quando o gate não consegue provar; o log fica em
 `~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
 uma parte e nunca publica. Os pilares `windows` (`cargo xwin clippy` do desktop para
-`x86_64-pc-windows-msvc`, `-D warnings`) e `auditoria` são só do gate.
+`x86_64-pc-windows-msvc`, `-D warnings`), `auditoria` e `android` são só do gate. O `android`
+recebe o SDK, o NDK e o JDK de `mobile/scripts/android-sdk.sh` do host, só leitura
+(`ECLUME_ANDROID_SDK`, `ECLUME_ANDROID_NDK`, `ECLUME_ANDROID_JDK`), e o cache do Gradle em
+`~/eclume-gate/cache/gradle`; compila o APK de release minificado (R8) com uma chave descartável
+da execução, roda `testDebugUnitTest` e `lintRelease` (com `lint-baseline.xml` e `abortOnError`)
+do plugin e do app e confere a ponte JNI por `mobile/scripts/simbolos_jni.py` (cada
+`external fun` do `EclumeCore.kt` com o símbolo `Java_…` na `.so`, pelo `llvm-nm` do NDK, e a
+classe com os métodos nativos no dex, pelo `apkanalyzer` do SDK).
 Nenhum caminho que publica aceita um SHA sem `eclume/gate` = `success`: `deploy/deploy.sh`,
-`deploy/release-desktop.sh --publicar`, `desktop-release.yml` e `mobile-release.yml`. A saída de
-emergência é `--sem-gate "<motivo>"`, por invocação, no `deploy.sh` e no `release-desktop.sh`:
+`deploy/release-desktop.sh --publicar`, `deploy/release-movel.sh --publicar` e
+`desktop-release.yml`. A saída de emergência é `--sem-gate "<motivo>"`, por invocação, no
+`deploy.sh`, no `release-desktop.sh` e no `release-movel.sh`:
 dispensa só o status (árvore limpa e commit no GitHub seguem exigidos) e deixa no commit o status
-`eclume/gate-dispensa` = `failure` com o motivo. Os workflows de release não têm dispensa.
+`eclume/gate-dispensa` = `failure` com o motivo. O workflow de release não tem dispensa.
 
 **Hook de pre-push.** `.githooks/pre-push`, ativado uma vez por clone com
 `git config core.hooksPath .githooks`, dispara `bash deploy/gate.sh --fundo <sha>` para cada
