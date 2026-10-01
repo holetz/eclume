@@ -39,6 +39,14 @@ download no celular.
   conferir com a web antes de confiar.
 - Se o login disser para aceitar o aviso de responsabilidade, aceite-o na web e entre de novo.
 
+## Gravar agora pelo atalho do ícone
+
+Pressione o ícone do eclume e toque em **Gravar agora**: o app abre e começa a gravar, como o botão
+Gravar. Para um toque só na tela inicial, arraste o atalho **Gravar** para fora do menu e solte-o
+onde quiser. Na primeira vez, o app pede o microfone e as notificações. Se já houver uma gravação
+em curso, o atalho só abre a tela dela; se o app ainda não estiver conectado ao servidor, ele abre
+na tela que explica o que falta. Voltar ao app pelos recentes não começa outra gravação.
+
 ## Atualizações
 
 Na rede do eclume, o app confere uma vez por dia se há versão nova. Em **Configurações**, "Nova
