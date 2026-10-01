@@ -47,7 +47,6 @@ EXCECOES: tuple[Excecao, ...] = (
         "segredos gerados pelo deploy.sh --gerar-env; fora do git",
     ),
     Excecao("docs/project/deploy-producao.md", "web/test-results/prod", "saída da prova de produção do Playwright"),
-    Excecao("docs/standards/code/desktop-interface.md", "web/node_modules", "criado pelo npm ci"),
     Excecao(
         "docs/standards/agents/communication.md",
         "docs/standards/CLAUDE.md",
@@ -137,7 +136,8 @@ def caminhos_em_crase(texto: str, pastas_de_topo: set[str]) -> list[tuple[int, s
     for n, linha in linhas_fora_de_codigo(texto):
         for m in CRASE.finditer(linha):
             caminho = m["texto"].strip()
-            if any(c in caminho for c in "*<>{}$ ") or "/" not in caminho:
+            # Curinga, marcador, variável, comando e pasta gerada pelo npm não são caminhos do commit.
+            if any(c in caminho for c in "*<>{}$ ") or "/" not in caminho or "node_modules" in caminho:
                 continue
             caminho = LINHA_FINAL.sub("", caminho).rstrip("/")
             if caminho.split("/", 1)[0] in pastas_de_topo:
