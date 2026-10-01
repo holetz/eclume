@@ -1,0 +1,15 @@
+{
+  "usage": {
+    "storage_bytes": 1288490188,
+    "open_uploads": 1,
+    "gpu_minutes_24h": 95,
+    "agent_requests_24h": 12
+  },
+  "quotas": {
+    "storage_bytes": 10737418240,
+    "file_bytes": 2147483648,
+    "open_uploads": 3,
+    "gpu_minutes_24h": 600,
+    "agent_requests_24h": 200
+  }
+}

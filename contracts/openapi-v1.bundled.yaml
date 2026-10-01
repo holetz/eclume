@@ -263,6 +263,35 @@ paths:
                   $ref: '#/components/examples/MeViaPat'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/me/usage:
+    get:
+      tags:
+      - auth
+      operationId: getMyUsage
+      summary: Uso e cotas da conta
+      description: 'Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta
+        pelo
+
+        admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
+
+        agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat: []
+      responses:
+        '200':
+          description: Uso e cotas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+              examples:
+                conta:
+                  $ref: '#/components/examples/MeUsage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/me/password:
     post:
       tags:
@@ -759,6 +788,13 @@ paths:
         existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
 
         fixado pelo servidor e as URLs das primeiras partes.
+
+
+        Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
+
+        armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
+
+        `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
 
 
         Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
@@ -4340,7 +4376,8 @@ components:
       description: 'Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só
         sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta
         que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`,
-        `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial).'
+        `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). Desde
+        a 2.15.0, cota da conta estourada (`code: quota_exceeded`, com `quota`, `limit` e `used`).'
       content:
         application/problem+json:
           schema:
@@ -4444,14 +4481,29 @@ components:
 
             vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
 
-            vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`.
+            vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
 
-            Códigos novos entram de forma aditiva.
+            desde a 2.15.0, `quota_exceeded` (cota da conta estourada). Códigos novos entram de
+
+            forma aditiva.
 
             '
           type: string
         limit:
-          description: Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0).
+          description: Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com
+            `quota_exceeded`, o limite da cota (desde a 2.15.0).
+          type: integer
+        quota:
+          description: Com `quota_exceeded`, a cota estourada (desde a 2.15.0).
+          type: string
+          enum:
+          - storage_bytes
+          - file_bytes
+          - open_uploads
+          - agent_requests_24h
+        used:
+          description: Com `quota_exceeded`, o uso a que o pedido levaria (bytes, uploads abertos ou pedidos
+            em 24 h; em `file_bytes`, o tamanho do arquivo) (desde a 2.15.0).
           type: integer
         required_scopes:
           description: 'Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos
@@ -4756,6 +4808,80 @@ components:
           format: uuid
         name:
           type: string
+    Quotas:
+      description: Cotas de uma conta (desde a 2.15.0); `null` é sem limite. Minutos de áudio transcritos
+        e pedidos ao agente contam numa janela móvel de 24 h.
+      type: object
+      required:
+      - storage_bytes
+      - file_bytes
+      - open_uploads
+      - gpu_minutes_24h
+      - agent_requests_24h
+      properties:
+        storage_bytes:
+          description: Armazenamento total (áudio das gravações mais uploads abertos), em bytes.
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        file_bytes:
+          description: Tamanho máximo de um arquivo, em bytes.
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        open_uploads:
+          description: Uploads abertos ao mesmo tempo.
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        gpu_minutes_24h:
+          description: 'Minutos de áudio enviados à transcrição em 24 h. Passado o limite nada é recusado:
+            a gravação espera na fila até a janela abrir.'
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        agent_requests_24h:
+          description: Pedidos da pessoa ao agente (resumos, chats, pré-visualizações) em 24 h.
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    UsageNow:
+      description: Uso corrente de uma conta (desde a 2.15.0).
+      type: object
+      required:
+      - storage_bytes
+      - open_uploads
+      - gpu_minutes_24h
+      - agent_requests_24h
+      properties:
+        storage_bytes:
+          type: integer
+          minimum: 0
+        open_uploads:
+          type: integer
+          minimum: 0
+        gpu_minutes_24h:
+          type: integer
+          minimum: 0
+        agent_requests_24h:
+          type: integer
+          minimum: 0
+    Usage:
+      description: Uso e cota efetiva da conta (desde a 2.15.0).
+      type: object
+      required:
+      - usage
+      - quotas
+      properties:
+        usage:
+          $ref: '#/components/schemas/UsageNow'
+        quotas:
+          $ref: '#/components/schemas/Quotas'
     Me:
       type: object
       required:
@@ -8998,6 +9124,20 @@ components:
       value:
         email: mariana.couto@example.com
         password: correta-cavalo-bateria-grampo
+    MeUsage:
+      summary: Uso da conta abaixo das cotas padrão
+      value:
+        usage:
+          storage_bytes: 1288490188
+          open_uploads: 1
+          gpu_minutes_24h: 95
+          agent_requests_24h: 12
+        quotas:
+          storage_bytes: 10737418240
+          file_bytes: 2147483648
+          open_uploads: 3
+          gpu_minutes_24h: 600
+          agent_requests_24h: 200
     MeViaPat:
       summary: Consultora autenticada pelo PAT do lumea
       value:

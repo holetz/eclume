@@ -39,6 +39,7 @@ from eclume_server.problems import (
     unauthorized,
     validation_failed,
 )
+from eclume_server.quotas import check_upload
 from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
 from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
@@ -297,6 +298,7 @@ async def create_upload(
                     await ctx.storage.abort_multipart(open_upload["audio_key"], open_upload["s3_upload_id"])
                 await conn.execute(update(t.uploads).where(t.uploads.c.id == open_upload["id"]).values(status=closed))
 
+            await check_upload(conn, principal.user_id, body.size_bytes)
             recording_id = uuid4()
             key = audio_key(principal.user_id, recording_id)
             s3_upload_id = await ctx.storage.create_multipart(key, body.content_type)

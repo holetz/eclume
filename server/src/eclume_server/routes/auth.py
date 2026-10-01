@@ -32,6 +32,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.health import readiness
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
+from eclume_server.quotas import usage
 from eclume_server.ratelimit import attempts, check_login, client_ip, login_failed, login_succeeded
 from eclume_server.recordings import open_jobs_of
 from eclume_server.security import new_session_token, sha256_hex
@@ -266,6 +267,13 @@ async def accept_notice(
             .values(notice_version=body.notice_version, notice_accepted_at=func.now())
         )
     return Response(status_code=204)
+
+
+@router.get("/me/usage")
+async def my_usage(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
+    """Uso da conta e a cota efetiva (schema `Usage`)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await usage(conn, ctx.queue.pool, principal.user_id)
 
 
 @router.get("/me")
