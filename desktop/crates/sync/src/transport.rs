@@ -1,10 +1,10 @@
 //! O transporte HTTP: uma interface mínima (o protocolo é testado sobre um roteirizado) e a
 //! implementação real em `ureq` com rustls.
 //!
-//! TLS: sem CA extra vale o verificador da plataforma, que enxerga a CA do Caddy instalada no SO
-//! pelo runbook do host. Com `ca_path`, as raízes nativas do SO mais os certificados do PEM
-//! indicado — é o caminho para confiar na CA interna sem instalá-la no sistema, e o que a CA
-//! fixada pelo `pin.rs` usa.
+//! TLS, pelo [`TrustMode`]: a CA fixada pelo `pin.rs` (o desktop com a CA da primeira execução e o
+//! celular) confia em exatamente um certificado, sem as raízes do SO (`Pinned`). Sem CA própria
+//! (servidor com certificado público, ou `http://` de dev) vale o verificador da plataforma; com
+//! uma CA escolhida à mão, as raízes nativas do SO mais os certificados do PEM (`PlatformPlus`).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -110,10 +110,12 @@ const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 /// Em quem o transporte confia.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrustMode {
-    /// As raízes do SO (o verificador da plataforma) mais a CA do PEM, se houver: o desktop.
+    /// As raízes do SO (o verificador da plataforma) mais todos os certificados do PEM, se houver:
+    /// o desktop com uma CA escolhida à mão, ou sem CA própria do servidor.
     PlatformPlus(Option<PathBuf>),
-    /// Só os certificados do PEM, sem as raízes do SO nem o `rustls-platform-verifier` (que no
-    /// Android exige inicialização JNI própria): o celular, que fixa a CA do servidor.
+    /// Só o certificado do PEM fixado, sem as raízes do SO nem o `rustls-platform-verifier` (que
+    /// no Android exige inicialização JNI própria): o desktop com a CA da primeira execução e o
+    /// celular. Um PEM com mais de um certificado é erro, nunca confiança ampliada.
     Pinned(PathBuf),
 }
 
@@ -182,8 +184,21 @@ impl UreqTransport {
 pub fn trusted_roots(trust: &TrustMode) -> Result<RootCerts> {
     match trust {
         TrustMode::PlatformPlus(ca_path) => root_certs(ca_path.as_deref()),
-        TrustMode::Pinned(ca_path) => Ok(RootCerts::new_with_certs(&read_pem_certs(ca_path)?)),
+        TrustMode::Pinned(ca_path) => Ok(RootCerts::new_with_certs(&[pinned_cert(ca_path)?])),
     }
+}
+
+/// O único certificado de um PEM fixado; nenhum ou mais de um é erro que nomeia o arquivo.
+pub fn pinned_cert(path: &Path) -> Result<Certificate<'static>> {
+    let mut certs = read_pem_certs(path)?;
+    if certs.len() != 1 {
+        bail!(
+            "a CA fixada em {} tem {} certificados; esperava exatamente um",
+            path.display(),
+            certs.len()
+        );
+    }
+    Ok(certs.remove(0))
 }
 
 /// As raízes de confiança: o verificador da plataforma, ou as nativas mais o PEM extra.
@@ -348,6 +363,25 @@ mod tests {
         assert!(UreqTransport::pinned(&path, "eclume-android/0.1.0").is_ok());
         // Sem PEM, o modo fixado não cai nas raízes do SO: é erro.
         assert!(trusted_roots(&TrustMode::Pinned(PathBuf::from("/nao/existe.pem"))).is_err());
+    }
+
+    #[test]
+    fn ca_fixada_com_dois_certificados_e_erro_e_a_extra_soma_os_dois() {
+        let other = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+        let path = temp("duas.pem", &format!("{TEST_CA}{other}"));
+        let Err(err) = trusted_roots(&TrustMode::Pinned(path.clone())) else {
+            panic!("dois certificados no modo fixado tinham de ser erro");
+        };
+        let text = format!("{err:#}");
+        assert!(text.contains("duas.pem"), "{text}");
+        assert!(text.contains("2 certificados"), "{text}");
+        assert!(UreqTransport::pinned(&path, "eclume-android/0.1.0").is_err());
+        let RootCerts::Specific(merged) =
+            trusted_roots(&TrustMode::PlatformPlus(Some(path))).unwrap()
+        else {
+            panic!("esperava raízes específicas");
+        };
+        assert!(merged.len() >= 2);
     }
 
     #[test]
