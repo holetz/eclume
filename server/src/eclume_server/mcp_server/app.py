@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 MCP_PATH = "/mcp"
 PRINCIPAL_KEY = "eclume.principal"
 INSTRUCTIONS = (
-    "Gravações, transcrições e resumos de reuniões e notas por voz do usuário do eclume. Busque com "
+    "Gravações, transcrições e resumos de reuniões e notas de voz do usuário do eclume. Busque com "
     "search_recordings, leia com get_recording, get_transcript e get_summary, e edite só com os valores "
     "que list_fields_and_tags mostra. Cada ferramenta exige um escopo do token; a recusa diz qual falta."
 )
