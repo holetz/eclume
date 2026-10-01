@@ -30,6 +30,7 @@ export function gravacaoLocal(parcial: Partial<GravacaoLocal> = {}): GravacaoLoc
   return {
     id: 'g1',
     titulo: 'Reunião semanal',
+    titulo_do_servidor: null,
     iniciada_em: new Date(2026, 8, 26, 9, 0).getTime(),
     duracao_ms: 54 * 60_000,
     bytes: 10_000_000,
@@ -104,6 +105,7 @@ export function ponteFalsa(inicial: EstadoApp = estadoBase()): PonteFalsa {
       return ponte.detalhe
     }),
     urlDoArquivo: (caminho) => `asset://localhost/${caminho}`,
+    abrirNaWeb: vi.fn(async () => {}),
     excluirLocal: vi.fn(async () => {}),
     excluirSincronizadas: vi.fn(async () => 1_100_000_000),
     tiposDeAgenda: vi.fn(async () => [

@@ -11,6 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use eclume_recorder::{
     now_ms, sync_pending, Queue, QueuedRecording, SyncInterrupted, SyncReport, Uploader,
 };
+use eclume_sync::api::{cursor_from, LibraryPage, LibraryRecording};
 use eclume_sync::protocol::{api_error, RetryPolicy};
 use eclume_sync::transport::{HttpRequest, HttpResponse, Transport};
 use eclume_sync::{Client, HttpUploader};
@@ -370,11 +371,13 @@ pub struct Processador {
     pub offline_since: Option<String>,
 }
 
-/// O que o detalhe lê da gravação no servidor: as etapas e a espera na fila.
+/// O que o detalhe lê da gravação no servidor: as etapas, a espera na fila e o título.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NoServidor {
     pub etapas: Vec<Etapa>,
     pub espera: Option<Espera>,
+    /// O título que o servidor deu à gravação (vazio vira `None`).
+    pub titulo: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -385,6 +388,8 @@ struct JobDaApi {
 
 #[derive(Deserialize)]
 struct GravacaoDaApi {
+    #[serde(default)]
+    title: String,
     #[serde(default)]
     pipeline: Vec<Etapa>,
     #[serde(default)]
@@ -408,7 +413,69 @@ pub fn buscar_etapas(
     Ok(NoServidor {
         etapas: gravacao.pipeline,
         espera: gravacao.job.and_then(|job| job.queue),
+        titulo: Some(gravacao.title).filter(|titulo| !titulo.trim().is_empty()),
     })
+}
+
+/// Folga do próximo `?since=` (como no desktop): cobre a transação que confirma atrasada.
+const FOLGA_DOS_TITULOS_S: i64 = 60;
+
+/// Os títulos lidos do servidor: `(id no servidor, título)` e o próximo `since`, se a leitura
+/// trouxe algo.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Titulos {
+    pub pares: Vec<(String, String)>,
+    pub proximo: Option<String>,
+}
+
+/// Os títulos das gravações da conta que mudaram desde `desde` (`GET /recordings?since=`, todas as
+/// páginas).
+pub fn buscar_titulos(
+    transporte: &dyn Transport,
+    servidor: &Servidor,
+    token: &str,
+    desde: &str,
+) -> Result<Titulos> {
+    let mut itens: Vec<LibraryRecording> = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let mut caminho = format!("/recordings?limit=200&since={}", codificar(desde));
+        if let Some(cursor) = &cursor {
+            caminho.push_str(&format!("&cursor={}", codificar(cursor)));
+        }
+        let pagina: LibraryPage = get_json(
+            transporte,
+            servidor,
+            token,
+            &caminho,
+            "falha ao ler as gravações no servidor",
+        )?;
+        itens.extend(pagina.items);
+        match pagina.next_cursor {
+            Some(proximo) if !proximo.is_empty() => cursor = Some(proximo),
+            _ => break,
+        }
+    }
+    let proximo = cursor_from(&itens, FOLGA_DOS_TITULOS_S);
+    let pares = itens
+        .into_iter()
+        .filter(|item| !item.title.trim().is_empty())
+        .map(|item| (item.id, item.title))
+        .collect();
+    Ok(Titulos { pares, proximo })
+}
+
+/// Percent-encoding de um valor de query (só os caracteres não reservados passam).
+fn codificar(valor: &str) -> String {
+    valor
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 /// O `movel.json` do servidor (holetz/eclume#41, docs/standards/code/mobile-distribuicao.md).

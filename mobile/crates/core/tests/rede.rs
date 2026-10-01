@@ -10,8 +10,8 @@ use comum::{dirs_temp, json, Roteiro, CA_SHA256};
 use eclume_mobile_core::config::Servidor;
 use eclume_mobile_core::rede::{sondar, Andamento, EstadoRede, Rede, Sonda};
 use eclume_mobile_core::sync::{
-    baixar_apk, buscar_etapas, buscar_manifesto, buscar_tipos_de_agenda, bytes_sincronizados,
-    excluir_sincronizadas, mais_nova, reter, sincronizar, uploader, Medidor,
+    baixar_apk, buscar_etapas, buscar_manifesto, buscar_tipos_de_agenda, buscar_titulos,
+    bytes_sincronizados, excluir_sincronizadas, mais_nova, reter, sincronizar, uploader, Medidor,
 };
 use eclume_recorder::{now_ms, Queue, Source, Status};
 use eclume_sync::transport::HttpResponse;
@@ -328,8 +328,9 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
         .iter()
         .any(|(k, v)| k == "Authorization" && v == "Bearer eclp_x"));
     let no_servidor = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
-    // Servidor anterior à 2.16.0, sem `job.queue`: sem espera.
+    // Servidor anterior à 2.16.0, sem `job.queue`: sem espera; sem título, `None`.
     assert_eq!(no_servidor.espera, None);
+    assert_eq!(no_servidor.titulo, None);
     let etapas = no_servidor.etapas;
     assert_eq!(etapas[1].state, "active");
     assert_eq!(etapas[1].reason, None);
@@ -341,6 +342,45 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
 }
 
 #[test]
+fn titulos_do_servidor_por_since_em_todas_as_paginas() {
+    let roteiro = Roteiro::default();
+    let chamadas = Arc::new(Mutex::new(0));
+    let contador = Arc::clone(&chamadas);
+    roteiro.responde_com("GET", "/api/v1/recordings", move || {
+        let mut n = contador.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            json(
+                200,
+                serde_json::json!({"items": [
+                    {"id": "r1", "title": "Alinhamento", "updated_at": "2026-10-01T12:00:00Z"},
+                    {"id": "r2", "title": " ", "updated_at": "2026-10-01T12:05:00Z"}
+                ], "next_cursor": "c+2"}),
+            )
+        } else {
+            json(
+                200,
+                serde_json::json!({"items": [
+                    {"id": "r3", "title": "Kickoff", "updated_at": "2026-10-01T12:10:00Z"}
+                ], "next_cursor": null}),
+            )
+        }
+    });
+    let titulos = buscar_titulos(&roteiro, &servidor(), "eclp_x", "2026-10-01T11:00:00Z").unwrap();
+    assert_eq!(
+        titulos.pares,
+        [
+            ("r1".to_string(), "Alinhamento".to_string()),
+            ("r3".to_string(), "Kickoff".to_string())
+        ]
+    );
+    assert_eq!(titulos.proximo.as_deref(), Some("2026-10-01T12:09:00Z"));
+    let ultimo = roteiro.pedido("GET", "/api/v1/recordings").unwrap();
+    assert!(ultimo.url.contains("since=2026-10-01T11%3A00%3A00Z"));
+    assert!(ultimo.url.contains("cursor=c%2B2"));
+}
+
+#[test]
 fn espera_na_fila_do_servidor() {
     let roteiro = Roteiro::default();
     roteiro.responde(
@@ -348,17 +388,16 @@ fn espera_na_fila_do_servidor() {
         "/api/v1/recordings/rec-remoto",
         json(
             200,
-            serde_json::json!({"id": "rec-remoto", "pipeline": [], "job": {"state": "queued", "queue": {
+            serde_json::json!({"id": "rec-remoto", "title": "Alinhamento", "pipeline": [], "job": {"state": "queued", "queue": {
                 "reason": "processor_queue", "ahead": 2, "account_ahead": null,
                 "estimated_start_at": "2026-10-01T14:14:00Z", "resumes_at": null,
                 "processor": {"online": false, "offline_since": "2026-10-01T14:02:00Z"}
             }}}),
         ),
     );
-    let espera = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto")
-        .unwrap()
-        .espera
-        .unwrap();
+    let no_servidor = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
+    assert_eq!(no_servidor.titulo.as_deref(), Some("Alinhamento"));
+    let espera = no_servidor.espera.unwrap();
     assert_eq!(espera.reason, "processor_queue");
     assert_eq!(espera.ahead, Some(2));
     assert_eq!(espera.account_ahead, None);

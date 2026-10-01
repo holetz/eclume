@@ -349,6 +349,12 @@ pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<Strin
         })
 }
 
+/// Um instante em milissegundos desde a época Unix como RFC 3339 (UTC), para um `?since=`.
+pub fn rfc3339_from_ms(ms: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|at| at.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+}
+
 /// O início de uma gravação (`recorded_at`, RFC 3339) no fuso `zone`, como `AAAA-MM-DDTHH:MM:SS`.
 pub fn start_in<Tz>(recorded_at: &str, zone: &Tz) -> Option<String>
 where

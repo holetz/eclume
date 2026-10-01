@@ -307,3 +307,20 @@ pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
     .await
     .map_err(|err| err.to_string())?
 }
+
+/// "Abrir na web": a página da gravação enviada no navegador do sistema, pelo endereço do
+/// servidor pareado.
+#[tauri::command]
+pub fn abrir_na_web<R: Runtime>(app: AppHandle<R>, id: String) -> Resultado<()> {
+    use tauri_plugin_eclume_gravador::GravadorExt;
+
+    let url = trancar(nucleo()?)
+        .map_err(texto)?
+        .gravacao(&id)
+        .map_err(texto)?
+        .endereco_na_web
+        .ok_or_else(|| "A gravação ainda não foi enviada ao servidor".to_string())?;
+    app.gravador()
+        .abrir_url(&url)
+        .map_err(|err| err.to_string())
+}
