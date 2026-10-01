@@ -246,6 +246,34 @@ fi
 export ECLUME_COMMIT="$SHA"
 COMPOSE=(docker compose -p eclume -f "$TREE/deploy/docker-compose.prod.yml" --env-file "$COMPOSE_ENV")
 [[ "$SEM_GPU" -eq 0 ]] || COMPOSE+=(-f "$TREE/deploy/docker-compose.cpu.yml")
+
+# --- CA do HTTPS: a ativa (ECLUME_TLS_CA) e a raiz própria com restrição de nome --------------------
+# Rotação em três passos (anunciar, virar, aposentar): docs/project/deploy-producao.md, "CA raiz nos
+# clientes". Uma árvore sem a CA `eclume` (um --voltar para antes dela) não usa a raiz própria.
+TLS_CA=""
+[[ ! -f "$ENV_FILE" ]] || TLS_CA="$(env_value ECLUME_TLS_CA)"
+TLS_CA="${TLS_CA:-local}"
+CA_DIR="$DATA_DIR/secrets/ca"
+root_sha() { openssl x509 -outform DER | openssl dgst -sha256 -r | cut -d' ' -f1; }
+own_root_sha() {
+  local pem
+  pem="$(host "cat '$CA_DIR/raiz.crt' 2>/dev/null || true")"
+  [[ -z "$pem" ]] || root_sha <<< "$pem"
+}
+uses_own_ca=0
+grep -q 'ca eclume {' "$TREE/deploy/docker-compose.prod.yml" && uses_own_ca=1
+own_sha="$(own_root_sha)"
+case "$TLS_CA" in
+  local|eclume) ;;
+  *) problemas+=("ECLUME_TLS_CA=$TLS_CA: use local (raiz do Caddy) ou eclume (raiz própria)") ;;
+esac
+if [[ "$TLS_CA" == eclume && "$uses_own_ca" -eq 0 ]]; then
+  problemas+=("ECLUME_TLS_CA=eclume, mas o compose de $SHA não tem a CA eclume")
+fi
+# Virar sem anunciar trocaria a raiz de quem já confia na publicada: anuncie antes com `local`.
+if [[ "$TLS_CA" == eclume && -z "$own_sha" ]] && host "test -s '$DATA_DIR/downloads/eclume-root.crt'"; then
+  problemas+=("ECLUME_TLS_CA=eclume sem a raiz própria em $CA_DIR: os clientes confiam na raiz publicada; faça antes o deploy com ECLUME_TLS_CA=local, que a gera e a anuncia como próxima")
+fi
 service_id() { docker ps -q --filter label=com.docker.compose.project=eclume --filter "label=com.docker.compose.service=$1" | head -n 1; }
 
 pg="$(service_id postgres)"
@@ -311,6 +339,16 @@ host "for e in backup fora ensaio; do
   elif grep -Eq '\"ok\"[[:space:]]*:[[:space:]]*true' \$f; then echo \"  \$e: ok há \$(( (\$(date +%s) - \$(stat -c %Y \$f)) / 3600 )) h\"
   else echo \"  \$e: falhou (\$(stat -c %y \$f | cut -c1-16))\"; fi
 done" >&2 || echo "  estado das etapas noturnas: host sem resposta" >&2
+if [[ "$uses_own_ca" -eq 1 ]]; then
+  echo "CA ativa: $TLS_CA · raiz própria: ${own_sha:-ausente (o deploy a gera em $CA_DIR)}" >&2
+  if [[ "$TLS_CA" == local ]]; then
+    echo "Próxima raiz (/downloads/eclume-root-proxima.crt): ${own_sha:-a gerada neste deploy}" >&2
+  else
+    echo "Próxima raiz: nenhuma (o publish-ca apaga /downloads/eclume-root-proxima.crt)" >&2
+  fi
+else
+  echo "CA ativa: local (o compose de $SHA não tem a CA eclume)" >&2
+fi
 echo "Construir: ${BUILD[*]:-nada}" >&2
 echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-agents worker-gpu web caddy → publish-ca → mdns" >&2
 for image in "${IMAGES[@]}"; do
@@ -403,6 +441,18 @@ else
   done
 fi
 
+# --- raiz própria: gerada uma vez pela imagem do server, nunca sobrescrita ------------------------
+# O Caddy não sobe sem ela (bloco `pki`), mesmo com a ativa `local`. Só a pasta secrets/ca é montada.
+if [[ "$uses_own_ca" -eq 1 && -z "$own_sha" ]]; then
+  echo "Gerando a raiz própria em $CA_DIR…" >&2
+  host "install -d -m 700 '$CA_DIR'"
+  docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges:true \
+    --user "$(host 'echo "$(id -u):$(id -g)"')" -v "$CA_DIR:/ca" eclume-server:prod \
+    eclume-server ca gerar --pasta /ca --host "$(env_value ECLUME_PUBLIC_HOST)" --nomes "$(env_value ECLUME_CA_NOMES)" >&2
+  own_sha="$(own_root_sha)"
+  [[ -n "$own_sha" ]] || { echo "A raiz própria não apareceu em $CA_DIR; parei antes do up." >&2; exit 1; }
+fi
+
 # --- GPU: não mata transcrição em curso ------------------------------------------------------------
 deadline=$(( $(date +%s) + ESPERA_GPU * 60 ))
 while [[ "$(gpu_busy)" == 1 && "$(date +%s)" -lt "$deadline" ]]; do
@@ -445,7 +495,8 @@ echo "Subindo os serviços…" >&2
 # para o Caddyfile do SHA valer. A CA está no volume e sobrevive.
 "${COMPOSE[@]}" up -d --no-build --force-recreate --wait --wait-timeout 60 caddy
 
-# A CA nasce na primeira subida do Caddy; espera o arquivo e publica em /downloads/.
+# A raiz `local` nasce na primeira subida do Caddy; espera o arquivo e publica em /downloads/ a raiz
+# da CA ativa (e a própria como próxima, enquanto a ativa for `local`).
 for _ in $(seq 1 15); do
   if "${COMPOSE[@]}" run --rm --no-deps publish-ca 2>/dev/null; then published=1; break; fi
   sleep 2
@@ -499,4 +550,20 @@ if [[ "$descriptor" != *"\"ca_sha256\":\"$fingerprint\""* ]]; then
   echo "Deploy subiu, mas $PUBLIC_URL/api/v1/server não traz a impressão digital $fingerprint." >&2
   exit 1
 fi
-echo "Deploy concluído: $SHA em $PUBLIC_URL (health e descritor ok, CA $fingerprint, disco $(disk_pct)%)." >&2
+# O curl acima já provou que a publicada ancora a cadeia servida; com a ativa `eclume`, ela tem de ser
+# a raiz própria, e a próxima só é anunciada enquanto a ativa for `local`.
+if [[ "$uses_own_ca" -eq 1 ]]; then
+  if [[ "$TLS_CA" == eclume && "$fingerprint" != "$own_sha" ]]; then
+    echo "Deploy subiu, mas o eclume-root.crt publicado ($fingerprint) não é a raiz própria ($own_sha)." >&2
+    exit 1
+  fi
+  if [[ "$TLS_CA" == local && "$descriptor" != *"\"ca_next_sha256\":\"$own_sha\""* ]]; then
+    echo "Deploy subiu, mas $PUBLIC_URL/api/v1/server não anuncia a próxima raiz $own_sha." >&2
+    exit 1
+  fi
+  if [[ "$TLS_CA" == eclume && "$descriptor" == *'"ca_next_sha256":"'* ]]; then
+    echo "Deploy subiu, mas $PUBLIC_URL/api/v1/server ainda anuncia uma próxima raiz com a ativa eclume." >&2
+    exit 1
+  fi
+fi
+echo "Deploy concluído: $SHA em $PUBLIC_URL (health e descritor ok, CA $TLS_CA $fingerprint, disco $(disk_pct)%)." >&2
