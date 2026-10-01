@@ -174,6 +174,6 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
         async with system_tx(engine) as conn:
             result = await fail(conn, recording_id, code, _MESSAGES[code])
         await redis.delete(progress_key(recording_id))
-        log.warning("job %s (gravação %s): %s — %s", job_row_id, recording_id, code, result)
+        log.warning("job %s (gravação %s): %s — %s", job_row_id, recording_id, code, result.message)
         reaped.append(f"{recording_id}: {code}")
     return reaped

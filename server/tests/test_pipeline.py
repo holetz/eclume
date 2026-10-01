@@ -13,7 +13,7 @@ from eclume_server.db.session import make_engine
 from eclume_server.queue import Queue, progress_key
 from eclume_server.storage import Storage
 from eclume_server.transcripts import fail, render_markdown
-from eclume_server.worker import ingest_transcript
+from eclume_server.worker import ingest_transcript, transcription_failed
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import DEFAULT_VOICES, ENGINE_INFO, contract_transcript, run_cpu, run_gpu
 from eclume_server_testing.harness import run
@@ -164,13 +164,86 @@ def _ingest_directly(services: Services, recording_id: str) -> list[str]:
         redis = _EnqueueSpy()
         ctx = {"engine": engine, "storage": Storage(services.settings), "redis": redis}
         try:
-            key = f"recordings/{recording_id}/transcript.raw.json"
+            key = f"recordings/{recording_id}/r1/transcript.raw.json"
             await ingest_transcript(ctx, recording_id, key, None, ENGINE_INFO)
         finally:
             await engine.dispose()
         return redis.jobs
 
     return run(go())
+
+
+class _RedisSpy(_EnqueueSpy):
+    """Também registra as chaves apagadas."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.deleted: list[str] = []
+
+    async def delete(self, *keys: str) -> None:
+        self.deleted.extend(keys)
+
+
+def _deliver(services: Services, job: str, job_id: str | None, *args: object) -> _RedisSpy:
+    """Roda um job de retorno fora do arq, com o `_job_id` dado em `ctx`."""
+
+    async def go() -> _RedisSpy:
+        engine = make_engine(services.settings.database_url)
+        redis = _RedisSpy()
+        ctx = {"engine": engine, "storage": Storage(services.settings), "redis": redis, "job_id": job_id}
+        try:
+            function = ingest_transcript if job == "ingest_transcript" else transcription_failed
+            await function(ctx, *args)
+        finally:
+            await engine.dispose()
+        return redis
+
+    return run(go())
+
+
+def test_saida_atrasada_da_revisao_anterior_e_ignorada(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3600))
+    rid = recording["id"]
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    first = api.get(f"/api/v1/recordings/{rid}").json()
+    retried = api.post(f"/api/v1/recordings/{rid}/retranscribe")
+    assert retried.status_code == 202
+
+    # A saída da revisão 1 chega depois de a revisão 2 existir: nem grava, nem falha, nem apaga o progresso.
+    key = f"recordings/{rid}/r1/transcript.raw.json"
+    spy = _deliver(services, "ingest_transcript", f"ingest_transcript:{rid}:1", rid, key, None, ENGINE_INFO)
+    assert (spy.jobs, spy.deleted) == ([], [])
+    spy = _deliver(services, "transcription_failed", f"transcription_failed:{rid}:1", rid, "gpu_oom", "OOM", "asr")
+    assert spy.deleted == []
+    body = api.get(f"/api/v1/recordings/{rid}").json()
+    assert body["status"] == "queued"
+    assert (body["job"]["state"], body["job"]["id"]) == ("queued", retried.json()["job"]["id"])
+    assert api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()["revision"] == 1
+
+    # A da revisão 2 fecha o job dela.
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    assert api.get(f"/api/v1/recordings/{rid}").json()["status"] == "transcribed"
+    assert api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()["revision"] == 2
+
+
+def test_worker_antigo_sem_revisao_no_job_id_ainda_ingere(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3700))
+    run_gpu(services.settings, legacy=True)
+    run_cpu(services.settings)
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+    failed = upload_file(api, audio_bytes(3800))
+    run_gpu(services.settings, legacy=True, fail=True)
+    run_cpu(services.settings)
+    assert api.get(f"/api/v1/recordings/{failed['id']}").json()["job"]["error"]["code"] == "gpu_oom"
 
 
 def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(

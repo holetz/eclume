@@ -150,12 +150,52 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 class Ingested:
     """O desfecho da ingestão: a linha do log e se a transcrição foi gravada agora.
 
-    Só o que foi gravado segue para a cadeia por agente; `gone` diz que a gravação foi excluída.
+    Só o que foi gravado segue para a cadeia por agente (e fechou o job); `gone` diz que a
+    gravação foi excluída.
     """
 
     message: str
     persisted: bool = False
     gone: bool = False
+
+
+@dataclass(frozen=True)
+class Failed:
+    """O desfecho de `fail`: a linha do log e se o job foi fechado agora."""
+
+    message: str
+    closed: bool = False
+
+
+async def _lock_open_job(
+    conn: AsyncConnection, recording_id: UUID, revision: int | None
+) -> tuple[Row | None, Row | None]:
+    """Trava a gravação e só então lê o job da revisão (sem revisão, o mais recente).
+
+    Dois comandos: em READ COMMITTED, quem esperou o lock da gravação vê o job já atualizado por
+    quem o segurava. Devolve `(gravação, job)`; o job vem só se estiver em aberto.
+    """
+    recording = (
+        (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
+        .mappings()
+        .first()
+    )
+    if recording is None:
+        return None, None
+    jobs = t.transcription_jobs
+    query = select(jobs).where(jobs.c.recording_id == recording_id)
+    if revision is None:
+        query = query.order_by(jobs.c.revision.desc()).limit(1)
+    else:
+        query = query.where(jobs.c.revision == revision)
+    job = (await conn.execute(query.with_for_update())).mappings().first()
+    if job is None or job["state"] not in {"queued", "running"}:
+        return recording, None
+    return recording, job
+
+
+def _obsolete(revision: int | None) -> str:
+    return f"mensagem obsoleta: sem job em aberto da revisão {revision or 'mais recente'}"
 
 
 async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
@@ -166,34 +206,19 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     transcript_key: str,
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
+    revision: int | None = None,
 ) -> Ingested:
-    """Persiste a transcrição do job em aberto; idempotente por `(recording_id, revision)`.
+    """Persiste a transcrição do job da revisão; idempotente por `(recording_id, revision)`.
 
-    Roda com o papel de conexão (worker CPU). Job já concluído ou falho (pelo reaper, por exemplo)
-    não é gravado de novo.
+    Roda com o papel de conexão (worker CPU). Sem `revision` (worker antigo), vale o job mais
+    recente. Job já concluído ou falho (pelo reaper, por exemplo), ou de uma revisão que não está
+    mais em aberto, não é gravado: a mensagem é obsoleta.
     """
-    recording = (
-        (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
-        .mappings()
-        .first()
-    )
+    recording, job = await _lock_open_job(conn, recording_id, revision)
     if recording is None:
         return Ingested("gravação inexistente", gone=True)
-    job = (
-        (
-            await conn.execute(
-                select(t.transcription_jobs)
-                .where(t.transcription_jobs.c.recording_id == recording_id)
-                .order_by(t.transcription_jobs.c.revision.desc())
-                .limit(1)
-                .with_for_update()
-            )
-        )
-        .mappings()
-        .first()
-    )
-    if job is None or job["state"] not in {"queued", "running"}:
-        return Ingested("sem job em aberto (já ingerido ou falho)")
+    if job is None:
+        return Ingested(_obsolete(revision))
 
     raw = await storage.read_json(transcript_key)
     speakers, segments, mapping = normalize_raw(raw)
@@ -277,30 +302,25 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     return Ingested(f"transcrição {transcript_id} gravada (revisão do job {job['revision']})", persisted=True)
 
 
-async def fail(
-    conn: AsyncConnection, recording_id: UUID, error_code: str, message: str, stage: str | None = None
-) -> str:
-    """Marca como falho o job em aberto e a gravação; job já concluído não muda.
+async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed` e a revisão
+    conn: AsyncConnection,
+    recording_id: UUID,
+    error_code: str,
+    message: str,
+    stage: str | None = None,
+    *,
+    revision: int | None = None,
+) -> Failed:
+    """Marca como falho o job da revisão (sem ela, o mais recente) e a gravação, se em aberto.
 
-    `stage` é a etapa do progresso do worker GPU em que a falha aconteceu: no download ou no
-    pré-processamento, falha o pré-processamento; nas demais (ou sem ela), a transcrição.
+    Trava a gravação antes do job, na mesma ordem da ingestão. `stage` é a etapa do progresso do
+    worker GPU em que a falha aconteceu: no download ou no pré-processamento, falha o
+    pré-processamento; nas demais (ou sem ela), a transcrição.
     """
     now = datetime.now(UTC)
-    job = (
-        (
-            await conn.execute(
-                select(t.transcription_jobs)
-                .where(t.transcription_jobs.c.recording_id == recording_id)
-                .order_by(t.transcription_jobs.c.revision.desc())
-                .limit(1)
-                .with_for_update()
-            )
-        )
-        .mappings()
-        .first()
-    )
-    if job is None or job["state"] not in {"queued", "running"}:
-        return "sem job em aberto"
+    _, job = await _lock_open_job(conn, recording_id, revision)
+    if job is None:
+        return Failed(_obsolete(revision))
     await conn.execute(
         update(t.transcription_jobs)
         .where(t.transcription_jobs.c.id == job["id"])
@@ -325,7 +345,7 @@ async def fail(
         started_at=job["started_at"] or job["queued_at"],
         finished_at=now,
     )
-    return f"job {job['id']} falhou: {error_code}"
+    return Failed(f"job {job['id']} falhou: {error_code}", closed=True)
 
 
 # --- leitura ----------------------------------------------------------------------------------

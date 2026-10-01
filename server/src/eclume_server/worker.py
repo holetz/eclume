@@ -29,7 +29,7 @@ from eclume_server.db.session import make_engine, system_tx
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
-from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, step_job_id
+from eclume_server.queue import DEFAULT_QUEUE, enqueue_summary, progress_key, return_revision, step_job_id
 from eclume_server.stalled import INGEST_FAILED, INGEST_FAILED_MESSAGE, reap
 from eclume_server.storage import Storage, embeddings_object_key
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
@@ -71,10 +71,13 @@ async def ingest_transcript(
 ) -> str:
     """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`.
 
-    Uma ingestão que falha desfaz a transação inteira; numa transação nova, o job e a gravação
-    viram falha recuperável `ingest_failed`, para a gravação não ficar presa na fila. O arq não
-    retenta: a falha fica no log e no job, e retranscrever é o caminho.
+    A revisão vem do `_job_id` (`ingest_transcript:{recording_id}:{revision}`); sem ela (worker
+    antigo), vale o job mais recente. A mensagem de uma revisão que não está mais em aberto é
+    ignorada. Uma ingestão que falha desfaz a transação inteira; numa transação nova, o job e a
+    gravação viram falha recuperável `ingest_failed`, para a gravação não ficar presa na fila.
+    Só quem fecha o job apaga o hash de progresso.
     """
+    job_revision = return_revision("ingest_transcript", recording_id, ctx.get("job_id"))
     try:
         async with system_tx(ctx["engine"]) as conn:
             outcome = await ingest(
@@ -84,16 +87,19 @@ async def ingest_transcript(
                 transcript_key=transcript_key,
                 embeddings_key=embeddings_key,
                 engine_info=engine_info,
+                revision=job_revision,
             )
             revision = await current_revision(conn, UUID(recording_id))
     except Exception:
-        log.exception("ingest_transcript %s: a ingestão falhou", recording_id)
+        log.exception("ingest_transcript %s (revisão %s): a ingestão falhou", recording_id, job_revision)
         async with system_tx(ctx["engine"]) as conn:
-            result = await fail(conn, UUID(recording_id), INGEST_FAILED, INGEST_FAILED_MESSAGE)
-        await ctx["redis"].delete(progress_key(recording_id))
-        log.info("ingest_transcript %s: %s", recording_id, result)
+            result = await fail(conn, UUID(recording_id), INGEST_FAILED, INGEST_FAILED_MESSAGE, revision=job_revision)
+        if result.closed:
+            await ctx["redis"].delete(progress_key(recording_id))
+        log.info("ingest_transcript %s: %s", recording_id, result.message)
         return f"falhou: {INGEST_FAILED}"
-    await ctx["redis"].delete(progress_key(recording_id))
+    if outcome.persisted or outcome.gone:
+        await ctx["redis"].delete(progress_key(recording_id))
     if outcome.gone:
         # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
         await ctx["storage"].delete_artifacts(recording_id)
@@ -180,12 +186,17 @@ async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> 
 async def transcription_failed(
     ctx: dict[str, Any], recording_id: str, error_code: str, message: str, stage: str | None = None
 ) -> str:
-    """Marca o job e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou."""
+    """Marca o job da revisão e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou.
+
+    A revisão vem do `_job_id` (`transcription_failed:{recording_id}:{revision}`), como na ingestão.
+    """
+    revision = return_revision("transcription_failed", recording_id, ctx.get("job_id"))
     async with system_tx(ctx["engine"]) as conn:
-        result = await fail(conn, UUID(recording_id), error_code, message, stage)
-    await ctx["redis"].delete(progress_key(recording_id))
-    log.info("transcription_failed %s: %s", recording_id, result)
-    return result
+        result = await fail(conn, UUID(recording_id), error_code, message, stage, revision=revision)
+    if result.closed:
+        await ctx["redis"].delete(progress_key(recording_id))
+    log.info("transcription_failed %s (revisão %s): %s", recording_id, revision, result.message)
+    return result.message
 
 
 async def purge_embedding_objects(ctx: dict[str, Any]) -> int:
