@@ -55,6 +55,8 @@ pub enum Notice {
     Busy,
     /// A gravação parou sozinha (fontes caíram ou falha), com o tempo salvo.
     RecordingStopped(Option<i64>, StopReason),
+    /// O microfone está fora há mais de 5 s e a gravação segue sem ele.
+    MicLost,
 }
 
 impl Notice {
@@ -82,6 +84,10 @@ impl Notice {
             Self::Busy => (
                 "Já há uma gravação em andamento".into(),
                 "Pare a gravação atual para gravar uma nota.".into(),
+            ),
+            Self::MicLost => (
+                "Microfone perdido".into(),
+                "gravando sem a sua voz, tentando reconectar".into(),
             ),
             Self::RecordingStopped(ms, reason) => (
                 "A gravação parou".into(),
@@ -162,6 +168,11 @@ pub fn note_discarded() {
 /// A gravação parou sozinha: as fontes caíram ou a gravação falhou.
 pub fn recording_stopped(duration_ms: Option<i64>, reason: StopReason) {
     show(Notice::RecordingStopped(duration_ms, reason));
+}
+
+/// O microfone da gravação em curso está fora há mais de 5 s.
+pub fn mic_lost() {
+    show(Notice::MicLost);
 }
 
 /// "Nova nota" com outra gravação em andamento.
@@ -377,6 +388,10 @@ mod tests {
         assert_eq!(
             text(Notice::RecordingStopped(Some(42_000), StopReason::Failed)),
             "A gravação parou · 42 s salvos · falha ao gravar"
+        );
+        assert_eq!(
+            text(Notice::MicLost),
+            "Microfone perdido · gravando sem a sua voz, tentando reconectar"
         );
         assert_eq!((LABEL_RECORD, LABEL_IGNORE), ("Gravar", "Agora não"));
         let (title, body) = summary_text("Kickoff do programa");
