@@ -72,7 +72,7 @@ async function login(page: Page, shot?: string) {
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
 
-test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }) => {
+test('criar conta com o aceite do aviso e entrar na biblioteca @smoke', async ({ page }) => {
   await page.goto('/entrar')
   await page.getByRole('link', { name: 'Criar conta' }).click()
   await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
