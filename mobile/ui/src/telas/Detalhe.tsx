@@ -5,7 +5,7 @@ import { Voltar } from '../app/Voltar'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
 import type { DetalheLocal, Etapa } from '../ponte/tipos'
 import { SeloDaGravacao } from './ListaDoCelular'
-import { ESTADOS_ETAPA, ETAPAS, motivo } from '../app/vocabulario.js'
+import { ESTADOS_ETAPA, ETAPAS, fraseDaEspera, motivo } from '../app/vocabulario.js'
 
 /** A etapa em palavras, legível sem a cor: o nome quando concluída, o andamento quando ativa e "nome · estado" nas outras. */
 function rotuloDaEtapa(etapa: (typeof ETAPAS)[number], estado: Etapa | undefined): string {
@@ -56,7 +56,7 @@ function taxaDoArquivo(bytes: number | null, ms: number | null): string | null {
   return `Opus ${Math.round((bytes * 8) / (ms / 1000) / 1000)} kbps`
 }
 
-/** O detalhe de uma gravação: player local, marcadores e as etapas no servidor. */
+/** O detalhe de uma gravação: player local, marcadores, as etapas no servidor e a espera na fila. */
 export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) {
   const ponte = usePonte()
   const [detalhe, setDetalhe] = useState<DetalheLocal | null>(null)
@@ -167,6 +167,11 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
             <div className="m-section gap-2">
               <span className="kicker">No servidor</span>
               <EtapasNoServidor etapas={detalhe.etapas} />
+              {detalhe.espera && (
+                <p className="text-muted texto-13" role="status">
+                  {fraseDaEspera(detalhe.espera)}
+                </p>
+              )}
             </div>
           )}
           <div className="m-section m-fill gap-2">

@@ -142,7 +142,7 @@ export function fraseDaEspera(fila, agora = new Date()) {
   if (fila.reason === 'account_turn') {
     const antes = fila.account_ahead ?? 0
     if (antes === 0) return 'Na vez da sua conta: é a próxima gravação sua a entrar na fila.'
-    return `Atrás de ${antes === 1 ? '1 gravação sua' : `${antes} gravações suas`} que chegaram antes.`
+    return antes === 1 ? 'Atrás de 1 gravação sua que chegou antes.' : `Atrás de ${antes} gravações suas que chegaram antes.`
   }
   if (fila.reason === 'quota_window') {
     const quando = fila.resumes_at ? `às ${horario(fila.resumes_at, agora)}` : 'quando a janela liberar'

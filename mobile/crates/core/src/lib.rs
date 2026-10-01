@@ -30,7 +30,7 @@ use crate::config::{Config, Dirs, Qualidade, Servidor};
 use crate::estimativas::{Avisos, Bateria, LeituraDeBateria};
 use crate::rede::{EstadoRede, Rede, Sonda, PRAZO_DA_SONDA};
 use crate::sessao::{EstadoSessao, Sessao};
-use crate::sync::{Etapa, Medidor};
+use crate::sync::{Espera, Etapa, Medidor, NoServidor};
 
 /// O prefixo do `client_version` e do user agent do app Android.
 pub const CLIENT_PREFIX: &str = "eclume-android";
@@ -115,14 +115,15 @@ pub struct GravacaoLocal {
     pub ultimo_erro: Option<String>,
 }
 
-/// O detalhe de uma gravação: a linha, os marcadores e as etapas no servidor (em cache fora da
-/// rede).
+/// O detalhe de uma gravação: a linha, os marcadores, as etapas no servidor e a espera na fila (em
+/// cache fora da rede).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct DetalheLocal {
     pub gravacao: GravacaoLocal,
     pub caminho: Option<String>,
     pub marcadores: Vec<Marker>,
     pub etapas: Option<Vec<Etapa>>,
+    pub espera: Option<Espera>,
 }
 
 /// As configurações que a tela Configurações edita.
@@ -163,7 +164,7 @@ pub struct Core {
     espaco_livre: Option<u64>,
     visivel: bool,
     folha: Option<Folha>,
-    etapas: HashMap<String, Vec<Etapa>>,
+    etapas: HashMap<String, NoServidor>,
     /// A versão nova do `movel.json`, se houver.
     atualizacao: Option<sync::Manifesto>,
 }
@@ -637,7 +638,8 @@ impl Core {
             caminho: (rec.purged_at.is_none() && rec.status != Status::Recording)
                 .then(|| rec.path.to_string_lossy().into_owned()),
             marcadores: fila.markers(id)?,
-            etapas: self.etapas.get(id).cloned(),
+            etapas: self.etapas.get(id).map(|no| no.etapas.clone()),
+            espera: self.etapas.get(id).and_then(|no| no.espera.clone()),
         })
     }
 
@@ -653,7 +655,7 @@ impl Core {
         Ok(Some((plano, remoto)))
     }
 
-    pub fn guardar_etapas(&mut self, id: &str, etapas: Vec<Etapa>) {
+    pub fn guardar_etapas(&mut self, id: &str, etapas: NoServidor) {
         self.etapas.insert(id.to_string(), etapas);
     }
 
@@ -770,7 +772,7 @@ impl PlanoDeLeitura {
         sync::buscar_tipos_de_agenda(self.transporte.as_ref(), &self.servidor, &self.token)
     }
 
-    pub fn etapas(&self, remote_id: &str) -> Result<Vec<Etapa>> {
+    pub fn etapas(&self, remote_id: &str) -> Result<NoServidor> {
         sync::buscar_etapas(
             self.transporte.as_ref(),
             &self.servidor,
