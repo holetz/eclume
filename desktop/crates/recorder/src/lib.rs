@@ -10,7 +10,7 @@ pub mod session;
 pub mod source;
 pub mod vad;
 
-pub use eclume_audio_capture::AudioSource;
+pub use eclume_audio_capture::{AudioSource, SourceState};
 pub use encode::OggOpusWriter;
 pub use ext::{sync_pending, MeetingDetector, MeetingEvent, SyncReport, Uploader};
 pub use mix::{Mixer, TARGET_RATE};
