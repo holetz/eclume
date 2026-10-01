@@ -221,3 +221,9 @@ svg.lucide {
   letter-spacing: normal;
   color: var(--color-text);
 }
+
+/* O título recebe o foco depois de uma troca de rota (PageHead) só para o leitor de tela e o
+   teclado recomeçarem dele: não é um controle, então não ganha o anel de foco. */
+.page-head h1[tabindex='-1']:focus {
+  outline: none;
+}

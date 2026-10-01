@@ -1,6 +1,7 @@
 import { Menu, X } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
+import { NavigatedPathContext } from './pageFocus'
 import styles from './ShellFrame.module.css'
 
 interface ShellFrameProps {
@@ -23,37 +24,43 @@ interface ShellFrameProps {
  */
 export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProps) {
   const { pathname } = useLocation()
+  // A partir da primeira troca de rota, o `PageHead` da página nova leva o foco ao título.
+  const [firstPath] = useState(pathname)
+  const [navigated, setNavigated] = useState(false)
+  if (!navigated && pathname !== firstPath) setNavigated(true)
   // O menu compacto vale para a rota em que foi aberto: navegar o fecha.
   const [menuOpenAt, setMenuOpenAt] = useState<string | null>(null)
   const menuOpen = menuOpenAt === pathname
   const navId = useId()
 
   return (
-    <div className={`shell ${styles.shell}`} data-header={account ? '' : undefined}>
-      <a className="skip-link" href="#conteudo">
-        Pular para o conteúdo
-      </a>
-      <header className={styles.topbar}>
-        {brand}
-        {account && <div className={styles.account}>{account}</div>}
-        <button
-          type="button"
-          className={`btn btn-secondary ${styles.menuButton}`}
-          aria-expanded={menuOpen}
-          aria-controls={navId}
-          onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
-        >
-          {menuOpen ? <X size={16} aria-hidden /> : <Menu size={16} aria-hidden />}
-          Menu
-        </button>
-      </header>
-      <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
-        {!account && <div className={styles.brandSide}>{brand}</div>}
-        {sidebar}
-      </aside>
-      <main id="conteudo" tabIndex={-1} className={`main ${styles.main}`}>
-        {children}
-      </main>
-    </div>
+    <NavigatedPathContext.Provider value={navigated ? pathname : null}>
+      <div className={`shell ${styles.shell}`} data-header={account ? '' : undefined}>
+        <a className="skip-link" href="#conteudo">
+          Pular para o conteúdo
+        </a>
+        <header className={styles.topbar}>
+          {brand}
+          {account && <div className={styles.account}>{account}</div>}
+          <button
+            type="button"
+            className={`btn btn-secondary ${styles.menuButton}`}
+            aria-expanded={menuOpen}
+            aria-controls={navId}
+            onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
+          >
+            {menuOpen ? <X size={16} aria-hidden /> : <Menu size={16} aria-hidden />}
+            Menu
+          </button>
+        </header>
+        <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
+          {!account && <div className={styles.brandSide}>{brand}</div>}
+          {sidebar}
+        </aside>
+        <main id="conteudo" tabIndex={-1} className={`main ${styles.main}`}>
+          {children}
+        </main>
+      </div>
+    </NavigatedPathContext.Provider>
   )
 }
