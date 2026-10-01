@@ -169,7 +169,7 @@ pilar_android() {
     > "$gradle/keystore.properties"
   run npm --prefix mobile run tauri -- android build --apk --target aarch64 --ci
   (cd "$gradle" && run ./gradlew --no-daemon :tauri-plugin-eclume-gravador:testDebugUnitTest \
-    :tauri-plugin-eclume-gravador:lintRelease :app:lintRelease)
+    :tauri-plugin-eclume-gravador:lintRelease :app:lintUniversalRelease)
   local apk
   apk="$(find "$gradle/app/build/outputs/apk" -path '*release*' -name '*.apk' | head -n 1)"
   [[ -n "$apk" ]] || { echo "APK de release não encontrado" >&2; return 1; }

@@ -62,18 +62,21 @@ def simbolos_do_nm(saida: str) -> set[str]:
 def faltando_no_dex(saida: str, pacote: str, classe: str, metodos: list[str]) -> list[str]:
     """O que o R8 renomeou ou removeu: a classe e cada método nativo pelo nome no dex.
 
-    O `apkanalyzer dex packages` lista linhas como `C r 1 2 120 br.com.x.EclumeCore` e
+    O `apkanalyzer dex packages` separa os campos por tabulação, em linhas como `C r 1 2 120 br.com.x.EclumeCore` e
     `M r 0 1 10 br.com.x.EclumeCore java.lang.String acao(java.lang.String)`.
     """
     completa = f"{pacote}.{classe}"
-    linhas = [linha.strip() for linha in saida.splitlines()]
+    linhas = [linha.split() for linha in saida.splitlines()]
     faltam = []
-    if not any(linha.startswith("C ") and linha.endswith(f" {completa}") for linha in linhas):
+    if not any(campos[:1] == ["C"] and campos[-1] == completa for campos in linhas):
         faltam.append(completa)
     faltam.extend(
         f"{completa}.{metodo}"
         for metodo in metodos
-        if not any(linha.startswith("M ") and f" {completa} " in linha and f" {metodo}(" in linha for linha in linhas)
+        if not any(
+            campos[:1] == ["M"] and completa in campos and any(c.startswith(f"{metodo}(") for c in campos)
+            for campos in linhas
+        )
     )
     return faltam
 
