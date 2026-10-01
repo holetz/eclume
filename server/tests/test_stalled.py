@@ -83,9 +83,13 @@ def _prepare(services: Services, recording_id: str, fn: Callable[[Any, str], Any
     run(_with_redis(services, lambda pool: fn(pool, job_id)))
 
 
-def _heartbeat(busy: bool) -> Callable[[Any], Any]:  # noqa: FBT001
+def _heartbeat(busy: bool, job_id: str | None = None) -> Callable[[Any], Any]:  # noqa: FBT001
+    """Sem `job_id`, o heartbeat do worker antigo."""
+
     async def go(pool: Any) -> None:  # noqa: ANN401
-        await pool.hset(GPU_HEALTH_KEY, mapping={"updated_at": _iso(datetime.now(UTC)), "busy": "1" if busy else "0"})
+        mapping = {"updated_at": _iso(datetime.now(UTC)), "busy": "1" if busy else "0"}
+        await pool.delete(GPU_HEALTH_KEY)
+        await pool.hset(GPU_HEALTH_KEY, mapping=mapping | ({"job_id": job_id} if job_id else {}))
 
     return go
 
@@ -213,6 +217,68 @@ def test_progresso_parado_alem_do_teto_vira_job_stalled(
     finally:
         _clear_heartbeat(services)
     assert _state(api, recording["id"])["job"]["error"]["code"] == "job_stalled"
+
+
+def _running_with_progress(recording_id: str, at: datetime, **fields: str) -> Callable[[Any, str], Any]:
+    async def running(pool: Any, job_id: str) -> None:  # noqa: ANN401
+        await pool.set(in_progress_key_prefix + job_id, b"1", ex=3600)
+        await pool.hset(
+            progress_key(recording_id), mapping={"stage": "asr", "pct": "40", "updated_at": _iso(at)} | fields
+        )
+
+    return running
+
+
+def test_heartbeat_de_outro_job_vira_worker_lost(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = _recording(api)
+    started = datetime.now(UTC)
+    _prepare(services, recording["id"], _running_with_progress(recording["id"], started, revision="1"))
+    # O worker está vivo e ocupado, mas com outro job: este ficou sem quem o termine.
+    run(_with_redis(services, _heartbeat(busy=True, job_id=transcribe_job_id(recording["id"], 9))))
+    try:
+        assert _sweep(services, started + LATER, recording["id"]) is None
+        assert _sweep(services, started + LATER + AFTER_GRACE, recording["id"]) == "worker_lost"
+    finally:
+        _clear_heartbeat(services)
+
+
+def test_progresso_de_outra_revisao_nao_conta(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = _recording(api)
+    now = datetime.now(UTC)
+    # Progresso "recente" de outra revisão, sem worker neste job: vale como progresso ausente.
+    _prepare(services, recording["id"], _running_with_progress(recording["id"], now + LATER, revision="7"))
+    run(_with_redis(services, _heartbeat(busy=False)))
+    try:
+        assert _sweep(services, now + LATER, recording["id"]) is None
+        assert _sweep(services, now + LATER + AFTER_GRACE, recording["id"]) == "worker_lost"
+    finally:
+        _clear_heartbeat(services)
+
+
+def test_worker_pre_processando_nao_vira_worker_lost(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = _recording(api)
+    started = datetime.now(UTC)
+    # Pré-processamento longo: o progresso parou em `preprocess` além da graça (abaixo do teto), e o
+    # heartbeat diz que o worker está neste job.
+    _prepare(
+        services, recording["id"], _running_with_progress(recording["id"], started, stage="preprocess", revision="1")
+    )
+    run(_with_redis(services, _heartbeat(busy=True, job_id=transcribe_job_id(recording["id"], 1))))
+    try:
+        assert _sweep(services, started + LATER, recording["id"]) is None
+        assert _sweep(services, started + LATER + AFTER_GRACE, recording["id"]) is None
+    finally:
+        _clear_heartbeat(services)
+    assert _state(api, recording["id"])["status"] == "processing"
 
 
 async def _crash(_ctx: dict[str, Any], *_args: Any) -> None:  # noqa: ANN401
