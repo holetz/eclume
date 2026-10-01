@@ -23,6 +23,8 @@ DEFAULT_QUEUE = "eclume:default"
 AGENT_QUEUE = "eclume:agents"
 # Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
 GPU_HEALTH_KEY = "eclume:gpu:health"
+# `updated_at` do último heartbeat visto, gravado pelo cron `reap_stalled_jobs`: o "fora do ar desde".
+GPU_LAST_SEEN_KEY = "eclume:gpu:last_seen"
 DEFAULT_LANGUAGE = "pt"
 AUTO_LANGUAGE = "auto"
 
