@@ -265,7 +265,12 @@ def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
     agents = agents or FakeAgents()
     params = worker_settings(settings) | {"cron_jobs": None}
     # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
-    params["ctx"] = params["ctx"] | {"provider_factory": agents, "retry_delays": (0, 0), "gpu_retry_s": 0}
+    params["ctx"] = params["ctx"] | {
+        "provider_factory": agents,
+        "retry_delays": (0, 0),
+        "gpu_retry_s": 0,
+        "ingest_retry_delays": (0, 0, 0),
+    }
     run(_drain(params.pop("functions"), **params))
     return agents
 

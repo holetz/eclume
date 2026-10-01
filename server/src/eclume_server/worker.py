@@ -35,6 +35,7 @@ from eclume_server.storage import Storage
 from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summary
 from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
 from eclume_server.transcripts import fail, ingest
+from eclume_server.transient import is_transient
 from eclume_server.voice import platform_voice
 
 if TYPE_CHECKING:
@@ -45,6 +46,10 @@ if TYPE_CHECKING:
 log = logging.getLogger("eclume_server.worker")
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
+# Falha passageira de Postgres ou S3 nos jobs de retorno do worker GPU: 3 novas tentativas com
+# espera crescente (315 s no total, abaixo de `job_stall_seconds`, para o reaper não decidir antes).
+INGEST_RETRY_DELAYS_S = (15, 60, 240)
+RETURN_MAX_TRIES = len(INGEST_RETRY_DELAYS_S) + 1
 # Códigos de pareamento vencidos sem uso somem depois disso (cron `expire_pairing_codes`).
 PAIRING_RETENTION = timedelta(days=1)
 
@@ -75,7 +80,9 @@ async def ingest_transcript(
     antigo), vale o job mais recente. A mensagem de uma revisão que não está mais em aberto é
     ignorada. Uma ingestão que falha desfaz a transação inteira; numa transação nova, o job e a
     gravação viram falha recuperável `ingest_failed`, para a gravação não ficar presa na fila.
-    Só quem fecha o job apaga o hash de progresso.
+    Só quem fecha o job apaga o hash de progresso. A falha passageira de Postgres ou S3 volta à
+    fila antes disso (`INGEST_RETRY_DELAYS_S`); a definitiva, ou a passageira que dura todas as
+    tentativas, vira `ingest_failed`.
     """
     job_revision = return_revision("ingest_transcript", recording_id, ctx.get("job_id"))
     try:
@@ -90,7 +97,8 @@ async def ingest_transcript(
                 revision=job_revision,
             )
             revision = await current_revision(conn, UUID(recording_id))
-    except Exception:
+    except Exception as exc:
+        _retry_if_transient(ctx, "ingest_transcript", recording_id, exc)
         log.exception("ingest_transcript %s (revisão %s): a ingestão falhou", recording_id, job_revision)
         async with system_tx(ctx["engine"]) as conn:
             result = await fail(conn, UUID(recording_id), INGEST_FAILED, INGEST_FAILED_MESSAGE, revision=job_revision)
@@ -109,6 +117,22 @@ async def ingest_transcript(
         await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
     return outcome.message
+
+
+def _retry_if_transient(ctx: dict[str, Any], job: str, recording_id: str, exc: Exception) -> None:
+    """Levanta `Retry` (fora da transação) se a falha é passageira e ainda há tentativa."""
+    delays = ctx.get("ingest_retry_delays", INGEST_RETRY_DELAYS_S)
+    attempt = ctx.get("job_try", 1)
+    if attempt <= len(delays) and is_transient(exc):
+        log.warning(
+            "%s %s: falha passageira na tentativa %d (%s: %s); tenta de novo",
+            job,
+            recording_id,
+            attempt,
+            type(exc).__name__,
+            exc,
+        )
+        raise Retry(defer=delays[attempt - 1]) from exc
 
 
 async def _keep_only_revision(storage: Storage, recording_id: str, revision: int | None) -> None:
@@ -203,10 +227,16 @@ async def transcription_failed(
     """Marca o job da revisão e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou.
 
     A revisão vem do `_job_id` (`transcription_failed:{recording_id}:{revision}`), como na ingestão.
+    A falha passageira de Postgres volta à fila como na ingestão; esgotadas as tentativas, relança, e
+    o reaper cobre o job.
     """
     revision = return_revision("transcription_failed", recording_id, ctx.get("job_id"))
-    async with system_tx(ctx["engine"]) as conn:
-        result = await fail(conn, UUID(recording_id), error_code, message, stage, revision=revision)
+    try:
+        async with system_tx(ctx["engine"]) as conn:
+            result = await fail(conn, UUID(recording_id), error_code, message, stage, revision=revision)
+    except Exception as exc:
+        _retry_if_transient(ctx, "transcription_failed", recording_id, exc)
+        raise
     if result.closed:
         await ctx["redis"].delete(progress_key(recording_id))
     log.info("transcription_failed %s (revisão %s): %s", recording_id, revision, result.message)
@@ -296,8 +326,9 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
     """Parâmetros do `arq.Worker` para esta configuração."""
     return {
         "functions": [
-            ingest_transcript,
-            transcription_failed,
+            # Só a falha passageira volta à fila (`Retry`); o resto termina na primeira tentativa.
+            func(ingest_transcript, max_tries=RETURN_MAX_TRIES),
+            func(transcription_failed, max_tries=RETURN_MAX_TRIES),
             purge_embedding_objects,
             # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
             # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.

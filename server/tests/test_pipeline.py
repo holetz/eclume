@@ -7,13 +7,14 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
+from botocore.exceptions import EndpointConnectionError
 from sqlalchemy import text
 
 from eclume_server.db.session import make_engine
 from eclume_server.queue import Queue, progress_key
 from eclume_server.storage import Storage
 from eclume_server.transcripts import fail, render_markdown
-from eclume_server.worker import ingest_transcript, transcription_failed
+from eclume_server.worker import INGEST_RETRY_DELAYS_S, ingest_transcript, transcription_failed
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import DEFAULT_VOICES, ENGINE_INFO, contract_transcript, run_cpu, run_gpu
 from eclume_server_testing.harness import run
@@ -269,6 +270,54 @@ def test_retranscricao_apaga_artefatos_da_revisao_anterior(
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert listed() == [f"recordings/{rid}/r2/transcript.raw.json"]
+
+
+def _flaky_read(monkeypatch: pytest.MonkeyPatch, failures: int) -> list[str]:
+    """`Storage.read_json` com o S3 fora do ar nas `failures` primeiras chamadas; devolve as chamadas."""
+    original = Storage.read_json
+    calls: list[str] = []
+
+    async def read(storage: Storage, key: str) -> object:
+        calls.append(key)
+        if len(calls) <= failures:
+            raise EndpointConnectionError(endpoint_url="http://minio:9000")
+        return await original(storage, key)
+
+    monkeypatch.setattr(Storage, "read_json", read)
+    return calls
+
+
+def test_ingestao_com_falha_passageira_tenta_de_novo(
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(4000))
+    run_gpu(services.settings)
+    calls = _flaky_read(monkeypatch, failures=2)
+    run_cpu(services.settings)
+    assert len(calls) == 3
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
+
+
+def test_falha_passageira_persistente_vira_ingest_failed(
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # As esperas cabem antes do teto do reaper, que não declara `ingest_failed` no meio das tentativas.
+    assert sum(INGEST_RETRY_DELAYS_S) < services.settings.job_stall_seconds
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(4100))
+    run_gpu(services.settings)
+    calls = _flaky_read(monkeypatch, failures=99)
+    run_cpu(services.settings)
+    assert len(calls) == len(INGEST_RETRY_DELAYS_S) + 1
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert (body["status"], body["job"]["error"]["code"]) == ("failed", "ingest_failed")
 
 
 def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
