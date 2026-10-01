@@ -164,7 +164,9 @@ def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Servi
     run_cpu(services.settings, agents)
     done = pat.get(f"/api/v1/base-chat/{created.json()['id']}").json()
     assert (done["status"], done["answer"], done["queries"]) == ("done", "Só pelos resumos.", 0)
-    calls = agents.of("base_chat")
+    # Só as chamadas desta pergunta: o worker também drena perguntas deixadas na fila por outros testes.
+    calls = [call for call in agents.of("base_chat") if "Qual o orçamento?" in call[2]]
+    assert len(calls) == 2
     assert all(system == BASE_CHAT_SUMMARIES_SYSTEM for _, system, _ in calls)
     assert "search_transcripts" not in calls[0][1]
     assert correction(transcripts=False) in calls[1][2]
