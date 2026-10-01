@@ -175,6 +175,15 @@ pub struct PlanoDeLeitura {
     transporte: Arc<dyn eclume_sync::transport::Transport>,
     servidor: Servidor,
     token: String,
+    /// A CA fixada, ao lado da qual a sonda guarda a próxima raiz anunciada.
+    ca: std::path::PathBuf,
+}
+
+/// A próxima raiz guardada e o transporte fixado nela: a troca conferida fora da trava.
+pub struct PlanoDaProxima {
+    transporte: Arc<dyn eclume_sync::transport::Transport>,
+    servidor: Servidor,
+    raiz: eclume_sync::pin::RootCa,
 }
 
 /// O núcleo do app.
@@ -409,6 +418,7 @@ impl Core {
             transporte: self.conexao.transporte(prazo)?,
             servidor,
             token,
+            ca: self.dirs.ca(),
         }))
     }
 
@@ -423,6 +433,27 @@ impl Core {
             return Ok(None);
         }
         self.leitura(PRAZO_DA_SONDA)
+    }
+
+    /// Depois de uma sonda `CaMudou`: a próxima raiz guardada, para conferir se o servidor virou
+    /// para ela; `None` sem servidor ou sem próxima.
+    pub fn preparar_proxima(&self) -> Result<Option<PlanoDaProxima>> {
+        let Some(servidor) = self.config.servidor.clone() else {
+            return Ok(None);
+        };
+        Ok(self
+            .conexao
+            .proxima(PRAZO_DA_SONDA)?
+            .map(|(raiz, transporte)| PlanoDaProxima {
+                transporte,
+                servidor,
+                raiz,
+            }))
+    }
+
+    /// A próxima raiz conferida vira a fixada (ver [`conexao::Conexao::promover_proxima`]).
+    pub fn promover_proxima(&mut self, plano: &PlanoDaProxima) -> Result<()> {
+        self.conexao.promover_proxima(&plano.raiz, &mut self.config)
     }
 
     pub fn registrar_sonda(&mut self, agora_ms: i64, sonda: Sonda) {
@@ -910,7 +941,7 @@ impl Core {
 
 impl PlanoDeLeitura {
     pub fn sondar(self) -> Sonda {
-        rede::sondar(self.transporte, &self.servidor)
+        rede::sondar_e_aprender(self.transporte, &self.servidor, &self.ca)
     }
 
     pub fn tipos(&self) -> Result<Vec<config::TipoDeAgenda>> {
@@ -941,6 +972,13 @@ pub struct PlanoDeDownload {
     servidor: Servidor,
     manifesto: sync::Manifesto,
     destino: std::path::PathBuf,
+}
+
+impl PlanoDaProxima {
+    /// O descritor, lido fixando a próxima raiz, a confirma: o servidor virou para ela.
+    pub fn confere(&self) -> bool {
+        rede::confere_proxima(Arc::clone(&self.transporte), &self.servidor, &self.raiz.sha256)
+    }
 }
 
 impl PlanoDeDownload {
@@ -1015,13 +1053,29 @@ pub fn sondar(nucleo: &Mutex<Core>, forcar: bool) -> Result<Sondagem> {
     let plano = trancar(nucleo)?.preparar_sonda(agora, forcar)?;
     let rodou = plano.is_some();
     if let Some(plano) = plano {
-        let sonda = plano.sondar();
+        let mut sonda = plano.sondar();
+        if sonda == Sonda::CaMudou && trocar_pela_proxima(nucleo)? {
+            sonda = Sonda::Ok;
+        }
         trancar(nucleo)?.registrar_sonda(agora, sonda);
     }
     Ok(Sondagem {
         rodou,
         na_rede: trancar(nucleo)?.rede.na_rede(),
     })
+}
+
+/// Na sonda que acusou outra CA: se o servidor virou para a próxima raiz guardada (o descritor,
+/// lido fixando-a, a confirma), ela vira a fixada e a sonda vale como ok; senão, `CaMudou` segue.
+fn trocar_pela_proxima(nucleo: &Mutex<Core>) -> Result<bool> {
+    let Some(plano) = trancar(nucleo)?.preparar_proxima()? else {
+        return Ok(false);
+    };
+    if !plano.confere() {
+        return Ok(false);
+    }
+    trancar(nucleo)?.promover_proxima(&plano)?;
+    Ok(true)
 }
 
 /// O que o `SyncWorker` precisa saber antes de subir: se está na rede do eclume e o que aguarda.

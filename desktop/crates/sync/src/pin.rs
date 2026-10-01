@@ -206,6 +206,28 @@ pub fn forget_next(pinned: &Path) -> Result<()> {
     }
 }
 
+/// Guarda a próxima raiz que `info` anuncia (`ca_next_sha256`, no descritor lido por `transport`,
+/// fixado na raiz atual em `pinned`): baixa-a pela mesma conexão, confere e grava ao lado da
+/// fixada. Sem anúncio, apaga a próxima guardada antes. Diz se gravou uma nova.
+pub fn learn_next(
+    transport: &dyn Transport,
+    url: &str,
+    info: &ServerInfo,
+    pinned: &Path,
+) -> Result<bool> {
+    let Some(announced) = info.ca_next_sha256.as_deref() else {
+        forget_next(pinned)?;
+        return Ok(false);
+    };
+    let next = normalize_fingerprint(announced)?;
+    if saved_next(pinned).is_some_and(|saved| saved.sha256 == next) {
+        return Ok(false);
+    }
+    let root = fetch_next(transport, url, &next)?;
+    save_next(&root, pinned)?;
+    Ok(true)
+}
+
 /// Troca a fixada em `pinned` pela próxima guardada ao lado (`rename`, o arquivo inteiro de uma
 /// vez): o transporte fixado e o updater passam a confiar só nela.
 pub fn promote_next(pinned: &Path) -> Result<()> {

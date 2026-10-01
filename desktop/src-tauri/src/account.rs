@@ -330,22 +330,11 @@ pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
 }
 
 /// Aprende a próxima raiz pelo descritor lido na conexão fixada em `pinned` (a raiz atual avaliza
-/// a nova, sem TOFU): baixa-a pela mesma conexão, confere com `ca_next_sha256` e a guarda ao lado
-/// da fixada, um certificado só. Sem anúncio, apaga a próxima guardada antes. Diz se gravou uma.
+/// a nova, sem TOFU) e a guarda ao lado da fixada ([`pin::learn_next`]). Diz se gravou uma.
 pub fn learn_next(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
     let transport = net.verified(&TrustMode::Pinned(pinned.to_path_buf()))?;
     let info = server_info(Arc::clone(&transport), web_url)?;
-    let Some(announced) = info.ca_next_sha256.as_deref() else {
-        pin::forget_next(pinned)?;
-        return Ok(false);
-    };
-    let next = pin::normalize_fingerprint(announced)?;
-    if pin::saved_next(pinned).is_some_and(|saved| saved.sha256 == next) {
-        return Ok(false);
-    }
-    let root = pin::fetch_next(&*transport, web_url, &next)?;
-    pin::save_next(&root, pinned)?;
-    Ok(true)
+    pin::learn_next(&*transport, web_url, &info, pinned)
 }
 
 /// O `ca_path` é a CA fixada pela primeira execução (e não uma escolhida à mão em "Avançado").
