@@ -49,6 +49,14 @@ describe('estado da gravação', () => {
     }
   })
 
+  it('cancelada quando a gravação falhou com uma etapa pulada por cancelamento', () => {
+    const recording = withSteps('failed', {})
+    recording.pipeline = recording.pipeline.map((step) =>
+      step.step === 'transcription' ? { ...step, state: 'skipped', reason: 'cancelled' } : step,
+    )
+    expect(recordingState(recording)).toMatchObject({ state: 'failed', label: 'Cancelada', tone: 'neutral' })
+  })
+
   it('em andamento mostra a etapa corrente em palavra', () => {
     const busy = (recording: Schemas['Recording']) => {
       const state = recordingState(recording)

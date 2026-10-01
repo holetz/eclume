@@ -2,7 +2,7 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-01
 audience: both
@@ -43,7 +43,7 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
 
-One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket), `migrate`
+One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket, usuários e políticas por serviço), `migrate`
 (`eclume-server migrate`, como o superusuário, que também liga o `LOGIN` de `eclume_server` com `ECLUME_RUNTIME_PG_PASSWORD`) e `publish-ca` (copia a CA para `/downloads/`).
 
 - **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO,
@@ -61,6 +61,28 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
   filtrando o contexto da raiz. Uma imagem de server serve à API, ao worker CPU, às migrations e ao
   CLI. Ela roda como uid 1000 (`HOME=/home/app`) e traz o binário nativo da CLI `claude`, fixado
   na versão do host.
+- **Redes por papel** (holetz/eclume#94): `borda` (caddy, web, server); `dados`, interna
+  (postgres, redis, minio, server, worker-cpu, worker-agents, `minio-init`, `migrate`); `fila-gpu`,
+  interna (redis, minio, worker-gpu); `saida` (worker-cpu, worker-agents e worker-gpu, que falam
+  com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem web.
+  `publish-ca` roda com `network_mode: none`; `mdns`, na rede do host.
+- **Credencial por serviço:** server e workers CPU usam `eclume-server` no Redis e no MinIO; o
+  worker GPU, `eclume-gpu`, que só lê o áudio e escreve os artefatos. O root do MinIO fica no
+  MinIO, no `minio-init` e no backup; o usuário `default` do Redis está desligado
+  ([server-nucleo.md](../standards/code/server-nucleo.md#credenciais-de-redis-e-minio)). Para
+  depurar o Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
+- **Privilégio mínimo:** os contêineres Python (server, workers, `migrate`, `mdns`) rodam com
+  `cap_drop: [ALL]` e `no-new-privileges`; Caddy e web ficam como estão, porque escutam em porta
+  baixa.
+- **Limites de memória (`mem_limit`)** em caddy, web, server, worker-cpu, worker-agents,
+  worker-gpu, redis e minio, cada um por env `ECLUME_MEM_<SERVIÇO>` (`ECLUME_MEM_WORKER_GPU`, por
+  exemplo) com padrão no compose. Os padrões são provisórios e folgados (host de 16 GB: 256m,
+  128m, 1g, 1g, 2g, 8g, 512m, 1g) até a medição de 24 h de `docker stats` com uma transcrição de
+  1 h ou mais e um resumo; o valor certo é o pico × 1,5. Para ajustar, defina a variável em
+  `deploy/.env.prod` e faça deploy. O Postgres não tem teto: ganha `oom_score_adj: -800` (o OOM
+  do host escolhe outro antes) e `shm_size: 256m`. Um contêiner que estoura o teto morre dentro
+  do próprio cgroup e o `restart` o traz de volta. O `release-desktop.sh` limita o build a
+  `ECLUME_BUILD_MEMORY` (6g), ao lado das 2 CPUs.
 - **Restart `unless-stopped` e logs rotacionados** (3 × 10 MB por container): o stack volta
   sozinho depois de um reboot, sem ninguém rodar deploy.
 
@@ -167,6 +189,10 @@ host.
 |---|---|
 | `ECLUME_PG_PASSWORD` | do superusuário `eclume` (migrador); só vale na criação do volume; para trocar depois, `ALTER USER eclume PASSWORD '…'` antes de mudar o env |
 | `ECLUME_RUNTIME_PG_PASSWORD` | do papel `eclume_server`, a conexão do server e do worker CPU. O `migrate` a aplica a cada deploy, então trocá-la é mudar o env e fazer deploy. Um env anterior a ela ganha uma gerada pelo próprio `deploy.sh` (append, sem tocar no resto) |
+| `ECLUME_MINIO_USER`, `ECLUME_MINIO_PASSWORD` | root do MinIO: só o MinIO, o `minio-init` e os scripts de backup a usam |
+| `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` do MinIO; o `minio-init` as aplica a cada deploy, então trocar é mudar o env e fazer deploy. Um env anterior a elas as ganha geradas pelo `deploy.sh` (append), com aviso no `--plan` |
+| `ECLUME_REDIS_SERVER_PASSWORD`, `ECLUME_REDIS_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` da ACL do Redis; a ACL é recriada com o contêiner do Redis no deploy. Geradas pelo `deploy.sh` quando faltam, como as do MinIO |
+| `ECLUME_MEM_<SERVIÇO>` | opcionais: teto de memória de cada serviço (ver Stack) |
 | `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
@@ -342,7 +368,9 @@ usuário não rodaria fora de sessão. O `deploy.sh` instala o script e a linha 
 
 Ficam os **7 mais recentes** de cada (`MANTER`). Rodar duas vezes no mesmo dia substitui o
 backup do dia. O backup fica **no mesmo disco**: ele protege contra erro lógico e corrupção,
-não contra a perda do disco. Copiar `backups/` para fora do host é decisão do usuário.
+não contra a perda do disco. Copiar `backups/` para fora do host é decisão do usuário. O espelho
+do MinIO (e a restauração) roda num contêiner `mc` com o root, ligado à rede interna `dados` do
+projeto (escolhida pelo nome, `*_dados`, entre as redes do MinIO).
 
 ```bash
 ssh holetz@192.168.15.199 /srv/eclume/bin/backup.sh                    # backup agora

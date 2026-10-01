@@ -11,6 +11,8 @@ from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import in_progress_key_prefix
 
+from eclume_engines.fila import desserializar
+
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -143,7 +145,12 @@ class Queue:
     @classmethod
     async def connect(cls, redis_url: str) -> Queue:
         """Abre o pool a partir da URL do Redis."""
-        return cls(await create_pool(RedisSettings.from_dsn(redis_url), default_queue_name=DEFAULT_QUEUE))
+        # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e pickle sem globais; grava pickle.
+        return cls(
+            await create_pool(
+                RedisSettings.from_dsn(redis_url), default_queue_name=DEFAULT_QUEUE, job_deserializer=desserializar
+            )
+        )
 
     async def close(self) -> None:
         """Fecha o pool."""

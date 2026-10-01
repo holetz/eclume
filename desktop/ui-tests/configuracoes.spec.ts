@@ -29,7 +29,7 @@ test('Ctrl+, abre Reuniões com os 8 apps, o subtítulo do DS e a política de c
   await expect(linhas.nth(5).locator('.list-row-sub')).toHaveText('App ou aba do WhatsApp Web')
   await expect(linhas.nth(6).locator('.list-row-sub')).toHaveText('Microfone em uso, reunião não reconhecida')
   await expect(linhas.nth(7).locator('input[value="ignore"]')).toBeChecked()
-  await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Perguntar', 'Ignorar'])
+  await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
 })
 
 test('Reuniões: o aviso de resumo pronto vem ligado e desliga na hora', async ({ abrir }) => {
@@ -317,7 +317,7 @@ test('Áudio: atalhos com o estado do registro e troca pela próxima combinaçã
   expect(entrada.shortcuts).toEqual({ record: 'Ctrl+Alt+R', note: 'Ctrl+Alt+N', marker: 'Ctrl+Alt+J' })
 })
 
-test('Sincronização: vem desligada, escolhe a pasta, liga e explica Collections, Obsidian e agente', async ({ abrir }) => {
+test('Sincronização: vem desligada, escolhe a pasta, liga e explica coleções, Obsidian e agente', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await page.locator('[data-aba="pasta"]').click()
@@ -330,7 +330,7 @@ test('Sincronização: vem desligada, escolhe a pasta, liga e explica Collection
 
   // O texto explica o que vai para a pasta e como ela serve ao Obsidian e a agentes.
   const como = page.locator('#pasta-como')
-  await expect(como).toContainText('Collections viram subpastas, e cada uma se divide por mês')
+  await expect(como).toContainText('Coleções viram subpastas, e cada uma se divide por mês')
   await expect(como).toContainText('2026-09-18_1100_01928f3a.md')
   await expect(como).toContainText('O título fica dentro do arquivo')
   await expect(como).toContainText('sem-colecao')

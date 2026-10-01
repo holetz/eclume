@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-mobile"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -890,7 +890,7 @@ dependencies = [
 
 [[package]]
 name = "eclume-mobile-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "eclume-recorder",
@@ -3997,7 +3997,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-eclume-gravador"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",

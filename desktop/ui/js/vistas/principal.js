@@ -4,17 +4,18 @@
 import { el, trocar, $ } from "../dom.js";
 import { versao } from "../tauri.js";
 import { rotuloDoServidor } from "./primeira-execucao.js";
+import { ESTADOS_APARELHO } from "../vocabulario.js";
 
 const MIN = 60_000;
 const DIA = 24 * 60 * MIN;
 
-/** Como cada estado da fila aparece: rótulo e variante do `.badge`. */
+/** O estado da fila no vocabulário compartilhado (estados no aparelho): rótulo e tom do `.badge`. */
 const SITUACOES = {
-  recording: ["Gravando", "badge-progress"],
-  pending: ["Na fila", ""],
-  syncing: ["Enviando", "badge-progress"],
-  synced: ["Enviada", "badge-success"],
-  failed: ["Falhou", "badge-danger"],
+  recording: ESTADOS_APARELHO.recording,
+  pending: ESTADOS_APARELHO.pending,
+  syncing: ESTADOS_APARELHO.uploading,
+  synced: ESTADOS_APARELHO.uploaded,
+  failed: ESTADOS_APARELHO.failed,
 };
 
 export const MAC = /Mac/.test(navigator.platform || navigator.userAgent);
@@ -329,12 +330,14 @@ export function montar(secao, app) {
     trocar(
       fila,
       gravacoes.map((gravacao) => {
-        const [rotulo, variante] = SITUACOES[gravacao.status] ?? [gravacao.status, ""];
+        const { rotulo, tom } = SITUACOES[gravacao.status] ?? { rotulo: gravacao.status, tom: "neutral" };
+        const erro = gravacao.status === "failed" && gravacao.last_error;
         return el(
           "li",
           { dataset: { id: gravacao.id } },
           el("span", {}, rotuloDaGravacao(gravacao, agora)),
-          el("span", { class: `badge ${variante}`.trim(), title: gravacao.last_error ?? null }, rotulo),
+          el("span", { class: tom === "neutral" ? "badge" : `badge badge-${tom}` }, rotulo),
+          erro ? el("span", { class: "fila-erro" }, erro) : null,
         );
       }),
     );

@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server e o ASR residente entre jobs.
-resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
+description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg.
+resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94
 maintainer: holetz
 ---
 
@@ -32,6 +32,16 @@ Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
   registradas por uma versão, para drenar o que já estava na fila dele.
 
 O worker GPU não muda de fila: os retornos continuam em `eclume:default`.
+
+**Serialização (holetz/eclume#94).** Nenhum job nem resultado é desserializado com `pickle`
+irrestrito: `eclume_engines.fila` tem `serializar` (JSON, `default=str`, que nunca falha) e
+`desserializar` (JSON; bytes com o marcador de protocolo do pickle passam por um `Unpickler` cujo
+`find_class` recusa toda classe, então só tipos primitivos abrem). Todo leitor usa o
+`desserializar`: o pool do server (`job_deserializer`), o `WorkerSettings` dos workers CPU e GPU e o
+`Job` do reaper. A troca é em duas fases (expandir/contrair): na fase A, só os leitores mudam e o
+serializador continua pickle; depois do deploy dela, a fase B passa `serializar` como
+`job_serializer` em todo produtor e worker. Assim, nenhum leitor antigo recebe JSON e nenhum job na
+fila se perde. Argumento de job é sempre `str`, `int`, `float`, `bool`, `None`, `dict` ou `list`.
 
 ## Cancelamento
 
@@ -86,6 +96,16 @@ argumentos:
 `eclume_worker/preprocess.py`, entre o download e o ASR, com o `ffmpeg` da imagem, numa thread.
 A ordem é fixa:
 
+0. **Contêiner pela lista permitida** (holetz/eclume#94): os bytes iniciais do arquivo escolhem o
+   demuxer — `OggS` → `ogg`; EBML `1A45DFA3` → `matroska` (Matroska e WebM); `ftyp` na posição 4 →
+   `mov` (MP4, MOV, M4A); `RIFF…WAVE` → `wav`; `fLaC` → `flac`; `ID3` ou sincronia MPEG → `mp3`;
+   cabeçalho ADTS → `aac`. O ffmpeg nunca adivinha o formato: todo `ffprobe`/`ffmpeg` recebe `-f`
+   explícito, `-protocol_whitelist file` e a entrada como `file:<caminho>`, inclusive nos WAV
+   intermediários. Playlist HLS, `concat`, SDP e qualquer outro contêiner terminam em
+   `audio_decode_failed` com o motivo (`contêiner fora da lista permitida`), sem chamar o ffmpeg.
+   **Tempo limite:** 60 s no `ffprobe`; em cada `ffmpeg`, 300 s mais a duração do áudio, com teto
+   de 4 h (o teto também vale quando a duração é desconhecida). Estourar o tempo é uma falha como
+   outra (cai no passo 5). O WhisperX só recebe o WAV que o próprio pré-processamento gerou.
 1. **Sonda** (`ffprobe`): os canais do áudio.
 2. **Separar canais** (ligado e só com 2 canais): `pan=mono|c0=c0-c1,volumedetect` com
    `mean_volume` abaixo de −60 dB é mono duplicado, e a etapa sai `skipped` (`dual_mono`); senão,
@@ -349,7 +369,7 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
 | `error_code` | Quando |
 |---|---|
 | `audio_download_failed` | o `audio_key` não existe ou o S3 falhou |
-| `audio_decode_failed` | o ffmpeg não decodifica o áudio, nem para só converter o formato |
+| `audio_decode_failed` | o contêiner está fora da lista permitida, ou o ffmpeg não decodifica o áudio nem para só converter o formato (dentro do tempo limite) |
 | `out_of_memory` | falta VRAM mesmo com lote 1 e o modelo `medium` |
 | `asr_failed` | erro no ASR que não é falta de memória |
 | `alignment_failed` | erro no alinhamento por palavra |

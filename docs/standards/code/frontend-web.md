@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114
 maintainer: holetz
 ---
 
@@ -253,6 +253,16 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   externa.
 - Toda ação alcançável por teclado, foco visível, skip link, rótulos em todos os campos,
   `aria-live` em progresso e confirmações. Estado nunca só por cor: o selo tem texto.
+- **Vocabulário de estados compartilhado** (`src/lib/vocabulario.js`, módulo ES puro com
+  `vocabulario.d.ts`): os nomes em pt-BR dos estados no aparelho, dos estados da gravação no
+  servidor ("Na fila" só para a espera pela transcrição; "Cancelada" para a gravação `failed` com
+  etapa pulada por `cancelled`), das seis etapas na ordem de `STEPS` e o texto de cada código de
+  motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
+  teste em cada cliente, e `vocabulario.test.ts` falha quando o servidor grava um código de motivo
+  sem texto. Tela nenhuma escreve esses rótulos à mão.
+- **Motivo em texto visível, nunca só no `title`.** Uma etapa pulada ou que falhou, uma linha que
+  falhou no Importar ou na fila do desktop mostram o motivo em texto na tela; `title` pode repetir,
+  nunca ser o único portador.
 - Enum desconhecido na resposta aparece cru, sem quebrar a tela (o contrato só cresce).
 
 ## Biblioteca no tempo
@@ -347,8 +357,9 @@ desce; abaixo de 56rem, os campos também):
   (`parseAs: 'blob'`, nome do `Content-Disposition`) e mostra o `Problem` num alerta; um 401 no
   export encerra a sessão como qualquer outra chamada; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
   volta com "Gravação excluída.".
-- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts`): as seis etapas no `ol.pipeline`, o motivo
-  de uma etapa pulada ou que falhou em texto acessível e em `title`, o progresso do worker com a
+- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as seis etapas no
+  `ol.pipeline`, cada uma com o estado em palavra quando não está concluída ("Resumo · pulada"), a
+  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada ou que falhou, o progresso do worker com a
   transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
   `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
 - **Reprodução compartilhada** (`PlaybackProvider`, `playback.ts`): um único `<audio>` liga o
@@ -392,7 +403,10 @@ desce; abaixo de 56rem, os campos também):
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
   Excluir resumo) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
-  um ("Escolha um tipo de agenda para gerar o resumo.").
+  um ("Escolha um tipo de agenda para gerar o resumo."). Sem agente de resumo (etapa `skipped` com
+  `no_provider`), diz "Sem resumo: nenhum agente configurado; fale com quem administra." e troca o
+  "Gerar resumo" primário por um "Tentar de novo" secundário; o 422 de `provider_id` vira a mesma
+  frase, nunca cru.
   **Regenerar** gera outra versão pelo tipo da gravação (`POST /transcripts/{id}/summaries` sem
   `agenda_type_id`) e sempre confirma antes, porque a nova versão passa a ser a atual e uma edição à
   mão deixa de ser a mostrada, embora fique guardada; fica desabilitado enquanto há geração em

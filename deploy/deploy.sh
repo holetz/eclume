@@ -99,6 +99,10 @@ if [[ "$GEN_ENV" -eq 1 ]]; then
   sed -e "s|^ECLUME_PG_PASSWORD=.*|ECLUME_PG_PASSWORD=$(openssl rand -hex 24)|" \
       -e "s|^ECLUME_RUNTIME_PG_PASSWORD=.*|ECLUME_RUNTIME_PG_PASSWORD=$(openssl rand -hex 24)|" \
       -e "s|^ECLUME_MINIO_PASSWORD=.*|ECLUME_MINIO_PASSWORD=$(openssl rand -hex 24)|" \
+      -e "s|^ECLUME_MINIO_SERVER_PASSWORD=.*|ECLUME_MINIO_SERVER_PASSWORD=$(openssl rand -hex 24)|" \
+      -e "s|^ECLUME_MINIO_GPU_PASSWORD=.*|ECLUME_MINIO_GPU_PASSWORD=$(openssl rand -hex 24)|" \
+      -e "s|^ECLUME_REDIS_SERVER_PASSWORD=.*|ECLUME_REDIS_SERVER_PASSWORD=$(openssl rand -hex 24)|" \
+      -e "s|^ECLUME_REDIS_GPU_PASSWORD=.*|ECLUME_REDIS_GPU_PASSWORD=$(openssl rand -hex 24)|" \
       -e "s|^ECLUME_SECRET_KEY=.*|ECLUME_SECRET_KEY=$(openssl rand -hex 32)|" \
       -e "s|^ECLUME_ENCRYPTION_KEY=.*|ECLUME_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
       deploy/.env.prod.example > "$ENV_FILE"
@@ -192,16 +196,19 @@ if [[ -f "$ENV_FILE" ]] && host "test -s '$DATA_DIR/secrets/env.prod'"; then
   fi
 fi
 
-# Env anterior ao papel eclume_server (holetz/eclume#26): gera a senha dele, sem tocar no resto.
-if [[ -f "$ENV_FILE" ]] && ! grep -q '^ECLUME_RUNTIME_PG_PASSWORD=' "$ENV_FILE"; then
+# Env anterior a uma senha nova (papel eclume_server, holetz/eclume#26; credenciais por serviço de
+# Redis e MinIO, holetz/eclume#94): gera a que falta, sem tocar no resto. O `minio-init` e a ACL do
+# Redis a aplicam no mesmo deploy.
+for key in ECLUME_RUNTIME_PG_PASSWORD ECLUME_MINIO_SERVER_PASSWORD ECLUME_MINIO_GPU_PASSWORD \
+           ECLUME_REDIS_SERVER_PASSWORD ECLUME_REDIS_GPU_PASSWORD; do
+  [[ -f "$ENV_FILE" ]] && ! grep -q "^$key=" "$ENV_FILE" || continue
   if [[ "$PLAN_ONLY" -eq 1 ]]; then
-    echo "Aviso: $ENV_FILE sem ECLUME_RUNTIME_PG_PASSWORD; o deploy geraria uma." >&2
+    echo "Aviso: $ENV_FILE sem $key; o deploy geraria uma." >&2
   elif [[ "${#problemas[@]}" -eq 0 ]]; then
-    printf '\n# Papel eclume_server (conexão da aplicação), gerado pelo deploy.\nECLUME_RUNTIME_PG_PASSWORD=%s\n' \
-      "$(openssl rand -hex 24)" >> "$ENV_FILE"
-    echo "Gerada ECLUME_RUNTIME_PG_PASSWORD em $ENV_FILE." >&2
+    printf '\n# Gerada pelo deploy.\n%s=%s\n' "$key" "$(openssl rand -hex 24)" >> "$ENV_FILE"
+    echo "Gerada $key em $ENV_FILE." >&2
   fi
-fi
+done
 if [[ -f "$ENV_FILE" ]] && grep -q '=troque-' "$ENV_FILE" && [[ "$PLAN_ONLY" -eq 0 ]]; then
   problemas+=("$ENV_FILE ainda tem valores 'troque-': gere segredos reais (--gerar-env)")
 fi
@@ -233,7 +240,12 @@ gpu_busy() {
   local redis_id
   redis_id="$(service_id redis)"
   [[ -n "$redis_id" ]] || { echo 0; return; }
-  docker exec "$redis_id" redis-cli --raw hget eclume:gpu:health busy 2>/dev/null | tr -dc 0-9 || echo 0
+  # Com a ACL (holetz/eclume#94), o redis-cli autentica com a senha que o próprio contêiner tem; o
+  # Redis anterior a ela não tem a variável e responde sem usuário.
+  # shellcheck disable=SC2016 # expandida dentro do contêiner
+  docker exec "$redis_id" sh -c 'redis-cli --no-auth-warning --raw \
+    ${ECLUME_REDIS_SERVER_PASSWORD:+--user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"} \
+    hget eclume:gpu:health busy' 2>/dev/null | tr -dc 0-9 || echo 0
 }
 busy="$(gpu_busy)"
 
