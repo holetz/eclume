@@ -11,7 +11,7 @@ estão no standard [docs/standards/api/contrato-v1.md](../docs/standards/api/con
 | `fixtures/` | **Fonte.** Exemplos realistas em pt-BR, um arquivo por exemplo do OpenAPI (`externalValue`). |
 | `openapi-v1.bundled.yaml` | **Gerado** por `tools/bundle.py`: arquivo único, sem refs externas, com as fixtures inlinadas. É o que o mock e os geradores de tipos leem. Não edite à mão. |
 | `tools/bundle.py` | Gera o bundle; `--check` falha se ele estiver desatualizado. |
-| `tests/` | Testes de contrato (pytest do workspace) e o smoke do mock. |
+| `tests/` | Testes de contrato (pytest do workspace) e o smoke do mock; fixam também os campos obsoletos da v1 (`DEPRECATED_V1`), que seguem obrigatórios até a `/api/v2`. |
 
 ```bash
 uv run python contracts/tools/bundle.py          # depois de mudar qualquer fonte
