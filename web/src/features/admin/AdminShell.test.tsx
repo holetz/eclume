@@ -142,7 +142,7 @@ describe('moldura do painel', () => {
     expect(screen.getByText('mariana.couto@example.com')).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: 'Tema' })).not.toBeInTheDocument()
-    expect(document.title).toBe('Usuários — Admin eclume')
+    await waitFor(() => expect(document.title).toBe('Usuários — Admin eclume'))
     expect(http.requests('GET /api/v1/me')).toHaveLength(0)
   })
 
