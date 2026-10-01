@@ -128,7 +128,8 @@ trap 'host "rmdir \"$BASE/.trava\""' EXIT
 
 # --- código: o commit, não a árvore de trabalho ---------------------------------------------------
 echo "Enviando o código de $SHA para o host…" >&2
-git archive --format=tar "$SHA" | host "rm -rf '$SRC' && mkdir -p '$SRC' && tar -x -C '$SRC'"
+# Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
+git -c core.autocrlf=false archive --format=tar "$SHA" | host "rm -rf '$SRC' && mkdir -p '$SRC' && tar -x -C '$SRC'"
 host "rm -rf '$DIST' && mkdir -p '$DIST'"
 
 # --- build ----------------------------------------------------------------------------------------

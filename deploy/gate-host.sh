@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate de qualidade do eclume, a parte que roda no host GPU a partir da árvore extraída do
-# `git archive` do commit (deploy/gate.sh a envia e chama este script). Roda os sete pilares de
+# `git archive` do commit (deploy/gate.sh a envia e chama este script). Roda os pilares de
 # deploy/pilares.sh, cada um num contêiner da imagem eclume-gate:<Rust> (CPU, memória e prioridade
 # limitadas, uid 1000, sem socket do Docker nem token do gh), contra os serviços de teste e o mock
 # do projeto compose eclume-gate, e publica o resultado no commit como status `eclume/gate`.

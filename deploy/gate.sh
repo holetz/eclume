@@ -85,7 +85,8 @@ fi
 # shellcheck disable=SC2016 # o $HOME é o do host
 DIR="$(host 'echo "$HOME"')/eclume-gate/src-$SHA-$(date +%s)"
 echo "Enviando o código de $SHA para $SSH:$DIR…" >&2
-git archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
+# Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
+git -c core.autocrlf=false archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
 
 args=(--sha "$SHA")
 [[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")
