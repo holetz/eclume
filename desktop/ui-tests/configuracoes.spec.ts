@@ -41,6 +41,15 @@ test('Reuniões: o aviso de resumo pronto vem ligado e desliga na hora', async (
   expect((await ultimaEntrada(page)).notify_summary).toBe(false)
 })
 
+test('Início: iniciar com o computador vem ligado e desliga na hora', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('#iniciar-com-o-sistema')).toBeChecked()
+  await page.locator('label.switch', { hasText: 'Iniciar com o computador' }).click()
+  await expect(page.locator('#iniciar-com-o-sistema')).not.toBeChecked()
+  expect((await ultimaEntrada(page)).autostart).toBe(false)
+})
+
 test('mudar a política, desligar a detecção e restaurar os padrões salvam na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()

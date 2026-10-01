@@ -229,6 +229,8 @@ pub struct SettingsView {
     pub theme: String,
     /// Avisar quando o resumo automático fica pronto.
     pub notify_summary: bool,
+    /// Iniciar com o computador.
+    pub autostart: bool,
     /// A pasta sincronizada está ligada.
     pub mirror_enabled: bool,
     /// A raiz da pasta sincronizada; `None` até a pessoa escolher.
@@ -276,6 +278,9 @@ pub struct SettingsInput {
     /// Ausente mantém o de hoje.
     #[serde(default)]
     pub notify_summary: Option<bool>,
+    /// Iniciar com o computador; ausente mantém o de hoje.
+    #[serde(default)]
+    pub autostart: Option<bool>,
     /// Liga ou desliga a pasta sincronizada; ausente mantém o de hoje.
     #[serde(default)]
     pub mirror_enabled: Option<bool>,
@@ -775,6 +780,11 @@ impl AppState {
         Ok(self.inner()?.config.notify_summary)
     }
 
+    /// Se o app deve iniciar com o computador.
+    pub fn autostart(&self) -> Result<bool> {
+        Ok(self.inner()?.config.autostart)
+    }
+
     /// O estado da pasta sincronizada para a janela.
     pub fn mirror_status(&self) -> Result<MirrorStatus> {
         Ok(self.inner()?.mirror.clone())
@@ -1013,6 +1023,7 @@ impl AppState {
             language: config.language.clone(),
             theme: config.theme.clone(),
             notify_summary: config.notify_summary,
+            autostart: config.autostart,
             mirror_enabled: config.mirror.enabled,
             mirror_dir: config.mirror.dir.clone(),
             mirror_transcripts: config.mirror.transcripts,
@@ -1059,6 +1070,9 @@ impl AppState {
         }
         if let Some(notify) = input.notify_summary {
             next.notify_summary = notify;
+        }
+        if let Some(autostart) = input.autostart {
+            next.autostart = autostart;
         }
         if let Some(enabled) = input.mirror_enabled {
             next.mirror.enabled = enabled;
@@ -1305,6 +1319,7 @@ mod tests {
             language: None,
             theme: None,
             notify_summary: None,
+            autostart: None,
             mirror_enabled: None,
             mirror_dir: None,
             mirror_transcripts: None,
