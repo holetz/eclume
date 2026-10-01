@@ -6,7 +6,7 @@
 #                         do `main`, roda o smoke_prod.py e as conferências, grava estado/ensaio.json
 #                         e sai sempre com `down -v`
 #   staging.sh subir      o mesmo stack restaurado, de pé em https://127.0.0.1:18444 para as provas
-#                         (conta descartável em ~/eclume-staging/conta, CA em ~/eclume-staging/ca.crt)
+#                         (conta descartável em ~/eclume-staging/conta, CA em ~/eclume-staging/ca/ca.crt)
 #   staging.sh derrubar   `down -v` do stack e das imagens :staging
 #
 # O código é o tarball do `main` (gh api, o `gh` autenticado dos releases); ECLUME_STAGING_SRC
@@ -20,6 +20,8 @@ SECRETS="$DATA_DIR/secrets"
 ESTADO="$DATA_DIR/estado"
 STAGING_DIR="${STAGING_DIR:-$HOME/eclume-staging}"
 REST="$STAGING_DIR/restaurado"
+# A CA do Caddy do staging, também montada no server (o /api/v1/server dá a impressão digital ao app).
+CA="$STAGING_DIR/ca/ca.crt"
 URL=https://127.0.0.1:18444
 EMAIL=staging@eclume.invalid
 LOTE="${ECLUME_STAGING_LOTE:-20}"
@@ -98,7 +100,8 @@ passo="env.prod restaurado sem ECLUME_ENCRYPTION_KEY"
 ECLUME_ENCRYPTION_KEY="$(sed -n 's/^ECLUME_ENCRYPTION_KEY=//p' "$R/secrets/env.prod" | tail -n 1)"
 [[ -n "$ECLUME_ENCRYPTION_KEY" ]] || exit 1
 ECLUME_CLAUDE_OAUTH_TOKEN="$(sed -n 's/^ECLUME_CLAUDE_OAUTH_TOKEN=//p' "$R/secrets/env.prod" | tail -n 1)"
-export ECLUME_ENCRYPTION_KEY ECLUME_CLAUDE_OAUTH_TOKEN ECLUME_DATA_DIR="$DATA_DIR"
+install -d -m 755 "$STAGING_DIR/ca"
+export ECLUME_ENCRYPTION_KEY ECLUME_CLAUDE_OAUTH_TOKEN ECLUME_DATA_DIR="$DATA_DIR" ECLUME_STAGING_CA_DIR="$STAGING_DIR/ca"
 
 passo="build das imagens :staging"
 log "build: server e web (:staging)"
@@ -117,18 +120,19 @@ passo="subida do stack"
 compose up -d --wait --wait-timeout 300 server worker-cpu worker-agents worker web caddy
 
 passo="contas descartáveis"
-compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$STAGING_DIR/ca.crt"
+compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$CA"
+chmod 644 "$CA"
 senha="$(openssl rand -hex 16)"
 printf '%s\n' "$senha" | compose run --rm -T migrate \
   eclume-server admin create --email "$EMAIL" --name "Admin staging" --password-stdin >/dev/null
-aviso="$(curl -sf --cacert "$STAGING_DIR/ca.crt" "$URL/api/v1/auth/signup" | python3 -c 'import json, sys; print(json.load(sys.stdin)["notice"]["version"])')"
-curl -sf --cacert "$STAGING_DIR/ca.crt" -H 'Content-Type: application/json' -o /dev/null \
+aviso="$(curl -sf --cacert "$CA" "$URL/api/v1/auth/signup" | python3 -c 'import json, sys; print(json.load(sys.stdin)["notice"]["version"])')"
+curl -sf --cacert "$CA" -H 'Content-Type: application/json' -o /dev/null \
   -d "{\"name\": \"Staging\", \"email\": \"$EMAIL\", \"password\": \"$senha\", \"notice_version\": \"$aviso\"}" \
   "$URL/api/v1/auth/signup"
-(umask 077; printf 'ECLUME_URL=%s\nECLUME_EMAIL=%s\nECLUME_PASSWORD=%s\n' "$URL" "$EMAIL" "$senha" > "$STAGING_DIR/conta")
+(umask 077; printf 'ECLUME_URL=%s\nECLUME_CA=%s\nECLUME_EMAIL=%s\nECLUME_PASSWORD=%s\n' "$URL" "$CA" "$EMAIL" "$senha" > "$STAGING_DIR/conta")
 
 if [[ "$acao" == subir ]]; then
-  log "eclume-staging de pé em $URL (conta em $STAGING_DIR/conta, CA em $STAGING_DIR/ca.crt); derrube com: staging.sh derrubar"
+  log "eclume-staging de pé em $URL (conta em $STAGING_DIR/conta, CA em $CA); derrube com: staging.sh derrubar"
   exit 0
 fi
 
@@ -155,7 +159,7 @@ fora "$RESTIC_IMAGE" check --no-cache --read-data-subset "$fatia" >/dev/null
 
 passo="smoke_prod.py no staging"
 log "smoke no staging"
-ECLUME_SMOKE_PASSWORD="$senha" python3 "$SRC/deploy/smoke_prod.py" --url "$URL" --ca "$STAGING_DIR/ca.crt" \
+ECLUME_SMOKE_PASSWORD="$senha" python3 "$SRC/deploy/smoke_prod.py" --url "$URL" --ca "$CA" \
   --email "$EMAIL" --admin-email "$EMAIL"
 resumo="snapshot do repositório fora restaurado; migrate e smoke ok; $n áudios e a fatia $fatia conferidos"
 log "ok: $resumo"

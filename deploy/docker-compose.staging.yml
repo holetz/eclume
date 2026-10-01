@@ -55,7 +55,12 @@ services:
 
   server:
     <<: *server-image
-    environment: *server-env
+    environment:
+      <<: *server-env
+      # A CA deste Caddy (staging.sh a copia depois da subida): a impressão digital do /server.
+      ECLUME_CA_FILE: /srv/staging-ca/ca.crt
+    volumes:
+      - ${ECLUME_STAGING_CA_DIR:-./staging-ca}:/srv/staging-ca:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

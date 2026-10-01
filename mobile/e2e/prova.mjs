@@ -1,4 +1,4 @@
-// A prova do app móvel no emulador do host, contra a produção (holetz/eclume#41, 8.1).
+// A prova do app móvel no emulador do host, contra o staging (holetz/eclume#41, 8.1; #91).
 //
 // Dirige o WebView do app pelo Playwright `_android` (o build de depuração do Tauri habilita a
 // depuração do WebView), a tela bloqueada e a rede pelo `adb`, e a notificação pelo
@@ -6,8 +6,9 @@
 // `mobile` e os marcadores. Roda de mobile/scripts/prova-emulador.sh, que sobe o emulador e
 // instala o APK; a limpeza (gravações da prova, token do aparelho) é daqui.
 //
-// Variáveis: ECLUME_SMOKE_PASSWORD (obrigatória), ECLUME_URL (https://192.168.15.199:8443),
-// ECLUME_SMOKE_EMAIL (admin@example.com), ECLUME_CA (PEM da CA raiz).
+// Variáveis: ECLUME_SMOKE_PASSWORD (obrigatória), ECLUME_URL (https://127.0.0.1:18444, o
+// `staging.sh subir`, alcançado pelo `adb reverse`), ECLUME_SMOKE_EMAIL (staging@eclume.invalid),
+// ECLUME_CA (PEM da CA raiz). A prova escreve: recusa a URL de produção.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -15,13 +16,18 @@ import https from 'node:https'
 import { _android as android } from 'playwright'
 
 const PACOTE = 'io.github.holetz.eclume.movel'
-const URL_SERVIDOR = process.env.ECLUME_URL ?? 'https://192.168.15.199:8443'
-const EMAIL = process.env.ECLUME_SMOKE_EMAIL ?? 'admin@example.com'
+const URL_SERVIDOR = process.env.ECLUME_URL ?? 'https://127.0.0.1:18444'
+const PRODUCAO = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter(Boolean)
+const EMAIL = process.env.ECLUME_SMOKE_EMAIL ?? 'staging@eclume.invalid'
 const SENHA = process.env.ECLUME_SMOKE_PASSWORD
 const CA = readFileSync(process.env.ECLUME_CA ?? 'eclume-root.crt')
 const TITULO = `Prova emulador ${new Date().toISOString().slice(0, 19)}`
 const INICIO = Date.now()
 
+if (PRODUCAO.some((u) => new URL(u).host === new URL(URL_SERVIDOR).host)) {
+  console.error(`FALHA: ${URL_SERVIDOR} é a produção; a prova escreve: use o staging`)
+  process.exit(2)
+}
 if (!SENHA) {
   console.error('FALHA: informe ECLUME_SMOKE_PASSWORD')
   process.exit(2)
