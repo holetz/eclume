@@ -128,6 +128,7 @@ export function RecordingPage() {
         recordingId={data.id}
         hasTranscript={data.transcript_id !== null}
         hasSummary={Boolean(summary.data?.current)}
+        agendaTypeId={data.agenda_type?.id ?? null}
         className={styles.chat}
       />
     </div>

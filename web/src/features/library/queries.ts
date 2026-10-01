@@ -5,6 +5,7 @@ import { pollWhile } from '../../app/polling'
 import type { Range } from './calendar'
 import { filtersToQuery, type LibraryFilters } from './filters'
 import { recordingState } from '../../shared/format'
+import { PEOPLE_KEY } from '../people/queries'
 
 type Recording = Schemas['Recording']
 
@@ -98,5 +99,14 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
       (data) => data?.pages.some((page) => anyBusy(page.items)) ?? false,
       POLL_MS,
     ),
+  })
+}
+
+export function useHasAnyPerson(enabled: boolean) {
+  return useQuery({
+    queryKey: [...PEOPLE_KEY, 'any'],
+    enabled,
+    queryFn: () => unwrap(api.GET('/api/v1/people', { params: { query: { limit: 1 } } })),
+    select: (page) => page.items.length > 0,
   })
 }

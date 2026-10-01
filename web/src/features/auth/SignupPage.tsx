@@ -20,6 +20,11 @@ function signupDestinationLine(info: PrivacyInfo | undefined): string | null {
   return `Neste servidor, ${what} são feitos fora dele, por ${who}: o texto das transcrições vai para lá. O áudio e as transcrições ficam guardados aqui.`
 }
 
+/** "a, b e c". */
+function joinMissing(labels: string[]): string {
+  return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} e ${labels[labels.length - 1]}` : labels[0]
+}
+
 /** Criar conta (`/cadastro`): cadastro aberto, com o aceite obrigatório do aviso em vigor. */
 export function SignupPage() {
   usePageTitle('Criar conta')
@@ -34,16 +39,37 @@ export function SignupPage() {
   const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const ids = { name: useId(), email: useId(), password: useId(), hint: useId(), error: useId() }
+  const [triedSubmit, setTriedSubmit] = useState(false)
+  const ids = {
+    name: useId(),
+    email: useId(),
+    password: useId(),
+    hint: useId(),
+    accepted: useId(),
+    error: useId(),
+    missing: useId(),
+  }
 
   if (me.data) return <Navigate to="/" replace />
 
   const notice = info.data?.notice
-  const ready = Boolean(notice) && name.trim() !== '' && email.trim() !== '' && password.length >= MIN_PASSWORD && accepted
+  // O que falta, na ordem do formulário: o botão fica ativo e, ao enviar, diz isto e foca o primeiro.
+  const missing = [
+    name.trim() === '' && { id: ids.name, label: 'o nome' },
+    email.trim() === '' && { id: ids.email, label: 'o e-mail' },
+    password.length < MIN_PASSWORD && { id: ids.password, label: `a senha com ${MIN_PASSWORD} caracteres` },
+    !accepted && { id: ids.accepted, label: 'o aceite do aviso' },
+  ].filter((item) => item !== false)
+  const showMissing = triedSubmit && missing.length > 0
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!ready || !notice) return
+    if (missing.length > 0) {
+      setTriedSubmit(true)
+      document.getElementById(missing[0].id)?.focus()
+      return
+    }
+    if (!notice) return
     setError(null)
     setSubmitting(true)
     try {
@@ -146,7 +172,13 @@ export function SignupPage() {
         {destinationLine && <p className="field-hint">{destinationLine}</p>}
         <div className="panel">
           <label className="check">
-            <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+            <input
+              id={ids.accepted}
+              type="checkbox"
+              required
+              checked={accepted}
+              onChange={(e) => setAccepted(e.target.checked)}
+            />
             <span className="box" />
             <span>{notice?.text}</span>
           </label>
@@ -156,7 +188,17 @@ export function SignupPage() {
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !ready}>
+        {showMissing && (
+          <p id={ids.missing} className="alert alert-error" role="alert">
+            Para criar a conta, falta {joinMissing(missing.map((item) => item.label))}.
+          </p>
+        )}
+        <button
+          type="submit"
+          className="btn btn-primary btn-block"
+          disabled={submitting}
+          aria-describedby={showMissing ? ids.missing : undefined}
+        >
           {submitting ? 'Criando…' : 'Criar conta'}
         </button>
         {back}

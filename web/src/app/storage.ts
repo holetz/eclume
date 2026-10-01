@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   motion: 'eclume-movimento',
   peopleColumns: 'eclume-pessoas-colunas',
   notifyOutcomes: 'eclume-aviso-navegador',
+  firstStepsDismissed: 'eclume-primeiros-passos-dispensado',
+  agendaTypesSeen: 'eclume-tipos-de-agenda-visto',
 } as const
 
 export function readStored(key: string): string | null {

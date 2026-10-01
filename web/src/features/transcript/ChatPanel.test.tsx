@@ -6,7 +6,7 @@ import { json } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
 
-beforeAll(() => preloadRoute('/gravacoes/x'))
+beforeAll(() => preloadRoute('/gravacoes/x', '/config/agendas'))
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -76,6 +76,30 @@ describe('chat de ajuste do resumo', () => {
     )
     expect(within(aside).queryByLabelText('Trabalhando')).not.toBeInTheDocument()
   }, 15_000)
+
+  it('depois de um ajuste, leva o pedido ao rascunho das instruções do tipo, sem salvar', async () => {
+    const http = mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const aside = await chat()
+    const link = await within(aside).findByRole('link', { name: 'Levar este pedido para as instruções do tipo' })
+    expect(link).toHaveAttribute('href', '/config/agendas?tipo=01928f3a-1c00-7a00-8000-000000000901')
+    await userEvent.click(link)
+    const panel = await screen.findByRole('form', { name: 'Editar Reunião de equipe' })
+    const instructions = within(panel).getByLabelText('Instruções do resumo') as HTMLTextAreaElement
+    expect(instructions.value).toMatch(/responsável, o quê e quando\.\n\nQuem falou do orçamento\? Coloque isso nas decisões\.$/)
+    expect(within(panel).getByRole('status')).toHaveTextContent('O pedido do chat entrou no fim das instruções do resumo.')
+    expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeEnabled()
+    expect(http.requests('PATCH /api/v1/agenda-types/:id')).toHaveLength(0)
+  })
+
+  it('sem ajuste que mudou o resumo, não oferece levar o pedido ao tipo', async () => {
+    const page = fixtures.summaryChatPage()
+    page.items[1] = { ...page.items[1], summary_id: null }
+    mockTranscriptApi({ 'GET /api/v1/recordings/:id/summary/chat': () => page })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const aside = await chat()
+    expect(within(aside).queryByRole('link', { name: /Levar este pedido/ })).not.toBeInTheDocument()
+  })
 
   it('Ctrl+Enter envia; o resumo que mudou no meio e a falha viram nota e nova tentativa', async () => {
     const user = userEvent.setup()

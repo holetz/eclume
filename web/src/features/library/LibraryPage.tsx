@@ -1,9 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { lazy, Suspense, useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { api } from '../../api/client'
-import { errorMessage, unwrap } from '../../api/problem'
+import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -14,6 +12,7 @@ import { useImportContext } from '../import/importContext'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
 import { CalendarMonth } from './CalendarMonth'
 import { CalendarWeek } from './CalendarWeek'
+import { FirstSteps } from './FirstSteps'
 import {
   activeFilterCount,
   NO_FILTERS,
@@ -27,6 +26,7 @@ import {
 import { FilterGroups, LibraryFilters } from './LibraryFilters'
 import styles from './LibraryPage.module.css'
 import type { ImportItem } from '../import/useImportQueue'
+import { useHasAnyRecording } from './anyRecording'
 import { useLibraryList, useLibraryRange } from './queries'
 import { RecordingList } from './RecordingList'
 
@@ -52,16 +52,6 @@ function useNarrow(): boolean {
     query?.addEventListener?.('change', onChange)
     return () => query?.removeEventListener?.('change', onChange)
   }, matchesNarrow)
-}
-
-/** Se a conta tem alguma gravação: decide entre "nada neste período" e a biblioteca vazia. */
-function useHasAnyRecording(enabled: boolean) {
-  return useQuery({
-    queryKey: ['recordings', 'any'],
-    enabled,
-    queryFn: () => unwrap(api.GET('/api/v1/recordings', { params: { query: { limit: 1 } } })),
-    select: (page) => page.items.length > 0,
-  })
 }
 
 export function LibraryPage() {
@@ -108,6 +98,7 @@ export function LibraryPage() {
   const current = view === 'lista' ? list : range
   const items = (view === 'lista' ? list.data?.pages.flatMap((page) => page.items) : range.data?.items) ?? []
   const emptyPeriod = current.isSuccess && items.length === 0
+  // Decide entre "nada neste período" e a biblioteca vazia.
   const anyRecording = useHasAnyRecording(emptyPeriod && activeFilterCount(filters) === 0)
   const emptyLibrary = anyRecording.data === false
 
@@ -166,6 +157,7 @@ export function LibraryPage() {
           </p>
         )}
         <ImportBand items={importQueue.items} onOpen={() => setImporting(true)} />
+        <FirstSteps onImport={() => setImporting(true)} />
 
         <div className={`toolbar ${styles.toolbar}`}>
           <span className="toolbar-title" aria-live="polite">
@@ -325,8 +317,10 @@ function EmptyLibrary({ onImport }: { onImport: () => void }) {
     <div className={`card ${styles.empty}`}>
       <h2>Nenhuma gravação ainda</h2>
       <p className="text-muted">
-        Importe um arquivo de áudio ou vídeo, ou instale o <Link to="/app-desktop">app desktop</Link> para gravar
-        reuniões automaticamente.
+        Importe um arquivo de áudio ou vídeo, grave reuniões automaticamente com o{' '}
+        <Link to="/app-desktop">app desktop</Link> ou grave pelo <Link to="/app-movel">app do celular</Link>. Cada
+        gravação é transcrita, ganha título e resumo pelo seu{' '}
+        <Link to="/config/agendas">tipo de agenda</Link>.
       </p>
       <button type="button" className="btn btn-primary" onClick={onImport}>
         Importar arquivos

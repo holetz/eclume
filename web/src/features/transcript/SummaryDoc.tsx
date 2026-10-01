@@ -1,6 +1,7 @@
 import { Copy } from 'lucide-react'
 import { useId, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { Link } from 'react-router'
 import { safeMarkdown } from '../../app/markdown'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
@@ -136,6 +137,7 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   const [confirmingRegenerate, setConfirmingRegenerate] = useState(false)
   const [mode, setMode] = useState<'read' | 'edit' | 'compare'>('read')
   const [copied, setCopied] = useState<'ok' | 'error' | null>(null)
+  const agendaTypes = useAgendaTypes()
 
   if (recording.transcript_id === null) return null
   if (state.isPending) return <p role="status">Carregando o resumo…</p>
@@ -237,11 +239,25 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
 
   const { generated } = state.data
   const comparable = generated !== null && generated.id !== current.id
+  // O selo é o instantâneo do tipo no resumo: só vira link se o tipo ainda existe.
+  const typeLabel = `Tipo · ${current.agenda_type?.name ?? typeName ?? 'sem tipo'}`
+  const liveTypeId = agendaTypes.data?.items.find((type) => type.id === current.agenda_type?.id)?.id
 
   return (
     <section className={styles.summary} aria-label="Resumo">
       <div className="doc-bar">
-        <span className="tag tag-neutral">Tipo · {current.agenda_type?.name ?? typeName ?? 'sem tipo'}</span>
+        {liveTypeId ? (
+          <Link
+            to={`/config/agendas?tipo=${liveTypeId}`}
+            className="tag tag-neutral"
+            title="Ajustar o modelo deste tipo"
+            aria-label={`${typeLabel}: ajustar o modelo deste tipo`}
+          >
+            {typeLabel}
+          </Link>
+        ) : (
+          <span className="tag tag-neutral">{typeLabel}</span>
+        )}
         <span>
           {originLabel(current)} · versão {current.version}
         </span>

@@ -49,6 +49,13 @@ describe('painel de campos', () => {
     expect(within(tags).getByRole('button', { name: 'Aceitar Tags' })).toBeInTheDocument()
 
     expect(within(prop(section, 'Cliente')).getByText('Nada encontrado')).toHaveClass('text-muted')
+
+    // Editar a regra leva ao dono: o campo em Campos personalizados, o título ao tipo, as tags a Tags.
+    const rule = (name: string) => within(prop(section, name)).getByRole('link', { name: `Editar a regra de ${name}` })
+    const cliente = fixtures.fieldPage().items.find((field) => field.name === 'Cliente')
+    expect(rule('Cliente')).toHaveAttribute('href', `/config/campos?campo=${cliente?.id}`)
+    expect(rule('Título')).toHaveAttribute('href', '/config/agendas?tipo=01928f3a-1c00-7a00-8000-000000000901')
+    expect(rule('Tags')).toHaveAttribute('href', '/tags')
     expect(within(prop(section, 'Projeto')).getByText('Editado')).toHaveClass('origin', 'origin-edited')
 
     const type = prop(section, 'Tipo de agenda')

@@ -67,7 +67,10 @@ export function CollectionsPage() {
         </p>
       )}
       {collections.isSuccess && items.length === 0 && (
-        <p className={styles.empty}>Nenhuma coleção ainda. Crie uma e escolha as gravações na página de cada uma.</p>
+        <p className={styles.empty}>
+          Nenhuma coleção ainda. Crie uma com Nova coleção; as gravações entram pela página de cada gravação, em
+          Coleções, ou sozinhas pela regra em <strong>Quando incluir</strong>.
+        </p>
       )}
       {items.length > 0 && (
         <ul className={`list ${styles.list}`} aria-label="Coleções">

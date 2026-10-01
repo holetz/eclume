@@ -6,6 +6,7 @@ import { Brand } from './Brand'
 import { ConnectionBanner } from './ConnectionBanner'
 import { useImportContext } from '../features/import/importContext'
 import { ImportProvider } from '../features/import/ImportProvider'
+import { useHasAnyRecording } from '../features/library/anyRecording'
 import { ConfirmDialog } from './ConfirmDialog'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
@@ -47,14 +48,18 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
   ))
 }
 
-/** O item destacado (Perguntar): a ação primária do DS no topo da barra lateral, com o ícone dele. */
+/**
+ * O item destacado (Perguntar): a ação primária do DS no topo da barra lateral, com o ícone dele.
+ * Enquanto a conta não tem gravação não há o que perguntar: fica no mesmo lugar, como secundário.
+ */
 function FeaturedLink({ item }: { item: FeaturedItem }) {
   const { pathname } = useLocation()
+  const anyRecording = useHasAnyRecording()
   const Icon = item.icon
   return (
     <Link
       to={item.to}
-      className={`btn btn-primary ${styles.featured}`}
+      className={`btn ${anyRecording.data === false ? 'btn-secondary' : 'btn-primary'} ${styles.featured}`}
       aria-current={isItemActive(item, pathname) ? 'page' : undefined}
     >
       <Icon size={16} aria-hidden="true" />

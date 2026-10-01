@@ -87,7 +87,9 @@ export function PeoplePage() {
             {people.isSuccess && items.length === 0 && (
               <tr>
                 <td colSpan={shown.length + 1} className="text-muted">
-                  {deferredQ ? 'Ninguém com esse nome ou e-mail.' : 'Nenhuma pessoa cadastrada ainda.'}
+                  {deferredQ
+                    ? 'Ninguém com esse nome ou e-mail.'
+                    : 'Nenhuma pessoa ainda. As pessoas nascem quando você liga um locutor a alguém na transcrição de uma gravação, ou se cadastram aqui, na linha acima.'}
                 </td>
               </tr>
             )}

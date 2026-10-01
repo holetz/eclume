@@ -26,6 +26,10 @@ describe('documento do resumo', () => {
     const section = await summarySection()
     const bar = section.querySelector('.doc-bar') as HTMLElement
     expect(within(bar).getByText('Tipo · Reunião de equipe')).toHaveClass('tag', 'tag-neutral')
+    // O selo leva ao tipo em Tipos de agenda, para ajustar o modelo do resumo.
+    expect(
+      await within(bar).findByRole('link', { name: 'Tipo · Reunião de equipe: ajustar o modelo deste tipo' }),
+    ).toHaveAttribute('href', '/config/agendas?tipo=01928f3a-1c00-7a00-8000-000000000901')
     expect(bar).toHaveTextContent('Editado por você · versão 2')
     const doc = section.querySelector('.doc') as HTMLElement
     expect(within(doc).getByRole('heading', { name: 'Decisões' })).toBeInTheDocument()
@@ -33,6 +37,16 @@ describe('documento do resumo', () => {
     // Com resumo atual, o MD do Exportar fica habilitado.
     await userEvent.click(screen.getByRole('button', { name: 'Exportar' }))
     expect(screen.getByRole('menuitem', { name: /^Resumo/ })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('o selo de um tipo que não existe mais fica sem link', async () => {
+    const http = mockTranscriptApi({ 'GET /api/v1/agenda-types': () => ({ items: [], next_cursor: null }) })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    await waitFor(() => expect(http.requests('GET /api/v1/agenda-types').length).toBeGreaterThan(0))
+    const bar = section.querySelector('.doc-bar') as HTMLElement
+    expect(within(bar).getByText('Tipo · Reunião de equipe').tagName).toBe('SPAN')
+    expect(within(bar).queryByRole('link', { name: /ajustar o modelo/ })).not.toBeInTheDocument()
   })
 
   it('copia o título e o resumo em HTML e texto, com os títulos em negrito, e avisa quando o navegador não deixa', async () => {

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { COLLECTIONS_KEY, useCollections } from '../collections/queries'
@@ -55,7 +56,18 @@ function draftOf(item: FieldValue): string {
   return item.value ?? ''
 }
 
-function FieldProp({ item, recordingId }: { item: FieldValue; recordingId: string }) {
+/**
+ * Onde se edita a regra do campo: o campo personalizado em Campos personalizados; os embutidos levam
+ * ao dono, o título ao tipo de agenda da gravação e as tags a Tags.
+ */
+function ruleLink(field: FieldValue['field'], agendaTypeId: string | undefined): string {
+  if (field.builtin === 'tags') return '/tags'
+  if (field.builtin === 'title') return agendaTypeId ? `/config/agendas?tipo=${agendaTypeId}` : '/config/agendas'
+  return `/config/campos?campo=${field.id}`
+}
+
+function FieldProp({ item, recording }: { item: FieldValue; recording: Recording }) {
+  const recordingId = recording.id
   const { put, accept } = useFieldMutations(recordingId)
   const [draft, setDraft] = useState<string | null>(null)
   const inputId = useId()
@@ -143,6 +155,13 @@ function FieldProp({ item, recordingId }: { item: FieldValue; recordingId: strin
           >
             Editar
           </button>
+          <Link
+            to={ruleLink(field, recording.agenda_type?.id)}
+            className="btn btn-ghost btn-sm"
+            aria-label={`Editar a regra de ${field.name}`}
+          >
+            Editar a regra
+          </Link>
         </>
       }
     >
@@ -319,7 +338,7 @@ export function FieldsPanel({ recording, transcript, onChangeType, onFixSpeakers
       )}
       <div className={`props ${styles.props}`}>
         {items.map((item) => (
-          <FieldProp key={item.field.id} item={item} recordingId={recording.id} />
+          <FieldProp key={item.field.id} item={item} recording={recording} />
         ))}
         <Prop
           label="Tipo de agenda"

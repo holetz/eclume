@@ -5,7 +5,7 @@ paginas: [agendas]
 relacionados: [padrao-de-titulo, trocar-tipo-da-gravacao, editar-resumo]
 termos: [tipo de agenda, agenda, reunião de equipe, 1:1, conversa com cliente, nota de voz, instruções do resumo, pré-visualizar]
 ordem: 4
-atualizado: 2026-09-30
+atualizado: 2026-10-01
 ---
 O tipo de agenda diz que tipo de conversa é a gravação e como resumi-la. Depois da transcrição, um
 agente escolhe o tipo, e o tipo define o título, as tags e o resumo.
@@ -41,6 +41,12 @@ passa as gravações dele para o tipo padrão.
   outros.
 - **Tags padrão:** somadas às tags automáticas.
 - **Instruções do resumo:** em Markdown. O resumo segue estas instruções, com os mesmos títulos.
+
+## Chegar ao tipo pelo resumo
+
+Na página da gravação, o selo do tipo acima do resumo abre este tipo aqui. Depois de um ajuste pelo
+chat do resumo, **Levar este pedido para as instruções do tipo** abre o tipo com o pedido no fim das
+instruções do resumo, para você revisar e salvar. Veja [Ajuste o resumo pelo chat](/ajuda/ajustar-pelo-chat).
 
 ## Pré-visualizar antes de salvar
 

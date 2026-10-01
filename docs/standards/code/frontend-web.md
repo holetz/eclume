@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115
 maintainer: holetz
 ---
 
@@ -158,7 +158,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
   `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
   DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
-  `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`); o título da tela segue
+  `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
+  gravação (a mesma pergunta `GET /recordings` com `limit=1` da biblioteca, chave
+  `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
+  acessível; o título da tela segue
   "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
   biblioteca) e Organizar (Pessoas, Coleções, Campos personalizados, Tipos de agenda); a `header` vai para
   os menus do cabeçalho: Minhas configurações (Ambiente, Conexão MCP, Tokens de acesso, App
@@ -237,7 +240,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Rotas públicas:** `/entrar`, `/cadastro`, `/redefinir-senha`, `/parear` e `/admin/entrar`. Criar conta (`SignupPage`) lê
   de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
   12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
-  `notice_version` aceita; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
+  `notice_version` aceita. **Criar conta** fica sempre ativo: enviar com falta não chama a API,
+  mostra no `role=alert` o que falta, na ordem do formulário ("Para criar a conta, falta o nome, o
+  e-mail, a senha com 12 caracteres e o aceite do aviso."), foca o primeiro campo pendente e liga o
+  resumo ao botão por `aria-describedby`; a lista acompanha o preenchimento; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
   uma conta com este e-mail."; cadastro fechado (`open: false` ou `signup_closed`) mostra o aviso
   no lugar do formulário. Antes do aceite, quando os resumos ou o chat saem do servidor
   (`GET /privacy`, `location: external`), uma linha diz quais e para quem ("Neste servidor, os
@@ -365,8 +371,17 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   último filtro não o ressuscita na próxima visita.
 - **Estados**: carregando (grade com `aria-busy` e "Carregando gravações…"), erro com "Tentar de
   novo", "Nada gravado neste período." e, numa conta sem nenhuma gravação (`GET /recordings` com
-  `limit=1`), o cartão "Nenhuma gravação ainda". A faixa `alert-info` "Enviando 1 de 3 arquivos ·
-  Abrir" acompanha a fila de importação.
+  `limit=1`), o cartão "Nenhuma gravação ainda", que ensina os caminhos reais: importar, o app
+  desktop, o app do celular (`/app-movel`) e o tipo de agenda que dá título e resumo. A faixa
+  `alert-info` "Enviando 1 de 3 arquivos · Abrir" acompanha a fila de importação.
+- **Primeiros passos** (`FirstSteps`): cartão no topo da biblioteca enquanto há passo pendente, com
+  três passos derivados, sem contrato novo: (1) traga a primeira gravação (a conta tem gravação,
+  `useHasAnyRecording`, em `library/anyRecording.ts`, módulo próprio para o shell não puxar as consultas da biblioteca ao JS inicial), com importar, app desktop e app do celular; (2) confira os tipos de agenda
+  (abrir `/config/agendas` neste navegador grava `eclume-tipos-de-agenda-visto`); (3) ligue um
+  locutor a uma pessoa (a conta tem pessoa, `GET /people` com `limit=1`, `useHasAnyPerson`). Cada
+  passo feito ganha o check e "(feito)" para leitor de tela; com os três feitos o cartão some
+  sozinho, e **Dispensar** grava `eclume-primeiros-passos-dispensado`. As duas chaves são deste
+  navegador, como as preferências de Ambiente, e "Restaurar os padrões" as apaga.
 
 ## Importar: modal e fila
 
@@ -454,7 +469,8 @@ desce; abaixo de 56rem, os campos também):
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
-  Excluir resumo) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
+  Excluir resumo; o selo do tipo é o instantâneo do resumo e só vira link, "ajustar o modelo deste
+  tipo" para `/config/agendas?tipo=`, se o tipo ainda existe em `GET /agenda-types`) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
   um ("Escolha um tipo de agenda para gerar o resumo."). Sem agente de resumo (etapa `skipped` com
   `no_provider`), diz "Sem resumo: nenhum agente configurado; fale com quem administra." e troca o
   "Gerar resumo" primário por um "Tentar de novo" secundário; o 422 de `provider_id` vira a mesma
@@ -483,12 +499,19 @@ desce; abaixo de 56rem, os campos também):
   sólido, aceito sem selo), Aceitar, Aceitar tudo e Editar pelo tipo (texto até 300, lista por
   vírgula, escolha com "Nenhum"); o tipo de agenda com Trocar; as coleções (com "Nova coleção…");
   os locutores com "Corrigir locutores", que abre a transcrição e foca o bloco; e, quando há, os
-  "Dados anteriores" do `metadata` antigo, só leitura.
+  "Dados anteriores" do `metadata` antigo, só leitura. Cada campo tem **Editar a regra**, que leva
+  ao dono da regra: o campo personalizado a `/config/campos?campo=`, o título ao tipo da gravação
+  (`/config/agendas?tipo=`) e as tags a `/tags`.
 - **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma
   `.msg-note` por leitura do agente ("Leu a transcrição, 00:03:20–00:04:20", "Buscou “orçamento”
   na transcrição · 3 trechos"); enviar recebe o 202 com as duas mensagens, e a resposta é
   consultada no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`. O composer espera com um pedido em aberto (e no
-  409 `chat_busy`) e sem resumo atual.
+  409 `chat_busy`) e sem resumo atual. Depois do último ajuste que mudou o resumo (`done` com
+  `summary_id`), com a gravação num tipo, o painel oferece **Levar este pedido para as instruções do
+  tipo**: abre `/config/agendas?tipo=` com o pedido no `state` da navegação
+  (`InstructionsRequestState`, em `organize/queries.ts` para o grafo de features seguir sem ciclo), e o `AgendaTypeEditor` o acrescenta ao fim do rascunho das
+  instruções do resumo, com um `role=status` explicando, sem salvar; o rascunho sujo fica sob o
+  "Descartar alterações?" e o guarda de saída.
 
 ## Pessoas, busca e coleções
 
@@ -546,6 +569,11 @@ desce; abaixo de 56rem, os campos também):
   `.switch` "Incluir automaticamente depois da transcrição"; a linha mostra o `.badge`
   "Automática" quando há regra e o interruptor ligado. "Mesclar em…" (com duas coleções ou mais)
   abre um `Dialog` com o `<select>` da coleção que recebe e manda `POST /collections/{id}/merge`.
+- **Vazios que ensinam o caminho real**, no tom do vazio de Tags: Coleções diz que as gravações
+  entram pela página da gravação ou sozinhas pela regra em "Quando incluir"; Pessoas, que as pessoas
+  nascem ao ligar um locutor na transcrição ou se cadastram na linha de cadastro; Campos
+  personalizados dá um exemplo de campo com a regra ("Cliente", "A empresa cliente citada na
+  reunião; vazio se nenhuma for citada").
 - **Tags** (`/tags`, em Organizar depois de Coleções): o cartão de configuração grava na hora o
   `.switch` do automático, o modo (`.seg`: "Só as tags cadastradas" ou "O agente pode criar tags")
   e o limite de tags novas por gravação, e a regra geral com Salvar (`PATCH /me/tag-assignment`); a
