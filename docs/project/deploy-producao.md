@@ -13,8 +13,10 @@ maintainer: holetz
 
 # Deploy de produção no host GPU
 
-O eclume de produção roda no host `192.168.15.199`, preparado pelo
-[runbook do host](host-setup.md), e responde em **`https://192.168.15.199:8443`**. O host é
+Este é o runbook **desta** produção: o eclume da consultoria roda no host `192.168.15.199`,
+preparado pelo [runbook do host](host-setup.md), e responde em **`https://192.168.15.199:8443`**.
+O caminho genérico, para qualquer servidor com ou sem GPU, está em
+[auto-hospedar.md](../how-to/auto-hospedar.md); aqui ficam os valores e as escolhas deste host. O host é
 compartilhado com o lumea (443) e com os serviços pessoais do usuário, que o deploy nunca toca.
 
 ```
@@ -106,13 +108,14 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 Da máquina de desenvolvimento, com o contexto `gpu-host` do [runbook do host](host-setup.md):
 
 ```bash
-bash deploy/deploy.sh --gerar-env              # uma vez: deploy/.env.prod com segredos aleatórios
+bash deploy/deploy.sh --context gpu-host --gerar-env   # uma vez: deploy/.env.prod com segredos aleatórios
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
-bash deploy/bootstrap-admin.sh                 # uma vez: a conta de admin do painel
+bash deploy/bootstrap-admin.sh --context gpu-host --email admin@example.com   # uma vez
 ```
 
-O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do endpoint
+Os scripts não têm contexto padrão: sem `--context` (ou `ECLUME_DOCKER_CONTEXT`), recusam. Este
+host tem GPU e sobe sem `--sem-gpu`. O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do endpoint
 `ssh://` do contexto) para o que é do host. Em ordem:
 
 1. Recusa, antes de qualquer escrita no host, uma árvore de trabalho suja, um HEAD que o GitHub não
@@ -355,7 +358,7 @@ com `OK`, sem erro de página, e deixa os screenshots em `web/test-results/prod/
 vínculo gerados vencem sozinhos em 10 minutos.
 
 ```bash
-bash deploy/prova-web-prod.sh
+ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prova-web-prod.sh
 ```
 
 ## Conectar um assistente (MCP)

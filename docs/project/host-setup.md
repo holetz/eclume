@@ -13,7 +13,10 @@ maintainer: holetz
 
 # Preparar o host 192.168.15.199
 
-Este runbook deixa o servidor pronto para receber os containers do eclume e do lumea. O servidor
+Este é o runbook **deste** host: deixa o servidor da consultoria pronto para receber os
+containers do eclume e do lumea. Os requisitos e passos para qualquer servidor, com ou sem GPU,
+estão em [auto-hospedar.md](../how-to/auto-hospedar.md); desenvolver sem GPU e sem este host, em
+[desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). O servidor
 roda Ubuntu 24.04 LTS com uma NVIDIA GTX 1660 Super (6 GB). Os passos 1 a 8 rodam **no
 servidor**; o passo 9 roda **na máquina de desenvolvimento**.
 
