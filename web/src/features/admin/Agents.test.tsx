@@ -117,6 +117,10 @@ describe('Agentes', () => {
     renderApp('/admin/agentes')
     await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
     const form = screen.getByRole('form', { name: 'Novo provider' })
+    // O tipo que vem escolhido não é a CLI proprietária.
+    expect(within(form).getByLabelText('Tipo')).toHaveValue('ollama')
+    await userEvent.selectOptions(within(form).getByLabelText('Tipo'), 'claude-cli')
+    expect(within(form).getByText(/exige a imagem construída com a CLI/)).toBeInTheDocument()
     expect(within(form).getByLabelText('Token do Claude')).toHaveAccessibleDescription(/claude setup-token/)
     expect(within(form).queryByLabelText('Chave de API')).not.toBeInTheDocument()
     await userEvent.selectOptions(within(form).getByLabelText('Tipo'), 'anthropic')
