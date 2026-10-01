@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime  # noqa: TC003 — campo de dataclass, resolvido em tempo de execução
 from typing import TYPE_CHECKING, Any
 
 import boto3
@@ -50,6 +51,31 @@ def artifacts_prefix(recording_id: UUID | str) -> str:
 def revision_prefix(recording_id: UUID | str, revision: int) -> str:
     """Prefixo dos artefatos de uma revisão."""
     return f"{artifacts_prefix(recording_id)}r{revision}/"
+
+
+class MultipartGoneError(Exception):
+    """O multipart upload não existe mais no bucket (`NoSuchUpload`: vencido ou abortado)."""
+
+
+def _no_such_upload(exc: ClientError) -> bool:
+    return exc.response.get("Error", {}).get("Code") == "NoSuchUpload"
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    """Objeto do bucket com a data da última escrita."""
+
+    key: str
+    last_modified: datetime
+
+
+@dataclass(frozen=True)
+class PendingMultipart:
+    """Multipart upload em andamento no bucket."""
+
+    key: str
+    upload_id: str
+    initiated: datetime
 
 
 @dataclass(frozen=True)
@@ -98,14 +124,19 @@ class Storage:
         return response["UploadId"]
 
     async def upload_part(self, key: str, upload_id: str, part_number: int, body: bytes) -> str:
-        """Grava uma parte e devolve o `ETag`."""
-        response = await run_in_threadpool(
-            self._s3.upload_part, Bucket=self.bucket, Key=key, UploadId=upload_id, PartNumber=part_number, Body=body
-        )
+        """Grava uma parte e devolve o `ETag`; multipart sumido é `MultipartGoneError`."""
+        try:
+            response = await run_in_threadpool(
+                self._s3.upload_part, Bucket=self.bucket, Key=key, UploadId=upload_id, PartNumber=part_number, Body=body
+            )
+        except ClientError as exc:
+            if _no_such_upload(exc):
+                raise MultipartGoneError(upload_id) from exc
+            raise
         return response["ETag"]
 
     async def list_parts(self, key: str, upload_id: str) -> list[StoredPart]:
-        """Partes já confirmadas, em ordem."""
+        """Partes já confirmadas, em ordem; multipart sumido é `MultipartGoneError`."""
 
         def collect() -> list[StoredPart]:
             parts: list[StoredPart] = []
@@ -117,25 +148,71 @@ class Storage:
                     return parts
                 marker = page["NextPartNumberMarker"]
 
-        return await run_in_threadpool(collect)
+        try:
+            return await run_in_threadpool(collect)
+        except ClientError as exc:
+            if _no_such_upload(exc):
+                raise MultipartGoneError(upload_id) from exc
+            raise
 
     async def complete_multipart(self, key: str, upload_id: str, parts: list[tuple[int, str]]) -> None:
-        """Monta o objeto a partir das partes `(número, etag)`."""
-        await run_in_threadpool(
-            self._s3.complete_multipart_upload,
-            Bucket=self.bucket,
-            Key=key,
-            UploadId=upload_id,
-            MultipartUpload={"Parts": [{"PartNumber": n, "ETag": etag} for n, etag in parts]},
-        )
+        """Monta o objeto a partir das partes `(número, etag)`; multipart sumido é `MultipartGoneError`."""
+        try:
+            await run_in_threadpool(
+                self._s3.complete_multipart_upload,
+                Bucket=self.bucket,
+                Key=key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": [{"PartNumber": n, "ETag": etag} for n, etag in parts]},
+            )
+        except ClientError as exc:
+            if _no_such_upload(exc):
+                raise MultipartGoneError(upload_id) from exc
+            raise
 
     async def abort_multipart(self, key: str, upload_id: str) -> None:
         """Descarta um multipart upload e as partes; já descartado não é erro."""
         try:
             await run_in_threadpool(self._s3.abort_multipart_upload, Bucket=self.bucket, Key=key, UploadId=upload_id)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") != "NoSuchUpload":
+            if not _no_such_upload(exc):
                 raise
+
+    async def head_object(self, key: str) -> bool:
+        """Se o objeto existe."""
+        try:
+            await run_in_threadpool(self._s3.head_object, Bucket=self.bucket, Key=key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
+        return True
+
+    async def list_objects(self, prefix: str) -> list[StoredObject]:
+        """Os objetos sob `prefix`, com a data da última escrita."""
+
+        def listed() -> list[StoredObject]:
+            objects: list[StoredObject] = []
+            for page in self._s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
+                objects.extend(StoredObject(obj["Key"], obj["LastModified"]) for obj in page.get("Contents", []))
+            return objects
+
+        return await run_in_threadpool(listed)
+
+    async def list_multipart_uploads(self, prefix: str = "") -> list[PendingMultipart]:
+        """Os multipart uploads em andamento no bucket (sob `prefix`)."""
+
+        def listed() -> list[PendingMultipart]:
+            pending: list[PendingMultipart] = []
+            paginator = self._s3.get_paginator("list_multipart_uploads")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                pending.extend(
+                    PendingMultipart(item["Key"], item["UploadId"], item["Initiated"])
+                    for item in page.get("Uploads", [])
+                )
+            return pending
+
+        return await run_in_threadpool(listed)
 
     async def sha256(self, key: str) -> str:
         """SHA-256 (hex) do objeto, lido em streaming."""
@@ -185,14 +262,7 @@ class Storage:
 
     async def list_keys(self, prefix: str) -> list[str]:
         """Todas as chaves sob `prefix`."""
-
-        def listed() -> list[str]:
-            keys: list[str] = []
-            for page in self._s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
-                keys.extend(obj["Key"] for obj in page.get("Contents", []))
-            return keys
-
-        return await run_in_threadpool(listed)
+        return [obj.key for obj in await self.list_objects(prefix)]
 
     async def delete_artifacts(self, recording_id: UUID | str) -> None:
         """Apaga os artefatos do worker GPU de uma gravação (a transcrição bruta e os embeddings)."""
