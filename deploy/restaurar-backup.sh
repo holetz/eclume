@@ -51,7 +51,7 @@ SECRETS="${pasta:-$DATA_DIR}/secrets"
 restic_() {
   local repo=(-e RESTIC_REPOSITORY=/repo -v "$DEST/restic:/repo")
   [[ "$repositorio" == local ]] || repo=(--env-file "$SECRETS/restic-fora.env")
-  docker run --rm -i "${repo[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
+  docker run --rm "${repo[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
 # resolver <snap>: data AAAA-MM-DD vira o id do último snapshot do dia.
