@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101
 maintainer: holetz
 ---
 
@@ -74,7 +74,8 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Rotas públicas** (sem credencial): `GET /health` (estático, sinal de vida), `GET /health/ready`
   (prontidão desde a 2.13.0: 200 ou 503 com só o nome e `ok`/`down` de Postgres, Redis e
   armazenamento), `GET /server` (descritor: nome, endereço,
-  endereço MCP, impressão digital da CA raiz e versões), `GET /privacy` (desde a 2.19.0: para
+  endereço MCP, impressão digital da CA raiz e versões; desde a 2.21.0, `ca_next_sha256`, a
+  impressão digital da próxima raiz durante a rotação, opcional e `null` fora dela), `GET /privacy` (desde a 2.19.0: para
   onde vai cada dado, `PrivacyInfo` com um `DataDestination` por finalidade — transcrição e as de
   agente — em `server`, `local_network`, `external` ou `disabled`, e quem processa só quando sai;
   nunca endereço, modelo, chave nem nome do provider; separada de `/server` porque muda em

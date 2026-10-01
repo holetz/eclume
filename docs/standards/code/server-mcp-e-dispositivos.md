@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Servidor MCP e ligação de dispositivos
-description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas e o descritor público /server com a impressão digital da CA raiz.
-resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql
+description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas, o descritor público /server com a impressão digital da CA raiz e da próxima, e a raiz própria com restrição de nome e a rotação anunciada.
+resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/ca.py, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql
 tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#102
+source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#101, holetz/eclume#102
 maintainer: holetz
 ---
 
@@ -140,6 +140,11 @@ em cache pelo `mtime`: no primeiro deploy a CA é publicada depois de o server s
 descritor passa a trazê-la sem restart. Sem arquivo (ou PEM inválido), `null`. É a fonte do mDNS,
 do QR, do pareamento e do endereço embutido no instalador.
 
+`ca_next_sha256` (desde a 2.21.0, opcional) é a mesma conta, com o mesmo cache, sobre
+`ECLUME_CA_NEXT_FILE` (em produção, `/srv/downloads/eclume-root-proxima.crt`): a próxima raiz
+durante a rotação, `null` fora dela. O mDNS, o QR e o instalador seguem só com `ca_sha256`; a
+próxima só vale pelo descritor lido numa conexão já fixada na raiz atual (ver "Rotação anunciada").
+
 ## Descoberta na rede (mDNS)
 
 - **Registro** (`discovery.py`): tipo `_eclume._tcp.local.`, instância `<ECLUME_SERVER_NAME>`,
@@ -164,9 +169,9 @@ do QR, do pareamento e do endereço embutido no instalador.
 
 ## Fixação da CA pelos apps
 
-O Caddy `tls internal` troca o certificado folha a cada ~12 h e o intermediário a cada ~7 dias, e
-não envia a raiz na cadeia; a raiz vale 10 anos e vive no volume `caddy-data`. Por isso os apps
-fixam a **raiz**, nunca o folha, sem instalar a CA no sistema:
+O Caddy (emissor `internal`) troca o certificado folha a cada ~12 h e o intermediário a cada ~7
+dias, e não envia a raiz na cadeia; a raiz vale 10 anos. Por isso os apps fixam a **raiz**, nunca
+o folha, sem instalar a CA no sistema:
 
 1. obter `url` e `ca_sha256` — do instalador (endereço embutido no build), do QR (`pair_url`,
    que sai da web autenticada) ou do TXT do mDNS (não autenticado: antes de mandar a senha, a
@@ -179,8 +184,8 @@ fixam a **raiz**, nunca o folha, sem instalar a CA no sistema:
    conferida é recusada mesmo que o SO confie nela. Certificados a mais no arquivo servido nunca
    chegam ao disco, e um PEM fixado com mais de um é erro, nunca confiança ampliada.
 
-O primeiro certificado do `eclume-root.crt` é a raiz que assina a cadeia servida (o deploy publica
-o `root.crt` do Caddy); quem trocar a raiz mantém isso. Um app que já guardou uma CA fixada com
+O primeiro certificado do `eclume-root.crt` é a raiz que assina a cadeia servida (o `publish-ca`
+publica a raiz da CA ativa, um certificado só); quem trocar a raiz mantém isso. Um app que já guardou uma CA fixada com
 mais de um certificado a regrava só com o primeiro na abertura, apaga a credencial local e pede
 nova entrada, mandando trocar a senha e desvincular a entrada antiga na web (holetz/eclume#102):
 nenhum servidor legítimo publica mais de um, então o caso é sinal de interceptação na primeira
@@ -189,6 +194,39 @@ conexão.
 Com endereço digitado e sem impressão digital, o app confia na primeira CA (TOFU) e mostra a
 impressão digital ao usuário. A troca do código de pareamento e o login só acontecem depois da
 fixação; `GET /api/v1/server` confirma o que veio e permite trocar de servidor ("Usar outro").
+
+**Raiz própria com restrição de nome** (holetz/eclume#101). O Caddy define sempre a CA nomeada
+`eclume` (`pki { ca eclume { root { cert … key … } } }`), cuja raiz o `eclume-server ca gerar`
+(`ca.py`) cria uma vez em `<ECLUME_DATA_DIR>/secrets/ca/` (`raiz.crt`, `raiz.key` 0600) e recusa
+sobrescrever: ECDSA P-256, 10 anos, `basicConstraints` CA crítica, `keyUsage` só `keyCertSign` e
+`cRLSign`, `extendedKeyUsage = serverAuth` (o Windows não a aceita para assinatura de código nem
+S/MIME) e `nameConstraints` **crítica** com `permitted` para cada IP exato (`/32` ou `/128`) e cada
+nome DNS de `ECLUME_PUBLIC_HOST` e `ECLUME_CA_NOMES`, mais o e-mail `eclume.invalid`. Sem subtree
+de um tipo, nomes desse tipo ficariam livres (RFC 5280): sem nome DNS configurado, o DNS fica
+restrito a `eclume.invalid`; sem nenhum IP, a geração recusa. A chave fica no host porque o Caddy
+emite intermediário e folhas sozinho; a restrição torna isso aceitável: quem roubar a chave só se
+passa pelo próprio servidor, o que quem já está no host consegue de qualquer jeito. Só a pasta
+`secrets/ca` é montada no Caddy (só leitura), nunca `secrets/`. `ECLUME_TLS_CA` escolhe a CA que
+emite (`tls { issuer internal { ca … } }`): `local` (a raiz gerada pelo Caddy, sem restrição;
+padrão, para a produção não virar num deploy comum) ou `eclume` (instalação nova, pelo
+`.env.prod.example`). Nos apps a restrição não acrescenta nada (já confiam numa raiz só, para um
+servidor só); ela protege navegador, sistema e clientes MCP, que instalam a raiz. `eclume-server ca
+gerar --prova <pasta>` gera uma raiz descartável de `127.0.0.1` com os folhas `dentro` (127.0.0.1)
+e `fora` (127.0.0.2), para provar a recusa nos clientes (`deploy/prova-ca-restrita.sh`).
+
+**Rotação anunciada.** O `publish-ca` publica em `/downloads/eclume-root.crt` a raiz da CA ativa
+e, com a ativa `local` e a raiz própria existente, a própria em
+`/downloads/eclume-root-proxima.crt`; com a ativa `eclume`, apaga a próxima. O descritor a anuncia
+em `ca_next_sha256`, que o app lê pela conexão fixada na raiz atual: a raiz velha avaliza a nova,
+sem TOFU. O app baixa a próxima por essa mesma conexão, confere o SHA-256 e grava um certificado
+só ao lado da fixada (`servidor-ca.proxima.pem` no desktop, `ca.proxima.pem` no celular;
+`pin::learn_next`); sem anúncio, apaga a próxima guardada. Quando a conexão fixada falha e a raiz
+servida é a próxima, o app lê o descritor fixando a próxima, confere que ele não a contradiz e a
+troca pela fixada por `rename` — sem nova entrada nem novo pareamento. Uma raiz que não é a
+próxima anunciada segue no caminho de hoje ("O certificado do servidor mudou"). Não há confiança em
+duas raízes ao mesmo tempo: a próxima só vira a fixada, nunca soma com ela. A ordem da rotação
+(apps com suporte publicados → anunciar → janela → virar → release do desktop → aposentar) está no
+runbook ([deploy-producao.md](../../project/deploy-producao.md), "CA raiz nos clientes").
 
 **Endereço embutido no instalador.** O empacotamento Tauri de hoje embute no **build**: o
 `desktop-release.yml` passa `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (variáveis do
