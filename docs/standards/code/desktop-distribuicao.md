@@ -4,10 +4,10 @@ title: Distribuição do app desktop
 description: Como o app desktop do eclume vira instaladores e se atualiza — versão no tauri.conf.json, tag desktop-v<versão>, release no host pelo deploy/release-desktop.sh (Linux; Windows opcional por compilação cruzada; macOS fora enquanto o repositório for privado) e o workflow desktop-release como alternativa manual, o endereço e a impressão digital do servidor embutidos no build, pacotes do updater assinados com a chave minisign própria, latest.json e instaladores.json com URLs do servidor eclume, publicação em /srv/eclume/downloads pelo deploy/publicar-desktop.sh e o aviso "Atualizado para X".
 resource: desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
-timestamp: 2026-09-29
+timestamp: 2026-09-30
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88
 maintainer: holetz
 ---
 
@@ -158,6 +158,16 @@ baixa o release para uma pasta temporária dentro de `/srv/eclume/downloads`, co
 troca `latest.json`, `instaladores.json` e `INSTALACAO.md` da raiz (cópia + `mv`, atômico). Não
 retrocede a raiz para uma versão mais antiga sem `FORCAR=1` e mantém as três versões mais
 recentes. O Caddy do eclume serve a pasta em `/downloads/`.
+
+## Início automático
+
+O instalador não registra o início com o computador: o próprio app o registra pelo
+`tauri-plugin-autostart` (`desktop-interface.md`, "Início com o computador"). No Windows é a chave
+`eclume` em `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (por usuário, sem admin); no
+Linux, um `.desktop` em `~/.config/autostart` (com `$APPIMAGE` quando o app é um AppImage); no
+macOS, um LaunchAgent. A linha de comando registrada leva `--autostart`. Como o app concilia o
+registro a cada abertura, um update que troque o caminho do executável o corrige na primeira
+abertura seguinte.
 
 ## Updater no app
 

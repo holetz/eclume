@@ -131,6 +131,10 @@ pub struct Config {
     /// Avisar quando o resumo automático de uma gravação enviada fica pronto.
     #[serde(default = "default_true")]
     pub notify_summary: bool,
+    /// Iniciar com o computador: o app concilia o registro do sistema a esta preferência a cada
+    /// abertura e a cada salvar. Ligado por padrão, também numa config de versão anterior.
+    #[serde(default = "default_true")]
+    pub autostart: bool,
     /// A pasta local que espelha os resumos e as transcrições da biblioteca.
     #[serde(default)]
     pub mirror: MirrorConfig,
@@ -262,6 +266,7 @@ impl Default for Config {
             language: None,
             theme: default_theme(),
             notify_summary: true,
+            autostart: true,
             mirror: MirrorConfig::default(),
             mic: None,
             system_source: default_system_source(),
@@ -395,6 +400,19 @@ pub fn validate_web_url(url: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn iniciar_com_o_computador_vem_ligado_e_lembra_o_desligar() {
+        let antiga: Config = serde_json::from_str("{}").unwrap();
+        assert!(antiga.autostart);
+        let desligada = Config {
+            autostart: false,
+            ..Config::default()
+        };
+        let json = serde_json::to_string(&desligada).unwrap();
+        let lida: Config = serde_json::from_str(&json).unwrap();
+        assert!(!lida.autostart);
+    }
 
     #[test]
     fn tema_e_aviso_de_resumo_tem_padrao_e_o_tema_e_fechado() {

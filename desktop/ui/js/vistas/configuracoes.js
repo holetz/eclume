@@ -397,6 +397,7 @@ export function montar(secao, app) {
     desenharBotoesDeTeste();
     $("#idioma", secao).value = config.language ?? "";
     $("#avisar-resumo", secao).checked = config.notify_summary ?? true;
+    $("#iniciar-com-o-sistema", secao).checked = config.autostart ?? true;
     const tema = config.theme ?? "system";
     for (const opcao of secao.querySelectorAll('input[name="tema"]')) opcao.checked = opcao.value === tema;
     const silencio = String(config.note_silence_s ?? 0);
@@ -493,6 +494,9 @@ export function montar(secao, app) {
     salvar({ system_source: sistema.value });
   });
   $("#idioma", secao).addEventListener("change", (evento) => salvar({ language: evento.target.value }));
+  $("#iniciar-com-o-sistema", secao).addEventListener("change", (evento) =>
+    salvar({ autostart: evento.target.checked }),
+  );
   $("#avisar-resumo", secao).addEventListener("change", (evento) =>
     salvar({ notify_summary: evento.target.checked }),
   );

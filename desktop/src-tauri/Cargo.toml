@@ -30,6 +30,8 @@ serde_json = "1"
 # botões, e minimizar/fechar não recebiam o clique (tauri-apps/tauri#13440).
 tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
+# Iniciar com o computador: `Run` no Windows, `~/.config/autostart` no Linux, LaunchAgent no macOS.
+tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 # Uma instância só: `eclume-desktop --nova-nota` (o atalho do sistema no Wayland) chega à que já
 # está aberta.

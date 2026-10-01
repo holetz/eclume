@@ -163,6 +163,7 @@ pub fn save_settings(
     if let Ok(action) = &result {
         crate::auto::execute(&app, *action);
         crate::shortcuts::register(&app);
+        crate::reconcile_autostart(&app);
         // PAT ou servidor novos: as falhas tentam de novo já.
         if let Err(err) = crate::sync::sync_now(&app) {
             log::error!("{err:#}");

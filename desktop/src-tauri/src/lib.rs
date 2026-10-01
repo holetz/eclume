@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use tauri::{AppHandle, DragDropEvent, Emitter, Manager, WindowEvent};
+use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::state::{AppState, Busy, NoteToggle, Reaped};
@@ -32,6 +33,27 @@ pub const APP_NAME: &str = "eclume";
 
 /// Evento que a janela escuta para se atualizar.
 const STATUS_EVENT: &str = "status-changed";
+
+/// Concilia o início com o computador ao que a config diz: registra ou remove o app no sistema.
+/// Um build de desenvolvimento não registra (poria o binário de `target/` no início do sistema),
+/// e uma falha do sistema só vai ao log.
+pub(crate) fn reconcile_autostart(app: &AppHandle) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let Ok(wanted) = app.state::<AppState>().autostart() else {
+        return;
+    };
+    let launcher = app.autolaunch();
+    let result = match (wanted, launcher.is_enabled()) {
+        (true, Ok(false) | Err(_)) => launcher.enable(),
+        (false, Ok(true)) => launcher.disable(),
+        _ => Ok(()),
+    };
+    if let Err(err) = result {
+        log::error!("falha ao conciliar o início com o computador: {err}");
+    }
+}
 
 /// Atualiza tudo que mostra o estado: a bandeja e a janela.
 pub(crate) fn refresh_ui(app: &AppHandle) {
@@ -213,6 +235,10 @@ pub fn run() {
                 None => show_window(app),
             }
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -240,6 +266,7 @@ pub fn run() {
                         .unwrap_or("Veja as novidades na janela do eclume."),
                 );
             }
+            reconcile_autostart(app.handle());
             shortcuts::init(app.handle());
             // Aberto por um atalho do sistema sem instância rodando: faz a ação já.
             if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>())
