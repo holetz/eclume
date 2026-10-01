@@ -9,6 +9,12 @@ import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { locationLabel, PURPOSE_LABEL, usePrivacy } from '../../app/privacy'
 import { ME_KEY, useMe } from '../../app/session'
+import {
+  serverDefaultLabel,
+  useTranscriptionPreference,
+  useUpdateTranscriptionPreference,
+} from '../../app/transcriptionLanguage'
+import { LanguageSelect } from '../../shared/LanguageSelect'
 import { Switch } from '../../shared/Switch'
 import { useUpdateVoiceAssignment, useVoiceAssignment, type VoiceAssignment } from '../people/queries'
 import styles from './Account.module.css'
@@ -23,7 +29,7 @@ function fieldError(error: unknown, field: string): string | null {
   return errors.find((item) => item.field === field)?.message ?? null
 }
 
-/** Minhas configurações › Conta: os dados da conta, privacidade e dados, trocar a senha e excluir a conta. */
+/** Minhas configurações › Conta: os dados da conta, o idioma da transcrição, privacidade e dados, trocar a senha e excluir a conta. */
 export function AccountPage() {
   useHelpTopic('conta')
   const me = useMe()
@@ -41,6 +47,8 @@ export function AccountPage() {
           <dd className="mono">{user.email}</dd>
         </dl>
       )}
+
+      <TranscriptionSection />
 
       <PrivacySection />
 
@@ -64,6 +72,40 @@ export function AccountPage() {
       </section>
 
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
+    </section>
+  )
+}
+
+/** O idioma em que as gravações desta conta são transcritas quando o arquivo não escolhe outro. */
+function TranscriptionSection() {
+  const id = useId()
+  const preference = useTranscriptionPreference()
+  const update = useUpdateTranscriptionPreference()
+
+  return (
+    <section className={`panel ${styles.form}`} aria-labelledby={`${id}-titulo`}>
+      <h4 id={`${id}-titulo`}>Idioma da transcrição</h4>
+      {preference.data && (
+        <div className="field">
+          <label htmlFor={id}>Idioma das gravações</label>
+          <LanguageSelect
+            id={id}
+            value={update.isPending ? (update.variables ?? '') : (preference.data.language ?? '')}
+            defaultLabel={serverDefaultLabel(preference.data)}
+            disabled={update.isPending}
+            onChange={(value) => update.mutate(value === '' ? null : value)}
+          />
+          <span className="field-hint">
+            Vale para as próximas gravações. Cada arquivo pode pedir outro idioma ao importar, e uma gravação pode ser
+            transcrita de novo em outro idioma.
+          </span>
+        </div>
+      )}
+      {(preference.isError || update.isError) && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(preference.error ?? update.error)}
+        </p>
+      )}
     </section>
   )
 }

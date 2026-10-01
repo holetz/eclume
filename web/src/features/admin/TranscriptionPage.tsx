@@ -7,14 +7,12 @@ import { ExternalDataNotice } from './ExternalDataNotice'
 import styles from './Admin.module.css'
 import { COMPUTE_TYPES, ENGINES, lastChangeText, MODELS, optionalInt } from './labels'
 import { useAdminSettings, useUpdateSettings } from './queries'
-import { whisperLanguages } from './whisperLanguages'
+import { AUTO_LANGUAGE, whisperLanguages } from '../../lib/languages'
 
 type Settings = Schemas['AdminSettings']
 type Asr = Schemas['AsrSettings']
 
 const FORM_ID = 'admin-transcricao'
-/** Valor de `default_language` que pede a detecção do idioma por gravação (contrato 2.1.0). */
-const AUTO_LANGUAGE = 'auto'
 
 /** Motor, modelo e idioma da transcrição; a separação e a identificação ficam em Locutores. */
 export function TranscriptionPage() {

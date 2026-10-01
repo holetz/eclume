@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
-import { WHISPER_LANGUAGE_CODES, whisperLanguages } from './whisperLanguages'
+import { WHISPER_LANGUAGE_CODES, whisperLanguages } from '../../lib/languages'
 
 beforeAll(() => preloadRoute('/admin/transcricao'))
 
