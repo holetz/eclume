@@ -26,6 +26,11 @@ class InstaladorArgs {
 }
 
 @InvokeArg
+class AgendarSyncArgs {
+    var atrasoMs: Long = 0
+}
+
+@InvokeArg
 class PararArgs {
     var motivo: String? = null
     var duracaoMs: Long? = null
@@ -65,6 +70,14 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
     fun pararServico(invoke: Invoke) {
         val args = invoke.parseArgs(PararArgs::class.java)
         ServicoDeGravacao.encerrar(activity, args.motivo, args.duracaoMs)
+        invoke.resolve()
+    }
+
+    /** Agenda uma passada do `SyncWorker` no próximo Wi-Fi não medido (Parar, Salvar e Pular). */
+    @Command
+    fun agendarSync(invoke: Invoke) {
+        val args = invoke.parseArgs(AgendarSyncArgs::class.java)
+        SyncWorker.agendarAgora(activity, args.atrasoMs)
         invoke.resolve()
     }
 
