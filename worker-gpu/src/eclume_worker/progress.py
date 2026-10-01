@@ -1,7 +1,8 @@
 """Progresso do job em Redis: `HSET eclume:progress:{recording_id}` com TTL de 1 dia.
 
 O `pct` é o geral do job, monotônico, com uma faixa por etapa. `started_at` é o início do job,
-igual em toda gravação do hash.
+igual em toda gravação do hash. `revision` diz de qual revisão é o progresso, para o server ignorar
+o de outra revisão.
 """
 
 from __future__ import annotations
@@ -47,10 +48,17 @@ def _rfc3339(moment: datetime) -> str:
 class ProgressReporter:
     """Grava o progresso só quando o `pct` geral ou a etapa mudam."""
 
-    def __init__(self, redis: Any, recording_id: str, clock: Callable[[], datetime] = _utc_now) -> None:  # noqa: ANN401 — redis.asyncio.Redis ou ArqRedis
+    def __init__(
+        self,
+        redis: Any,  # noqa: ANN401 — redis.asyncio.Redis ou ArqRedis
+        recording_id: str,
+        revision: int,
+        clock: Callable[[], datetime] = _utc_now,
+    ) -> None:
         """`redis` é o cliente assíncrono do arq."""
         self.redis = redis
         self.key = progress_key(recording_id)
+        self.revision = revision
         self.clock = clock
         self.started_at = _rfc3339(clock())
         self._last: tuple[str, int] | None = None
@@ -68,6 +76,7 @@ class ProgressReporter:
             return
         self._last = (stage, self._pct)
         mapping = {
+            "revision": self.revision,
             "stage": stage,
             "pct": self._pct,
             "started_at": self.started_at,

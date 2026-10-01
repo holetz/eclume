@@ -52,7 +52,7 @@ def test_pct_geral_por_etapa(stage: str, pct: float, esperado: int):
 
 def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     redis = FakeRedis()
-    reporter = ProgressReporter(redis, "rec-1", clock=relogio)
+    reporter = ProgressReporter(redis, "rec-1", 1, clock=relogio)
 
     async def roda() -> None:
         await reporter.report("download")
@@ -65,6 +65,7 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     key = progress_key("rec-1")
     assert key == "eclume:progress:rec-1"
     assert redis.hashes[key] == {
+        "revision": 1,
         "stage": "upload",
         "pct": 100,
         "started_at": "2026-09-24T12:00:00Z",
@@ -72,6 +73,19 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     }
     assert redis.ttl[key] == PROGRESS_TTL_SECONDS
     assert redis.writes == 3
+
+
+def test_reporter_grava_a_revisao():
+    redis = FakeRedis()
+    reporter = ProgressReporter(redis, "rec-1", 4, clock=relogio)
+
+    async def roda() -> None:
+        await reporter.report("download")
+        await reporter.report("asr", 50)
+
+    asyncio.run(roda())
+    assert redis.hashes[progress_key("rec-1")]["revision"] == 4
+    assert redis.writes == 2
 
 
 def test_config_do_ambiente():

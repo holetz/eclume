@@ -271,7 +271,7 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
     config: WorkerConfig = ctx["config"]
     config.work_dir.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
-    reporter = ProgressReporter(ctx["redis"], recording_id)
+    reporter = ProgressReporter(ctx["redis"], recording_id, parse_revision(ctx.get("job_id")))
     try:
         return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
     except JobFailedError as exc:
