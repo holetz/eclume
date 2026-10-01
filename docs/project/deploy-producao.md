@@ -2,12 +2,12 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prova-ca-restrita.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101
 maintainer: holetz
 ---
 
@@ -377,9 +377,19 @@ ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prova-web-prod.sh
 
 ## CA raiz nos clientes
 
-HTTPS é obrigatório para o microfone e a conversão de mídia no navegador, e o desktop só confia no
-servidor pelo repositório de CAs do sistema. A raiz fica em
-**`https://192.168.15.199:8443/downloads/eclume-root.crt`**. Ela é distinta da do lumea.
+HTTPS é obrigatório para o microfone e a conversão de mídia no navegador. A raiz fica em
+**`https://192.168.15.199:8443/downloads/eclume-root.crt`** (um certificado só, a raiz da CA
+ativa). Ela é distinta da do lumea. Os apps (desktop e celular) **não** usam o repositório do
+sistema: fixam a raiz por conta própria, pela impressão digital, na primeira execução ou no
+pareamento ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps)).
+Só o navegador, o Claude Desktop/Code (MCP) e o lumea precisam da raiz instalada.
+
+A raiz própria do eclume (`ECLUME_TLS_CA=eclume`) tem restrição de nome crítica: só vale para o
+IP de `ECLUME_PUBLIC_HOST` e os nomes de `ECLUME_CA_NOMES` (hoje `holetz-pc.local`), e só para
+servidor TLS. Instalá-la numa estação não deixa ninguém se passar por outro site com ela. A chave
+fica em `/srv/eclume/secrets/ca/` (o deploy a gera uma vez e nunca a sobrescreve; entra no backup
+de `secrets/`). A raiz `local` do Caddy, das instalações anteriores, não tem restrição e sai na
+rotação abaixo.
 
 - **Primeiro download** (antes de confiar): `curl -k -o eclume-root.crt https://192.168.15.199:8443/downloads/eclume-root.crt`,
   ou `scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .`. Confira a impressão
@@ -391,6 +401,45 @@ servidor pelo repositório de CAs do sistema. A raiz fica em
 - **Firefox:** importe em Configurações → Certificados, porque ele usa um repositório próprio.
 - **lumea:** monte o PEM no container `api` e aponte `LUMEA_ECLUME_CA_BUNDLE` para ele, com
   `LUMEA_ECLUME_URL=https://192.168.15.199:8443` (`deploy/.env.remote` do lumea).
+- **Prova da restrição** numa estação: `bash deploy/prova-ca-restrita.sh` gera uma raiz
+  descartável de `127.0.0.1`, sobe `127.0.0.1:18445` (dentro) e `127.0.0.2:18446` (fora) e confere
+  o `curl`; com a raiz descartável instalada, Chrome, Edge e Firefox abrem o primeiro e recusam o
+  segundo. Remova a raiz descartável depois (o script imprime o comando).
+
+### Rotação para a raiz restrita
+
+Três passos, cada um com conferência. A ordem importa: os apps só atravessam a virada sozinhos se
+já tiverem guardado a próxima raiz.
+
+1. **Anunciar.** Com o desktop e o celular que trazem a próxima raiz (holetz/eclume#101)
+   publicados e instalados, faça o deploy comum (`ECLUME_TLS_CA` ausente ou `local`). O deploy
+   gera `/srv/eclume/secrets/ca/raiz.crt` e `raiz.key` se faltarem, o `publish-ca` publica a raiz
+   própria em `/downloads/eclume-root-proxima.crt`, e o descritor passa a trazer
+   `ca_next_sha256`; o `--plan` mostra a CA ativa e a próxima, e o fim do deploy confere o
+   anúncio. Confira também:
+   `curl -fsS --ssl-no-revoke --cacert eclume-root.crt https://192.168.15.199:8443/api/v1/server`
+   (traz `"ca_next_sha256":"<64 hex>"`). Os apps guardam a próxima na sonda (celular) ou em até
+   6 h (desktop).
+2. **Virar**, na data decidida. Antes, instale a próxima raiz
+   (`https://192.168.15.199:8443/downloads/eclume-root-proxima.crt`) nas estações, no lumea e nos
+   clientes MCP, **ao lado** da atual. Durante a janela, quem usa um bundle PEM recebe as duas
+   raízes num arquivo só: `cat eclume-root.crt eclume-root-proxima.crt > eclume-raizes.pem`, para
+   `LUMEA_ECLUME_CA_BUNDLE` e `NODE_EXTRA_CA_CERTS` (Claude Desktop/Code). Depois, ponha
+   `ECLUME_TLS_CA=eclume` no `deploy/.env.prod` e faça o deploy: o Caddy emite pela raiz própria,
+   o `publish-ca` publica a própria como `eclume-root.crt` e apaga a próxima, e o fim do deploy
+   confere que a publicada é a raiz própria. Em seguida, troque a variável
+   `ECLUME_SERVER_CA_SHA256` pela impressão nova e solte um release do desktop
+   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)):
+   os instaladores antigos em `/downloads` embutem a impressão velha. Confira desktop e celular
+   sincronizando sem nova entrada; quem ficou para trás entra ou pareia de novo.
+3. **Aposentar**, depois da janela: tire a raiz velha das estações, do lumea e dos clientes MCP
+   (o bundle volta a ter só a nova) e apague a raiz `local` do host:
+   `ssh holetz@192.168.15.199 'sudo rm -rf /srv/eclume/caddy/data/caddy/pki/authorities/local'`.
+   Confira: `ssh holetz@192.168.15.199 '! sudo test -e /srv/eclume/caddy/data/caddy/pki/authorities/local/root.key'`.
+   Com a ativa `eclume`, o Caddy não recria a `local`.
+
+O deploy recusa `ECLUME_TLS_CA=eclume` sem a raiz própria quando já há uma raiz publicada: virar
+sem anunciar trocaria a raiz de quem confia na atual.
 
 ## Backup e restauração
 
@@ -490,8 +539,8 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
 - **Instaladores do desktop:** `deploy/publicar-desktop.sh` grava em `/srv/eclume/downloads/`,
   que o Caddy já serve ([host-setup.md](host-setup.md), seção dos instaladores). Desde a 0.2.0,
   o release embute o endereço e a impressão digital da CA deste servidor (variáveis
-  `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz ou o endereço exige
-  atualizar as variáveis e soltar um release novo
+  `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz (a virada da rotação acima)
+  ou o endereço exige atualizar as variáveis e soltar um release novo
   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,

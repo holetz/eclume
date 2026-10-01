@@ -3,7 +3,7 @@ titulo: Por que o aparelho pergunta sobre o certificado
 topico: conectar
 paginas: [app-desktop, app-movel, mcp]
 relacionados: [vincular-aparelho, conectar-assistente-mcp, instalar-app-desktop]
-termos: [certificado, HTTPS, segurança, impressão digital, CA, confiar, aviso do navegador]
+termos: [certificado, HTTPS, segurança, impressão digital, CA, confiar, aviso do navegador, troca do certificado, próxima raiz]
 ordem: 5
 atualizado: 2026-10-01
 ---
@@ -36,3 +36,15 @@ raiz. Baixe [a raiz do servidor](/downloads/eclume-root.crt) no celular e instal
 Configurações › Segurança › Criptografia e credenciais › Instalar um certificado › **Certificado
 de CA** (o caminho muda um pouco entre fabricantes). Sem isso, o navegador mostra o aviso de
 conexão não particular.
+
+## Quando o certificado do servidor muda
+
+A raiz deste servidor só vale para o endereço dele: instalada no computador, ela não serve para
+se passar por nenhum outro site.
+
+Quando quem administra o servidor troca a raiz, ela é anunciada antes. Os apps atualizados
+guardam a nova sozinhos e seguem funcionando na troca, sem você entrar de novo. Um app que ficou
+para trás mostra **"O certificado do servidor mudou"**: entre ou pareie de novo.
+
+No navegador e no Claude Desktop, instale também [a próxima raiz](/downloads/eclume-root-proxima.crt)
+quando quem administra o servidor avisar, ao lado da atual. Depois da troca, a antiga pode sair.
