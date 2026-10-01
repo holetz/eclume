@@ -260,6 +260,54 @@ describe('página da gravação', () => {
     expect(http.requests('POST /api/v1/recordings/:id/retranscribe')).toHaveLength(1)
   })
 
+  it('o dono cancela a transcrição em curso com confirmação, e a gravação mostra o motivo', async () => {
+    const processing = fixtures.recordingQueued()
+    processing.status = 'processing'
+    processing.job = { ...processing.job!, state: 'running', stage: 'asr', progress: 0.4 }
+    const cancelled = fixtures.recordingQueued()
+    cancelled.status = 'failed'
+    cancelled.job = {
+      ...cancelled.job!,
+      state: 'cancelled',
+      error: { code: 'cancelled', message: 'Transcrição cancelada.', retryable: true },
+    }
+    cancelled.pipeline = cancelled.pipeline.map((step) =>
+      step.step === 'transcription' ? { ...step, state: 'skipped', reason: 'cancelled' } : step,
+    )
+    const http = mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/recordings/:id': () => processing,
+      'POST /api/v1/recordings/:id/cancel': () => cancelled,
+    })
+    renderApp(`/gravacoes/${processing.id}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar transcrição' }))
+    const dialog = screen.getByRole('dialog', { name: 'Cancelar a transcrição?' })
+    // Desistir não chama a API.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    expect(http.requests('POST /api/v1/recordings/:id/cancel')).toHaveLength(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar transcrição' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Parar a transcrição' }))
+    expect(await screen.findByText('Transcrição cancelada.')).toBeInTheDocument()
+    expect(http.requests('POST /api/v1/recordings/:id/cancel')).toHaveLength(1)
+    expect(screen.getByText('Transcrição', { selector: 'li' })).toHaveAttribute('title', 'a transcrição foi cancelada')
+    expect(screen.getByText(/Você cancelou a transcrição/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Transcrever de novo' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()
+  })
+
+  it('quem não é dono não vê o cancelar da transcrição', async () => {
+    const queued = fixtures.recordingQueued()
+    queued.owner = { id: '01928f3a-1c00-7a00-8000-000000000999', name: 'Outra pessoa' }
+    mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'GET /api/v1/recordings/:id': () => queued,
+    })
+    renderApp(`/gravacoes/${queued.id}`)
+    expect(await screen.findByText('Aguardando a vez na fila de transcrição.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()
+  })
+
   it('quem não é dono não vê o botão de retentar', async () => {
     const failed = fixtures.recordingQueued()
     failed.status = 'failed'

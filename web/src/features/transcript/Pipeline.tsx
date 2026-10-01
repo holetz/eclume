@@ -1,16 +1,57 @@
+import { useState } from 'react'
 import type { Schemas } from '../../api/client'
+import { errorMessage } from '../../api/problem'
+import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { useMe } from '../../app/session'
 import { stageLabel } from '../library/format'
+import { useCancelTranscription } from './queries'
 import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
 import styles from './RecordingPage.module.css'
 
 type Recording = Schemas['Recording']
 
+/** "Cancelar transcrição", só para o dono, com confirmação: a GPU para e a gravação fica sem texto. */
+function CancelTranscription({ recording }: { recording: Recording }) {
+  const me = useMe()
+  const cancel = useCancelTranscription(recording.id)
+  const [confirming, setConfirming] = useState(false)
+  if (me.data?.user.id !== recording.owner.id) return null
+  return (
+    <>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>
+        Cancelar transcrição
+      </button>
+      {cancel.isError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(cancel.error)}
+        </p>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title="Cancelar a transcrição?"
+          confirmLabel="Parar a transcrição"
+          busy={cancel.isPending}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => cancel.mutate(undefined, { onSettled: () => setConfirming(false) })}
+        >
+          A transcrição para e a gravação fica sem texto. Você pode transcrever de novo quando quiser.
+        </ConfirmDialog>
+      )}
+    </>
+  )
+}
+
 /** O progresso do worker enquanto a transcrição anda: etapa e %, no `.progress-row` do DS. */
 function TranscriptionProgress({ recording }: { recording: Recording }) {
   const job = recording.job
   if (recording.status === 'queued') {
-    return <p className={styles.pipelineNote}>Aguardando a vez na fila de transcrição.</p>
+    return (
+      <>
+        <p className={styles.pipelineNote}>Aguardando a vez na fila de transcrição.</p>
+        <CancelTranscription recording={recording} />
+      </>
+    )
   }
   if (recording.status !== 'processing' || !job) return null
   const percent = Math.round(job.progress * 100)
@@ -22,6 +63,7 @@ function TranscriptionProgress({ recording }: { recording: Recording }) {
         <span>{stage}</span>
         <span>{percent}%</span>
       </div>
+      <CancelTranscription recording={recording} />
     </div>
   )
 }
