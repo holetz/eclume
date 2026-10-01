@@ -146,16 +146,21 @@ uma vez.
 
 ## 7. `claude -p` no servidor
 
-Os agentes de sumarização podem usar o Claude Code do próprio servidor.
+Os agentes de sumarização desta produção usam o provider `claude-cli`, escolha deste host (a
+matriz dos quatro providers está em [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige)).
+A CLI que roda no worker vem da imagem construída com `ECLUME_CLAUDE_CLI=1` no `deploy/.env.prod`;
+a do host só serve para gerar o token.
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 claude setup-token   # token de longa duração (1 ano) para o eclume
 ```
 
-O worker CPU do eclume recebe o token por `ECLUME_CLAUDE_OAUTH_TOKEN`
-([deploy-producao.md](deploy-producao.md#segredos)), sem montar a sessão do host: o bind mount de
-`~/.claude/.credentials.json` diverge quando o `claude` do host renova o OAuth.
+O worker de agentes do eclume recebe o token pelo painel (Admin → Agentes → Token do Claude) ou por
+`ECLUME_CLAUDE_OAUTH_TOKEN` ([deploy-producao.md](deploy-producao.md#segredos)), sem montar a
+sessão do host: o bind mount de `~/.claude/.credentials.json` diverge quando o `claude` do host
+renova o OAuth. Se os termos permitem esse uso do token de assinatura é decisão pendente da dona
+(holetz/eclume#129).
 
 ## 8. Token do Hugging Face (diarização)
 
