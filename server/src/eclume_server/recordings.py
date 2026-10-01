@@ -231,9 +231,14 @@ async def enqueue_transcription(
     cifra do server (docs/standards/api/jobs-transcricao.md).
     """
     async with system_tx(ctx.engine) as conn:
-        hf_token = await secret_encrypted(conn, HF_TOKEN)
-    payload = {**options, "hf_token_encrypted": hf_token} if hf_token else options
+        payload = await transcribe_payload(conn, options)
     await ctx.queue.enqueue_transcribe(recording_id, revision, audio_key, payload)
+
+
+async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any]) -> dict[str, Any]:
+    """As `options` do `transcribe` com o token do HF da plataforma cifrado (papel de conexão)."""
+    hf_token = await secret_encrypted(conn, HF_TOKEN)
+    return {**options, "hf_token_encrypted": hf_token} if hf_token else options
 
 
 # --- biblioteca ----------------------------------------------------------------------------------
