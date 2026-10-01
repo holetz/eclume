@@ -1,12 +1,16 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { useLeaveGuard } from '../../app/useLeaveGuard'
 import styles from './RecordingPage.module.css'
 import { isSummaryChanged, useSummaryMutations, useSummaryState, type SummaryState } from './summary'
 import { diffLines } from './summary-diff'
+import { readSummaryDraft, writeSummaryDraft } from './summaryDraft'
 
 type Recording = Schemas['Recording']
+
+const DRAFT_WRITE_DELAY_MS = 500
 
 const PREFIX = { same: ' ', removed: '−', added: '+' } as const
 
@@ -46,13 +50,24 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
   const { edit, revert } = useSummaryMutations(recording)
   const latest = useSummaryState(recording.id)
   const opened = state.current
-  const [draft, setDraft] = useState(opened?.content_md ?? '')
-  const [base, setBase] = useState(opened?.version ?? 0)
-  const [conflict, setConflict] = useState<{ version: number; content: string } | null>(null)
+  // O rascunho guardado volta ao reabrir; se a versão andou desde então, volta com o aviso de conflito.
+  const [saved] = useState(() => readSummaryDraft(recording.id))
+  const [draft, setDraft] = useState(saved?.content_md ?? opened?.content_md ?? '')
+  const [base, setBase] = useState(saved?.base_version ?? opened?.version ?? 0)
+  const [conflict, setConflict] = useState<{ version: number; content: string } | null>(() =>
+    saved && opened && saved.base_version < opened.version
+      ? { version: opened.version, content: opened.content_md ?? '' }
+      : null,
+  )
   const [showConflict, setShowConflict] = useState(false)
   const [confirm, setConfirm] = useState<'discard' | 'revert' | null>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
   const changed = draft !== (opened?.content_md ?? '')
+  const leaveDialog = useLeaveGuard(changed, {
+    title: 'Descartar a edição?',
+    message: <p>As mudanças deste rascunho se perdem.</p>,
+    onDiscard: () => writeSummaryDraft(recording.id, null),
+  })
 
   // A área cresce com o conteúdo, como o documento.
   useLayoutEffect(() => {
@@ -62,11 +77,29 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
     text.style.height = `${text.scrollHeight}px`
   }, [draft])
 
+  useEffect(() => {
+    if (draft === (opened?.content_md ?? '') && base === (opened?.version ?? 0)) {
+      writeSummaryDraft(recording.id, null)
+      return
+    }
+    const timer = window.setTimeout(
+      () => writeSummaryDraft(recording.id, { base_version: base, content_md: draft }),
+      DRAFT_WRITE_DELAY_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [recording.id, draft, base, opened])
+
+  // Salvar, descartar ou voltar à gerada encerram a edição e apagam o rascunho guardado.
+  function finish() {
+    writeSummaryDraft(recording.id, null)
+    onDone()
+  }
+
   function save(baseVersion = base) {
     edit.mutate(
       { content_md: draft, base_version: baseVersion },
       {
-        onSuccess: onDone,
+        onSuccess: finish,
         onError: async (error) => {
           if (!isSummaryChanged(error)) return
           const fresh = (await latest.refetch()).data?.current
@@ -78,7 +111,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
 
   function cancel() {
     if (changed) setConfirm('discard')
-    else onDone()
+    else finish()
   }
 
   return (
@@ -157,7 +190,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
           title="Descartar a edição?"
           confirmLabel="Descartar"
           onCancel={() => setConfirm(null)}
-          onConfirm={onDone}
+          onConfirm={finish}
         >
           <p>As mudanças deste rascunho se perdem.</p>
         </ConfirmDialog>
@@ -168,7 +201,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
           confirmLabel="Voltar à gerada"
           busy={revert.isPending}
           onCancel={() => setConfirm(null)}
-          onConfirm={() => revert.mutate(undefined, { onSuccess: onDone })}
+          onConfirm={() => revert.mutate(undefined, { onSuccess: finish })}
         >
           <p>O rascunho é descartado, e a versão gerada volta como uma versão nova. Nada se perde.</p>
           {revert.isError && (
@@ -178,6 +211,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
           )}
         </ConfirmDialog>
       )}
+      {leaveDialog}
     </section>
   )
 }

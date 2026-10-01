@@ -1,16 +1,16 @@
-import { BrowserRouter } from 'react-router'
+import { createBrowserRouter } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from './app/providers'
 import { createQueryClient } from './app/queryClient'
-import { AppRoutes } from './app/routes'
+import { routes } from './app/routes'
 
 const queryClient = createQueryClient()
+const router = createBrowserRouter(routes)
 
 function App() {
   return (
     <AppProviders client={queryClient}>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </AppProviders>
   )
 }
