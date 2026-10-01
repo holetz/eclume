@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99
 maintainer: holetz
 ---
 
@@ -58,6 +58,25 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   (menos a sessão recém-lida) e os rascunhos `eclume-resumo-rascunho:*`. Um 401 com a sessão
   aberta remove as consultas fora de `['admin']` e zera `['me']`, sem apagar rascunhos: a mesma
   conta que volta os reencontra. O `useLogout` usa a mesma remoção.
+
+## Markdown gerado e CSP
+
+- **Markdown gerado por LLM nunca carrega imagem.** O resumo (`SummaryDoc`), a cópia para colar
+  (`copy-summary.ts`), o chat da base (`ChatPage`) e a pré-visualização do tipo de agenda
+  (`AgendaTypePreview`) passam ao `react-markdown` os `components` de `src/app/markdown.tsx`
+  (`SAFE_MARKDOWN`, ou `safeMarkdown(próprios)` quando a tela troca outros elementos, que nunca
+  sobrepõem `img` nem `a`): `![alt](url)` vira um link de texto (`alt`, ou a URL sem ele) e todo
+  link abre em outra aba com `rel="noopener noreferrer"`. Um resumo envenenado não faz o navegador
+  buscar uma URL de fora (rastreio, `Referer`). A ajuda, de conteúdo próprio, fica fora disso.
+- **A CSP é da imagem web** (`deploy/web.Caddyfile`): `default-src 'self'`,
+  `img-src 'self' data: blob:`, `media-src 'self' blob:`, `connect-src 'self'`,
+  `script-src 'self' 'wasm-unsafe-eval'`, `worker-src 'self' blob:`, `frame-ancestors 'none'`,
+  `base-uri 'none'` e `object-src 'none'`, com `X-Content-Type-Options: nosniff` e
+  `Referrer-Policy: no-referrer`. O app respeita: nenhum script ou estilo inline no `index.html`,
+  nenhum recurso de outra origem (fontes e ícones vêm dos assets), o áudio de `/media` na mesma
+  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. O Caddy
+  de borda repete `nosniff`, `Referrer-Policy` e `frame-ancestors 'none'` (sem sobrescrever a CSP
+  do web) para `/api`, `/media`, `/mcp` e `/downloads`.
 
 ## Estrutura de pastas
 
@@ -506,7 +525,8 @@ desce; abaixo de 56rem, os campos também):
 
 - **Conta** (`/config/conta`, o primeiro item da engrenagem): o nome e o e-mail, o painel "Trocar a
   senha" (atual, nova e repetição; a repetição diferente e a senha curta não enviam, e a senha
-  atual errada aparece no campo) e a zona de perigo "Excluir a conta", com o `.alert-error` do que
+  atual errada aparece no campo; a `.check` "Encerrar também aparelhos e tokens", marcada por
+  padrão, manda `revoke_tokens`) e a zona de perigo "Excluir a conta", com o `.alert-error` do que
   é apagado e um `Dialog` que só habilita "Excluir minha conta" com a senha e a `.check` "Entendo
   que tudo será apagado para sempre". Excluída, o app limpa o cache e volta a `/entrar` com o aviso
   no `state`, que a tela de entrada mostra.
