@@ -232,6 +232,23 @@ def test_esquecer_a_voz_apaga_amostras_e_sugestoes(ek: Conta):
     assert ek.owner.get(f"/api/v1/people/{rafael['id']}").status_code == 200
 
 
+def test_esquecer_a_voz_apaga_os_vetores_dos_locutores_ligados(ek: Conta, services: Services):
+    ek.voice_on()
+    rafael = ek.person("Rafael Lima")
+    linked, other = ek.transcript(), ek.transcript()
+    ek.link(linked, "S2", rafael["id"])
+    assert _embeddings(services, linked) == 3
+    assert ek.owner.delete(f"/api/v1/people/{rafael['id']}/voiceprint").status_code == 204
+    # Sai o vetor do locutor ligado à pessoa; o vínculo e os outros locutores ficam.
+    assert _embeddings(services, linked) == 2
+    assert _embeddings(services, other) == 3
+    assert ek.speakers(linked)["S2"]["person"]["id"] == rafael["id"]
+    # Religar o mesmo locutor não recria a amostra: o vetor não existe mais.
+    ek.link(linked, "S2", None)
+    ek.link(linked, "S2", rafael["id"])
+    assert ek.samples(rafael["id"]) == 0
+
+
 def test_remover_uma_amostra_e_ouvir_o_trecho(new_account: Callable[[], Conta]):
     ek, other = new_account(), new_account()
     ek.voice_on()
