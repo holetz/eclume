@@ -86,6 +86,66 @@ test('criar conta com o aceite do aviso e entrar na biblioteca', async ({ page }
   await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
 })
 
+/** Um WAV PCM curto (tom de 440 Hz), gerado aqui: o import do smoke não depende de codec proprietário. */
+function wavTone(seconds: number, rate = 48_000): Buffer {
+  const samples = seconds * rate
+  const buffer = Buffer.alloc(44 + samples * 2)
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + samples * 2, 4)
+  buffer.write('WAVEfmt ', 8)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20)
+  buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(rate, 24)
+  buffer.writeUInt32LE(rate * 2, 28)
+  buffer.writeUInt16LE(2, 32)
+  buffer.writeUInt16LE(16, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(samples * 2, 40)
+  for (let i = 0; i < samples; i++) buffer.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / rate)), 44 + i * 2)
+  return buffer
+}
+
+// O smoke dos três motores (Chromium, WebKit e Firefox): login, biblioteca, gravação com copiar o
+// resumo e o player, e um import pequeno. Só o que não depende de codec proprietário.
+test('smoke: entrar, biblioteca, gravação com copiar e player, e import pequeno @smoke', async ({ page }, info) => {
+  await login(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })).toBeVisible()
+
+  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
+  await summary.getByRole('button', { name: 'Copiar com título' }).click()
+  // O motor pode negar a área de transferência; o que importa é a resposta na tela, não o silêncio.
+  await expect(summary.getByText(/^(Copiado|Não deu para copiar)/)).toBeVisible()
+
+  // O player: o motor diz se toca Ogg Opus (registrado no relatório), e a ficha do marcador leva a
+  // trilha até ele.
+  const opus = await page
+    .getByLabel('Áudio da gravação')
+    .evaluate((audio: HTMLAudioElement) => audio.canPlayType('audio/ogg; codecs=opus'))
+  info.annotations.push({ type: 'ogg-opus', description: `${info.project.name}: canPlayType = "${opus}"` })
+  await page.getByRole('group', { name: 'Marcadores' }).getByRole('button', { name: /00:00:42/ }).click()
+  await expect(page.getByRole('slider', { name: 'Posição no áudio' })).toHaveAttribute('aria-valuetext', '00:00:42')
+
+  // Import pequeno: um WAV de 2 s convertido no navegador e enviado.
+  await page.goto('/?importar=1')
+  const dialog = page.getByRole('dialog', { name: 'Importar arquivos' })
+  await dialog
+    .getByLabel(/Solte áudio ou vídeo aqui/)
+    .setInputFiles({ name: 'tom.wav', mimeType: 'audio/wav', buffer: wavTone(2) })
+  const created = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/v1/uploads'))
+  const partPut = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes('/parts/1'), {
+    timeout: 60_000,
+  })
+  await dialog.getByRole('button', { name: 'Enviar 1 arquivo' }).click()
+  expect((await created).postDataJSON()).toMatchObject({ content_type: 'audio/ogg; codecs=opus' })
+  // A conversão terminou e a parte saiu. O "Enviado" fica com o cenário completo do Chromium: o
+  // WebKit do Playwright não repassa o corpo Blob no `route.fetch` que leva a parte ao mock.
+  await partPut
+})
+
 test('biblioteca na semana, no mês e na lista, com o filtro na requisição', async ({ page }) => {
   await login(page, '1-login')
   // O mock não filtra nem pagina: a semana de 21/09/2026 é o primeiro exemplo de GET /recordings.
