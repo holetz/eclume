@@ -19,7 +19,7 @@ mod updater;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Context;
@@ -151,9 +151,9 @@ const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 fn init_logging(dir: &Path) {
     let builder =
         &mut env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
-    match open_log(dir, LOG_MAX_BYTES) {
-        Ok(file) => {
-            builder.target(env_logger::Target::Pipe(Box::new(Tee(file))));
+    match Tee::open(dir, LOG_MAX_BYTES) {
+        Ok(tee) => {
+            builder.target(env_logger::Target::Pipe(Box::new(tee)));
         }
         Err(err) => eprintln!("log só no stderr: falha ao abrir {}: {err}", dir.display()),
     }
@@ -191,18 +191,54 @@ fn open_log(dir: &Path, max_bytes: u64) -> io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
 
-/// Escreve no arquivo e, quando houver, no stderr.
-struct Tee(File);
+/// Escreve no arquivo e, quando houver, no stderr. Passando de `max_bytes`, gira o arquivo para
+/// `.1` com o app aberto (sob o lock do `env_logger`, que serializa as escritas).
+struct Tee {
+    dir: PathBuf,
+    max_bytes: u64,
+    file: Option<File>,
+    written: u64,
+}
+
+impl Tee {
+    fn open(dir: &Path, max_bytes: u64) -> io::Result<Self> {
+        let file = open_log(dir, max_bytes)?;
+        let written = file.metadata().map_or(0, |meta| meta.len());
+        Ok(Self {
+            dir: dir.to_path_buf(),
+            max_bytes,
+            file: Some(file),
+            written,
+        })
+    }
+
+    /// Fecha o arquivo (o Windows não renomeia arquivo aberto), gira e reabre.
+    fn rotate(&mut self) -> io::Result<()> {
+        self.file = None;
+        let file = open_log(&self.dir, 0).or_else(|_| open_log(&self.dir, u64::MAX))?;
+        self.written = file.metadata().map_or(0, |meta| meta.len());
+        self.file = Some(file);
+        Ok(())
+    }
+}
 
 impl Write for Tee {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let _ = io::stderr().write_all(buf);
-        self.0.write_all(buf)?;
+        if self.written > 0 && self.written + buf.len() as u64 > self.max_bytes {
+            self.rotate()?;
+        }
+        let file = self
+            .file
+            .as_mut()
+            .ok_or_else(|| io::Error::other("log fechado"))?;
+        file.write_all(buf)?;
+        self.written += buf.len() as u64;
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.0.flush()
+        self.file.as_mut().map_or(Ok(()), Write::flush)
     }
 }
 
@@ -375,7 +411,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{help_url, open_log, APP_NAME, LOG_FILE};
+    use super::{help_url, open_log, Tee, APP_NAME, LOG_FILE};
 
     #[test]
     fn endereco_da_ajuda() {
@@ -411,6 +447,46 @@ mod tests {
         let girado = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
         assert_eq!(girado, "primeira linha\nsegunda\n");
         assert_eq!(std::fs::read_to_string(dir.join(LOG_FILE)).unwrap(), "");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn log_gira_com_o_app_aberto() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("eclume-log-aberto-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mut tee = Tee::open(&dir, 32).unwrap();
+        tee.write_all(
+            b"primeira linha do log
+",
+        )
+        .unwrap();
+        tee.write_all(
+            b"segunda linha do log
+",
+        )
+        .unwrap();
+        tee.write_all(
+            b"terceira
+",
+        )
+        .unwrap();
+        tee.flush().unwrap();
+        let girado = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
+        assert_eq!(
+            girado,
+            "primeira linha do log
+"
+        );
+        let atual = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
+        assert_eq!(
+            atual,
+            "segunda linha do log
+terceira
+"
+        );
+        drop(tee);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
