@@ -315,8 +315,13 @@ impl Core {
 
     // --- rede e sync ----------------------------------------------------------------------------
 
-    /// O plugin avisou o Wi-Fi não medido. Devolve se a sonda deve rodar de novo.
+    /// O plugin avisou o Wi-Fi não medido (o callback do sistema, na hora, ou a leitura do
+    /// aparelho). Sem ele, o sync em curso para na próxima requisição. Devolve se a sonda deve
+    /// rodar de novo.
     pub fn mudou_rede(&mut self, wifi_nao_medido: bool) -> bool {
+        if !wifi_nao_medido {
+            self.medidor.interromper();
+        }
         let mudou = self.rede.mudou_wifi(wifi_nao_medido);
         if mudou {
             log::info!("Wi-Fi não medido: {wifi_nao_medido}");
@@ -372,8 +377,27 @@ impl Core {
         }
     }
 
+    /// O sistema parou o trabalho de sync (o `onStopped` do worker): o upload para na próxima
+    /// requisição e a gravação volta à fila sem gastar tentativa.
+    pub fn interromper_sync(&self) {
+        self.medidor.interromper();
+    }
+
+    /// As gravações aguardando o sync e quantos bytes elas somam.
+    pub fn pendentes(&self) -> Result<(u32, u64)> {
+        let fila = self.trancar_fila()?;
+        fila.retry_due(now_ms(), sync::MAX_TENTATIVAS)?;
+        let pendentes = fila.by_status(Status::Pending)?;
+        let bytes = pendentes
+            .iter()
+            .filter_map(|rec| rec.bytes)
+            .map(|b| u64::try_from(b).unwrap_or(0))
+            .sum();
+        Ok((u32::try_from(pendentes.len()).unwrap_or(u32::MAX), bytes))
+    }
+
     /// O sync a rodar: na rede do eclume, sem outro em curso, com algo pendente e (sem `agora`)
-    /// com o sync automático ligado.
+    /// com o sync automático ligado. Na rede, a interrupção anterior deixa de valer.
     pub fn preparar_sync(&self, agora: bool) -> Result<Option<PlanoDeSync>> {
         if !self.rede.na_rede()
             || (!agora && !self.config.sync_auto)
@@ -405,6 +429,8 @@ impl Core {
             &self.config.device_name,
         )?;
         self.sincronizando.store(true, Ordering::Release);
+        // Sob a trava do núcleo: um "saiu da rede" depois daqui interrompe esta passada.
+        self.medidor.retomar();
         Ok(Some(PlanoDeSync {
             uploader,
             fila: Arc::clone(&self.fila),
@@ -843,11 +869,44 @@ pub fn sondar(nucleo: &Mutex<Core>, forcar: bool) -> Result<Sondagem> {
     })
 }
 
+/// O que o `SyncWorker` precisa saber antes de subir: se está na rede do eclume e o que aguarda.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct SondagemDoWorker {
+    pub na_rede: bool,
+    pub pendentes: u32,
+    pub bytes: u64,
+}
+
+/// O resultado do ciclo do worker: o relatório do sync e se ele foi interrompido no meio.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RelatorioDoWorker {
+    pub relatorio: eclume_recorder::SyncReport,
+    pub interrompido: bool,
+}
+
+/// A sonda do `SyncWorker`, antes de decidir o primeiro plano: parte da rede não medida que o
+/// WorkManager garante (o processo aberto só para ele não tem a tela que avisaria o Wi-Fi).
+pub fn sondar_do_worker(nucleo: &Mutex<Core>) -> Result<SondagemDoWorker> {
+    trancar(nucleo)?.mudou_rede(true);
+    let na_rede = sondar(nucleo, false)?.na_rede;
+    let (pendentes, bytes) = trancar(nucleo)?.pendentes()?;
+    Ok(SondagemDoWorker {
+        na_rede,
+        pendentes,
+        bytes,
+    })
+}
+
 /// O ciclo do `SyncWorker`. O WorkManager só o roda em rede não medida (`UNMETERED`), e o processo
 /// aberto só para ele não tem a tela que avisaria o Wi-Fi: sem isso, a sonda nunca rodaria.
-pub fn ciclo_do_worker(nucleo: &Mutex<Core>) -> Result<Option<eclume_recorder::SyncReport>> {
+pub fn ciclo_do_worker(nucleo: &Mutex<Core>) -> Result<Option<RelatorioDoWorker>> {
     trancar(nucleo)?.mudou_rede(true);
-    ciclo(nucleo, false)
+    let relatorio = ciclo(nucleo, false)?;
+    let interrompido = trancar(nucleo)?.medidor.interrompido();
+    Ok(relatorio.map(|relatorio| RelatorioDoWorker {
+        relatorio,
+        interrompido,
+    }))
 }
 
 /// Um ciclo: sonda, atualiza os tipos de agenda e sincroniza (`agora`: "Sincronizar agora", que

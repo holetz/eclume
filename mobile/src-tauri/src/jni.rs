@@ -6,7 +6,7 @@
 
 use eclume_mobile_core::{self as core, trancar};
 use jni::objects::{JClass, JString};
-use jni::sys::jstring;
+use jni::sys::{jboolean, jstring};
 use jni::JNIEnv;
 use serde_json::json;
 
@@ -85,11 +85,67 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sy
         core::iniciar(crate::dirs_de(std::path::Path::new(&base)), crate::VERSAO)
             .and_then(core::ciclo_do_worker)
             .map(|relatorio| match relatorio {
-                Some(r) => {
-                    json!({ "na_rede": true, "sincronizadas": r.synced, "falhas": r.failed })
-                }
+                Some(r) => json!({
+                    "na_rede": true,
+                    "sincronizadas": r.relatorio.synced,
+                    "falhas": r.relatorio.failed,
+                    "interrompido": r.interrompido,
+                }),
                 None => json!({ "na_rede": false }),
             })
+    });
+    devolver(&mut env, &resposta)
+}
+
+/// `EclumeCore.sondarPendentes(base)`: antes do sync do worker, se o celular está na rede do
+/// eclume e quantas gravações (e bytes) aguardam, para decidir o primeiro plano.
+#[no_mangle]
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sondarPendentes<
+    'l,
+>(
+    mut env: JNIEnv<'l>,
+    _classe: JClass<'l>,
+    base: JString<'l>,
+) -> jstring {
+    let base = texto(&mut env, &base);
+    let resposta = crate::responder(|| {
+        let nucleo = core::iniciar(crate::dirs_de(std::path::Path::new(&base)), crate::VERSAO)?;
+        Ok(serde_json::to_value(core::sondar_do_worker(nucleo)?)?)
+    });
+    devolver(&mut env, &resposta)
+}
+
+/// `EclumeCore.rede(wifiNaoMedido)`: o callback de rede do sistema, na hora; sem o Wi-Fi não
+/// medido, o sync em curso para na próxima requisição. Sem o núcleo aberto, não há o que avisar.
+#[no_mangle]
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_rede<'l>(
+    mut env: JNIEnv<'l>,
+    _classe: JClass<'l>,
+    wifi_nao_medido: jboolean,
+) -> jstring {
+    let resposta = crate::responder(|| {
+        if let Some(nucleo) = core::global() {
+            trancar(nucleo)?.mudou_rede(wifi_nao_medido != 0);
+        }
+        Ok(json!({}))
+    });
+    devolver(&mut env, &resposta)
+}
+
+/// `EclumeCore.interromperSync()`: o `onStopped` do worker; o upload para na próxima requisição e
+/// a gravação volta à fila sem gastar tentativa.
+#[no_mangle]
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_interromperSync<
+    'l,
+>(
+    mut env: JNIEnv<'l>,
+    _classe: JClass<'l>,
+) -> jstring {
+    let resposta = crate::responder(|| {
+        if let Some(nucleo) = core::global() {
+            trancar(nucleo)?.interromper_sync();
+        }
+        Ok(json!({}))
     });
     devolver(&mut env, &resposta)
 }

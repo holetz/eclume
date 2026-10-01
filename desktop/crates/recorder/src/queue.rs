@@ -488,6 +488,17 @@ impl Queue {
         self.get(&id)
     }
 
+    /// Devolve a `pending` a gravação reivindicada por [`Queue::claim_next`] cujo sync foi
+    /// interrompido, desfazendo o `attempts + 1`: a interrupção não é falha.
+    pub fn release_claim(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE recordings SET status = 'pending', attempts = MAX(attempts - 1, 0)
+             WHERE id = ?1 AND status = 'syncing'",
+            params![id],
+        )?;
+        Ok(())
+    }
+
     /// Devolve a `pending` as falhas com menos de `max_attempts` tentativas, sem esperar o
     /// backoff (o usuário trocou o PAT ou pediu para tentar de novo).
     pub fn retry_failed(&self, max_attempts: i64) -> Result<usize> {
