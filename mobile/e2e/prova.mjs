@@ -145,6 +145,25 @@ function servicoEmPrimeiroPlano() {
 /** Toca numa ação da notificação da gravação, pela aba de notificações do sistema. O driver do
  * Playwright acha o botão pelo texto (o `uiautomator dump` não serve: o cronômetro da notificação
  * nunca deixa a tela ociosa). */
+/** Os jobs do WorkManager do app (o SyncWorker), pelo `dumpsys jobscheduler`. */
+function jobsDoSyncWorker() {
+  const saida = adb('shell', 'dumpsys', 'jobscheduler')
+  const ids = new Set()
+  for (const linha of saida.split('\n')) {
+    const achado = linha.match(/JOB #u[0-9a-z]*\/(\d+): .*br\.com\.holetz\.eclume\.movel\/.*SystemJobService/)
+    if (achado) ids.add(achado[1])
+  }
+  return [...ids]
+}
+
+/** Roda já os jobs do SyncWorker, sem esperar as restrições nem o agendamento. */
+function forcarSyncWorker() {
+  const ids = jobsDoSyncWorker()
+  if (ids.length === 0) throw new Error('nenhum job do SyncWorker agendado')
+  for (const id of ids) adb('shell', 'cmd', 'jobscheduler', 'run', '-f', PACOTE, id)
+  return ids
+}
+
 async function tocarNaNotificacao(device, texto) {
   adb('shell', 'wm', 'dismiss-keyguard')
   adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -193,10 +212,16 @@ async function principal() {
   await pagina.getByRole('button', { name: 'Adicionar' }).click()
   passo('marcador pela tela, com nota')
 
+  // Tela bloqueada e Doze forçado (fora da tomada, ocioso) por 60 s: o serviço de microfone em
+  // primeiro plano segue gravando.
   adb('shell', 'input', 'keyevent', 'KEYCODE_SLEEP')
-  passo('tela bloqueada; 60 s')
+  adb('shell', 'dumpsys', 'battery', 'unplug')
+  adb('shell', 'dumpsys', 'deviceidle', 'force-idle')
+  passo('tela bloqueada e Doze forçado (deviceidle force-idle); 60 s')
   await esperar(60_000)
-  if (!servicoEmPrimeiroPlano()) throw new Error('o serviço caiu com a tela bloqueada')
+  adb('shell', 'dumpsys', 'deviceidle', 'unforce')
+  adb('shell', 'dumpsys', 'battery', 'reset')
+  if (!servicoEmPrimeiroPlano()) throw new Error('o serviço caiu com a tela bloqueada no Doze')
   adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
   await tocarNaNotificacao(device, 'Marcador')
   passo('marcador pela notificação')
@@ -206,7 +231,7 @@ async function principal() {
   const audio = await pagina.getByLabel('Tempo de áudio').textContent()
   const [h, m, s] = audio.split(':').map(Number)
   if (h * 3600 + m * 60 + s < 60) throw new Error(`tempo de áudio curto demais: ${audio}`)
-  passo(`tempo de áudio ${audio}, com a tela bloqueada contada`)
+  passo(`tempo de áudio ${audio}, com a tela bloqueada e o Doze contados`)
 
   // Fora da rede: nada sobe; parar e dar título. O app lê o Wi‑Fi a cada 5 s, e o emulador
   // segue alcançando o servidor pelos dados móveis: parar antes de ele notar subiria já.
@@ -224,19 +249,22 @@ async function principal() {
   await pagina.getByText('1 aguardando').first().waitFor({ timeout: 10_000 })
   passo('fora da rede: 1 aguardando')
 
-  // De volta à rede: sincroniza sozinho.
+  // De volta à rede com o app morto: só o SyncWorker do WorkManager sobe a gravação.
+  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+  await esperar(2000)
+  adb('shell', 'am', 'kill', PACOTE)
+  passo('app em segundo plano e morto (am kill)')
   adb('shell', 'svc', 'wifi', 'enable')
-  await ate(
-    'a gravação sincronizada',
-    async () => (await pagina.getByText(TITULO).count()) > 0 && (await pagina.getByText('Enviada').count()) > 0,
-    120,
-  )
-  passo('de volta à rede: sincronizada')
-
+  await esperar(5000)
+  passo(`SyncWorker forçado (jobs ${forcarSyncWorker().join(', ')}), sem abrir o app`)
   await entrarNaApi()
-  const noServidor = await ate('a gravação no servidor', async () =>
-    (await gravacoesDaProva()).find((g) => g.title === TITULO),
+  const noServidor = await ate(
+    'a gravação no servidor pelo SyncWorker',
+    async () => (await gravacoesDaProva()).find((g) => g.title === TITULO),
+    180,
   )
+  passo('de volta à rede: subiu pelo worker, com o app fechado')
+  pagina = await abrirApp(device)
   if (noServidor.source !== 'mobile') throw new Error(`source ${noServidor.source}`)
   if (noServidor.recorded_at_source !== 'capture') throw new Error(`recorded_at_source ${noServidor.recorded_at_source}`)
   const marcadores = await pedir('GET', `/api/v1/recordings/${noServidor.id}/markers`)

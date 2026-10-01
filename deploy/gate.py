@@ -22,9 +22,21 @@ import sys
 from typing import Any
 
 CONTEXTO = "eclume/gate"
-PILARES = ("python", "contracts", "web", "web-browser", "desktop", "mobile", "docs", "windows", "auditoria")
-# Pilares que só o gate roda: a CI não tem o xwin nem a rede da auditoria a cada PR.
-SO_NO_GATE = ("windows", "auditoria")
+PILARES = (
+    "python",
+    "contracts",
+    "web",
+    "web-browser",
+    "desktop",
+    "mobile",
+    "docs",
+    "windows",
+    "auditoria",
+    "android",
+)
+# Pilares que só o gate roda: a CI não tem o xwin, a rede da auditoria nem o SDK Android (o build
+# do APK verificado leva perto de 15 min) a cada PR.
+SO_NO_GATE = ("windows", "auditoria", "android")
 LIMITE_DESCRICAO = 140
 ALVO = "refs/heads/main"
 SHA_NULO = "0" * 40

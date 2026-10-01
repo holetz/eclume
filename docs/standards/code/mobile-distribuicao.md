@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Distribuição do app móvel
-description: Como o app móvel do eclume vira um APK e se atualiza — versão no tauri.conf.json, tag mobile-v<versão>, workflow mobile-release com APK universal assinado pela keystore de release (secrets ANDROID_KEYSTORE_*), conferido pelo apksigner, movel.json e SHA256SUMS, publicação em /srv/eclume/downloads/movel pelo deploy/publicar-movel.sh e a atualização dentro do app pela CA fixada.
-resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/INSTALACAO.md, .github/workflows/mobile-release.yml, deploy/publicar-movel.sh
-tags: [code, mobile, android, release, apk, ci]
+description: Como o app móvel do eclume vira um APK e se atualiza — versão no tauri.conf.json, tag mobile-v<versão>, release no host pelo deploy/release-movel.sh (contêiner com a keystore só leitura, APK universal assinado, certificado conferido contra mobile/certificado-release.sha256, fumaça do APK minificado no emulador), keystore só no host, movel.json e SHA256SUMS, publicação em /srv/eclume/downloads/movel pelo deploy/publicar-movel.sh, que recusa a troca de certificado não declarada, e a atualização dentro do app pela CA fixada.
+resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/scripts/simbolos_jni.py, mobile/scripts/prova-emulador.sh, mobile/build.Dockerfile, mobile/INSTALACAO.md, deploy/release-movel.sh, deploy/publicar-movel.sh
+tags: [code, mobile, android, release, apk, host]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90
+source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#108
 maintainer: holetz
 ---
 
@@ -23,40 +23,58 @@ produto. O iOS está fora do escopo, sem spec aberta.
   `mobile/Cargo.toml`, que andam juntos. O `versionCode` do Android sai da versão pelo Tauri.
 - A tag é `mobile-v<versão>`. O bump é do conclude da spec que muda o app, nunca de uma task.
 
-## Workflow `mobile-release.yml`
+## Release no host — `deploy/release-movel.sh`
 
-Roda por tag `mobile-v*` ou à mão (`workflow_dispatch` com `publicar` e `notas`), nunca em PR:
+Espelho do `release-desktop.sh` ([desktop-distribuicao.md](desktop-distribuicao.md)), sem GitHub
+Actions: a keystore **nunca** vai para os secrets do GitHub.
 
-1. confere que a tag bate com a versão do `tauri.conf.json` e, quando vai publicar, que o commit tem
-   o status `eclume/gate` = `success` do gate do host ([monorepo.md](monorepo.md)), sem dispensa;
-2. num `ubuntu-24.04`, que já traz o SDK, instala o Java 21, o Node do `.nvmrc`, o Rust de
-   `mobile/rust-toolchain.toml` (com os alvos `aarch64-linux-android` e `armv7-linux-androideabi`)
-   e o NDK `28.2.13676358` de `mobile/scripts/android-sdk.sh` pelo `sdkmanager`, e roda o `npm ci`
-   antes de a keystore existir no runner;
-3. decodifica a keystore de `ANDROID_KEYSTORE_B64` num arquivo temporário e grava
-   `gen/android/keystore.properties` (`storeFile`, `password`, `keyAlias`; fora do git), que o
-   `app/build.gradle.kts` lê para o `signingConfig` de release;
-4. `tauri android build --apk --target aarch64 --target armv7`: o **APK universal**;
-5. `apksigner verify --print-certs` confere a assinatura e dá o SHA-256 do certificado;
-6. `mobile/scripts/manifesto_movel.py` grava `movel.json` e `SHA256SUMS` na pasta do release, com
-   o `INSTALACAO.md`;
-7. com `publicar`, o GitHub Release (privado, como o repo) `mobile-v<versão>` com o APK, o
-   `movel.json`, o `INSTALACAO.md` e o `SHA256SUMS`.
+- Roda **na estação** e opera o host pelo contexto Docker (`gpu-host`) e por SSH. `--plan` só mostra
+  versão, tag, commit, certificado esperado, disco e os impedimentos.
+- Com `--publicar`, recusa árvore suja, commit que o GitHub não tem, commit sem o status
+  `eclume/gate` = `success` do gate do host ([monorepo.md](monorepo.md); a dispensa é
+  `--sem-gate "<motivo>"`, com o rastro `eclume/gate-dispensa`), tag que já existe e a falta de
+  `mobile/certificado-release.sha256` ou da keystore no host. Recusa começar com o disco do host em
+  90% ou mais, e a trava `~/eclume-build/movel/.trava` impede dois releases ao mesmo tempo.
+- O código vai **do commit** (`git archive`) para `~/eclume-build/movel/src`. O contêiner é
+  `eclume-mobile-build:<versão do Rust>` (de `mobile/build.Dockerfile`, sobre a imagem de build do
+  desktop: Ubuntu 24.04, Node, o Rust fixado com os alvos Android e Python), com `--cpus 2`, uid
+  1000, o SDK, o NDK e o JDK de `mobile/scripts/android-sdk.sh` só leitura e o cache do Gradle no
+  host. O `npm ci --ignore-scripts` roda sem a keystore; só o build a recebe, **só leitura**, e grava
+  o `keystore.properties` dentro do contêiner (apagado no fim).
+- Saem o **APK universal** (`aarch64`, `armv7`, minificado pelo R8) e um APK `x86_64` com a mesma
+  chave, só para a fumaça. O `apksigner verify --print-certs` dá o SHA-256 do certificado, que
+  precisa bater com `mobile/certificado-release.sha256` (o valor versionado, público: já sai no
+  `movel.json`); se diferir, o release para.
+- `mobile/scripts/manifesto_movel.py` grava `movel.json` e `SHA256SUMS`, conferidos antes de
+  publicar.
+- **Fumaça do APK minificado:** `mobile/scripts/prova-emulador.sh --fumaca <apk x86_64>` sobe o AVD
+  do host, instala, abre a Activity, espera o log do núcleo, força o job do `SyncWorker`
+  (`cmd jobscheduler run -f`) e exige o log do sync, sem `UnsatisfiedLinkError`,
+  `ClassNotFoundException` nem `FATAL EXCEPTION` no logcat. O Playwright não abre o WebView de um
+  APK de release; a fumaça prova o R8 e a ponte JNI pelo caminho que não depende dele. `--publicar`
+  sempre a roda.
+- Com `--publicar`, o GitHub Release (privado, como o repo) `mobile-v<versão>` com o APK, o
+  `movel.json`, o `INSTALACAO.md` e o `SHA256SUMS`, pelo `gh` do host.
 
-Sem os secrets, o workflow para antes do build. No Linux, um build Android por release custa 1× o
-minuto: não há matriz.
+O APK de release também é provado a cada gate, no pilar `android` ([monorepo.md](monorepo.md)):
+minificado e assinado com uma chave descartável, com os testes de unidade e o lint do plugin e do
+app e a conferência dos símbolos JNI (`mobile/scripts/simbolos_jni.py`: cada `external fun` do
+`EclumeCore.kt` com o símbolo `Java_…` na `.so`, e a classe com os métodos nativos no dex).
 
-## Keystore e secrets
+## Keystore e certificado
 
-- A keystore é criada **uma vez**, no host, por `mobile/scripts/criar-keystore.sh`: RSA 4096,
-  validade de 30 anos, alias `eclume`, em `/srv/eclume/secrets/eclume-android.jks`, com a senha em
-  `/srv/eclume/secrets/android-keystore-password` (os dois 0600, no backup do deploy). O script se
-  recusa a sobrescrever uma keystore existente.
+- A keystore é criada **uma vez**, no host, por `mobile/scripts/criar-keystore.sh --dname "<titular>"`
+  (o titular sai da identidade do app, holetz/eclume#17): RSA 4096, validade de 30 anos, alias
+  `eclume`, em `/srv/eclume/secrets/eclume-android.jks`, com a senha em
+  `/srv/eclume/secrets/android-keystore-password` (os dois 0600). O script se recusa a sobrescrever
+  uma keystore existente e imprime o SHA-256 do certificado, a versionar em
+  `mobile/certificado-release.sha256`.
 - **Perdê-la impede atualizar os apps instalados**: o Android só instala por cima um APK assinado
-  pela mesma chave, e a saída é desinstalar e parear de novo.
-- Os secrets do repositório são `ANDROID_KEYSTORE_B64` (a keystore em base64),
-  `ANDROID_KEYSTORE_PASSWORD` e `ANDROID_KEY_ALIAS`. Gravá-los exige a confirmação da dona do
-  repositório; o script imprime os comandos `gh secret set`.
+  pela mesma chave, e a saída é desinstalar e parear de novo. A cópia cifrada da keystore e da senha
+  fora do host (holetz/eclume#91) é pré-condição do primeiro release.
+- Ordem do primeiro release: identidade decidida (#17) → keystore criada com ela → SHA-256
+  versionado → cópia fora do host → gate verde → `release-movel.sh --publicar` →
+  `publicar-movel.sh`.
 - O build de depuração (o do emulador e da prova) usa a chave de debug do SDK e nunca é publicado.
 
 ## `movel.json`
@@ -92,6 +110,9 @@ deploy/publicar-movel.sh`):
   e `mv` (nunca um arquivo pela metade), só se a versão não for mais antiga que a publicada
   (`FORCAR=1` aponta para uma anterior);
 - mantém as três versões mais recentes, e nunca apaga a que o `movel.json` aponta.
+- recusa um release cujo `certificado_sha256` difere do `movel.json` já publicado: os apps
+  instalados não atualizariam. A troca só passa declarada, com `TROCAR_CERTIFICADO="<motivo>"` (o
+  caso da #17), que aparece no log.
 
 O Caddy do eclume serve `/downloads/` ([deploy-producao.md](../../project/deploy-producao.md)).
 
