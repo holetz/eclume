@@ -587,7 +587,7 @@ desce; abaixo de 56rem, os campos também):
   agente", com Nova tag, Editar (409 `tag_exists` sugere mesclar), "Mesclar em…" e Excluir em
   `Dialog`. "Campos personalizados" lista só os campos do usuário: o título vem dos tipos de agenda
   e as tags, desta tela.
-- **Processamento automático** (`/config/automacao`, `organize/AutomationPage.tsx`, chave de ajuda
+- **Processamento automático** (`/config/automacao`, `automation/AutomationPage.tsx`, pasta própria para não criar ciclo entre `people` e `organize`, chave de ajuda
   `automacao`, primeiro item de Regras): a visão geral, na ordem do pipeline de
   [processamento-automatico.md](processamento-automatico.md), do que acontece sozinho depois de
   cada gravação, numa `<ol class="list">` de `.list-row`: pré-processamento e transcrição (da

@@ -7,8 +7,8 @@ import { PageHead } from '../../app/PageHead'
 import { useCollections } from '../collections/queries'
 import { useVoiceAssignment, type VoiceAssignment } from '../people/queries'
 import { useTagAssignment, type TagAssignment } from '../tags/queries'
-import styles from './Organize.module.css'
-import { useAgendaTypes, useFields } from './queries'
+import styles from './Automation.module.css'
+import { useAgendaTypes, useFields } from '../organize/queries'
 
 const percent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 0 })
 
@@ -45,7 +45,8 @@ function tagState(tags: TagAssignment): string {
 }
 
 /**
- * Processamento automático: a visão geral, na ordem do pipeline, do que o eclume faz sozinho depois
+ * Processamento automático (pasta própria: lê pessoas, tags, coleções e organize sem criar ciclo
+ * entre elas): a visão geral, na ordem do pipeline, do que o eclume faz sozinho depois
  * de cada gravação. Só lê o que as telas de cada etapa configuram e leva até elas; nada se edita aqui.
  */
 export function AutomationPage() {

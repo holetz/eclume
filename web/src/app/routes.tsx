@@ -25,7 +25,7 @@ export interface RouteHandle {
 
 const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminRoutes')
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
-const AutomationPage = named(() => import('../features/organize/AutomationPage'), 'AutomationPage')
+const AutomationPage = named(() => import('../features/automation/AutomationPage'), 'AutomationPage')
 const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const ChatPage = named(() => import('../features/chat/ChatPage'), 'ChatPage')

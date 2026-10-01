@@ -1,0 +1,14 @@
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.page p {
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
