@@ -1,5 +1,5 @@
 import { Menu, X } from 'lucide-react'
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { NavigatedPathContext } from './pageFocus'
 import styles from './ShellFrame.module.css'
@@ -32,6 +32,27 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
   const [menuOpenAt, setMenuOpenAt] = useState<string | null>(null)
   const menuOpen = menuOpenAt === pathname
   const navId = useId()
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  // Aberto, o menu compacto leva o foco ao primeiro link; Esc fecha e devolve o foco ao botão Menu.
+  useEffect(() => {
+    if (!menuOpen) return
+    sidebarRef.current?.querySelector<HTMLElement>('a[href]')?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMenuOpenAt(null)
+      menuButton.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
+  // O link da rota em que já se está não navega: fecha o menu, como os outros fariam.
+  function closeOnCurrentLink(event: MouseEvent<HTMLElement>) {
+    const link = (event.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null
+    if (menuOpen && link && new URL(link.href).pathname === pathname) setMenuOpenAt(null)
+  }
 
   return (
     <NavigatedPathContext.Provider value={navigated ? pathname : null}>
@@ -43,6 +64,7 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
           {brand}
           {account && <div className={styles.account}>{account}</div>}
           <button
+            ref={menuButton}
             type="button"
             className={`btn btn-secondary ${styles.menuButton}`}
             aria-expanded={menuOpen}
@@ -53,7 +75,13 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
             Menu
           </button>
         </header>
-        <aside className={`sidebar ${styles.sidebar}`} id={navId} data-open={menuOpen}>
+        <aside
+          ref={sidebarRef}
+          className={`sidebar ${styles.sidebar}`}
+          id={navId}
+          data-open={menuOpen}
+          onClick={closeOnCurrentLink}
+        >
           {!account && <div className={styles.brandSide}>{brand}</div>}
           {sidebar}
         </aside>

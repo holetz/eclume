@@ -227,6 +227,26 @@ describe('AppShell', () => {
   })
 })
 
+describe('menu compacto acessível', () => {
+  it('abrir foca o primeiro link, Esc fecha e devolve o foco ao Menu, e o link da rota atual fecha', async () => {
+    const user = userEvent.setup()
+    renderShell(member, vi.fn(), '/pessoas')
+    const button = screen.getByRole('button', { name: 'Menu' })
+    await user.click(button)
+    const sidebar = document.getElementById(button.getAttribute('aria-controls')!)!
+    expect(sidebar.querySelector('a[href]')).toHaveFocus()
+
+    await user.keyboard('{Escape}')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveFocus()
+
+    await user.click(button)
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await user.click(within(nav).getByRole('link', { name: 'Pessoas' }))
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
 describe('PageHead e 404', () => {
   it('mostra kicker, título e ações, e dá o título da aba', () => {
     render(<PageHead kicker="Organizar" title="Pessoas" actions={<button type="button">Adicionar</button>} />)
