@@ -99,7 +99,7 @@ pilar_mobile() {
 # A documentação: conformidade do bundle OKF (`cq`, do holetz/quenching na ref fixada no
 # gate.Dockerfile e no ci.yml) e links, âncoras, caminhos em crase e ordem do glossário.
 pilar_docs() {
-  run cq knowledge validate
+  run cq knowledge validate docs
   run python3 deploy/docs_check.py
 }
 
