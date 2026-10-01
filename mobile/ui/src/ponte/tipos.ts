@@ -11,7 +11,7 @@ export interface Servidor {
 export type EstadoConexao =
   | { fase: 'sem_servidor' }
   | { fase: 'confirmar_ca'; url: string; impressao: string }
-  | { fase: 'sem_credencial'; servidor: Servidor }
+  | { fase: 'sem_credencial'; servidor: Servidor; motivo?: string }
   | { fase: 'conectado'; servidor: Servidor }
 
 export type EstadoRede =
