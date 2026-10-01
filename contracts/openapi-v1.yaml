@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.16.0
+  version: 2.17.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -3967,7 +3967,9 @@ components:
       in: query
       description: |
         Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-        editado também move o `updated_at` da gravação e da transcrição a que pertence.
+        editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
+        2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
+        gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
       schema:
         type: string
         format: date-time
