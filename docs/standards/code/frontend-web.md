@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116
 maintainer: holetz
 ---
 
@@ -219,6 +219,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
     tela Segredos.
   - **Desligar a identificação por voz pede confirmação** (`ConfirmDialog`) antes do `PATCH`,
     porque o server apaga as impressões de voz da plataforma nesse momento.
+  - **Aviso de dados fora do servidor** (`ExternalDataNotice`, `.alert-warning` com `role="note"`):
+    em Agentes (finalidades de agente) e em Transcrição (a engine remota), lido de `GET /privacy`,
+    diz o que sai e para quem e que os usuários veem isso em Conta › Privacidade e dados e no
+    cadastro. Relê quando a configuração muda (`usePrivacy(revision)`); sem destino externo, nada
+    aparece.
   - **A Saúde relê a cada 15 s** (`HEALTH_REFRESH_MS`, alinhado ao heartbeat do worker), só com a
     aba visível (`refetchIntervalInBackground: false`), e mantém os últimos dados num erro.
   - **Nenhuma tela do painel mostra conteúdo de usuário**: nem título de gravação, nem nome de
@@ -234,7 +239,12 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
   `notice_version` aceita; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
   uma conta com este e-mail."; cadastro fechado (`open: false` ou `signup_closed`) mostra o aviso
-  no lugar do formulário.
+  no lugar do formulário. Antes do aceite, quando os resumos ou o chat saem do servidor
+  (`GET /privacy`, `location: external`), uma linha diz quais e para quem ("Neste servidor, os
+  resumos e o chat são feitos fora dele, por Anthropic…"); sem destino externo, nada aparece. O
+  título da entrada (`AuthLayout`, variante `user`) é "Cada palavra, guardada no seu servidor.":
+  o áudio e a transcrição ficam guardados nele, sem prometer que nada sai (holetz/eclume#116; a
+  forma final sai do Claude Design).
 - **Senha esquecida:** a entrada diz "Esqueceu a senha? Peça um link a quem administra o
   servidor." (o servidor não envia e-mail). `ResetPasswordPage` (`/redefinir-senha#<segredo>`, fora
   do `RequireSession`) lê o segredo do fragmento ao montar, antes de qualquer redirecionamento, e o
@@ -552,7 +562,13 @@ desce; abaixo de 56rem, os campos também):
   padrão, manda `revoke_tokens`) e a zona de perigo "Excluir a conta", com o `.alert-error` do que
   é apagado e um `Dialog` que só habilita "Excluir minha conta" com a senha e a `.check` "Entendo
   que tudo será apagado para sempre". Excluída, o app limpa o cache e volta a `/entrar` com o aviso
-  no `state`, que a tela de entrada mostra.
+  no `state`, que a tela de entrada mostra. Entre os dados e a senha, o painel **Privacidade e
+  dados** lista, gerado de `GET /privacy` (`app/privacy.ts`, `usePrivacy`, sem `staleTime`
+  infinito), onde ficam o áudio e a transcrição e o destino de cada finalidade ("Neste servidor",
+  "Na rede local", "Fora do servidor: <quem>", "Desligado: nada é enviado"), e, de
+  `/me/voice-assignment`, quantas pessoas têm impressão de voz e quantas amostras a conta guarda.
+  Com a voz ligada na plataforma, a chave "Guardar amostras de voz desta conta"; desligar pede
+  confirmação (`ConfirmDialog`, "Apagar e deixar de guardar") antes do `PATCH keep_samples: false`.
 - **Ambiente** (`/config/ambiente`, `features/environment/`, chave de ajuda `ambiente`) guarda as
   preferências deste navegador no `localStorage` (`app/preferences.ts`), sem conta nem servidor:
   tema (`theme.ts`), densidade (confortável ou compacta), movimento (seguir o sistema ou reduzir),
