@@ -17,8 +17,12 @@
   color: var(--color-text-muted);
 }
 
+/* Fala fora da tela não é pintada, mas fica no DOM: o Ctrl+F acha, o leitor de tela lê e o `?t=`
+   rola até ela. A altura intrínseca (lembrada depois da primeira pintura) evita a barra pular. */
 .item {
   scroll-margin: 7rem 0 var(--space-6);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 5.5rem;
 }
 
 .segment {

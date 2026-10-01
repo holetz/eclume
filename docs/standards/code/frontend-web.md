@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112
 maintainer: holetz
 ---
 
@@ -346,12 +346,33 @@ desce; abaixo de 56rem, os campos também):
   a segunda falha expõe `error` no contexto e o player mostra "O áudio não carregou" com "Tentar de
   novo", com o tocar desabilitado. Erro antes do primeiro carregamento num navegador cujo
   `canPlayType('audio/ogg; codecs=opus')` é vazio vira o aviso de que ele não toca Ogg Opus.
+  **O instante não passa pelo contexto**: fica numa store (`PlaybackClock`, escrita no `timeupdate`
+  e no `seek`), lida por `usePlaybackTime()` (o player) ou por `usePlaybackSelect(seletor)`, que só
+  renderiza quando o valor primitivo selecionado muda (a fala ativa). O contexto leva duração,
+  tocando, velocidade, erro e comandos, e só muda quando um deles muda: a `.marker-bar` e quem só
+  comanda não renderizam por tick.
 - **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
   locutores, falas e marcadores; aberta, tem o bloco Locutores (renomear, ligar pessoa, sugestões,
   juntar), "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
   primeira fala que começa no marcador (`placeMarkers`), editar a nota (até 500) e excluir o
   marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
-  sem tocar e rola até a fala.
+  sem tocar e rola **uma vez** até a fala do instante, independente do seguir.
+  - **Transcrição longa.** Cada fala é um `SegmentRow` memoizado com props estáveis (nome e cor do
+    locutor e marcadores por índice saem de mapas em `useMemo` por transcrição; `active` e
+    `editing` booleanos; `seek` e `setEditingId` como callbacks), e a fala ativa vem de
+    `usePlaybackSelect` com o `findSegmentAt` (busca binária): um tick sem troca renderiza zero
+    falas e uma troca renderiza duas. O item da fala tem `content-visibility: auto` com
+    `contain-intrinsic-size: auto 5.5rem` no CSS Module: fora da tela não é pintado, mas fica no
+    DOM. A virtualização foi descartada: o Ctrl+F do navegador e o leitor de tela precisam das
+    falas no DOM, a âncora do `?t=` usa `scrollIntoView` na fala e a lista rola a janela, não um
+    contêiner próprio.
+  - **"Acompanhar o áudio" só com a lista à vista**: um `IntersectionObserver` com a faixa central
+    da janela (`rootMargin: -40% 0px -40% 0px`) diz se a lista está sendo lida; fora dela (lendo o
+    resumo logo abaixo, usando o chat), a troca de fala não rola a página. O padrão continua ligado.
+  - **A medida é contrato**: `TranscriptDisclosure.test.tsx` conta renders sobre 3.000 falas (0 por
+    tick sem troca, 2 na troca, a `.marker-bar` nenhum), e `TranscriptDisclosure.browser.test.tsx`
+    (`npm run test:browser`, Chrome no host) mede o commit por `React.Profiler`: mediana de 20
+    ticks abaixo de 8 ms sem troca e de 16 ms com troca.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
