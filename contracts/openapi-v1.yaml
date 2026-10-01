@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.9.0
+  version: 2.10.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -1164,6 +1164,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Recording"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [recordings]
+      operationId: cancelRecordingTranscription
+      summary: Cancelar a transcrição em curso ou na fila
+      description: |
+        Desde a 2.10.0. O job `queued`/`running` da gravação termina `cancelled`, a gravação fica
+        `failed` com `Job.error.code` `cancelled` (recuperável) e a etapa em curso fica `skipped`
+        com `reason` `cancelled`. O worker GPU para no próximo ponto de checagem e libera a GPU;
+        "Transcrever de novo" (`/retranscribe`) é a volta. Sem job em aberto, 409.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: Transcrição cancelada; a gravação com o job `cancelled`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
+              examples:
+                cancelled:
+                  $ref: "#/components/examples/RecordingCancelled"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4774,7 +4810,8 @@ components:
                     sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto),
                     detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou
                     pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou
-                    nunca chegou); recuperável.
+                    nunca chegou); recuperável. Desde a 2.10.0, `cancelled`: o dono cancelou a
+                    transcrição (ou excluiu a gravação); recuperável, com `state` `cancelled`.
                   type: string
                 message:
                   type: string
@@ -4949,7 +4986,8 @@ components:
         reason:
           description: |
             Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
-            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
+            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
           type: [string, "null"]
 
     RecordingPatch:
@@ -7387,6 +7425,9 @@ components:
     RecordingQueued:
       summary: Gravação criada, job na fila
       externalValue: ./fixtures/recording-queued.json
+    RecordingCancelled:
+      summary: Transcrição cancelada pelo dono no meio do ASR
+      externalValue: ./fixtures/recording-cancelled.json
     RecordingTranscribed:
       summary: Gravação transcrita
       externalValue: ./fixtures/recording-transcribed.json

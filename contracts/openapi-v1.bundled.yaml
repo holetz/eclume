@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.9.0
+  version: 2.10.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -1237,6 +1237,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Recording'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags:
+      - recordings
+      operationId: cancelRecordingTranscription
+      summary: Cancelar a transcrição em curso ou na fila
+      description: 'Desde a 2.10.0. O job `queued`/`running` da gravação termina `cancelled`, a gravação
+        fica
+
+        `failed` com `Job.error.code` `cancelled` (recuperável) e a etapa em curso fica `skipped`
+
+        com `reason` `cancelled`. O worker GPU para no próximo ponto de checagem e libera a GPU;
+
+        "Transcrever de novo" (`/retranscribe`) é a volta. Sem job em aberto, 409.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202':
+          description: Transcrição cancelada; a gravação com o job `cancelled`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+              examples:
+                cancelled:
+                  $ref: '#/components/examples/RecordingCancelled'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5247,7 +5289,9 @@ components:
                   a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu
                   da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo
                   server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas
-                  o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável.'
+                  o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. Desde
+                  a 2.10.0, `cancelled`: o dono cancelou a transcrição (ou excluiu a gravação); recuperável,
+                  com `state` `cancelled`.'
                 type: string
               message:
                 type: string
@@ -5507,7 +5551,9 @@ components:
         reason:
           description: 'Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
 
-            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), entre outros.
+            `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
+
+            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
 
             '
           type:
@@ -9186,6 +9232,93 @@ components:
         marker_count: 0
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
+    RecordingCancelled:
+      summary: Transcrição cancelada pelo dono no meio do ASR
+      value:
+        id: 01928f3a-1c00-7a00-8000-000000000401
+        title: Alinhamento do programa de lideranças
+        source: desktop
+        recorded_at: '2026-09-18T14:00:05Z'
+        recorded_at_source: capture
+        duration_ms: 166000
+        language: pt-BR
+        size_bytes: 19287595
+        content_type: audio/ogg
+        content_hash: sha256:e8a08c6af61744061af021cbb0b9acdf8c408b203cd2f3e2ac455e72e067aee5
+        owner:
+          id: 01928f3a-1c00-7a00-8000-000000000101
+          name: Mariana Couto
+        capture:
+          meeting_app: teams
+          device_name: NB-MARIANA
+          client_version: eclume-desktop/0.3.0
+        status: failed
+        kind: meeting
+        tags: []
+        collection_ids: []
+        collections_origin: null
+        metadata: {}
+        agenda_type: null
+        job:
+          id: 01928f3a-1c00-7a00-8000-000000000e01
+          state: cancelled
+          stage: null
+          progress: 0
+          attempts: 0
+          error:
+            code: cancelled
+            message: Transcrição cancelada.
+            retryable: true
+          queued_at: '2026-09-18T14:09:31Z'
+          started_at: '2026-09-18T14:09:35Z'
+          finished_at: '2026-09-18T14:12:40Z'
+        pipeline:
+        - step: received
+          state: done
+          started_at: '2026-09-18T14:09:31Z'
+          finished_at: '2026-09-18T14:09:31Z'
+          duration_ms: 0
+          error: null
+          reason: null
+        - step: preprocessing
+          state: done
+          started_at: '2026-09-18T14:09:35Z'
+          finished_at: '2026-09-18T14:10:02Z'
+          duration_ms: 27000
+          error: null
+          reason: null
+        - step: transcription
+          state: skipped
+          started_at: '2026-09-18T14:10:02Z'
+          finished_at: '2026-09-18T14:12:40Z'
+          duration_ms: 158000
+          error: null
+          reason: cancelled
+        - step: agenda_type
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: fields
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        - step: summary
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
+        transcript_id: null
+        marker_count: 0
+        created_at: '2026-09-18T14:09:31Z'
+        updated_at: '2026-09-18T14:12:40Z'
     RecordingTranscribed:
       summary: Gravação transcrita
       value:
