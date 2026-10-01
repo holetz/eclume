@@ -176,6 +176,21 @@ svg.lucide {
   z-index: 20;
 }
 
+/* Rótulo de uma parte do menu (a engrenagem agrupada): não focável, com o filete do .menu-sep acima. */
+.menu-heading {
+  padding: 8px 12px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.menu-heading:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--color-divider);
+}
+
 /* O conteúdo usa a largura toda da área ao lado da barra: o DS limita o .main a --content-width,
    mas o eclume é ferramenta de trabalho em desktop. Texto corrido mantém a própria medida (68ch). */
 .main {

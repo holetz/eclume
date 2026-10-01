@@ -81,11 +81,15 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
   const { sending } = useImportContext()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const itemsOf = (group: string): MenuEntry[] =>
-    (header.find((entry) => entry.group === group)?.items ?? []).map((item) => ({
-      key: item.to,
-      label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
-      onSelect: () => navigate(item.to),
-    }))
+    (header.find((entry) => entry.group === group)?.items ?? []).flatMap((item, index, list) => {
+      const entry: MenuEntry = {
+        key: item.to,
+        label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
+        onSelect: () => navigate(item.to),
+      }
+      // Cada parte da engrenagem abre com o rótulo dela.
+      return item.part && item.part !== list[index - 1]?.part ? [{ heading: item.part }, entry] : [entry]
+    })
   const helpItems: MenuEntry[] = [
     { key: 'pagina', label: 'Ajuda desta página', kbd: '?', onSelect: () => help?.openHelp() },
     ...itemsOf('Ajuda'),

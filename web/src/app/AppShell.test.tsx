@@ -43,9 +43,9 @@ describe('navegação', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
   const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
 
-  it('agrupa em Gravações e Organizar, e o resto nos menus do cabeçalho', () => {
+  it('agrupa em Gravações, Organizar (dados) e Regras, e o resto nos menus do cabeçalho', () => {
     const { main, header: more } = navGroups()
-    expect(titles(main)).toEqual(['Gravações', 'Organizar'])
+    expect(titles(main)).toEqual(['Gravações', 'Organizar', 'Regras'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem. O destacado não
     // pertence a grupo: a barra lateral o desenha antes deles.
@@ -53,7 +53,16 @@ describe('navegação', () => {
       NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
-    expect(labels(main).slice(0, 6)).toEqual(['Biblioteca', 'Busca', 'Pessoas', 'Coleções', 'Tags', 'Campos personalizados'])
+    expect(labels(main)).toEqual([
+      'Biblioteca',
+      'Busca',
+      'Pessoas',
+      'Coleções',
+      'Tags',
+      'Processamento automático',
+      'Tipos de agenda',
+      'Campos personalizados',
+    ])
     expect(labels(more)).toEqual(enabled('header'))
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
@@ -79,6 +88,7 @@ describe('navegação', () => {
     const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
     expect(routes).toMatchObject({
       Tags: '/tags',
+      'Processamento automático': '/config/automacao',
       'Campos personalizados': '/config/campos',
       'Tipos de agenda': '/config/agendas',
       Conta: '/config/conta',
@@ -113,7 +123,7 @@ describe('AppShell', () => {
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
     // Configurações e ajuda saíram da barra lateral: moram nos menus do cabeçalho.
-    expect(titles).toEqual(['Gravações', 'Organizar'])
+    expect(titles).toEqual(['Gravações', 'Organizar', 'Regras'])
     expect(within(nav).queryByText('Configurações e ajuda')).not.toBeInTheDocument()
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
       expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
@@ -206,12 +216,21 @@ describe('AppShell', () => {
     const menu = screen.getByRole('menu', { name: 'Minhas configurações' })
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Conta',
-      'Ambiente',
-      'Conexão MCP',
-      'Tokens de acesso',
       'App desktop',
       'App móvel',
+      'Conexão MCP',
+      'Tokens de acesso',
+      'Ambiente',
     ])
+    // Agrupada por natureza: cada parte abre com um rótulo que o teclado não foca.
+    expect(within(menu).getAllByRole('separator').map((sep) => sep.getAttribute('aria-label'))).toEqual([
+      'Conta e privacidade',
+      'Aparelhos',
+      'Integrações',
+      'Ambiente',
+    ])
+    await user.keyboard('{ArrowDown}')
+    expect(within(menu).getByRole('menuitem', { name: 'App desktop' })).toHaveFocus()
     await user.click(within(menu).getByRole('menuitem', { name: 'Tokens de acesso' }))
     expect(await screen.findByRole('heading', { name: 'Tokens' })).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Principal' })
