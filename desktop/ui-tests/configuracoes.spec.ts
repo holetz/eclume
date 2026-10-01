@@ -32,11 +32,11 @@ test('Ctrl+, abre Reuniões com os 8 apps, o subtítulo do DS e a política de c
   await expect(linhas.first().locator('.seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
 })
 
-test('Reuniões: o aviso de resumo pronto vem ligado e desliga na hora', async ({ abrir }) => {
+test('Reuniões: o aviso do fim do processamento vem ligado e desliga na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
   await expect(page.locator('#avisar-resumo')).toBeChecked()
-  await page.locator('label.switch', { hasText: 'Avisar quando o resumo ficar pronto' }).click()
+  await page.locator('label.switch', { hasText: 'Avisar quando uma gravação terminar de processar' }).click()
   await expect(page.locator('#avisar-resumo')).not.toBeChecked()
   expect((await ultimaEntrada(page)).notify_summary).toBe(false)
 })

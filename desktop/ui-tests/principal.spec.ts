@@ -77,6 +77,14 @@ test('fila com as etiquetas do vocabulário, nota, importação e o erro visíve
   await expect(page.locator('#fila-resumo')).toHaveText('1 de 4 enviadas')
 })
 
+test('a fila mostra o título dado ao parar, senão o que o servidor deu', async ({ abrir }) => {
+  const page = await abrir('titulos')
+  const linhas = page.locator('#fila li')
+  await expect(linhas.nth(0)).toContainText('Alinhamento semanal · 54 min')
+  await expect(linhas.nth(1)).toContainText('Ideia do orçamento · 1 min')
+  await expect(linhas.nth(2)).toContainText('· 22 min')
+})
+
 test('enviada com a transcrição na fila do servidor diz por que espera', async ({ abrir }) => {
   const page = await abrir('espera')
   const linhas = page.locator('#fila li')
