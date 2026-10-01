@@ -9,6 +9,7 @@ uma linha por arquivo. `FAKE_FALHA=<subcomando>` faz o restic falhar nesse subco
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -28,6 +29,14 @@ with open(base / "chamadas.jsonl", "a") as f:
     f.write(json.dumps(args) + "\n")
 running = os.environ.get("FAKE_RUNNING", "postgres minio caddy server worker-cpu worker-agents worker-gpu").split()
 cmd = args[0] if args else ""
+raiz = Path(os.environ["FAKE_ROOT_CRT"]).read_text() if os.environ.get("FAKE_ROOT_CRT") else "C"
+if cmd == "compose":
+    texto = " ".join(args)
+    if "cat /data/caddy/pki" in texto:
+        print(raiz, end="")
+    elif "select audio_key" in texto:
+        print(os.environ.get("FAKE_LOTE", ""))
+    sys.exit(int(os.environ.get("FAKE_COMPOSE_SAIDA", "0")) if " build " in texto else 0)
 if cmd == "ps":
     filtros = [args[i + 1] for i, a in enumerate(args) if a == "--filter"]
     servico = next((x.rsplit("=", 1)[1] for x in filtros if "compose.service=" in x), "")
@@ -78,7 +87,8 @@ elif cmd == "run":
         for rel, txt in {"eclume/pg/roles.sql": "R", "eclume/pg/eclume.dump": "D",
                          "eclume/minio/rec/audio.ogg": "audio",
                          "eclume/secrets/env.prod": "ECLUME_ENCRYPTION_KEY=k\n",
-                         "eclume/caddy/data/caddy/pki/authorities/local/root.key": "K"}.items():
+                         "eclume/caddy/data/caddy/pki/authorities/local/root.key": "K",
+                         "eclume/caddy/data/caddy/pki/authorities/local/root.crt": raiz}.items():
             p = out / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(txt)
@@ -287,3 +297,140 @@ def test_restaurar_host_novo_sem_credencial_do_destino(tmp_path: Path, host: Hos
 
     assert r.returncode == 1
     assert "restic-fora.env" in r.stderr
+
+
+AUDIO_HASH = "sha256:" + hashlib.sha256(b"audio").hexdigest()
+
+
+@pytest.fixture
+def staging(tmp_path: Path, host: Host) -> Host:
+    """O host com o destino fora, o estado do último backup, a raiz publicada e uma árvore do main falsa."""
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+    crt = tmp_path / "root.crt"
+    subprocess.run(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-subj",
+            "/CN=teste",
+            "-days",
+            "1",
+            "-keyout",
+            str(tmp_path / "root.key"),
+            "-out",
+            str(crt),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    (host.data / "downloads").mkdir()
+    (host.data / "downloads" / "eclume-root.crt").write_text(crt.read_text())
+    estado = host.data / "estado"
+    estado.mkdir()
+    linhas = [
+        f"{hashlib.sha256(b'ECLUME_ENCRYPTION_KEY=k\n').hexdigest()}  secrets/env.prod",
+        f"{hashlib.sha256(b'K').hexdigest()}  caddy/data/caddy/pki/authorities/local/root.key",
+    ]
+    (estado / "secrets.sha256").write_text("\n".join(linhas) + "\n")
+    src = tmp_path / "main"
+    (src / "deploy").mkdir(parents=True)
+    (src / "deploy" / "docker-compose.staging.yml").write_text("")
+    (src / "deploy" / "smoke_prod.py").write_text(
+        f"import sys\nopen({str(host.bin / 'smoke.args')!r}, 'w').write(' '.join(sys.argv[1:]))\nprint('OK')\n"
+    )
+    for nome, corpo in {
+        "df": 'printf "Use%%\\n %s%%\\n" "${FAKE_DISCO:-40}"\n',
+        "curl": 'for a; do [[ "$a" == -d ]] && exit 0; done; echo \'{"open": true, "notice": {"version": "3"}}\'\n',
+    }.items():
+        (host.bin / nome).write_text("#!/usr/bin/env bash\n" + corpo)
+        (host.bin / nome).chmod(0o755)
+    host.env |= {
+        "ECLUME_STAGING_SRC": str(src),
+        "STAGING_DIR": str(tmp_path / "home" / "eclume-staging"),
+        "FAKE_ROOT_CRT": str(crt),
+        "FAKE_LOTE": f"rec/audio.ogg|{AUDIO_HASH}",
+    }
+    return host
+
+
+def compose_chamadas(host: Host) -> list[str]:
+    return [" ".join(c) for c in host.chamadas() if c[0] == "compose"]
+
+
+def test_ensaio_restaura_do_repositorio_fora_confere_e_derruba(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    estado = staging.estado("ensaio")
+    assert estado["ok"] is True, estado
+    assert "1 áudios" in estado["detalhe"]
+    (restore,) = staging.restic("sh")
+    assert "--env-file" in restore
+    assert "latest" in " ".join(restore)
+    (check,) = staging.restic("check")
+    assert "--read-data-subset" in check
+    chamadas = compose_chamadas(staging)
+    assert all("-p eclume-staging" in c for c in chamadas)
+    assert any(" run --rm migrate" in c for c in chamadas)
+    assert "down -v" in chamadas[-1]
+    smoke = (staging.bin / "smoke.args").read_text()
+    assert "--url https://127.0.0.1:18444" in smoke
+    # Nada restaurado fica em claro depois do ensaio.
+    assert not Path(staging.env["STAGING_DIR"], "restaurado").exists()
+
+
+def test_ensaio_content_hash_divergente_falha(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", FAKE_LOTE="rec/audio.ogg|sha256:00")
+
+    assert r.returncode != 0
+    estado = staging.estado("ensaio")
+    assert estado["ok"] is False
+    assert "content_hash" in estado["detalhe"]
+    assert "down -v" in compose_chamadas(staging)[-1]
+
+
+def test_ensaio_secrets_divergentes_falha(staging: Host) -> None:
+    (staging.data / "estado" / "secrets.sha256").write_text(f"{'0' * 64}  secrets/env.prod\n")
+
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode != 0
+    assert "sha256" in staging.estado("ensaio")["detalhe"]
+
+
+def test_ensaio_check_do_restic_falha(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", FAKE_FALHA="check")
+
+    assert r.returncode != 0
+    assert "restic check" in staging.estado("ensaio")["detalhe"]
+
+
+def test_ensaio_recusa_disco_cheio(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", FAKE_DISCO="91")
+
+    assert r.returncode == 3
+    assert "disco" in staging.estado("ensaio")["detalhe"]
+    assert staging.restic("sh") == []
+
+
+def test_ensaio_sem_destino_fora_falha(staging: Host) -> None:
+    (staging.secrets / "restic-fora.env").unlink()
+
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode != 0
+    assert "restic-fora.env" in staging.estado("ensaio")["detalhe"]
+
+
+def test_subir_deixa_o_stack_e_a_conta_sem_estado(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "subir")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    conta = Path(staging.env["STAGING_DIR"], "conta").read_text()
+    assert "ECLUME_URL=https://127.0.0.1:18444" in conta
+    assert not any("down" in c for c in compose_chamadas(staging))
+    assert not (staging.data / "estado" / "ensaio.json").exists()
