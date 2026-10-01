@@ -1,7 +1,7 @@
 // Acessibilidade das telas principais pelo axe (WCAG 2.1 A e AA), no tema claro e no escuro, contra
 // o mock (Prism) como os outros E2E. O axe confere o contraste do texto renderizado; o das bordas de
 // controle (1.4.11) fica com o teste de tokens do eclume.css.
-import AxeBuilder from '@axe-core/playwright'
+import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
