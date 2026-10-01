@@ -219,6 +219,19 @@ pub struct AgendaRef {
 pub struct PipelineStepInfo {
     pub step: String,
     pub state: String,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    /// Por que a etapa foi pulada (`no_provider`, `cancelled`, `summary_deleted`…).
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// O job de transcrição de uma gravação: só o estado e o fim importam para o desfecho.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct JobInfo {
+    pub state: String,
+    #[serde(default)]
+    pub finished_at: Option<String>,
 }
 
 /// O que o espelho local lê de uma gravação da biblioteca (`GET /api/v1/recordings`).
@@ -243,15 +256,19 @@ pub struct LibraryRecording {
     pub agenda_type: Option<AgendaRef>,
     #[serde(default)]
     pub pipeline: Vec<PipelineStepInfo>,
+    #[serde(default)]
+    pub job: Option<JobInfo>,
 }
 
 impl LibraryRecording {
     /// Estado da etapa `summary` do pipeline, quando a gravação a tem.
     pub fn summary_state(&self) -> Option<&str> {
-        self.pipeline
-            .iter()
-            .find(|step| step.step == "summary")
-            .map(|step| step.state.as_str())
+        self.summary_step().map(|step| step.state.as_str())
+    }
+
+    /// A etapa `summary` do pipeline, quando a gravação a tem.
+    pub fn summary_step(&self) -> Option<&PipelineStepInfo> {
+        self.pipeline.iter().find(|step| step.step == "summary")
     }
 }
 
@@ -375,6 +392,7 @@ mod tests {
             transcript_id: None,
             agenda_type: None,
             pipeline: vec![],
+            job: None,
         }
     }
 

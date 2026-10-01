@@ -14,6 +14,7 @@ use anyhow::Result;
 use eclume_recorder::{sync_pending, Kind, NewImport, Queue, RecordedAtSource, Status, SyncReport};
 use eclume_sync::{
     Client, HttpRequest, HttpResponse, HttpUploader, RetryPolicy, Transport, UreqTransport,
+    Watermark,
 };
 
 /// Gravação e upload das fixtures do contrato.
@@ -231,4 +232,15 @@ fn check_do_pat_no_mock() {
     let Some(base) = mock_url() else { return };
     client(&base, false, false).check().unwrap();
     assert!(client(&base, false, true).check().is_err());
+}
+
+#[test]
+fn listagem_por_since_no_mock_alimenta_a_marca_dagua() {
+    let Some(base) = mock_url() else { return };
+    let items = client(&base, false, false)
+        .library(Some("2026-01-01T00:00:00Z"))
+        .unwrap();
+    // O exemplo do contrato termina antes da marca: nenhum aviso retroativo.
+    let mut mark = Watermark::starting(chrono::Utc::now());
+    assert!(mark.take(&items).is_empty());
 }

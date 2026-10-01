@@ -479,6 +479,7 @@ mod tests {
             transcript_id: com_transcricao.then(|| format!("t-{id}")),
             agenda_type: None,
             pipeline: vec![],
+            job: None,
         }
     }
 

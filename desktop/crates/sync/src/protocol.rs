@@ -239,52 +239,18 @@ impl Client {
         )
     }
 
-    /// O resumo de uma gravação enviada: `GET /api/v1/recordings/{id}/summary`, para o aviso de
-    /// resumo pronto (a credencial de dispositivo tem `summaries:read` desde o contrato 2.6.0).
-    /// Primeiro a etapa `summary` da gravação (`GET /recordings/{id}`): pulada ou falha, não há o
-    /// que avisar; pendente ou em curso, espera sem ler o resumo. Só com ela `done` lê o resumo.
-    pub fn summary(&self, recording_id: &str) -> Result<SummaryPoll> {
-        Ok(self.check_recording(recording_id, true)?.summary)
-    }
-
-    /// A leitura de uma gravação enviada (`GET /recordings/{id}`): a espera na fila (`job.queue`,
-    /// contrato 2.16.0) e, com `read_summary`, o resumo como em [`Client::summary`]. Sem
-    /// `read_summary` (aviso de resumo desligado), o resumo nem é pedido e fica `Waiting`.
-    pub fn check_recording(
-        &self,
-        recording_id: &str,
-        read_summary: bool,
-    ) -> Result<RecordingCheck> {
+    /// A espera na fila de uma gravação enviada (`GET /recordings/{id}`, `job.queue` desde o
+    /// contrato 2.16.0): a posição muda sem mover o `updated_at`, por isso não vem do `?since=`.
+    /// `None` fora da fila, com a gravação apagada ou em servidor anterior à 2.16.0.
+    pub fn queue_wait(&self, recording_id: &str) -> Result<Option<QueueWait>> {
         let url = self.endpoint(&format!("/recordings/{recording_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
-        let recording: RecordingPipeline = match response.status {
-            404 => return Ok(RecordingCheck::gone()),
+        let recording: RecordingJobOnly = match response.status {
+            404 => return Ok(None),
             _ if response.is_success() => parse("falha ao ler a gravação", &response)?,
             _ => return Err(api_error("falha ao ler a gravação", &response)),
         };
-        let wait = recording.job.as_ref().and_then(|job| job.queue.clone());
-        let summary = match recording.summary_step() {
-            Some("failed" | "skipped") => SummaryPoll::Gone,
-            Some("done") if read_summary => self.summary_of(recording_id)?,
-            _ => SummaryPoll::Waiting,
-        };
-        Ok(RecordingCheck { summary, wait })
-    }
-
-    fn summary_of(&self, recording_id: &str) -> Result<SummaryPoll> {
-        let url = self.endpoint(&format!("/recordings/{recording_id}/summary"));
-        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
-        match response.status {
-            // A gravação saiu do servidor: não há o que avisar.
-            404 => Ok(SummaryPoll::Gone),
-            // Sem transcrição ainda.
-            409 => Ok(SummaryPoll::Waiting),
-            _ if response.is_success() => {
-                let state: SummaryState = parse("falha ao ler o resumo", &response)?;
-                Ok(state.poll())
-            }
-            _ => Err(api_error("falha ao ler o resumo", &response)),
-        }
+        Ok(recording.job.and_then(|job| job.queue))
     }
 
     /// Percorre as páginas de uma listagem por cursor (`limit` 200) e junta os itens.
@@ -333,7 +299,9 @@ impl Client {
     }
 
     /// As gravações da biblioteca: `GET /api/v1/recordings`, só as com `updated_at >= since`
-    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.8.0).
+    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.8.0, e
+    /// quando a etapa de resumo falha ou é pulada, 2.17.0). É a leitura do espelho e do aviso de
+    /// desfechos ([`crate::outcome`]).
     pub fn library(&self, since: Option<&str>) -> Result<Vec<api::LibraryRecording>> {
         let query: Vec<(&str, &str)> = since.map(|value| ("since", value)).into_iter().collect();
         self.paged(
@@ -579,35 +547,6 @@ fn finished(upload: Upload) -> Result<Uploaded> {
     })
 }
 
-/// O que o aviso de resumo pronto faz com uma gravação.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SummaryPoll {
-    /// O resumo atual ficou pronto: o Markdown dele.
-    Ready(String),
-    /// Ainda transcrevendo ou resumindo: perguntar de novo depois.
-    Waiting,
-    /// Não vai haver resumo para avisar (gravação apagada, etapa pulada ou que falhou).
-    Gone,
-}
-
-/// O que a leitura de uma gravação enviada traz: o resumo para o aviso e a espera na fila.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RecordingCheck {
-    pub summary: SummaryPoll,
-    /// Por que a transcrição espera, enquanto o job está `queued`; `None` fora disso ou em
-    /// servidor anterior à 2.16.0.
-    pub wait: Option<QueueWait>,
-}
-
-impl RecordingCheck {
-    fn gone() -> Self {
-        Self {
-            summary: SummaryPoll::Gone,
-            wait: None,
-        }
-    }
-}
-
 /// `Job.queue`: por que a transcrição espera. A UI monta a frase com `fraseDaEspera`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct QueueWait {
@@ -632,11 +571,9 @@ pub struct ProcessorStatus {
     pub offline_since: Option<String>,
 }
 
-/// A parte da `Recording` que o aviso lê: o estado da etapa `summary` do pipeline e a espera.
+/// A parte da `Recording` que a espera na fila lê.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-struct RecordingPipeline {
-    #[serde(default)]
-    pipeline: Vec<PipelineStep>,
+struct RecordingJobOnly {
     #[serde(default)]
     job: Option<RecordingJob>,
 }
@@ -647,22 +584,7 @@ struct RecordingJob {
     queue: Option<QueueWait>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-struct PipelineStep {
-    step: String,
-    state: String,
-}
-
-impl RecordingPipeline {
-    fn summary_step(&self) -> Option<&str> {
-        self.pipeline
-            .iter()
-            .find(|step| step.step == "summary")
-            .map(|step| step.state.as_str())
-    }
-}
-
-/// A parte do `SummaryState` que o aviso lê.
+/// A parte do `SummaryState` que o espelho e o Copiar do aviso leem.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 pub struct SummaryState {
     #[serde(default)]
@@ -689,21 +611,6 @@ pub struct LibrarySummary {
     pub version: u64,
     pub agenda_type: Option<String>,
     pub content_md: String,
-}
-
-impl SummaryState {
-    /// Com a etapa `summary` já `done`: pronto com o Markdown da versão atual; sem ela (uma
-    /// geração nova em curso), espera.
-    pub fn poll(self) -> SummaryPoll {
-        match self.current {
-            Some(SummaryVersion {
-                status,
-                content_md: Some(markdown),
-                ..
-            }) if status == "done" && !markdown.trim().is_empty() => SummaryPoll::Ready(markdown),
-            _ => SummaryPoll::Waiting,
-        }
-    }
 }
 
 /// Um endereço de servidor: `http://` ou `https://` seguido do host.
@@ -953,7 +860,7 @@ mod tests {
     }
 
     #[test]
-    fn leitura_da_gravacao_traz_a_espera_sem_pedir_o_resumo() {
+    fn espera_na_fila_vem_da_leitura_da_gravacao() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/recordings/r1",
@@ -970,87 +877,18 @@ mod tests {
                 "GET /api/v1/recordings/r2",
                 json(
                     200,
-                    serde_json::json!({"id": "r2", "pipeline": [{"step": "summary", "state": "done"}],
-                                       "job": {"state": "succeeded", "queue": null}}),
+                    serde_json::json!({"id": "r2", "job": {"state": "succeeded", "queue": null}}),
                 ),
-            );
+            )
+            .expect("GET /api/v1/recordings/r3", status(404));
         let (client, script, _) = make_client(script);
-        let check = client.check_recording("r1", false).unwrap();
-        assert_eq!(check.summary, SummaryPoll::Waiting);
-        let wait = check.wait.unwrap();
+        let wait = client.queue_wait("r1").unwrap().unwrap();
         assert_eq!(wait.reason, "quota_window");
         assert_eq!(wait.resumes_at.as_deref(), Some("2026-10-02T09:00:00Z"));
         assert_eq!(wait.processor.map(|p| p.online), Some(true));
-        // Aviso desligado: com a etapa `done`, o resumo não é pedido.
-        let check = client.check_recording("r2", false).unwrap();
-        assert_eq!((check.summary, check.wait), (SummaryPoll::Waiting, None));
-        assert_eq!(script.seen().len(), 2);
-    }
-
-    #[test]
-    fn resumo_pronto_espera_ou_desiste() {
-        let versao = |status: &str, md: Option<&str>| serde_json::json!({"status": status, "content_md": md, "version": 1});
-        let gravacao = |resumo: &str| {
-            let etapas: Vec<_> = [
-                "received",
-                "preprocessing",
-                "transcription",
-                "fields",
-                "agenda_type",
-                "summary",
-            ]
-            .iter()
-            .map(|step| {
-                let state = if *step == "summary" { resumo } else { "done" };
-                serde_json::json!({"step": step, "state": state})
-            })
-            .collect();
-            json(200, serde_json::json!({"id": "r", "pipeline": etapas}))
-        };
-        let script = Script::default()
-            .expect("GET /api/v1/recordings/r1", gravacao("done"))
-            .expect(
-                "GET /api/v1/recordings/r1/summary",
-                json(
-                    200,
-                    serde_json::json!({
-                        "current": versao("done", Some("# Ata\n\n- decisão")),
-                        "generated": null, "pending": null, "version_count": 1
-                    }),
-                ),
-            )
-            .expect("GET /api/v1/recordings/r2", gravacao("active"))
-            .expect("GET /api/v1/recordings/r3", gravacao("failed"))
-            .expect("GET /api/v1/recordings/r4", gravacao("skipped"))
-            .expect("GET /api/v1/recordings/r5", gravacao("pending"))
-            .expect("GET /api/v1/recordings/r6", status(404))
-            .expect("GET /api/v1/recordings/r7", gravacao("done"))
-            .expect(
-                "GET /api/v1/recordings/r7/summary",
-                json(
-                    200,
-                    serde_json::json!({
-                        "current": null, "generated": null,
-                        "pending": versao("running", None), "version_count": 1
-                    }),
-                ),
-            );
-        let (client, script, _) = make_client(script);
-        assert_eq!(
-            client.summary("r1").unwrap(),
-            SummaryPoll::Ready("# Ata\n\n- decisão".into())
-        );
-        assert_eq!(client.summary("r2").unwrap(), SummaryPoll::Waiting);
-        assert_eq!(client.summary("r3").unwrap(), SummaryPoll::Gone);
-        // Sem provedor ou sem tipo de pauta, o resumo é pulado: nada a esperar por 24 h.
-        assert_eq!(client.summary("r4").unwrap(), SummaryPoll::Gone);
-        assert_eq!(client.summary("r5").unwrap(), SummaryPoll::Waiting);
-        assert_eq!(client.summary("r6").unwrap(), SummaryPoll::Gone);
-        assert_eq!(client.summary("r7").unwrap(), SummaryPoll::Waiting);
-        let seen = script.seen();
-        // Enquanto a etapa não fica `done`, o resumo nem é pedido.
-        assert_eq!(seen.len(), 9);
-        assert!(seen.iter().all(|request| request
+        assert_eq!(client.queue_wait("r2").unwrap(), None);
+        assert_eq!(client.queue_wait("r3").unwrap(), None);
+        assert!(script.seen().iter().all(|request| request
             .headers
             .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
     }
