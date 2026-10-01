@@ -1,5 +1,6 @@
 //! A conta do app (o lado do desktop da holetz/eclume#35): escolher o servidor e fixar a CA dele,
-//! entrar com e-mail e senha ou com o código de pareamento, e perceber quando a CA fixada mudou.
+//! entrar com e-mail e senha ou com o código de pareamento, e perceber quando a CA fixada mudou —
+//! trocando-a sozinho pela próxima raiz anunciada na rotação (holetz/eclume#101).
 //!
 //! As funções recebem a rede por [`Net`], para os testes roteirizarem as respostas; o estado do
 //! app (`state.rs`) guarda o servidor escolhido e aplica o resultado.
@@ -285,6 +286,7 @@ pub fn sign_in(
             let path = config_dir.join(pin::PINNED_FILE);
             std::fs::rename(pending, &path)
                 .with_context(|| format!("falha ao gravar {}", path.display()))?;
+            pin::forget_next(&path)?;
             Some(path)
         }
         None => None,
@@ -301,13 +303,38 @@ pub fn sign_in(
     })
 }
 
-/// A CA que o servidor serve hoje é outra que a fixada em `pinned`?
+/// A CA que o servidor serve hoje é outra que a fixada em `pinned`? Se a servida é a próxima
+/// guardada por [`learn_next`] e o descritor, lido fixando-a, não a contradiz, ela vira a fixada
+/// (`rename`) e a CA não conta como mudada: o sync e o updater seguem sem nova entrada.
 pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
     let pem =
         std::fs::read(pinned).with_context(|| format!("falha ao ler {}", pinned.display()))?;
-    let pinned = pin::root_from_pem(&pem)?;
+    let current = pin::root_from_pem(&pem)?;
     let served = pin::fetch_root(&*net.insecure(), web_url, None)?;
-    Ok(served.sha256 != pinned.sha256)
+    if served.sha256 == current.sha256 {
+        return Ok(false);
+    }
+    match pin::saved_next(pinned) {
+        Some(next) if next.sha256 == served.sha256 => {
+            let trust = TrustMode::Pinned(pin::next_path(pinned));
+            let info = server_info(net.verified(&trust)?, web_url)?;
+            if pin::confirm(&info, &next.sha256).is_err() {
+                return Ok(true);
+            }
+            pin::promote_next(pinned)?;
+            log::info!("CA do servidor trocada pela próxima anunciada ({})", next.sha256);
+            Ok(false)
+        }
+        _ => Ok(true),
+    }
+}
+
+/// Aprende a próxima raiz pelo descritor lido na conexão fixada em `pinned` (a raiz atual avaliza
+/// a nova, sem TOFU) e a guarda ao lado da fixada ([`pin::learn_next`]). Diz se gravou uma.
+pub fn learn_next(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
+    let transport = net.verified(&TrustMode::Pinned(pinned.to_path_buf()))?;
+    let info = server_info(Arc::clone(&transport), web_url)?;
+    pin::learn_next(&*transport, web_url, &info, pinned)
 }
 
 /// O `ca_path` é a CA fixada pela primeira execução (e não uma escolhida à mão em "Avançado").
@@ -682,6 +709,69 @@ pub(crate) mod tests {
         assert!(ca_changed(&shared, URL, &pinned).is_err());
         assert!(!is_pinned(&dir, Some(Path::new("/etc/ssl/outra.pem"))));
         assert!(!is_pinned(&dir, None));
+    }
+
+    fn other_ca() -> Result<HttpResponse> {
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: OTHER_CA.as_bytes().to_vec(),
+        })
+    }
+
+    const OTHER_CA: &str = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+
+    #[test]
+    fn proxima_raiz_aprendida_pela_conexao_fixada() {
+        let dir = dir("proxima");
+        let pinned = dir.join(pin::PINNED_FILE);
+        std::fs::write(&pinned, CA).unwrap();
+        let other_sha = pin::root_from_pem(OTHER_CA.as_bytes()).unwrap().sha256;
+        let mut announced = info(Some(CA_SHA256));
+        announced["ca_next_sha256"] = json!(other_sha);
+        let net = Arc::new(
+            ScriptNet::default()
+                .expect("verificado GET /api/v1/server", body(200, announced.clone()))
+                .expect("verificado GET /downloads/eclume-root-proxima.crt", other_ca())
+                .expect("verificado GET /api/v1/server", body(200, announced))
+                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256)))),
+        );
+        let shared = Shared(Arc::clone(&net));
+        assert!(learn_next(&shared, URL, &pinned).unwrap());
+        assert_eq!(pin::saved_next(&pinned).unwrap().sha256, other_sha);
+        assert!(!learn_next(&shared, URL, &pinned).unwrap(), "já guardada");
+        assert!(!learn_next(&shared, URL, &pinned).unwrap());
+        assert!(pin::saved_next(&pinned).is_none(), "sem anúncio, a próxima sai");
+        assert!(net.done());
+        let trusts = net.trusts.lock().unwrap();
+        assert!(trusts.iter().all(|trust| *trust == TrustMode::Pinned(pinned.clone())));
+    }
+
+    #[test]
+    fn troca_pela_proxima_quando_e_a_servida() {
+        let dir = dir("troca-proxima");
+        let pinned = dir.join(pin::PINNED_FILE);
+        std::fs::write(&pinned, CA).unwrap();
+        let other = pin::root_from_pem(OTHER_CA.as_bytes()).unwrap();
+        pin::save_next(&other, &pinned).unwrap();
+        let net = Arc::new(
+            ScriptNet::default()
+                .expect("inseguro GET /downloads/eclume-root.crt", other_ca())
+                .expect("verificado GET /api/v1/server", body(200, info(Some(&other.sha256))))
+                .expect("inseguro GET /downloads/eclume-root.crt", pem()),
+        );
+        let shared = Shared(Arc::clone(&net));
+        assert!(!ca_changed(&shared, URL, &pinned).unwrap());
+        let now_pinned = std::fs::read(&pinned).unwrap();
+        assert_eq!(pin::root_from_pem(&now_pinned).unwrap().sha256, other.sha256);
+        assert!(pin::saved_next(&pinned).is_none());
+        assert_eq!(
+            *net.trusts.lock().unwrap(),
+            vec![TrustMode::Pinned(pin::next_path(&pinned))]
+        );
+        // Outra raiz, que não é a próxima anunciada: a CA mudou de fato.
+        assert!(ca_changed(&shared, URL, &pinned).unwrap());
+        assert!(net.done());
     }
 
     #[test]

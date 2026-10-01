@@ -7,7 +7,7 @@ tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126, holetz/eclume#102
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126, holetz/eclume#102, holetz/eclume#101
 maintainer: holetz
 ---
 
@@ -120,6 +120,11 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   `ECLUME_SERVER_CA_SHA256` das **variáveis do repositório** (gravadas pela holetz/eclume#35, ao
   lado de `ECLUME_DOWNLOADS_URL`); o `release-desktop.sh` as lê por `gh variable get` e aceita
   override pelo ambiente.
+- **Na virada da raiz** (holetz/eclume#101), `ECLUME_SERVER_CA_SHA256` muda para a impressão da
+  raiz própria e exige um release do desktop logo depois: os instaladores em `/downloads` embutem
+  a impressão velha e, numa instalação nova, a primeira execução recusaria a raiz servida. Os apps
+  já instalados atravessam a virada sozinhos pela próxima raiz guardada
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)).
 - O app os lê por `option_env!` (`config::embedded_server`), com
   `cargo:rerun-if-env-changed` no `build.rs`. Variável vazia ou endereço inválido não embutem
   nada; um build local, sem elas, não tem servidor embutido.

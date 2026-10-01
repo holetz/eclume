@@ -7,7 +7,7 @@ tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101
 maintainer: holetz
 ---
 
@@ -263,9 +263,17 @@ O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispos
   recusa `http://` fora de `localhost` e `127.0.0.1`.
 - **Com a conta ativa**, a aba Servidor não troca o endereço nem a CA: a credencial e a CA fixada
   valem para aquele servidor ("Saia da conta antes de trocar o servidor ou a CA").
-- **A CA mudou.** Depois de uma falha no sync com a CA fixada, `account::ca_changed` baixa a raiz
-  de novo e compara com a guardada. Se mudou, o sync para com "O certificado do servidor mudou" e
-  a janela volta à primeira execução, onde a pessoa escolhe o servidor e entra de novo.
+- **A próxima raiz** (holetz/eclume#101). Com a CA fixada, o laço do sync lê, no máximo a cada
+  6 h (10 min depois de uma falha), o descritor pela conexão fixada (`account::learn_next`): com
+  `ca_next_sha256`, baixa `/downloads/eclume-root-proxima.crt` pela mesma conexão, confere o
+  SHA-256 e grava um certificado só em `<config_dir>/servidor-ca.proxima.pem`; sem anúncio, apaga
+  a guardada. Entrar de novo também a apaga.
+- **A CA mudou.** Depois de uma falha no sync (envio ou leitura dos desfechos) com a CA fixada,
+  `account::ca_changed` baixa a raiz de novo e compara com a guardada. Se a servida é a próxima
+  guardada, lê o descritor fixando a próxima e, se ele não a contradiz, troca a fixada por ela
+  (`rename`): o sync e o updater seguem sem nova entrada. Se mudou para outra, o sync para com "O
+  certificado do servidor mudou" e a janela volta à primeira execução, onde a pessoa escolhe o
+  servidor e entra de novo.
 - **Comandos** da janela: `discover_servers`, `prepare_server(url, ca_sha256?)` (devolve `{name,
   url, ca_sha256, trusted_by}`, com `trusted_by` `fingerprint`, `first_use`, `system` ou
   `unencrypted`), `confirm_server(url, ca_sha256?)`, `sign_in`, `pair`, `sign_out`, `test_connection`, `open_signup` (abre

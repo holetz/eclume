@@ -696,3 +696,72 @@ fn ca_guardada_com_certificado_a_mais_pede_nova_entrada() {
         comum::CA_PEM
     );
 }
+
+/// Rotação da raiz: a sonda guarda a próxima anunciada pelo descritor fixado e, quando o servidor
+/// vira (o TLS recusa a fixada), troca por ela sem parear de novo; outra troca sem anúncio segue
+/// acusando a CA mudada.
+#[test]
+fn ca_trocada_pela_proxima_sem_parear_de_novo() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use eclume_mobile_core::{sondar as sondar_nucleo, trancar};
+
+    const OUTRA_CA: &str = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    let outra = eclume_sync::pin::root_from_pem(OUTRA_CA.as_bytes()).unwrap();
+    let outra = outra.sha256;
+    let (nucleo, roteiro, _guard) = nucleo_conectado("proxima");
+    let anunciada = outra.clone();
+    roteiro.responde(
+        "GET",
+        "/api/v1/server",
+        json(
+            200,
+            serde_json::json!({"name": "eclume", "url": URL, "ca_sha256": CA_SHA256,
+                "ca_next_sha256": anunciada}),
+        ),
+    );
+    roteiro.responde(
+        "GET",
+        "/downloads/eclume-root-proxima.crt",
+        comum::texto(200, OUTRA_CA),
+    );
+    trancar(&nucleo).unwrap().mudou_rede(true);
+    assert!(sondar_nucleo(&nucleo, true).unwrap().na_rede);
+    let proxima = eclume_sync::pin::next_path(&trancar(&nucleo).unwrap().dirs().ca());
+    assert_eq!(std::fs::read_to_string(&proxima).unwrap(), OUTRA_CA);
+
+    // A virada: a sonda pela fixada falha no TLS; a conferência pela próxima responde com ela.
+    let chamadas = Arc::new(AtomicUsize::new(0));
+    let (contador, virada) = (Arc::clone(&chamadas), outra.clone());
+    roteiro.responde_com("GET", "/api/v1/server", move || {
+        if contador.fetch_add(1, Ordering::SeqCst) % 2 == 0 {
+            comum::falha("invalid peer certificate: UnknownIssuer")
+        } else {
+            json(
+                200,
+                serde_json::json!({"name": "eclume", "url": URL, "ca_sha256": virada}),
+            )
+        }
+    });
+    assert!(sondar_nucleo(&nucleo, true).unwrap().na_rede);
+    {
+        let core = trancar(&nucleo).unwrap();
+        assert_eq!(core.config().servidor.as_ref().unwrap().ca_sha256, outra);
+        assert_eq!(
+            std::fs::read_to_string(core.dirs().ca()).unwrap(),
+            OUTRA_CA
+        );
+        assert!(!proxima.exists());
+        assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
+    }
+
+    // Outra raiz, sem próxima guardada: a CA mudou de fato.
+    roteiro.responde(
+        "GET",
+        "/api/v1/server",
+        comum::falha("invalid peer certificate: UnknownIssuer"),
+    );
+    assert!(!sondar_nucleo(&nucleo, true).unwrap().na_rede);
+    let core = trancar(&nucleo).unwrap();
+    assert_eq!(core.estado().unwrap().rede, EstadoRede::CaMismatch);
+}

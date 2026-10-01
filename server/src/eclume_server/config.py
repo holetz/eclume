@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     server_name: str = "eclume"
     # PEM da CA raiz que os apps fixam (em produção, a publicada em /downloads/eclume-root.crt).
     ca_file: str | None = None
+    # PEM da próxima raiz durante a rotação (em produção, /downloads/eclume-root-proxima.crt); o
+    # descritor a anuncia em `ca_next_sha256` pela conexão já fixada na raiz atual.
+    ca_next_file: str | None = None
     # `false` só para dev em HTTP puro: o cookie Secure não volta por HTTP.
     cookie_secure: bool = True
     session_ttl_days: int = 14

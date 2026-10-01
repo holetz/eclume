@@ -1,4 +1,4 @@
-"""Descritor público do servidor: nome, endereços, impressão digital da CA raiz e versões."""
+"""Descritor público do servidor: nome, endereços, impressões digitais da CA raiz (e da próxima) e versões."""
 
 from __future__ import annotations
 
@@ -49,6 +49,7 @@ def server_info(settings: Settings, base_url: str) -> dict[str, Any]:
         "url": url,
         "mcp_url": f"{url}/mcp",
         "ca_sha256": ca_sha256(settings.ca_file),
+        "ca_next_sha256": ca_sha256(settings.ca_next_file),
         "version": __version__,
         "contract_version": CONTRACT_VERSION,
     }

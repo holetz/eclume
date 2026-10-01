@@ -12,6 +12,11 @@
 //! Um arquivo fixado gravado antes com mais de um certificado é regravado só com o primeiro por
 //! [`trim_saved`]; o app trata o caso como possível interceptação e pede nova entrada
 //! ([`CA_TRIMMED`]).
+//!
+//! Rotação anunciada (holetz/eclume#101): o descritor, lido pela conexão fixada na raiz atual,
+//! traz `ca_next_sha256`; o app baixa a próxima raiz por essa mesma conexão ([`fetch_next`]) e a
+//! guarda à parte ([`save_next`], um certificado só). Quando o servidor passa a servi-la, o app a
+//! promove a fixada ([`promote_next`]) em vez de pedir nova entrada.
 
 use std::path::{Path, PathBuf};
 
@@ -27,6 +32,8 @@ use crate::transport::{HttpRequest, Transport};
 pub const ROOT_PATH: &str = "/downloads/eclume-root.crt";
 /// O arquivo da CA fixada, na pasta de configuração do app.
 pub const PINNED_FILE: &str = "servidor-ca.pem";
+/// Onde a próxima raiz fica publicada durante a rotação.
+pub const NEXT_PATH: &str = "/downloads/eclume-root-proxima.crt";
 /// A mensagem quando a raiz do servidor não é mais a fixada.
 pub const CA_CHANGED: &str = "O certificado do servidor mudou";
 /// A mensagem quando a CA fixada guardada tinha certificados a mais e foi regravada só com o
@@ -110,12 +117,16 @@ pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
     })
 }
 
-/// Baixa a raiz de `url` por `insecure` (um transporte sem verificação de TLS, usado só aqui) e
-/// confere com `expected`; sem `expected`, devolve a raiz para a pessoa conferir (TOFU).
-pub fn fetch_root(insecure: &dyn Transport, url: &str, expected: Option<&str>) -> Result<RootCa> {
+/// Baixa o certificado em `<url><path>` por `transport` e confere com `expected`, se houver.
+fn download(
+    transport: &dyn Transport,
+    url: &str,
+    path: &str,
+    expected: Option<&str>,
+) -> Result<RootCa> {
     let base = parse_base(url)?;
-    let address = format!("{}{ROOT_PATH}", base.as_str().trim_end_matches('/'));
-    let response = insecure
+    let address = format!("{}{path}", base.as_str().trim_end_matches('/'));
+    let response = transport
         .send(HttpRequest::new("GET", address.clone()))
         .with_context(|| format!("não foi possível falar com o servidor em {base}"))?;
     if !response.is_success() {
@@ -133,6 +144,18 @@ pub fn fetch_root(insecure: &dyn Transport, url: &str, expected: Option<&str>) -
     Ok(root)
 }
 
+/// Baixa a raiz de `url` por `insecure` (um transporte sem verificação de TLS, usado só aqui) e
+/// confere com `expected`; sem `expected`, devolve a raiz para a pessoa conferir (TOFU).
+pub fn fetch_root(insecure: &dyn Transport, url: &str, expected: Option<&str>) -> Result<RootCa> {
+    download(insecure, url, ROOT_PATH, expected)
+}
+
+/// Baixa a próxima raiz por `pinned` (o transporte fixado na raiz atual, que avaliza a nova) e
+/// confere com o `ca_next_sha256` do descritor.
+pub fn fetch_next(pinned: &dyn Transport, url: &str, expected: &str) -> Result<RootCa> {
+    download(pinned, url, NEXT_PATH, Some(expected))
+}
+
 /// Grava a raiz em `<config_dir>/servidor-ca.pem` e devolve o caminho, o `ca_path` do app.
 pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(config_dir)
@@ -141,6 +164,76 @@ pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
     std::fs::write(&path, &root.pem)
         .with_context(|| format!("falha ao gravar {}", path.display()))?;
     Ok(path)
+}
+
+/// Grava `pem` em `path` por um temporário e `rename`: quem lê nunca vê o arquivo pela metade.
+fn write_atomic(path: &Path, pem: &[u8]) -> Result<()> {
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(".novo");
+    let temp = PathBuf::from(temp);
+    std::fs::write(&temp, pem).with_context(|| format!("falha ao gravar {}", temp.display()))?;
+    std::fs::rename(&temp, path)
+        .with_context(|| format!("falha ao substituir {}", path.display()))
+}
+
+/// Onde a próxima raiz fica, ao lado da fixada: `servidor-ca.pem` → `servidor-ca.proxima.pem` no
+/// desktop, `ca.pem` → `ca.proxima.pem` no celular.
+pub fn next_path(pinned: &Path) -> PathBuf {
+    pinned.with_extension("proxima.pem")
+}
+
+/// Grava a próxima raiz ao lado da fixada em `pinned` (um certificado só) e devolve o caminho.
+pub fn save_next(root: &RootCa, pinned: &Path) -> Result<PathBuf> {
+    let path = next_path(pinned);
+    write_atomic(&path, &root.pem)?;
+    Ok(path)
+}
+
+/// A próxima raiz guardada ao lado da fixada em `pinned`, se houver uma legível.
+pub fn saved_next(pinned: &Path) -> Option<RootCa> {
+    let pem = std::fs::read(next_path(pinned)).ok()?;
+    root_from_pem(&pem).ok()
+}
+
+/// Apaga a próxima raiz guardada ao lado de `pinned` (o servidor deixou de anunciá-la, ou a
+/// pessoa entrou de novo); sem arquivo, nada a fazer.
+pub fn forget_next(pinned: &Path) -> Result<()> {
+    let path = next_path(pinned);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("falha ao apagar {}", path.display())),
+    }
+}
+
+/// Guarda a próxima raiz que `info` anuncia (`ca_next_sha256`, no descritor lido por `transport`,
+/// fixado na raiz atual em `pinned`): baixa-a pela mesma conexão, confere e grava ao lado da
+/// fixada. Sem anúncio, apaga a próxima guardada antes. Diz se gravou uma nova.
+pub fn learn_next(
+    transport: &dyn Transport,
+    url: &str,
+    info: &ServerInfo,
+    pinned: &Path,
+) -> Result<bool> {
+    let Some(announced) = info.ca_next_sha256.as_deref() else {
+        forget_next(pinned)?;
+        return Ok(false);
+    };
+    let next = normalize_fingerprint(announced)?;
+    if saved_next(pinned).is_some_and(|saved| saved.sha256 == next) {
+        return Ok(false);
+    }
+    let root = fetch_next(transport, url, &next)?;
+    save_next(&root, pinned)?;
+    Ok(true)
+}
+
+/// Troca a fixada em `pinned` pela próxima guardada ao lado (`rename`, o arquivo inteiro de uma
+/// vez): o transporte fixado e o updater passam a confiar só nela.
+pub fn promote_next(pinned: &Path) -> Result<()> {
+    let next = next_path(pinned);
+    std::fs::rename(&next, pinned)
+        .with_context(|| format!("falha ao substituir {}", pinned.display()))
 }
 
 /// Regrava o arquivo fixado em `path` só com o primeiro certificado (temporário + `rename`) e
@@ -154,13 +247,7 @@ pub fn trim_saved(path: &Path) -> Result<usize> {
     }
     let root = root_from_pem(&pem)
         .with_context(|| format!("CA inválida em {}", path.display()))?;
-    let mut temp = path.as_os_str().to_owned();
-    temp.push(".novo");
-    let temp = PathBuf::from(temp);
-    std::fs::write(&temp, &root.pem)
-        .with_context(|| format!("falha ao gravar {}", temp.display()))?;
-    std::fs::rename(&temp, path)
-        .with_context(|| format!("falha ao substituir {}", path.display()))?;
+    write_atomic(path, &root.pem)?;
     Ok(total - 1)
 }
 
@@ -196,6 +283,7 @@ mod tests {
             name: "eclume".into(),
             url: "https://eclume.test:8443".into(),
             ca_sha256: ca.map(str::to_string),
+            ca_next_sha256: None,
             version: "0.1.0".into(),
             contract_version: "2.3.0".into(),
         }
@@ -301,6 +389,38 @@ mod tests {
             1,
             "o PEM gravado serve de ca_path"
         );
+    }
+
+    #[test]
+    fn proxima_raiz_conferida_guardada_e_promovida() {
+        let dir = std::env::temp_dir().join(format!("eclume-pin-proxima-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let pinned = save(&root_from_pem(OTHER_CA.as_bytes()).unwrap(), &dir).unwrap();
+        assert_eq!(next_path(&pinned), dir.join("servidor-ca.proxima.pem"));
+        assert_eq!(next_path(Path::new("ca.pem")), Path::new("ca.proxima.pem"));
+
+        let script = Script::default()
+            .expect("GET /downloads/eclume-root-proxima.crt", pem(CA))
+            .expect("GET /downloads/eclume-root-proxima.crt", pem(CA));
+        let url = "https://eclume.test:8443/";
+        let err = fetch_next(&script, url, &"0".repeat(64)).unwrap_err();
+        assert!(format!("{err:#}").contains("não confere"), "{err:#}");
+        let next = fetch_next(&script, url, CA_SHA256).unwrap();
+
+        assert!(saved_next(&pinned).is_none());
+        save_next(&next, &pinned).unwrap();
+        assert_eq!(saved_next(&pinned).unwrap().sha256, CA_SHA256);
+        promote_next(&pinned).unwrap();
+        let promoted = std::fs::read(&pinned).unwrap();
+        assert_eq!(root_from_pem(&promoted).unwrap().sha256, CA_SHA256);
+        assert_eq!(certificates(&promoted).len(), 1);
+        assert!(saved_next(&pinned).is_none());
+
+        forget_next(&pinned).unwrap();
+        save_next(&next, &pinned).unwrap();
+        forget_next(&pinned).unwrap();
+        assert!(!next_path(&pinned).exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

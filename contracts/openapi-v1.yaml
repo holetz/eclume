@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.20.0
+  version: 2.21.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -5017,6 +5017,14 @@ components:
           description: >-
             SHA-256, em hex minúsculo, do DER do certificado raiz servido em
             `/downloads/eclume-root.crt`; `null` enquanto a raiz não foi publicada.
+          type: [string, "null"]
+          pattern: "^[0-9a-f]{64}$"
+        ca_next_sha256:
+          description: >-
+            Desde a 2.21.0. SHA-256, em hex minúsculo, do DER da próxima raiz durante a rotação,
+            servida em `/downloads/eclume-root-proxima.crt`; ausente ou `null` fora dela. O app
+            com a raiz atual fixada baixa a próxima por essa mesma conexão, confere a impressão e a
+            guarda para trocar sozinho quando o servidor passar a servi-la.
           type: [string, "null"]
           pattern: "^[0-9a-f]{64}$"
         version:

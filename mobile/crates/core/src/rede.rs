@@ -3,9 +3,16 @@
 //! Wi-Fi, o núcleo roda a sonda e registra o resultado, e o estado sai daqui.
 //!
 //! Fora do Wi-Fi não medido, a sonda não roda e nenhum byte sai pelos dados móveis.
+//!
+//! Na rotação da raiz (holetz/eclume#101), a sonda que responde guarda a próxima raiz anunciada
+//! no descritor ([`sondar_e_aprender`]); quando a CA muda, o núcleo confere a próxima
+//! ([`confere_proxima`]) e a troca pela fixada antes de acusar `CaMudou`.
 
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
+use eclume_sync::api::ServerInfo;
 use eclume_sync::pin;
 use eclume_sync::transport::Transport;
 use eclume_sync::Devices;
@@ -145,18 +152,42 @@ impl Rede {
 
 /// Roda a sonda: `GET /api/v1/server` pelo transporte fixado (com [`PRAZO_DA_SONDA`]) e confere
 /// a impressão digital anunciada com a fixada.
-pub fn sondar(transport: std::sync::Arc<dyn Transport>, servidor: &Servidor) -> Sonda {
+pub fn sondar(transport: Arc<dyn Transport>, servidor: &Servidor) -> Sonda {
+    ler(transport, servidor).0
+}
+
+/// A sonda que, com a CA fixada em `ca` confirmada, guarda também a próxima raiz anunciada pelo
+/// descritor ([`pin::learn_next`], pela mesma conexão). Uma falha ao guardá-la não muda a sonda.
+pub fn sondar_e_aprender(transport: Arc<dyn Transport>, servidor: &Servidor, ca: &Path) -> Sonda {
+    let (sonda, info) = ler(Arc::clone(&transport), servidor);
+    if let Some(info) = info {
+        if let Err(err) = pin::learn_next(transport.as_ref(), &servidor.url, &info, ca) {
+            log::info!("não deu para guardar a próxima CA: {err:#}");
+        }
+    }
+    sonda
+}
+
+/// O descritor, lido pelo transporte fixado na próxima raiz, a confirma (`proxima`, o SHA-256)?
+pub fn confere_proxima(transport: Arc<dyn Transport>, servidor: &Servidor, proxima: &str) -> bool {
+    Devices::new(transport, &servidor.url)
+        .and_then(|d| d.server_info())
+        .is_ok_and(|info| pin::confirm(&info, proxima).is_ok())
+}
+
+/// A sonda e, quando ela confirma a CA fixada, o descritor lido.
+fn ler(transport: Arc<dyn Transport>, servidor: &Servidor) -> (Sonda, Option<ServerInfo>) {
     let info = Devices::new(transport, &servidor.url).and_then(|d| d.server_info());
     match info {
         Ok(info) => match pin::confirm(&info, &servidor.ca_sha256) {
-            Ok(()) => Sonda::Ok,
-            Err(_) => Sonda::CaMudou,
+            Ok(()) => (Sonda::Ok, Some(info)),
+            Err(_) => (Sonda::CaMudou, None),
         },
         // Com a CA fixada, uma cadeia de outra raiz falha no TLS: é a CA que mudou, não a rede.
-        Err(err) if erro_de_certificado(&err) => Sonda::CaMudou,
+        Err(err) if erro_de_certificado(&err) => (Sonda::CaMudou, None),
         Err(err) => {
             log::info!("sonda sem resposta: {err:#}");
-            Sonda::SemResposta
+            (Sonda::SemResposta, None)
         }
     }
 }

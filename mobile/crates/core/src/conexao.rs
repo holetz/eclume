@@ -15,6 +15,10 @@
 //! confirma o `ca_sha256`. O token do dispositivo fica no arquivo privado fora do backup. Um
 //! `ca.pem` antigo com certificados a mais é regravado com um só na abertura (`Core::abrir`), e a
 //! credencial é apagada com o motivo [`pin::CA_TRIMMED`] (holetz/eclume#102).
+//!
+//! Rotação da raiz (holetz/eclume#101): a sonda guarda em `ca.proxima.pem` a próxima raiz que o
+//! descritor fixado anuncia; quando o servidor vira, [`Conexao::promover_proxima`] a troca pela
+//! fixada por `rename`, sem nova entrada nem novo pareamento.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -208,6 +212,32 @@ impl Conexao {
         self.transportes.fixado(&self.dirs.ca(), prazo)
     }
 
+    /// A próxima raiz guardada pela sonda e o transporte fixado nela, para conferir a troca fora
+    /// da trava do núcleo; `None` sem próxima guardada.
+    pub fn proxima(&self, prazo: Duration) -> Result<Option<(RootCa, Arc<dyn Transport>)>> {
+        let ca = self.dirs.ca();
+        let Some(raiz) = pin::saved_next(&ca) else {
+            return Ok(None);
+        };
+        let transporte = self.transportes.fixado(&pin::next_path(&ca), prazo)?;
+        Ok(Some((raiz, transporte)))
+    }
+
+    /// O servidor virou para a próxima raiz e o descritor fixado nela a confirmou: ela vira a CA
+    /// fixada (`rename`) e a impressão nova vai para a config. O aparelho segue pareado.
+    pub fn promover_proxima(&mut self, raiz: &RootCa, config: &mut Config) -> Result<()> {
+        let ca = self.dirs.ca();
+        if pin::saved_next(&ca).is_none_or(|guardada| guardada.sha256 != raiz.sha256) {
+            bail!("a próxima CA guardada mudou durante a conferência");
+        }
+        pin::promote_next(&ca)?;
+        if let Some(servidor) = config.servidor.as_mut() {
+            servidor.ca_sha256 = raiz.sha256.clone();
+        }
+        log::info!("CA do servidor trocada pela próxima anunciada ({})", raiz.sha256);
+        config.salvar(&self.dirs.config())
+    }
+
     /// Um servidor achado pelo mDNS: baixa a raiz, confere com o `ca` anunciado e espera a pessoa
     /// conferir a impressão digital (o TXT não é autenticado).
     pub fn conectar_descoberto(&mut self, url: &str, ca_anunciada: Option<&str>) -> Result<()> {
@@ -278,6 +308,7 @@ impl Conexao {
         };
         std::fs::rename(&provisoria, &ca)
             .with_context(|| format!("falha ao gravar {}", ca.display()))?;
+        pin::forget_next(&ca)?;
         if config
             .servidor
             .as_ref()
@@ -368,6 +399,7 @@ impl Conexao {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err).context("falha ao apagar a CA"),
         }
+        pin::forget_next(&self.dirs.ca())?;
         config.servidor = None;
         config.tipos_de_agenda.clear();
         config.salvar(&self.dirs.config())

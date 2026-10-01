@@ -111,6 +111,8 @@ describe('artigo da ajuda', () => {
     openHelp('/ajuda/certificado-do-servidor')
     const download = await screen.findByRole('link', { name: '/downloads/eclume-root.crt' })
     expect(download).toHaveAttribute('href', '/downloads/eclume-root.crt')
+    const next = screen.getByRole('link', { name: 'a próxima raiz' })
+    expect(next).toHaveAttribute('href', '/downloads/eclume-root-proxima.crt')
   })
 
   it('um link para outro artigo navega sem recarregar', async () => {

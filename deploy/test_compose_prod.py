@@ -174,3 +174,44 @@ def test_healthcheck_em_todo_servico_da_aplicacao_que_fica_no_ar() -> None:
     """Server e workers têm healthcheck."""
     for name in ("server", "worker-cpu", "worker-agents", "worker-gpu"):
         assert "healthcheck" in SERVICES[name], name
+
+
+def test_ca_caddy_monta_so_a_pasta_da_raiz_e_so_leitura() -> None:
+    volumes = SERVICES["caddy"]["volumes"]
+    assert "${ECLUME_DATA_DIR}/secrets/ca:/etc/caddy/ca:ro" in volumes
+    assert not [v for v in volumes if re.search(r"/secrets(/?:|/(?!ca:))", v)]
+
+
+def test_ca_caddyfile_define_a_raiz_propria_e_emite_pela_ativa() -> None:
+    caddyfile = CONFIGS["caddyfile"]["content"]
+    assert re.search(
+        r"pki \{\s*ca eclume \{.*?root \{\s*cert /etc/caddy/ca/raiz\.crt\s*key /etc/caddy/ca/raiz\.key",
+        caddyfile,
+        re.DOTALL,
+    )
+    assert re.search(r"issuer internal \{\s*ca \$\{ECLUME_TLS_CA:-local\}\s*\}", caddyfile)
+    assert "tls internal" not in caddyfile
+
+
+def test_ca_publish_publica_a_ativa_e_a_proxima() -> None:
+    publish = SERVICES["publish-ca"]
+    assert "${ECLUME_DATA_DIR}/secrets/ca:/ca:ro" in publish["volumes"]
+    script = publish["entrypoint"][-1]
+    ativa_eclume, ativa_local = script.split("else", 1)
+    assert '"${ECLUME_TLS_CA:-local}" = eclume' in ativa_eclume
+    assert "/ca/raiz.crt /downloads/eclume-root.crt" in ativa_eclume
+    assert "rm -f /downloads/eclume-root-proxima.crt" in ativa_eclume
+    assert "authorities/local/root.crt /downloads/eclume-root.crt" in ativa_local
+    assert "/ca/raiz.crt /downloads/eclume-root-proxima.crt" in ativa_local
+
+
+@pytest.mark.parametrize("service", ["server", "mdns"])
+def test_ca_proxima_no_descritor_e_no_anuncio(service: str) -> None:
+    env = _env(service)
+    assert env["ECLUME_CA_FILE"] == "/srv/downloads/eclume-root.crt"
+    assert env["ECLUME_CA_NEXT_FILE"] == "/srv/downloads/eclume-root-proxima.crt"
+
+
+def test_ca_instalacao_nova_ja_nasce_restrita() -> None:
+    assert re.search(r"^ECLUME_TLS_CA=eclume$", ENV_EXAMPLE, re.MULTILINE)
+    assert re.search(r"^ECLUME_CA_NOMES=", ENV_EXAMPLE, re.MULTILINE)

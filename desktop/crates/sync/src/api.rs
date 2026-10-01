@@ -133,6 +133,9 @@ pub struct ServerInfo {
     pub url: String,
     /// SHA-256 (hex minúsculo) do DER da CA raiz; `None` enquanto a raiz não foi publicada.
     pub ca_sha256: Option<String>,
+    /// A próxima raiz durante a rotação (contrato 2.21.0); `None` fora dela.
+    #[serde(default)]
+    pub ca_next_sha256: Option<String>,
     #[serde(default)]
     pub version: String,
     #[serde(default)]
