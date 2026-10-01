@@ -38,6 +38,9 @@ export default function App() {
 }
 
 function Tela({ estado, rota, ir }: { estado: EstadoApp; rota: string; ir: (rota: string) => void }) {
+  // Uma gravação (ou a folha "Gravação salva") em curso fica na tela, seja qual for a fase da
+  // conexão: um 401 no meio da gravação não tira Pausar, Marcador e Parar.
+  if (estado.sessao || estado.folha) return <Gravando estado={estado} />
   const conexao = estado.conexao
   switch (conexao.fase) {
     case 'sem_servidor':
@@ -50,7 +53,6 @@ function Tela({ estado, rota, ir }: { estado: EstadoApp; rota: string; ir: (rota
       if (rota === '/ler-codigo') return <LerCodigo ir={ir} voltarPara="/entrar" />
       return <Entrar servidor={conexao.servidor} ir={ir} />
     case 'conectado':
-      if (estado.sessao || estado.folha) return <Gravando estado={estado} />
       if (rota === '/configuracoes') return <Configuracoes ir={ir} espacoLivre={estado.espaco_livre} />
       if (rota.startsWith('/gravacao/')) return <Detalhe id={decodeURIComponent(rota.slice(10))} ir={ir} />
       return <Inicio estado={estado} ir={ir} />

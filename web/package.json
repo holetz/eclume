@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
+    "budget": "node scripts/bundle-budget.mjs",
     "test:e2e": "playwright test",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
@@ -36,6 +37,7 @@
     "react-router": "^8.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.2",

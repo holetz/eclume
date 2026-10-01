@@ -1,6 +1,6 @@
-// O início da gravação lido das fixtures reais (scripts/media-fixtures.sh), em Chrome headless
-// (npm run test:browser, no host de build): a data vem dos metadados do original, que a conversão
-// para Opus não carrega.
+// O início da gravação lido das fixtures reais (scripts/media-fixtures.sh), em Chrome, Firefox e
+// WebKit headless (npm run test:browser, no host de build): a data vem dos metadados do original,
+// que a conversão para Opus não carrega. Ler a data não decodifica nada: vale em qualquer motor.
 import { describe, expect, it } from 'vitest'
 import { convertAudio, readRecordedAt } from './index'
 

@@ -92,12 +92,25 @@ pub async fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> Resultado<(
     Ok(())
 }
 
+/// Gravar só confirma depois de o serviço entrar em primeiro plano: abrir o microfone e esperar o
+/// Kotlin rodam numa thread de bloqueio (comando síncrono roda na thread principal). Se o Android
+/// recusar o serviço, a gravação aberta é desfeita e a tela recebe o motivo.
 #[tauri::command]
-pub fn gravar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
-    let fonte = crate::microfone().map_err(texto)?;
-    let id = com_nucleo(&app, |c| c.gravar(fonte))?;
-    crate::servico::iniciar(&app);
-    Ok(id)
+pub async fn gravar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let fonte = crate::microfone().map_err(texto)?;
+        let id = com_nucleo(&app, |c| c.gravar(fonte))?;
+        if let Err(motivo) = crate::servico::iniciar(&app) {
+            log::warn!("serviço de gravação recusado: {motivo}");
+            com_nucleo(&app, Core::desfazer_gravacao)?;
+            return Err(format!(
+                "O Android não deixou gravar em segundo plano: {motivo}"
+            ));
+        }
+        Ok(id)
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]

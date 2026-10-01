@@ -146,6 +146,10 @@ usa o nome do arquivo e o preenchimento automático pode trocá-lo.
   próprio blob.
 - Provado em Chrome 154 headless no host (2026-09-24): o `AudioEncoder` aceita Opus a 16 kHz mono,
   e as oito fixtures convertem pelo WebCodecs.
+- Os mesmos testes rodam no Firefox e no WebKit do Playwright (holetz/eclume#113): cada motor
+  converte pelo caminho que tem (WebCodecs quando decodifica a faixa e codifica Opus, a reserva
+  ffmpeg.wasm quando não), e o que depende só do WebCodecs é pulado com o motivo. No WebKit, a
+  decodificação de Vorbis (MKV e OGG) pelo WebCodecs trava sem erro e é pulada (2026-10-01).
 - Na CI, o job `web-browser` roda `npm run fixtures && npm run test:browser` no Google Chrome que
   já vem no runner `ubuntu-latest`, com o ffmpeg instalado por apt.
 - Para validar à mão: `npm --prefix web run dev` e abrir `/media-convert.html` (só no dev, fora do

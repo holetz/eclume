@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
 import { featuredItem, isItemActive, NAV_ITEMS, navGroups } from './nav'
@@ -227,6 +227,26 @@ describe('AppShell', () => {
   })
 })
 
+describe('menu compacto acessível', () => {
+  it('abrir foca o primeiro link, Esc fecha e devolve o foco ao Menu, e o link da rota atual fecha', async () => {
+    const user = userEvent.setup()
+    renderShell(member, vi.fn(), '/pessoas')
+    const button = screen.getByRole('button', { name: 'Menu' })
+    await user.click(button)
+    const sidebar = document.getElementById(button.getAttribute('aria-controls')!)!
+    expect(sidebar.querySelector('a[href]')).toHaveFocus()
+
+    await user.keyboard('{Escape}')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveFocus()
+
+    await user.click(button)
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await user.click(within(nav).getByRole('link', { name: 'Pessoas' }))
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
 describe('PageHead e 404', () => {
   it('mostra kicker, título e ações, e dá o título da aba', () => {
     render(<PageHead kicker="Organizar" title="Pessoas" actions={<button type="button">Adicionar</button>} />)
@@ -242,5 +262,40 @@ describe('PageHead e 404', () => {
     expect(within(main).getByRole('heading', { level: 1, name: 'Página não encontrada' })).toBeInTheDocument()
     expect(within(main).getByRole('link', { name: 'Voltar à biblioteca' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('navigation', { name: 'Principal' })).toBeInTheDocument()
+  })
+})
+
+describe('foco na troca de rota', () => {
+  function renderPages() {
+    render(
+      <QueryClientProvider client={createQueryClient({ retry: false })}>
+        <MemoryRouter initialEntries={['/tokens']}>
+          <Routes>
+            <Route element={<AppShell user={member} onLogout={vi.fn()} />}>
+              <Route path="/tokens" element={<PageHead title="Tokens" />} />
+              <Route
+                path="/pessoas"
+                element={
+                  <PageHead title="Pessoas" actions={<Link to="?aba=falas">Falas</Link>} />
+                }
+              />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('não move o foco na primeira carga, foca o h1 da página nova e não move numa troca só de busca', async () => {
+    renderPages()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tokens' })).not.toHaveFocus()
+
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await userEvent.click(within(nav).getByRole('link', { name: 'Pessoas' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Pessoas' })).toHaveFocus()
+
+    const falas = screen.getByRole('link', { name: 'Falas' })
+    await userEvent.click(falas)
+    expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).not.toHaveFocus()
   })
 })

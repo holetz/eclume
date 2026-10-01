@@ -7,12 +7,12 @@ import { errorMessage, unwrap } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { useCollections } from '../collections/queries'
-import { shortDayLabel } from '../library/calendar'
+
 import { useUserFields } from '../library/queries'
 import { recordingAt, usePeopleOptions } from '../people/queries'
 import { useTags } from '../tags/queries'
 import { hms } from '../transcript/markers'
-import { PersonCombobox } from '../transcript/PersonCombobox'
+import { PersonCombobox } from '../people/PersonCombobox'
 import { speakerColorIndex, speakerName } from '../transcript/segments'
 import { FilterChip } from './FilterChip'
 import {
@@ -27,6 +27,7 @@ import {
 import { groupHits, totalLabel, type HitGroup } from './group'
 import { parseHighlight } from './highlight'
 import styles from './SearchPage.module.css'
+import { shortDayLabel } from '../../shared/format'
 
 const PERIOD_LABELS: Record<Exclude<Period, ''>, string> = {
   '7d': 'Últimos 7 dias',

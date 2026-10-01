@@ -86,6 +86,17 @@ describe('Configurações', () => {
     expect(screen.getByText('eclume para Android · v0.1.0')).toBeInTheDocument()
   })
 
+  it('mostra a isenção da otimização de bateria e pede quando falta', async () => {
+    const ponte = abrir('/configuracoes', (p) => {
+      p.aparelho = vi.fn(async () => ({ notificacoes: true, isencaoDeBateria: 'recusada' as const }))
+    })
+    expect(await screen.findByText('A otimização de bateria pode parar a gravação')).toBeInTheDocument()
+    ponte.aparelho = vi.fn(async () => ({ notificacoes: true, isencaoDeBateria: 'concedida' as const }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permitir' }))
+    expect(ponte.pedirIsencaoDeBateria).toHaveBeenCalled()
+    expect(await screen.findByText('Sem otimização de bateria')).toBeInTheDocument()
+  })
+
   it('sair confirma e lembra das gravações aguardando e de desvincular na web', async () => {
     const ponte = abrir('/configuracoes')
     await userEvent.click(await screen.findByRole('button', { name: 'Sair e esquecer o servidor' }))

@@ -17,8 +17,14 @@ export default defineConfig({
     timezoneId: 'America/Sao_Paulo',
     trace: 'retain-on-failure',
   },
-  // E2E_CHANNEL=chrome usa o Google Chrome instalado (CI); sem ele, o Chromium do Playwright.
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], channel: process.env.E2E_CHANNEL } }],
+  // E2E_CHANNEL=chrome usa o Google Chrome instalado (CI); sem ele, o Chromium do Playwright. O
+  // Chromium roda todos os cenários; WebKit e Firefox, só o smoke (`@smoke` no título), com uma
+  // nova tentativa: são o termômetro dos outros motores, não a suíte inteira.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: process.env.E2E_CHANNEL } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, grep: /@smoke/, retries: 1 },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, grep: /@smoke/, retries: 1 },
+  ],
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: `http://127.0.0.1:${PORT}`,

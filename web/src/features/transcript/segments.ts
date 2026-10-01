@@ -26,16 +26,6 @@ export function findSegmentAt(segments: readonly Pick<Segment, 'start_ms'>[], ms
   return found
 }
 
-/** "02:46" ou, com `withHours`, "0:02:46". */
-export function formatClock(ms: number, withHours = false): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-  const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-  return withHours || hours > 0 ? `${hours}:${mmss}` : mmss
-}
-
 /** Nome exibido do locutor: a pessoa ligada ou, sem pessoa, o rótulo. */
 export function speakerName(speaker: Pick<Speaker, 'label' | 'person'> | undefined): string {
   if (!speaker) return 'Locutor desconhecido'

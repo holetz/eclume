@@ -1,10 +1,12 @@
 import { onlineManager } from '@tanstack/react-query'
 import { act, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../test/fixtures'
 import { mockFetch, problem } from '../test/http'
-import { renderApp } from '../test/render'
+import { preloadRoute, renderApp } from '../test/render'
 import { ME_KEY } from './session'
+
+beforeAll(() => preloadRoute('/ajuda'))
 
 afterEach(() => {
   vi.unstubAllGlobals()

@@ -2,8 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useDeferredValue, useId, useState, type KeyboardEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { PEOPLE_KEY } from '../people/queries'
-import styles from './SpeakersPanel.module.css'
+import { PEOPLE_KEY } from './queries'
+import styles from './PersonCombobox.module.css'
 
 type Person = Schemas['Person']
 type Option = { kind: 'person'; person: Person } | { kind: 'create'; name: string }

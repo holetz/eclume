@@ -17,6 +17,7 @@ import {
 } from './queries'
 import { TagInput } from './TagInput'
 import { usePreview } from './usePreview'
+import { Switch } from '../../shared/Switch'
 
 const EMPTY: FieldDraft = { name: '', kind: 'text', options: [], instructions: '', auto_fill: true }
 
@@ -156,15 +157,9 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
         {hint('instructions')}
       </div>
 
-      <label className="switch">
-        <input
-          type="checkbox"
-          checked={draft.auto_fill ?? true}
-          onChange={(event) => set({ auto_fill: event.target.checked })}
-        />
-        <span className="track" />
+      <Switch checked={draft.auto_fill ?? true} onChange={(autoFill) => set({ auto_fill: autoFill })}>
         Preencher automaticamente depois da transcrição
-      </label>
+      </Switch>
 
       {save.isError && !Object.keys(errors).length && (
         <p className="alert alert-error" role="alert">

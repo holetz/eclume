@@ -32,14 +32,14 @@ export function Entrar({ servidor, ir }: { servidor: Servidor; ir: (rota: string
   return (
     <div className="m-body">
       <Voltar rotulo="Servidores" aoVoltar={trocarDeServidor} />
-      <div className="m-section" style={{ gap: 8 }}>
+      <div className="m-section gap-2">
         <h1 className="m-title">Entrar</h1>
-        <p style={{ margin: 0, fontSize: 15 }}>Use a conta que você tem na web.</p>
+        <p className="sem-margem texto-15">Use a conta que você tem na web.</p>
         <div className="code-block">
           <span>{new URL(servidor.url).host}</span>
         </div>
       </div>
-      <form className="m-section m-fill" style={{ gap: 16, alignContent: 'start' }} onSubmit={enviar}>
+      <form className="m-section m-fill gap-4 alinha-topo" onSubmit={enviar}>
         <div className="field">
           <label htmlFor="email">E-mail</label>
           <input
@@ -70,16 +70,14 @@ export function Entrar({ servidor, ir }: { servidor: Servidor; ir: (rota: string
         )}
         <button
           type="submit"
-          className="btn btn-primary"
-          style={{ justifyContent: 'flex-start' }}
+          className="btn btn-primary botao-inicio"
           disabled={ocupado || !email.trim() || !senha}
         >
           {ocupado ? 'Entrando…' : 'Entrar'}
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
-          style={{ justifyContent: 'flex-start' }}
+          className="btn btn-ghost botao-inicio"
           onClick={() => ir('/ler-codigo')}
         >
           Ler um código da web

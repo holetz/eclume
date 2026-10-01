@@ -3,7 +3,7 @@ import { tamanho } from '../app/formatos'
 import { IconeAjustes } from '../app/Icones'
 import { Marca } from '../app/Marca'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
-import type { EstadoApp, GravacaoLocal } from '../ponte/tipos'
+import type { Aparelho, EstadoApp, GravacaoLocal } from '../ponte/tipos'
 import { FaixaDeRede } from './FaixaDeRede'
 import { ListaDoCelular } from './ListaDoCelular'
 
@@ -20,6 +20,20 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
   const [gravacoes, setGravacoes] = useState<GravacaoLocal[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  const [semMicrofone, setSemMicrofone] = useState(false)
+  const [aparelho, setAparelho] = useState<Aparelho | null>(null)
+  const [explicandoBateria, setExplicandoBateria] = useState(false)
+
+  useEffect(() => {
+    let ativo = true
+    ponte
+      .aparelho()
+      .then((lido) => ativo && setAparelho(lido))
+      .catch(() => {})
+    return () => {
+      ativo = false
+    }
+  }, [ponte])
 
   // A lista acompanha o estado: a cada mudança de pendentes ou de rede, lê de novo.
   const chave = `${estado.pendentes}|${estado.rede.estado}|${estado.folha?.id ?? ''}`
@@ -37,9 +51,18 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
   async function gravar() {
     setOcupado(true)
     setErro(null)
+    setSemMicrofone(false)
     try {
-      if (!(await ponte.permissoes())) {
-        setErro('Sem o microfone, o eclume não grava. Permita o microfone nas configurações do Android.')
+      const permitido = await ponte.permissoes()
+      setAparelho((atual) => atual && { ...atual, notificacoes: permitido.notificacoes })
+      if (!permitido.microfone) {
+        setSemMicrofone(true)
+        setErro('Sem o microfone, o eclume não grava. Permita o microfone nas configurações do app.')
+        return
+      }
+      // Antes do primeiro Gravar sem a isenção, explica por que ela importa.
+      if (aparelho?.isencaoDeBateria === 'pedir') {
+        setExplicandoBateria(true)
         return
       }
       await ponte.gravar()
@@ -47,6 +70,28 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
       setErro(mensagemDeErro(e))
     } finally {
       setOcupado(false)
+    }
+  }
+
+  async function seguirDaBateria(pedir: boolean) {
+    setExplicandoBateria(false)
+    setOcupado(true)
+    try {
+      if (pedir) await ponte.pedirIsencaoDeBateria()
+      setAparelho(await ponte.aparelho())
+      await ponte.gravar()
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function abrirConfiguracoesDoApp() {
+    try {
+      await ponte.abrirConfiguracoesDoApp()
+    } catch (e) {
+      setErro(mensagemDeErro(e))
     }
   }
 
@@ -74,15 +119,27 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
         </button>
       </div>
       <FaixaDeRede rede={estado.rede} pendentes={estado.pendentes} />
+      {aparelho && !aparelho.notificacoes && (
+        <div className="alert alert-warning alerta-no-topo" role="status">
+          <span className="alert-title">Notificações bloqueadas</span>
+          <span>Sem elas, a gravação não aparece na tela bloqueada e você não fica sabendo se ela parar.</span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm alinha-inicio margem-topo-2"
+            onClick={abrirConfiguracoesDoApp}
+          >
+            Abrir configurações do app
+          </button>
+        </div>
+      )}
       {armazenamento && (
-        <div className="alert alert-warning" style={{ margin: '12px 20px 0' }} role="status">
+        <div className="alert alert-warning alerta-no-topo" role="status">
           <span className="alert-title">Armazenamento quase cheio</span>
           <span>{armazenamento.restante.replace(/^cerca/, 'Cerca')} de gravação.</span>
           {armazenamento.sincronizadas_bytes > 0 && (
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ justifySelf: 'start', marginTop: 8 }}
+              className="btn btn-secondary btn-sm alinha-inicio margem-topo-2"
               onClick={excluirSincronizadas}
             >
               Excluir sincronizadas · {tamanho(armazenamento.sincronizadas_bytes)}
@@ -97,10 +154,32 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
             <span className="m-rec-sub">Continua gravando com a tela bloqueada</span>
           </span>
         </button>
+        {explicandoBateria && (
+          <div className="alert alert-info" role="alertdialog" aria-label="Gravar com a tela bloqueada">
+            <span className="alert-title">Gravar com a tela bloqueada</span>
+            <span>
+              A otimização de bateria do Android pode parar a gravação com a tela apagada. Permita que o eclume
+              funcione em segundo plano.
+            </span>
+            <div className="duas-colunas margem-topo-2">
+              <button type="button" className="btn btn-primary" onClick={() => seguirDaBateria(true)}>
+                Permitir
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => seguirDaBateria(false)}>
+                Agora não
+              </button>
+            </div>
+          </div>
+        )}
         {erro && (
           <p className="erro" role="alert">
             {erro}
           </p>
+        )}
+        {semMicrofone && (
+          <button type="button" className="btn btn-secondary" onClick={abrirConfiguracoesDoApp}>
+            Abrir configurações do app
+          </button>
         )}
       </div>
       <ListaDoCelular gravacoes={gravacoes} resumo={resumo(estado)} abrir={(id) => ir(`/gravacao/${id}`)} />

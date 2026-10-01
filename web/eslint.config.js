@@ -19,6 +19,37 @@ export default defineConfig([
       ecmaVersion: 2023,
       globals: globals.browser,
     },
+    rules: {
+      // Estilo por classe (CSS Module ou app.css): `style` só leva custom property (--nome), como o
+      // ui_assets do desktop exige da UI estática e o lint do celular.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSXAttribute[name.name='style'] ObjectExpression > Property:not([key.type='Literal'][key.value=/^--/]):not([computed=true])",
+          message: 'Sem `style` fixo: use uma classe; `style` só com custom property (--nome).',
+        },
+      ],
+    },
+  },
+  {
+    // O painel admin é um app à parte: nenhuma feature do usuário o importa (src/test/boundaries.test.ts
+    // confere o mesmo, além dos ciclos entre features e de src/shared/).
+    files: ['src/features/**/*.{ts,tsx}'],
+    ignores: ['src/features/admin/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^\\.\\./(\\.\\./features/)?admin(/|$)',
+              message: 'Feature do usuário não importa features/admin/ (o painel admin é um app à parte).',
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     // A biblioteca de conversão é autocontida: nada nela importa do app.

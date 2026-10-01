@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { errorMessage } from '../../api/problem'
-import { Switch } from '../admin/Switch'
+import { Switch } from '../../shared/Switch'
 import styles from './Tags.module.css'
 import { useTagAssignment, useUpdateTagAssignment, type TagAssignment } from './queries'
 

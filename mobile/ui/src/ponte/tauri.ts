@@ -5,7 +5,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { cancel, Format, scan } from '@tauri-apps/plugin-barcode-scanner'
 import type { Ponte } from './ponte'
-import type { EstadoApp } from './tipos'
+import type { Aparelho, EstadoApp } from './tipos'
 
 export const ponteTauri: Ponte = {
   estado: () => invoke('estado'),
@@ -32,8 +32,14 @@ export const ponteTauri: Ponte = {
     const estados = await invoke<Record<string, string>>('plugin:eclume-gravador|request_permissions', {
       permissions: ['microfone', 'notificacoes'],
     })
-    return estados.microfone === 'granted'
+    return { microfone: estados.microfone === 'granted', notificacoes: estados.notificacoes === 'granted' }
   },
+  async aparelho() {
+    const aparelho = await invoke<Aparelho>('plugin:eclume-gravador|estado_do_dispositivo')
+    return { notificacoes: aparelho.notificacoes, isencaoDeBateria: aparelho.isencaoDeBateria }
+  },
+  abrirConfiguracoesDoApp: () => invoke('plugin:eclume-gravador|abrir_configuracoes_do_app'),
+  pedirIsencaoDeBateria: () => invoke('plugin:eclume-gravador|pedir_isencao_de_bateria'),
   gravar: () => invoke('gravar'),
   pausar: () => invoke('pausar'),
   continuar: () => invoke('continuar'),

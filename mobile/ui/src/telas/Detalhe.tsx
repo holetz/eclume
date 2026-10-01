@@ -83,15 +83,15 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
       )}
       {detalhe && gravacao && (
         <>
-          <div className="m-section" style={{ gap: 6, paddingTop: 4 }}>
+          <div className="m-section gap-curto topo-1">
             <span className="kicker">{dataLonga(gravacao.iniciada_em)}</span>
             <h1 className="m-title">{gravacao.titulo ?? 'Sem título'}</h1>
-            <span style={{ justifySelf: 'start' }}>
+            <span className="alinha-inicio">
               <SeloDaGravacao selo={gravacao.selo} />
             </span>
           </div>
           {detalhe.caminho && (
-            <div style={{ padding: '0 20px' }}>
+            <div className="recuo-lateral">
               <audio
                 ref={audio}
                 src={ponte.urlDoArquivo(detalhe.caminho)}
@@ -103,9 +103,8 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
               <div className="player">
                 <button
                   type="button"
-                  className="btn btn-primary btn-icon"
+                  className="btn btn-primary btn-icon botao-44"
                   aria-label={tocando ? 'Pausar' : 'Tocar'}
-                  style={{ width: 44, height: 44 }}
                   onClick={alternar}
                 >
                   {tocando ? <IconePausar /> : <IconeTocar />}
@@ -119,7 +118,7 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
           <div className="m-section">
             <div className="linha-entre">
               <span className="kicker">Marcadores</span>
-              <span className="text-muted" style={{ fontSize: 12 }}>
+              <span className="text-muted texto-12">
                 {detalhe.marcadores.length}
               </span>
             </div>
@@ -135,7 +134,7 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
             </ul>
           </div>
           {gravacao.remote_id && (
-            <div className="m-section" style={{ gap: 8 }}>
+            <div className="m-section gap-2">
               <span className="kicker">No servidor</span>
               <ol className="pipeline">
                 {ETAPAS.map((etapa) => (
@@ -146,27 +145,26 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
               </ol>
             </div>
           )}
-          <div className="m-section m-fill" style={{ gap: 8 }}>
-            <span className="text-muted" style={{ fontSize: 13 }}>
+          <div className="m-section m-fill gap-2">
+            <span className="text-muted texto-13">
               {detalhes}
             </span>
             {gravacao.selo === 'sincronizada' && !gravacao.apagada && (
               <>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-danger"
-                  style={{ justifyContent: 'flex-start' }}
+                  className="btn btn-secondary btn-danger botao-inicio"
                   onClick={excluir}
                 >
                   Excluir deste celular
                 </button>
-                <span className="text-muted" style={{ fontSize: 12 }}>
+                <span className="text-muted texto-12">
                   O servidor mantém a cópia dele.
                 </span>
               </>
             )}
             {gravacao.apagada && (
-              <span className="text-muted" style={{ fontSize: 12 }}>
+              <span className="text-muted texto-12">
                 O arquivo já saiu deste celular; a gravação está no servidor.
               </span>
             )}

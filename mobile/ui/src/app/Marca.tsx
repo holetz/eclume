@@ -1,7 +1,7 @@
-/** A marca do DS: as cinco barras do medidor e o nome. */
-export function Marca({ tamanho }: { tamanho?: number }) {
+/** A marca do DS: as cinco barras do medidor e o nome; `grande` é a da tela de servidor (24 px). */
+export function Marca({ grande = false }: { grande?: boolean }) {
   return (
-    <span className="brand" style={tamanho ? { fontSize: tamanho } : undefined}>
+    <span className={grande ? 'brand marca-grande' : 'brand'}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="0.5" y="8" width="3" height="8" />
         <rect x="5.5" y="3" width="3" height="18" />

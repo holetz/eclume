@@ -4,7 +4,7 @@ import { unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
 import type { Range } from './calendar'
 import { filtersToQuery, type LibraryFilters } from './filters'
-import { recordingState } from './format'
+import { recordingState } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 

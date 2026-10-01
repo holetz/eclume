@@ -8,7 +8,7 @@ import styles from './Admin.module.css'
 import { labelOf, MODEL_PLACEHOLDERS, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret, PURPOSES, SECRET_INFO } from './labels'
 import { PROVIDERS_KEY, usePlatformSecret, useProviders, useSecrets } from './queries'
 import { SecretField } from './SecretField'
-import { Switch } from './Switch'
+import { Switch } from '../../shared/Switch'
 
 type Provider = Schemas['AgentProvider']
 type ProviderKind = Schemas['AgentProviderKind']

@@ -2,6 +2,9 @@ package io.github.holetz.eclume.movel.gravador
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.webkit.WebView
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -22,6 +25,12 @@ class InstaladorArgs {
     lateinit var caminho: String
 }
 
+@InvokeArg
+class PararArgs {
+    var motivo: String? = null
+    var duracaoMs: Long? = null
+}
+
 /**
  * O plugin `eclume-gravador`: o que só o sistema faz, pedido pelo Rust do app (`run_mobile_plugin`) ou
  * pela UI (`plugin:eclume-gravador|…`). As permissões `microfone` e `notificacoes` são pedidas pela UI
@@ -39,10 +48,10 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
         SyncWorker.agendar(activity)
     }
 
+    /** Sobe o serviço; o `invoke` é respondido pelo serviço depois do `startForeground`. */
     @Command
     fun iniciarServico(invoke: Invoke) {
-        ServicoDeGravacao.iniciar(activity)
-        invoke.resolve()
+        ServicoDeGravacao.iniciar(activity, invoke)
     }
 
     @Command
@@ -51,9 +60,28 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve()
     }
 
+    /** Tira a notificação; com `motivo` (parada sem pedido), avisa "A gravação parou". */
     @Command
     fun pararServico(invoke: Invoke) {
-        ServicoDeGravacao.encerrar(activity)
+        val args = invoke.parseArgs(PararArgs::class.java)
+        ServicoDeGravacao.encerrar(activity, args.motivo, args.duracaoMs)
+        invoke.resolve()
+    }
+
+    /** "Abrir configurações do app": a tela do sistema com as permissões do eclume. */
+    @Command
+    fun abrirConfiguracoesDoApp(invoke: Invoke) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", activity.packageName, null))
+        activity.startActivity(intent)
+        invoke.resolve()
+    }
+
+    /** Pede a isenção da otimização de bateria (o diálogo do sistema). */
+    @Command
+    fun pedirIsencaoDeBateria(invoke: Invoke) {
+        Dispositivo.marcarIsencaoPedida(activity)
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${activity.packageName}"))
+        activity.startActivity(intent)
         invoke.resolve()
     }
 
@@ -73,7 +101,10 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(JSObject().apply { put("servicos", servicos) })
     }
 
-    /** Bateria, espaço livre, Wi-Fi não medido, modelo e os recortes de borda a borda (dp). */
+    /**
+     * Bateria, espaço livre, Wi-Fi não medido, modelo, os recortes de borda a borda (dp), as
+     * notificações liberadas e a isenção da otimização de bateria.
+     */
     @Command
     fun estadoDoDispositivo(invoke: Invoke) {
         val estado = Dispositivo.ler(activity)
@@ -85,6 +116,8 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
             put("modelo", estado.modelo)
             put("insetTopo", estado.insetTopo.toDouble())
             put("insetBase", estado.insetBase.toDouble())
+            put("notificacoes", estado.notificacoes)
+            put("isencaoDeBateria", estado.isencaoDeBateria)
         })
     }
 

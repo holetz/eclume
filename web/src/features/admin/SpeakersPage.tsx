@@ -7,7 +7,7 @@ import styles from './Admin.module.css'
 import { lastChangeText, SECRET_INFO, SPEAKER_PRESETS, speakerPreset } from './labels'
 import { useAdminSettings, usePlatformSecret, useSecrets, useUpdateSettings } from './queries'
 import { SecretField } from './SecretField'
-import { Switch } from './Switch'
+import { Switch } from '../../shared/Switch'
 
 type Settings = Schemas['AdminSettings']
 type Secret = Schemas['SecretList']['items'][number]

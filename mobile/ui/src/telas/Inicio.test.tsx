@@ -62,13 +62,37 @@ describe('Início', () => {
     expect(ponte.gravar).toHaveBeenCalled()
   })
 
-  it('sem o microfone, não grava e explica', async () => {
+  it('sem o microfone, não grava, explica e abre as configurações do app', async () => {
     const ponte = abrir(estadoBase(), (p) => {
-      p.permissoes = async () => false
+      p.permissoes = async () => ({ microfone: false, notificacoes: true })
     })
     await userEvent.click(await screen.findByRole('button', { name: /Gravar/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Sem o microfone')
     expect(ponte.gravar).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir configurações do app' }))
+    expect(ponte.abrirConfiguracoesDoApp).toHaveBeenCalled()
+  })
+
+  it('com as notificações bloqueadas, mostra a faixa com o atalho', async () => {
+    const ponte = abrir(estadoBase(), (p) => {
+      p.aparelho = async () => ({ notificacoes: false, isencaoDeBateria: 'concedida' })
+    })
+    expect(await screen.findByText('Notificações bloqueadas')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir configurações do app' }))
+    expect(ponte.abrirConfiguracoesDoApp).toHaveBeenCalled()
+  })
+
+  it('explica a bateria antes do primeiro Gravar e pede a isenção', async () => {
+    const ponte = abrir(estadoBase(), (p) => {
+      p.aparelho = async () => ({ notificacoes: true, isencaoDeBateria: 'pedir' })
+    })
+    await waitFor(() => expect(ponte.aparelho).toBeDefined())
+    await userEvent.click(await screen.findByRole('button', { name: /Gravar/ }))
+    expect(await screen.findByRole('alertdialog', { name: 'Gravar com a tela bloqueada' })).toBeInTheDocument()
+    expect(ponte.gravar).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Permitir' }))
+    expect(ponte.pedirIsencaoDeBateria).toHaveBeenCalled()
+    await waitFor(() => expect(ponte.gravar).toHaveBeenCalled())
   })
 
   it('com pouco espaço, avisa e exclui as sincronizadas', async () => {

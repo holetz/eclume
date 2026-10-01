@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41
+source: holetz/eclume#41, holetz/eclume#122
 maintainer: holetz
 ---
 
@@ -126,6 +126,16 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
 - **Queda do processo:** o `.ogg.part` já tem as páginas Ogg em disco; na abertura seguinte o
   `session::recover` o acerta e a gravação aparece como "Interrompida". O serviço destruído com a
   gravação em curso para a gravação pela ponte.
+- **Parada sem pedido avisa:** `verificar_limites` devolve a gravação e o motivo
+  (`sem_espaco`, `fonte_encerrada`); o laço passa o motivo e o tempo salvo a
+  `pararServico`, e o serviço posta "A gravação parou · <motivo> · <tempo> salvos" no canal
+  `avisos` antes de sair (o mesmo aviso do `onDestroy` com gravação em curso).
+- **Vigia do processo:** ao entrar em primeiro plano, o serviço grava "gravando desde" nas
+  `SharedPreferences` do plugin e arma `setAndAllowWhileIdle` (`ELAPSED_REALTIME_WAKEUP`, 5 min;
+  o Doze estica até ~9 min). O `VigiaDaGravacao` (receiver não exportado) rearma enquanto o
+  serviço vive; num processo novo, com a marca e sem serviço, avisa "A gravação foi interrompida ·
+  Toque para abrir" e limpa a marca. `encerrar` e o `onDestroy` cancelam o alarme e limpam a
+  marca. Sem `START_STICKY`: o reinício em segundo plano não reabre o microfone no Android 14+.
 - **Troca de rota não encerra:** plugar ou tirar um fone com microfone (P2, USB-C, Bluetooth)
   derruba o stream, e o `MicSource` se reconecta dentro da fonte
   ([desktop-gravacao.md](desktop-gravacao.md) §Fontes): a gravação segue no mesmo arquivo, com
@@ -143,7 +153,7 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 
 | Peça | O que faz |
 |---|---|
-| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico`, `atualizarServico`, `pararServico`, `descobrir(segundos)`, `estadoDoDispositivo`, `abrirInstalador(caminho)`; no `load`, acompanha a rede e agenda o `SyncWorker` |
+| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`; no `load`, acompanha a rede e agenda o `SyncWorker` |
 | `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao`; na API 29+, `registerAudioRecordingCallback` enquanto grava (removido ao encerrar e no `onDestroy`): quando `isClientSilenced()` muda, `EclumeCore.acao("silenciado" \| "audivel")`, que marca "silenciado pelo sistema". Abaixo da API 29 não há sinal |
 | `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h", ou "Microfone desconectado · reconectando", ou "Silenciado pelo sistema"; Pausar/Continuar, Marcador e Parar |
 | `EclumeCore` | `external fun acao`, `estado` e `syncPendentes`, implementadas em `src-tauri/src/jni.rs` sobre o núcleo global; devolvem JSON |
@@ -152,10 +162,23 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 | `SyncWorker`, `Atualizador` | o sync do WorkManager; o instalador do sistema pelo `FileProvider` do app (o APK fica no cache) |
 
 - O Rust chama o plugin sempre **fora da thread do comando** (o Kotlin responde na thread de quem
-  chama).
+  chama). `gravar` é `async`: numa thread de bloqueio, abre a gravação e espera o
+  `iniciarServico`; na recusa, desfaz a gravação aberta (fila e disco) e devolve o motivo à tela.
+- **Três respostas do núcleo:** o serviço lê o JSON da ponte como sessão, sem sessão
+  (`"sessao": null`) ou erro (`{"erro": …}`, `RespostaDoNucleo`). Erro nunca encerra: mantém o
+  primeiro plano e a última notificação (num `INICIAR`, entra com a notificação neutra). Só "sem
+  sessão" encerra, e Parar sempre encerra, mesmo com erro, avisando "A gravação parou com erro".
+- **A ponte JNI não aborta:** as três funções `Java_…_EclumeCore_*` passam por `responder`
+  (`catch_unwind`), que devolve `{"erro": "pânico: …"}`.
+- **Canais:** `gravacao` (importância baixa, silencioso, a notificação contínua) e `avisos`
+  (importância padrão, toca: a gravação parou ou foi interrompida).
+- **Isenção de bateria:** `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (o app não sai pela Play, onde a
+  política o restringe). Antes do primeiro Gravar com `isencaoDeBateria: pedir`, o Início explica e
+  oferece pedir; Configurações mostram o estado e oferecem pedir depois.
 - **Manifesto** (app e plugin): `RECORD_AUDIO`, `FOREGROUND_SERVICE`,
   `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE`,
-  `INTERNET`, `REQUEST_INSTALL_PACKAGES`, `CAMERA` (do leitor de QR) e `ACCESS_LOCAL_NETWORK`,
+  `INTERNET`, `REQUEST_INSTALL_PACKAGES`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `CAMERA` (do
+  leitor de QR) e `ACCESS_LOCAL_NETWORK`,
   declarada à frente do `targetSdk 37`; `network_security_config` sem texto claro (o HTTP do
   servidor de desenvolvimento só em `src/debug`); `FileProvider` só com o `cache-path`. `minSdk 26`, `targetSdk`/`compileSdk 36`.
 - **Câmera:** o `tauri-plugin-barcode-scanner` oficial (`windowed`, QR), com a permissão numa
@@ -171,12 +194,25 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   `excluir_sincronizadas`, `tipos_de_agenda`, `configuracoes`, `salvar_configuracoes`, `sair`,
   `visibilidade`, `verificar_atualizacao` e `atualizar`.
 - **Evento `estado`** (`eventos.rs`): o `EstadoApp` completo (conexão, rede, sessão com
-  `audio_ms`, nível e marcadores, folha, pendentes, avisos, espaço livre, versão), a cada 250 ms
-  gravando e a cada mudança no resto. O mesmo laço fecha a gravação que bateu num limite e tenta o
-  ciclo de rede a cada 5 s.
+  `audio_ms`, nível e marcadores, folha, pendentes, avisos, espaço livre, versão), a cada mudança.
+  O laço roda a 250 ms com o app visível (o medidor precisa) e a 1 s invisível (`visibilidade`,
+  pelo `visibilitychange` da UI), quando só confere os limites e o microfone, sem `estado()` nem
+  `emit`; ao voltar a ficar visível, emite já no primeiro tick. O mesmo laço fecha a gravação que
+  bateu num limite e tenta o ciclo de rede a cada 5 s. O token do aparelho fica em memória na
+  `Conexao` (lido na abertura, trocado em entrar, parear, sair e perda da credencial): o estado não
+  relê o disco.
+- **Sessão antes da fase:** com uma gravação ou a folha "Gravação salva" em curso, a tela é a de
+  gravação, seja qual for a fase da conexão; com `sem_credencial`, ela mostra a faixa "Entre de novo
+  para sincronizar" sem tirar Pausar, Marcador e Parar.
+- **Permissões:** microfone negado mostra "Abrir configurações do app"; notificações bloqueadas
+  viram a faixa "Notificações bloqueadas" no Início, com o mesmo botão.
 - **UI** (`mobile/ui/src`): React + TS, função do `EstadoApp` (`app/estado.ts`), com a ponte tipada
   (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia fiel do DS (a camada mobile
-  `.m-*`); ajustes de produto em `app.css`. Tema por `data-theme` a partir do
+  `.m-*`), conferida contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
+  `tsconfig.node.json`, porque lê o arquivo do disco); ajustes de produto em `app.css`. Nenhum
+  `style` fixo nas telas: espaços e tamanhos são classes do `app.css` com `--space-*` e os
+  tamanhos do DS, e `style` só leva custom property (o `--h` das barras do medidor); o
+  `no-restricted-syntax` do `eslint.config.js` barra o resto. Tema por `data-theme` a partir do
   `prefers-color-scheme`; recortes em `--safe-top`/`--safe-bottom`; alvos de toque de 44 px ou mais.
 
 | Tela do DS | Rota | O que mostra |
@@ -198,8 +234,11 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Núcleo** (`cargo test -p eclume-mobile-core`): a conexão pelos três caminhos, a rede, o sync
   inteiro, a retenção, a atualização e a sessão, com um transporte roteirizado
   (`crates/core/tests/comum`) e uma fonte sintética em tempo real no lugar do microfone.
-- **Plugin** (`./gradlew testDebugUnitTest` em `gen/android`): os textos da notificação, as ações,
-  a regra do Wi‑Fi, a bateria, o TXT e a autoridade do `FileProvider`.
+- **Plugin** (`./gradlew testDebugUnitTest` em `gen/android`): os textos da notificação e dos
+  avisos, as três respostas do núcleo (`RespostaDoNucleo`, com o `org.json` real só nos testes), as
+  ações, a regra do Wi‑Fi, a bateria e a isenção, o TXT e a autoridade do `FileProvider`.
+- **App** (`cargo test -p eclume-mobile`): `responder` transforma erro e pânico em JSON, e o
+  intervalo do laço por visibilidade.
 - **UI** (`npm --prefix mobile test`): as telas pela ponte falsa.
 - **Prova no emulador** (`mobile/scripts/prova-emulador.sh` + `mobile/e2e/prova.mjs`): o AVD
   `eclume-35` headless com KVM (`-gpu swiftshader_indirect -no-snapshot`, microfone mudo por
