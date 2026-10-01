@@ -13,7 +13,7 @@ from arq.constants import in_progress_key_prefix, job_key_prefix
 from sqlalchemy import text
 
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_LAST_SEEN_KEY, GPU_QUEUE
-from eclume_server.queue_status import PACE_KEY
+from eclume_server.queue_status import PACE_KEY, _resumes_at
 from eclume_server_testing.api import audio_bytes, override_quotas, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
@@ -132,3 +132,7 @@ def test_janela_de_minutos_diz_quando_libera(
     assert queue["reason"] == "quota_window"
     assert datetime.fromisoformat(queue["resumes_at"]) == run(services.sql(dispatched)) + timedelta(hours=24)
     assert queue["account_ahead"] is None
+
+    # Dentro da cota, não há janela a esperar.
+    owner = api.get("/api/v1/me").json()["user"]["id"]
+    assert run(services.sql(lambda conn: _resumes_at(conn, owner, 4))) is None

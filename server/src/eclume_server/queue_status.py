@@ -159,6 +159,8 @@ async def _resumes_at(conn: AsyncConnection, owner_id: UUID, limit: int) -> str 
         )
     ).all()
     used_ms = sum(int(ms) for _, ms in rows)
+    if math.ceil(used_ms / 60_000) < limit:
+        return None
     for dispatched_at, ms in rows:
         used_ms -= int(ms)
         if math.ceil(used_ms / 60_000) < limit:
