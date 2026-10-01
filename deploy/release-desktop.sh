@@ -76,8 +76,10 @@ BASE="$(host 'echo "$HOME"')/eclume-build/release"
 SRC="$BASE/src"
 DIST="$BASE/dist-$VERSAO"
 REGISTRY="$(dirname "$BASE")/cargo-registry"
-IMG_LINUX=eclume-desktop-build:24.04
-IMG_WINDOWS=eclume-desktop-build-windows:24.04
+# As imagens de build levam na tag a versão do Rust de desktop/rust-toolchain.toml.
+RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml)"
+IMG_LINUX="eclume-desktop-build:$RUST"
+IMG_WINDOWS="eclume-desktop-build-windows:$RUST"
 
 # Pré-condições do --publicar: o release aponta para um commit que o GitHub tem, feito de uma árvore
 # limpa e provado pelo gate (status eclume/gate), e nunca sobrescreve uma tag.
@@ -132,11 +134,17 @@ host "rm -rf '$DIST' && mkdir -p '$DIST'"
 # --- build ----------------------------------------------------------------------------------------
 export BUILDKIT_PROGRESS=plain
 echo "Imagem $IMG_LINUX…" >&2
-docker build -q -t "$IMG_LINUX" - < desktop/build.Dockerfile >/dev/null
+docker build -q -t "$IMG_LINUX" -f desktop/build.Dockerfile desktop >/dev/null
 if [[ "$WINDOWS" -eq 1 ]]; then
   echo "Imagem $IMG_WINDOWS…" >&2
-  docker build -q -t "$IMG_WINDOWS" - < desktop/build-windows.Dockerfile >/dev/null
+  docker build -q --build-arg "RUST=$RUST" -t "$IMG_WINDOWS" - < desktop/build-windows.Dockerfile >/dev/null
 fi
+
+# A CLI do Tauri sai de desktop/package-lock.json, instalada sem scripts num contêiner sem a chave
+# do updater; o build depois só a executa (npx --no-install).
+echo "CLI do Tauri (npm ci, sem a chave)…" >&2
+docker run --rm --cpus 2 -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/desktop "$IMG_LINUX" \
+  nice -n 10 npm ci --ignore-scripts --no-audit --no-fund
 
 # $1: imagem · $2: pasta do target/ no host · $3: pasta extra montada em /tmp/.cache (ou vazio)
 # $4…: argumentos do `tauri build`. A chave entra só leitura e vira variável dentro do contêiner.
@@ -155,7 +163,7 @@ compilar() {
     -w /src/desktop/src-tauri "$img" \
     bash -c 'export TAURI_SIGNING_PRIVATE_KEY="$(cat /run/chave/key)"
              export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat /run/chave/senha)"
-             exec nice -n 10 npx --yes @tauri-apps/cli@2 build --ci "$@"' tauri "$@"
+             exec nice -n 10 npx --no-install tauri build --ci "$@"' tauri "$@"
 }
 
 echo "Compilando o Linux (AppImage e deb)…" >&2
