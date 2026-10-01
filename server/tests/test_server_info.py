@@ -37,6 +37,7 @@ def test_descritor_sem_credencial_e_sem_ca(client: TestClient):
         "url": base,
         "mcp_url": f"{base}/mcp",
         "ca_sha256": None,
+        "ca_next_sha256": None,
         "version": __version__,
         "contract_version": bundle()["info"]["version"],
     }
@@ -63,3 +64,15 @@ def test_ca_publicada_depois_entra_sem_restart(services: Services, tmp_path: Pat
         stat = ca.stat()
         os.utime(ca, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
         assert client.get("/api/v1/server").json()["ca_sha256"] == CA_SHA256
+
+
+def test_proxima_raiz_anunciada_durante_a_rotacao(services: Services, tmp_path: Path):
+    next_ca = tmp_path / "eclume-root-proxima.crt"
+    with _client(services, ca_file=str(CA), ca_next_file=str(next_ca)) as client:
+        assert client.get("/api/v1/server").json()["ca_next_sha256"] is None
+        shutil.copyfile(CA, next_ca)
+        info = client.get("/api/v1/server").json()
+        assert info["ca_next_sha256"] == CA_SHA256
+        # Na virada, o publish-ca apaga a próxima: o descritor deixa de anunciá-la.
+        next_ca.unlink()
+        assert client.get("/api/v1/server").json()["ca_next_sha256"] is None

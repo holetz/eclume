@@ -2408,6 +2408,8 @@ export interface components {
             mcp_url: string;
             /** @description SHA-256, em hex minúsculo, do DER do certificado raiz servido em `/downloads/eclume-root.crt`; `null` enquanto a raiz não foi publicada. */
             ca_sha256: string | null;
+            /** @description Desde a 2.21.0. SHA-256, em hex minúsculo, do DER da próxima raiz durante a rotação, servida em `/downloads/eclume-root-proxima.crt`; ausente ou `null` fora dela. O app com a raiz atual fixada baixa a próxima por essa mesma conexão, confere a impressão e a guarda para trocar sozinho quando o servidor passar a servi-la. */
+            ca_next_sha256?: string | null;
             /** @description Versão do servidor. */
             version: string;
             /** @description Versão deste contrato que o servidor implementa. */
