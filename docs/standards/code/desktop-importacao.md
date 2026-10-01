@@ -58,6 +58,9 @@ decodificar o áudio. A data de gravação vem, nesta ordem de confiança:
 - **Fallback.** Um codec ou contêiner que o `symphonia` não lê (AVI, AC-3, WMA, AMR) é **copiado**
   como está para `gravacoes/<id>.<ext>`, com o `content_type` pela extensão. O servidor aceita
   `audio/*` e `video/*`, e o worker decodifica com ffmpeg.
+- **Pânico do decodificador:** a conversão roda em `catch_unwind`; um arquivo que faz o
+  `symphonia` entrar em pânico conta como arquivo que não decodifica: o `.part` sai e vale o
+  fallback (vai como está). A importação em curso se desliga por guarda, mesmo depois do pânico.
 - **Cancelar** (`cancel_import`) interrompe entre pacotes e apaga o parcial. O fim sai por
   `import-finished` (o id na fila) ou `import-failed` (o texto do erro).
 

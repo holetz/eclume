@@ -55,7 +55,8 @@ impl std::fmt::Display for Cancelled {
 impl std::error::Error for Cancelled {}
 
 /// Converte `src` para `<dir>/<id>.ogg`, ou o copia para `<dir>/<id>.<ext>` quando não dá.
-/// `progress` recebe a fração feita (0 a 1); `cancel` interrompe entre pacotes.
+/// `progress` recebe a fração feita (0 a 1); `cancel` interrompe entre pacotes. Um pânico do
+/// decodificador conta como arquivo que não decodifica: o `.part` sai e vale "vai como está".
 pub fn convert(
     src: &Path,
     dir: &Path,
@@ -66,7 +67,11 @@ pub fn convert(
     std::fs::create_dir_all(dir).with_context(|| format!("falha ao criar {}", dir.display()))?;
     let dest = dir.join(format!("{id}.ogg"));
     let part = dir.join(format!("{id}.ogg.part"));
-    match to_opus(src, &part, cancel, &mut progress) {
+    let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        to_opus(src, &part, cancel, &mut progress)
+    }))
+    .unwrap_or_else(|_| Err(anyhow!("o decodificador entrou em pânico")));
+    match attempt {
         Ok(samples) => {
             std::fs::rename(&part, &dest)?;
             progress(1.0);
@@ -415,6 +420,30 @@ mod tests {
             std::fs::read(fixture("tom.avi")).unwrap()
         );
         assert!(!dir.join("v.ogg").exists() && !dir.join("v.ogg.part").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn panico_do_decodificador_vai_como_esta() {
+        let dir = scratch("panico");
+        let mut panicked = false;
+        let out = convert(
+            &fixture("tom.wav"),
+            &dir,
+            "p",
+            &AtomicBool::new(false),
+            |_| {
+                // Dentro da conversão, o primeiro passo entra em pânico, como um decodificador
+                // quebrado; o "vai como está" segue.
+                if !std::mem::replace(&mut panicked, true) {
+                    panic!("decodificador quebrado");
+                }
+            },
+        )
+        .unwrap();
+        assert!(!out.converted);
+        assert_eq!(out.path, dir.join("p.wav"));
+        assert!(!dir.join("p.ogg.part").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -127,7 +127,7 @@ pub fn open_help(
 }
 
 /// "Relatar um problema…": abre a pasta de logs, para anexar o `eclume.log`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_log_dir(app: AppHandle) -> CommandResult<()> {
     use tauri::Manager;
     use tauri_plugin_opener::OpenerExt;
@@ -148,12 +148,12 @@ pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
     to_js(crate::open_web(&app, &state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn settings(state: State<'_, AppState>) -> CommandResult<SettingsView> {
     to_js(state.settings())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -276,13 +276,13 @@ pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec
 }
 
 /// Quantas gravações e quanto espaço ainda estão neste computador.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn storage_info(state: State<'_, AppState>) -> CommandResult<StorageInfo> {
     to_js(state.storage_info())
 }
 
 /// "Mostrar": abre a pasta das gravações no gerenciador de arquivos.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let dir = state.data_dir();
@@ -332,7 +332,7 @@ pub fn prepare_server(
 }
 
 /// A pessoa conferiu a impressão digital do servidor escolhido.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn confirm_server(
     state: State<'_, AppState>,
     url: String,
@@ -378,7 +378,7 @@ fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
 }
 
 /// "Sair": apaga a credencial deste computador; a fila espera o próximo login.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sign_out(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     let result = state.sign_out();
     crate::refresh_ui(&app);

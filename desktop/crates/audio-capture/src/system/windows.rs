@@ -29,7 +29,7 @@ const ENDPOINT_SWITCH_CONFIRMATIONS: u8 = 2;
 
 pub(super) fn list_output_devices() -> Result<OutputDevices> {
     // O COM é por thread e a thread de quem chama pode já estar num apartamento STA.
-    thread::Builder::new()
+    let handle = thread::Builder::new()
         .name("eclume-lista-saidas".into())
         .spawn(|| -> Result<OutputDevices> {
             initialize_mta()
@@ -55,8 +55,9 @@ pub(super) fn list_output_devices() -> Result<OutputDevices> {
                 .collect();
             Ok(OutputDevices { default, devices })
         })
-        .context("falha ao criar a thread da lista de saídas")?
-        .join()
+        .context("falha ao criar a thread da lista de saídas")?;
+    crate::join_with_deadline(handle, crate::STOP_DEADLINE)
+        .ok_or_else(|| anyhow::anyhow!("tempo esgotado ao listar as saídas de áudio"))?
         .map_err(|_| anyhow::anyhow!("a thread da lista de saídas entrou em pânico"))?
 }
 
@@ -85,19 +86,19 @@ pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
         Ok(Ok(fell_back)) => fell_back,
         Ok(Err(err)) => {
             running.store(false, Ordering::Release);
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             return Err(err);
         }
         Err(_) => {
             running.store(false, Ordering::Release);
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             anyhow::bail!("tempo esgotado ao iniciar o loopback WASAPI");
         }
     };
 
     let source = source.on_stop(move || {
         running.store(false, Ordering::Release);
-        let _ = capture_thread.join();
+        let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
     });
     Ok((source, fell_back))
 }

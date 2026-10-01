@@ -1,7 +1,8 @@
 """Retentativa de jobs de transcrição pelo admin (`/admin/jobs/{job_id}/retry`). Só a sessão de admin.
 
 Regras em docs/standards/code/server-admin.md: vale para a gravação de qualquer usuário, mas só para
-o job mais recente da gravação e em estado `failed`. A resposta não traz conteúdo da gravação.
+o job mais recente da gravação e em estado `failed`, lido depois de travar a linha da gravação. A
+resposta não traz conteúdo da gravação.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict, not_found
-from eclume_server.recordings import enqueue_transcription, recording_select, start_next_revision
+from eclume_server.recordings import enqueue_transcription, lock_recording, start_next_revision
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -33,15 +34,8 @@ async def retry_job(job_id: UUID, ctx: Ctx) -> dict[str, Any]:
         recording_id = (await conn.execute(select(jobs.c.recording_id).where(jobs.c.id == job_id))).scalar()
         if recording_id is None:
             raise not_found("Job inexistente.")
-        row = (
-            (
-                await conn.execute(
-                    recording_select().where(t.recordings.c.id == recording_id).with_for_update(of=t.recordings)
-                )
-            )
-            .mappings()
-            .one()
-        )
+        # Trava a gravação antes de ler o estado: um segundo pedido simultâneo recebe 409.
+        row = await lock_recording(conn, recording_id)
         if row["job_id"] != job_id:
             raise conflict("A gravação já tem um job mais recente que este.")
         if row["job_state"] != "failed":

@@ -1,7 +1,9 @@
 """Heartbeat do worker GPU: `HSET eclume:gpu:health` a cada 15 s, com TTL de 45 s.
 
-O server lê o hash para `/admin/health` (contrato em docs/standards/api/jobs-transcricao.md). Sem o
-hash, o worker está parado há mais de 45 s. Sem NVML (engine CPU), os campos da GPU ficam de fora.
+O server lê o hash para `/admin/health` e para o reaper (contrato em
+docs/standards/api/jobs-transcricao.md). Sem o hash, o worker está parado há mais de 45 s. `busy` vale
+do início ao fim de um `transcribe`, e `job_id` é o `_job_id` dele (fora do hash quando ocioso). Sem
+NVML (engine CPU), os campos da GPU ficam de fora.
 """
 
 from __future__ import annotations
@@ -40,6 +42,8 @@ def heartbeat_fields(
         "busy": "1" if registry.busy else "0",
         "models": json.dumps(registry.loaded_models()),
     }
+    if registry.current_job is not None:
+        fields["job_id"] = registry.current_job
     if gpu is not None:
         fields |= {name: str(value) for name, value in gpu.items()}
     return fields

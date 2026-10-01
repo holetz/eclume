@@ -30,6 +30,7 @@ from eclume_server.recordings import (
     enqueue_transcription,
     get_visible,
     list_library,
+    lock_recording,
     render,
     start_next_revision,
 )
@@ -238,7 +239,7 @@ async def retranscribe(
 ) -> dict[str, Any]:
     """Transcreve de novo com a configuração atual; a transcrição sobe de `revision`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        row = await get_visible(conn, recording_id)
+        row = await lock_recording(conn, recording_id)
         if row["job_state"] in {"queued", "running"}:
             raise conflict("Já há um job de transcrição em andamento.")
         if body is not None and body.language is not None:

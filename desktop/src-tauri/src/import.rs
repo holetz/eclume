@@ -92,10 +92,12 @@ pub fn spawn(
     let app = app.clone();
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
+        // Solta a importação no fim, mesmo que a conversão entre em pânico.
+        let importing = state.import_guard();
         let result = state.import_file(&path, recorded_at, source, &cancel, |done| {
             let _ = app.emit(PROGRESS_EVENT, done);
         });
-        state.end_import();
+        drop(importing);
         match result {
             Ok(recording) => {
                 log::info!("{} importado como {}", path.display(), recording.id);
