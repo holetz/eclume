@@ -250,6 +250,7 @@ agent_providers = Table(
     Column("used_for", ARRAY(Text), server_default=FetchedValue()),
     _ts("created_at"),
     _ts("updated_at"),
+    Column("key_set_at", DateTime(timezone=True)),
 )
 
 # --- tipos de agenda (009_tipos_de_agenda) ------------------------------------------------------

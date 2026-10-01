@@ -173,3 +173,14 @@ html.lendo-codigo .viewfinder {
 
 .marca-grande { font-size: 24px; }
 .medidor-pausado { color: var(--color-divider); }
+
+/* O motivo de cada etapa pulada ou com falha, em texto sob a barra de etapas (nunca só na cor). */
+.motivos-das-etapas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}

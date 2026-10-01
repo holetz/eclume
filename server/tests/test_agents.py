@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import httpx2
 import pytest
+from sqlalchemy import select
 
 from eclume_server.agents import ProviderConfig, ProviderError, build_provider
 from eclume_server.agents import base as codes
@@ -38,10 +39,16 @@ from eclume_server.agents.prompting import (
     split_sections,
     summarize,
 )
+from eclume_server.db import tables as t
+from eclume_server_testing.harness import run as run_sync
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
     from pathlib import Path
+
+    from eclume_server_testing.api import Api
+    from eclume_server_testing.harness import Services
 
 
 def run[T](coro: Any) -> T:  # noqa: ANN401
@@ -582,3 +589,26 @@ def test_extracao_curta_numa_chamada_e_longa_por_secoes():
     assert len(provider.calls) >= 3
     assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
     assert values == {"cliente": "Serra Azul", "pendencias": ["a", "b"]}
+
+
+def _key_set_at(services: Services, provider_id: str) -> datetime | None:
+    async def read(conn: Any) -> datetime | None:  # noqa: ANN401
+        query = select(t.agent_providers.c.key_set_at).where(t.agent_providers.c.id == provider_id)
+        return (await conn.execute(query)).scalar_one()
+
+    return run_sync(services.sql(read))
+
+
+def test_key_set_at_muda_so_quando_a_chave_muda(admin: Api, services: Services):
+    created = admin.post(
+        "/api/v1/admin/agent-providers",
+        json={"name": "Claude", "kind": "claude-cli", "model": "sonnet", "api_key": "sk-ant-oat01-x"},
+    ).json()
+    first = _key_set_at(services, created["id"])
+    assert first is not None
+    admin.patch(f"/api/v1/admin/agent-providers/{created['id']}", json={"name": "Claude CLI"})
+    assert _key_set_at(services, created["id"]) == first
+    admin.patch(f"/api/v1/admin/agent-providers/{created['id']}", json={"api_key": "sk-ant-oat01-y"})
+    assert _key_set_at(services, created["id"]) > first
+    admin.patch(f"/api/v1/admin/agent-providers/{created['id']}", json={"api_key": None})
+    assert _key_set_at(services, created["id"]) is None

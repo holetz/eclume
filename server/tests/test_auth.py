@@ -7,18 +7,20 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from eclume_server.app import create_app
 from eclume_server.db.migrate import migrate
 from eclume_server_testing.api import PASSWORD, Api
-from eclume_server_testing.conformance import bundle
+from eclume_server_testing.conformance import CONFORMANCE, bundle
 from eclume_server_testing.harness import DATABASE_URL, run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from fastapi.testclient import TestClient
+    import pytest
 
     from eclume_server_testing.api import Account
     from eclume_server_testing.harness import Services
@@ -27,8 +29,17 @@ if TYPE_CHECKING:
 def test_health_sem_credencial(client: TestClient):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    # O server anuncia a versão do contrato a que conforma.
+    # O server anuncia a versão do contrato a que conforma; fora de imagem de produção, sem commit.
     assert response.json()["contract_version"] == bundle()["info"]["version"]
+    assert "commit" not in response.json()
+
+
+def test_health_diz_o_commit_da_imagem(services: Services):
+    settings = services.settings.model_copy(update={"commit": "2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c"})
+    with TestClient(create_app(settings), base_url="https://testserver") as client:
+        client.event_hooks["response"] = [CONFORMANCE.check]
+        body = client.get("/api/v1/health").json()
+    assert body["commit"] == "2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c"
 
 
 def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):
@@ -262,3 +273,29 @@ INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES
         ("desktop", ["recordings:read", "recordings:write", "recordings:delete"], "personal"),
         ("lumea", ["transcripts:read"], "personal"),
     ]
+
+
+def test_health_ready_com_tudo_no_ar(client: TestClient):
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "checks": [
+            {"name": "postgres", "status": "ok"},
+            {"name": "redis", "status": "ok"},
+            {"name": "storage", "status": "ok"},
+        ],
+    }
+    assert response.headers["x-request-id"]
+
+
+def test_health_ready_503_nomeia_o_que_caiu(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    async def fora() -> None:
+        raise ConnectionError
+
+    monkeypatch.setattr(client.app.state.ctx.storage, "head_bucket", fora)
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 503
+    checks = {c["name"]: c["status"] for c in response.json()["checks"]}
+    assert checks == {"postgres": "ok", "redis": "ok", "storage": "down"}
+    assert response.json()["status"] == "down"

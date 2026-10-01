@@ -15,10 +15,11 @@ colors:
   recording: "#B8432C"
   neutral: "#9A9288"
   success: "#56663A"
-  warning: "#936419"
+  warning: "#875C17"
   danger: "#A33A26"
   highlight: "#E9E1D4"
   divider: "rgb(38 36 32 / 0.32)"
+  control-border: "#7C746A"
   dark-background: "#1E1C19"
   dark-surface: "#292622"
   dark-on-surface: "#ECE8E2"
@@ -26,6 +27,11 @@ colors:
   dark-primary: "#B9A48A"
   dark-recording: "#E0735A"
   dark-danger: "#F08A73"
+  dark-success: "#A9B98A"
+  dark-warning: "#D9AE6A"
+  dark-accent-ink: "#D6C8B5"
+  dark-highlight: "#3A2F24"
+  dark-divider: "rgb(236 232 226 / 0.3)"
   secondary: "#E9E1D4"
   on-secondary: "#3A2F24"
 typography:
@@ -158,11 +164,16 @@ tinta (`on-surface`) é quase preta e quente, e o texto secundário (`text-muted
   navegação ativo. `accent-ink` é a nogueira escura para kickers.
 - **Terracota (`recording`)** é semântica, não decorativa: gravação em curso e falha. Nunca vira
   um segundo acento de variedade.
-- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção.
+- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção. Como
+  texto, todos passam de 4,5:1 sobre o fundo e a superfície nos dois temas.
+- **Borda de controle (`control-border`) não é fio de estrutura.** Campo, caixa de seleção, botão
+  secundário e o trilho do switch desligado usam o linho 600, com pelo menos 3:1 sobre o fundo e a
+  superfície nos dois temas; o `divider` continua sendo o fio leve da estrutura. Escurecer o divisor
+  engrossaria todas as linhas da página.
 - Os locutores têm seis cores próprias em OKLCH (`--speaker-1` a `--speaker-6` no CSS), de mesma
   luminosidade, que não competem com a nogueira.
 - **Tema escuro** (`data-theme="dark"`): os tokens `dark-*` trocam fundo, superfície, tinta,
-  nogueira clara e terracota clara. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
+  nogueira clara, terracota clara, os estados, a tinta do acento, o realce e o divisor. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
 
 **Regra do acento único.** Um bloco tem no máximo um acento; a terracota só entra quando o estado
 de gravação ou falha estiver presente.

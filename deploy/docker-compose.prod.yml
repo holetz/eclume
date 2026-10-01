@@ -18,10 +18,19 @@ x-restart: &restart
     driver: json-file
     options: {max-size: "10m", max-file: "3"}
 
+# Credencial por serviço (docs/standards/code/server-nucleo.md §Credenciais de Redis e MinIO): o
+# root do MinIO fica só no MinIO, no `minio-init` e nos scripts de backup do host; o Redis recusa
+# conexão sem usuário. Server e workers CPU usam `eclume-server`; o worker GPU, `eclume-gpu`.
+# Contêineres Python (uid 1000): sem capabilities e sem ganhar privilégio por setuid. Caddy e web
+# ficam de fora porque escutam em porta baixa.
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
 x-s3-server: &s3-server
   ECLUME_S3_ENDPOINT: http://minio:9000
-  ECLUME_S3_ACCESS_KEY: ${ECLUME_MINIO_USER:?defina em deploy/.env.prod}
-  ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD:?defina em deploy/.env.prod}
+  ECLUME_S3_ACCESS_KEY: eclume-server
+  ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_SERVER_PASSWORD:?defina em deploy/.env.prod}
   ECLUME_S3_BUCKET: eclume
 
 # Server e worker CPU conectam como `eclume_server`: sem superusuário, sem DDL, só DML; as
@@ -30,7 +39,7 @@ x-s3-server: &s3-server
 x-server-env: &server-env
   <<: *s3-server
   ECLUME_DATABASE_URL: postgresql+asyncpg://eclume_server:${ECLUME_RUNTIME_PG_PASSWORD:?defina em deploy/.env.prod}@postgres:5432/eclume
-  ECLUME_REDIS_URL: redis://redis:6379/0
+  ECLUME_REDIS_URL: redis://eclume-server:${ECLUME_REDIS_SERVER_PASSWORD:?defina em deploy/.env.prod}@redis:6379/0
   ECLUME_SECRET_KEY: ${ECLUME_SECRET_KEY:?defina em deploy/.env.prod}
   ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
   ECLUME_PUBLIC_URL: ${ECLUME_PUBLIC_URL:?defina em deploy/.env.prod}
@@ -44,16 +53,22 @@ x-server-env: &server-env
   ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
   ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
 
+# `:prod` é o ponteiro de execução; `:<sha>` (ECLUME_COMMIT, que o deploy define a partir do SHA
+# construído) fica retido para o `--voltar`. Fora do deploy, a tag é `:sem-commit`.
 x-server-image: &server-image
   image: eclume-server:prod
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
-    labels: {org.eclume.image: "server"}
+    args: {ECLUME_COMMIT: "${ECLUME_COMMIT:-}"}
+    tags: ["eclume-server:${ECLUME_COMMIT:-sem-commit}"]
+    labels: {org.eclume.image: "server", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
 services:
   caddy:
     <<: *restart
+    networks: [borda]
+    mem_limit: ${ECLUME_MEM_CADDY:-256m}
     image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     depends_on:
       server: {condition: service_healthy}
@@ -70,14 +85,19 @@ services:
 
   web:
     <<: *restart
+    networks: [borda]
+    mem_limit: ${ECLUME_MEM_WEB:-128m}
     image: eclume-web:prod
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
-      labels: {org.eclume.image: "web"}
+      tags: ["eclume-web:${ECLUME_COMMIT:-sem-commit}"]
+      labels: {org.eclume.image: "web", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
   server:
-    <<: [*restart, *server-image]
+    <<: [*restart, *server-image, *hardened]
+    networks: [borda, dados]
+    mem_limit: ${ECLUME_MEM_SERVER:-1g}
     environment: *server-env
     depends_on:
       postgres: {condition: service_healthy}
@@ -86,8 +106,9 @@ services:
     volumes:
       # A CA raiz publicada pelo `publish-ca`: a impressão digital do descritor (cache pelo mtime).
       - ${ECLUME_DATA_DIR}/downloads:/srv/downloads:ro
+    # Prontidão: Postgres, Redis ou MinIO fora deixam o server unhealthy (e o vigia.sh avisa).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -96,7 +117,9 @@ services:
   # Fila eclume:default: ingestão das transcrições, resumos (claude -p) e expiração de uploads.
   # Fila eclume:default: ingestão, falhas do worker GPU, purgas e crons (reaper e retomada).
   worker-cpu:
-    <<: [*restart, *server-image]
+    <<: [*restart, *server-image, *hardened]
+    networks: [dados, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_CPU:-1g}
     command: ["arq", "eclume_server.worker.WorkerSettings"]
     environment:
       <<: *server-env
@@ -107,11 +130,20 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    healthcheck:
+      # A chave eclume:{fila}:health-check que o arq renova a cada 15 s (TTL 16 s).
+      test: ["CMD", "eclume-server", "sonda", "fila", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Fila eclume:agents: tipo de agenda, campos, resumos, chats e pré-visualizações, com
   # ECLUME_AGENT_MAX_JOBS vagas; a ingestão não espera atrás deles.
   worker-agents:
-    <<: [*restart, *server-image]
+    <<: [*restart, *server-image, *hardened]
+    networks: [dados, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_AGENTS:-2g}
     command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
     environment:
       <<: *server-env
@@ -123,20 +155,35 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    healthcheck:
+      # A chave eclume:{fila}:health-check que o arq renova a cada 15 s (TTL 16 s).
+      test: ["CMD", "eclume-server", "sonda", "fila", "agents"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Fila eclume:gpu (imagem da holetz/eclume#8, ~8 GB). max_jobs=1 vem do WorkerSettings.
   worker-gpu:
-    <<: *restart
+    <<: [*restart, *hardened]
+    networks: [fila-gpu, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_GPU:-8g}
     image: eclume-worker-gpu:prod
+    # Só a tag: label ou ENV com o SHA mudariam o ID da imagem a cada deploy e recriariam o
+    # container (com dreno) mesmo sem mudança no worker.
     build:
       context: ..
       dockerfile: worker-gpu/Dockerfile
+      tags: ["eclume-worker-gpu:${ECLUME_COMMIT:-sem-commit}"]
       labels: {org.eclume.image: "worker-gpu"}
+    # O SIGTERM drena (o arq termina o job em curso, `job_completion_wait`); o deploy espera a GPU
+    # ficar livre até --espera-gpu (30 min) antes de parar, e este prazo o cobre.
+    stop_grace_period: 40m
     environment:
-      ECLUME_REDIS_URL: redis://redis:6379/0
+      ECLUME_REDIS_URL: redis://eclume-gpu:${ECLUME_REDIS_GPU_PASSWORD:?defina em deploy/.env.prod}@redis:6379/0
       ECLUME_S3_ENDPOINT_URL: http://minio:9000
-      ECLUME_S3_ACCESS_KEY: ${ECLUME_MINIO_USER}
-      ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_PASSWORD}
+      ECLUME_S3_ACCESS_KEY: eclume-gpu
+      ECLUME_S3_SECRET_KEY: ${ECLUME_MINIO_GPU_PASSWORD:?defina em deploy/.env.prod}
       ECLUME_S3_BUCKET: eclume
       # A mesma do server: abre o token do HF que Administração → Segredos manda cifrado no job.
       ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?defina em deploy/.env.prod}
@@ -152,6 +199,13 @@ services:
       - ${ECLUME_DATA_DIR}/models:/models
       # Só o token: a pasta secrets também guarda o env de produção e a senha do admin.
       - ${ECLUME_DATA_DIR}/secrets/hf_token:/run/secrets/hf_token:ro
+    # O heartbeat eclume:gpu:health (a cada 15 s, TTL 45 s); começa antes da carga do modelo.
+    healthcheck:
+      test: ["CMD", "python", "-m", "eclume_worker.health", "--sonda"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     deploy:
       resources:
         reservations:
@@ -164,7 +218,7 @@ services:
   # Rede do host: o multicast não sai da bridge. Sem porta publicada; o 5353/udp passa pelo ufw
   # (docs/project/host-setup.md). O deploy o recria depois do `publish-ca`.
   mdns:
-    <<: [*restart, *server-image]
+    <<: [*restart, *server-image, *hardened]
     command: ["eclume-server", "announce"]
     network_mode: host
     environment:
@@ -176,6 +230,10 @@ services:
 
   postgres:
     <<: *restart
+    networks: [dados]
+    # O OOM do host escolhe outro antes do banco; o shm padrão (64 MB) não basta ao paralelismo.
+    oom_score_adj: -800
+    shm_size: 256m
     image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       # Superusuário: dono do schema, usado só pelo one-shot `migrate` (e pelo backup). A aplicação
@@ -193,18 +251,28 @@ services:
 
   redis:
     <<: *restart
+    networks: [dados, fila-gpu]
+    mem_limit: ${ECLUME_MEM_REDIS:-512m}
     image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    configs:
+      - source: redis-conf
+        target: /usr/local/etc/redis/redis.conf
+    environment:
+      # Só para o healthcheck e o `deploy.sh` (que lê o `busy` do worker GPU por `docker exec`).
+      ECLUME_REDIS_SERVER_PASSWORD: ${ECLUME_REDIS_SERVER_PASSWORD:?defina em deploy/.env.prod}
     volumes:
       - redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user eclume-server --pass \"$$ECLUME_REDIS_SERVER_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   minio:
     <<: *restart
+    networks: [dados, fila-gpu]
+    mem_limit: ${ECLUME_MEM_MINIO:-1g}
     # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do
     # mesmo servidor, fixado.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
@@ -225,6 +293,7 @@ services:
   # --- one-shots (perfil tools; `compose run --rm <serviço>`) ---
 
   minio-init:
+    networks: [dados]
     profiles: [tools]
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     depends_on:
@@ -232,11 +301,21 @@ services:
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER}
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD}
-    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc mb --ignore-existing local/eclume"]
+      MINIO_SERVER_PASSWORD: ${ECLUME_MINIO_SERVER_PASSWORD:?defina em deploy/.env.prod}
+      MINIO_GPU_PASSWORD: ${ECLUME_MINIO_GPU_PASSWORD:?defina em deploy/.env.prod}
+    configs:
+      - source: minio-init-sh
+        target: /minio-init.sh
+      - source: minio-policy-app
+        target: /policies/eclume-app.json
+      - source: minio-policy-gpu
+        target: /policies/eclume-fila-gpu.json
+    entrypoint: ["sh", "/minio-init.sh"]
 
   # O migrador: o superusuário aplica as migrations e liga o LOGIN de eclume_server com a senha dele.
   migrate:
-    <<: *server-image
+    <<: [*server-image, *hardened]
+    networks: [dados]
     profiles: [tools]
     command: ["eclume-server", "migrate"]
     environment:
@@ -248,6 +327,7 @@ services:
 
   # Copia a CA raiz do Caddy para /downloads/eclume-root.crt (clientes e LUMEA_ECLUME_CA_BUNDLE).
   publish-ca:
+    network_mode: none
     profiles: [tools]
     image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     volumes:
@@ -259,6 +339,45 @@ services:
       - install -m 644 -o 1000 -g 1000 /data/caddy/pki/authorities/local/root.crt /downloads/eclume-root.crt && echo publicada /downloads/eclume-root.crt
 
 configs:
+  # ACL do Redis: `default` desligado; `eclume-server` com tudo menos os comandos perigosos (o INFO
+  # volta: o arq o lê ao subir); `eclume-gpu` só nas chaves da fila, da saúde e do progresso dele, e
+  # só lê o pedido de cancelamento.
+  redis-conf:
+    content: |
+      appendonly yes
+      user default off
+      user eclume-server on >${ECLUME_REDIS_SERVER_PASSWORD} ~* &* +@all -@dangerous +info
+      user eclume-gpu on >${ECLUME_REDIS_GPU_PASSWORD} resetchannels ~arq:* ~eclume:gpu* ~eclume:default ~eclume:progress:* %R~eclume:cancel:* +@all -@dangerous -@admin -@pubsub +info
+  # Bucket, usuários e políticas a cada deploy (idempotente): `user add` em usuário existente só
+  # troca a senha pela do env; a política é recriada por cima, sem apagar o usuário. A imagem do
+  # MinIO não tem grep nem sed: só sh e mc.
+  minio-init-sh:
+    content: |
+      set -eu
+      mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+      mc mb --ignore-existing local/eclume
+      for pair in "eclume-server:eclume-app:$$MINIO_SERVER_PASSWORD" "eclume-gpu:eclume-fila-gpu:$$MINIO_GPU_PASSWORD"; do
+        user="$${pair%%:*}"; rest="$${pair#*:}"; policy="$${rest%%:*}"; password="$${rest#*:}"
+        mc admin policy create local "$$policy" "/policies/$$policy.json" >/dev/null
+        mc admin user add local "$$user" "$$password" >/dev/null
+        case "$$(mc admin user info local "$$user")" in
+          *"$$policy"*) ;;
+          *) mc admin policy attach local "$$policy" --user "$$user" >/dev/null ;;
+        esac
+        echo "minio-init: $$user com $$policy"
+      done
+  minio-policy-app:
+    content: |
+      {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": ["s3:*"], "Resource": ["arn:aws:s3:::eclume", "arn:aws:s3:::eclume/*"]}
+      ]}
+  # O worker GPU lê o áudio original e escreve os artefatos; não lista nem apaga.
+  minio-policy-gpu:
+    content: |
+      {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::eclume/users/*/recordings/*/audio"]},
+        {"Effect": "Allow", "Action": ["s3:PutObject"], "Resource": ["arn:aws:s3:::eclume/recordings/*"]}
+      ]}
   # `tls internal`: certificado da CA local do Caddy. `default_sni`: quem acessa por IP não envia
   # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
   # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o
@@ -297,6 +416,19 @@ configs:
           reverse_proxy web:80
         }
       }
+
+# Limites de memória (`mem_limit`) por env, `ECLUME_MEM_<SERVIÇO>`: os padrões são provisórios e
+# folgados (host de 16 GB) até a medição de 24 h (pico × 1,5, docs/project/deploy-producao.md).
+# Os workers não ganham `oom_score_adj`: com teto próprio, o OOM fica dentro do cgroup deles.
+
+# Redes por papel: `borda` (Caddy, web, server); `dados`, interna (Postgres, Redis, MinIO, server,
+# workers CPU e os one-shots); `fila-gpu`, interna (Redis, MinIO e worker GPU); `saida` (workers que
+# falam com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem web.
+networks:
+  borda: {}
+  dados: {internal: true}
+  fila-gpu: {internal: true}
+  saida: {}
 
 # Dados no disco do host, sob ${ECLUME_DATA_DIR} (/srv/eclume). As pastas precisam existir antes do
 # primeiro deploy (o deploy.sh as cria). Nomes próprios, fora do padrão eclume_*, para nunca

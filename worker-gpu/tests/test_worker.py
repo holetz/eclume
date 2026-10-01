@@ -28,3 +28,9 @@ def test_worker_settings_do_contrato():
     [job] = WorkerSettings.functions
     assert job.name == "transcribe"
     assert job.max_tries == 1
+    # Fase A da fila sem pickle: o worker lê JSON e o pickle antigo sem globais.
+    from eclume_engines.fila import desserializar  # noqa: PLC0415
+
+    assert WorkerSettings.job_deserializer is desserializar
+    # SIGTERM drena: termina o job em curso, até o teto dele, antes de parar.
+    assert WorkerSettings.job_completion_wait == WorkerSettings.job_timeout > 0

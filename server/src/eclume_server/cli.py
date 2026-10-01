@@ -7,22 +7,35 @@ import asyncio
 import getpass
 import json
 import sys
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
+from redis.asyncio import Redis
 from sqlalchemy import exists, insert, select, update
 
+from eclume_engines.registro import configurar_logs
 from eclume_server.accounts import AccountError, create_admin, set_admin_password
+from eclume_server.agents.base import PROVIDER_AUTH
 from eclume_server.config import get_settings
+from eclume_server.context import AppContext
+from eclume_server.crypto import decrypt
 from eclume_server.db import tables as t
-from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate
+from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate, pending
 from eclume_server.db.session import make_engine, system_tx
 from eclume_server.discovery import DiscoveryError, announce, discover
+from eclume_server.health import admin_health
+from eclume_server.queue import Queue
 from eclume_server.storage import Storage, audio_key
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 LEGACY_PREFIX = "orgs/"
+# Token de longa duração do `claude setup-token`: vale um ano a partir do cadastro.
+OAUTH_TOKEN_PREFIX = "sk-ant-oat"  # noqa: S105 — prefixo do formato, não um segredo
+TOKEN_LIFETIME = timedelta(days=365)
+# Job na fila da GPU há mais que isso sem começar vira alerta do vigia.sh.
+STALE_QUEUED = timedelta(hours=2)
 
 
 def _password(from_stdin: bool) -> str:  # noqa: FBT001 — espelha a flag do CLI
@@ -43,6 +56,16 @@ async def _migrate() -> None:
     print("aplicadas: " + (", ".join(applied) if applied else "nenhuma (schema em dia)"))  # noqa: T201
     if settings.runtime_db_password:
         print(f"papel {RUNTIME_ROLE} com LOGIN")  # noqa: T201
+
+
+async def _pending() -> None:
+    engine = make_engine(get_settings().database_url)
+    try:
+        versions = await pending(engine)
+    finally:
+        await engine.dispose()
+    for version in versions:
+        print(version)  # noqa: T201
 
 
 async def _create_admin(args: argparse.Namespace, password: str) -> None:
@@ -131,12 +154,86 @@ def _discover(timeout: float) -> int:
     return 0
 
 
+async def _queue_alive(queue: str) -> bool:
+    """A chave `eclume:<fila>:health-check` que o arq do worker renova a cada 15 s existe."""
+    client = Redis.from_url(get_settings().redis_url)
+    try:
+        return bool(await client.exists(f"eclume:{queue}:health-check"))
+    finally:
+        await client.aclose()
+
+
+def token_validity(providers: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    """Vencimento do token de longa duração do Claude cadastrado no painel.
+
+    O `sk-ant-oat…` é opaco: vence `TOKEN_LIFETIME` depois de `key_set_at`. Sem provider com esse
+    token, o do ambiente (`ECLUME_CLAUDE_OAUTH_TOKEN`) não tem data: `status` `unknown`.
+    """
+    dated = [p for p in providers if p["key"].startswith(OAUTH_TOKEN_PREFIX) and p["key_set_at"] is not None]
+    if not dated:
+        return {"status": "unknown", "expires_at": None, "days_left": None}
+    first = min(dated, key=lambda p: p["key_set_at"])
+    expires = first["key_set_at"] + TOKEN_LIFETIME
+    return {
+        "status": "ok",
+        "provider": first["name"],
+        "expires_at": expires.isoformat(),
+        "days_left": (expires - now).days,
+    }
+
+
+async def _health_report() -> dict[str, Any]:
+    """`saude --json`: os números da Saúde do admin, um resumo para o `vigia.sh` e o token do Claude."""
+    settings = get_settings()
+    engine = make_engine(settings.database_url)
+    queue = await Queue.connect(settings.redis_url)
+    try:
+        ctx = AppContext(settings=settings, engine=engine, storage=Storage(settings), queue=queue)
+        health = await admin_health(ctx)
+        async with system_tx(engine) as conn:
+            rows = (
+                await conn.execute(
+                    select(
+                        t.agent_providers.c.name, t.agent_providers.c.api_key_encrypted, t.agent_providers.c.key_set_at
+                    ).where(t.agent_providers.c.enabled, t.agent_providers.c.api_key_encrypted.is_not(None))
+                )
+            ).all()
+    finally:
+        await queue.close()
+        await engine.dispose()
+    providers = [
+        {"name": row.name, "key": decrypt(settings, row.api_key_encrypted), "key_set_at": row.key_set_at}
+        for row in rows
+    ]
+    now = datetime.now(UTC)
+    stale = now - STALE_QUEUED
+    queued_too_long = [
+        job
+        for job in health["running_jobs"]
+        if job["state"] == "queued" and datetime.fromisoformat(job["queued_at"]) < stale
+    ]
+    return {
+        "checked_at": health["checked_at"],
+        "summary": {
+            "queued_over_2h": len(queued_too_long),
+            "failed_last_24h": len(health["recent_failures"]),
+            "provider_auth_last_24h": sum(1 for f in health["recent_failures"] if f["code"] == PROVIDER_AUTH),
+            "services_down": [s["name"] for s in health["services"] if s["status"] == "down"],
+        },
+        "claude_token": token_validity(providers, now),
+        "health": health,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Parser do CLI."""
     parser = argparse.ArgumentParser(prog="eclume-server", description="Administração do server do eclume.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser(
+    migrate_cmd = commands.add_parser(
         "migrate", help="aplica as migrations pendentes (e liga o papel eclume_server com ECLUME_RUNTIME_DB_PASSWORD)"
+    )
+    migrate_cmd.add_argument(
+        "--pendentes", action="store_true", help="só lista as migrations pendentes, uma por linha, sem aplicar"
     )
 
     commands.add_parser("announce", help="anuncia o servidor na rede local (mDNS _eclume._tcp) até ser interrompido")
@@ -150,6 +247,15 @@ def build_parser() -> argparse.ArgumentParser:
         "relocate-legacy", help="move os áudios das chaves orgs/… para users/{dono}/recordings/{id}/audio"
     )
     relocate.add_argument("--dry-run", action="store_true", help="só lista o que moveria")
+
+    report = commands.add_parser("saude", help="a Saúde do admin e o vencimento do token do Claude, para o vigia.sh")
+    report.add_argument("--json", action="store_true", required=True, help="imprime um objeto JSON")
+
+    probe = commands.add_parser("sonda", help="sondas do healthcheck dos contêineres").add_subparsers(
+        dest="sonda", required=True
+    )
+    probe_queue = probe.add_parser("fila", help="sai 0 se o worker arq da fila renovou o health-check (16 s)")
+    probe_queue.add_argument("nome", help="fila sem o prefixo eclume: (default, agents)")
 
     admin = commands.add_parser("admin", help="contas de admin do painel").add_subparsers(dest="admin", required=True)
     create = admin.add_parser("create", help="cria uma conta de admin (aplica as migrations)")
@@ -165,13 +271,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Ponto de entrada do script `eclume-server`."""
     args = build_parser().parse_args(argv)
+    # O stdout é dos dados (`saude --json`, `discover`); o log do CLI vai para o stderr.
+    configurar_logs(stream=sys.stderr)
     try:
         if args.command == "migrate":
-            asyncio.run(_migrate())
+            asyncio.run(_pending() if args.pendentes else _migrate())
         elif args.command == "announce":
             asyncio.run(announce(get_settings()))
         elif args.command == "discover":
             return _discover(args.timeout)
+        elif args.command == "saude":
+            print(json.dumps(asyncio.run(_health_report()), ensure_ascii=False))  # noqa: T201
+        elif args.command == "sonda":
+            return 0 if asyncio.run(_queue_alive(args.nome)) else 1
         elif args.command == "storage":
             asyncio.run(_relocate(args.dry_run))
         elif args.admin == "create":

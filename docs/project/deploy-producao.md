@@ -2,12 +2,12 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92
 maintainer: holetz
 ---
 
@@ -43,7 +43,7 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
 
-One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket), `migrate`
+One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket, usuários e políticas por serviço), `migrate`
 (`eclume-server migrate`, como o superusuário, que também liga o `LOGIN` de `eclume_server` com `ECLUME_RUNTIME_PG_PASSWORD`) e `publish-ca` (copia a CA para `/downloads/`).
 
 - **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO,
@@ -61,6 +61,28 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
   filtrando o contexto da raiz. Uma imagem de server serve à API, ao worker CPU, às migrations e ao
   CLI. Ela roda como uid 1000 (`HOME=/home/app`) e traz o binário nativo da CLI `claude`, fixado
   na versão do host.
+- **Redes por papel** (holetz/eclume#94): `borda` (caddy, web, server); `dados`, interna
+  (postgres, redis, minio, server, worker-cpu, worker-agents, `minio-init`, `migrate`); `fila-gpu`,
+  interna (redis, minio, worker-gpu); `saida` (worker-cpu, worker-agents e worker-gpu, que falam
+  com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem web.
+  `publish-ca` roda com `network_mode: none`; `mdns`, na rede do host.
+- **Credencial por serviço:** server e workers CPU usam `eclume-server` no Redis e no MinIO; o
+  worker GPU, `eclume-gpu`, que só lê o áudio e escreve os artefatos. O root do MinIO fica no
+  MinIO, no `minio-init` e no backup; o usuário `default` do Redis está desligado
+  ([server-nucleo.md](../standards/code/server-nucleo.md#credenciais-de-redis-e-minio)). Para
+  depurar o Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
+- **Privilégio mínimo:** os contêineres Python (server, workers, `migrate`, `mdns`) rodam com
+  `cap_drop: [ALL]` e `no-new-privileges`; Caddy e web ficam como estão, porque escutam em porta
+  baixa.
+- **Limites de memória (`mem_limit`)** em caddy, web, server, worker-cpu, worker-agents,
+  worker-gpu, redis e minio, cada um por env `ECLUME_MEM_<SERVIÇO>` (`ECLUME_MEM_WORKER_GPU`, por
+  exemplo) com padrão no compose. Os padrões são provisórios e folgados (host de 16 GB: 256m,
+  128m, 1g, 1g, 2g, 8g, 512m, 1g) até a medição de 24 h de `docker stats` com uma transcrição de
+  1 h ou mais e um resumo; o valor certo é o pico × 1,5. Para ajustar, defina a variável em
+  `deploy/.env.prod` e faça deploy. O Postgres não tem teto: ganha `oom_score_adj: -800` (o OOM
+  do host escolhe outro antes) e `shm_size: 256m`. Um contêiner que estoura o teto morre dentro
+  do próprio cgroup e o `restart` o traz de volta. O `release-desktop.sh` limita o build a
+  `ECLUME_BUILD_MEMORY` (6g), ao lado das 2 CPUs.
 - **Restart `unless-stopped` e logs rotacionados** (3 × 10 MB por container): o stack volta
   sozinho depois de um reboot, sem ninguém rodar deploy.
 
@@ -92,25 +114,53 @@ O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do e
 
 1. Recusa, antes de qualquer escrita no host, uma árvore de trabalho suja, um HEAD que o GitHub não
    tem e um HEAD sem o status `eclume/gate` = `success` do gate do host (`bash deploy/gate.sh`;
-   [monorepo.md](../standards/code/monorepo.md)). O `--plan` mostra o estado do gate sem recusar.
-   Recusa também com o disco do host em 90% ou mais (`ECLUME_DISK_LIMIT`), antes e depois do build.
+   [monorepo.md](../standards/code/monorepo.md)). Recusa também um HEAD fora de `origin/main` ou
+   que não descende do SHA em produção (o último do `deploys.log`), salvo `--fora-do-main
+   "<motivo>"` (ramo de teste; o motivo vai ao histórico) ou `--voltar` (retorno), e um
+   `deploy/.env.prod` que perde ou muda chave da cópia do host (abaixo). O `--plan` mostra, sem
+   recusar: o SHA em produção e o alvo, quantos commits os separam, as migrations pendentes, o
+   env × host, a GPU ocupada e o gate. Recusa também com o disco do host em 90% ou mais
+   (`ECLUME_DISK_LIMIT`), antes e depois do build.
 2. Cria as pastas de `/srv/eclume` e um `hf_token` vazio se faltar. Um arquivo ausente num bind
    mount viraria pasta.
 3. Guarda a cópia de `deploy/.env.prod` em `/srv/eclume/secrets/env.prod`, instala os scripts
    de backup em `bin/` e a linha `# eclume-backup` no crontab.
-4. Constrói `server`, `web` e `worker-gpu` no daemon do host (`--services` restringe;
-   `--sem-build` pula). Com o lock inalterado, o worker GPU sai do cache em segundos.
-5. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
+4. Constrói `server`, `web` e `worker-gpu` no daemon do host a partir do `git archive` do SHA num
+   diretório temporário da estação — compose, Dockerfiles e scripts são os do SHA, nunca os da
+   árvore de trabalho (`--services` restringe; `--sem-build` pula). O build grava
+   `ECLUME_COMMIT` (o `/api/v1/health` o devolve em `commit`) e as tags `:<sha>` ao lado de `:prod`;
+   o deploy marca com `:<sha>` também as imagens que não construiu, e cada deploy deixa um trio. No
+   `worker-gpu` só a tag muda: com o código igual, o cache devolve a mesma imagem e o container não
+   é recriado.
+5. **GPU ocupada:** espera o `busy` do heartbeat cair até `--espera-gpu` (30 min); ao fim, recusa,
+   salvo `--interromper-gpu`. O SIGTERM drena (o worker termina o job atual).
+6. Com migration pendente, grava `pg_dump -Fc` em `/srv/eclume/backups/pre-deploy/` antes do
+   `migrate`; `restaurar-backup.sh --banco <dump> --confirmo` restaura só o banco a partir dele.
+7. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
    `up --wait server worker-cpu worker-agents worker-gpu web` → `up --force-recreate --wait caddy`. Os one-shots
    ficam fora do `--wait`, que trata a saída 0 de um serviço que ninguém espera como falha. O
    Caddy é sempre recriado porque o compose não recria um container quando só o
    `configs.content` muda. A CA está no volume e sobrevive.
-6. Publica a CA em `/srv/eclume/downloads/eclume-root.crt`, poda as imagens do eclume que ficaram
-   sem tag (rótulo `org.eclume.image`, nada de outros projetos) e confere o health pela CA
+8. Publica a CA em `/srv/eclume/downloads/eclume-root.crt`, acrescenta uma linha ao
+   `/srv/eclume/deploys.log`, aplica a retenção e confere o health (com o `commit` do SHA) pela CA
    publicada.
 
-Deploys de branches diferentes se sobrescrevem: o servidor e o web de produção são os do último
-deploy. O estado estável é o deploy de `main`; depois de testar um branch, volte a `main`.
+### Rastreio, retenção e retorno
+
+- **O que está em produção** sai de três lugares que concordam: `GET /api/v1/health` (`commit`),
+  as tags `eclume-{server,web,worker-gpu}:<sha>` e `/srv/eclume/deploys.log` (TSV: data, SHA,
+  flags, motivo, migrations aplicadas e o dump pré-deploy).
+- **Retenção:** o host guarda o trio de imagens e o dump dos últimos 3 deploys distintos
+  (`ECLUME_DEPLOYS_RETIDOS`); as tags fora da janela saem e o `image prune` só leva o que ficou sem
+  tag (rótulo `org.eclume.image`).
+- **`bash deploy/deploy.sh --context gpu-host --voltar <sha>`** sobe o trio retido daquele deploy,
+  sem build e sem migrate (o `deploy_lib.py voltar` decide). Um passo atrás vale mesmo com
+  migration nova, pela regra expandir/contrair
+  ([server-nucleo.md](../standards/code/server-nucleo.md)); mais de um passo com migrations que o
+  alvo não conhece recusa e aponta o dump pré-deploy para restaurar o banco antes.
+- **Ramo de teste** é `--fora-do-main "<motivo>"`; o deploy seguinte do `main` exige descender do
+  que está em produção, então volte ao `main` com `--voltar` ou com um commit do `main` que já
+  contém o ramo.
 
 ### Gate e dispensa
 
@@ -126,7 +176,11 @@ rede) — e rode o gate no mesmo SHA logo depois.
 ### Segredos
 
 `deploy/.env.prod` (600, no `.gitignore`) sai de `deploy/.env.prod.example` por
-`--gerar-env`, com `openssl rand`. As senhas são hex, porque entram na DSN sem escape, e
+`--gerar-env`, com `openssl rand`; o `--gerar-env` recusa quando o host já tem
+`secrets/env.prod` (o deploy restaura essa cópia num checkout sem env). O deploy compara o env
+local com a cópia do host **por chave** — o host manda só o sha256 de cada valor — e recusa
+quando uma chave do host falta ou mudou; chave nova só no local passa. `--substituir-env` aceita
+a troca e guarda antes `secrets/env.prod.<data>`. As senhas são hex, porque entram na DSN sem escape, e
 `ECLUME_ENCRYPTION_KEY` é o base64 de 32 bytes. O deploy recusa enquanto houver um `=troque-`.
 Sem o arquivo no checkout (outra máquina, outra worktree), o deploy o restaura da cópia do
 host.
@@ -135,6 +189,10 @@ host.
 |---|---|
 | `ECLUME_PG_PASSWORD` | do superusuário `eclume` (migrador); só vale na criação do volume; para trocar depois, `ALTER USER eclume PASSWORD '…'` antes de mudar o env |
 | `ECLUME_RUNTIME_PG_PASSWORD` | do papel `eclume_server`, a conexão do server e do worker CPU. O `migrate` a aplica a cada deploy, então trocá-la é mudar o env e fazer deploy. Um env anterior a ela ganha uma gerada pelo próprio `deploy.sh` (append, sem tocar no resto) |
+| `ECLUME_MINIO_USER`, `ECLUME_MINIO_PASSWORD` | root do MinIO: só o MinIO, o `minio-init` e os scripts de backup a usam |
+| `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` do MinIO; o `minio-init` as aplica a cada deploy, então trocar é mudar o env e fazer deploy. Um env anterior a elas as ganha geradas pelo `deploy.sh` (append), com aviso no `--plan` |
+| `ECLUME_REDIS_SERVER_PASSWORD`, `ECLUME_REDIS_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` da ACL do Redis; a ACL é recriada com o contêiner do Redis no deploy. Geradas pelo `deploy.sh` quando faltam, como as do MinIO |
+| `ECLUME_MEM_<SERVIÇO>` | opcionais: teto de memória de cada serviço (ver Stack) |
 | `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
@@ -175,7 +233,9 @@ abre a autorização no navegador e imprime o token (`sk-ant-oat01-…`). Cadast
 **Admin → Agentes → Claude (servidor) → Editar → Token do Claude**. Ele fica cifrado no banco e
 vence o `ECLUME_CLAUDE_OAUTH_TOKEN` do env, que sobra como alternativa de operação sem painel. O
 token vale 1 ano e não se renova: gere outro antes de vencer (o sintoma é o resumo falhando com
-`provider_auth` na Saúde do admin).
+`provider_auth` na Saúde do admin). O painel grava a data de cadastro (`key_set_at`), e
+`eclume-server saude --json` informa o vencimento (`claude_token.days_left`); o `vigia.sh` avisa
+com 30 dias ou menos. O token só no env não tem data: o vigia avisa uma vez "validade desconhecida".
 
 Numa estação Windows ([estacao-windows.md](estacao-windows.md)), o `.gitattributes` mantém os
 scripts com LF em qualquer checkout. Sem `flock`, a trava vira o diretório `deploy/.deploy.lock.d`.
@@ -310,7 +370,9 @@ usuário não rodaria fora de sessão. O `deploy.sh` instala o script e a linha 
 
 Ficam os **7 mais recentes** de cada (`MANTER`). Rodar duas vezes no mesmo dia substitui o
 backup do dia. O backup fica **no mesmo disco**: ele protege contra erro lógico e corrupção,
-não contra a perda do disco. Copiar `backups/` para fora do host é decisão do usuário.
+não contra a perda do disco. Copiar `backups/` para fora do host é decisão do usuário. O espelho
+do MinIO (e a restauração) roda num contêiner `mc` com o root, ligado à rede interna `dados` do
+projeto (escolhida pelo nome, `*_dados`, entre as redes do MinIO).
 
 ```bash
 ssh holetz@192.168.15.199 /srv/eclume/bin/backup.sh                    # backup agora
@@ -359,6 +421,28 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,
   `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`.
+- **Logs:** uma linha JSON por registro (`ts`, `level`, `logger`, `msg` e, quando houver,
+  `request_id`, `recording_id`, `revision`, `job_id`); toda resposta da API leva `X-Request-ID`.
+  Para seguir uma requisição ou um job:
+  `"${P[@]}" logs --no-log-prefix server | grep '"request_id": "<id>"'` (ou `"recording_id": "<id>"`
+  nos workers). Campos e o que nunca entra em
+  [server-nucleo.md](../standards/code/server-nucleo.md#logs).
+- **Saúde e prontidão:** `/api/v1/health/ready` dá 503 nomeando Postgres, Redis ou MinIO fora, e é
+  o healthcheck do `server`; os workers têm healthcheck pelas chaves de heartbeat das filas
+  (`"${P[@]}" ps` mostra `unhealthy`). Os números da Saúde do admin pelo terminal:
+  `"${P[@]}" exec server eclume-server saude --json`.
+- **Alertas (`vigia.sh`):** o cron `# eclume-vigia` roda `/srv/eclume/bin/vigia.sh` a cada 5 min
+  (o `deploy.sh` instala). Avisa quando: disco ≥ 85%; backup, cópia fora do host ou ensaio sem
+  `ok` há mais de 26 h (`estado/*.json`; sem eles, a última linha `ok:` do `backup.log`);
+  contêiner do projeto `eclume` `unhealthy`, reiniciando ou parado em duas rodadas seguidas; job
+  na fila da GPU há mais de 2 h; 3 ou mais falhas em 24 h ou qualquer `provider_auth`; token do
+  Claude vencendo em 30 dias; `nvidia-smi` falhando ou sem heartbeat do worker GPU; `saude --json`
+  sem resposta. Cada alerta sai uma vez, repete a cada 6 h e manda o aviso de volta ao normal;
+  estado em `/srv/eclume/estado/vigia/`. Limites por ambiente (`VIGIA_DISCO_PCT`,
+  `VIGIA_BACKUP_HORAS`, `VIGIA_TOKEN_DIAS`, `VIGIA_REPETIR_HORAS`). Para ver sem mandar:
+  `ssh holetz@192.168.15.199 /srv/eclume/bin/vigia.sh --simular`. **Canal:** ainda não decidido
+  (holetz/eclume#93, tarefa 5.3); até lá os alertas vão para `estado/vigia/alertas.log` e para o
+  syslog (`journalctl -t eclume-vigia`).
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
   `docker --context gpu-host builder prune -f --filter until=720h`; nunca faça `image prune -a`,
   porque ele apagaria imagens dos serviços pessoais.

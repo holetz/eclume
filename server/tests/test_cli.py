@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import io
+import json
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import text
+import redis
+from sqlalchemy import make_url, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from eclume_server import cli
+from eclume_server.db.migrate import migration_files
 from eclume_server_testing.api import admin_login, audio_bytes, upload_file
-from eclume_server_testing.harness import run
+from eclume_server_testing.harness import DATABASE_URL, run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,6 +74,38 @@ def test_admin_set_password_troca_a_senha_e_encerra_as_sessoes(
 
     assert _run(monkeypatch, "senha-nova-e-bem-longa", "set-password", "--email", "ninguem@exemplo.com.br") == 2
     assert "inexistente" in capsys.readouterr().err
+
+
+def _as_owner(services: Services, statement: str, **params: object) -> None:
+    """Como o migrador (o papel de conexão não escreve em `schema_migrations`)."""
+
+    async def go() -> None:
+        engine = create_async_engine(make_url(DATABASE_URL).set(database=services.database))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(statement), params)
+        finally:
+            await engine.dispose()
+
+    run(go())
+
+
+def test_migrate_pendentes_lista_sem_aplicar(
+    monkeypatch: pytest.MonkeyPatch, services: Services, capsys: pytest.CaptureFixture[str]
+):
+    _env(monkeypatch, services)
+    assert cli.main(["migrate", "--pendentes"]) == 0
+    assert capsys.readouterr().out == ""
+    latest = migration_files()[-1].stem
+    _as_owner(services, "DELETE FROM schema_migrations WHERE version = :v", v=latest)
+    try:
+        assert cli.main(["migrate", "--pendentes"]) == 0
+        assert capsys.readouterr().out.splitlines() == [latest]
+        # Listar não aplica: segue pendente.
+        assert cli.main(["migrate", "--pendentes"]) == 0
+        assert capsys.readouterr().out.splitlines() == [latest]
+    finally:
+        _as_owner(services, "INSERT INTO schema_migrations (version) VALUES (:v)", v=latest)
 
 
 def test_migrate_sem_pendencias(
@@ -138,3 +175,51 @@ def test_relocate_legacy_move_as_chaves_orgs_uma_vez(
     # Idempotente: na segunda vez, nada a mover além da que segue em andamento.
     assert cli.main(["storage", "relocate-legacy"]) == 0
     assert "movida" not in capsys.readouterr().out
+
+
+def test_sonda_fila_pela_chave_de_health_check(monkeypatch: pytest.MonkeyPatch, services: Services):
+    monkeypatch.setenv("ECLUME_REDIS_URL", services.settings.redis_url)
+    cli.get_settings.cache_clear()
+    client = redis.Redis.from_url(services.settings.redis_url)
+    client.delete("eclume:default:health-check")
+    assert cli.main(["sonda", "fila", "default"]) == 1
+    client.set("eclume:default:health-check", "j_complete=1", ex=16)
+    try:
+        assert cli.main(["sonda", "fila", "default"]) == 0
+    finally:
+        client.delete("eclume:default:health-check")
+        cli.get_settings.cache_clear()
+
+
+def test_token_validity_pelo_cadastro_da_chave_oat():
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    oat = {"name": "Claude", "key": "sk-ant-oat01-x", "key_set_at": now - timedelta(days=340)}
+    api = {"name": "API", "key": "sk-ant-api03-x", "key_set_at": now - timedelta(days=400)}
+    validity = cli.token_validity([api, oat], now)
+    assert validity["status"] == "ok"
+    assert validity["provider"] == "Claude"
+    assert validity["days_left"] == 25
+    assert cli.token_validity([api], now) == {"status": "unknown", "expires_at": None, "days_left": None}
+
+
+def test_saude_json_resume_a_saude_e_o_token(
+    monkeypatch: pytest.MonkeyPatch, services: Services, admin: Api, capsys: pytest.CaptureFixture[str]
+):
+    created = admin.post(
+        "/api/v1/admin/agent-providers",
+        json={"name": "Claude", "kind": "claude-cli", "model": "sonnet", "api_key": "sk-ant-oat01-x"},
+    ).json()
+
+    async def age(conn: Any) -> None:  # noqa: ANN401
+        await conn.execute(
+            text("UPDATE agent_providers SET key_set_at = now() - interval '340 days' WHERE id = :id"),
+            {"id": created["id"]},
+        )
+
+    run(services.sql(age))
+    monkeypatch.setattr(cli, "get_settings", lambda: services.settings)
+    assert cli.main(["saude", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["claude_token"]["days_left"] in {24, 25}
+    assert set(report["summary"]) == {"queued_over_2h", "failed_last_24h", "provider_auth_last_24h", "services_down"}
+    assert "services" in report["health"]

@@ -6,14 +6,14 @@
 #
 # Uso: bash deploy/pilares.sh <pilar>     roda os comandos do pilar, parando no primeiro que falha
 #      bash deploy/pilares.sh --lista     enumera os pilares, um por linha
-# Pilares: python contracts web web-browser desktop mobile docs windows auditoria (os dois últimos
-# só no gate).
+# Pilares: python contracts web web-browser desktop mobile docs windows auditoria android (os três
+# últimos só no gate).
 # Contrato: docs/standards/code/monorepo.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PILARES=(python contracts web web-browser desktop mobile docs windows auditoria)
+PILARES=(python contracts web web-browser desktop mobile docs windows auditoria android)
 
 # Um grupo dobrável por comando no log da CI; no gate, só um cabeçalho.
 run() {
@@ -145,8 +145,48 @@ pilar_auditoria() {
   done
 }
 
+# O APK de release do celular, verificado: minificado (R8) e assinado com uma chave descartável
+# desta execução, com os testes de unidade e o lint do plugin e do app, os símbolos da ponte JNI na
+# .so e a classe EclumeCore no dex (mobile/scripts/simbolos_jni.py). Só no gate: o SDK, o NDK e o
+# JDK chegam do host só leitura (ECLUME_ANDROID_SDK, ECLUME_ANDROID_NDK, ECLUME_ANDROID_JDK), e o
+# build leva perto de 15 min.
+pilar_android() {
+  local sdk="${ECLUME_ANDROID_SDK:?ECLUME_ANDROID_SDK aponta para o SDK fixado}"
+  local ndk="${ECLUME_ANDROID_NDK:?ECLUME_ANDROID_NDK aponta para o NDK fixado}"
+  local jdk="${ECLUME_ANDROID_JDK:?ECLUME_ANDROID_JDK aponta para o JDK}"
+  export ANDROID_HOME="$sdk" ANDROID_SDK_ROOT="$sdk" JAVA_HOME="$jdk"
+  export NDK_HOME="$ndk" ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
+  export PATH="$jdk/bin:$PATH" GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+  local gradle="$ROOT/mobile/src-tauri/gen/android"
+  run npm --prefix mobile ci
+  # Uma chave por execução, fora do repositório: o APK de release sai assinado e minificado como o
+  # de verdade, sem a keystore do host.
+  local chaves
+  chaves="$(mktemp -d)"
+  keytool -genkeypair -noprompt -keystore "$chaves/gate.jks" -alias gate -keyalg RSA -keysize 2048 \
+    -validity 2 -storepass gate-descartavel -keypass gate-descartavel -dname "CN=eclume gate"
+  printf 'storeFile=%s\npassword=gate-descartavel\nkeyAlias=gate\n' "$chaves/gate.jks" \
+    > "$gradle/keystore.properties"
+  run npm --prefix mobile run tauri -- android build --apk --target aarch64 --ci
+  (cd "$gradle" && run ./gradlew --no-daemon :tauri-plugin-eclume-gravador:testDebugUnitTest \
+    :tauri-plugin-eclume-gravador:lintRelease :app:lintUniversalRelease)
+  local apk
+  apk="$(find "$gradle/app/build/outputs/apk" -path '*release*' -name '*.apk' | head -n 1)"
+  [[ -n "$apk" ]] || { echo "APK de release não encontrado" >&2; return 1; }
+  python3 - "$apk" "$chaves/lib.so" <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as apk, open(sys.argv[2], "wb") as so:
+    so.write(apk.read("lib/arm64-v8a/libeclume_mobile_lib.so"))
+PY
+  "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D --defined-only "$chaves/lib.so" > "$chaves/nm.txt"
+  "$sdk/cmdline-tools/latest/bin/apkanalyzer" dex packages "$apk" > "$chaves/dex.txt"
+  run python3 mobile/scripts/simbolos_jni.py --nm "$chaves/nm.txt" --dex "$chaves/dex.txt" \
+    --kotlin mobile/plugins/gravador/android/src/main/java/io/github/holetz/eclume/movel/gravador/EclumeCore.kt
+  rm -rf "$chaves" "$gradle/keystore.properties"
+}
+
 case "${1:-}" in
   --lista) printf '%s\n' "${PILARES[@]}" ;;
-  python|contracts|web|web-browser|desktop|mobile|docs|windows|auditoria) "pilar_${1//-/_}" ;;
+  python|contracts|web|web-browser|desktop|mobile|docs|windows|auditoria|android) "pilar_${1//-/_}" ;;
   *) echo "Uso: bash deploy/pilares.sh <$(IFS='|'; echo "${PILARES[*]}")> | --lista" >&2; exit 2 ;;
 esac

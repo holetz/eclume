@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
 
@@ -27,6 +28,7 @@ from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.health import readiness
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.ratelimit import attempts, count_login
 from eclume_server.recordings import open_jobs_of
@@ -38,7 +40,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.11.0"
+CONTRACT_VERSION = "2.13.0"
 WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -86,9 +88,19 @@ def _check_notice(version: str) -> None:
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
-    """Saúde do serviço e versão do contrato."""
-    return {"status": "ok", "version": __version__, "contract_version": CONTRACT_VERSION}
+async def health(ctx: Ctx) -> dict[str, str]:
+    """Saúde do serviço, versão do contrato e, numa imagem de produção, o commit de que ela saiu."""
+    body = {"status": "ok", "version": __version__, "contract_version": CONTRACT_VERSION}
+    if ctx.settings.commit:
+        body["commit"] = ctx.settings.commit
+    return body
+
+
+@router.get("/health/ready")
+async def health_ready(ctx: Ctx) -> JSONResponse:
+    """Prontidão: 200 quando Postgres, Redis e armazenamento respondem em 2 s, 503 nomeando o que caiu."""
+    body = await readiness(ctx)
+    return JSONResponse(body, status_code=200 if body["status"] == "ok" else 503)
 
 
 @router.post("/auth/login", status_code=204)

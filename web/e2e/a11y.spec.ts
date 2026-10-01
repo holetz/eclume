@@ -37,9 +37,7 @@ async function expectAccessible(page: Page, screen: string) {
   for (const scheme of SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme })
     await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)
-    // Exceção conhecida e única: o `.table th` do DS (60% do texto) não chega a 4,5:1 no tema claro.
-    // A correção é na fonte do DS (holetz/eclume#122, tarefa 1.2, depois da #130); sai daqui com ela.
-    const { violations } = await new AxeBuilder({ page }).withTags(WCAG).exclude('.table th').analyze()
+    const { violations } = await new AxeBuilder({ page }).withTags(WCAG).analyze()
     const found = violations.map(
       (v) => `${screen} (${scheme}) · ${v.id} [${v.impact}]: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`,
     )

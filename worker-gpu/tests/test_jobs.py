@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import time
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from eclume_engines import EngineError, EngineOptions, EngineResult, Segment, Word
+from eclume_engines import EngineError, EngineOptions, EngineResult, Segment, Word, registro
 from eclume_worker import jobs
 from eclume_worker.config import WorkerConfig
 from eclume_worker.jobs import EngineRegistry, parse_revision, transcribe
@@ -572,3 +573,16 @@ def test_audio_que_nao_abre_falha_no_preprocessamento(tmp_path: Path, pre: FakeP
     assert rodar(ctx)["error_code"] == "audio_decode_failed"
     [(name, args, _)] = ctx["redis"].jobs
     assert (name, args[1], args[3]) == ("transcription_failed", "audio_decode_failed", "preprocess")
+
+
+def test_log_do_job_leva_job_id_gravacao_e_revisao(tmp_path: Path):
+    stream = io.StringIO()
+    registro.configurar_logs(stream=stream)
+    ctx = contexto(tmp_path, store=SpyStore([], []))
+    ctx["redis"].keys.add(CANCEL)
+    assert rodar(ctx) == {"status": "cancelled"}
+    linhas = [json.loads(linha) for linha in stream.getvalue().splitlines()]
+    cancelada = next(linha for linha in linhas if "cancelada" in linha["msg"])
+    assert cancelada["recording_id"] == RECORDING
+    assert cancelada["revision"] == 3
+    assert cancelada["job_id"] == f"transcribe:{RECORDING}:3"

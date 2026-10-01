@@ -11,13 +11,16 @@
 #   ssh holetz@192.168.15.199 'bash -s -- mobile-v0.1.0' < deploy/publicar-movel.sh
 #
 # Variáveis: DESTINO (padrão /srv/eclume/downloads), REPO (holetz/eclume), MANTER (3 versões),
-# FORCAR=1 para apontar o movel.json para uma versão mais antiga que a atual.
+# FORCAR=1 para apontar o movel.json para uma versão mais antiga que a atual,
+# TROCAR_CERTIFICADO="<motivo>" para aceitar um certificado de assinatura diferente do publicado
+# (o Android não instala por cima um APK de outra chave: só numa troca declarada, como a da #17).
 set -euo pipefail
 
 DESTINO="${DESTINO:-/srv/eclume/downloads}"
 REPO="${REPO:-holetz/eclume}"
 MANTER="${MANTER:-3}"
 FORCAR="${FORCAR:-0}"
+TROCAR_CERTIFICADO="${TROCAR_CERTIFICADO:-}"
 MOVEL="$DESTINO/movel"
 
 tag="${1:-}"
@@ -41,6 +44,23 @@ gh release download "$tag" -R "$REPO" -D "$tmp"
 (cd "$tmp" && sha256sum -c --quiet SHA256SUMS)
 publicada=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["versao"])' "$tmp/movel.json")
 [ "$publicada" = "$versao" ] || { echo "movel.json diz $publicada, a tag diz $versao" >&2; exit 1; }
+
+# O certificado de assinatura não muda sem aviso: o Android só atualiza um app pela mesma chave.
+certificado() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["certificado_sha256"].replace(":", "").lower())' "$1"
+}
+if [ -f "$DESTINO/movel.json" ]; then
+  anterior=$(certificado "$DESTINO/movel.json")
+  novo=$(certificado "$tmp/movel.json")
+  if [ "$anterior" != "$novo" ]; then
+    if [ -z "$TROCAR_CERTIFICADO" ]; then
+      echo "o certificado de $tag ($novo) difere do publicado ($anterior): os apps instalados não atualizam." >&2
+      echo "Troca de chave só declarada: TROCAR_CERTIFICADO=\"<motivo>\"." >&2
+      exit 1
+    fi
+    echo "TROCA DE CERTIFICADO declarada ($anterior → $novo): $TROCAR_CERTIFICADO"
+  fi
+fi
 chmod -R a+rX "$tmp"
 
 # Troca a pasta da versão (republicar a mesma versão substitui a anterior).

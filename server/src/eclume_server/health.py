@@ -213,25 +213,54 @@ def connected_assistants(count: int) -> str:
     return f"{count} assistentes conectados nas últimas 24 h"
 
 
+async def check_postgres(ctx: AppContext) -> str:
+    """Sonda do Postgres: responde e diz se a RLS está forçada nas tabelas do usuário."""
+    async with system_tx(ctx.engine) as conn:
+        forced = (
+            await conn.execute(
+                select(func.bool_and(t_pg_class.c.relforcerowsecurity)).where(
+                    t_pg_class.c.relname.in_(USER_TABLES), t_pg_class.c.relkind == "r"
+                )
+            )
+        ).scalar()
+    return "RLS ativa" if forced else "RLS desligada em alguma tabela do usuário"
+
+
+async def check_redis(ctx: AppContext) -> None:
+    """Sonda do Redis."""
+    await ctx.queue.pool.ping()
+
+
+async def check_storage(ctx: AppContext) -> None:
+    """Sonda do armazenamento S3."""
+    await ctx.storage.head_bucket()
+
+
+async def readiness(ctx: AppContext) -> dict[str, Any]:
+    """`/health/ready`: as sondas de Postgres, Redis e armazenamento, só com nome e `ok`/`down`.
+
+    Pública: sem latência nem mensagem de erro, que diriam demais a quem não está logado.
+    """
+    probes = await asyncio.gather(
+        _probe("postgres", lambda: check_postgres(ctx)),
+        _probe("redis", lambda: check_redis(ctx)),
+        _probe("storage", lambda: check_storage(ctx)),
+    )
+    checks = [{"name": p["name"], "status": "down" if p["status"] == "down" else "ok"} for p in probes]
+    return {"status": "down" if any(c["status"] == "down" for c in checks) else "ok", "checks": checks}
+
+
 async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[dict[str, Any]]:
     """`services`: uma sonda por serviço, em paralelo."""
 
     async def postgres() -> str:
-        async with system_tx(ctx.engine) as conn:
-            forced = (
-                await conn.execute(
-                    select(func.bool_and(t_pg_class.c.relforcerowsecurity)).where(
-                        t_pg_class.c.relname.in_(USER_TABLES), t_pg_class.c.relkind == "r"
-                    )
-                )
-            ).scalar()
-        return "RLS ativa" if forced else "RLS desligada em alguma tabela do usuário"
+        return await check_postgres(ctx)
 
     async def redis() -> None:
-        await ctx.queue.pool.ping()
+        await check_redis(ctx)
 
     async def storage() -> None:
-        await ctx.storage.head_bucket()
+        await check_storage(ctx)
 
     async def gpu_worker() -> str:
         if beat is None:

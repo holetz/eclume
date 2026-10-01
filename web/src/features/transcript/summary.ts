@@ -38,6 +38,15 @@ export function isMissingType(error: unknown): boolean {
   )
 }
 
+/** O 422 de gerar o resumo sem agente de resumo configurado (`provider_id`). */
+export function isMissingProvider(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 422 &&
+    (error.problem?.errors?.some((item) => item.field === 'provider_id') ?? false)
+  )
+}
+
 /** O 409 de uma edição cuja versão de base já não é a atual. */
 export function isSummaryChanged(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'summary_changed'

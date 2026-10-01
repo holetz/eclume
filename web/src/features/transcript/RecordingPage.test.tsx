@@ -25,8 +25,8 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
       'Pré-processamento',
       'Transcrição',
       'Tipo de agenda',
-      'Campos preenchidos',
-      'Resumo pronto',
+      'Campos',
+      'Resumo',
     ])
     expect(steps.every((step) => step.dataset.state === 'done')).toBe(true)
     expect(document.querySelector('aside.chat')).toHaveTextContent('Ajustar o resumo')
@@ -53,12 +53,15 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     )
     mockTranscriptApi({ 'GET /api/v1/recordings/:id': () => recording })
     renderApp(`/gravacoes/${RECORDING}`)
-    const skipped = await screen.findByText('Tipo de agenda', { selector: 'li' })
+    // O estado está no texto da etapa, e o motivo numa linha visível sob a barra, não só no `title`.
+    const skipped = await screen.findByText('Tipo de agenda · pulada', { selector: 'ol li' })
     expect(skipped).toHaveAttribute('data-state', 'skipped')
-    expect(skipped).toHaveAttribute('title', 'só o tipo padrão está cadastrado: ficou ele')
-    const failed = screen.getByText(/^Resumo/, { selector: 'li' })
-    expect(failed).toHaveAttribute('data-state', 'failed')
-    expect(failed).toHaveTextContent('(O agente não respondeu a tempo.)')
+    expect(screen.getByText('Resumo · falhou', { selector: 'ol li' })).toHaveAttribute('data-state', 'failed')
+    const reasons = within(screen.getByRole('list', { name: 'Motivos das etapas' })).getAllByRole('listitem')
+    expect(reasons.map((item) => item.textContent)).toEqual([
+      'Tipo de agenda · pulada: só o tipo padrão está cadastrado: ficou ele',
+      'Resumo · falhou: O agente não respondeu a tempo.',
+    ])
     expect(screen.getByText(/· data do envio$/)).toHaveClass('kicker')
   })
 
@@ -292,7 +295,7 @@ describe('página da gravação', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Parar a transcrição' }))
     expect(await screen.findByText('Transcrição cancelada.')).toBeInTheDocument()
     expect(http.requests('POST /api/v1/recordings/:id/cancel')).toHaveLength(1)
-    expect(screen.getByText('Transcrição', { selector: 'li' })).toHaveAttribute('title', 'a transcrição foi cancelada')
+    expect(screen.getByText('Transcrição · pulada: a transcrição foi cancelada')).toBeInTheDocument()
     expect(screen.getByText(/Você cancelou a transcrição/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Transcrever de novo' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()

@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
-resource: server/**, deploy/docker-compose.test.yml
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, credencial própria por serviço no Redis e no MinIO, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+resource: server/**, engines/src/eclume_engines/registro.py, deploy/docker-compose.test.yml, deploy/docker-compose.prod.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93
 maintainer: holetz
 ---
 
@@ -40,6 +40,24 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
 
+## Logs
+
+- **Formato:** API, CLI, `worker-cpu`, `worker-agents` e worker GPU escrevem uma linha JSON por
+  registro (`eclume_engines/registro.py`, `configurar_logs()`), com `ts` (RFC 3339 UTC), `level`,
+  `logger`, `msg`, `exc` quando houver exceção e, quando definidos, `request_id`, `recording_id`,
+  `revision` e `job_id`. Vale para `eclume_server.*`, `eclume_worker.*`, `eclume_engines.*`,
+  `uvicorn.*` e `arq.*`. API e workers escrevem no stdout (o `docker compose logs`); o CLI no
+  stderr, porque o stdout dele é dado (`saude --json`, `discover`).
+- **Contexto por `ContextVar`, não por argumento:** o middleware `RequestIdMiddleware` define
+  `request_id`; o `on_job_start` dos workers arq e o `transcribe` do worker GPU definem `job_id`,
+  `recording_id` e `revision`, lidos do `_job_id` `{job}:{recording_id}:{revision}`.
+- **`X-Request-ID`:** toda resposta HTTP da API o leva — o recebido, se tiver até 128 caracteres de
+  `[A-Za-z0-9._-]`, ou um novo (uuid4 hex) — e as linhas de log da requisição levam o mesmo valor.
+- **Log de acesso:** `eclume_server.acesso` grava método, caminho, status e duração. O
+  `uvicorn.access` fica calado.
+- **Nunca no log:** query string (as URLs de parte e de áudio são assinadas), cabeçalhos de
+  credencial, e-mail, título, texto de transcrição ou resumo, tokens e chaves.
+
 ## Persistência
 
 - **Migrations em SQL versionado**, `eclume_server/db/migrations/NNN_nome.sql`, aplicadas em ordem
@@ -51,6 +69,15 @@ Tudo por ambiente (`eclume_server/config.py`):
 - Uma migration nova ganha o próximo número livre **na `main`**, não na branch: duas specs em
   paralelo não disputam o mesmo `NNN`. O runner aplica toda migration ainda não aplicada, então a
   ordem de chegada entre branches não importa.
+- **Expandir ou contrair, nunca as duas.** Toda migration é uma das duas (holetz/eclume#92):
+  *expandir* só acrescenta (tabela, coluna anulável ou com default, índice, função nova) e entra
+  junto com o código que a usa; *contrair* (remover, renomear, apertar restrição) só entra num
+  deploy **posterior** ao do código que deixou de depender do objeto. Assim o código do deploy
+  anterior roda sobre o schema novo: o `migrate` com server e workers antigos de pé é seguro e o
+  `deploy.sh --voltar` de um passo dispensa restaurar o banco. Não há `down`: além de um passo, o
+  caminho é o dump pré-deploy (`restaurar-backup.sh --banco`).
+- `eclume-server migrate --pendentes` lista as migrations que a árvore conhece e o banco não
+  aplicou, uma por linha, sem aplicar nada (`migrate.pending`).
 
 ## Papéis do banco
 
@@ -78,6 +105,32 @@ Três papéis, cada um com um motivo:
 - A suíte do server aplica as migrations como superusuário e roda inteira como `eclume_server`
   (`harness.provision`); um teste confere os atributos do papel, que ele não é dono de nada e que
   `CREATE TABLE` e escrita em `schema_migrations` são negados.
+
+## Credenciais de Redis e MinIO
+
+Em produção, cada serviço usa a própria credencial (holetz/eclume#94), como no banco; o código não
+muda, porque a DSN do Redis e as chaves S3 vêm do env (`ECLUME_REDIS_URL`, `ECLUME_S3_*` no server,
+`ECLUME_S3_ENDPOINT_URL` no worker GPU).
+
+| Credencial | Quem usa | Alcance |
+|---|---|---|
+| root do MinIO (`ECLUME_MINIO_USER`) | o MinIO, o one-shot `minio-init` e os scripts de backup do host | tudo; nunca num serviço da aplicação |
+| MinIO `eclume-server` (política `eclume-app`) | server, worker CPU e worker de agentes | `s3:*` no bucket `eclume` |
+| MinIO `eclume-gpu` (política `eclume-fila-gpu`) | worker GPU | `GetObject` em `eclume/users/*/recordings/*/audio` e `PutObject` em `eclume/recordings/*`; não lista nem apaga |
+| Redis `default` | ninguém | desligado (`user default off`) |
+| Redis `eclume-server` | server, workers CPU e de agentes | todas as chaves, todos os comandos menos `@dangerous` (o `INFO`, que o arq lê ao subir, volta) |
+| Redis `eclume-gpu` | worker GPU | só `arq:*`, `eclume:gpu*`, `eclume:default`, `eclume:progress:*` e, só leitura, `eclume:cancel:*`; sem `@dangerous`, `@admin` nem pub/sub |
+
+- A ACL do Redis é um `configs.content` interpolado do compose de produção (o padrão do
+  Caddyfile). O `minio-init` (root) cria o bucket, os usuários e as políticas a cada deploy, de forma
+  idempotente: `user add` num usuário existente só troca a senha pela do env, e a política é
+  recriada por cima, sem apagar o usuário.
+- As senhas (`ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD`,
+  `ECLUME_REDIS_SERVER_PASSWORD`, `ECLUME_REDIS_GPU_PASSWORD`) são hex, porque entram na URL; o
+  `deploy.sh` gera as que faltam.
+- Os composes de dev, teste, e2e e GPU seguem sem senha no Redis e com o root do MinIO.
+- `deploy/test_compose_prod.py` falha se a credencial root aparecer num serviço da aplicação, se um
+  serviço trocar de credencial ou se a ACL do `eclume-gpu` ganhar chave.
 
 ## Isolamento por RLS
 

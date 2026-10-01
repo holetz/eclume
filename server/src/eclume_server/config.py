@@ -53,6 +53,9 @@ class Settings(BaseSettings):
 
     # Job de transcrição morto (docs/standards/api/jobs-transcricao.md §Job morto): a suspeita só
     # vira falha depois de durar a graça; progresso parado além do teto é falha mesmo com worker vivo.
+    # SHA do git da imagem (`ECLUME_COMMIT`, gravado pelo deploy no build); vazio fora dela.
+    commit: str = ""
+
     job_grace_seconds: float = 120
     job_stall_seconds: float = 30 * 60
 

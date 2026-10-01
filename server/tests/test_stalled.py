@@ -16,6 +16,7 @@ from arq.connections import RedisSettings
 from arq.constants import in_progress_key_prefix, job_key_prefix
 from arq.worker import func
 
+from eclume_engines.fila import serializar
 from eclume_server.db.session import make_engine
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server.stalled import reap
@@ -297,8 +298,16 @@ async def _crash(_ctx: dict[str, Any], *_args: Any) -> None:  # noqa: ANN401
     raise RuntimeError(msg)
 
 
+# O resultado do arq em pickle (até a fase B da fila sem pickle) e em JSON: o reaper lê os dois.
+SERIALIZERS = pytest.mark.parametrize("serializer", [None, serializar], ids=["pickle", "json"])
+
+
+@SERIALIZERS
 def test_job_encerrado_pelo_arq_sem_callback_vira_worker_lost(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+    serializer: Callable[[dict], bytes] | None,
 ):
     api = as_user(make_user())
     recording = _recording(api)
@@ -310,6 +319,7 @@ def test_job_encerrado_pelo_arq_sem_callback_vira_worker_lost(
             queue_name=GPU_QUEUE,
             redis_settings=RedisSettings.from_dsn(services.settings.redis_url),
             max_jobs=1,
+            **({"job_serializer": serializer} if serializer else {}),
         )
     )
     now = datetime.now(UTC)
@@ -322,8 +332,12 @@ async def _done_without_ingest(_ctx: dict[str, Any], *_args: Any) -> str:  # noq
     return "ok"
 
 
+@SERIALIZERS
 def test_transcricao_pronta_sem_ingestao_alem_do_teto_vira_ingest_failed(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+    serializer: Callable[[dict], bytes] | None,
 ):
     api = as_user(make_user())
     recording = _recording(api)
@@ -334,6 +348,7 @@ def test_transcricao_pronta_sem_ingestao_alem_do_teto_vira_ingest_failed(
             queue_name=GPU_QUEUE,
             redis_settings=RedisSettings.from_dsn(services.settings.redis_url),
             max_jobs=1,
+            **({"job_serializer": serializer} if serializer else {}),
         )
     )
     now = datetime.now(UTC)

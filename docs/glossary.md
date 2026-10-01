@@ -58,6 +58,8 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - **engine** — Implementação da interface de ASR do pacote `eclume_engines` (`whisperx-local`, remota OpenAI-compatível ou CPU para dev).
 - **épico** — Spec orquestradora (`holetz/eclume#1`) cujas tasks apontam para specs filhas, cada uma uma issue própria.
 - [escopo](standards/api/contrato-v1.md#convenções) — Permissão de um token (`recordings:read`, `summaries:write`, `people:read`…) que cada rota da API e cada ferramenta do servidor MCP exige.
+- [estado no aparelho](standards/code/frontend-web.md) — Como o desktop e o celular nomeiam a gravação antes e durante o envio (Gravando, Aguardando envio, Enviando, Enviada, Interrompida, Falhou o envio), pelo vocabulário compartilhado `vocabulario.js`.
+- [estado no servidor](standards/code/frontend-web.md) — Como a web nomeia a gravação no servidor (Na fila, a etapa em andamento, Pronta, Falhou, Cancelada); "Na fila" é só a espera pela transcrição.
 - [etapa do pipeline](standards/code/processamento-automatico.md) — Um dos seis passos do processamento de uma gravação por revisão (recebido, pré-processamento, transcrição, tipo de agenda, campos, resumo), com estado `pending`, `active`, `done`, `failed` ou `skipped`.
 - [ffmpeg.wasm](standards/code/formato-audio-upload.md) — O ffmpeg compilado para WebAssembly, fallback da conversão no navegador para contêineres e codecs que o WebCodecs não atende.
 - [fila de importação](standards/code/frontend-web.md#importar-modal-e-fila) — Os arquivos escolhidos no modal Importar, convertidos e enviados um por vez pelo shell, que sobrevivem a fechar o modal e a navegar.
@@ -76,6 +78,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [marcador](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Instante de uma gravação (`at_ms`), com nota opcional e o dispositivo que marcou, enviado pelos apps de forma idempotente por `client_id`.
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
 - [mock server](../contracts/README.md) — Prism servindo o bundle do contrato v1 com as fixtures (`deploy/docker-compose.mock.yml`, `127.0.0.1:4010`), contra o qual o lumea, o desktop e o web desenvolvem sem o backend.
+- [motivo da etapa](standards/code/processamento-automatico.md) — Código (`reason`) que o servidor grava numa etapa pulada (`no_provider`, `no_types`, `cancelled`…), mostrado em texto visível sob a barra de etapas pelo `MOTIVOS` do vocabulário compartilhado.
 - [nota de voz](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Gravação de `kind: note` (uma pessoa ditando uma ideia ou lembrete), que passa pelo mesmo pipeline da reunião (`kind: meeting`); é o termo da tela, do desktop e do MCP.
 - **OKF** — Open Knowledge Format: o formato do bundle `docs/`, com homes fixas e frontmatter por doc.
 - [origem da data](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — De onde veio o início da gravação (`recorded_at_source`): `capture` (relógio do app), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (digitada) ou `upload` (hora do envio).

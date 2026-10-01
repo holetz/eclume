@@ -8,8 +8,9 @@ import { Dialog } from '../../app/Dialog'
 import { useAgendaTypes } from '../organize/queries'
 import { summaryClipboard } from './copy-summary'
 import styles from './RecordingPage.module.css'
-import { isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
+import { isMissingProvider, isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
 import { SummaryDiff, SummaryEditor } from './SummaryEditor'
+import { motivo } from '../../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 
@@ -119,6 +120,8 @@ function RegenerateDialog({ typeName, current, busy, error, onConfirm, onClose }
   )
 }
 
+const NO_PROVIDER = `Sem resumo: ${motivo('no_provider')}.`
+
 interface SummaryDocProps {
   recording: Recording
   onChangeType: () => void
@@ -146,6 +149,8 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
   const { current, pending } = state.data
   const typeName = pending?.agenda_type?.name ?? recording.agenda_type?.name ?? null
   const summaryStep = recording.pipeline.find((step) => step.step === 'summary')
+  // Sem agente de resumo, o motivo no lugar do "Gerar resumo" primário; o retentar fica para depois que alguém configurar um.
+  const noProvider = summaryStep?.state === 'skipped' && summaryStep.reason === 'no_provider'
 
   async function copy() {
     setCopied(null)
@@ -202,21 +207,23 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
                 {summaryStep.error?.message ?? 'A geração do resumo falhou.'}
               </p>
             ) : (
-              <p>Sem resumo.</p>
+              <p>{noProvider ? NO_PROVIDER : 'Sem resumo.'}</p>
             )}
             <button
               type="button"
-              className="btn btn-primary btn-sm"
+              className={`btn ${noProvider ? 'btn-secondary' : 'btn-primary'} btn-sm`}
               disabled={generate.isPending}
               onClick={startGenerate}
             >
-              {summaryStep?.state === 'failed' ? 'Tentar de novo' : 'Gerar resumo'}
+              {summaryStep?.state === 'failed' || noProvider ? 'Tentar de novo' : 'Gerar resumo'}
             </button>
             {generate.isError && (
               <p className="alert alert-error" role="alert">
                 {isMissingType(generate.error)
                   ? 'Escolha um tipo de agenda para gerar o resumo.'
-                  : errorMessage(generate.error)}
+                  : isMissingProvider(generate.error)
+                    ? NO_PROVIDER
+                    : errorMessage(generate.error)}
               </p>
             )}
           </div>

@@ -10,10 +10,11 @@
   --design-colors-recording: #B8432C;
   --design-colors-neutral: #9A9288;
   --design-colors-success: #56663A;
-  --design-colors-warning: #936419;
+  --design-colors-warning: #875C17;
   --design-colors-danger: #A33A26;
   --design-colors-highlight: #E9E1D4;
   --design-colors-divider: rgb(38 36 32 / 0.32);
+  --design-colors-control-border: #7C746A;
   --design-colors-dark-background: #1E1C19;
   --design-colors-dark-surface: #292622;
   --design-colors-dark-on-surface: #ECE8E2;
@@ -21,6 +22,11 @@
   --design-colors-dark-primary: #B9A48A;
   --design-colors-dark-recording: #E0735A;
   --design-colors-dark-danger: #F08A73;
+  --design-colors-dark-success: #A9B98A;
+  --design-colors-dark-warning: #D9AE6A;
+  --design-colors-dark-accent-ink: #D6C8B5;
+  --design-colors-dark-highlight: #3A2F24;
+  --design-colors-dark-divider: rgb(236 232 226 / 0.3);
   --design-colors-secondary: var(--design-colors-highlight);
   --design-colors-on-secondary: #3A2F24;
   --design-typography-display-font-family: Archivo, system-ui, sans-serif;

@@ -17,6 +17,8 @@ from typing import Any
 from arq.connections import RedisSettings
 from arq.worker import func
 
+from eclume_engines.fila import desserializar
+from eclume_engines.registro import configurar_logs
 from eclume_engines.vram import VramMonitor
 from eclume_worker.config import GPU_QUEUE, WorkerConfig
 from eclume_worker.health import heartbeat_loop, withdraw
@@ -37,21 +39,9 @@ async def idle_unloader(registry: EngineRegistry, idle_seconds: float, every: fl
             logger.info("modelos descarregados após %.0f s ociosos", idle_seconds)
 
 
-def configure_logging(level: int = logging.INFO) -> None:
-    """Log do worker e das engines no stderr; o CLI do arq só configura o logger `arq`."""
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
-    for name in ("eclume_worker", "eclume_engines"):
-        named = logging.getLogger(name)
-        if not named.handlers:
-            named.addHandler(handler)
-            named.setLevel(level)
-            named.propagate = False
-
-
 async def startup(ctx: dict[str, Any]) -> None:
     """Prepara o log, o S3, a engine, a descarga por ociosidade e o heartbeat."""
-    configure_logging()
+    configurar_logs()
     ctx["config"] = CONFIG
     ctx["store"] = ArtifactStore.from_config(CONFIG)
     ctx["engines"] = registry = EngineRegistry(CONFIG)
@@ -82,6 +72,12 @@ class WorkerSettings:
     max_jobs = 1
     max_tries = 1
     job_timeout = CONFIG.job_timeout_seconds
+    # No SIGTERM (deploy), o arq para de pegar jobs e espera o atual terminar até o teto do job: o
+    # deploy drena o worker GPU sem matar transcrição em curso. O `stop_grace_period` do compose
+    # cobre o `stop -t` do deploy.
+    job_completion_wait = CONFIG.job_timeout_seconds
+    # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e o pickle antigo sem globais.
+    job_deserializer = desserializar
     redis_settings = RedisSettings.from_dsn(CONFIG.redis_url)
     on_startup = startup
     on_shutdown = shutdown

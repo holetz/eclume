@@ -9,6 +9,8 @@
   --color-accent-2: #b8432c;
   --color-rec: #b8432c;
   --color-divider: color-mix(in srgb, #262420 32%, transparent);
+  /* Borda de controle interativo (campo, caixa, botão secundário, switch): ≥ 3:1 sobre fundo e superfície, nos dois temas; o divisor fica para a estrutura. */
+  --color-control-border: var(--color-neutral-600);
 
   /* Tonal ramps — warm linen neutrals, walnut accent, terracotta for recording and failure. */
   --color-neutral-100: #f7f5f2;
@@ -66,7 +68,7 @@
   --color-text-muted: #625b52;
   --color-accent-ink: #5e4c39;
   --color-success: #56663a;
-  --color-warning: #936419;
+  --color-warning: #875c17;
   --color-danger: #a33a26;
   --color-highlight: #e9e1d4;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -172,7 +174,7 @@ figcaption {
 .btn-primary { background: var(--color-accent); color: var(--color-bg); }
 .btn-primary:hover { background: var(--color-accent-600); }
 .btn-primary:active { background: var(--color-accent-700); }
-.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary { border-color: var(--color-control-border); }
 .btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
 .btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
@@ -190,7 +192,7 @@ figcaption {
   width: 100%; min-height: 36px; padding: 6px 10px; font: inherit;
   font-size: 14px; color: var(--color-text); caret-color: var(--color-accent);
   background: var(--color-surface);
-  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  border: 1px solid var(--color-control-border); border-radius: var(--radius-md);
 }
 .input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 .input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
@@ -269,7 +271,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .table th {
   text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
   padding: var(--space-2); border-bottom: 2px solid var(--color-divider);
 }
 .table td {
@@ -487,12 +489,12 @@ mark,.hl{background:var(--color-highlight);color:inherit;padding:0 2px}
 /* — checkbox and switch — */
 .check{display:inline-flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:14px;line-height:1.4}
 .check input,.switch input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
-.check .box{width:16px;height:16px;flex:none;margin-top:1px;border:1.5px solid var(--color-divider)}
+.check .box{width:16px;height:16px;flex:none;margin-top:1px;border:1.5px solid var(--color-control-border)}
 .check:hover .box{border-color:var(--color-accent)}
 .check input:checked+.box{border-color:var(--color-accent);background:var(--color-accent);box-shadow:inset 0 0 0 3px var(--color-bg)}
 .check input:focus-visible+.box,.switch input:focus-visible+.track{outline:2px solid var(--color-accent);outline-offset:2px}
 .switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:14px}
-.switch .track{position:relative;width:34px;height:18px;flex:none;border:1.5px solid var(--color-divider);background:var(--color-bg)}
+.switch .track{position:relative;width:34px;height:18px;flex:none;border:1.5px solid var(--color-control-border);background:var(--color-bg)}
 .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;background:var(--color-text-muted)}
 .switch input:checked+.track{background:var(--color-accent);border-color:var(--color-accent)}
 .switch input:checked+.track::after{left:18px;background:var(--color-bg)}

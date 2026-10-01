@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -177,20 +178,27 @@ def _ingest_directly(services: Services, recording_id: str) -> list[str]:
 class _RedisSpy(_EnqueueSpy):
     """Também registra as chaves apagadas."""
 
-    def __init__(self) -> None:
+    def __init__(self, progress: dict[str, str] | None = None) -> None:
         super().__init__()
         self.deleted: list[str] = []
+        self.progress = progress or {}
 
     async def delete(self, *keys: str) -> None:
         self.deleted.extend(keys)
 
+    async def hget(self, _key: str, field: str) -> bytes | None:
+        value = self.progress.get(field)
+        return value.encode() if value is not None else None
 
-def _deliver(services: Services, job: str, job_id: str | None, *args: object) -> _RedisSpy:
-    """Roda um job de retorno fora do arq, com o `_job_id` dado em `ctx`."""
+
+def _deliver(
+    services: Services, job: str, job_id: str | None, *args: object, progress: dict[str, str] | None = None
+) -> _RedisSpy:
+    """Roda um job de retorno fora do arq, com o `_job_id` dado em `ctx` e o hash de progresso dado."""
 
     async def go() -> _RedisSpy:
         engine = make_engine(services.settings.database_url)
-        redis = _RedisSpy()
+        redis = _RedisSpy(progress)
         ctx = {"engine": engine, "storage": Storage(services.settings), "redis": redis, "job_id": job_id}
         try:
             function = ingest_transcript if job == "ingest_transcript" else transcription_failed
@@ -575,3 +583,37 @@ def test_falha_no_pre_processamento_marca_a_etapa_certa(
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
     assert _step(body, "preprocessing")["error"] == {"code": "audio_decode_failed", "message": "não abre"}
     assert _step(body, "transcription")["state"] == "pending"
+
+
+def test_job_started_at_e_o_inicio_no_worker_gpu_no_sucesso(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3400))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    # O início do job é o do worker (`engine_info.started_at`), o mesmo do pré-processamento.
+    assert body["job"]["started_at"] == _step(body, "preprocessing")["started_at"]
+
+
+def test_job_started_at_e_o_inicio_no_worker_gpu_na_falha(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(3500))
+    rid = recording["id"]
+    started = (datetime.now(UTC) - timedelta(seconds=3)).isoformat()
+    _deliver(
+        services,
+        "transcription_failed",
+        f"transcription_failed:{rid}:1",
+        rid,
+        "gpu_oom",
+        "OOM",
+        "asr",
+        progress={"started_at": started},
+    )
+    body = api.get(f"/api/v1/recordings/{rid}").json()
+    assert datetime.fromisoformat(body["job"]["started_at"]) == datetime.fromisoformat(started)
+    assert datetime.fromisoformat(_step(body, "transcription")["started_at"]) == datetime.fromisoformat(started)

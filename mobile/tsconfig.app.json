@@ -19,5 +19,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["ui/src"],
-  "exclude": ["ui/src/styles/copia.test.ts"]
+  "exclude": ["ui/src/styles/copia.test.ts", "ui/src/app/vocabulario.test.ts"]
 }

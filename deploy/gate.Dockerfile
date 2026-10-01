@@ -27,10 +27,12 @@ RUN cargo install --locked cargo-deny --version 0.20.2 && rm -rf /opt/cargo/regi
  && chmod -R a+rwX /opt/cargo && cargo deny --version
 # O `cq` do pilar `docs`: o holetz/quenching público na ref fixada (a mesma do job `docs` do ci.yml;
 # deploy/test_docs_check.py confere).
-ARG QUENCHING_SHA=9150af364e40ec7ca9c4f918cb60593e93ae4eea
+ARG QUENCHING_SHA=a5e9b6af2d0649bd3bc1101d897e6ab2937fd0a9
 RUN git init -q /opt/quenching && cd /opt/quenching \
  && git fetch -q --depth 1 https://github.com/holetz/quenching.git "$QUENCHING_SHA" \
  && git checkout -q FETCH_HEAD && rm -rf .git \
  && ln -s /opt/quenching/plugins/quenching/bin/cq /usr/local/bin/cq && cq --version
-# Núcleo do app móvel para o Android (o NDK chega do host, só leitura).
-RUN rustup target add aarch64-linux-android armv7-linux-androideabi && chmod -R a+rwX /opt/cargo /opt/rustup
+# Núcleo e app móvel para o Android (o NDK, o SDK e o JDK chegam do host, só leitura): os alvos
+# do APK de release (aarch64, armv7) e o do emulador (x86_64) do pilar android.
+RUN rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android \
+ && chmod -R a+rwX /opt/cargo /opt/rustup

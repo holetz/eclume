@@ -8,6 +8,7 @@ NVML (engine CPU), os campos da GPU ficam de fora.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import contextlib
 import json
@@ -15,12 +16,14 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from redis.asyncio import Redis
+
 from eclume_engines import DEFAULT_ENGINE
 from eclume_worker import __version__
+from eclume_worker.config import WorkerConfig
 
 if TYPE_CHECKING:
     from eclume_engines.vram import VramMonitor
-    from eclume_worker.config import WorkerConfig
     from eclume_worker.jobs import EngineRegistry
 
 logger = logging.getLogger(__name__)
@@ -80,3 +83,27 @@ async def withdraw(redis: Any) -> None:  # noqa: ANN401 — ArqRedis
     """Apaga o heartbeat no desligamento, para a saúde mostrar o worker parado na hora."""
     with contextlib.suppress(Exception):
         await redis.delete(HEALTH_KEY)
+
+
+async def alive(redis_url: str) -> bool:
+    """O heartbeat `eclume:gpu:health` existe (o worker publicou nos últimos 45 s)."""
+    client = Redis.from_url(redis_url)
+    try:
+        return bool(await client.exists(HEALTH_KEY))
+    finally:
+        await client.aclose()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m eclume_worker.health --sonda`: sai 0 com heartbeat, 1 sem; healthcheck do compose."""
+    parser = argparse.ArgumentParser(prog="python -m eclume_worker.health")
+    parser.add_argument("--sonda", action="store_true", required=True, help="confere o heartbeat e sai 0/1")
+    parser.parse_args(argv)
+    try:
+        return 0 if asyncio.run(alive(WorkerConfig.from_env().redis_url)) else 1
+    except Exception:  # noqa: BLE001 — Redis fora é worker sem sinal
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

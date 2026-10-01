@@ -98,7 +98,6 @@ jobs:
               - "deploy/gate.py"
               - "deploy/test_gate.py"
               - ".github/workflows/desktop-release.yml"
-              - ".github/workflows/mobile-release.yml"
             contracts:
               - *ci
               - *uv
@@ -117,11 +116,14 @@ jobs:
               - *ci
               - "desktop/**"
               - "web/src/styles/eclume.css"
+              - "web/src/lib/vocabulario.js"
               - "web/src/features/help/articles/**"
             mobile:
               - *ci
               - "mobile/**"
               - "desktop/crates/**"
+              - "web/src/lib/vocabulario.js"
+              - "web/src/lib/vocabulario.d.ts"
             docs:
               - *ci
               - "docs/**"
@@ -287,7 +289,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: holetz/quenching
-          ref: 9150af364e40ec7ca9c4f918cb60593e93ae4eea # 6.3.0
+          ref: a5e9b6af2d0649bd3bc1101d897e6ab2937fd0a9 # 6.3.0+681 (cq design)
           path: .quenching
       # Fora da árvore do eclume, para a checagem não varrer o quenching.
       - run: |
