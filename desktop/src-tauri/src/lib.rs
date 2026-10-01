@@ -358,8 +358,8 @@ mod tests {
             "https://192.168.15.199:8443/ajuda"
         );
         assert_eq!(
-            help_url("https://eclume.local", Some("primeiros-passos")).unwrap(),
-            "https://eclume.local/ajuda/primeiros-passos"
+            help_url("https://eclume.local", Some("primeira-gravacao")).unwrap(),
+            "https://eclume.local/ajuda/primeira-gravacao"
         );
         assert!(help_url("https://eclume.local", Some("../admin")).is_err());
         assert!(help_url("https://eclume.local", Some("")).is_err());
