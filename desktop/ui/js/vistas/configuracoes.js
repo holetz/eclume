@@ -31,7 +31,7 @@ const NENHUM = "none";
 
 const POLITICAS = [
   ["auto", "Gravar"],
-  ["ask", "Perguntar"],
+  ["ask", "Confirmar"],
   ["ignore", "Ignorar"],
 ];
 

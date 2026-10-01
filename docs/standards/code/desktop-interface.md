@@ -7,7 +7,7 @@ tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114
 maintainer: holetz
 ---
 
@@ -62,6 +62,11 @@ Na ordem do `index.html`:
 
 - **`tauri.js`** é o único lugar que toca o Tauri: `invoke`, `listen` e `versao` resolvem
   `window.__TAURI__` (o `withGlobalTauri`) a cada chamada, para os testes injetarem o mock antes.
+- **`vocabulario.js`** é cópia byte a byte de `web/src/lib/vocabulario.js` (o vocabulário de
+  estados compartilhado, [frontend-web.md](frontend-web.md)); a fila de envio tira dele os rótulos e
+  o tom dos estados no aparelho (Gravando, Aguardando envio, Enviando, Enviada, Falhou o envio), e
+  um envio que falhou mostra o `last_error` em texto na própria linha (`.fila-erro`), não só no
+  `title`. Mude o texto no web e copie o arquivo; nunca edite a cópia.
 - **`main.js`** registra as vistas, uma `<section data-vista>` cada, e só uma fica visível. Ele
   aplica o tema, trata as teclas da janela e consulta `status` e `recordings` a cada 1 s (e no
   evento `status-changed`). Sem credencial (`connection: first_run`), a janela fica na primeira
@@ -148,7 +153,8 @@ Na ordem do `index.html`:
 
 ## Testes
 
-- **`ui_assets`** (`desktop/src-tauri/tests`, no `cargo test`): o `eclume.css` igual ao do web,
+- **`ui_assets`** (`desktop/src-tauri/tests`, no `cargo test`): o `eclume.css` e o
+  `js/vocabulario.js` iguais aos do web,
   nenhuma URL `http(s)://` na UI, as fontes declaradas existentes com o `OFL.txt`, nenhum
   `style=""` e o `index.html` carregando só arquivos que existem. Por isso nem um `placeholder`
   leva `https://`.

@@ -82,7 +82,7 @@ test('gravação automática mostra a política do app e deixa mudá-la', async 
   await expect(page.locator('#gravacao-automatica')).toBeVisible()
   await expect(page.locator('#politica')).toBeVisible()
   await expect(page.locator('#politica-titulo')).toHaveText('Reuniões no Teams')
-  await expect(page.locator('#politica .seg-opt')).toHaveText(['Gravar', 'Perguntar', 'Ignorar'])
+  await expect(page.locator('#politica .seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
   await expect(page.locator('#politica input[value="ask"]')).toBeChecked()
 
   await page.locator('#politica .seg-opt', { hasText: 'Gravar' }).click()

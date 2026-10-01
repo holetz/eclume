@@ -39,6 +39,7 @@ updates:
     directories:
       - "/deploy"
       - "/desktop"
+      - "/mobile"
       - "/worker-gpu"
     schedule: {interval: weekly}
     cooldown: {default-days: 7}

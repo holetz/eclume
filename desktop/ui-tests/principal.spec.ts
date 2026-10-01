@@ -65,12 +65,14 @@ test('pergunta de reunião com Gravar e Agora não', async ({ abrir }) => {
   expect(feitas).toContainEqual({ comando: 'answer_meeting', args: { record: false } })
 })
 
-test('fila com as etiquetas, nota, importação e o erro no title', async ({ abrir }) => {
+test('fila com as etiquetas do vocabulário, nota, importação e o erro visível', async ({ abrir }) => {
   const page = await abrir('fila')
   const linhas = page.locator('#fila li')
-  await expect(linhas.locator('.badge')).toHaveText(['Enviando', 'Enviada', 'Falhou', 'Na fila'])
+  await expect(linhas.locator('.badge')).toHaveText(['Enviando', 'Enviada', 'Falhou o envio', 'Aguardando envio'])
   await expect(linhas.nth(1)).toContainText('Hoje, 08:18 · Nota · 1 min')
-  await expect(linhas.nth(2).locator('.badge')).toHaveAttribute('title', 'HTTP 413: arquivo grande demais')
+  await expect(linhas.nth(2).locator('.badge')).toHaveClass(/badge-danger/)
+  await expect(linhas.nth(2).locator('.fila-erro')).toBeVisible()
+  await expect(linhas.nth(2).locator('.fila-erro')).toHaveText('HTTP 413: arquivo grande demais')
   await expect(linhas.nth(3)).toContainText('kickoff-guion · 47 min')
   await expect(page.locator('#fila-resumo')).toHaveText('1 de 4 enviadas')
 })

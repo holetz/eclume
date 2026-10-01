@@ -7,7 +7,7 @@ tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#96
+source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#96, holetz/eclume#114
 maintainer: holetz
 ---
 
@@ -35,9 +35,17 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
 | `summary` | o resumo automático: `active` ao abrir, `done`/`failed` quando o `summarize` termina |
 
 - **Estados:** `pending`, `active`, `done`, `failed` e `skipped` (os do componente `.pipeline` do
-  Design System). Pulada ou falha, a etapa diz por quê: `detail.reason` (`no_provider`,
-  `no_auto_fields`, `no_types`, `set_by_user`, `no_agenda_type`, `before_pipeline`, `cancelled`
-  — a transcrição cancelada pelo dono nesta etapa) ou `error_code`/`error_message`.
+  Design System). Pulada ou falha, a etapa diz por quê: `detail.reason` ou
+  `error_code`/`error_message`. Os códigos de motivo hoje: `no_provider` (sem agente para a etapa),
+  `no_auto_fields`, `no_types`, `set_by_user`, `no_agenda_type`, `before_pipeline` (gravação
+  anterior ao pipeline, migration 012), `worker_without_preprocess` (o worker GPU não faz
+  pré-processamento), `summary_deleted` (o resumo da etapa foi excluído) e `cancelled` (a
+  transcrição cancelada pelo dono nesta etapa).
+- **Código de motivo novo exige texto.** Todo código ganha texto em `MOTIVOS` do vocabulário
+  compartilhado (`web/src/lib/vocabulario.js`, copiado no desktop e no celular, ver
+  [frontend-web.md](frontend-web.md)): `vocabulario.test.ts` lê os `"reason": ...`, `skip = ...` e
+  `reason=...` do servidor e das migrations e falha com código sem texto. Na tela, código ainda
+  desconhecido aparece cru.
 - `pipeline.set_step` faz upsert por `(recording_id, revision, step)`: `active` marca o início, um
   estado final marca o fim e mantém o início; `duration_ms` é coluna gerada.
 - **`Recording.pipeline`** são as seis etapas da maior revisão, em ordem; sem linha, `pending`.

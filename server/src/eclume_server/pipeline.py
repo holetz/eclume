@@ -1,8 +1,8 @@
 """Etapas do processamento de uma gravação (`pipeline_steps`), por revisão do job de transcrição.
 
-recebido → pré-processamento → transcrição → campos → tipo de agenda → resumo. Cada etapa fica
-`pending`, `active`, `done`, `failed` ou `skipped`, com o motivo quando pulada ou falha. Contrato e
-decisões em docs/standards/code/processamento-automatico.md.
+recebido → pré-processamento → transcrição → tipo de agenda → campos → resumo (a ordem de
+`STEPS`). Cada etapa fica `pending`, `active`, `done`, `failed` ou `skipped`, com o motivo quando
+pulada ou falha. Contrato e decisões em docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations

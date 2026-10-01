@@ -1,18 +1,20 @@
 import { duracao, marcadores, quando } from '../app/formatos'
 import type { GravacaoLocal, Selo } from '../ponte/tipos'
+import { ESTADOS_APARELHO, type Tom } from '../app/vocabulario.js'
 
-const SELOS: Record<Selo, { texto: string; classe: string }> = {
-  gravando: { texto: 'Gravando', classe: 'badge badge-danger' },
-  aguardando: { texto: 'Aguardando', classe: 'badge' },
-  sincronizando: { texto: 'Sincronizando', classe: 'badge badge-progress' },
-  sincronizada: { texto: 'Sincronizada', classe: 'badge badge-success' },
-  interrompida: { texto: 'Interrompida', classe: 'badge badge-warning' },
-  falhou: { texto: 'Falhou', classe: 'badge badge-warning' },
+/** Os selos do celular no vocabulário compartilhado (estados no aparelho). */
+const SELOS: Record<Selo, { rotulo: string; tom: Tom }> = {
+  gravando: ESTADOS_APARELHO.recording,
+  aguardando: ESTADOS_APARELHO.pending,
+  sincronizando: ESTADOS_APARELHO.uploading,
+  sincronizada: ESTADOS_APARELHO.uploaded,
+  interrompida: ESTADOS_APARELHO.interrupted,
+  falhou: ESTADOS_APARELHO.failed,
 }
 
 export function SeloDaGravacao({ selo }: { selo: Selo }) {
-  const { texto, classe } = SELOS[selo]
-  return <span className={classe}>{texto}</span>
+  const { rotulo, tom } = SELOS[selo]
+  return <span className={tom === 'neutral' ? 'badge' : `badge badge-${tom}`}>{rotulo}</span>
 }
 
 /** A linha de uma gravação: "Hoje 09:00 · 54 min · 3 marcadores". */

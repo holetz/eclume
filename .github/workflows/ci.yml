@@ -116,11 +116,14 @@ jobs:
               - *ci
               - "desktop/**"
               - "web/src/styles/eclume.css"
+              - "web/src/lib/vocabulario.js"
               - "web/src/features/help/articles/**"
             mobile:
               - *ci
               - "mobile/**"
               - "desktop/crates/**"
+              - "web/src/lib/vocabulario.js"
+              - "web/src/lib/vocabulario.d.ts"
             docs:
               - *ci
               - "docs/**"

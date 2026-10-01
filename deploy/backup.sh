@@ -53,7 +53,8 @@ fi
 log "minio: espelho do bucket"
 user="$(sed -n 's/^ECLUME_MINIO_USER=//p' "$ENV_FILE" | tail -n 1)"
 pass="$(sed -n 's/^ECLUME_MINIO_PASSWORD=//p' "$ENV_FILE" | tail -n 1)"
-network="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' "$minio")"
+# A rede interna `dados` do projeto (o MinIO também está na `fila-gpu`).
+network="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$minio" | grep '_dados$')"
 image="$(docker inspect -f '{{.Config.Image}}' "$minio")"
 mkdir -p "$DEST/minio/.espelho"
 docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e HOME=/tmp \

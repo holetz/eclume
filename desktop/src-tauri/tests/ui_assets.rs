@@ -49,6 +49,22 @@ fn eclume_css_e_a_mesma_copia_do_web() {
 }
 
 #[test]
+fn vocabulario_e_a_mesma_copia_do_web() {
+    let desktop = read(&ui_dir().join("js/vocabulario.js"));
+    assert!(
+        desktop.contains("export const MOTIVOS"),
+        "não parece o vocabulário de estados"
+    );
+    let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/lib/vocabulario.js");
+    if web.exists() {
+        assert!(
+            desktop == read(&web),
+            "desktop/ui/js/vocabulario.js difere de web/src/lib/vocabulario.js: copie o do web"
+        );
+    }
+}
+
+#[test]
 fn nenhum_recurso_externo() {
     for path in text_files(&ui_dir()) {
         let text = read(&path);

@@ -23,6 +23,7 @@ from arq.connections import RedisSettings
 from arq.worker import func
 from sqlalchemy import delete, select, update
 
+from eclume_engines.fila import desserializar
 from eclume_engines.registro import configurar_logs, contexto_do_job
 from eclume_server.agenda_types import ensure_type, run_detect
 from eclume_server.base_chat import run_base_chat_job
@@ -442,6 +443,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         "on_shutdown": shutdown,
         "on_job_start": job_start,
         "ctx": {"settings": settings},
+        # Fase A da fila sem pickle: lê JSON e o pickle antigo sem globais.
+        "job_deserializer": desserializar,
     }
 
 
@@ -459,6 +462,7 @@ def agent_worker_settings(settings: Settings) -> dict[str, Any]:
         "on_shutdown": shutdown,
         "on_job_start": job_start,
         "ctx": {"settings": settings},
+        "job_deserializer": desserializar,
     }
 
 
@@ -479,6 +483,7 @@ class WorkerSettings:
     on_job_start = _FROM_ENV["on_job_start"]
     ctx = _FROM_ENV["ctx"]
     max_jobs = _FROM_ENV["max_jobs"]
+    job_deserializer = _FROM_ENV["job_deserializer"]
 
 
 class AgentWorkerSettings:
@@ -494,3 +499,4 @@ class AgentWorkerSettings:
     on_shutdown = _AGENTS_FROM_ENV["on_shutdown"]
     on_job_start = _AGENTS_FROM_ENV["on_job_start"]
     ctx = _AGENTS_FROM_ENV["ctx"]
+    job_deserializer = _AGENTS_FROM_ENV["job_deserializer"]

@@ -8,6 +8,7 @@ import styles from './ImportDialog.module.css'
 import { useImportContext } from './importContext'
 import type { ImportDate, ImportItem } from './useImportQueue'
 import { formatBytes } from '../../shared/format'
+import { ESTADOS_APARELHO } from '../../lib/vocabulario.js'
 
 const SOURCE_LABELS: Record<ImportDate['source'], string> = {
   metadata: 'Dos metadados do arquivo',
@@ -61,12 +62,11 @@ function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
       )
     case 'error':
       return (
-        <span className={styles.error} title={state.message}>
-          Falhou ·{' '}
+        <span className={styles.error}>
+          {ESTADOS_APARELHO.failed.rotulo}: {state.message} ·{' '}
           <button type="button" className={styles.linkButton} onClick={onRetry}>
             Tentar de novo
           </button>
-          <span className="visually-hidden">: {state.message}</span>
         </span>
       )
     case 'canceled':
