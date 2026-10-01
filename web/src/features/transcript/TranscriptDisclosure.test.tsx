@@ -76,3 +76,50 @@ describe('transcrição longa', () => {
     expect(list.children[10].querySelector('.segment')).toHaveAttribute('aria-current', 'true')
   })
 })
+
+describe('acompanhar o áudio', () => {
+  /** Um `IntersectionObserver` de mentira: o teste diz quando a lista entra ou sai da janela. */
+  function stubObserver() {
+    const observers: { callback: IntersectionObserverCallback; element?: Element }[] = []
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observers.push({ callback })
+        }
+        observe(element: Element) {
+          observers.at(-1)!.element = element
+        }
+        disconnect() {}
+      },
+    )
+    return (isIntersecting: boolean) =>
+      act(() => {
+        for (const { callback, element } of observers) {
+          callback([{ isIntersecting, target: element } as IntersectionObserverEntry], {} as IntersectionObserver)
+        }
+      })
+  }
+
+  it('abre pelo ?t= rolando uma vez até a fala do instante, e só segue o áudio com a lista à vista', async () => {
+    const setVisible = stubObserver()
+    const scroll = vi.mocked(Element.prototype.scrollIntoView)
+    scroll.mockClear()
+    mockTranscriptApi({ 'GET /api/v1/transcripts/:id': () => longTranscript() })
+    renderApp(`/gravacoes/${RECORDING}?t=${STEP_MS * 50 + 100}`)
+    const list = await screen.findByRole('list', { name: 'Falas' })
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll.mock.contexts[0]).toBe(list.children[50])
+
+    // Fora da janela (lendo o resumo), a troca de fala não rola a página.
+    setVisible(false)
+    scroll.mockClear()
+    tick(STEP_MS * 60 + 100)
+    expect(scroll).not.toHaveBeenCalled()
+
+    // De volta à vista, segue a fala ativa.
+    setVisible(true)
+    tick(STEP_MS * 61 + 100)
+    expect(scroll.mock.contexts.at(-1)).toBe(list.children[61])
+  })
+})

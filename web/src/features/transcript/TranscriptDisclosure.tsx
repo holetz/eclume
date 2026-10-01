@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { markersLabel } from '../library/calendar'
 import { placeMarkers, type Marker } from './markers'
 import { usePlayback, usePlaybackSelect } from './playback'
@@ -11,14 +11,29 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 
 const NO_MARKERS: Marker[] = []
 
+/** Se o elemento cruza a janela; sem `IntersectionObserver`, conta como visível. */
+function useInView(ref: RefObject<HTMLElement | null>): boolean {
+  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return inView
+}
+
 function Segments({
   transcript,
   markers,
   recordingId,
+  anchorMs,
 }: {
   transcript: Transcript
   markers: Marker[]
   recordingId: string
+  anchorMs: number | null
 }) {
   const { seek } = usePlayback()
   const listRef = useRef<HTMLDivElement>(null)
@@ -44,10 +59,22 @@ function Segments({
     return byIndex
   }, [segments, markers])
 
+  const visible = useInView(listRef)
+  const anchored = useRef(false)
+
+  // Aberta pela URL com `?t=` (busca, fonte do chat, marcador): uma rolagem só até a fala do instante.
   useEffect(() => {
-    if (!follow || active < 0) return
+    if (anchored.current || anchorMs === null) return
+    anchored.current = true
+    const index = findSegmentAt(segments, anchorMs)
+    if (index >= 0) listRef.current?.children[index]?.scrollIntoView({ block: 'center' })
+  }, [anchorMs, segments])
+
+  // Acompanhar o áudio só rola com a lista à vista: lendo o resumo ou usando o chat, a página fica.
+  useEffect(() => {
+    if (!follow || !visible || active < 0) return
     listRef.current?.children[active]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [active, follow])
+  }, [active, follow, visible])
 
   return (
     <>
@@ -88,6 +115,8 @@ interface TranscriptDisclosureProps {
   transcript: Transcript
   markers: Marker[]
   recordingId: string
+  /** O instante do `?t=` da URL, para a rolagem única até a fala dele. */
+  anchorMs?: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -100,6 +129,7 @@ export function TranscriptDisclosure({
   transcript,
   markers,
   recordingId,
+  anchorMs = null,
   open,
   onOpenChange,
 }: TranscriptDisclosureProps) {
@@ -128,7 +158,7 @@ export function TranscriptDisclosure({
       {open && (
         <div className={styles.view}>
           <SpeakersPanel transcript={transcript} />
-          <Segments transcript={transcript} markers={markers} recordingId={recordingId} />
+          <Segments transcript={transcript} markers={markers} recordingId={recordingId} anchorMs={anchorMs} />
         </div>
       )}
     </details>
