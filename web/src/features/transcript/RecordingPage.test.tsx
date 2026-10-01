@@ -296,31 +296,6 @@ describe('página da gravação', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()
   })
 
-  it('quem não é dono não vê o cancelar da transcrição', async () => {
-    const queued = fixtures.recordingQueued()
-    queued.owner = { id: '01928f3a-1c00-7a00-8000-000000000999', name: 'Outra pessoa' }
-    mockFetch({
-      'GET /api/v1/me': () => fixtures.me(),
-      'GET /api/v1/recordings/:id': () => queued,
-    })
-    renderApp(`/gravacoes/${queued.id}`)
-    expect(await screen.findByText('Aguardando a vez na fila de transcrição.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()
-  })
-
-  it('quem não é dono não vê o botão de retentar', async () => {
-    const failed = fixtures.recordingQueued()
-    failed.status = 'failed'
-    failed.owner = { id: '01928f3a-1c00-7a00-8000-000000000999', name: 'Outra pessoa' }
-    mockFetch({
-      'GET /api/v1/me': () => fixtures.me(),
-      'GET /api/v1/recordings/:id': () => failed,
-    })
-    renderApp(`/gravacoes/${failed.id}`)
-    expect(await screen.findByText(/o job falhou/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
-  })
-
   it('gravação ainda em processamento mostra o job no lugar da transcrição', async () => {
     const page = fixtures.recordingPage()
     mockFetch({

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
-import { useMe } from '../../app/session'
 import { stageLabel } from '../library/format'
 import { useCancelTranscription } from './queries'
 import { stepLabel, stepNote } from './steps'
@@ -11,12 +10,10 @@ import styles from './RecordingPage.module.css'
 
 type Recording = Schemas['Recording']
 
-/** "Cancelar transcrição", só para o dono, com confirmação: a GPU para e a gravação fica sem texto. */
+/** "Cancelar transcrição", com confirmação: a GPU para e a gravação fica sem texto. */
 function CancelTranscription({ recording }: { recording: Recording }) {
-  const me = useMe()
   const cancel = useCancelTranscription(recording.id)
   const [confirming, setConfirming] = useState(false)
-  if (me.data?.user.id !== recording.owner.id) return null
   return (
     <>
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>
