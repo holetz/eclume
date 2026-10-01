@@ -88,11 +88,14 @@ echo "Enviando o código de $SHA para $SSH:$DIR…" >&2
 # Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
 git -c core.autocrlf=false archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
 
+# ECLUME_DISK_LIMIT da estação segue para o host, para subir o limite de disco num gate pontual.
+envs=""
+[[ -z "${ECLUME_DISK_LIMIT:-}" ]] || envs="ECLUME_DISK_LIMIT=${ECLUME_DISK_LIMIT//[^0-9]/} "
 args=(--sha "$SHA")
 [[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")
 if [[ "$FUNDO" -eq 1 ]]; then
-  host "setsid nohup bash '$DIR/deploy/gate-host.sh' ${args[*]} >/dev/null 2>&1 < /dev/null &"
+  host "${envs}setsid nohup bash '$DIR/deploy/gate-host.sh' ${args[*]} >/dev/null 2>&1 < /dev/null &"
   echo "Gate de $SHA solto no host; acompanhe com: bash deploy/gate.sh --estado $SHA" >&2
   exit 0
 fi
-host "bash '$DIR/deploy/gate-host.sh' ${args[*]}"
+host "${envs}bash '$DIR/deploy/gate-host.sh' ${args[*]}"
