@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { tamanho } from '../app/formatos'
 import { Voltar } from '../app/Voltar'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
-import type { Atualizacao, Configuracoes as Dados, Preferencias, Qualidade } from '../ponte/tipos'
+import type { Aparelho, Atualizacao, Configuracoes as Dados, Preferencias, Qualidade } from '../ponte/tipos'
 
 const MB_POR_HORA: Record<Qualidade, number> = { padrao: 11, alta: 22 }
 
@@ -51,6 +51,7 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
   const [erro, setErro] = useState<string | null>(null)
   const [confirmandoSaida, setConfirmandoSaida] = useState(false)
   const [pendentes, setPendentes] = useState(0)
+  const [aparelho, setAparelho] = useState<Aparelho | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -65,6 +66,10 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
     ponte
       .estado()
       .then((estado) => ativo && setPendentes(estado.pendentes))
+      .catch(() => {})
+    ponte
+      .aparelho()
+      .then((lido) => ativo && setAparelho(lido))
       .catch(() => {})
     return () => {
       ativo = false
@@ -86,6 +91,16 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
     try {
       await ponte.sair()
       ir('/servidor')
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+    }
+  }
+
+  async function pedirIsencao() {
+    setErro(null)
+    try {
+      await ponte.pedirIsencaoDeBateria()
+      setAparelho(await ponte.aparelho())
     } catch (e) {
       setErro(mensagemDeErro(e))
     }
@@ -154,6 +169,27 @@ export function Configuracoes({ ir, espacoLivre }: { ir: (rota: string) => void;
               </Linha>
             </ul>
           </div>
+          {aparelho && (
+            <div className="m-group">
+              <span className="kicker">Gravação</span>
+              <ul className="m-rows">
+                <Linha
+                  titulo="Gravar com a tela bloqueada"
+                  sub={
+                    aparelho.isencaoDeBateria === 'concedida'
+                      ? 'Sem otimização de bateria'
+                      : 'A otimização de bateria pode parar a gravação'
+                  }
+                >
+                  {aparelho.isencaoDeBateria !== 'concedida' && (
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={pedirIsencao}>
+                      Permitir
+                    </button>
+                  )}
+                </Linha>
+              </ul>
+            </div>
+          )}
           <div className="m-group">
             <span className="kicker">Armazenamento</span>
             <ul className="m-rows">
