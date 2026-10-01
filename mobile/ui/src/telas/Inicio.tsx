@@ -120,13 +120,12 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
       </div>
       <FaixaDeRede rede={estado.rede} pendentes={estado.pendentes} />
       {aparelho && !aparelho.notificacoes && (
-        <div className="alert alert-warning" style={{ margin: '12px 20px 0' }} role="status">
+        <div className="alert alert-warning alerta-no-topo" role="status">
           <span className="alert-title">Notificações bloqueadas</span>
           <span>Sem elas, a gravação não aparece na tela bloqueada e você não fica sabendo se ela parar.</span>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            style={{ justifySelf: 'start', marginTop: 8 }}
+            className="btn btn-secondary btn-sm alinha-inicio margem-topo-2"
             onClick={abrirConfiguracoesDoApp}
           >
             Abrir configurações do app
@@ -162,7 +161,7 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
               A otimização de bateria do Android pode parar a gravação com a tela apagada. Permita que o eclume
               funcione em segundo plano.
             </span>
-            <div className="duas-colunas" style={{ marginTop: 8 }}>
+            <div className="duas-colunas margem-topo-2">
               <button type="button" className="btn btn-primary" onClick={() => seguirDaBateria(true)}>
                 Permitir
               </button>

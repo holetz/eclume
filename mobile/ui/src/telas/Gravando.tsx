@@ -53,7 +53,7 @@ export function Gravando({ estado }: { estado: EstadoApp }) {
         )}
       </div>
       {estado.conexao.fase === 'sem_credencial' && (
-        <div className="alert alert-warning" style={{ margin: '0 20px' }} role="status">
+        <div className="alert alert-warning margem-lateral" role="status">
           <span className="alert-title">Entre de novo para sincronizar</span>
           <span>A gravação segue no celular; ela sobe depois que você entrar.</span>
         </div>
