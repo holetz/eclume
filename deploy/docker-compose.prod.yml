@@ -60,7 +60,7 @@ x-server-image: &server-image
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
-    args: {ECLUME_COMMIT: "${ECLUME_COMMIT:-}"}
+    args: {ECLUME_COMMIT: "${ECLUME_COMMIT:-}", ECLUME_CLAUDE_CLI: "${ECLUME_CLAUDE_CLI:-0}"}
     tags: ["eclume-server:${ECLUME_COMMIT:-sem-commit}"]
     labels: {org.eclume.image: "server", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 

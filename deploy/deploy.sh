@@ -212,6 +212,15 @@ done
 if [[ -f "$ENV_FILE" ]] && grep -q '=troque-' "$ENV_FILE" && [[ "$PLAN_ONLY" -eq 0 ]]; then
   problemas+=("$ENV_FILE ainda tem valores 'troque-': gere segredos reais (--gerar-env)")
 fi
+# A CLI `claude` só entra na imagem com ECLUME_CLAUDE_CLI=1 (holetz/eclume#129): sem a declaração,
+# o build cairia no padrão 0 e o claude-cli da produção sumiria em silêncio.
+if [[ -f "$ENV_FILE" ]] && ! grep -qE '^ECLUME_CLAUDE_CLI=[01]$' "$ENV_FILE"; then
+  if [[ "$PLAN_ONLY" -eq 1 ]]; then
+    echo "Aviso: $ENV_FILE não declara ECLUME_CLAUDE_CLI (0 ou 1); o deploy real recusa." >&2
+  else
+    problemas+=("$ENV_FILE não declara ECLUME_CLAUDE_CLI=0 ou 1 (1 mantém a CLI do claude-cli na imagem)")
+  fi
+fi
 
 # --- a árvore do SHA, num diretório temporário: compose, Dockerfiles e scripts são os dele ---------
 if git cat-file -e "$SHA^{commit}" 2>/dev/null; then
