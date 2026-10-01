@@ -58,6 +58,28 @@ def progress_key(recording_id: UUID | str) -> str:
     return f"eclume:progress:{recording_id}"
 
 
+def return_revision(job: str, recording_id: UUID | str, job_id: str | None) -> int | None:
+    """A revisão do `_job_id` `{job}:{recording_id}:{revision}` de um job de retorno do worker GPU.
+
+    `None` quando o id não tem essa forma (worker antigo, id aleatório do arq): vale a regra antiga,
+    o job mais recente da gravação.
+    """
+    prefix = f"{job}:{recording_id}:"
+    if not job_id or not job_id.startswith(prefix):
+        return None
+    tail = job_id.removeprefix(prefix)
+    if not tail.isdigit() or int(tail) < 1:
+        return None
+    return int(tail)
+
+
+def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str, str] | None:
+    """O hash de progresso, se for da revisão; o hash sem `revision` (worker antigo) vale."""
+    if not raw or raw.get("revision", str(revision)) != str(revision):
+        return None
+    return raw
+
+
 def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
     """`options` do `transcribe`, da configuração da plataforma; o worker não lê o banco."""
     asr = platform["asr"]
@@ -156,10 +178,14 @@ class Queue:
             recording_id: _decode(values) for recording_id, values in zip(recording_ids, raw, strict=True) if values
         }
 
-    async def progress(self, recording_ids: list[UUID]) -> dict[UUID, tuple[str | None, float]]:
-        """Progresso publicado pelo worker GPU, por gravação."""
-        raw = await self.raw_progress(recording_ids)
-        return {recording_id: parsed for recording_id, values in raw.items() if (parsed := job_progress(values))}
+    async def progress(self, open_jobs: dict[UUID, int]) -> dict[UUID, tuple[str | None, float]]:
+        """Progresso publicado pelo worker GPU, por gravação, só o da revisão do job em aberto."""
+        raw = await self.raw_progress(list(open_jobs))
+        return {
+            recording_id: parsed
+            for recording_id, values in raw.items()
+            if (parsed := job_progress(progress_of_revision(values, open_jobs[recording_id])))
+        }
 
     async def depth(self, queue_name: str) -> tuple[int, int]:
         """`(na fila, rodando)` de uma fila arq: o zset guarda os dois até o job terminar."""

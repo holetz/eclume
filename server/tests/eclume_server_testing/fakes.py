@@ -1,9 +1,11 @@
 """Fakes da suíte: o worker GPU e os agentes de sumarização.
 
 O worker GPU fake cumpre o lado GPU do contrato de jobs com a transcrição de fixture: publica
-`recordings/{id}/transcript.raw.json` (a fixture de 3 locutores sem `person`/`suggestions`, com
-rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso e enfileira
-`ingest_transcript` (ou `transcription_failed`) em `eclume:default`. Os embeddings têm 256
+`recordings/{id}/r{revision}/transcript.raw.json` (a fixture de 3 locutores sem `person`/
+`suggestions`, com rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso
+com a revisão e enfileira `ingest_transcript` (ou `transcription_failed`) em `eclume:default` com o
+`_job_id` da revisão. `legacy=True` faz o worker antigo: chaves sem revisão, progresso sem
+`revision` e retorno sem `_job_id`. Os embeddings têm 256
 dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
 toda gravação; `voices=` troca as vozes de uma rodada.
 
@@ -92,20 +94,34 @@ async def _put_json(storage: Storage, key: str, document: object) -> None:
     )
 
 
+def _return_job_id(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> dict[str, str]:
+    """O `_job_id` do retorno com a revisão; o worker antigo deixa o arq sortear um."""
+    return {} if ctx.get("legacy") else {"_job_id": f"{job}:{recording_id}:{revision}"}
+
+
 async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any]) -> str:
     """O `transcribe` do contrato, sem GPU."""
     storage: Storage = ctx["storage"]
     redis = ctx["redis"]
-    await redis.hset(progress_key(recording_id), mapping={"stage": "upload", "pct": "100", "updated_at": "agora"})
+    legacy = bool(ctx.get("legacy"))
+    revision = int(str(ctx["job_id"]).rsplit(":", 1)[1])
+    progress = {"stage": "upload", "pct": "100", "updated_at": "agora"} | ({} if legacy else {"revision": revision})
+    await redis.hset(progress_key(recording_id), mapping=progress)
     await redis.expire(progress_key(recording_id), 86400)
     if ctx.get("fail"):
         code, message = ctx.get("failure") or ("gpu_oom", "CUDA out of memory")
         await redis.enqueue_job(
-            "transcription_failed", recording_id, code, message, ctx.get("fail_stage", "asr"), _queue_name=DEFAULT_QUEUE
+            "transcription_failed",
+            recording_id,
+            code,
+            message,
+            ctx.get("fail_stage", "asr"),
+            _queue_name=DEFAULT_QUEUE,
+            **_return_job_id(ctx, "transcription_failed", recording_id, revision),
         )
         return "falhou"
     await storage.sha256(audio_key)  # o áudio existe e é legível
-    prefix = artifacts_prefix(recording_id)
+    prefix = artifacts_prefix(recording_id) + ("" if legacy else f"r{revision}/")
     transcript_key = f"{prefix}transcript.raw.json"
     await _put_json(storage, transcript_key, raw_transcript())
     embeddings_key = None
@@ -133,7 +149,13 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
             "fallback": failed,
         }
     await redis.enqueue_job(
-        "ingest_transcript", recording_id, transcript_key, embeddings_key, info, _queue_name=DEFAULT_QUEUE
+        "ingest_transcript",
+        recording_id,
+        transcript_key,
+        embeddings_key,
+        info,
+        _queue_name=DEFAULT_QUEUE,
+        **_return_job_id(ctx, "ingest_transcript", recording_id, revision),
     )
     ctx["calls"].append((recording_id, audio_key, options))
     return "ok"
@@ -152,8 +174,9 @@ def run_gpu(
 ) -> list[tuple[str, str, dict[str, Any]]]:
     """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas.
 
-    `behavior` ajusta o fake: `fail_stage` e `failure` (código, mensagem) na falha, e
-    `preprocess_fallback` para a cadeia do pré-processamento caída para só o formato.
+    `behavior` ajusta o fake: `fail_stage` e `failure` (código, mensagem) na falha,
+    `preprocess_fallback` para a cadeia do pré-processamento caída para só o formato e `legacy`
+    para o worker GPU anterior à revisão nos retornos.
     """
     calls: list[tuple[str, str, dict[str, Any]]] = []
     ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices, **behavior}
@@ -242,7 +265,12 @@ def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
     agents = agents or FakeAgents()
     params = worker_settings(settings) | {"cron_jobs": None}
     # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
-    params["ctx"] = params["ctx"] | {"provider_factory": agents, "retry_delays": (0, 0), "gpu_retry_s": 0}
+    params["ctx"] = params["ctx"] | {
+        "provider_factory": agents,
+        "retry_delays": (0, 0),
+        "gpu_retry_s": 0,
+        "ingest_retry_delays": (0, 0, 0),
+    }
     run(_drain(params.pop("functions"), **params))
     return agents
 

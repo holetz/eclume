@@ -1,9 +1,10 @@
 """Job `transcribe` da fila `eclume:gpu` (contrato em docs/standards/api/jobs-transcricao.md).
 
 Baixa o áudio, pré-processa (`preprocess.py`), roda a engine numa thread (uma vez por canal, com
-os canais separados), grava `transcript.raw.json` e `speaker_embeddings.json` no bucket e enfileira
-`ingest_transcript` em `eclume:default`. Em falha, enfileira `transcription_failed` com a etapa em
-que parou e retorna sem relançar: o retry é decisão do server, não do arq.
+os canais separados), grava `transcript.raw.json` e `speaker_embeddings.json` da revisão no bucket e
+enfileira `ingest_transcript` em `eclume:default`. Em falha, enfileira `transcription_failed` com a
+etapa em que parou e retorna sem relançar: o retry é decisão do server, não do arq. Os dois retornos
+levam a revisão no `_job_id` (`{job}:{recording_id}:{revision}`); os argumentos são os de sempre.
 """
 
 from __future__ import annotations
@@ -54,6 +55,11 @@ class JobFailedError(Exception):
         self.message = message
 
 
+def return_job_id(job: str, recording_id: str, revision: int) -> str:
+    """`_job_id` `{job}:{recording_id}:{revision}`: o do `transcribe` e o dos retornos da revisão."""
+    return f"{job}:{recording_id}:{revision}"
+
+
 def parse_revision(job_id: str | None) -> int:
     """Lê a revisão do `_job_id` `transcribe:{recording_id}:{revision}`; padrão 1."""
     try:
@@ -81,6 +87,8 @@ class EngineRegistry:
         self._key: tuple[str, str | None] | None = None
         self._engine: Engine | None = None
         self._last_used = clock()
+        # O `_job_id` do `transcribe` em execução (do download ao enfileiramento do retorno).
+        self.current_job: str | None = None
         # A engine continua no registro depois da descarga ociosa (recarrega no próximo job); isto
         # diz se os modelos dela já foram descarregados desde o último uso.
         self._unloaded = False
@@ -96,8 +104,8 @@ class EngineRegistry:
 
     @property
     def busy(self) -> bool:
-        """Há um job usando a engine agora."""
-        return self._lock.locked()
+        """Há um `transcribe` em execução (ou a engine em uso)."""
+        return self.current_job is not None or self._lock.locked()
 
     def loaded_models(self) -> list[dict[str, Any]]:
         """Modelos residentes da engine, para o heartbeat; engines sem o método não declaram nenhum."""
@@ -269,18 +277,25 @@ def _thread_progress(
 async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any] | None) -> dict:
     """Job `transcribe(recording_id, audio_key, options)` do contrato."""
     config: WorkerConfig = ctx["config"]
-    config.work_dir.mkdir(parents=True, exist_ok=True)
-    workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
-    reporter = ProgressReporter(ctx["redis"], recording_id)
+    registry: EngineRegistry = ctx["engines"]
+    revision = parse_revision(ctx.get("job_id"))
+    registry.current_job = ctx.get("job_id") or return_job_id("transcribe", recording_id, revision)
     try:
-        return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
-    except JobFailedError as exc:
-        return await _fail(ctx["redis"], recording_id, exc.code, exc.message, reporter.stage)
-    except Exception as exc:
-        logger.exception("gravação %s: erro inesperado", recording_id)
-        return await _fail(ctx["redis"], recording_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}", reporter.stage)
+        config.work_dir.mkdir(parents=True, exist_ok=True)
+        workdir = Path(tempfile.mkdtemp(prefix=f"{recording_id}-", dir=config.work_dir))
+        reporter = ProgressReporter(ctx["redis"], recording_id, revision)
+        try:
+            return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter)
+        except JobFailedError as exc:
+            return await _fail(ctx["redis"], reporter, exc)
+        except Exception as exc:
+            logger.exception("gravação %s: erro inesperado", recording_id)
+            failure = JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
+            return await _fail(ctx["redis"], reporter, failure)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        registry.current_job = None
 
 
 async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha também lê
@@ -337,7 +352,7 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
     transcript = build_transcript(
         result,
         recording_id=recording_id,
-        revision=parse_revision(ctx.get("job_id")),
+        revision=reporter.revision,
         content_hash=content_hash,
         # O pedido (com a região), ou o que a engine detectou.
         language=options.get("language") or result.language,
@@ -346,7 +361,8 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
         duration_ms=pre.duration_ms,
     )
     await reporter.report("upload")
-    t_key, e_key = transcript_key(recording_id), embeddings_key(recording_id)
+    t_key = transcript_key(recording_id, reporter.revision)
+    e_key = embeddings_key(recording_id, reporter.revision)
     try:
         await asyncio.to_thread(store.put_json, t_key, transcript)
         await asyncio.to_thread(store.put_json, e_key, build_embeddings(result))
@@ -356,7 +372,15 @@ async def _run(  # noqa: PLR0913 — o job e o reporter de progresso que a falha
     info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at, pre)
     # 100 antes do retorno: o server apaga o hash ao ingerir, e uma gravação depois o recriaria.
     await reporter.report("upload", 100)
-    await redis.enqueue_job("ingest_transcript", recording_id, t_key, e_key, info, _queue_name=DEFAULT_QUEUE)
+    await redis.enqueue_job(
+        "ingest_transcript",
+        recording_id,
+        t_key,
+        e_key,
+        info,
+        _job_id=return_job_id("ingest_transcript", recording_id, reporter.revision),
+        _queue_name=DEFAULT_QUEUE,
+    )
     logger.info("gravação %s transcrita: %s", recording_id, info)
     return {"status": "done", "transcript_key": t_key, "embeddings_key": e_key, "engine_info": info}
 
@@ -372,7 +396,17 @@ def _platform_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple[str
         return None, [WARN_HF_TOKEN_UNDECRYPTABLE]
 
 
-async def _fail(redis: Any, recording_id: str, code: str, message: str, stage: str | None) -> dict:  # noqa: ANN401 — ArqRedis
-    logger.error("gravação %s falhou em %s (%s): %s", recording_id, stage, code, message)
-    await redis.enqueue_job("transcription_failed", recording_id, code, message, stage, _queue_name=DEFAULT_QUEUE)
+async def _fail(redis: Any, reporter: ProgressReporter, failure: JobFailedError) -> dict:  # noqa: ANN401 — ArqRedis
+    recording_id, revision, stage = reporter.recording_id, reporter.revision, reporter.stage
+    code, message = failure.code, failure.message
+    logger.error("gravação %s (revisão %s) falhou em %s (%s): %s", recording_id, revision, stage, code, message)
+    await redis.enqueue_job(
+        "transcription_failed",
+        recording_id,
+        code,
+        message,
+        stage,
+        _job_id=return_job_id("transcription_failed", recording_id, revision),
+        _queue_name=DEFAULT_QUEUE,
+    )
     return {"status": "failed", "error_code": code, "message": message}

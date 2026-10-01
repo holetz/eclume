@@ -3,8 +3,9 @@
 Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, restart, deploy) não
 enfileira `transcription_failed`, e a gravação ficaria `processing` para sempre. O cron
 `reap_stalled_jobs` do worker CPU cruza três sinais por job em aberto — o estado no arq, o hash de
-progresso e o heartbeat do worker GPU — e marca como falha **recuperável** o que não tem mais quem
-o termine — inclusive o `transcribe` concluído cuja ingestão nunca chegou (`ingest_failed`).
+progresso da revisão do job e o heartbeat do worker GPU (`busy` e o `job_id` em curso) — e marca
+como falha **recuperável** o que não tem mais quem o termine — inclusive o `transcribe` concluído
+cuja ingestão nunca chegou (`ingest_failed`).
 Regras em docs/standards/api/jobs-transcricao.md §Job morto.
 
 Nada é marcado na primeira vez que parece morto: a suspeita fica registrada no Redis e só vira
@@ -23,7 +24,7 @@ from sqlalchemy import select
 
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
-from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
+from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, progress_of_revision, transcribe_job_id
 from eclume_server.transcripts import fail
 
 if TYPE_CHECKING:
@@ -100,11 +101,17 @@ def _diagnose_complete(result: JobResult | None, *, now: datetime, settings: Set
     return INGEST_FAILED if now - finished > timedelta(seconds=settings.job_stall_seconds) else None
 
 
+def _worker_on(beat: dict[str, str] | None, job_id: str) -> bool:
+    """O worker vivo declara estar rodando este job (sem `job_id` no heartbeat, worker antigo, basta `busy`)."""
+    return beat is not None and beat.get("busy") == "1" and beat.get("job_id", job_id) == job_id
+
+
 async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram explícitos, para o teste
     redis: ArqRedis,
     job_id: str,
     *,
     recording_id: UUID,
+    revision: int,
     beat: dict[str, str] | None,
     now: datetime,
     settings: Settings,
@@ -117,15 +124,15 @@ async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram exp
     if status == JobStatus.complete:
         return _diagnose_complete(await job.result_info(), now=now, settings=settings)
 
-    progress = _decode(await redis.hgetall(progress_key(recording_id)))
+    # O progresso de outra revisão não diz nada deste job.
+    progress = progress_of_revision(_decode(await redis.hgetall(progress_key(recording_id))), revision) or {}
     if status == JobStatus.not_found and not progress:
         return JOB_LOST
     updated = _parse(progress.get("updated_at"))
     if updated is not None and now - updated > timedelta(seconds=settings.job_stall_seconds):
         return JOB_STALLED
-    worker_idle = beat is None or beat.get("busy") != "1"
     silent = updated is None or now - updated > timedelta(seconds=settings.job_grace_seconds)
-    if worker_idle and silent:
+    if silent and not _worker_on(beat, job_id):
         return WORKER_LOST
     return None
 
@@ -168,12 +175,16 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
     reaped = []
     for job_row_id, recording_id, revision in rows:
         job_key = transcribe_job_id(recording_id, revision)
-        code = await diagnose(redis, job_key, recording_id=recording_id, beat=beat, now=now, settings=settings)
+        code = await diagnose(
+            redis, job_key, recording_id=recording_id, revision=revision, beat=beat, now=now, settings=settings
+        )
         if not await _confirmed(redis, job_key, code, now, settings.job_grace_seconds):
             continue
         async with system_tx(engine) as conn:
-            result = await fail(conn, recording_id, code, _MESSAGES[code])
+            result = await fail(conn, recording_id, code, _MESSAGES[code], revision=revision)
+        if not result.closed:
+            continue
         await redis.delete(progress_key(recording_id))
-        log.warning("job %s (gravação %s): %s — %s", job_row_id, recording_id, code, result)
+        log.warning("job %s (gravação %s): %s — %s", job_row_id, recording_id, code, result.message)
         reaped.append(f"{recording_id}: {code}")
     return reaped

@@ -94,8 +94,9 @@ def test_transcreve_o_dialogo_de_duas_vozes():
     assert job.function == "ingest_transcript", job.args
     _, t_key, e_key, info = job.args
     print(json.dumps(info, ensure_ascii=False, indent=2))  # noqa: T201 — registro do benchmark curto
-    assert t_key == f"recordings/{recording_id}/transcript.raw.json"
-    assert e_key == f"recordings/{recording_id}/speaker_embeddings.json"
+    assert job.job_id == f"ingest_transcript:{recording_id}:1"
+    assert t_key == f"recordings/{recording_id}/r1/transcript.raw.json"
+    assert e_key == f"recordings/{recording_id}/r1/speaker_embeddings.json"
     assert info["engine"] == "whisperx-local"
     assert info["model"] == "large-v3-turbo"
     assert info["duration_ms"] > 25_000
@@ -127,6 +128,7 @@ def test_transcreve_o_dialogo_de_duas_vozes():
         assert len(transcript["speakers"]) == 2
         assert set(embeddings["speaker_embeddings"]) == {"S1", "S2"}
 
+    assert extra["progress"]["revision"] == "1"
     assert extra["progress"]["stage"] == "upload"
     assert extra["progress"]["pct"] == "100"
     assert extra["progress"]["started_at"] == info["started_at"]
@@ -138,3 +140,4 @@ def test_audio_inexistente_gera_transcription_failed():
     job, _ = asyncio.run(enqueue_and_wait(recording_id, f"nao/existe/{recording_id}.ogg", {"language": "pt"}))
     assert job.function == "transcription_failed"
     assert job.args[:2] == (recording_id, "audio_download_failed")
+    assert job.job_id == f"transcription_failed:{recording_id}:1"

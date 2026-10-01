@@ -109,6 +109,17 @@ def test_campos_com_gpu_e_modelo_residente(tmp_path: Path):
     }
 
 
+def test_job_em_curso_publica_busy_e_job_id(tmp_path: Path):
+    registry = _registry(tmp_path)
+    registry.current_job = "transcribe:rec-1:2"
+    fields = heartbeat_fields(WorkerConfig(), registry, None, datetime(2026, 9, 25, 12, 0, 5, tzinfo=UTC))
+    assert (fields["busy"], fields["job_id"]) == ("1", "transcribe:rec-1:2")
+    registry.current_job = None
+    fields = heartbeat_fields(WorkerConfig(), registry, None, datetime(2026, 9, 25, 12, 0, 5, tzinfo=UTC))
+    assert fields["busy"] == "0"
+    assert "job_id" not in fields
+
+
 def test_sem_nvml_sai_sem_gpu_e_a_engine_do_ambiente_vence():
     registry = EngineRegistry(WorkerConfig(), hf_token=lambda: None)
     fields = heartbeat_fields(WorkerConfig(engine="cpu", device="cpu"), registry, None, datetime.now(UTC))

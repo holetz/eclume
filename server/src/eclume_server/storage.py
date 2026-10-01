@@ -36,14 +36,20 @@ def audio_key(owner_id: UUID, recording_id: UUID) -> str:
     return f"users/{owner_id}/recordings/{recording_id}/audio"
 
 
-def embeddings_object_key(recording_id: UUID | str) -> str:
-    """`speaker_embeddings.json` do worker GPU (contrato de jobs)."""
-    return f"{artifacts_prefix(recording_id)}speaker_embeddings.json"
+# Raiz dos artefatos do worker GPU: `recordings/{recording_id}/r{revision}/…` (e as chaves antigas,
+# sem revisão, `recordings/{recording_id}/…`).
+ARTIFACTS_ROOT = "recordings/"
+EMBEDDINGS_FILE = "speaker_embeddings.json"
 
 
 def artifacts_prefix(recording_id: UUID | str) -> str:
-    """Prefixo dos artefatos do worker GPU (contrato de jobs)."""
-    return f"recordings/{recording_id}/"
+    """Prefixo dos artefatos do worker GPU de uma gravação, de todas as revisões (contrato de jobs)."""
+    return f"{ARTIFACTS_ROOT}{recording_id}/"
+
+
+def revision_prefix(recording_id: UUID | str, revision: int) -> str:
+    """Prefixo dos artefatos de uma revisão."""
+    return f"{artifacts_prefix(recording_id)}r{revision}/"
 
 
 @dataclass(frozen=True)
@@ -177,18 +183,34 @@ class Storage:
         if keys:
             await run_in_threadpool(delete)
 
-    async def delete_artifacts(self, recording_id: UUID | str) -> None:
-        """Apaga os artefatos do worker GPU de uma gravação (a transcrição bruta e os embeddings)."""
-        await self.delete_recording(None, recording_id)
-
-    async def delete_recording(self, key: str | None, recording_id: UUID | str) -> None:
-        """Apaga o áudio e os artefatos do worker de uma gravação."""
+    async def list_keys(self, prefix: str) -> list[str]:
+        """Todas as chaves sob `prefix`."""
 
         def listed() -> list[str]:
-            keys = [key] if key else []
-            prefix = artifacts_prefix(recording_id)
+            keys: list[str] = []
             for page in self._s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
                 keys.extend(obj["Key"] for obj in page.get("Contents", []))
             return keys
 
-        await self.delete_keys(await run_in_threadpool(listed))
+        return await run_in_threadpool(listed)
+
+    async def delete_artifacts(self, recording_id: UUID | str) -> None:
+        """Apaga os artefatos do worker GPU de uma gravação (a transcrição bruta e os embeddings)."""
+        await self.delete_recording(None, recording_id)
+
+    async def delete_other_revisions(self, recording_id: UUID | str, revision: int) -> None:
+        """Apaga os artefatos da gravação fora de `r{revision}/`, as chaves antigas sem revisão inclusive."""
+        keep = revision_prefix(recording_id, revision)
+        keys = await self.list_keys(artifacts_prefix(recording_id))
+        await self.delete_keys([key for key in keys if not key.startswith(keep)])
+
+    async def delete_embedding_objects(self) -> int:
+        """Apaga todo `speaker_embeddings.json` do bucket (de toda revisão e das chaves antigas)."""
+        keys = [key for key in await self.list_keys(ARTIFACTS_ROOT) if key.endswith(f"/{EMBEDDINGS_FILE}")]
+        await self.delete_keys(keys)
+        return len(keys)
+
+    async def delete_recording(self, key: str | None, recording_id: UUID | str) -> None:
+        """Apaga o áudio e os artefatos do worker de uma gravação, de todas as revisões."""
+        keys = await self.list_keys(artifacts_prefix(recording_id))
+        await self.delete_keys([key, *keys] if key else keys)
