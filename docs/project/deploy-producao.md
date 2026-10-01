@@ -7,7 +7,7 @@ tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92
 maintainer: holetz
 ---
 
@@ -92,25 +92,53 @@ O `deploy.sh` usa o contexto Docker para build e subida e o SSH (o alvo sai do e
 
 1. Recusa, antes de qualquer escrita no host, uma árvore de trabalho suja, um HEAD que o GitHub não
    tem e um HEAD sem o status `eclume/gate` = `success` do gate do host (`bash deploy/gate.sh`;
-   [monorepo.md](../standards/code/monorepo.md)). O `--plan` mostra o estado do gate sem recusar.
-   Recusa também com o disco do host em 90% ou mais (`ECLUME_DISK_LIMIT`), antes e depois do build.
+   [monorepo.md](../standards/code/monorepo.md)). Recusa também um HEAD fora de `origin/main` ou
+   que não descende do SHA em produção (o último do `deploys.log`), salvo `--fora-do-main
+   "<motivo>"` (ramo de teste; o motivo vai ao histórico) ou `--voltar` (retorno), e um
+   `deploy/.env.prod` que perde ou muda chave da cópia do host (abaixo). O `--plan` mostra, sem
+   recusar: o SHA em produção e o alvo, quantos commits os separam, as migrations pendentes, o
+   env × host, a GPU ocupada e o gate. Recusa também com o disco do host em 90% ou mais
+   (`ECLUME_DISK_LIMIT`), antes e depois do build.
 2. Cria as pastas de `/srv/eclume` e um `hf_token` vazio se faltar. Um arquivo ausente num bind
    mount viraria pasta.
 3. Guarda a cópia de `deploy/.env.prod` em `/srv/eclume/secrets/env.prod`, instala os scripts
    de backup em `bin/` e a linha `# eclume-backup` no crontab.
-4. Constrói `server`, `web` e `worker-gpu` no daemon do host (`--services` restringe;
-   `--sem-build` pula). Com o lock inalterado, o worker GPU sai do cache em segundos.
-5. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
+4. Constrói `server`, `web` e `worker-gpu` no daemon do host a partir do `git archive` do SHA num
+   diretório temporário da estação — compose, Dockerfiles e scripts são os do SHA, nunca os da
+   árvore de trabalho (`--services` restringe; `--sem-build` pula). O build grava
+   `ECLUME_COMMIT` (o `/api/v1/health` o devolve em `commit`) e as tags `:<sha>` ao lado de `:prod`;
+   o deploy marca com `:<sha>` também as imagens que não construiu, e cada deploy deixa um trio. No
+   `worker-gpu` só a tag muda: com o código igual, o cache devolve a mesma imagem e o container não
+   é recriado.
+5. **GPU ocupada:** espera o `busy` do heartbeat cair até `--espera-gpu` (30 min); ao fim, recusa,
+   salvo `--interromper-gpu`. O SIGTERM drena (o worker termina o job atual).
+6. Com migration pendente, grava `pg_dump -Fc` em `/srv/eclume/backups/pre-deploy/` antes do
+   `migrate`; `restaurar-backup.sh --banco <dump> --confirmo` restaura só o banco a partir dele.
+7. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
    `up --wait server worker-cpu worker-agents worker-gpu web` → `up --force-recreate --wait caddy`. Os one-shots
    ficam fora do `--wait`, que trata a saída 0 de um serviço que ninguém espera como falha. O
    Caddy é sempre recriado porque o compose não recria um container quando só o
    `configs.content` muda. A CA está no volume e sobrevive.
-6. Publica a CA em `/srv/eclume/downloads/eclume-root.crt`, poda as imagens do eclume que ficaram
-   sem tag (rótulo `org.eclume.image`, nada de outros projetos) e confere o health pela CA
+8. Publica a CA em `/srv/eclume/downloads/eclume-root.crt`, acrescenta uma linha ao
+   `/srv/eclume/deploys.log`, aplica a retenção e confere o health (com o `commit` do SHA) pela CA
    publicada.
 
-Deploys de branches diferentes se sobrescrevem: o servidor e o web de produção são os do último
-deploy. O estado estável é o deploy de `main`; depois de testar um branch, volte a `main`.
+### Rastreio, retenção e retorno
+
+- **O que está em produção** sai de três lugares que concordam: `GET /api/v1/health` (`commit`),
+  as tags `eclume-{server,web,worker-gpu}:<sha>` e `/srv/eclume/deploys.log` (TSV: data, SHA,
+  flags, motivo, migrations aplicadas e o dump pré-deploy).
+- **Retenção:** o host guarda o trio de imagens e o dump dos últimos 3 deploys distintos
+  (`ECLUME_DEPLOYS_RETIDOS`); as tags fora da janela saem e o `image prune` só leva o que ficou sem
+  tag (rótulo `org.eclume.image`).
+- **`bash deploy/deploy.sh --context gpu-host --voltar <sha>`** sobe o trio retido daquele deploy,
+  sem build e sem migrate (o `deploy_lib.py voltar` decide). Um passo atrás vale mesmo com
+  migration nova, pela regra expandir/contrair
+  ([server-nucleo.md](../standards/code/server-nucleo.md)); mais de um passo com migrations que o
+  alvo não conhece recusa e aponta o dump pré-deploy para restaurar o banco antes.
+- **Ramo de teste** é `--fora-do-main "<motivo>"`; o deploy seguinte do `main` exige descender do
+  que está em produção, então volte ao `main` com `--voltar` ou com um commit do `main` que já
+  contém o ramo.
 
 ### Gate e dispensa
 
@@ -126,7 +154,11 @@ rede) — e rode o gate no mesmo SHA logo depois.
 ### Segredos
 
 `deploy/.env.prod` (600, no `.gitignore`) sai de `deploy/.env.prod.example` por
-`--gerar-env`, com `openssl rand`. As senhas são hex, porque entram na DSN sem escape, e
+`--gerar-env`, com `openssl rand`; o `--gerar-env` recusa quando o host já tem
+`secrets/env.prod` (o deploy restaura essa cópia num checkout sem env). O deploy compara o env
+local com a cópia do host **por chave** — o host manda só o sha256 de cada valor — e recusa
+quando uma chave do host falta ou mudou; chave nova só no local passa. `--substituir-env` aceita
+a troca e guarda antes `secrets/env.prod.<data>`. As senhas são hex, porque entram na DSN sem escape, e
 `ECLUME_ENCRYPTION_KEY` é o base64 de 32 bytes. O deploy recusa enquanto houver um `=troque-`.
 Sem o arquivo no checkout (outra máquina, outra worktree), o deploy o restaura da cópia do
 host.
