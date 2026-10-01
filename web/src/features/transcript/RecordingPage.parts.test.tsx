@@ -58,15 +58,15 @@ describe('player e marcadores', () => {
     fireEvent.loadedMetadata(audio())
     expect(audio().currentTime).toBe(65)
     expect(audio().play).toHaveBeenCalled()
-    expect(within(player).queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('O áudio não carregou.')).not.toBeInTheDocument()
 
     fireEvent.error(audio())
-    const alert = within(player).getByRole('alert')
-    expect(alert).toHaveTextContent('O áudio não carregou.')
+    // O aviso fica logo abaixo do player, fora da linha dele.
+    const alert = screen.getByText('O áudio não carregou.').closest('[role="alert"]') as HTMLElement
     expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
     const failed = audio().getAttribute('src')
     await user.click(within(alert).getByRole('button', { name: 'Tentar de novo' }))
-    expect(within(player).queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('O áudio não carregou.')).not.toBeInTheDocument()
     expect(audio().getAttribute('src')).not.toBe(failed)
   })
 
@@ -76,7 +76,7 @@ describe('player e marcadores', () => {
     const player = await screen.findByRole('group', { name: 'Player' })
     vi.spyOn(audio(), 'canPlayType').mockReturnValue('')
     fireEvent.error(audio())
-    expect(within(player).getByRole('alert')).toHaveTextContent('Este navegador não toca o áudio do eclume (Ogg Opus).')
+    expect(screen.getByText(/^Este navegador não toca o áudio do eclume \(Ogg Opus\)/)).toHaveAttribute('role', 'alert')
     expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
   })
 
