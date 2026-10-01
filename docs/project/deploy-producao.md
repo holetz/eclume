@@ -207,7 +207,9 @@ abre a autorização no navegador e imprime o token (`sk-ant-oat01-…`). Cadast
 **Admin → Agentes → Claude (servidor) → Editar → Token do Claude**. Ele fica cifrado no banco e
 vence o `ECLUME_CLAUDE_OAUTH_TOKEN` do env, que sobra como alternativa de operação sem painel. O
 token vale 1 ano e não se renova: gere outro antes de vencer (o sintoma é o resumo falhando com
-`provider_auth` na Saúde do admin).
+`provider_auth` na Saúde do admin). O painel grava a data de cadastro (`key_set_at`), e
+`eclume-server saude --json` informa o vencimento (`claude_token.days_left`); o `vigia.sh` avisa
+com 30 dias ou menos. O token só no env não tem data: o vigia avisa uma vez "validade desconhecida".
 
 Numa estação Windows ([estacao-windows.md](estacao-windows.md)), o `.gitattributes` mantém os
 scripts com LF em qualquer checkout. Sem `flock`, a trava vira o diretório `deploy/.deploy.lock.d`.
@@ -391,6 +393,28 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,
   `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`.
+- **Logs:** uma linha JSON por registro (`ts`, `level`, `logger`, `msg` e, quando houver,
+  `request_id`, `recording_id`, `revision`, `job_id`); toda resposta da API leva `X-Request-ID`.
+  Para seguir uma requisição ou um job:
+  `"${P[@]}" logs --no-log-prefix server | grep '"request_id": "<id>"'` (ou `"recording_id": "<id>"`
+  nos workers). Campos e o que nunca entra em
+  [server-nucleo.md](../standards/code/server-nucleo.md#logs).
+- **Saúde e prontidão:** `/api/v1/health/ready` dá 503 nomeando Postgres, Redis ou MinIO fora, e é
+  o healthcheck do `server`; os workers têm healthcheck pelas chaves de heartbeat das filas
+  (`"${P[@]}" ps` mostra `unhealthy`). Os números da Saúde do admin pelo terminal:
+  `"${P[@]}" exec server eclume-server saude --json`.
+- **Alertas (`vigia.sh`):** o cron `# eclume-vigia` roda `/srv/eclume/bin/vigia.sh` a cada 5 min
+  (o `deploy.sh` instala). Avisa quando: disco ≥ 85%; backup, cópia fora do host ou ensaio sem
+  `ok` há mais de 26 h (`estado/*.json`; sem eles, a última linha `ok:` do `backup.log`);
+  contêiner do projeto `eclume` `unhealthy`, reiniciando ou parado em duas rodadas seguidas; job
+  na fila da GPU há mais de 2 h; 3 ou mais falhas em 24 h ou qualquer `provider_auth`; token do
+  Claude vencendo em 30 dias; `nvidia-smi` falhando ou sem heartbeat do worker GPU; `saude --json`
+  sem resposta. Cada alerta sai uma vez, repete a cada 6 h e manda o aviso de volta ao normal;
+  estado em `/srv/eclume/estado/vigia/`. Limites por ambiente (`VIGIA_DISCO_PCT`,
+  `VIGIA_BACKUP_HORAS`, `VIGIA_TOKEN_DIAS`, `VIGIA_REPETIR_HORAS`). Para ver sem mandar:
+  `ssh holetz@192.168.15.199 /srv/eclume/bin/vigia.sh --simular`. **Canal:** ainda não decidido
+  (holetz/eclume#93, tarefa 5.3); até lá os alertas vão para `estado/vigia/alertas.log` e para o
+  syslog (`journalctl -t eclume-vigia`).
 - **Disco:** o `deploy.sh` mostra o uso no `--plan`. Para liberar espaço, rode
   `docker --context gpu-host builder prune -f --filter until=720h`; nunca faça `image prune -a`,
   porque ele apagaria imagens dos serviços pessoais.
