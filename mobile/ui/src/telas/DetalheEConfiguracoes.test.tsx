@@ -33,6 +33,7 @@ describe('Detalhe da gravação', () => {
           { step: 'agenda_type', state: 'skipped', reason: 'set_by_user' },
           { step: 'summary', state: 'pending' },
         ],
+        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
       }
     })
     expect(await screen.findByRole('heading', { name: 'Reunião semanal' })).toBeInTheDocument()
@@ -58,6 +59,21 @@ describe('Detalhe da gravação', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Excluir deste celular' }))
     expect(ponte.excluirLocal).toHaveBeenCalledWith('g1')
     expect(screen.getByText('O servidor mantém a cópia dele.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir na web' }))
+    expect(ponte.abrirNaWeb).toHaveBeenCalledWith('g1')
+  })
+
+  it('sem título dado ao parar, mostra o que o servidor deu', async () => {
+    abrir('/gravacao/g1', (p) => {
+      p.detalhe = {
+        gravacao: gravacaoLocal({ titulo: null, titulo_do_servidor: '2026-09-26 09-00 gravação' }),
+        caminho: null,
+        marcadores: [],
+        etapas: [],
+        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
+      }
+    })
+    expect(await screen.findByRole('heading', { name: '2026-09-26 09-00 gravação' })).toBeInTheDocument()
   })
 
   it('na fila do servidor, diz por que a transcrição espera', async () => {
@@ -75,6 +91,7 @@ describe('Detalhe da gravação', () => {
           resumes_at: null,
           processor: { online: true, offline_since: null },
         },
+        endereco_na_web: null,
       }
     })
     expect(await screen.findByRole('status')).toHaveTextContent('Atrás de 1 gravação sua que chegou antes.')
@@ -87,11 +104,13 @@ describe('Detalhe da gravação', () => {
         caminho: '/data/eclume/gravacoes/g1.ogg',
         marcadores: [],
         etapas: null,
+        endereco_na_web: null,
       }
     })
     expect(await screen.findByText('Aguardando envio')).toBeInTheDocument()
     expect(screen.queryByText('No servidor')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Excluir deste celular' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir na web' })).not.toBeInTheDocument()
   })
 })
 
