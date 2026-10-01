@@ -87,13 +87,13 @@ impl MicSource {
                     .map_err(|_| anyhow!("a thread do mic terminou antes de entregar a fonte"))?
                     .on_stop(move || {
                         let _ = stop_tx.send(());
-                        let _ = thread.join();
+                        let _ = crate::join_with_deadline(thread, crate::STOP_DEADLINE);
                     });
                 log::info!("mic aberto a {rate} Hz");
                 Ok(Self { ring, fell_back })
             }
             Ok(Err(err)) => {
-                let _ = thread.join();
+                let _ = crate::join_with_deadline(thread, crate::STOP_DEADLINE);
                 Err(err)
             }
             Err(_) => {

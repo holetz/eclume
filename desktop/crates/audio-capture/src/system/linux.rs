@@ -129,23 +129,23 @@ fn try_pipewire(target: Option<String>) -> Result<RingSource> {
         Ok(Ok(())) => {}
         Ok(Err(err)) => {
             let _ = shutdown_tx.send(());
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             return Err(err);
         }
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
             let _ = shutdown_tx.send(());
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             anyhow::bail!("tempo esgotado ao iniciar a captura do sistema por PipeWire");
         }
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             anyhow::bail!("a captura do sistema por PipeWire parou durante a inicialização");
         }
     }
 
     Ok(source.on_stop(move || {
         let _ = shutdown_tx.send(());
-        let _ = capture_thread.join();
+        let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
     }))
 }
 
@@ -310,23 +310,23 @@ fn try_pulseaudio(monitor: Option<String>) -> Result<RingSource> {
         Ok(Ok(())) => {}
         Ok(Err(err)) => {
             running.store(false, Ordering::Release);
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             return Err(err);
         }
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
             running.store(false, Ordering::Release);
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             anyhow::bail!("tempo esgotado ao iniciar a captura do sistema por PulseAudio");
         }
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            let _ = capture_thread.join();
+            let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
             anyhow::bail!("a captura do sistema por PulseAudio parou durante a inicialização");
         }
     }
 
     Ok(source.on_stop(move || {
         running.store(false, Ordering::Release);
-        let _ = capture_thread.join();
+        let _ = crate::join_with_deadline(capture_thread, crate::STOP_DEADLINE);
     }))
 }
 

@@ -12,7 +12,8 @@
 //! expõe apenas o trait e o anel ([`ring`]), sem nenhuma dependência de sistema. A feature `mic`
 //! liga só o [`MicSource`] (o app móvel).
 
-use std::time::Duration;
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 pub mod ring;
 
@@ -47,5 +48,51 @@ impl<T: AudioSource + ?Sized> AudioSource for Box<T> {
 
     fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
         (**self).read(timeout)
+    }
+}
+
+/// Quanto a parada espera, no máximo, pela thread de captura (o driver soltar o dispositivo).
+pub const STOP_DEADLINE: Duration = Duration::from_secs(3);
+
+/// Espera a thread terminar até `deadline`. Vencido o prazo (um driver preso ao soltar o
+/// dispositivo), registra o aviso no log, solta a thread e devolve `None`; a parada não espera
+/// sem prazo.
+pub fn join_with_deadline<T>(
+    handle: JoinHandle<T>,
+    deadline: Duration,
+) -> Option<std::thread::Result<T>> {
+    let until = Instant::now() + deadline;
+    while !handle.is_finished() {
+        if Instant::now() >= until {
+            log::warn!(
+                "a thread {} não terminou em {deadline:?}; seguindo sem ela",
+                handle.thread().name().unwrap_or("de captura")
+            );
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Some(handle.join())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn join_com_prazo_solta_a_thread_presa() {
+        let stuck = std::thread::spawn(|| std::thread::sleep(Duration::from_secs(10)));
+        let started = Instant::now();
+        assert!(join_with_deadline(stuck, Duration::from_millis(200)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn join_com_prazo_devolve_o_resultado_da_thread() {
+        let done = std::thread::spawn(|| 42);
+        assert_eq!(
+            join_with_deadline(done, STOP_DEADLINE).map(Result::unwrap),
+            Some(42)
+        );
     }
 }
