@@ -127,7 +127,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
           ...(file.recordedAt ? { recorded_at: file.recordedAt } : {}),
           ...(file.recordedAtSource ? { recorded_at_source: file.recordedAtSource } : {}),
           ...(file.kind ? { kind: file.kind } : {}),
-          language: file.language || undefined,
+          language: file.language,
         },
         signal,
       }),

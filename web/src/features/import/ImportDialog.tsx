@@ -142,7 +142,7 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
           value={item.language ?? ''}
           defaultLabel={defaultLanguage}
           disabled={!editable}
-          onChange={(language) => queue.setLanguage(item.id, language)}
+          onChange={(language) => queue.edit(item.id, (current) => ({ ...current, language: language || undefined }))}
         />
       </td>
       <td className="tabular">{clockDuration(item.probe?.durationSec)}</td>

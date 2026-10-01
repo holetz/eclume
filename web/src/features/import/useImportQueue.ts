@@ -50,7 +50,8 @@ export interface ImportQueue {
   sending: boolean
   add: (files: Iterable<File>) => void
   setDate: (id: string, value: string) => void
-  setLanguage: (id: string, language: string) => void
+  /** Muda um arquivo da fila (o idioma, no modal). */
+  edit: (id: string, change: (item: ImportItem) => ImportItem) => void
   remove: (id: string) => void
   send: () => void
   cancel: (id: string) => void
@@ -153,11 +154,6 @@ export function useImportQueue(): ImportQueue {
 
   const setDate = useCallback(
     (id: string, value: string) => update(id, (item) => ({ ...item, date: { ...item.date, value, source: 'user' } })),
-    [update],
-  )
-
-  const setLanguage = useCallback(
-    (id: string, language: string) => update(id, (item) => ({ ...item, language })),
     [update],
   )
 
@@ -271,5 +267,5 @@ export function useImportQueue(): ImportQueue {
   )
 
   const sending = items.some((item) => BUSY.includes(item.state.kind))
-  return { items, sending, add, setDate, setLanguage, remove, send, cancel, retry, clearFinished }
+  return { items, sending, add, setDate, edit: update, remove, send, cancel, retry, clearFinished }
 }
