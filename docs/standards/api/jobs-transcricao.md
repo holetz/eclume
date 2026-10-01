@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs.
+description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server e o ASR residente entre jobs.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95
 maintainer: holetz
 ---
 
@@ -87,26 +87,37 @@ primeira fala. A engine não muda.
 
 ## O worker GPU devolve
 
-1. Baixa o áudio do S3, roda o pipeline e grava `recordings/{recording_id}/transcript.raw.json`
-   no mesmo bucket.
+1. Baixa o áudio do S3, roda o pipeline e grava `recordings/{recording_id}/r{revision}/transcript.raw.json`
+   no mesmo bucket (a `revision` é a do `_job_id` do `transcribe`).
 2. O arquivo segue [`contracts/transcript.schema.json`](/contracts/transcript.schema.json):
    segmentos, palavras e locutores com `label` "Locutor N", **sem** `person`/`suggestions`, que
    são do server.
 3. Grava também um `speaker_embeddings` com `{speaker_id: [float, ...]}` e `embedding_model`,
-   num arquivo à parte: `recordings/{recording_id}/speaker_embeddings.json`.
+   num arquivo à parte: `recordings/{recording_id}/r{revision}/speaker_embeddings.json`.
 4. Em seguida enfileira `ingest_transcript(recording_id, transcript_key, embeddings_key,
-   engine_info)` em `eclume:default`. O `engine_info` traz engine, modelo, `compute_type`,
-   duração, tempo real e VRAM de pico.
+   engine_info)` em `eclume:default`, com `_job_id="ingest_transcript:{recording_id}:{revision}"`.
+   O `engine_info` traz engine, modelo, `compute_type`, duração, tempo real e VRAM de pico.
 5. Em falha, enfileira `transcription_failed(recording_id, error_code, message, stage)` em
-   `eclume:default`. `stage` é a última etapa do progresso (`preprocess`, `asr`…), que o server usa
-   para marcar a etapa certa do pipeline; um worker antigo não o manda, e vale a transcrição.
+   `eclume:default`, com `_job_id="transcription_failed:{recording_id}:{revision}"`. `stage` é a
+   última etapa do progresso (`preprocess`, `asr`…), que o server usa para marcar a etapa certa do
+   pipeline; um worker antigo não o manda, e vale a transcrição.
+
+A revisão viaja só no `_job_id` (holetz/eclume#95): os argumentos posicionais não mudam, e um
+server antigo ingere o retorno do worker novo. O server lê a revisão exigindo o prefixo
+`{job}:{recording_id}:` e um inteiro ≥ 1; sem isso (worker antigo, id sorteado pelo arq), vale a
+regra antiga, o job mais recente da gravação, e as chaves que o job traz (inclusive as antigas, sem
+`r{revision}/`). O mesmo `_job_id` deduplica o retorno repetido da mesma revisão.
 
 ## Progresso
 
-O worker grava `HSET eclume:progress:{recording_id}` com `stage` (`download`, `preprocess`, `asr`,
-`align`, `diarize`, `embed` ou `upload`), `pct` (0–100) e `updated_at`, com TTL de 1 dia. O server lê
-para o estado do job. O hash traz também `started_at` (RFC 3339 UTC), o início do job, gravado
-desde a primeira escrita.
+O worker grava `HSET eclume:progress:{recording_id}` com `revision`, `stage` (`download`,
+`preprocess`, `asr`, `align`, `diarize`, `embed` ou `upload`), `pct` (0–100) e `updated_at`, com TTL
+de 1 dia. O server lê para o estado do job. O hash traz também `started_at` (RFC 3339 UTC), o início
+do job, gravado desde a primeira escrita.
+
+O `revision` (holetz/eclume#95) diz de qual revisão é o progresso: a tela da gravação, a Saúde do
+admin e o reaper só usam o hash cuja revisão é a do job em aberto; o hash sem o campo (worker
+antigo) vale. A chave não muda, para o server novo ver o progresso do worker antigo.
 
 ## Heartbeat do worker GPU
 
@@ -118,7 +129,8 @@ Hash ausente = worker parado há mais de 45 s. Campos, todos texto:
 |---|---|
 | `updated_at` | instante do heartbeat (RFC 3339 UTC) |
 | `worker_version`, `engine`, `device` | versão do `eclume_worker`, engine do processo (a forçada por `ECLUME_ENGINE`, a última usada ou `whisperx-local`) e dispositivo |
-| `busy` | `1` com um job rodando, `0` ocioso |
+| `busy` | `1` do início ao fim de um `transcribe` (download, pré-processamento, ASR, upload e o enfileiramento do retorno), `0` ocioso |
+| `job_id` | o `_job_id` do `transcribe` em curso (`transcribe:{recording_id}:{revision}`); ausente quando ocioso e no worker antigo |
 | `models` | JSON `[{name, kind, loaded_at, vram_mb}]` do modelo residente (`kind` em `asr`, `alignment`, `diarization`); `[]` sem modelo |
 | `gpu_name`, `vram_total_mb`, `vram_used_mb`, `utilization_pct` | leitura da NVML do dispositivo inteiro; ausentes sem NVML (engine `cpu`) |
 
@@ -136,16 +148,36 @@ da gravação para `transcribed`.
 
 - **Embedding não finito.** A ingestão também descarta o vetor com NaN ou infinito (worker antigo,
   arquivo já no bucket): o pgvector o recusaria e desfaria a ingestão inteira.
+- **Só o job da revisão da mensagem.** `ingest_transcript` e `transcription_failed` fecham só o job
+  `(recording_id, revision)` da mensagem. Se esse job não está `queued`/`running` — já ingerido,
+  falho pelo reaper, ou de uma revisão anterior a uma retranscrição —, a mensagem é obsoleta: é
+  logada e ignorada, sem gravar transcrição, sem marcar falha, sem tocar no hash de progresso nem
+  nos artefatos. Só quem fecha o job apaga o hash.
+- **Falha passageira retenta.** Conexão recusada, caída ou com timeout com o Postgres ou o S3
+  (família `ConnectionError`/`TimeoutError`, `socket.gaierror`, `botocore` de conexão e timeout,
+  `ClientError` HTTP ≥ 500 ou `SlowDown`), pool esgotado, `OperationalError`/`InterfaceError` ou
+  `DBAPIError` com `connection_invalidated`, deadlock e falha de serialização — na exceção ou na
+  causa (`__cause__`, `orig`) — voltam à fila por `Retry`, levantado fora da transação, com as
+  esperas `INGEST_RETRY_DELAYS_S = (15, 60, 240)` s; as duas funções são registradas com
+  `max_tries=4`. As esperas somam 315 s, abaixo de `ECLUME_JOB_STALL_SECONDS`, e o reaper não
+  decide no meio delas. Classificação em `eclume_server/transient.py`.
 - **Ingestão que falha.** Qualquer exceção desfaz a transação inteira (nem transcrição nem etapas
-  do worker GPU ficam). Numa transação nova, `ingest_transcript` marca o job e a gravação com o
-  `fail()` de sempre, código `ingest_failed` (recuperável), e loga a exceção; o job do arq
-  termina sem relevantar, porque o arq não retentaria e o estado final já está no banco.
-  Retranscrever resolve.
+  do worker GPU ficam). A definitiva — dado inválido, JSON malformado, `NoSuchKey`, violação de
+  integridade —, ou a passageira na quarta tentativa, faz `ingest_transcript` marcar, numa
+  transação nova, o job da revisão e a gravação com o `fail()` de sempre, código `ingest_failed`
+  (recuperável), e logar a exceção. Retranscrever resolve. O `transcription_failed` que esgota as
+  tentativas relança, e o reaper cobre o job.
 
 ## Idempotência
 
-Reprocessar a mesma `revision` sobrescreve os artefatos; `ingest_transcript` é idempotente por
-`(recording_id, revision)`.
+Reprocessar a mesma `revision` sobrescreve os artefatos de `r{revision}/`; `ingest_transcript` é
+idempotente por `(recording_id, revision)`.
+
+**Uma revisão guardada.** Depois do commit da ingestão que grava a revisão N, o server apaga sob
+`recordings/{recording_id}/` tudo o que não está em `r{N}/`, inclusive as chaves antigas sem
+revisão. Uma falha nessa limpeza só vai para o log; o resto sai na próxima ingestão ou na exclusão
+da gravação, que apaga o prefixo inteiro. Guardar todas as revisões multiplicaria cópias de dado
+biométrico (LGPD) sem consumidor.
 
 ## Job morto
 
@@ -163,14 +195,18 @@ de progresso e o heartbeat:
 | arq `complete` com falha (o retry do arq encerrou o job de um worker morto) | `worker_lost` |
 | sumido do arq (`not_found`) e sem hash de progresso | `job_lost` |
 | progresso sem escrita há mais de `ECLUME_JOB_STALL_SECONDS` (1800 s), mesmo com worker vivo | `job_stalled` |
-| heartbeat ausente ou `busy=0` e progresso ausente ou sem escrita há mais que a graça | `worker_lost` |
+| o worker não está neste job (heartbeat ausente, `busy=0`, ou `job_id` de outro `transcribe`) e o progresso da revisão ausente ou sem escrita há mais que a graça | `worker_lost` |
+
+O worker está "neste job" com heartbeat presente, `busy=1` e `job_id` igual a
+`transcribe:{recording_id}:{revision}` (ou sem `job_id`, worker antigo). O hash de progresso de
+outra revisão conta como ausente. O heartbeat é o sinal de vida; o progresso mede travamento.
 
 - **Duas observações.** Nada é marcado na primeira vez: a suspeita fica em
   `eclume:reaper:suspect:<_job_id>` (código e instante) e só vira falha se o mesmo diagnóstico
   durar a graça inteira. Isso cobre o worker que acabou de pegar o job e ainda não publicou
   progresso nem heartbeat.
-- **Falha recuperável.** O veredito vai pelo mesmo `fail()` do `transcription_failed` (job e
-  gravação `failed`, hash apagado), com mensagem em pt-BR. `worker_lost`, `job_lost`,
+- **Falha recuperável.** O veredito vai pelo mesmo `fail()` do `transcription_failed`, com a
+  revisão da linha (job e gravação `failed`, hash apagado), com mensagem em pt-BR. `worker_lost`, `job_lost`,
   `job_stalled`, `ingest_failed`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e
   `upload_failed` saem com `Job.error.retryable = true` (contrato 1.4.0; `ingest_failed` desde a
   2.5.0). A ingestão que falha
@@ -179,7 +215,8 @@ de progresso e o heartbeat:
 - **Retentar é explícito.** O dono retranscreve (`POST /recordings/{id}/retranscribe`); o admin
   retenta a gravação de qualquer usuário por `POST /admin/jobs/{job_id}/retry`
   ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
-  configuração atual. Não há retentativa automática: repetiria um OOM ou um áudio ruim em laço.
+  configuração atual. Não há retentativa automática do `transcribe`: repetiria um OOM ou um áudio
+  ruim em laço; só os jobs de retorno retentam a falha passageira.
 - **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela; a ingestão que falha em
   `server/tests/test_pipeline.py`.
 
@@ -195,11 +232,16 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
   gravação, sem região (`pt-BR` → `pt`), ou o padrão da plataforma; `diarize` é a diarização
   ligada; `embeddings` só é `true` com a identificação por voz ligada na plataforma (LGPD).
 - **Revisão.** A `revision` do job é a da transcrição que ele vai produzir: 1 no primeiro;
-  numa retranscrição, uma acima da maior entre a transcrição e o último job.
+  numa retranscrição, uma acima da maior entre a transcrição e o último job. Todo caminho que cria
+  uma revisão ou fecha o job (retranscrever, retentar do admin, `ingest`, `fail`) trava a linha de
+  `recordings` com `SELECT … FOR UPDATE` num comando próprio e só então lê o job em outro: em READ
+  COMMITTED, quem esperou o lock vê o job novo, e o segundo de dois pedidos simultâneos recebe 409
+  em problem+json.
 - **Estado do job.** Com o hash de progresso presente, o job aparece `running` e a gravação
   `processing`; `stage` vira `Job.stage` do contrato v1 (`download`/`asr` → `asr`, `align` →
   `alignment`, `diarize` → `diarization`, `embed` → `embeddings`, `upload` → `finalizing`) e
-  `progress = pct / 100`. O `ingest_transcript` e o `transcription_failed` apagam o hash.
+  `progress = pct / 100`, só com o hash da revisão do job em aberto (ou sem `revision`). O
+  `ingest_transcript` e o `transcription_failed` apagam o hash só quando fecham o job.
 - **Ingestão tolerante.** O raw é lido com padrões para o que faltar e ignorando o que não se
   conhece; um id de locutor fora de `S<n>` é renumerado na ordem em que aparece, e o mesmo mapa
   vale para os embeddings. Com o job já `succeeded`, `ingest_transcript` não faz nada.
@@ -210,7 +252,9 @@ do server usam um worker fake que publica um `transcript.raw.json` de fixture de
 
 - **Execução.** `max_jobs=1` e `max_tries=1`. Uma falha não relança exceção: o worker enfileira
   `transcription_failed` e encerra o job, e o retry é decisão do server. A `revision` é lida do
-  `_job_id`; sem ela, vale 1.
+  `_job_id`; sem ela, vale 1. Ela vai ao hash de progresso, às chaves `r{revision}/` e ao `_job_id`
+  dos dois retornos. O job em curso fica marcado do início ao fim (inclusive o enfileiramento do
+  retorno), e o heartbeat publica `busy` e `job_id` por ele.
 - **Engine.** `ECLUME_ENGINE`, quando definido no processo do worker, força a engine (dev sem
   GPU e o E2E: `cpu`). Vazio, vale `options.engine`, e na falta dele, `whisperx-local`. Uma engine
   forçada diferente de `options.engine` ignora `model`, `compute_type`, `batch_size` e
