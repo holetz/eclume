@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22"
+  },
   "description": "App móvel do eclume: gravador portátil com marcadores e sincronização pelo Wi-Fi do servidor.",
   "scripts": {
     "dev": "vite",

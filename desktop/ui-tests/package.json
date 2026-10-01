@@ -2,6 +2,9 @@
   "name": "eclume-desktop-ui-tests",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22"
+  },
   "description": "Testes de navegador da UI do app desktop do eclume, com o Tauri simulado.",
   "scripts": {
     "test": "playwright test"
