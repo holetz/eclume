@@ -10,7 +10,7 @@ import { AuthLayout } from './AuthLayout'
 export function LoginPage() {
   usePageTitle('Entrar')
   const [params] = useSearchParams()
-  // O aviso de quem chega de outra tela, como a conta excluída.
+  // O aviso de quem chega de outra tela, como a conta excluída ou a senha redefinida.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
   const volta = safeReturnPath(params.get('volta'))
   const me = useMe()
@@ -85,6 +85,7 @@ export function LoginPage() {
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !email || !password}>
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>
+        <p className="text-muted auth-note">Esqueceu a senha? Peça um link a quem administra o servidor.</p>
         <p className="text-muted auth-note">
           Não tem conta? <Link to="/cadastro">Criar conta</Link>
         </p>
