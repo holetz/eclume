@@ -5,8 +5,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
@@ -53,6 +57,8 @@ class ServicoDeGravacao : Service() {
 
     private var emPrimeiroPlano = false
     private var trava: PowerManager.WakeLock? = null
+    private var vigiaDoSilencio: AudioManager.AudioRecordingCallback? = null
+    private var silenciada = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -97,6 +103,7 @@ class ServicoDeGravacao : Service() {
         }
         ServiceCompat.startForeground(this, Notificacao.ID, notificacao, tipo)
         emPrimeiroPlano = true
+        vigiarSilencio()
         if (trava == null) {
             trava = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "eclume:gravacao")
@@ -104,7 +111,39 @@ class ServicoDeGravacao : Service() {
         }
     }
 
+    /**
+     * API 29+: o `AudioRecordingCallback` diz quando o sistema silencia a captura do próprio app
+     * (`isClientSilenced`: chamada, assistente de voz, bloqueio do microfone). O núcleo marca e a
+     * notificação mostra "Silenciado pelo sistema". Abaixo da API 29 não há sinal.
+     */
+    private fun vigiarSilencio() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || vigiaDoSilencio != null) return
+        val vigia = object : AudioManager.AudioRecordingCallback() {
+            override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
+                val agora = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && configs.any { it.isClientSilenced }
+                if (agora == silenciada) return
+                silenciada = agora
+                val estado = EclumeCore.acao(if (agora) "silenciado" else "audivel")
+                SessaoNaNotificacao.doEstado(estado)?.let { sessao ->
+                    getSystemService(NotificationManager::class.java)
+                        .notify(Notificacao.ID, Notificacao.montar(this@ServicoDeGravacao, sessao, System.currentTimeMillis()))
+                }
+            }
+        }
+        getSystemService(AudioManager::class.java)
+            .registerAudioRecordingCallback(vigia, Handler(Looper.getMainLooper()))
+        vigiaDoSilencio = vigia
+    }
+
+    private fun pararDeVigiarSilencio() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        vigiaDoSilencio?.let { getSystemService(AudioManager::class.java).unregisterAudioRecordingCallback(it) }
+        vigiaDoSilencio = null
+        silenciada = false
+    }
+
     private fun encerrar() {
+        pararDeVigiarSilencio()
         trava?.takeIf { it.isHeld }?.release()
         trava = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -119,6 +158,7 @@ class ServicoDeGravacao : Service() {
             Log.w(TAG, "serviço destruído gravando; parando a gravação")
             EclumeCore.acao("parar")
         }
+        pararDeVigiarSilencio()
         trava?.takeIf { it.isHeld }?.release()
         super.onDestroy()
     }

@@ -16,6 +16,10 @@ data class SessaoNaNotificacao(
     val pausada: Boolean,
     val marcadores: Int,
     val espacoLivre: String?,
+    /** O microfone caiu e o núcleo tenta reabri-lo (fone plugado ou tirado, Bluetooth). */
+    val reconectando: Boolean = false,
+    /** O sistema silenciou a captura (chamada, assistente de voz, bloqueio do microfone). */
+    val silenciada: Boolean = false,
 ) {
     companion object {
         /** A sessão do `EstadoApp`; `null` sem gravação em curso (ou com erro do núcleo). */
@@ -27,6 +31,8 @@ data class SessaoNaNotificacao(
                 pausada = sessao.optBoolean("pausada"),
                 marcadores = sessao.optJSONArray("marcadores")?.length() ?: 0,
                 espacoLivre = estado.optString("espaco_livre").takeIf { it.isNotEmpty() && it != "null" },
+                reconectando = sessao.optString("microfone") == "reconectando",
+                silenciada = sessao.optBoolean("silenciada"),
             )
         }
     }
@@ -43,8 +49,13 @@ object TextosDaNotificacao {
     fun titulo(sessao: SessaoNaNotificacao): String =
         if (sessao.pausada) "Pausado · ${relogio(sessao.audioMs)}" else "Gravando"
 
-    /** "2 marcadores · espaço para cerca de 9 h". */
+    /**
+     * "2 marcadores · espaço para cerca de 9 h"; com o microfone fora, "Microfone desconectado ·
+     * reconectando"; com a captura silenciada pelo sistema, "Silenciado pelo sistema".
+     */
     fun texto(sessao: SessaoNaNotificacao): String {
+        if (sessao.silenciada) return "Silenciado pelo sistema"
+        if (sessao.reconectando) return "Microfone desconectado · reconectando"
         val marcadores = if (sessao.marcadores == 1) "1 marcador" else "${sessao.marcadores} marcadores"
         return sessao.espacoLivre?.let { "$marcadores · espaço para $it" } ?: marcadores
     }
