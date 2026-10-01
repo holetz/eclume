@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
-from eclume_server.accounts import NOTICE_VERSION, password_login
+from eclume_server.accounts import NOTICE_VERSION
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
@@ -21,9 +21,9 @@ from eclume_server.devices import (
     pairing_code_json,
     redeem_pairing_code,
 )
-from eclume_server.problems import ApiProblemError, not_found, notice_required, unauthorized
-from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR, attempts, count_login
-from eclume_server.routes.auth import WRONG_PASSWORD, check_email
+from eclume_server.problems import ApiProblemError, not_found, notice_required
+from eclume_server.ratelimit import PAIR_GLOBAL_FACTOR, attempts, client_ip
+from eclume_server.routes.auth import check_email, user_password_login
 from eclume_server.server_info import server_info
 
 router = APIRouter()
@@ -59,10 +59,7 @@ async def device_login(
 
     Conta sem o aceite do aviso em vigor não ganha credencial nova: 403 `notice_required`.
     """
-    await count_login(ctx, "user", body.email)
-    user_id = await password_login(ctx.engine, body.email, body.password)
-    if user_id is None:
-        raise unauthorized(WRONG_PASSWORD)
+    user_id = await user_password_login(ctx, body.email, body.password, client_ip(request))
     async with system_tx(ctx.engine) as conn:
         accepted = await conn.scalar(select(t.users.c.notice_version).where(t.users.c.id == user_id))
         if accepted != NOTICE_VERSION:

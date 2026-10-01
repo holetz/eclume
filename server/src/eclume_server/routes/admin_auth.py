@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import delete, func, insert, select, update
 
 from eclume_server.auth import ADMIN_COOKIE_PATH, ADMIN_CSRF_COOKIE, ADMIN_SESSION_COOKIE, Admin
@@ -18,7 +18,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import unauthorized
-from eclume_server.ratelimit import attempts, count_login
+from eclume_server.ratelimit import attempts, check_login, client_ip, login_failed, login_succeeded
 from eclume_server.routes.auth import LoginRequest
 from eclume_server.security import (
     hash_password_async,
@@ -33,9 +33,12 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
 @router.post("/auth/login", status_code=204)
-async def admin_login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]) -> Response:
+async def admin_login(
+    body: LoginRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]
+) -> Response:
     """Abre a sessão de admin: `eclume_admin_session` (HttpOnly, só no painel) e `eclume_admin_csrf`."""
-    await count_login(ctx, "admin", body.email)
+    ip = client_ip(request)
+    await check_login(ctx, "admin", body.email, ip)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
         query = select(t.admins).where(func.lower(t.admins.c.email) == body.email.lower())
@@ -46,7 +49,9 @@ async def admin_login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(a
         or not admin
         or not admin["active"]
     ):
+        await login_failed(ctx, "admin", body.email, ip)
         raise unauthorized("E-mail ou senha incorretos.")
+    await login_succeeded(ctx, "admin", body.email, ip)
     values: dict[str, Any] = {"last_login_at": now}
     if needs_rehash(admin["password_hash"]):
         values["password_hash"] = await hash_password_async(body.password)

@@ -1,13 +1,16 @@
-"""Limite de tentativas nas rotas que conferem credencial: janela fixa de 1 minuto no Redis.
+"""Limite de tentativas nas rotas que conferem credencial, com contadores no Redis.
 
-Cada rota conta por IP (`attempts`). Os logins por senha também contam por conta
-(`count_login`), numa janela comum ao navegador e ao aparelho, e a troca de código de pareamento
-tem ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes.
+Cada rota conta por IP numa janela fixa de 1 minuto (`attempts`). Os logins por senha contam também
+as **falhas** por conta (`check_login`, `login_failed`, `login_succeeded`), comuns ao navegador e ao
+aparelho: por par (conta, IP), e um teto global da conta que não barra IP que já entrou nela. Assim,
+as tentativas de um IP qualquer não trancam a dona da conta. A troca de código de pareamento tem
+ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes.
 O IP vem do uvicorn, que com `--proxy-headers` confia no `X-Forwarded-For` do Caddy.
 """
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
@@ -20,6 +23,9 @@ if TYPE_CHECKING:
 
 WINDOW_SECONDS = 60
 PAIR_GLOBAL_FACTOR = 6
+FAILURE_WINDOW_SECONDS = 15 * 60
+ACCOUNT_WINDOW_SECONDS = 60 * 60
+KNOWN_IP_SECONDS = 30 * 24 * 60 * 60
 
 
 async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
@@ -34,9 +40,56 @@ async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
         raise rate_limited("Tentativas demais; espere a janela de um minuto reabrir.", retry_after)
 
 
-async def count_login(ctx: AppContext, scope: str, email: str) -> None:
-    """Janela por conta (`scope` = `user` ou `admin`), comum a todas as rotas de login dela."""
-    await count_attempt(ctx, f"{scope}_email:{email.lower()}", ctx.settings.credential_attempts_per_minute)
+def client_ip(request: Request) -> str:
+    """O IP do cliente (com `--proxy-headers`, o que o Caddy repassou)."""
+    return request.client.host if request.client else "desconhecido"
+
+
+def _keys(scope: str, email: str, ip: str) -> tuple[str, str, str]:
+    base = f"eclume:rl:{scope}_fail:{email.lower()}"
+    return f"{base}:{ip}", base, f"eclume:rl:{scope}_known:{email.lower()}"
+
+
+async def check_login(ctx: AppContext, scope: str, email: str, ip: str) -> None:
+    """429 antes de conferir a senha, se o par (conta, IP) ou a conta passaram do teto de falhas.
+
+    `scope` é `user` (navegador e aparelho) ou `admin`. O teto da conta não vale para IP que entrou
+    nela com sucesso nos últimos 30 dias.
+    """
+    redis = ctx.queue.pool
+    pair, account, known = _keys(scope, email, ip)
+    if int(await redis.get(pair) or 0) >= ctx.settings.login_failures_per_pair:
+        raise rate_limited("Tentativas erradas demais nesta conta; espere a janela reabrir.", await _ttl(ctx, pair))
+    if int(await redis.get(account) or 0) >= ctx.settings.login_failures_per_account:
+        last_ok = await redis.zscore(known, ip)
+        if last_ok is None or last_ok < time.time() - KNOWN_IP_SECONDS:
+            raise rate_limited(
+                "Tentativas erradas demais nesta conta; espere a janela reabrir.", await _ttl(ctx, account)
+            )
+
+
+async def login_failed(ctx: AppContext, scope: str, email: str, ip: str) -> None:
+    """Soma a falha no par (conta, IP), janela de 15 min, e na conta, janela de 1 h."""
+    redis = ctx.queue.pool
+    pair, account, _ = _keys(scope, email, ip)
+    for key, window in ((pair, FAILURE_WINDOW_SECONDS), (account, ACCOUNT_WINDOW_SECONDS)):
+        await redis.incr(key)
+        await redis.expire(key, window, nx=True)
+
+
+async def login_succeeded(ctx: AppContext, scope: str, email: str, ip: str) -> None:
+    """Zera as falhas do par e guarda o IP como conhecido da conta por 30 dias."""
+    redis = ctx.queue.pool
+    pair, _, known = _keys(scope, email, ip)
+    now = time.time()
+    await redis.delete(pair)
+    await redis.zadd(known, {ip: now})
+    await redis.zremrangebyscore(known, "-inf", now - KNOWN_IP_SECONDS)
+    await redis.expire(known, KNOWN_IP_SECONDS)
+
+
+async def _ttl(ctx: AppContext, key: str) -> int:
+    return max(await ctx.queue.pool.ttl(key), 1)
 
 
 def attempts(route: str, *, global_factor: int | None = None) -> Callable[[Request, AppContext], Awaitable[None]]:
@@ -46,7 +99,7 @@ def attempts(route: str, *, global_factor: int | None = None) -> Callable[[Reque
     """
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> None:
-        ip = request.client.host if request.client else "desconhecido"
+        ip = client_ip(request)
         limit = ctx.settings.credential_attempts_per_minute
         await count_attempt(ctx, f"{route}:{ip}", limit)
         if global_factor is not None:

@@ -119,29 +119,6 @@ def test_tentativas_demais_do_mesmo_ip_sao_429(limited: TestClient, path: str, b
     assert limited.post(other, json={}).status_code == 422
 
 
-def test_login_conta_por_conta_no_navegador_e_no_aparelho(limited: TestClient):
-    email = "alvo@exemplo.com.br"
-    browser = {"email": email, "password": "p"}
-    device = browser | {"device_name": "d", "platform": "ios"}
-    # Duas por rota: nenhuma janela por IP enche, mas a da conta sim.
-    statuses = [
-        limited.post(path, json=body).status_code
-        for path, body in [
-            ("/api/v1/auth/login", browser),
-            ("/api/v1/devices/login", device),
-            ("/api/v1/auth/login", browser),
-        ]
-    ]
-    assert statuses == [401, 401, 401]
-    blocked = limited.post("/api/v1/devices/login", json=device)
-    assert (blocked.status_code, blocked.json()["code"]) == (429, "rate_limited")
-    # Outra conta, mesmo IP, segue na própria janela; o admin conta à parte.
-    assert (
-        limited.post("/api/v1/auth/login", json={"email": "outra@exemplo.com.br", "password": "p"}).status_code == 401
-    )
-    assert limited.post("/api/v1/admin/auth/login", json=browser).status_code == 401
-
-
 def test_troca_de_codigo_tem_teto_global(limited: TestClient, services: Services):
     store = redis.Redis.from_url(services.settings.redis_url)
     store.set("eclume:rl:devices_pair:*", 3 * PAIR_GLOBAL_FACTOR, ex=60)

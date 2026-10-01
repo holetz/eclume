@@ -6,7 +6,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, insert, select, update
@@ -32,7 +32,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.health import readiness
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
-from eclume_server.ratelimit import attempts, count_login
+from eclume_server.ratelimit import attempts, check_login, client_ip, login_failed, login_succeeded
 from eclume_server.recordings import open_jobs_of
 from eclume_server.security import new_session_token, sha256_hex
 from eclume_server.serialize import user_json
@@ -106,14 +106,24 @@ async def health_ready(ctx: Ctx) -> JSONResponse:
 
 
 @router.post("/auth/login", status_code=204)
-async def login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]) -> Response:
+async def login(
+    body: LoginRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]
+) -> Response:
     """Abre sessão e define `eclume_session` (HttpOnly) e `eclume_csrf` (legível)."""
-    await count_login(ctx, "user", body.email)
-    user_id = await password_login(ctx.engine, body.email, body.password)
-    if user_id is None:
-        raise unauthorized(WRONG_PASSWORD)
+    user_id = await user_password_login(ctx, body.email, body.password, client_ip(request))
     async with system_tx(ctx.engine) as conn:
         return await _open_session(conn, ctx, user_id, datetime.now(UTC))
+
+
+async def user_password_login(ctx: AppContext, email: str, password: str, ip: str) -> UUID:
+    """Login por senha da conta de usuário sob o limite de falhas; senha errada é 401."""
+    await check_login(ctx, "user", email, ip)
+    user_id = await password_login(ctx.engine, email, password)
+    if user_id is None:
+        await login_failed(ctx, "user", email, ip)
+        raise unauthorized(WRONG_PASSWORD)
+    await login_succeeded(ctx, "user", email, ip)
+    return user_id
 
 
 @router.get("/auth/signup")
