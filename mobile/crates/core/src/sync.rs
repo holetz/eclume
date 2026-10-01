@@ -327,6 +327,22 @@ pub fn buscar_tipos_de_agenda(
         .collect())
 }
 
+/// O idioma de transcrição que vale para a conta: `GET /me/transcription` (contrato 2.20.0).
+pub fn buscar_idioma_da_conta(
+    transporte: &dyn Transport,
+    servidor: &Servidor,
+    token: &str,
+) -> Result<String> {
+    let preferencia: eclume_sync::api::TranscriptionPreference = get_json(
+        transporte,
+        servidor,
+        token,
+        "/me/transcription",
+        "falha ao ler o idioma da conta",
+    )?;
+    Ok(preferencia.effective().to_string())
+}
+
 /// Uma etapa do processamento no servidor (`PipelineStep`), com o código do motivo de uma etapa
 /// pulada (`reason`) e o erro de uma que falhou; servidor sem esses campos vira `None`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

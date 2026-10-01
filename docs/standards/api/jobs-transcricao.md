@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -318,9 +318,16 @@ fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
 
 ## Como o server cumpre a sua parte
 
-- **Opções.** `options` sai da configuração da plataforma (`platform_settings`): o idioma é o da
-  gravação, sem região (`pt-BR` → `pt`), ou o padrão da plataforma; `diarize` é a diarização
-  ligada; `embeddings` só é `true` com a identificação por voz ligada na plataforma (LGPD).
+- **Opções.** `options` sai da configuração da plataforma (`platform_settings`) e da conta. O
+  idioma se resolve **uma vez, ao enfileirar** (upload, retranscrever e o retentar do admin passam
+  por `insert_job`), nesta ordem: o do arquivo (`recordings.language`, dito no upload, no `PATCH` ou
+  no retranscrever), o preferido da conta (`users.transcription_language`, `GET`/`PATCH
+  /me/transcription`), o padrão do servidor (`asr.default_language`) e `pt`; vai sem região
+  (`pt-BR` → `pt`). Mudar a preferência da conta não mexe nos jobs já enfileirados. `auto` em
+  qualquer nível é um pedido de detecção (`options.language = null`), nunca um resultado: a
+  ingestão grava em `recordings.language` e na transcrição o idioma detectado (o do raw) e, sem
+  ele, o padrão resolvido; `auto` só aparece na gravação enquanto a detecção não roda. `diarize` é
+  a diarização ligada; `embeddings` só é `true` com a identificação por voz ligada na plataforma (LGPD).
 - **Revisão.** A `revision` do job é a da transcrição que ele vai produzir: 1 no primeiro;
   numa retranscrição, uma acima da maior entre a transcrição e o último job. Todo caminho que cria
   uma revisão ou fecha o job (retranscrever, retentar do admin, `ingest`, `fail`) trava a linha de

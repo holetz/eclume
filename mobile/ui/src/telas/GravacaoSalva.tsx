@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { duracao, marcadores, tituloSugerido } from '../app/formatos'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
-import type { Folha, TipoDeAgenda } from '../ponte/tipos'
+import type { Folha, OpcaoDeIdioma, TipoDeAgenda } from '../ponte/tipos'
 
 /**
- * A folha "Gravação salva", depois de Parar: título e tipo de agenda, os dois opcionais. Enquanto
+ * A folha "Gravação salva", depois de Parar: título, tipo de agenda e idioma, todos opcionais (o
+ * idioma parte do padrão da conta, nomeado). Enquanto
  * ela está aberta, o sync espera (até 10 min); Salvar ou Pular o libera.
  */
 export function GravacaoSalva({ folha }: { folha: Folha }) {
@@ -12,6 +13,8 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
   const [titulo, setTitulo] = useState('')
   const [tipo, setTipo] = useState<string | null>(null)
   const [tipos, setTipos] = useState<TipoDeAgenda[]>([])
+  const [idioma, setIdioma] = useState('')
+  const [idiomas, setIdiomas] = useState<OpcaoDeIdioma[]>([])
   const [erro, setErro] = useState<string | null>(null)
 
   useEffect(() => {
@@ -19,6 +22,10 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
     ponte
       .tiposDeAgenda()
       .then((lista) => ativo && setTipos(lista))
+      .catch(() => {})
+    ponte
+      .idiomas()
+      .then((lista) => ativo && setIdiomas(lista))
       .catch(() => {})
     return () => {
       ativo = false
@@ -28,7 +35,12 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
   async function concluir(salvar: boolean) {
     setErro(null)
     try {
-      await ponte.salvar(folha.id, salvar ? titulo.trim() || null : null, salvar ? tipo : null)
+      await ponte.salvar(
+        folha.id,
+        salvar ? titulo.trim() || null : null,
+        salvar ? tipo : null,
+        salvar ? idioma || null : null,
+      )
     } catch (e) {
       setErro(mensagemDeErro(e))
     }
@@ -77,6 +89,23 @@ export function GravacaoSalva({ folha }: { folha: Folha }) {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {idiomas.length > 0 && (
+          <div className="field">
+            <label htmlFor="idioma">Idioma da transcrição</label>
+            <select
+              id="idioma"
+              className="input"
+              value={idioma}
+              onChange={(e) => setIdioma(e.target.value)}
+            >
+              {idiomas.map((opcao) => (
+                <option key={opcao.valor} value={opcao.valor}>
+                  {opcao.rotulo}
+                </option>
+              ))}
+            </select>
           </div>
         )}
         <span className="text-muted texto-13">

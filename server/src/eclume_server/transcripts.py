@@ -16,6 +16,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.pipeline import FAILED_STEP, gpu_started, record_gpu_steps, set_step
 from eclume_server.problems import not_found
+from eclume_server.queue import AUTO_LANGUAGE, DEFAULT_LANGUAGE
 from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.voice import (
     capture_links,
@@ -233,7 +234,9 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     speakers, segments, mapping = normalize_raw(raw)
     engine_info = engine_info or {}
     options = job["options"] or {}
-    language = raw.get("language") or recording["language"] or options.get("language") or "pt"
+    # `auto` é pedido, nunca resultado: vale o detectado e, sem ele, o padrão resolvido.
+    requested = None if recording["language"] == AUTO_LANGUAGE else recording["language"]
+    language = raw.get("language") or requested or options.get("language") or DEFAULT_LANGUAGE
     duration_ms = (
         _int(raw.get("duration_ms"), 0) or recording["duration_ms"] or max((s["end_ms"] for s in segments), default=0)
     )
@@ -309,7 +312,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         .where(t.recordings.c.id == recording_id)
         .values(
             status="transcribed",
-            language=recording["language"] or language,
+            language=requested or language,
             duration_ms=recording["duration_ms"] or duration_ms,
             updated_at=now,
         )

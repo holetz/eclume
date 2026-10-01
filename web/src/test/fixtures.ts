@@ -49,6 +49,7 @@ import uploadCreated from '../../../contracts/fixtures/upload-created.json'
 import uploadDeduplicated from '../../../contracts/fixtures/upload-deduplicated.json'
 import uploadInProgress from '../../../contracts/fixtures/upload-in-progress.json'
 import voiceprint from '../../../contracts/fixtures/voiceprint.json'
+import transcriptionPreference from '../../../contracts/fixtures/transcription-preference.json'
 import voiceAssignment from '../../../contracts/fixtures/voice-assignment.json'
 
 type Transcript = import('../api/schema.gen').operations['getTranscript']['responses'][200]['content']['application/json']
@@ -111,4 +112,5 @@ export const fixtures = {
   tagList: fresh<Schemas['TagList']>(tagList),
   voiceprint: fresh<Schemas['Voiceprint']>(voiceprint),
   voiceAssignment: fresh<Schemas['VoiceAssignment']>(voiceAssignment),
+  transcriptionPreference: fresh<Schemas['TranscriptionPreference']>(transcriptionPreference),
 }

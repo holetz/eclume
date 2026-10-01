@@ -79,12 +79,19 @@ fn gravar_pausar_marcar_parar_e_salvar() {
     assert_eq!((folha.id.as_str(), folha.marcadores), (id.as_str(), 1));
     assert_eq!(core.estado().unwrap().pendentes, 1);
 
-    core.salvar(&id, Some("Visita ao cliente"), None).unwrap();
+    core.salvar(&id, Some("Visita ao cliente"), None, Some("en"))
+        .unwrap();
     assert_eq!(core.estado().unwrap().folha, None);
     let lista = core.gravacoes().unwrap();
     assert_eq!(lista[0].titulo.as_deref(), Some("Visita ao cliente"));
     assert_eq!(lista[0].selo, Selo::Aguardando);
     assert_eq!(lista[0].marcadores, 1);
+    let fila = core.fila().lock().unwrap();
+    assert_eq!(
+        fila.get(&id).unwrap().unwrap().language.as_deref(),
+        Some("en")
+    );
+    drop(fila);
     let detalhe = core.gravacao(&id).unwrap();
     assert!(detalhe.caminho.unwrap().ends_with(".ogg"));
     // Só depois de sincronizada sai do celular.

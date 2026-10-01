@@ -7,7 +7,7 @@ tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93, holetz/eclume#98, holetz/eclume#119
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#93, holetz/eclume#98, holetz/eclume#119, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -76,7 +76,12 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   só quando o `PATCH` toca um dos dois blocos: um estado antigo que a quebra não trava a edição de
   outro bloco. As regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
 - **Idioma automático:** `asr.default_language: "auto"` manda `options.language = null`, e a
-  engine detecta o idioma de cada gravação (o idioma da gravação, quando dito, vence).
+  engine detecta o idioma de cada gravação.
+- **Padrão do servidor é o último recurso:** `asr.default_language` só vale quando nem o arquivo
+  nem a conta escolhem (`users.transcription_language` nulo); a ordem completa (arquivo → conta →
+  servidor → `pt`) está em [jobs-transcricao.md](../api/jobs-transcricao.md). O `GET
+  /me/transcription` devolve o padrão em `platform_default` para os clientes o nomearem
+  ("Padrão do servidor: Português").
 - **Bloco `preprocessing`:** `denoise` (`enabled`, `method` `rnnoise`/`afftdn`, `strength` 0–1),
   `loudnorm` (`target_lufs` −30 a −10, `true_peak_db` −9 a 0, `lra` 1–20), `trim_silence`
   (`min_silence_s` 1–30, `threshold_db` −80 a −20) e `split_channels` (`enabled`). A conversão

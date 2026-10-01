@@ -224,6 +224,13 @@ impl Client {
         self.call_json("falha ao ler a conta", request)
     }
 
+    /// O idioma de transcrição da conta e o padrão do servidor: `GET /api/v1/me/transcription`
+    /// (`recordings:read`, contrato 2.20.0), para a aba Áudio nomear o padrão da conta.
+    pub fn transcription_preference(&self) -> Result<api::TranscriptionPreference> {
+        let request = HttpRequest::new("GET", self.endpoint("/me/transcription"));
+        self.call_json("falha ao ler o idioma da conta", request)
+    }
+
     /// Monta o cliente real (TLS com a CA extra, a versão no `User-Agent`) a partir da config do
     /// uploader: o mesmo que sobe as gravações lê o resumo delas.
     pub fn from_config(config: &crate::uploader::UploaderConfig) -> Result<Self> {
@@ -1408,5 +1415,30 @@ mod tests {
         assert!(script.seen()[0]
             .headers
             .contains(&("Authorization".into(), format!("Bearer {PAT}"))));
+    }
+
+    #[test]
+    fn idioma_da_conta_cai_no_padrao_do_servidor() {
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/me/transcription",
+                json(
+                    200,
+                    serde_json::json!({"language": null, "platform_default": "pt"}),
+                ),
+            )
+            .expect(
+                "GET /api/v1/me/transcription",
+                json(
+                    200,
+                    serde_json::json!({"language": "auto", "platform_default": "pt"}),
+                ),
+            );
+        let (client, _, _) = make_client(script);
+        assert_eq!(client.transcription_preference().unwrap().effective(), "pt");
+        assert_eq!(
+            client.transcription_preference().unwrap().effective(),
+            "auto"
+        );
     }
 }

@@ -61,7 +61,8 @@ PartNumber = Annotated[int, Path(ge=1, le=10000)]
 
 MAX_PARTS = 10_000
 FIRST_PART_URLS = 100
-LANGUAGE = r"^[a-z]{2,3}(-[A-Z]{2})?$"
+# Um idioma (`pt`, `pt-BR`) ou `auto`: a engine detecta e a gravação guarda o detectado.
+LANGUAGE = r"^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
 Kind = Literal["meeting", "note"]
 RecordedAtSource = Literal["capture", "file_metadata", "user", "upload"]
 

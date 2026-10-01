@@ -252,6 +252,12 @@ async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[s
     ]
 
 
+async def account_language(conn: AsyncConnection, user_id: UUID) -> str | None:
+    """O idioma de transcrição preferido da conta; nulo é o padrão do servidor."""
+    query = select(t.users.c.transcription_language).where(t.users.c.id == user_id)
+    return (await conn.execute(query)).scalar()
+
+
 async def insert_job(
     conn: AsyncConnection,
     recording: Row,
@@ -262,7 +268,9 @@ async def insert_job(
     """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho."""
     platform = (await conn.execute(select(t.platform_settings))).mappings().one()
     keep = await keeps_samples(conn, recording["owner_id"])
-    options = transcribe_options(platform, recording["language"], keep_samples=keep)
+    # O idioma do arquivo, o da conta; sem nenhum, `transcribe_options` cai no do servidor e em `pt`.
+    language = recording["language"] or await account_language(conn, recording["owner_id"])
+    options = transcribe_options(platform, language, keep_samples=keep)
     values: dict[str, Any] = {
         "owner_id": recording["owner_id"],
         "recording_id": recording["id"],

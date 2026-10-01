@@ -31,6 +31,7 @@ from eclume_server.routes import (
     summary_chat,
     tags,
     tokens,
+    transcription,
     transcripts,
     uploads,
     voice,
@@ -74,6 +75,7 @@ def include_routes(app: FastAPI) -> None:
         tags,
         search,
         voice,
+        transcription,
     ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.

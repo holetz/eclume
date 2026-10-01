@@ -57,6 +57,8 @@ users = Table(
     Column("tag_new_limit", Integer, server_default=FetchedValue()),
     # 026_cotas_e_fila_justa
     Column("quotas", JSONB),
+    # 029_idioma_da_conta
+    Column("transcription_language", Text),
 )
 
 sessions = Table(

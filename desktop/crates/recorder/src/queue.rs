@@ -21,8 +21,11 @@
 //! aberta, por no máximo [`DETAILS_WAIT_MS`].
 //!
 //! Esquema v5: `server_title` é o título que o servidor dá à gravação depois de processada, lido
-//! da listagem por `?since=`; a fila mostra o título local, senão ele. Uma fila v1 a v4 ganha as
-//! colunas e a tabela na abertura, sem perder linhas.
+//! da listagem por `?since=`; a fila mostra o título local, senão ele.
+//!
+//! Esquema v6: `language` é o idioma da transcrição escolhido para a gravação (no celular, a folha
+//! "Gravação salva"; `auto` pede a detecção); sem ele, o upload manda o do aparelho, e sem nenhum
+//! vale o da conta. Uma fila v1 a v5 ganha as colunas e a tabela na abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -32,7 +35,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRe
 use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
 use serde::Serialize;
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 /// Quanto uma gravação com `details_pending` espera o título e o tipo antes de subir sem eles.
 pub const DETAILS_WAIT_MS: i64 = 10 * 60 * 1_000;
@@ -67,7 +70,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     title              TEXT,
     agenda_type_id     TEXT,
     details_pending    INTEGER NOT NULL DEFAULT 0,
-    server_title       TEXT
+    server_title       TEXT,
+    language           TEXT
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
 CREATE TABLE IF NOT EXISTS markers (
@@ -80,8 +84,8 @@ CREATE TABLE IF NOT EXISTS markers (
 CREATE INDEX IF NOT EXISTS markers_recording ON markers (recording_id, at_ms);
 ";
 
-/// Colunas que a v2 a v5 acrescentaram, com o tipo, para migrar uma fila anterior.
-const ADDED_COLUMNS: [(&str, &str); 15] = [
+/// Colunas que a v2 a v6 acrescentaram, com o tipo, para migrar uma fila anterior.
+const ADDED_COLUMNS: [(&str, &str); 16] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
     ("next_attempt_at", "INTEGER"),
@@ -97,6 +101,7 @@ const ADDED_COLUMNS: [(&str, &str); 15] = [
     ("agenda_type_id", "TEXT"),
     ("details_pending", "INTEGER NOT NULL DEFAULT 0"),
     ("server_title", "TEXT"),
+    ("language", "TEXT"),
 ];
 
 /// Um enum guardado como texto na fila, lido, escrito e serializado no vocabulário do contrato.
@@ -304,6 +309,8 @@ pub struct QueuedRecording {
     pub details_pending: bool,
     /// O título que o servidor deu à gravação depois de processada.
     pub server_title: Option<String>,
+    /// Idioma da transcrição escolhido para a gravação (`pt`, `auto`…); `None` deixa o do aparelho.
+    pub language: Option<String>,
 }
 
 impl QueuedRecording {
@@ -338,6 +345,7 @@ impl QueuedRecording {
                 agenda_type_id: row.get("agenda_type_id")?,
                 details_pending: row.get::<_, i64>("details_pending")? != 0,
                 server_title: row.get("server_title")?,
+                language: row.get("language")?,
             },
             status,
         ))
@@ -635,20 +643,20 @@ impl Queue {
         Ok(())
     }
 
-    /// Grava o título e o tipo de agenda (vazios viram `None`) e libera o sync. Pular é chamar
-    /// com os dois `None`.
+    /// Grava o título, o tipo de agenda e o idioma (vazios viram `None`) e libera o sync. Pular é
+    /// chamar com os três `None`.
     pub fn save_details(
         &self,
         id: &str,
         title: Option<&str>,
         agenda_type_id: Option<&str>,
+        language: Option<&str>,
     ) -> Result<()> {
         self.ensure_editable(id)?;
-        let title = title.map(str::trim).filter(|t| !t.is_empty());
-        let agenda_type_id = agenda_type_id.map(str::trim).filter(|t| !t.is_empty());
         self.conn.execute(
-            "UPDATE recordings SET title = ?2, agenda_type_id = ?3, details_pending = 0 WHERE id = ?1",
-            params![id, title, agenda_type_id],
+            "UPDATE recordings SET title = ?2, agenda_type_id = ?3, language = ?4, details_pending = 0
+             WHERE id = ?1",
+            params![id, filled(title), filled(agenda_type_id), filled(language)],
         )?;
         Ok(())
     }
@@ -872,7 +880,7 @@ fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     Ok(())
 }
 
-/// Acrescenta as colunas da v2 a v5 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
+/// Acrescenta as colunas da v2 a v6 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
 /// mexe numa tabela que já existe; a tabela `markers` nasce no `SCHEMA`).
 fn migrate(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
@@ -887,6 +895,11 @@ fn migrate(conn: &Connection) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// O texto aparado, ou `None` se vazio.
+fn filled(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|v| !v.is_empty())
 }
 
 fn with_status((mut recording, status): (QueuedRecording, String)) -> Result<QueuedRecording> {
@@ -1245,16 +1258,24 @@ mod tests {
         assert!(queue.claim_next().unwrap().is_none());
 
         queue
-            .save_details("folha", Some("  Visita ao cliente "), Some(""))
+            .save_details(
+                "folha",
+                Some("  Visita ao cliente "),
+                Some(""),
+                Some("auto"),
+            )
             .unwrap();
         let rec = queue.claim_next().unwrap().unwrap();
         assert_eq!(rec.id, "folha");
         assert_eq!(rec.source, Source::Mobile);
         assert_eq!(rec.title.as_deref(), Some("Visita ao cliente"));
         assert_eq!(rec.agenda_type_id, None);
+        assert_eq!(rec.language.as_deref(), Some("auto"));
         assert!(!rec.details_pending);
         // Depois de sair para o servidor, título e tipo não mudam mais aqui.
-        assert!(queue.save_details("folha", Some("outro"), None).is_err());
+        assert!(queue
+            .save_details("folha", Some("outro"), None, None)
+            .is_err());
 
         // A folha esquecida aberta não segura o sync para sempre.
         begin_and_finish(&queue, "esquecida", 1);
@@ -1298,6 +1319,7 @@ mod tests {
         assert_eq!(rec.id, "velha");
         assert!(rec.upload_id.is_none());
         assert!(rec.server_title.is_none());
+        assert!(rec.language.is_none());
         queue.set_upload_state("velha", Some("up"), None).unwrap();
         queue.mark_synced("velha", "srv-velha").unwrap();
         assert!(queue.set_server_title("srv-velha", "Alinhamento").unwrap());

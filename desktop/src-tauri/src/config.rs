@@ -32,8 +32,9 @@ fn default_true() -> bool {
     true
 }
 
-/// Os idiomas de transcrição que a aba Áudio oferece, além do automático (o padrão do servidor).
-pub const LANGUAGES: [&str; 3] = ["pt", "es", "en"];
+/// Os idiomas de transcrição que a aba Áudio oferece, além de `auto` (detectar) e do padrão da
+/// conta (`null`).
+pub const LANGUAGES: [&str; 4] = ["auto", "pt", "es", "en"];
 
 /// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
 pub const SOURCE_NONE: &str = "none";
@@ -120,7 +121,7 @@ pub struct Config {
     /// Atalhos globais de gravar, nova nota e marcador.
     #[serde(default)]
     pub shortcuts: Shortcuts,
-    /// Idioma da transcrição (`pt`, `es` ou `en`); `null` deixa o padrão do servidor.
+    /// Idioma da transcrição (`pt`, `es`, `en` ou `auto`, detectar); `null` deixa o da conta.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     /// Tema da janela: `system` (acompanha o sistema), `light` ou `dark`.
@@ -408,7 +409,7 @@ impl Config {
         }
         if let Some(language) = &self.language {
             if !LANGUAGES.contains(&language.as_str()) {
-                bail!("idioma da transcrição: use pt, es ou en, ou Automático");
+                bail!("idioma da transcrição: use pt, es, en ou auto, ou o padrão da conta");
             }
         }
         self.mirror.validate()?;
@@ -523,6 +524,8 @@ mod tests {
             language: Some("es".into()),
             ..Config::default()
         };
+        config.validate().unwrap();
+        config.language = Some("auto".into());
         config.validate().unwrap();
         config.language = Some("fr".into());
         assert!(config.validate().is_err());

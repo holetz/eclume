@@ -107,6 +107,10 @@ pub struct Config {
     pub reter_dias: u32,
     #[serde(default)]
     pub tipos_de_agenda: Vec<TipoDeAgenda>,
+    /// O idioma de transcrição que vale para a conta (`GET /me/transcription`), no cache para a
+    /// folha "Gravação salva" nomear o padrão fora da rede.
+    #[serde(default)]
+    pub idioma_da_conta: Option<String>,
     /// Quando o `movel.json` foi lido pela última vez (ms Unix).
     #[serde(default)]
     pub atualizacao_verificada_em: Option<i64>,
@@ -122,6 +126,7 @@ impl Default for Config {
             excluir_sincronizadas: false,
             reter_dias: 7,
             tipos_de_agenda: Vec::new(),
+            idioma_da_conta: None,
             atualizacao_verificada_em: None,
         }
     }

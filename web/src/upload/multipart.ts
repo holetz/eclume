@@ -20,6 +20,8 @@ export interface UploadFile {
   recordedAt?: string
   recordedAtSource?: Schemas['RecordedAtSource']
   kind?: Schemas['RecordingKind']
+  /** Idioma da transcrição deste arquivo (ou `auto`); sem ele, vale o da conta. */
+  language?: string
 }
 
 export interface UploadProgress {
@@ -125,6 +127,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
           ...(file.recordedAt ? { recorded_at: file.recordedAt } : {}),
           ...(file.recordedAtSource ? { recorded_at_source: file.recordedAtSource } : {}),
           ...(file.kind ? { kind: file.kind } : {}),
+          language: file.language,
         },
         signal,
       }),

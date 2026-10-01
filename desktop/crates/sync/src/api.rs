@@ -46,7 +46,7 @@ pub struct UploadCreate {
     pub markers: Vec<MarkerInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// Idioma da transcrição (`pt`, `es`, `en`); sem valor, vale o padrão do servidor.
+    /// Idioma da transcrição (`pt`, `es`, `en` ou `auto`); sem valor, vale o idioma da conta.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     pub source: Source,
@@ -192,6 +192,21 @@ pub struct MeAuth {
 }
 
 /// Uma Collection de `GET /api/v1/collections` (plana: sem hierarquia).
+/// O idioma de transcrição da conta: `GET /api/v1/me/transcription` (contrato 2.20.0).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct TranscriptionPreference {
+    /// O escolhido pela conta (`pt`, `auto`…); `None` é o padrão do servidor.
+    pub language: Option<String>,
+    pub platform_default: String,
+}
+
+impl TranscriptionPreference {
+    /// O idioma que vale para a conta: o escolhido, senão o do servidor.
+    pub fn effective(&self) -> &str {
+        self.language.as_deref().unwrap_or(&self.platform_default)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CollectionInfo {
     pub id: String,

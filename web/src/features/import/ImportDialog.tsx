@@ -2,6 +2,8 @@ import { Upload, X } from 'lucide-react'
 import { useId, useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { Dialog } from '../../app/Dialog'
+import { accountDefaultLabel, useTranscriptionPreference } from '../../app/transcriptionLanguage'
+import { LanguageSelect } from '../../shared/LanguageSelect'
 import { checkEnvironment } from '../../lib/media-convert'
 
 import styles from './ImportDialog.module.css'
@@ -100,11 +102,11 @@ function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
   }
 }
 
-function Row({ item }: { item: ImportItem }) {
+function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: string }) {
   const queue = useImportContext()
   const sourceId = useId()
   const busy = item.state.kind === 'converting' || item.state.kind === 'uploading'
-  // A data vai só na criação do upload: depois de criado, retentar retoma o mesmo e não a reenvia.
+  // A data e o idioma vão só na criação do upload: depois de criado, retentar retoma o mesmo e não os reenvia.
   const editable =
     item.state.kind === 'reading' || item.state.kind === 'ready' || (item.state.kind === 'error' && !item.state.resumable)
   const removable = editable || item.state.kind === 'error'
@@ -133,6 +135,16 @@ function Row({ item }: { item: ImportItem }) {
           {item.state.kind === 'reading' ? 'Lendo a data do arquivo…' : SOURCE_LABELS[item.date.source]}
         </div>
       </td>
+      <td>
+        <LanguageSelect
+          className={`input ${styles.language}`}
+          label={`Idioma de ${item.file.name}`}
+          value={item.language ?? ''}
+          defaultLabel={defaultLanguage}
+          disabled={!editable}
+          onChange={(language) => queue.edit(item.id, (current) => ({ ...current, language: language || undefined }))}
+        />
+      </td>
       <td className="tabular">{clockDuration(item.probe?.durationSec)}</td>
       <td>
         <Status item={item} onRetry={() => queue.retry(item.id)} />
@@ -158,10 +170,12 @@ function Row({ item }: { item: ImportItem }) {
 
 /**
  * O modal Importar sobre a biblioteca (frame "Import files"): zona de soltar e a tabela com o início
- * da gravação de cada arquivo, confirmado antes do envio. Fechar durante o envio só esconde o modal.
+ * da gravação e o idioma de cada arquivo, confirmados antes do envio. Fechar durante o envio só esconde o modal.
  */
 export function ImportDialog({ onClose }: { onClose: () => void }) {
   const queue = useImportContext()
+  const preference = useTranscriptionPreference()
+  const defaultLanguage = preference.data ? accountDefaultLabel(preference.data) : 'Padrão da conta'
   const environment = checkEnvironment()
   const blocked = !environment.secureContext || !environment.subtleCrypto
   const [over, setOver] = useState(false)
@@ -257,6 +271,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
                 <tr>
                   <th scope="col">Arquivo</th>
                   <th scope="col">Início da gravação</th>
+                  <th scope="col">Idioma</th>
                   <th scope="col">Duração</th>
                   <th scope="col">Situação</th>
                   <th scope="col">
@@ -266,7 +281,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
               </thead>
               <tbody>
                 {queue.items.map((item) => (
-                  <Row key={item.id} item={item} />
+                  <Row key={item.id} item={item} defaultLanguage={defaultLanguage} />
                 ))}
               </tbody>
             </table>

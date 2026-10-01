@@ -475,6 +475,7 @@
       return null;
     },
     test_connection: (e) => e.testeDeConexao,
+    account_language: () => "pt",
     open_signup: () => null,
     pick_ca_file: () => "/home/ana/caddy-root.pem",
     pick_mirror_dir: () => "/home/ana/Obsidian/eclume",

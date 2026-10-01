@@ -170,14 +170,15 @@ impl Sessao {
             .is_some_and(ActiveRecording::is_finished)
     }
 
-    /// Título e tipo de agenda da folha "Gravação salva" ("Pular" passa os dois vazios).
+    /// Título, tipo de agenda e idioma da folha "Gravação salva" ("Pular" passa os três vazios).
     pub fn salvar(
         fila: &Mutex<Queue>,
         id: &str,
         titulo: Option<&str>,
         tipo_de_agenda_id: Option<&str>,
+        idioma: Option<&str>,
     ) -> Result<()> {
-        trancar(fila)?.save_details(id, titulo, tipo_de_agenda_id)
+        trancar(fila)?.save_details(id, titulo, tipo_de_agenda_id, idioma)
     }
 
     /// Acerta, na abertura, a gravação que uma queda do processo deixou em `recording`.

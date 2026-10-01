@@ -211,10 +211,18 @@ test('Áudio: microfone por nome, saída do sistema e parada por silêncio salva
   await expect.poll(async () => (await ultimaEntrada(page)).note_silence_s).toBe(8)
 
   await expect(page.locator('#idioma')).toHaveValue('')
-  await expect(page.locator('#idioma option')).toHaveText(['Automático (padrão do servidor)', 'Português', 'Español', 'English'])
+  await expect(page.locator('#idioma option')).toHaveText([
+    'Padrão da conta: Português',
+    'Detectar automaticamente',
+    'Português',
+    'Español',
+    'English',
+  ])
   await page.locator('#idioma').selectOption('es')
   await expect.poll(async () => (await ultimaEntrada(page)).language).toBe('es')
   await expect(page.locator('#idioma')).toHaveValue('es')
+  await page.locator('#idioma').selectOption('auto')
+  await expect.poll(async () => (await ultimaEntrada(page)).language).toBe('auto')
   await page.locator('#idioma').selectOption('')
   await expect.poll(async () => (await ultimaEntrada(page)).language).toBe('')
 })

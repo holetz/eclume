@@ -11,6 +11,9 @@ export const WHISPER_LANGUAGE_CODES = [
 // O Whisper usa `jw` para o javanês, que no ISO é `jv`.
 const ISO_CODE: Record<string, string> = { jw: 'jv' }
 
+/** O pedido de detecção: vale como idioma do arquivo, da conta e do servidor, nunca como resultado. */
+export const AUTO_LANGUAGE = 'auto'
+
 interface LanguageOption {
   value: string
   label: string
@@ -27,4 +30,15 @@ export function whisperLanguages(): LanguageOption[] {
   return WHISPER_LANGUAGE_CODES.map((code) => ({ value: code, label: languageName(names, code) })).sort((a, b) =>
     a.label.localeCompare(b.label, 'pt-BR'),
   )
+}
+
+/** O nome de um idioma pedido ou detectado: `pt-BR` → "Português", `auto` → "Detectar automaticamente". */
+export function languageLabel(code: string): string {
+  if (code === AUTO_LANGUAGE) return 'Detectar automaticamente'
+  const names = new Intl.DisplayNames(['pt-BR'], { type: 'language', fallback: 'code' })
+  try {
+    return languageName(names, code.split('-', 1)[0])
+  } catch {
+    return code
+  }
 }

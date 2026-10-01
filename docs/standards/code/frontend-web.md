@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -151,6 +151,18 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   (`RetryTranscription`, `POST .../retranscribe`), sem comparar com `recording.owner` (obsoleto: a
   conta só vê o que é dela; um 403/404 aparece pelo `errorMessage`), com a falha passageira
   (`error.retryable`) dita como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
+- **Idioma da transcrição.** A lista de idiomas do Whisper vive em `src/lib/languages.ts` (usada
+  pelo admin e pelas telas do usuário, sem cruzar features) e o seletor em
+  `shared/LanguageSelect.tsx`; o padrão aparece sempre nomeado pelo idioma real ("Padrão do
+  servidor: Português", "Padrão da conta: Inglês"), e "Detectar automaticamente" só para `auto`.
+  Conta tem **Idioma da transcrição** (`GET`/`PATCH /me/transcription`, grava na hora; vazio é o
+  padrão do servidor). O Importar tem a coluna **Idioma** por arquivo, partindo do padrão da conta
+  e levada só na criação do upload. A gravação mostra o idioma no kicker e, em `RecordingHeader`,
+  **Transcrever de novo em…** (`RetranscribeAction`, em `RetryTranscription.tsx`) para gravação
+  pronta ou falha, com o diálogo de idioma e a confirmação do que muda (revisão nova, correções à
+  mão perdidas, pessoas dos locutores de volta, campos, tipo e resumo refeitos); o 409 vira "Já há
+  uma transcrição em andamento.". Tudo isso fica em rotas e no modal sob demanda: o motor de upload
+  do bundle inicial só ganhou o campo `language`.
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
   `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a Biblioteca
   fica marcada em `/gravacoes/`); o item comum tem `group`, e `navGroups()` devolve as duas seções.

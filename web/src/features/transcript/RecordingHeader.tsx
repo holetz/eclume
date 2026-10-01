@@ -2,19 +2,27 @@ import { useState } from 'react'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { AUTO_LANGUAGE, languageLabel } from '../../lib/languages'
 
 import { ExportMenu } from './ExportMenu'
 import { useDeleteRecording } from './queries'
+import { RetranscribeAction } from './RetryTranscription'
 import styles from './RecordingPage.module.css'
 import { formatDuration, shortDayLabel, shortRef, timeLabel } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
-/** "qui 24 set 2026 · 09:00 · 1 h 12 min", com "· data do envio" quando o arquivo não trazia data. */
-function recordingKicker(recording: Pick<Recording, 'recorded_at' | 'recorded_at_source' | 'duration_ms'>): string {
+/**
+ * "qui 24 set 2026 · 09:00 · 1 h 12 min · Português", com "· data do envio" quando o arquivo não
+ * trazia data; o idioma é o da transcrição, que só aparece depois da detecção.
+ */
+function recordingKicker(
+  recording: Pick<Recording, 'recorded_at' | 'recorded_at_source' | 'duration_ms' | 'language'>,
+): string {
   const start = new Date(recording.recorded_at)
   const parts = [`${shortDayLabel(start)} ${start.getFullYear()}`, timeLabel(start)]
   if (recording.duration_ms) parts.push(formatDuration(recording.duration_ms))
+  if (recording.language && recording.language !== AUTO_LANGUAGE) parts.push(languageLabel(recording.language))
   if (recording.recorded_at_source === 'upload') parts.push('data do envio')
   return parts.join(' · ')
 }
@@ -25,7 +33,7 @@ interface RecordingHeaderProps {
   onDeleted: () => void
 }
 
-/** Data, hora e duração no kicker, o título e as ações Exportar e Excluir (frame "Recording"). */
+/** Data, hora, duração e idioma no kicker, o título e as ações Transcrever de novo em…, Exportar e Excluir (frame "Recording"). */
 export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingHeaderProps) {
   const [confirming, setConfirming] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -41,6 +49,7 @@ export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingH
         </span>
       </div>
       <div className={styles.actions}>
+        <RetranscribeAction recording={recording} />
         <ExportMenu recordingId={recording.id} hasSummary={hasSummary} onError={setExportError} />
         <button type="button" className="btn btn-danger btn-secondary" onClick={() => setConfirming(true)}>
           Excluir

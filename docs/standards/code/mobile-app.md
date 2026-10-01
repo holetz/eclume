@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -134,7 +134,12 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   tela, o `at_ms` dos marcadores e o `duration_ms` do upload.
 - **Marcador** marca na hora, com `client_id` UUID; a nota vem depois, opcional
   (`anotar_marcador`). **Parar** fecha o arquivo e abre a folha "Gravação salva" (título sugerido
-  pela hora de início, os chips dos tipos de agenda; Salvar ou Pular). `recorded_at` é o relógio do
+  pela hora de início, os chips dos tipos de agenda e o **Idioma da transcrição**; Salvar ou
+  Pular). O seletor de idioma vem da ponte (`idiomas`): "Padrão da conta: <idioma>" (valor vazio,
+  a gravação sobe sem idioma e vale o da conta), "Detectar automaticamente" (`auto`), Português,
+  Español e English; o padrão da conta é lido de `GET /me/transcription` no ciclo que lê os tipos
+  de agenda e fica no cache (`idioma_da_conta`) para a folha fora da rede. `save_details` grava o
+  idioma na linha da fila, que o upload manda. `recorded_at` é o relógio do
   celular no início, `recorded_at_source: capture`.
 - **Limites** (`estimativas.rs`): menos de 1 h de gravação no espaço livre dá o aviso
   "Armazenamento quase cheio" no Início; menos de 5 min, gravando, para e salva sozinho; bateria em

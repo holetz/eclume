@@ -48,6 +48,7 @@ function mockLibrary() {
     'GET /api/v1/collections': () => fixtures.collectionPage(),
     'GET /api/v1/fields': () => fixtures.fieldPage(),
     'GET /api/v1/people': () => fixtures.personPage(),
+    'GET /api/v1/me/transcription': () => fixtures.transcriptionPreference(),
   })
 }
 
@@ -93,6 +94,19 @@ describe('modal Importar', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Remover kickoff-guion.m4a' }))
     expect(within(dialog).getByRole('button', { name: 'Enviar arquivos' })).toBeDisabled()
+  })
+
+  it('escolhe o idioma de cada arquivo, partindo do padrão da conta', async () => {
+    vi.mocked(runUpload).mockResolvedValue({ recordingId: '01928f3a-1c00-7a00-8000-000000000401', deduplicated: false })
+    const { user, dialog } = await openWithFiles()
+    const m4a = within(dialog).getByLabelText('Idioma de kickoff-guion.m4a')
+    expect(m4a).toHaveValue('')
+    expect(within(m4a).getByRole('option', { name: 'Padrão da conta: Inglês' })).toBeInTheDocument()
+    await user.selectOptions(m4a, 'Detectar automaticamente')
+    await user.click(within(dialog).getByRole('button', { name: 'Enviar 2 arquivos' }))
+    await waitFor(() => expect(runUpload).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(runUpload).mock.calls[0][0].language).toBe('auto')
+    expect(vi.mocked(runUpload).mock.calls[1][0].language).toBeUndefined()
   })
 
   it('avisa quando os metadados trazem só o dia', async () => {

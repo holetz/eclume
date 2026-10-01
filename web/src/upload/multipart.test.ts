@@ -74,6 +74,13 @@ describe('runUpload', () => {
       kind: 'meeting',
     })
     expect(body).not.toHaveProperty('title')
+    expect(body).not.toHaveProperty('language')
+  })
+
+  it('manda o idioma escolhido para o arquivo', async () => {
+    const http = mockFetch({ 'POST /api/v1/uploads': () => fixtures.uploadDeduplicated() })
+    await runUpload({ ...file(), language: 'auto' }, options)
+    expect(await http.calls[0].json()).toMatchObject({ language: 'auto' })
   })
 
   it('cria, envia as partes com os headers recebidos e conclui com os ETags em ordem', async () => {

@@ -15,9 +15,26 @@ const base = {
   'GET /api/v1/me': () => fixtures.me(),
   'GET /api/v1/privacy': () => fixtures.privacyInfo(),
   'GET /api/v1/me/voice-assignment': () => fixtures.voiceAssignment(),
+  'GET /api/v1/me/transcription': () => fixtures.transcriptionPreference(),
 }
 
 describe('conta', () => {
+  it('escolhe o idioma da transcrição, com o padrão do servidor nomeado', async () => {
+    const http = mockFetch({
+      ...base,
+      'PATCH /api/v1/me/transcription': () => ({ language: null, platform_default: 'pt' }),
+    })
+    renderApp('/config/conta')
+    const select = await screen.findByLabelText('Idioma das gravações')
+    expect(select).toHaveValue('en')
+    expect(within(select).getByRole('option', { name: 'Padrão do servidor: Português' })).toBeInTheDocument()
+    expect(within(select).queryByRole('option', { name: /^Automático/ })).not.toBeInTheDocument()
+    await userEvent.selectOptions(select, 'Padrão do servidor: Português')
+    await waitFor(() => expect(http.requests('PATCH /api/v1/me/transcription')).toHaveLength(1))
+    expect(await http.requests('PATCH /api/v1/me/transcription')[0].json()).toEqual({ language: null })
+    await waitFor(() => expect(select).toHaveValue(''))
+  })
+
   it('mostra a conta e troca a senha, conferindo a repetição', async () => {
     const http = mockFetch({
       ...base,
