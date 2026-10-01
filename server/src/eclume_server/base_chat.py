@@ -93,16 +93,19 @@ def _view(chat_id: UUID | str, state: dict[str, str]) -> dict[str, Any]:
     }
 
 
-async def create_chat(redis: ArqRedis, owner_id: UUID, message: str, history: list[dict[str, str]]) -> dict[str, Any]:
+async def create_chat(
+    redis: ArqRedis, owner_id: UUID, message: str, history: list[dict[str, str]], *, transcripts: bool
+) -> dict[str, Any]:
     """Guarda o pedido e enfileira `base_chat`; devolve o schema `BaseChat` na fila.
 
-    Com `MAX_OPEN` em aberto, 429 `rate_limited`.
+    `transcripts` diz se a credencial lê transcrições: sem isso, o agente só consulta resumos. Com
+    `MAX_OPEN` em aberto, 429 `rate_limited`.
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
         raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
     chat_id = uuid4()
     key = chat_key(chat_id)
-    request = json.dumps({"message": message, "history": history}, ensure_ascii=False)
+    request = json.dumps({"message": message, "history": history, "transcripts": transcripts}, ensure_ascii=False)
     await redis.hset(key, mapping={"owner_id": str(owner_id), "status": "queued", "request": request})
     await redis.expire(key, TTL_S)
     await redis.zadd(open_key(owner_id), {str(chat_id): time.time()})
@@ -249,7 +252,9 @@ async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) 
     except SecretDecryptError as exc:
         raise ChatError(PROVIDER_NOT_CONFIGURED, "A chave de API do provider não abre.") from exc
     history = [(item["role"], item["content"]) for item in request.get("history", [])]
-    context = BaseChatContext(history=history, question=request["message"])
+    context = BaseChatContext(
+        history=history, question=request["message"], transcripts=request.get("transcripts", True)
+    )
     result = await run_base_chat(provider, context, BaseTools(ctx["engine"], owner_id))
     return {
         "message": result.message,

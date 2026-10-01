@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from eclume_server.agents.base_chat import BASE_CHAT_SUMMARIES_SYSTEM, correction
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, contract_transcript, run_cpu, run_gpu
 
@@ -145,3 +146,25 @@ def test_validacao_escopo_e_limite_por_conta(
     run_cpu(services.settings)
     assert _ask(user).status_code == 202
     assert user.get("/api/v1/base-chat/01928f3a-1c00-7a00-8000-000000000e09").status_code == 404
+
+
+def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Services):
+    pat = user.pat("summaries:read")
+    agents = FakeAgents(
+        replies={
+            "base_chat": [
+                # A ação de transcrição não vale para esta credencial: recebe o pedido de correção.
+                _json(action="search_transcripts", query="orçamento"),
+                _json(action="reply", message="Só pelos resumos.", sources=[]),
+            ]
+        }
+    )
+    created = pat.post("/api/v1/base-chat", json={"message": "Qual o orçamento?"})
+    assert created.status_code == 202, created.text
+    run_cpu(services.settings, agents)
+    done = pat.get(f"/api/v1/base-chat/{created.json()['id']}").json()
+    assert (done["status"], done["answer"], done["queries"]) == ("done", "Só pelos resumos.", 0)
+    calls = agents.of("base_chat")
+    assert all(system == BASE_CHAT_SUMMARIES_SYSTEM for _, system, _ in calls)
+    assert "search_transcripts" not in calls[0][1]
+    assert correction(transcripts=False) in calls[1][2]

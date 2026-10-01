@@ -13,6 +13,7 @@ import pytest
 from eclume_server.agents import base as codes
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError
 from eclume_server.agents.base_chat import (
+    BASE_CHAT_SUMMARIES_SYSTEM,
     BASE_CHAT_SYSTEM,
     CORRECTION,
     LIMIT_NOTE,
@@ -20,6 +21,7 @@ from eclume_server.agents.base_chat import (
     BaseChatContext,
     BaseChatResult,
     Hit,
+    correction,
     parse_action,
     run_base_chat,
 )
@@ -167,3 +169,23 @@ def test_limite_de_consultas():
     provider = Scripted([*[search] * MAX_TOOL_CALLS, _json(action="reply", message="Chega.")])
     assert _run(provider).message == "Chega."
     assert LIMIT_NOTE in provider.prompts[-1][1]
+
+
+def test_sem_transcricoes_o_agente_so_tem_as_acoes_de_resumo():
+    assert "search_transcripts" not in BASE_CHAT_SUMMARIES_SYSTEM
+    assert "read_transcript" not in BASE_CHAT_SUMMARIES_SYSTEM
+    assert parse_action(_json(action="search_transcripts", query="a"), transcripts=False) is None
+    tools = Tools()
+    provider = Scripted(
+        [
+            _json(action="read_transcript", recording_id=str(KICKOFF), **{"from": "00:00:00", "to": "00:01:00"}),
+            _json(action="search_summaries", query="orçamento"),
+            _json(action="reply", message="Pelo resumo.", sources=[str(KICKOFF)]),
+        ]
+    )
+    context = BaseChatContext(history=[], question="Qual o orçamento?", transcripts=False)
+    result = asyncio.run(run_base_chat(provider, context, tools))
+    assert result.message == "Pelo resumo."
+    assert [name for name, _ in tools.calls] == ["search_summaries"]
+    assert all(system == BASE_CHAT_SUMMARIES_SYSTEM for system, _ in provider.prompts)
+    assert correction(transcripts=False) in provider.prompts[1][1]

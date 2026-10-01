@@ -29,7 +29,7 @@ from arq.worker import Worker, func
 from redis.asyncio import Redis
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError, with_context
-from eclume_server.agents.base_chat import BASE_CHAT_SYSTEM
+from eclume_server.agents.base_chat import BASE_CHAT_SUMMARIES_SYSTEM, BASE_CHAT_SYSTEM
 from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
 from eclume_server.queue import AGENT_QUEUE, DEFAULT_QUEUE, GPU_QUEUE, progress_key
@@ -201,9 +201,12 @@ def purpose_of(system: str, prompt: str) -> str:
     """
     if FIELDS_SYSTEM in prompt:
         return "fields"
-    return {DETECT_SYSTEM: "agenda_detection", CHAT_SYSTEM: "chat", BASE_CHAT_SYSTEM: "base_chat"}.get(
-        system, "summaries"
-    )
+    return {
+        DETECT_SYSTEM: "agenda_detection",
+        CHAT_SYSTEM: "chat",
+        BASE_CHAT_SYSTEM: "base_chat",
+        BASE_CHAT_SUMMARIES_SYSTEM: "base_chat",
+    }.get(system, "summaries")
 
 
 @dataclass
