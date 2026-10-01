@@ -25,8 +25,9 @@ function mockLibrary(recordings: (request: Request) => unknown = () => fixtures.
   })
 }
 
+/** O item da semana pelo nome do link que o ocupa (o item leva a posição e o estado). */
 function event(name: RegExp | string) {
-  return screen.getByRole('listitem', { name })
+  return screen.getByRole('link', { name }).closest('[role="listitem"]') as HTMLElement
 }
 
 /** Só o relógio é falso: hoje é sábado, 26/09/2026, 11:12. */
@@ -50,8 +51,9 @@ describe('biblioteca na semana', () => {
     const monday = await screen.findByRole('list', { name: 'segunda, 21 de setembro' })
     await waitFor(() => expect(within(monday).getAllByRole('listitem')).toHaveLength(2))
     const planning = event(/^Planejamento semanal/)
-    expect(planning).toHaveAccessibleName('Planejamento semanal, 09:00, 58 min, 2 marcadores')
-    expect(planning).toHaveAttribute('href', '/gravacoes/01928f3a-1c00-7a00-8000-0000000004a1')
+    const link = within(planning).getByRole('link')
+    expect(link).toHaveAccessibleName('Planejamento semanal, 09:00, 58 min, 2 marcadores')
+    expect(link).toHaveAttribute('href', '/gravacoes/01928f3a-1c00-7a00-8000-0000000004a1')
     expect(planning).toHaveClass('cal-event')
     expect(planning.style.getPropertyValue('--s')).toBe('9')
     expect(within(planning).getByText('09:00 · 58 min')).toHaveClass('mono')
