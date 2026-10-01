@@ -47,12 +47,14 @@ montado. O build do desktop é pesado: numa estação que também roda IDE e nav
 ```bash
 docker build -t eclume-desktop-build -f desktop/build.Dockerfile desktop
 docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
-  -v "$PWD:/src" -w /src eclume-desktop-build \
-  cargo test --manifest-path desktop/Cargo.toml --workspace
+  -v "$PWD:/src" -w /src/desktop eclume-desktop-build \
+  cargo test --workspace
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src" -w /src/desktop \
+  eclume-desktop-build npm ci --ignore-scripts
 # o .deb, sem os artefatos assinados do updater
 docker run --rm --cpus 2 -e CARGO_BUILD_JOBS=2 -u "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD:/src" -w /src/desktop/src-tauri eclume-desktop-build \
-  npx --yes @tauri-apps/cli@2 build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+  npx --no-install tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
 
 ```bash

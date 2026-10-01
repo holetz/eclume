@@ -242,6 +242,32 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
   await expect(page).toHaveURL(/visao=semana&data=2026-09-21/)
 })
 
+test('rascunho do resumo protegido: sair pede confirmação e recarregar reencontra o texto', async ({ page }) => {
+  await login(page)
+  await page.goto('/?visao=semana&data=2026-09-21')
+  await page.getByRole('listitem', { name: /^Planejamento semanal/ }).click()
+  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
+  await summary.getByRole('button', { name: 'Editar' }).click()
+  const editor = page.getByRole('region', { name: 'Editando o resumo' })
+  await editor.getByRole('textbox', { name: 'Resumo em Markdown' }).fill('# Rascunho que não se perde')
+
+  // Sair pela barra pede confirmação; continuar editando mantém o texto.
+  await navTo(page, 'Biblioteca')
+  const confirm = page.getByRole('dialog', { name: 'Descartar a edição?' })
+  await confirm.getByRole('button', { name: 'Continuar editando' }).click()
+  await expect(confirm).toBeHidden()
+  await expect(editor.getByRole('textbox')).toHaveValue('# Rascunho que não se perde')
+
+  // Recarregar a aba (aceitando o aviso do navegador) e reabrir a edição traz o rascunho de volta.
+  await expect
+    .poll(() => page.evaluate(() => Object.keys(sessionStorage).some((k) => k.startsWith('eclume-resumo-rascunho:'))))
+    .toBe(true)
+  page.on('dialog', (dialog) => dialog.accept())
+  await page.reload()
+  await summary.getByRole('button', { name: 'Editar' }).click()
+  await expect(editor.getByRole('textbox')).toHaveValue('# Rascunho que não se perde')
+})
+
 test('busca com ficha de campo, gravação no segundo, pessoas, coleções e token contra o mock', async ({ page }) => {
   await login(page)
   const nav = page.getByRole('navigation', { name: 'Principal' })

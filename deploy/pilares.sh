@@ -6,13 +6,13 @@
 #
 # Uso: bash deploy/pilares.sh <pilar>     roda os comandos do pilar, parando no primeiro que falha
 #      bash deploy/pilares.sh --lista     enumera os pilares, um por linha
-# Pilares: python contracts web web-browser desktop mobile windows (este só no gate).
+# Pilares: python contracts web web-browser desktop mobile windows auditoria (os dois últimos só no gate).
 # Contrato: docs/standards/code/monorepo.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PILARES=(python contracts web web-browser desktop mobile windows)
+PILARES=(python contracts web web-browser desktop mobile windows auditoria)
 
 # Um grupo dobrável por comando no log da CI; no gate, só um cabeçalho.
 run() {
@@ -22,7 +22,11 @@ run() {
 }
 
 # O link do desktop estoura (Bus error) com o debuginfo cheio na CI; o dev local mantém o cheio.
-cargo_env() { export CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_PROFILE_TEST_DEBUG=line-tables-only; }
+# O cargo roda de dentro da pasta do workspace: é dali que o rustup lê o rust-toolchain.toml.
+cargo_env() {
+  export CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_PROFILE_TEST_DEBUG=line-tables-only
+  cd "$ROOT/$1"
+}
 
 pilar_python() {
   run uv sync --all-packages --locked
@@ -57,11 +61,12 @@ pilar_web_browser() {
 }
 
 pilar_desktop() {
-  cargo_env
-  run cargo fmt --manifest-path desktop/Cargo.toml --all --check
-  run cargo check --manifest-path desktop/Cargo.toml --workspace --locked
-  run cargo clippy --manifest-path desktop/Cargo.toml --workspace --locked -- -D warnings
-  run cargo test --manifest-path desktop/Cargo.toml --workspace --locked
+  cargo_env desktop
+  run cargo fmt --all --check
+  run cargo check --workspace --locked
+  run cargo clippy --workspace --locked -- -D warnings
+  run cargo test --workspace --locked
+  cd "$ROOT"
   # A UI da janela (desktop/ui) num Chromium, com o Tauri simulado. As dependências de sistema do
   # navegador vêm de quem chama (setup da CI, imagem do gate).
   run npm --prefix desktop/ui-tests ci
@@ -74,32 +79,56 @@ pilar_mobile() {
   run npm --prefix mobile run lint
   run npm --prefix mobile test
   run npm --prefix mobile run build
-  cargo_env
-  run cargo fmt --manifest-path mobile/Cargo.toml --all --check
-  run cargo check --manifest-path mobile/Cargo.toml --workspace --locked
-  run cargo clippy --manifest-path mobile/Cargo.toml --workspace --locked -- -D warnings
-  run cargo test --manifest-path mobile/Cargo.toml --workspace --locked
+  cargo_env mobile
+  run cargo fmt --all --check
+  run cargo check --workspace --locked
+  run cargo clippy --workspace --locked -- -D warnings
+  run cargo test --workspace --locked
   # O núcleo compila para o Android sem o gradle: prova a compilação cruzada do libopus (cmake) e
-  # do SQLite com o NDK de quem chama (o do runner na CI, o do host no gate).
-  local ndk="${ANDROID_NDK_LATEST_HOME:?ANDROID_NDK_LATEST_HOME aponta para o NDK}"
+  # do SQLite com o NDK fixado de quem chama (ECLUME_ANDROID_NDK: o do sdkmanager na CI, o do host no gate).
+  local ndk="${ECLUME_ANDROID_NDK:?ECLUME_ANDROID_NDK aponta para o NDK fixado}"
   local bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
   export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
   export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
   export AR_aarch64_linux_android="$bin/llvm-ar"
   export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$bin/aarch64-linux-android26-clang"
-  run cargo check --manifest-path mobile/Cargo.toml -p eclume-mobile-core --target aarch64-linux-android --locked
+  run cargo check -p eclume-mobile-core --target aarch64-linux-android --locked
 }
 
 # O código só-Windows do desktop, por compilação cruzada (cargo-xwin). Só no gate: na CI o xwin
 # baixaria o SDK a cada execução.
 pilar_windows() {
-  cargo_env
-  run cargo xwin clippy --manifest-path desktop/Cargo.toml --workspace --all-targets --locked \
+  cargo_env desktop
+  run cargo xwin clippy --workspace --all-targets --locked \
     --target x86_64-pc-windows-msvc -- -D warnings
+}
+
+# Vulnerabilidades conhecidas das dependências de produção: pip-audit sobre o uv.lock, npm audit
+# (alta ou crítica) nos projetos que vão para o usuário e cargo-deny (advisories) nos workspaces
+# Rust. Exceção só com motivo e prazo: deploy/auditoria-excecoes.txt (Python), `overrides` no
+# package.json (npm) e o [advisories] ignore de desktop/deny.toml e mobile/deny.toml (Rust). Só no
+# gate: precisa da rede e das ferramentas da imagem eclume-gate.
+pilar_auditoria() {
+  local req ignorar=() id prazo
+  req="$(mktemp)"
+  run uv export --locked --all-packages --no-hashes --no-emit-workspace --format requirements-txt -o "$req"
+  # Linha da exceção: <id> <prazo AAAA-MM-DD> <motivo>; vencida, deixa de valer e o pilar falha.
+  while read -r id prazo _; do
+    [[ -z "$id" || "$id" == \#* ]] && continue
+    if [[ "$prazo" > "$(date +%F)" ]]; then ignorar+=(--ignore-vuln "$id"); fi
+  done < deploy/auditoria-excecoes.txt
+  run pip-audit --no-deps --disable-pip -r "$req" "${ignorar[@]}"
+  rm -f "$req"
+  for projeto in web mobile desktop; do
+    run npm --prefix "$projeto" audit --omit=dev --audit-level=high
+  done
+  for ws in desktop mobile; do
+    (cd "$ROOT/$ws" && run cargo deny --locked check advisories)
+  done
 }
 
 case "${1:-}" in
   --lista) printf '%s\n' "${PILARES[@]}" ;;
-  python|contracts|web|web-browser|desktop|mobile|windows) "pilar_${1//-/_}" ;;
+  python|contracts|web|web-browser|desktop|mobile|windows|auditoria) "pilar_${1//-/_}" ;;
   *) echo "Uso: bash deploy/pilares.sh <$(IFS='|'; echo "${PILARES[*]}")> | --lista" >&2; exit 2 ;;
 esac

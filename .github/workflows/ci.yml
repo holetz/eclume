@@ -45,7 +45,7 @@ permissions:
 
 jobs:
   mudancas:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -62,7 +62,7 @@ jobs:
       # No PR a lista de arquivos vem da API; no push em main o filtro compara com o commit
       # anterior ao push e precisa do checkout.
       - if: github.event_name == 'push'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # O noturno só gasta minutos quando o `main` mudou desde o último noturno verde.
       - if: github.event_name == 'schedule'
         id: noturno
@@ -73,7 +73,7 @@ jobs:
           if [ "$ultimo" = "$GITHUB_SHA" ]; then echo "pular=true" >> "$GITHUB_OUTPUT"; fi
       - if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
         id: filtro
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
@@ -123,11 +123,11 @@ jobs:
   python:
     needs: mudancas
     if: needs.mudancas.outputs.python == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
       - name: Serviços de teste do server (Postgres, Redis, MinIO)
@@ -139,11 +139,11 @@ jobs:
   contracts:
     needs: mudancas
     if: needs.mudancas.outputs.contracts == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
       - name: Mock server (Prism)
@@ -155,13 +155,13 @@ jobs:
   web:
     needs: mudancas
     if: needs.mudancas.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: bash deploy/pilares.sh web
@@ -172,15 +172,15 @@ jobs:
   web-browser:
     needs: mudancas
     if: needs.mudancas.outputs.web-browser == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       E2E_CHANNEL: chrome
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: ffmpeg para as fixtures de mídia
@@ -196,10 +196,10 @@ jobs:
   desktop:
     needs: mudancas
     if: needs.mudancas.outputs.desktop == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dependências de sistema do Tauri 2 e da captura de áudio
         run: |
           sudo apt-get update
@@ -207,16 +207,17 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev libssl-dev build-essential \
             libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      # O Rust de desktop/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
+      - name: Rust de desktop/rust-toolchain.toml
+        working-directory: desktop
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: desktop
       # A UI da janela (desktop/ui) roda num Chromium: as dependências de sistema dele vêm daqui.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: desktop/ui-tests/package-lock.json
       - run: |
@@ -230,10 +231,10 @@ jobs:
   mobile:
     needs: mudancas
     if: needs.mudancas.outputs.mobile == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dependências de sistema do Tauri 2 e do microfone
         run: |
           sudo apt-get update
@@ -241,18 +242,22 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev libssl-dev build-essential \
             libasound2-dev clang cmake ninja-build
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-          targets: aarch64-linux-android
-      - uses: Swatinem/rust-cache@v2
+      # O Rust de mobile/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
+      - name: Rust de mobile/rust-toolchain.toml
+        working-directory: mobile
+        run: rustup toolchain install
+      # O NDK que mobile/scripts/android-sdk.sh instala, não o mais novo do runner.
+      - name: NDK 28.2.13676358
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" >/dev/null
+          echo "ECLUME_ANDROID_NDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: mobile
-      # O pilar compila o núcleo para o Android com o NDK que o runner já traz
-      # (ANDROID_NDK_LATEST_HOME).
+      # O pilar compila o núcleo para o Android com o NDK fixado acima (ECLUME_ANDROID_NDK).
       - run: bash deploy/pilares.sh mobile

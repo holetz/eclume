@@ -1,0 +1,4 @@
+# Exceções do pip-audit no pilar `auditoria` (deploy/pilares.sh), uma por linha:
+#   <id da vulnerabilidade> <prazo AAAA-MM-DD> <motivo>
+# Depois do prazo a exceção deixa de valer e o pilar volta a falhar. As exceções do Rust vivem no
+# [advisories] ignore de desktop/deny.toml e mobile/deny.toml; no npm o caminho é `overrides`.

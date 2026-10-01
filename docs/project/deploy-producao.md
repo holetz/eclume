@@ -4,10 +4,10 @@ title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-09-29
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110
 maintainer: holetz
 ---
 
@@ -186,7 +186,9 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
   | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt
 ```
 
-O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA, `/downloads/latest.json`
+O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA (o `index.html` das rotas
+sem cache longo), o `404` sem `immutable` de um `/assets/*` que não existe (o chunk de um deploy
+anterior não pode voltar como `index.html` guardado por um ano), `/downloads/latest.json`
 e o cadastro aberto com o aviso, entra pela sessão de admin (garante o provider) e pela de
 usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
 quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload

@@ -188,6 +188,23 @@ describe('campos personalizados', () => {
     expect(await screen.findByRole('form', { name: 'Editar Projeto' })).toBeInTheDocument()
   })
 
+  it('pede para descartar as alterações antes de sair da rota', async () => {
+    mockFields()
+    renderApp('/config/campos')
+    await list()
+    const panel = screen.getByRole('form', { name: 'Editar Cliente' })
+    await userEvent.type(within(panel).getByLabelText('Como identificar'), ' Sem siglas.')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await userEvent.click(within(nav).getByRole('link', { name: 'Tags' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Descartar alterações?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continuar editando' }))
+    expect(screen.getByRole('form', { name: 'Editar Cliente' })).toBeInTheDocument()
+    expect(within(panel).getByLabelText('Como identificar')).toHaveValue(
+      'A empresa cliente de que a conversa trata; nenhuma, se for interna. Sem siglas.',
+    )
+  })
+
   it('mostra o erro 422 no campo certo', async () => {
     mockFields({
       'PATCH /api/v1/fields/:id': () =>
