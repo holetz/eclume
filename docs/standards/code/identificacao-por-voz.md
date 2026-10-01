@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Identificação de pessoas pela voz
-description: Como o eclume sugere e atribui quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão abaixo do limiar da conta e atribuição automática acima dele (antes do resumo), retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
-resource: server/src/eclume_server/voice.py, server/src/eclume_server/db/migrations/019_atribuicao_automatica_de_locutores.sql, web/src/features/people/AutoAssignCard.tsx, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
+description: Como o eclume sugere e atribui quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão abaixo do limiar da conta e atribuição automática acima dele (antes do resumo), retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, a conta que deixa de guardar amostras com a purga da conta, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
+resource: server/src/eclume_server/voice.py, server/src/eclume_server/db/migrations/019_atribuicao_automatica_de_locutores.sql, web/src/features/people/AutoAssignCard.tsx, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx, server/src/eclume_server/db/migrations/028_conta_sem_amostras_de_voz.sql, web/src/features/account/AccountPage.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95, holetz/eclume#97
+source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95, holetz/eclume#97, holetz/eclume#116
 maintainer: holetz
 ---
 
@@ -141,8 +141,21 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   aceita e ignora o antigo argumento `org_id`, que um job da versão anterior pode trazer. As
   amostras (locutores confirmados) ficam: esquecê-las é pela pessoa. Religar não traz os vetores
   antigos: só uma retranscrição os recria.
-- **Vale na ingestão.** Um job enfileirado com `embeddings: true` antes do desligamento chega ao
-  `ingest_transcript` depois dele: a ingestão relê a plataforma e não grava o vetor.
+- **A conta pode deixar de guardar amostras** (holetz/eclume#116): `users.voice_keep_samples`
+  (migration 028, padrão `true`), exposta como `keep_samples` em `/me/voice-assignment` junto de
+  `sample_count` e `voiceprint_people` (só leitura). A transição `true → false` apaga, na mesma
+  transação do `PATCH` e sob a RLS do dono (`voice.purge_account`), as amostras, os
+  `speaker_embeddings` e as sugestões pendentes **da conta** e, depois do commit, enfileira
+  `purge_embedding_objects(owner_id)`, que apaga só os `speaker_embeddings.json` das gravações da
+  conta (nada, se ela voltou a guardar nesse meio-tempo; sem argumento, o job segue sendo o da
+  plataforma). Diferente da purga da plataforma, **as amostras também saem**: é a escolha explícita
+  do titular de não ter biometria guardada. Daí em diante o job nasce com `embeddings: false`
+  (`transcribe_options(..., keep_samples=)`), a ingestão não grava vetor da conta, nada é
+  comparado nem sugerido, e confirmar um locutor não cria amostra. Os vínculos locutor ↔ pessoa
+  ficam. Voltar a `true` vale para as próximas transcrições, sem recuperar o que saiu.
+- **Vale na ingestão.** Um job enfileirado com `embeddings: true` antes do desligamento (da
+  plataforma ou da conta) chega ao `ingest_transcript` depois dele: a ingestão relê a plataforma e
+  a preferência do dono e não grava o vetor.
 - **O JSON de embeddings não fica no bucket.** Guardado ou descartado o vetor, a ingestão põe o
   `speaker_embeddings.json` da revisão que chegou (a chave que o job traz) na fila de exclusão do
   bucket, na mesma transação; o dreno o apaga em até um minuto. A biometria vive só no banco.
@@ -174,4 +187,8 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   O schema `Person` traz `voice_sample_count` (amostras da impressão) e `speaking_time_ms` (soma do
   `talk_ms` dos locutores ligados à pessoa, sob a RLS do dono), calculados em
   `people.person_select`.
+- **Conta** (`/config/conta`, Privacidade e dados): as contagens de impressões e amostras e, com a
+  voz ligada na plataforma, a chave **Guardar amostras de voz desta conta**; desligar pede
+  confirmação (`ConfirmDialog`). Com a conta sem amostras, o `AutoAssignCard` em Pessoas troca a
+  chave da atribuição automática por um aviso que leva à Conta.
 - **Admin** (`/admin/locutores`, seção Identificação): liga-desliga (depende da separação e pede confirmação ao desligar) e limiar de 0,50 a 0,99.

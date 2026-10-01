@@ -96,8 +96,8 @@ def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str,
     return raw
 
 
-def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
-    """`options` do `transcribe`, da configuração da plataforma; o worker não lê o banco."""
+def transcribe_options(platform: Any, language: str | None, *, keep_samples: bool = True) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
+    """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco."""
     asr = platform["asr"]
     diarization = platform["diarization"]
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
@@ -114,8 +114,9 @@ def transcribe_options(platform: Any, language: str | None) -> dict[str, Any]:  
         "endpoint_url": asr.get("endpoint_url"),
         "diarize": bool(diarization.get("enabled")),
         "diarization_model": diarization.get("model"),
-        # Impressão de voz só com a identificação por voz ligada na plataforma (LGPD).
-        "embeddings": bool(platform["voice_identification"].get("enabled")),
+        # Impressão de voz só com a identificação por voz ligada na plataforma e a conta guardando
+        # amostras (LGPD).
+        "embeddings": keep_samples and bool(platform["voice_identification"].get("enabled")),
         # O tratamento do áudio antes do ASR; um worker antigo ignora a chave.
         "preprocess": platform["preprocessing"],
     }
@@ -173,9 +174,10 @@ class Queue:
         for recording_id, revision in jobs:
             await self.pool.set(cancel_key(recording_id, revision), "1", ex=CANCEL_TTL_S)
 
-    async def enqueue_purge_embedding_objects(self) -> None:
-        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""
-        await self.pool.enqueue_job("purge_embedding_objects", _queue_name=DEFAULT_QUEUE)
+    async def enqueue_purge_embedding_objects(self, owner_id: UUID | None = None) -> None:
+        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma, ou só da conta, no worker CPU."""
+        args = (str(owner_id),) if owner_id is not None else ()
+        await self.pool.enqueue_job("purge_embedding_objects", *args, _queue_name=DEFAULT_QUEUE)
 
     async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
         """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""

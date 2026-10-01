@@ -3,7 +3,7 @@ titulo: Sua conta e quem vê suas gravações
 topico: comecar
 paginas: [biblioteca, ajuda, conta]
 relacionados: [primeira-gravacao, sugestoes-por-voz]
-termos: [conta, privacidade, quem vê, administrador, consentimento, aviso, cadastro, senha, trocar senha, esqueci a senha, redefinir senha, excluir conta, limite, cota, armazenamento]
+termos: [conta, privacidade, quem vê, para onde vão os dados, dados, agente externo, amostras de voz, administrador, consentimento, aviso, cadastro, senha, trocar senha, esqueci a senha, redefinir senha, excluir conta, limite, cota, armazenamento]
 ordem: 6
 atualizado: 2026-10-01
 ---
@@ -11,9 +11,24 @@ Cada conta do eclume é um espaço próprio.
 
 ## O que é só seu
 
-Suas gravações, transcrições, resumos, pessoas, campos e tipos de agenda só aparecem para você. Não
-há compartilhamento entre contas: outra pessoa com conta neste servidor não vê nada do que é seu, e
+Dentro do eclume, suas gravações, transcrições, resumos, pessoas, campos e tipos de agenda só
+aparecem para você. Não há compartilhamento entre contas: outra pessoa com conta neste servidor não vê nada do que é seu, e
 você não vê nada do que é dela.
+
+## Para onde vão seus dados
+
+O áudio e a transcrição ficam guardados neste servidor. Quem transforma o áudio em texto é a
+transcrição que quem administra configurou: em geral no próprio servidor, mas pode ser outra
+máquina. Os resumos, os campos, o chat e a detecção do tipo de agenda são feitos por um agente de
+IA que quem administra escolheu: pode rodar no servidor, na rede local ou fora dela, num serviço
+externo. Nesse último caso, o texto da transcrição (não o áudio) vai para esse fornecedor.
+
+Em **Minhas configurações › Conta › Privacidade e dados** você vê, para este servidor, onde é feita
+cada etapa e quem processa o que sai, além de quantas impressões e amostras de voz a sua conta
+guarda. Com a identificação por voz ligada no servidor, dá para desligar **Guardar amostras de voz
+desta conta**: depois de confirmar, as amostras, as impressões e as sugestões de pessoa pela voz
+são apagadas na hora, e nada de voz da conta é calculado ou guardado nas próximas gravações. Os
+locutores já ligados às pessoas continuam ligados.
 
 ## O que quem administra o servidor faz
 

@@ -4,6 +4,7 @@ import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { AdminPageHead } from './AdminPageHead'
+import { ExternalDataNotice } from './ExternalDataNotice'
 import styles from './Admin.module.css'
 import { labelOf, MODEL_PLACEHOLDERS, NEEDS_BASE_URL, PROVIDER_KINDS, providerSecret, PURPOSES, SECRET_INFO } from './labels'
 import { PROVIDERS_KEY, usePlatformSecret, useProviders, useSecrets } from './queries'
@@ -64,6 +65,10 @@ export function AgentsPage() {
           Sem provider para: {orphans.map((purpose) => purpose.label.toLocaleLowerCase('pt-BR')).join(', ')}.
         </p>
       )}
+      <ExternalDataNotice
+        purposes={['summaries', 'fields', 'chat', 'agenda_detection']}
+        revision={providers.dataUpdatedAt}
+      />
       {providers.isSuccess && items.length === 0 && <p className="text-muted">Nenhum provider cadastrado.</p>}
       {items.length > 0 && (
         <div className="list" aria-label="Providers cadastrados" role="list">

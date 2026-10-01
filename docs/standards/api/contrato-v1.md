@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116
 maintainer: holetz
 ---
 
@@ -74,7 +74,11 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Rotas públicas** (sem credencial): `GET /health` (estático, sinal de vida), `GET /health/ready`
   (prontidão desde a 2.13.0: 200 ou 503 com só o nome e `ok`/`down` de Postgres, Redis e
   armazenamento), `GET /server` (descritor: nome, endereço,
-  endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
+  endereço MCP, impressão digital da CA raiz e versões), `GET /privacy` (desde a 2.19.0: para
+  onde vai cada dado, `PrivacyInfo` com um `DataDestination` por finalidade — transcrição e as de
+  agente — em `server`, `local_network`, `external` ou `disabled`, e quem processa só quando sai;
+  nunca endereço, modelo, chave nem nome do provider; separada de `/server` porque muda em
+  runtime e o cadastro precisa dela antes do aceite), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
   de admin, `/devices/*` e, desde a 2.18.0, as duas rotas da redefinição de senha, que somam a
   mesma chave) têm limite de tentativas por IP e rota: estourado, **429**
@@ -94,7 +98,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   vencido, usado ou de conta desativada é sempre **401** `invalid_reset_link`, a mesma resposta
   para não servir de oráculo; senha curta é **422** `validation_failed` sem consumir o link.
 - **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
-  impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0). Um PAT vazado não cria outro PAT e não lê nem apaga dado
+  impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0;
+  desde a 2.19.0 ela traz `keep_samples`, `sample_count` e `voiceprint_people`, e
+  `keep_samples: false` no `PATCH` apaga na hora as amostras, os vetores e as sugestões pendentes
+  da conta). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
   credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
 - **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha

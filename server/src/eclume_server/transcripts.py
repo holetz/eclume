@@ -17,7 +17,14 @@ from eclume_server.pagination import iso
 from eclume_server.pipeline import FAILED_STEP, gpu_started, record_gpu_steps, set_step
 from eclume_server.problems import not_found
 from eclume_server.serialize import Row, requester_name, user_ref
-from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
+from eclume_server.voice import (
+    capture_links,
+    keeps_samples,
+    load_suggestions,
+    platform_voice,
+    restore_links,
+    suggest,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -120,14 +127,14 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 ) -> tuple[str | None, dict[str, list[float]]]:
     """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
 
-    A identificação por voz vale no momento da ingestão: um job enfileirado antes do desligamento
-    não guarda o vetor. Guardado ou descartado o vetor, o `speaker_embeddings.json` (biometria) entra
+    A identificação por voz e a preferência da conta valem no momento da ingestão: um job
+    enfileirado antes do desligamento (da plataforma ou da conta) não guarda o vetor. Guardado ou descartado o vetor, o `speaker_embeddings.json` (biometria) entra
     na fila de exclusão do bucket nesta mesma transação: o vetor vive só no banco.
     """
     if not embeddings_key:
         return None, {}
     await conn.execute(insert(t.storage_deletions).values(key=embeddings_key))
-    if not keep or not (await platform_voice(conn))["enabled"]:
+    if not keep or not (await platform_voice(conn))["enabled"] or not await keeps_samples(conn, owner_id):
         return None, {}
     model, vectors = _embeddings(await storage.read_json(embeddings_key), mapping)
     for sid, vector in vectors.items():

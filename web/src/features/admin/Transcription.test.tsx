@@ -13,6 +13,7 @@ afterEach(() => vi.unstubAllGlobals())
 function mockSettingsApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/admin/me': () => fixtures.adminMe(),
+    'GET /api/v1/privacy': () => fixtures.privacyInfo(),
     'GET /api/v1/admin/settings': () => fixtures.adminSettings(),
     ...extra,
   })
@@ -116,5 +117,23 @@ describe('Transcrição', () => {
     expect(await screen.findByText('Configuração salva.')).toBeInTheDocument()
     const sent = await http.requests('PATCH /api/v1/admin/settings')[0].json()
     expect(sent.asr.default_language).toBe('auto')
+  })
+
+  it('avisa quando a engine remota manda o áudio para fora do servidor', async () => {
+    mockSettingsApi({
+      'GET /api/v1/privacy': () => ({
+        destinations: [{ purpose: 'transcription', location: 'external', processor: 'asr.example.com' }],
+      }),
+    })
+    renderApp('/admin/transcricao')
+    const note = await screen.findByRole('note', { name: 'Dados fora do servidor' })
+    expect(note).toHaveTextContent('transcrição do áudio (asr.example.com)')
+  })
+
+  it('sem destino externo, não avisa', async () => {
+    mockSettingsApi()
+    renderApp('/admin/transcricao')
+    expect(await screen.findByRole('form', { name: 'Configuração de transcrição' })).toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Dados fora do servidor' })).not.toBeInTheDocument()
   })
 })

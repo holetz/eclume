@@ -110,7 +110,7 @@ describe('login', () => {
     mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     renderApp('/entrar')
     expect(await screen.findByRole('heading', { level: 2, name: 'Entrar' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: 'Cada palavra, guardada em casa.' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Cada palavra, guardada no seu servidor.' })).toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveClass('auth')
     expect(screen.getByRole('link', { name: 'Criar conta' })).toHaveAttribute('href', '/cadastro')
   })

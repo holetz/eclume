@@ -289,9 +289,12 @@ class Storage:
         keys = await self.list_keys(artifacts_prefix(recording_id))
         await self.delete_keys([key for key in keys if not key.startswith(keep)])
 
-    async def delete_embedding_objects(self) -> int:
-        """Apaga todo `speaker_embeddings.json` do bucket (de toda revisão e das chaves antigas)."""
-        keys = [key for key in await self.list_keys(ARTIFACTS_ROOT) if key.endswith(f"/{EMBEDDINGS_FILE}")]
+    async def delete_embedding_objects(self, recording_ids: list[UUID] | None = None) -> int:
+        """Apaga os `speaker_embeddings.json` (de toda revisão e das chaves antigas): de todo o bucket ou das gravações."""
+        prefixes = [ARTIFACTS_ROOT] if recording_ids is None else [artifacts_prefix(rid) for rid in recording_ids]
+        keys = [
+            key for prefix in prefixes for key in await self.list_keys(prefix) if key.endswith(f"/{EMBEDDINGS_FILE}")
+        ]
         await self.delete_keys(keys)
         return len(keys)
 

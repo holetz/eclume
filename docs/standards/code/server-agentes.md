@@ -2,12 +2,12 @@
 type: standard
 title: Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
 description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat); a matriz do que cada provider exige e a CLI claude opcional na imagem.
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py, server/src/eclume_server/privacy.py, server/src/eclume_server/routes/privacy.py
 tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98, holetz/eclume#116
 maintainer: holetz
 ---
 
@@ -89,6 +89,24 @@ LM Studio, o `/v1` do Ollama). Os outros caminhos mandam a transcrição a um fo
 chat). As regras de retentativa são uma só (`summaries.next_try`), para o resumo e para as etapas
 por agente; o chat tem as próprias (abaixo). `chat_tool_limit` (definitivo) é o chat que passou do
 limite de consultas à transcrição.
+
+### Para onde vai o texto: o destino de cada provider
+
+`privacy.py` classifica o destino de cada finalidade, e `GET /privacy` (pública) o devolve; a Conta,
+o cadastro e o painel admin leem essa rota, nenhuma tela decide pelo `kind` (holetz/eclume#116).
+A regra, sem resolver DNS e **na dúvida, fora** — errar para fora só sobra-avisa, errar para dentro
+esconderia o envio:
+
+- `anthropic` e `claude-cli`: sempre `external`, com `Anthropic` como quem processa.
+- `ollama` e `openai-compatible`, pelo host da `base_url`: `localhost`, loopback,
+  `host.docker.internal` e nome sem ponto (serviço do compose) são `server`; IP privado (RFC 1918,
+  link-local, ULA `fc00::/7`) e os sufixos `.local`/`.lan` são `local_network`; qualquer outro host
+  é `external`, rotulado só pelo host (minúsculo, sem porta, caminho nem query).
+- Finalidade sem provider habilitado: `disabled` (nada é enviado).
+- A transcrição segue a mesma regra pelo `asr.endpoint_url` com a engine `openai-compatible`; as
+  engines locais (`whisperx-local`, `cpu`) são `server`.
+
+A resposta nunca traz `base_url`, modelo, chave nem o nome dado pelo admin.
 
 ## Chaves de API
 

@@ -50,7 +50,7 @@ from eclume_server.summaries import INTERNAL_ERROR, run_summary, start_auto_summ
 from eclume_server.summary_chat import CHAT_TIMEOUT_S, reap_stalled_chats, run_summary_chat
 from eclume_server.transcripts import fail, ingest
 from eclume_server.transient import is_transient
-from eclume_server.voice import platform_voice
+from eclume_server.voice import keeps_samples, platform_voice
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -283,17 +283,27 @@ async def transcription_failed(
     return result.message
 
 
-async def purge_embedding_objects(ctx: dict[str, Any]) -> int:
-    """Apaga do bucket todo `speaker_embeddings.json` (voz desligada na plataforma).
+async def purge_embedding_objects(ctx: dict[str, Any], owner_id: str | None = None) -> int:
+    """Apaga do bucket os `speaker_embeddings.json`: de toda a plataforma ou só da conta.
 
-    Lista `recordings/`: alcança toda revisão e as chaves antigas sem revisão. Nada é apagado se a
-    identificação por voz tiver sido religada nesse meio-tempo: os arquivos novos já valem.
+    Sem dono (voz desligada na plataforma), lista `recordings/`: alcança toda revisão e as chaves
+    antigas sem revisão; nada é apagado se a identificação por voz tiver sido religada nesse
+    meio-tempo. Com dono (a conta deixou de guardar amostras), só as gravações da conta, e nada se
+    ela voltou a guardar. Um job antigo, sem argumento, segue valendo para a plataforma.
     """
     async with system_tx(ctx["engine"]) as conn:
-        if (await platform_voice(conn))["enabled"]:
-            return 0
-    deleted = await ctx["storage"].delete_embedding_objects()
-    log.info("purge_embedding_objects: %d arquivos", deleted)
+        if owner_id is None:
+            if (await platform_voice(conn))["enabled"]:
+                return 0
+            recording_ids = None
+        else:
+            owner = UUID(owner_id)
+            if await keeps_samples(conn, owner):
+                return 0
+            query = select(t.recordings.c.id).where(t.recordings.c.owner_id == owner)
+            recording_ids = list((await conn.execute(query)).scalars())
+    deleted = await ctx["storage"].delete_embedding_objects(recording_ids)
+    log.info("purge_embedding_objects %s: %d arquivos", owner_id or "plataforma", deleted)
     return deleted
 
 

@@ -445,6 +445,99 @@ def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumo
     assert _objects(services, f"recordings/{rid}/") == []
 
 
+# --- conta sem amostras de voz (holetz/eclume#116) ----------------------------------------------
+
+
+def _keep(conta: Conta, *, keep: bool) -> dict[str, Any]:
+    response = conta.owner.patch("/api/v1/me/voice-assignment", json={"keep_samples": keep})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _embedding_objects(services: Services, rid: str) -> list[str]:
+    return [key for key in _objects(services, f"recordings/{rid}/") if key.endswith("/speaker_embeddings.json")]
+
+
+def test_deixar_de_guardar_apaga_a_voz_so_da_conta(ek: Conta, new_account: Callable[[], Conta], services: Services):
+    other = new_account()
+    ek.voice_on()
+    rafael, ana = ek.person("Rafael Lima"), ek.person("Ana Souza")
+    first = ek.transcript()
+    ek.link(first, "S2", rafael["id"])
+    ek.link(first, "S3", ana["id"])
+    tid = ek.transcript()
+    assert ek.speakers(tid)["S2"]["suggestions"]
+    other_tid = other.transcript()
+    rid, other_rid = _recording_of(services, tid), _recording_of(services, other_tid)
+    before = ek.owner.get("/api/v1/me/voice-assignment").json()
+    assert (before["keep_samples"], before["sample_count"], before["voiceprint_people"]) == (True, 2, 2)
+
+    after = _keep(ek, keep=False)
+    assert (after["keep_samples"], after["sample_count"], after["voiceprint_people"]) == (False, 0, 0)
+    owner = {"o": ek.owner_id}
+    for table in ("speaker_embeddings", "voice_samples"):
+        assert _sql(services, f"SELECT count(*) FROM {table} WHERE owner_id = :o", **owner) == [(0,)]  # noqa: S608
+    pending = "SELECT count(*) FROM speaker_suggestions WHERE owner_id = :o AND status = 'pending'"
+    assert _sql(services, pending, **owner) == [(0,)]
+    assert ek.speakers(tid)["S2"]["suggestions"] == []
+    # O vínculo confirmado fica; só a biometria sai.
+    assert ek.speakers(first)["S2"]["person"]["id"] == rafael["id"]
+    # A outra conta não perde nada.
+    assert _embeddings(services, other_tid) == 3
+
+    run_cpu(services.settings)
+    assert _embedding_objects(services, rid) == []
+    assert _objects(services, f"recordings/{rid}/r1/transcript.raw.json")
+    assert _embedding_objects(services, other_rid)
+    # Desligar de novo não apaga nada a mais; religar não recupera o que saiu.
+    assert _keep(ek, keep=False)["sample_count"] == 0
+    assert _keep(ek, keep=True)["sample_count"] == 0
+
+
+def test_conta_sem_amostras_nada_e_calculado_comparado_nem_guardado(ek: Conta, services: Services):
+    ek.voice_on()
+    ek.auto(enabled=True)
+    rafael = ek.person("Rafael Lima")
+    _keep(ek, keep=False)
+    recording = upload_file(ek.owner, audio_bytes(2100))
+    job = _sql(
+        services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
+    )
+    assert job == [("false",)]
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    first = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    assert _embeddings(services, first) == 0
+    ek.link(first, "S2", rafael["id"])
+    assert ek.samples(rafael["id"]) == 0
+    second = ek.transcript()
+    assert _embeddings(services, second) == 0
+    assert all(s["suggestions"] == [] and s["person"] is None for s in ek.speakers(second).values())
+
+
+def test_job_de_antes_de_deixar_de_guardar_nao_guarda_o_vetor(ek: Conta, services: Services):
+    ek.voice_on()
+    recording = upload_file(ek.owner, audio_bytes(2100))
+    job = _sql(
+        services, "SELECT options ->> 'embeddings' FROM transcription_jobs WHERE recording_id = :r", r=recording["id"]
+    )
+    assert job == [("true",)]
+    _keep(ek, keep=False)
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
+    assert _embeddings(services, tid) == 0
+    drain_storage(services.settings)
+    assert _embedding_objects(services, recording["id"]) == []
+
+
+def test_voltar_a_guardar_vale_para_as_proximas(ek: Conta, services: Services):
+    ek.voice_on()
+    _keep(ek, keep=False)
+    _keep(ek, keep=True)
+    assert _embeddings(services, ek.transcript()) == 3
+
+
 # --- atribuição automática de locutores ------------------------------------------------------------
 
 
@@ -452,19 +545,22 @@ def test_atribuicao_automatica_padrao_e_limiar_da_conta(
     make_user: Callable[..., Account], as_user: Callable[[Account], Api], admin: Api
 ):
     owner = as_user(make_user())
+    counts = {"keep_samples": True, "sample_count": 0, "voiceprint_people": 0}
     assert owner.get("/api/v1/me/voice-assignment").json() == {
         "enabled": True,
         "threshold": 0.75,
         "platform_enabled": False,
+        **counts,
     }
     admin.patch("/api/v1/admin/settings", json={"voice_identification": {"enabled": True}})
     assert owner.patch("/api/v1/me/voice-assignment", json={"threshold": 0.9}).json() == {
         "enabled": True,
         "threshold": 0.9,
         "platform_enabled": True,
+        **counts,
     }
     assert owner.patch("/api/v1/me/voice-assignment", json={"enabled": False}).json()["threshold"] == 0.9
-    for body in ({}, {"threshold": 0.3}, {"threshold": 1}, {"enabled": None}, {"outro": 1}):
+    for body in ({}, {"threshold": 0.3}, {"threshold": 1}, {"enabled": None}, {"keep_samples": None}, {"outro": 1}):
         assert owner.patch("/api/v1/me/voice-assignment", json=body).status_code == 422, body
 
 

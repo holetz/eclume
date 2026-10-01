@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, delete, func, insert, literal, select, text, update
+from sqlalchemy import and_, delete, distinct, func, insert, literal, select, text, update
 
 from eclume_server.db import tables as t
 
@@ -403,6 +403,32 @@ async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, p
         .values(status="rejected", decided_by=principal.user_id, decided_at=datetime.now(UTC))
     )
     return result.rowcount > 0
+
+
+async def keeps_samples(conn: AsyncConnection, user_id: UUID) -> bool:
+    """A conta guarda amostras de voz (o padrão, se a conta não existe mais)."""
+    query = select(t.users.c.voice_keep_samples).where(t.users.c.id == user_id)
+    return (await conn.execute(query)).scalar() is not False
+
+
+async def voice_counts(conn: AsyncConnection, owner_id: UUID) -> tuple[int, int]:
+    """`(amostras, pessoas com impressão)` da conta."""
+    vs = t.voice_samples.c
+    query = select(func.count(), func.count(distinct(vs.person_id))).where(vs.owner_id == owner_id)
+    samples, people = (await conn.execute(query)).one()
+    return samples, people
+
+
+async def purge_account(conn: AsyncConnection, owner_id: UUID) -> None:
+    """A conta deixa de guardar voz: apaga as amostras, os vetores e as sugestões pendentes dela.
+
+    Roda sob a RLS do dono; o filtro explícito por dono vale também com o papel de conexão. Os
+    `speaker_embeddings.json` do bucket saem no worker CPU, depois do commit.
+    """
+    await conn.execute(delete(t.speaker_embeddings).where(t.speaker_embeddings.c.owner_id == owner_id))
+    await conn.execute(delete(t.voice_samples).where(t.voice_samples.c.owner_id == owner_id))
+    ss = t.speaker_suggestions.c
+    await conn.execute(delete(t.speaker_suggestions).where(ss.owner_id == owner_id, ss.status == "pending"))
 
 
 async def purge_embeddings(conn: AsyncConnection) -> tuple[int, int]:

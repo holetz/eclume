@@ -19,6 +19,7 @@ from eclume_server.queue import progress_of_revision, transcribe_options
 from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
 from eclume_server.stalled import CANCELLED, is_retryable
+from eclume_server.voice import keeps_samples
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -260,7 +261,8 @@ async def insert_job(
 ) -> None:
     """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho."""
     platform = (await conn.execute(select(t.platform_settings))).mappings().one()
-    options = transcribe_options(platform, recording["language"])
+    keep = await keeps_samples(conn, recording["owner_id"])
+    options = transcribe_options(platform, recording["language"], keep_samples=keep)
     values: dict[str, Any] = {
         "owner_id": recording["owner_id"],
         "recording_id": recording["id"],

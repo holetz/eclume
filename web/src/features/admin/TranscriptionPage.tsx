@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { AdminPageHead } from './AdminPageHead'
+import { ExternalDataNotice } from './ExternalDataNotice'
 import styles from './Admin.module.css'
 import { COMPUTE_TYPES, ENGINES, lastChangeText, MODELS, optionalInt } from './labels'
 import { useAdminSettings, useUpdateSettings } from './queries'
@@ -90,6 +91,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
           </button>
         }
       />
+      <ExternalDataNotice purposes={['transcription']} revision={settings.updated_at} />
       <form id={FORM_ID} className={styles.narrowForm} onSubmit={submit} aria-label="Configuração de transcrição">
         <div className="field">
           <span id={ids.engine} className={styles.label}>

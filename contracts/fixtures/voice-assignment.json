@@ -1,5 +1,8 @@
 {
   "enabled": true,
   "threshold": 0.8,
-  "platform_enabled": true
+  "platform_enabled": true,
+  "keep_samples": true,
+  "sample_count": 7,
+  "voiceprint_people": 3
 }

@@ -3,6 +3,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
+import { externalDestinations, usePrivacy, type PrivacyInfo } from '../../app/privacy'
 import { refreshSession, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { AuthLayout } from './AuthLayout'
@@ -10,11 +11,21 @@ import { MIN_PASSWORD, useSignupInfo } from './signup'
 
 const CLOSED = 'O cadastro está fechado neste servidor. Peça uma conta a quem o administra.'
 
+/** A linha antes do aceite: os resumos e o chat que saem do servidor, e para quem; `null` se nada sai. */
+function signupDestinationLine(info: PrivacyInfo | undefined): string | null {
+  const outside = externalDestinations(info).filter((d) => d.purpose === 'summaries' || d.purpose === 'chat')
+  if (outside.length === 0) return null
+  const what = outside.length === 2 ? 'os resumos e o chat' : outside[0].purpose === 'chat' ? 'o chat' : 'os resumos'
+  const who = [...new Set(outside.map((d) => d.processor ?? 'um serviço externo'))].join(' e ')
+  return `Neste servidor, ${what} são feitos fora dele, por ${who}: o texto das transcrições vai para lá. O áudio e as transcrições ficam guardados aqui.`
+}
+
 /** Criar conta (`/cadastro`): cadastro aberto, com o aceite obrigatório do aviso em vigor. */
 export function SignupPage() {
   usePageTitle('Criar conta')
   const me = useMe()
   const info = useSignupInfo()
+  const destinationLine = signupDestinationLine(usePrivacy().data)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -132,6 +143,7 @@ export function SignupPage() {
             Pelo menos {MIN_PASSWORD} caracteres.
           </span>
         </div>
+        {destinationLine && <p className="field-hint">{destinationLine}</p>}
         <div className="panel">
           <label className="check">
             <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
