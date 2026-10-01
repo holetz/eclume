@@ -306,6 +306,22 @@ async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
         await worker.close()
 
 
+def drain_storage(settings: Settings) -> None:
+    """Esvazia a fila de exclusão do bucket, como o cron `drain_storage_deletions` faria."""
+    from eclume_server.db.session import make_engine  # noqa: PLC0415
+    from eclume_server.storage_deletions import drain  # noqa: PLC0415
+
+    async def go() -> None:
+        engine = make_engine(settings.database_url)
+        try:
+            while await drain(engine, Storage(settings)):
+                pass
+        finally:
+            await engine.dispose()
+
+    run(go())
+
+
 def transcribed(
     api: Api,
     settings: Settings,
