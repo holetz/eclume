@@ -183,7 +183,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre).
+/// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre). Pede
+/// por `refresh`, que despacha para a thread principal.
 fn spawn_note_clock(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
@@ -236,9 +237,20 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// Atualiza ícone, dica e textos do menu a partir do estado; troca o menu quando a pergunta de
-/// reunião aparece ou some.
+/// Pede a atualização da bandeja, que só é tocada na thread principal: os setters do Tauri
+/// bloqueiam até a thread principal responder, e uma thread de fundo que os chamasse segurando o
+/// mutex do menu travaria o app (#83). Na thread principal roda na hora; de outra thread, só
+/// enfileira e volta. Quem roda lê o estado do momento, então nunca desenha um estado velho.
 pub fn refresh(app: &AppHandle) {
+    let handle = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || apply(&handle)) {
+        log::debug!("bandeja não atualizada (laço de eventos encerrado): {err}");
+    }
+}
+
+/// Atualiza ícone, dica e textos do menu a partir do estado; troca o menu quando a pergunta de
+/// reunião aparece ou some. Só na thread principal: chame `refresh`.
+fn apply(app: &AppHandle) {
     let Some(handles) = app.try_state::<TrayHandles>() else {
         return;
     };
