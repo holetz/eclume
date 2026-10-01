@@ -30,6 +30,8 @@
       synced_at: agora,
       purged_at: null,
       meeting_app: null,
+      title: null,
+      server_title: null,
       ...extra,
     };
   }
@@ -211,6 +213,11 @@
         gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
         gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
       ];
+    },
+    titulos(e) {
+      e.recordings[0].server_title = "Alinhamento semanal";
+      e.recordings[1].title = "Ideia do orçamento";
+      e.recordings[1].server_title = "Nota de voz";
     },
     espera(e) {
       const processador = { online: true, offline_since: null };

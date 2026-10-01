@@ -161,6 +161,18 @@ impl<R: Runtime> Gravador<R> {
         }
     }
 
+    /// Abre `url` no navegador do sistema (Intent `ACTION_VIEW`).
+    pub fn abrir_url(&self, url: &str) -> Resultado<()> {
+        #[cfg(mobile)]
+        self.handle.run_mobile_plugin::<serde_json::Value>(
+            "abrirUrl",
+            serde_json::json!({ "url": url }),
+        )?;
+        #[cfg(not(mobile))]
+        let _ = url;
+        Ok(())
+    }
+
     /// Tira a notificação e para o serviço. Com `parada` (a gravação parou sem pedido: o motivo e
     /// o tempo salvo), o serviço avisa "A gravação parou" no canal de avisos antes de sair.
     pub fn parar_servico(&self, parada: Option<(&str, i64)>) -> Resultado<()> {

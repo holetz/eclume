@@ -21,7 +21,7 @@ from eclume_server.crypto import SecretDecryptError, decrypt
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
-from eclume_server.pipeline import set_step
+from eclume_server.pipeline import UNSUMMARIZED, mark_recording_changed, set_step
 from eclume_server.problems import conflict, invalid_field, not_found
 from eclume_server.queue import GPU_QUEUE
 from eclume_server.settings_admin import ANTHROPIC_API_KEY, secret_encrypted
@@ -427,11 +427,15 @@ async def _finish_step(
     }
     if reason is not None:
         values["detail"] = ps.detail.op("||")(func.jsonb_build_object("reason", reason))
-    await conn.execute(
+    closed = await conn.execute(
         update(t.pipeline_steps)
         .where(ps.step == "summary", ps.state == "active", ps.detail["summary_id"].astext == str(summary_id))
         .values(**values)
+        .returning(ps.recording_id)
     )
+    recording_id = closed.scalar_one_or_none()
+    if recording_id is not None and state in UNSUMMARIZED:
+        await mark_recording_changed(conn, recording_id)
 
 
 # --- o job `summarize` ---------------------------------------------------------------------------

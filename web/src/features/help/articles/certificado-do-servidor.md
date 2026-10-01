@@ -5,7 +5,7 @@ paginas: [app-desktop, app-movel, mcp]
 relacionados: [vincular-aparelho, conectar-assistente-mcp, instalar-app-desktop]
 termos: [certificado, HTTPS, segurança, impressão digital, CA, confiar, aviso do navegador]
 ordem: 5
-atualizado: 2026-09-27
+atualizado: 2026-10-01
 ---
 Este servidor usa um certificado próprio, e não um certificado de uma autoridade pública. A
 conexão é cifrada do mesmo jeito, mas cada aparelho precisa saber que está falando com o servidor
@@ -28,3 +28,11 @@ administra o servidor antes de continuar.
 O navegador e o Claude Desktop confiam no certificado quando o computador confia na raiz dele.
 Baixe a raiz em [/downloads/eclume-root.crt](/downloads/eclume-root.crt) e instale como
 autoridade confiável no sistema. Quem administra o servidor tem o passo a passo de cada sistema.
+
+## Navegador do celular
+
+O **Abrir na web** do app abre a gravação no navegador do Android, que também precisa confiar na
+raiz. Baixe [a raiz do servidor](/downloads/eclume-root.crt) no celular e instale em
+Configurações › Segurança › Criptografia e credenciais › Instalar um certificado › **Certificado
+de CA** (o caminho muda um pouco entre fabricantes). Sem isso, o navegador mostra o aviso de
+conexão não particular.

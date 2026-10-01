@@ -97,7 +97,9 @@ export function linhaDeStatus(estado, detectando, agora = Date.now()) {
 }
 
 function rotuloDaGravacao(gravacao, agora) {
-  const partes = [gravacao.original_name ?? quando(gravacao.started_at, agora)];
+  // O título dado ao parar, senão o que o servidor deu depois de processar (fila v5).
+  const titulo = gravacao.title ?? gravacao.server_title ?? gravacao.original_name;
+  const partes = [titulo ?? quando(gravacao.started_at, agora)];
   if (gravacao.kind === "note") partes.push("Nota");
   partes.push(duracao(gravacao.duration_ms));
   if (gravacao.interrupted) partes.push("interrompida");

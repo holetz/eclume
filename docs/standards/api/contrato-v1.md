@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118
 maintainer: holetz
 ---
 
@@ -119,7 +119,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
   `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Desde a 2.8.0, um
   resumo que termina ou é editado também move o `updated_at` da gravação e da transcrição, então
-  `?since=` percebe resumo novo ou refeito. Um cursor vale
+  `?since=` percebe resumo novo ou refeito. Desde a 2.17.0, a etapa `summary` que termina `failed`
+  ou `skipped` move o `updated_at` **só da gravação** (o da transcrição só se move com resumo novo,
+  para não acordar o importador do lumea), e o `?since=` de `GET /recordings` é a leitura do aviso
+  do fim do processamento no desktop e no web (holetz/eclume#118). Um cursor vale
   só para a ordenação (`sort`) que o gerou.
 - **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
   valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota

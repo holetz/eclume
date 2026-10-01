@@ -103,6 +103,8 @@ pub enum Selo {
 pub struct GravacaoLocal {
     pub id: String,
     pub titulo: Option<String>,
+    /// O título que o servidor deu à gravação (fila v5); a lista o mostra sem o título local.
+    pub titulo_do_servidor: Option<String>,
     pub iniciada_em: i64,
     pub duracao_ms: Option<i64>,
     pub bytes: Option<i64>,
@@ -124,6 +126,8 @@ pub struct DetalheLocal {
     pub marcadores: Vec<Marker>,
     pub etapas: Option<Vec<Etapa>>,
     pub espera: Option<Espera>,
+    /// A página da gravação no eclume web (`/gravacoes/<id no servidor>`), depois de enviada.
+    pub endereco_na_web: Option<String>,
 }
 
 /// As configurações que a tela Configurações edita.
@@ -167,7 +171,13 @@ pub struct Core {
     etapas: HashMap<String, NoServidor>,
     /// A versão nova do `movel.json`, se houver.
     atualizacao: Option<sync::Manifesto>,
+    /// O próximo `?since=` da leitura dos títulos do servidor, e quando ela rodou.
+    titulos_desde: Option<String>,
+    titulos_lidos_em: i64,
 }
+
+/// De quanto em quanto tempo, no máximo, os títulos do servidor são lidos no ciclo de rede.
+pub const INTERVALO_DOS_TITULOS_MS: i64 = 60 * 1_000;
 
 /// De quanto em quanto tempo o `movel.json` é lido, na rede do eclume.
 pub const INTERVALO_DA_ATUALIZACAO_MS: i64 = 24 * 60 * 60 * 1_000;
@@ -196,6 +206,8 @@ impl Core {
             folha: None,
             etapas: HashMap::new(),
             atualizacao: None,
+            titulos_desde: None,
+            titulos_lidos_em: 0,
         })
     }
 
@@ -607,6 +619,7 @@ impl Core {
         Ok(GravacaoLocal {
             id: rec.id.clone(),
             titulo: rec.title.clone(),
+            titulo_do_servidor: rec.server_title.clone(),
             iniciada_em: rec.started_at,
             duracao_ms: rec.duration_ms,
             bytes: rec.bytes,
@@ -640,7 +653,18 @@ impl Core {
             marcadores: fila.markers(id)?,
             etapas: self.etapas.get(id).map(|no| no.etapas.clone()),
             espera: self.etapas.get(id).and_then(|no| no.espera.clone()),
+            endereco_na_web: self.endereco_na_web(rec.remote_id.as_deref()),
         })
+    }
+
+    /// A página da gravação no eclume web, pelo endereço do servidor pareado.
+    fn endereco_na_web(&self, remote_id: Option<&str>) -> Option<String> {
+        let servidor = self.config.servidor.as_ref()?;
+        Some(format!(
+            "{}/gravacoes/{}",
+            servidor.url.trim_end_matches('/'),
+            remote_id?
+        ))
     }
 
     /// A leitura das etapas de uma gravação sincronizada, na rede do eclume.
@@ -655,8 +679,54 @@ impl Core {
         Ok(Some((plano, remoto)))
     }
 
-    pub fn guardar_etapas(&mut self, id: &str, etapas: NoServidor) {
+    pub fn guardar_etapas(&mut self, id: &str, etapas: NoServidor) -> Result<()> {
+        if let Some(titulo) = &etapas.titulo {
+            let fila = self.trancar_fila()?;
+            if let Some(remoto) = fila.get(id)?.and_then(|rec| rec.remote_id) {
+                fila.set_server_title(&remoto, titulo)?;
+            }
+        }
         self.etapas.insert(id.to_string(), etapas);
+        Ok(())
+    }
+
+    /// A leitura dos títulos do servidor, na rede do eclume e no máximo a cada
+    /// [`INTERVALO_DOS_TITULOS_MS`]. A primeira parte da enviada mais antiga ainda sem título (sem
+    /// nenhuma, de agora); as seguintes, do `since` da anterior.
+    pub fn preparar_titulos(&mut self, agora_ms: i64) -> Result<Option<(PlanoDeLeitura, String)>> {
+        if !self.rede.na_rede() || agora_ms - self.titulos_lidos_em < INTERVALO_DOS_TITULOS_MS {
+            return Ok(None);
+        }
+        let desde = match &self.titulos_desde {
+            Some(desde) => desde.clone(),
+            None => {
+                let sem_titulo = self
+                    .trancar_fila()?
+                    .by_status(Status::Synced)?
+                    .into_iter()
+                    .filter(|rec| rec.server_title.is_none())
+                    .filter_map(|rec| rec.synced_at)
+                    .min();
+                let inicio = sem_titulo.unwrap_or(agora_ms) - INTERVALO_DOS_TITULOS_MS;
+                eclume_sync::api::rfc3339_from_ms(inicio).context("instante inválido")?
+            }
+        };
+        let Some(plano) = self.leitura(REQUEST_TIMEOUT)? else {
+            return Ok(None);
+        };
+        self.titulos_lidos_em = agora_ms;
+        Ok(Some((plano, desde)))
+    }
+
+    /// Guarda os títulos lidos nas linhas enviadas daqui e o próximo `since`.
+    pub fn guardar_titulos(&mut self, titulos: sync::Titulos, desde: String) -> Result<()> {
+        let fila = self.trancar_fila()?;
+        for (remoto, titulo) in &titulos.pares {
+            fila.set_server_title(remoto, titulo)?;
+        }
+        drop(fila);
+        self.titulos_desde = Some(titulos.proximo.unwrap_or(desde));
+        Ok(())
     }
 
     /// "Excluir deste celular": só uma gravação que o servidor já confirmou.
@@ -770,6 +840,10 @@ impl PlanoDeLeitura {
 
     pub fn tipos(&self) -> Result<Vec<config::TipoDeAgenda>> {
         sync::buscar_tipos_de_agenda(self.transporte.as_ref(), &self.servidor, &self.token)
+    }
+
+    pub fn titulos(&self, desde: &str) -> Result<sync::Titulos> {
+        sync::buscar_titulos(self.transporte.as_ref(), &self.servidor, &self.token, desde)
     }
 
     pub fn etapas(&self, remote_id: &str) -> Result<NoServidor> {
@@ -933,12 +1007,30 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
     if let Err(err) = verificar_atualizacao(nucleo, false) {
         log::warn!("{err:#}");
     }
-    let Some(plano) = trancar(nucleo)?.preparar_sync(agora)? else {
-        return Ok(None);
+    let plano = trancar(nucleo)?.preparar_sync(agora)?;
+    let relatorio = match plano {
+        Some(plano) => {
+            let (relatorio, recusada) = plano.executar()?;
+            trancar(nucleo)?.concluir_sync(recusada)?;
+            Some(relatorio)
+        }
+        None => None,
     };
-    let (relatorio, recusada) = plano.executar()?;
-    trancar(nucleo)?.concluir_sync(recusada)?;
-    Ok(Some(relatorio))
+    atualizar_titulos(nucleo)?;
+    Ok(relatorio)
+}
+
+/// Lê os títulos do servidor (fora da trava) e os guarda na fila: a lista e o detalhe mostram o
+/// título do servidor da gravação já processada.
+pub fn atualizar_titulos(nucleo: &Mutex<Core>) -> Result<()> {
+    let plano = trancar(nucleo)?.preparar_titulos(now_ms())?;
+    if let Some((plano, desde)) = plano {
+        match plano.titulos(&desde) {
+            Ok(titulos) => trancar(nucleo)?.guardar_titulos(titulos, desde)?,
+            Err(err) => leitura_falhou(nucleo, &err)?,
+        }
+    }
+    Ok(())
 }
 
 /// Uma leitura autenticada que falhou: com 401, a credencial caiu; o resto só vai ao log.
@@ -974,7 +1066,7 @@ pub fn detalhe(nucleo: &Mutex<Core>, id: &str) -> Result<DetalheLocal> {
     let plano = trancar(nucleo)?.preparar_etapas(id)?;
     if let Some((plano, remoto)) = plano {
         match plano.etapas(&remoto) {
-            Ok(etapas) => trancar(nucleo)?.guardar_etapas(id, etapas),
+            Ok(etapas) => trancar(nucleo)?.guardar_etapas(id, etapas)?,
             Err(err) => leitura_falhou(nucleo, &err)?,
         }
     }

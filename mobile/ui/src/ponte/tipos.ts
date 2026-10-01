@@ -87,6 +87,8 @@ export type Selo = 'gravando' | 'aguardando' | 'sincronizando' | 'sincronizada' 
 export interface GravacaoLocal {
   id: string
   titulo: string | null
+  /** O título que o servidor deu depois de processar; a lista o mostra sem o título local. */
+  titulo_do_servidor: string | null
   iniciada_em: number
   duracao_ms: number | null
   bytes: number | null
@@ -114,6 +116,8 @@ export interface DetalheLocal {
   etapas: Etapa[] | null
   /** Por que a transcrição espera na fila (`Job.queue`); a frase sai de `fraseDaEspera`. */
   espera?: FilaDaEspera | null
+  /** A página da gravação no eclume web, depois de enviada. */
+  endereco_na_web: string | null
 }
 
 export interface TipoDeAgenda {

@@ -219,6 +219,19 @@ pub struct AgendaRef {
 pub struct PipelineStepInfo {
     pub step: String,
     pub state: String,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    /// Por que a etapa foi pulada (`no_provider`, `cancelled`, `summary_deleted`…).
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// O job de transcrição de uma gravação: só o estado e o fim importam para o desfecho.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct JobInfo {
+    pub state: String,
+    #[serde(default)]
+    pub finished_at: Option<String>,
 }
 
 /// O que o espelho local lê de uma gravação da biblioteca (`GET /api/v1/recordings`).
@@ -243,15 +256,19 @@ pub struct LibraryRecording {
     pub agenda_type: Option<AgendaRef>,
     #[serde(default)]
     pub pipeline: Vec<PipelineStepInfo>,
+    #[serde(default)]
+    pub job: Option<JobInfo>,
 }
 
 impl LibraryRecording {
     /// Estado da etapa `summary` do pipeline, quando a gravação a tem.
     pub fn summary_state(&self) -> Option<&str> {
-        self.pipeline
-            .iter()
-            .find(|step| step.step == "summary")
-            .map(|step| step.state.as_str())
+        self.summary_step().map(|step| step.state.as_str())
+    }
+
+    /// A etapa `summary` do pipeline, quando a gravação a tem.
+    pub fn summary_step(&self) -> Option<&PipelineStepInfo> {
+        self.pipeline.iter().find(|step| step.step == "summary")
     }
 }
 
@@ -332,6 +349,12 @@ pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<Strin
         })
 }
 
+/// Um instante em milissegundos desde a época Unix como RFC 3339 (UTC), para um `?since=`.
+pub fn rfc3339_from_ms(ms: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|at| at.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+}
+
 /// O início de uma gravação (`recorded_at`, RFC 3339) no fuso `zone`, como `AAAA-MM-DDTHH:MM:SS`.
 pub fn start_in<Tz>(recorded_at: &str, zone: &Tz) -> Option<String>
 where
@@ -375,6 +398,7 @@ mod tests {
             transcript_id: None,
             agenda_type: None,
             pipeline: vec![],
+            job: None,
         }
     }
 

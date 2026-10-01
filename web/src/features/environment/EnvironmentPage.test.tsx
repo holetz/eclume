@@ -67,6 +67,38 @@ describe('tela Ambiente', () => {
     expect(document.documentElement).not.toHaveAttribute('data-density')
   })
 
+  it('liga o aviso do navegador só no gesto e explica quando a permissão é negada', async () => {
+    let answer: NotificationPermission = 'denied'
+    const fake = {
+      permission: 'default' as NotificationPermission,
+      requestPermission: vi.fn(async () => {
+        fake.permission = answer
+        return answer
+      }),
+    }
+    vi.stubGlobal('Notification', fake)
+    await openEnvironment()
+    const user = userEvent.setup()
+    const toggle = screen.getByRole('switch', { name: 'Avisar no navegador quando uma gravação terminar de processar' })
+    expect(toggle).not.toBeChecked()
+    expect(fake.requestPermission).not.toHaveBeenCalled()
+
+    await user.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(screen.getByText(/O navegador bloqueou os avisos deste site/)).toBeInTheDocument()
+    expect(localStorage.getItem('eclume-aviso-navegador')).toBeNull()
+
+    answer = 'granted'
+    fake.permission = 'default'
+    await user.click(toggle)
+    expect(toggle).toBeChecked()
+    expect(localStorage.getItem('eclume-aviso-navegador')).toBe('on')
+
+    await user.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(localStorage.getItem('eclume-aviso-navegador')).toBeNull()
+  })
+
   it('lista os atalhos de teclado', async () => {
     await openEnvironment()
     expect(screen.getByText('Abre a ajuda da página em que você está')).toBeInTheDocument()

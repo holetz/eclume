@@ -4059,7 +4059,9 @@ export interface components {
         Limit: number;
         /**
          * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-         *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+         *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
+         *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
+         *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
          */
         Since: string;
         /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
@@ -4892,7 +4894,9 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 /**
                  * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
+                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
+                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
                 /** @description `recorded_at >= from`. */
@@ -5508,7 +5512,9 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 /**
                  * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence.
+                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
+                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
+                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
                 /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */

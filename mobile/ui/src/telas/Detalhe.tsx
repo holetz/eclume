@@ -85,6 +85,14 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
     }
   }
 
+  async function abrirNaWeb() {
+    try {
+      await ponte.abrirNaWeb(id)
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+    }
+  }
+
   function alternar() {
     const elemento = audio.current
     if (!elemento) return
@@ -115,7 +123,7 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
         <>
           <div className="m-section gap-curto topo-1">
             <span className="kicker">{dataLonga(gravacao.iniciada_em)}</span>
-            <h1 className="m-title">{gravacao.titulo ?? 'Sem título'}</h1>
+            <h1 className="m-title">{gravacao.titulo ?? gravacao.titulo_do_servidor ?? 'Sem título'}</h1>
             <span className="alinha-inicio">
               <SeloDaGravacao selo={gravacao.selo} />
             </span>
@@ -171,6 +179,11 @@ export function Detalhe({ id, ir }: { id: string; ir: (rota: string) => void }) 
                 <p className="text-muted texto-13" role="status">
                   {fraseDaEspera(detalhe.espera)}
                 </p>
+              )}
+              {detalhe.endereco_na_web && (
+                <button type="button" className="btn btn-secondary botao-inicio" onClick={abrirNaWeb}>
+                  Abrir na web
+                </button>
               )}
             </div>
           )}

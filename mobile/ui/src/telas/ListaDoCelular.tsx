@@ -51,7 +51,7 @@ export function ListaDoCelular({
           {gravacoes.map((gravacao) => (
             <li className="m-row" key={gravacao.id}>
               <button type="button" className="m-row-botao" onClick={() => abrir(gravacao.id)}>
-                <span className="m-row-title">{gravacao.titulo ?? 'Sem título'}</span>
+                <span className="m-row-title">{gravacao.titulo ?? gravacao.titulo_do_servidor ?? 'Sem título'}</span>
                 <span className="m-row-sub">{subtitulo(gravacao)}</span>
               </button>
               <span className="m-row-end">

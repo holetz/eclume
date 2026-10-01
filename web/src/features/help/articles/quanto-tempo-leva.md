@@ -3,7 +3,7 @@ titulo: Quanto tempo leva
 topico: processamento
 paginas: [gravacao, biblioteca]
 relacionados: [etapas-do-processamento, por-que-falhou, importar-arquivos]
-termos: [demora, fila, espera, GPU, tempo, processando]
+termos: [demora, fila, espera, GPU, tempo, processando, aviso, notificação, resumo pronto]
 ordem: 5
 atualizado: 2026-10-01
 ---
@@ -27,3 +27,19 @@ minuto, conforme o agente configurado no servidor.
 - Um agente demorou a responder, e o servidor está tentando de novo.
 
 A página da gravação se atualiza sozinha: não precisa recarregar.
+
+## Saber quando ficou pronta
+
+Você não precisa ficar olhando a página. O eclume avisa quando o processamento de uma gravação
+termina: **resumo pronto**, **o resumo falhou**, **pronta sem resumo** (com o motivo) ou **a
+transcrição falhou**. Cancelar ou excluir o resumo é ação sua e não gera aviso.
+
+- **No app desktop**, o aviso chega para todas as gravações da sua conta, vindas do computador, do
+  celular ou do navegador. O de resumo pronto tem **Copiar** e **Abrir**; os outros, **Abrir**. Ele
+  se desliga em Configurações › Avisos.
+- **No navegador**, com uma aba do eclume aberta, o título da aba conta os avisos que chegaram
+  enquanto você estava em outra aba, como "(2) Biblioteca · eclume". Para receber também o aviso do
+  sistema, ligue **Avisar no navegador** em Ambiente, ou toque em **Avisar quando ficar pronta** ao
+  importar um arquivo. A escolha vale só para aquele navegador.
+- **No celular**, o app não avisa: ele só fala com o servidor no Wi‑Fi do eclume. A lista mostra o
+  título que o servidor deu à gravação, e o detalhe tem **Abrir na web**.

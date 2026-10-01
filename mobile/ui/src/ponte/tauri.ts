@@ -55,6 +55,7 @@ export const ponteTauri: Ponte = {
   gravacoes: () => invoke('gravacoes'),
   gravacao: (id) => invoke('gravacao', { id }),
   urlDoArquivo: (caminho) => convertFileSrc(caminho),
+  abrirNaWeb: (id) => invoke('abrir_na_web', { id }),
   excluirLocal: (id) => invoke('excluir_local', { id }),
   excluirSincronizadas: () => invoke('excluir_sincronizadas'),
   tiposDeAgenda: () => invoke('tipos_de_agenda'),

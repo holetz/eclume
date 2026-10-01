@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa com "Copiar" quando o resumo automático de uma gravação enviada fica pronto — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de resumo, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118
 maintainer: holetz
 ---
 
@@ -83,7 +83,7 @@ decisão do usuário, então `auto` nunca é padrão.
 - **Todo aviso no Windows** (a pergunta, gravando, reunião encerrada, nota salva, atualizado, "A
   gravação parou") sai pelo toast com o AUMID do app instalado, com o nome e o ícone do eclume; o
   AUMID do PowerShell só vale em dev (`tauri::is_dev()`). `notify-rust` fica para Linux e macOS.
-- **Prazo das ações no Linux:** a notificação com ações (a pergunta, o resumo pronto) espera no
+- **Prazo das ações no Linux:** a notificação com ações (a pergunta, os desfechos) espera no
   máximo 15 min; vencido o prazo sem resposta, o app a fecha e a thread que esperava termina. A
   pergunta e o resumo seguem na bandeja, na janela e no web.
 - Com a detecção desligada, o detector só acompanha até o fim a reunião que já tinha visto.
@@ -142,34 +142,42 @@ decisão do usuário, então `auto` nunca é padrão.
   uma falha com a CA fixada, o laço confere se a CA do servidor mudou (abaixo).
 - Transporte `ureq` 3 com rustls (ring): sem `reqwest`, que traria `aws-lc-rs` por padrão.
 
-## Aviso de resumo pronto
+## Aviso do fim do processamento
 
-- Depois de cada volta do laço, no máximo a cada 60 s e com "Avisar quando o resumo ficar
-  pronto" ligado (`notify_summary`, padrão ligado), o app pergunta pelas gravações `synced` há
-  menos de 24 h que ainda
-  não estão em `resumos-avisados.json` (no diretório de dados, cada id com o instante; um id
-  sai depois de 7 dias). A credencial de dispositivo lê resumos desde o contrato 2.6.0
-  ([server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#credencial-de-dispositivo)).
-- `Client::summary` lê primeiro a etapa `summary` do `pipeline` em `GET /recordings/{id}`:
-  `failed` ou `skipped` (sem provedor, sem tipo de pauta) ou `404` é **desistir**; `pending` ou
-  `active` é **esperar**, sem pedir o resumo. Só com ela `done` lê
-  `GET /recordings/{id}/summary`: o atual com `status: done` e `content_md` é **pronto**, e
-  `409 transcript_missing` ou uma geração nova em andamento é **esperar**. O `SummaryState` não
-  basta sozinho: o servidor só manda `pending` enquanto a geração está na fila ou rodando, e um
-  resumo pulado ou que falhou apareceria como "esperar" por 24 h. Pronto avisa e registra;
-  desistir só registra; uma falha de rede para a volta, e a próxima tenta de novo.
-- A notificação é "Resumo pronto · <título> · copie para compartilhar" (o título da fila, ou
-  "Reunião"/"Nota"), com **Copiar** — o Markdown do resumo na área de transferência
-  (`tauri-plugin-clipboard-manager`, só no Rust) — e **Abrir**, a gravação em
-  `<web_url>/gravacoes/<id>`. As ações usam o mesmo caminho da pergunta de reunião: D-Bus no
-  Linux, toast com botões no Windows, e no macOS o botão principal e o de fechar.
-- Sem o arquivo (a primeira abertura da versão que traz o aviso), as gravações já enviadas
-  entram como avisadas: a atualização não dispara avisos de resumos antigos.
-- **A espera na fila** (holetz/eclume#117): a leitura das gravações enviadas há menos de 24 h
-  acontece mesmo com o aviso desligado. `Client::check_recording(id, read_summary)` faz o
-  `GET /recordings/{id}` uma vez e devolve o resumo (só pedido com o aviso ligado) e `job.queue`;
+- Depois de cada volta do laço, no máximo a cada 60 s, o app lê `GET /recordings?since=<since>`
+  (`recordings:read`, que a credencial de dispositivo tem) — as gravações **da conta inteira** que
+  mudaram, importadas pelo web, gravadas no celular ou nele. O servidor move o `updated_at` quando
+  a etapa `summary` termina (`done` desde a 2.8.0, `failed`/`skipped` desde a 2.17.0,
+  [contrato-v1.md](../api/contrato-v1.md)); a mesma leitura também acorda a pasta sincronizada.
+- **O desfecho** (`eclume_sync::outcome::outcome_of`, espelhado em `web/src/app/processingWatch.ts`
+  com os mesmos casos de teste): etapa `summary` `done` é **resumo pronto**, `failed` é **resumo
+  falhou**, `skipped` é **pronta sem resumo** (com o motivo) — menos `cancelled`,
+  `summary_deleted` e `before_pipeline`, que não avisam —, e gravação `failed` com job `failed` é
+  **transcrição falhou** (job `cancelled` não avisa). O instante é o `finished_at` da etapa ou do
+  job.
+- **A marca d'água** (`Watermark`, em `resumos-avisados.json` no diretório de dados): o próximo
+  `since` (maior `updated_at` menos 60 s), a marca (desfechos até ela não avisam; avança para o
+  maior instante visto menos 60 s) e os avisados acima dela (id → instante, guardados por 7 dias).
+  Cada desfecho é avisado uma vez: editar o título depois não repete, e um resumo refeito é outro
+  instante. Sem o arquivo, ou com o formato antigo (id → instante em ms), a marca começa em
+  "agora": nem a primeira abertura nem a atualização disparam avisos antigos.
+- Com "Avisar quando uma gravação terminar de processar" ligado (`notify_summary`, a chave
+  antiga, padrão ligado): "Resumo pronto · <título> · copie para compartilhar" com **Copiar** (o
+  Markdown lido de `GET /recordings/{id}/summary`, na área de transferência pelo
+  `tauri-plugin-clipboard-manager`) e **Abrir**; "O resumo falhou", "Pronta sem resumo · <motivo>"
+  e "A transcrição falhou", só com **Abrir** (`<web_url>/gravacoes/<id>`). O título é o que o
+  servidor dá à gravação ("Gravação" se vazio). Mais de três desfechos numa volta viram um aviso
+  agrupado ("N gravações processadas") que abre a biblioteca. As ações usam o mesmo caminho da
+  pergunta de reunião: D-Bus no Linux, toast com botões no Windows, e no macOS o botão principal
+  e o de fechar (um aviso só com Abrir não tem o de fechar).
+- **O título do servidor** de cada item da leitura vai para a fila (`Queue::set_server_title`,
+  fila v5, [desktop-gravacao.md](desktop-gravacao.md)), e a fila de envio mostra o título dado
+  ao parar, senão o do servidor.
+- **A espera na fila** (holetz/eclume#117) não sai do `?since=`, porque a posição muda sem mover o
+  `updated_at`: para as gravações enviadas daqui há menos de 24 h ainda sem desfecho,
+  `Client::queue_wait(id)` lê `job.queue` em `GET /recordings/{id}`, mesmo com o aviso desligado;
   o laço guarda as esperas por id remoto em `StatusView.queue_waits`, e a fila de envio mostra,
-  sob a linha de uma gravação enviada, a frase de `fraseDaEspera` do vocabulário (`.fila-espera`).
+  sob a linha, a frase de `fraseDaEspera` do vocabulário (`.fila-espera`).
 
 ## Conta e credencial
 

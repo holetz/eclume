@@ -22,6 +22,11 @@ class DescobrirArgs {
 }
 
 @InvokeArg
+class UrlArgs {
+    lateinit var url: String
+}
+
+@InvokeArg
 class InstaladorArgs {
     lateinit var caminho: String
 }
@@ -169,5 +174,14 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
         val args = invoke.parseArgs(InstaladorArgs::class.java)
         val aberto = Atualizador.abrir(activity, args.caminho)
         invoke.resolve(JSObject().apply { put("aberto", aberto) })
+    }
+
+    /** Abre `url` no navegador do sistema ("Abrir na web" do detalhe), como o instalador abre o APK. */
+    @Command
+    fun abrirUrl(invoke: Invoke) {
+        val args = invoke.parseArgs(UrlArgs::class.java)
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(args.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        activity.startActivity(intent)
+        invoke.resolve()
     }
 }

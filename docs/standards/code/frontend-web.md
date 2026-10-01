@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118
 maintainer: holetz
 ---
 
@@ -175,7 +175,8 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   nome e o e-mail somem e o botão Menu abre a barra lateral por cima. Telas que grudam elementos no
   topo (os filtros da biblioteca, o chat da gravação) usam `top: var(--shell-header)`.
 - **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
-  shell, o botão Ajuda); ele também dá o título da aba. Rota desconhecida mostra
+  shell, o botão Ajuda); ele também dá o título da aba (`usePageTitle`), com o contador do
+  observador de desfechos na frente quando há. Rota desconhecida mostra
   `NotFoundPage` dentro do shell, com o link de volta à biblioteca.
 - **Gaveta de ajuda** (`help.ts`, `HelpProvider`, `HelpDrawer`): o `HelpProvider`, montado no
   `AppShell`, abre a `.help-drawer` com `?` (sem Ctrl, Meta ou Alt, fora de `input`, `textarea`,
@@ -546,8 +547,26 @@ desce; abaixo de 56rem, os campos também):
   tema (`theme.ts`), densidade (confortável ou compacta), movimento (seguir o sistema ou reduzir),
   expediente (início e fim em horas cheias, padrão 8–18, com o fim sempre depois do início), a
   visão em que a biblioteca abre sem parâmetros (última usada, semana, mês ou lista) e a lista de
-  atalhos de teclado. "Restaurar os padrões" apaga tudo e volta o tema ao do sistema. Cada valor
-  padrão apaga a própria chave em vez de gravá-la.
+  atalhos de teclado, e o aviso do navegador (abaixo). "Restaurar os padrões" apaga tudo e volta o
+  tema ao do sistema. Cada valor padrão apaga a própria chave em vez de gravá-la.
+- **Observador de desfechos** (`app/processingWatch.ts`, holetz/eclume#118): montado no
+  `AppShell` (só com sessão), lê a cada 30 s `GET /recordings?since=` (todas as páginas) e aplica a
+  regra do desfecho e a marca d'água do desktop
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), com
+  os mesmos casos de teste: resumo pronto, resumo que falhou, pronta sem resumo (motivo pelo
+  `motivo()` do vocabulário) e transcrição que falhou; cancelar e `summary_deleted` não avisam. A
+  marca vive na memória da aba e começa na montagem: atualizar ou reabrir o navegador não dispara
+  aviso antigo. Com a aba oculta, cada desfecho soma no título ("(2) Biblioteca · eclume",
+  `setTitleCount`), zerado no `visibilitychange` de volta. Erro de rede ou sessão só espera a
+  próxima volta.
+- **Aviso do navegador, opcional**: a notificação do sistema (`new Notification(título, { body,
+  tag: id })`; o `tag` impede que várias abas empilhem o mesmo aviso; o clique foca a aba e abre
+  `/gravacoes/<id>`) sai só com a chave `eclume-aviso-navegador` ligada **e** a permissão dada
+  (`notifyOutcomesOn()`). A permissão só é pedida num gesto — a chave "Avisar no navegador…" em
+  Ambiente ou "Avisar quando ficar pronta" na linha enviada do Importar (`enableNotifyOutcomes()`),
+  nunca ao carregar; negada, a chave fica desligada e a tela diz onde liberar; sem a API (http),
+  a chave fica desabilitada e a oferta some. Sem Web Push nem service worker: com todas as abas
+  fechadas, não há aviso (quem quer, usa o desktop).
 
 - **Grupos de escopo** (`tokens/scopes.ts`) são a escolha principal de um token: Buscar e ler
   gravações (`recordings:read`, `transcripts:read`), Ler e editar resumos (`summaries:*`), Editar

@@ -53,6 +53,8 @@ export interface Ponte {
   gravacao(id: string): Promise<DetalheLocal>
   /** A URL do arquivo local para o `<audio>` (o protocolo de assets do Tauri). */
   urlDoArquivo(caminho: string): string
+  /** Abre a gravação enviada no eclume web, no navegador do sistema. */
+  abrirNaWeb(id: string): Promise<void>
   excluirLocal(id: string): Promise<void>
   excluirSincronizadas(): Promise<number>
   tiposDeAgenda(): Promise<TipoDeAgenda[]>

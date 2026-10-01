@@ -1,5 +1,6 @@
 //! Notificações nativas, com os textos do frame "Notifications" do DS. A pergunta "gravar esta
-//! reunião?" leva as ações Gravar e Agora não, e o resumo pronto, Copiar e Abrir, onde o
+//! reunião?" leva as ações Gravar e Agora não, o resumo pronto, Copiar e Abrir, e os outros
+//! desfechos do processamento (resumo que falhou, pronta sem resumo, transcrição que falhou), Abrir, onde o
 //! SO deixa responder pela notificação — Linux (D-Bus, `notify-rust`), Windows (toast com botões,
 //! `tauri-winrt-notification`) e macOS (`mac-notification-sys`) —, e a mesma pergunta fica na
 //! bandeja e na janela, porque o SO pode suprimir a notificação (modo foco, não perturbe).
@@ -14,6 +15,7 @@ use std::time::Duration;
 
 use eclume_detect::AppKey;
 use eclume_recorder::session::StopReason;
+use eclume_sync::{Ended, Outcome};
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
@@ -36,7 +38,7 @@ const ACTIONS_DEADLINE: Duration = Duration::from_secs(15 * 60);
 static APP_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Duas ações `(id, rótulo)`: a principal e a outra.
-type Actions = [(&'static str, &'static str); 2];
+type Actions = &'static [(&'static str, &'static str)];
 /// O que fazer com a ação escolhida (o id dela).
 type OnAction = Arc<dyn Fn(&AppHandle, &str) + Send + Sync>;
 
@@ -200,43 +202,108 @@ pub fn ask(app: &AppHandle, key: AppKey) {
         app.clone(),
         title,
         body,
-        [(ACTION_RECORD, LABEL_RECORD), (ACTION_IGNORE, LABEL_IGNORE)],
+        &[(ACTION_RECORD, LABEL_RECORD), (ACTION_IGNORE, LABEL_IGNORE)],
         Arc::new(respond),
     );
 }
 
-/// Título e corpo do aviso de resumo pronto.
-pub fn summary_text(recording_title: &str) -> (String, String) {
+/// Quantos desfechos de uma volta ganham um aviso cada; acima disso, um aviso agrupado.
+pub const GROUP_ABOVE: usize = 3;
+
+/// O texto do motivo de um resumo pulado (o mesmo de `MOTIVOS` em `ui/js/vocabulario.js`); código
+/// desconhecido aparece cru, como na janela.
+fn reason_text(reason: Option<&str>) -> String {
+    match reason {
+        Some("no_provider") => "nenhum agente configurado; fale com quem administra".into(),
+        Some("no_agenda_type") => "a gravação não tem tipo de agenda".into(),
+        Some(code) => code.into(),
+        None => "sem motivo informado".into(),
+    }
+}
+
+/// Título e corpo do aviso de um desfecho do processamento.
+pub fn outcome_text(
+    outcome: Outcome,
+    recording_title: &str,
+    reason: Option<&str>,
+) -> (String, String) {
+    let name = if recording_title.trim().is_empty() {
+        "Gravação"
+    } else {
+        recording_title
+    };
+    match outcome {
+        Outcome::SummaryReady => (
+            "Resumo pronto".into(),
+            format!("{name} · copie para compartilhar"),
+        ),
+        Outcome::SummaryFailed => (
+            "O resumo falhou".into(),
+            format!("{name} · abra para gerar de novo"),
+        ),
+        Outcome::NoSummary => (
+            "Pronta sem resumo".into(),
+            format!("{name} · {}", reason_text(reason)),
+        ),
+        Outcome::TranscriptionFailed => (
+            "A transcrição falhou".into(),
+            format!("{name} · abra para ver o motivo"),
+        ),
+    }
+}
+
+/// Título e corpo do aviso agrupado, quando muitas gravações terminam na mesma volta.
+pub fn grouped_text(count: usize) -> (String, String) {
     (
-        "Resumo pronto".into(),
-        format!("{recording_title} · copie para compartilhar"),
+        format!("{count} gravações processadas"),
+        "Abra a biblioteca para ver os resumos e as falhas".into(),
     )
 }
 
-/// O resumo automático de uma gravação enviada ficou pronto: "Copiar" põe o Markdown na área de
-/// transferência e "Abrir" mostra a gravação no eclume web.
-pub fn summary_ready(app: &AppHandle, recording_title: &str, markdown: String, url: String) {
-    let (title, body) = summary_text(recording_title);
+/// Um desfecho do processamento de uma gravação da conta. Pronto, com o Markdown, leva "Copiar"
+/// (põe o resumo na área de transferência) e "Abrir"; os outros, só "Abrir" (a gravação no web).
+pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: String) {
+    let (title, body) = outcome_text(ended.outcome, &ended.title, ended.reason.as_deref());
+    let actions: Actions = if ended.outcome == Outcome::SummaryReady && markdown.is_some() {
+        &[(ACTION_COPY, LABEL_COPY), (ACTION_OPEN, LABEL_OPEN)]
+    } else {
+        &[(ACTION_OPEN, LABEL_OPEN)]
+    };
     let on_action: OnAction = Arc::new(move |app, action| match action {
         ACTION_COPY => {
-            if let Err(err) = app.clipboard().write_text(markdown.clone()) {
-                log::warn!("falha ao copiar o resumo: {err}");
+            if let Some(markdown) = &markdown {
+                if let Err(err) = app.clipboard().write_text(markdown.clone()) {
+                    log::warn!("falha ao copiar o resumo: {err}");
+                }
             }
         }
-        ACTION_OPEN => {
-            if let Err(err) = app.opener().open_url(&url, None::<&str>) {
-                log::warn!("falha ao abrir {url}: {err}");
-            }
-        }
+        ACTION_OPEN => open(app, &url),
         _ => {}
+    });
+    with_actions(app.clone(), title, body, actions, on_action);
+}
+
+/// Muitos desfechos de uma vez: um aviso só, que abre a biblioteca no web.
+pub fn outcomes_grouped(app: &AppHandle, count: usize, url: String) {
+    let (title, body) = grouped_text(count);
+    let on_action: OnAction = Arc::new(move |app, action| {
+        if action == ACTION_OPEN {
+            open(app, &url);
+        }
     });
     with_actions(
         app.clone(),
         title,
         body,
-        [(ACTION_COPY, LABEL_COPY), (ACTION_OPEN, LABEL_OPEN)],
+        &[(ACTION_OPEN, LABEL_OPEN)],
         on_action,
     );
+}
+
+fn open(app: &AppHandle, url: &str) {
+    if let Err(err) = app.opener().open_url(url, None::<&str>) {
+        log::warn!("falha ao abrir {url}: {err}");
+    }
 }
 
 fn respond(app: &AppHandle, action: &str) {
@@ -301,13 +368,14 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
 
     let app_id = toast_app_id();
     let handle = app.clone();
-    let [(first, first_label), (second, second_label)] = actions;
-    let shown = Toast::new(&app_id)
+    let mut toast = Toast::new(&app_id)
         .title(&title)
         .text1(&body)
-        .duration(Duration::Long)
-        .add_button(first_label, first)
-        .add_button(second_label, second)
+        .duration(Duration::Long);
+    for (id, label) in actions {
+        toast = toast.add_button(label, id);
+    }
+    let shown = toast
         .on_activated(move |action| {
             if let Some(action) = action {
                 on(&handle, &action);
@@ -327,16 +395,27 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
     std::thread::spawn(move || {
         // Só vale uma vez por processo; as seguintes devolvem "já definido".
         let _ = mac_notification_sys::set_application(&app.config().identifier);
-        let [(first, first_label), (second, second_label)] = actions;
-        let response = Notification::new()
-            .title(&title)
-            .message(&body)
-            .main_button(MainButton::SingleAction(first_label))
-            .close_button(second_label)
-            .send();
-        match response {
-            Ok(NotificationResponse::ActionButton(_)) => on(&app, first),
-            Ok(NotificationResponse::CloseButton(_)) => on(&app, second),
+        let first = actions.first().copied();
+        let second = actions.get(1).copied();
+        let mut notification = Notification::new();
+        notification.title(&title).message(&body);
+        if let Some((_, label)) = first {
+            notification.main_button(MainButton::SingleAction(label));
+        }
+        if let Some((_, label)) = second {
+            notification.close_button(label);
+        }
+        match notification.send() {
+            Ok(NotificationResponse::ActionButton(_)) => {
+                if let Some((id, _)) = first {
+                    on(&app, id);
+                }
+            }
+            Ok(NotificationResponse::CloseButton(_)) => {
+                if let Some((id, _)) = second {
+                    on(&app, id);
+                }
+            }
             Ok(_) => {}
             Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
         }
@@ -394,12 +473,40 @@ mod tests {
             "Microfone perdido · gravando sem a sua voz, tentando reconectar"
         );
         assert_eq!((LABEL_RECORD, LABEL_IGNORE), ("Gravar", "Agora não"));
-        let (title, body) = summary_text("Kickoff do programa");
+        assert_eq!((LABEL_COPY, LABEL_OPEN), ("Copiar", "Abrir"));
+    }
+
+    #[test]
+    fn textos_dos_desfechos() {
+        let text = |outcome, title: &str, reason: Option<&str>| {
+            let (title, body) = outcome_text(outcome, title, reason);
+            format!("{title} · {body}")
+        };
         assert_eq!(
-            format!("{title} · {body}"),
+            text(Outcome::SummaryReady, "Kickoff do programa", None),
             "Resumo pronto · Kickoff do programa · copie para compartilhar"
         );
-        assert_eq!((LABEL_COPY, LABEL_OPEN), ("Copiar", "Abrir"));
+        assert_eq!(
+            text(Outcome::SummaryFailed, "Kickoff", None),
+            "O resumo falhou · Kickoff · abra para gerar de novo"
+        );
+        assert_eq!(
+            text(Outcome::NoSummary, "Kickoff", Some("no_provider")),
+            "Pronta sem resumo · Kickoff · nenhum agente configurado; fale com quem administra"
+        );
+        assert_eq!(
+            text(Outcome::NoSummary, "", Some("motivo_novo")),
+            "Pronta sem resumo · Gravação · motivo_novo"
+        );
+        assert_eq!(
+            text(Outcome::TranscriptionFailed, "Kickoff", None),
+            "A transcrição falhou · Kickoff · abra para ver o motivo"
+        );
+        let (title, body) = grouped_text(5);
+        assert_eq!(
+            format!("{title} · {body}"),
+            "5 gravações processadas · Abra a biblioteca para ver os resumos e as falhas"
+        );
     }
 
     #[test]
