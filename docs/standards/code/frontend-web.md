@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110
 maintainer: holetz
 ---
 
@@ -73,6 +73,30 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
   (89 KB gzip). O chunk do WebCodecs (Mediabunny, ~560 KB) só carrega na conversão do import, e
   o aviso de chunk grande do Vite que ainda aparece é dele.
+- **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
+  `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
+  `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
+  `createMemoryRouter`. As telas buscam dados pelo React Query: nada de loaders, actions nem o
+  `lazy` do roteador.
+- **Erro por rota, sem tela branca.** Há dois `errorElement`: o `RootError` na raiz (página
+  inteira, para login, cadastro, parear e `/admin/*`) e o `RouteError` numa rota sem caminho filha
+  do `RequireSession`, que aparece no `Outlet` do shell com a barra, o cabeçalho e a fila de
+  importação de pé; a troca de localização reinicia o boundary, então a barra tira do erro. A
+  falha de chunk (mensagem do `import()` dinâmico do Chromium, Firefox ou WebKit, ou o preload do
+  Vite) vira "O eclume foi atualizado"; a exceção comum, "Algo deu errado nesta tela". As duas têm
+  "Recarregar", nunca mostram pilha e registram no `console.error`.
+- **Recarga única por chunk antigo** (`app/chunkReload.ts`, registrado no `main.tsx`): no
+  `vite:preloadError`, se a última recarga por chunk (carimbo `eclume-recarga-chunk` no
+  `sessionStorage`) tem mais de 60 s, grava o carimbo, cancela o evento e recarrega; senão o erro
+  segue para o `RouteError`. A janela de tempo, e não uma bandeira eterna, deixa um segundo deploy
+  na mesma aba recarregar de novo. O estático da imagem `eclume-web` responde `404` sem
+  `immutable` para `/assets/*` ausente, então o `import()` falha rápido e com motivo.
+- **Guarda de saída** (`app/useLeaveGuard.tsx`): com alterações não salvas, fechar ou recarregar a
+  aba dispara o aviso do navegador (`beforeunload`), e ir para outra rota do app pede confirmação
+  pelo `useBlocker`, só quando o `pathname` muda (o `?t=` da gravação e a seleção na URL passam);
+  devolve o diálogo com "Continuar editando" e "Descartar". Usam o guarda a edição do resumo e a
+  seleção de Campos personalizados e Tipos de agenda; o `ImportProvider` fica só com o
+  `beforeunload`, porque vive no shell e não desmonta na navegação interna.
 - **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
@@ -313,7 +337,12 @@ desce; abaixo de 56rem, os campos também):
 - **Edição** (`SummaryEditor`): o Markdown num `textarea` na tipografia do `.doc`, salvo com
   `base_version` = a versão aberta. O 409 `summary_changed` guarda o rascunho e oferece "Ver a
   versão N" (a comparação do rascunho com a nova) e "Salvar sobre a versão N". "Voltar à gerada"
-  pede confirmação. **Comparar** é um diff por linha no cliente (`summary-diff.ts`, LCS), com
+  pede confirmação. O rascunho sobrevive a recarregar a aba (`summaryDraft.ts`): fica no
+  `sessionStorage` em `eclume-resumo-rascunho:<recording_id>`, com a `base_version`, gravado ~500 ms
+  depois da última tecla; ao reabrir a edição, volta direto se a base é a versão aberta e com o
+  aviso de conflito se a base ficou para trás. Salvar, descartar (pelo Cancelar ou pelo guarda de
+  saída) e voltar à gerada apagam o rascunho guardado. Sair da gravação com rascunho pede
+  "Descartar a edição?" (o guarda de saída). **Comparar** é um diff por linha no cliente (`summary-diff.ts`, LCS), com
   `<del>`/`<ins>` e o sinal −/+ para quem não enxerga cor.
 - **Campos** (`FieldsPanel`, `fields.ts`, componente "Filled fields" variante A): título e tags
   primeiro, depois os campos do usuário, com o selo de origem (Automático tracejado, Editado
@@ -363,8 +392,8 @@ desce; abaixo de 56rem, os campos também):
   (`/admin/locutores`).
 - **Campos personalizados** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
   do DS: lista à esquerda (seleção em `?campo=`/`?tipo=`, `novo` para o rascunho) e painel à
-  direita. Trocar de item com alterações pede "Descartar alterações?"; sair da rota só avisa pelo
-  `beforeunload`, porque o app usa `BrowserRouter` e o `useBlocker` exige data router. Campos
+  direita. Trocar de item com alterações pede "Descartar alterações?", e sair da rota também (o
+  guarda de saída, com o aviso do navegador ao fechar a aba). Campos
   personalizados não lista o título embutido (o título vem do tipo de agenda) e mostra as tags
   como embutido (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora. Em Tipos
   de agenda, o tipo padrão (`fallback`) fica no topo com o `.badge` "Padrão", sem Excluir e sem
@@ -463,7 +492,8 @@ Depois de recarregar, o import recomeça pela conversão.
 - **Unitários** (`npm test`, vitest + jsdom + Testing Library): `mockFetch()` substitui o `fetch`
   por rotas `"MÉTODO /caminho/:param"`, respondendo com as fixtures de `contracts/fixtures/`
   (`src/test/fixtures.ts`, tipadas pelo schema). `renderApp(rota)` monta o app inteiro numa
-  rota. O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
+  rota, com a mesma árvore `routes` num `createMemoryRouter` (o `useBlocker` só funciona dentro de
+  um data router). O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
   `fetch` do Node).
 - **Fuso fixo**: os unitários rodam em `America/Sao_Paulo` (`process.env.TZ` no `vite.config.ts`)
   e o Playwright também (`timezoneId`), o fuso das fixtures; a biblioteca posiciona pela hora local.
