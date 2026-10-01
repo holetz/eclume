@@ -5,6 +5,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# As projeções do `cq design build` são versionadas: o `--check` acusa a deriva.
+!.design/build/
 .ruff_cache/
 .pytest_cache/
 

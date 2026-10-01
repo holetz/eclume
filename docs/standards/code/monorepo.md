@@ -7,7 +7,7 @@ tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125, holetz/eclume#130
 maintainer: holetz
 ---
 
@@ -249,7 +249,9 @@ crase que começa por uma pasta de topo existe (`:linha` ignorado; curinga, `<`,
 `node_modules` ficam de fora); e o glossário em ordem alfabética sem caixa nem acento. Um caminho
 citado que não existe de propósito (gerado em execução, de outro repositório, exemplo hipotético)
 entra em `EXCECOES`, no próprio script, com o motivo; a exceção que deixa de ser necessária também
-falha. Links para fora não são seguidos.
+falha. Links para fora não são seguidos. O pilar também roda `cq design build --check`: as projeções
+do front de design (`.design/build/`, geradas do `.design/tokens.json`) são versionadas, com a
+exceção `!.design/build/` no `.gitignore` e fora do ruff, e o `--check` acusa a deriva.
 
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
 commit para o host GPU e roda lá `deploy/gate-host.sh`: os nove pilares, cada um num contêiner da

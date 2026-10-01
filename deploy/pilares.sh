@@ -101,6 +101,8 @@ pilar_mobile() {
 pilar_docs() {
   run cq knowledge validate docs
   run python3 deploy/docs_check.py
+  # As projeções de .design/build/ são versionadas e batem com o .design/tokens.json.
+  run cq design build --check
 }
 
 # O código só-Windows do desktop, por compilação cruzada (cargo-xwin). Só no gate: na CI o xwin
