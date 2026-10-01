@@ -96,6 +96,11 @@ impl Watermark {
         }
     }
 
+    /// [`Watermark::starting`] a partir de milissegundos desde a época Unix.
+    pub fn starting_ms(now_ms: i64) -> Self {
+        Self::starting(DateTime::from_timestamp_millis(now_ms).unwrap_or_else(Utc::now))
+    }
+
     /// Os desfechos novos da leitura `items` (feita com `?since=` = [`Watermark::since`]), que
     /// passam a contar como avisados; avança o `since` e a marca.
     pub fn take(&mut self, items: &[LibraryRecording]) -> Vec<Ended> {
@@ -194,17 +199,17 @@ mod tests {
     fn os_quatro_desfechos_e_os_que_nao_avisam() {
         let outcome = |rec: &LibraryRecording| outcome_of(rec).map(|e| (e.outcome, e.reason));
         assert_eq!(
-            outcome(&recording("a", "ready", Some(("done", None, T)))),
+            outcome(&recording("a", "transcribed", Some(("done", None, T)))),
             Some((Outcome::SummaryReady, None))
         );
         assert_eq!(
-            outcome(&recording("b", "ready", Some(("failed", None, T)))),
+            outcome(&recording("b", "transcribed", Some(("failed", None, T)))),
             Some((Outcome::SummaryFailed, None))
         );
         assert_eq!(
             outcome(&recording(
                 "c",
-                "ready",
+                "transcribed",
                 Some(("skipped", Some("no_provider"), T))
             )),
             Some((Outcome::NoSummary, Some("no_provider".into())))
@@ -218,7 +223,7 @@ mod tests {
         assert_eq!(
             outcome(&recording(
                 "f",
-                "ready",
+                "transcribed",
                 Some(("skipped", Some("summary_deleted"), T))
             )),
             None
@@ -226,7 +231,7 @@ mod tests {
         assert_eq!(
             outcome(&recording(
                 "g",
-                "ready",
+                "transcribed",
                 Some(("skipped", Some("cancelled"), T))
             )),
             None
@@ -245,12 +250,12 @@ mod tests {
         assert_eq!(mark.since, "2026-10-01T11:59:00.000000Z");
         let old = recording(
             "velho",
-            "ready",
+            "transcribed",
             Some(("done", None, "2026-10-01T11:00:00Z")),
         );
         let new = recording(
             "novo",
-            "ready",
+            "transcribed",
             Some(("failed", None, "2026-10-01T12:00:05Z")),
         );
         let got = mark.take(&[old, new.clone()]);
@@ -265,14 +270,14 @@ mod tests {
         // Um desfecho que confirma atrasado, dentro da folga, ainda avisa.
         let late = recording(
             "atrasado",
-            "ready",
+            "transcribed",
             Some(("done", None, "2026-10-01T12:00:02Z")),
         );
         assert_eq!(mark.take(&[late]).len(), 1);
         // O resumo refeito depois é outro desfecho.
         let redone = recording(
             "novo",
-            "ready",
+            "transcribed",
             Some(("done", None, "2026-10-01T12:30:00Z")),
         );
         assert_eq!(mark.take(&[redone]).len(), 1);
@@ -286,7 +291,7 @@ mod tests {
         let mut mark = Watermark::starting(instant(T).unwrap());
         mark.take(&[recording(
             "a",
-            "ready",
+            "transcribed",
             Some(("done", None, "2026-10-01T12:00:01Z")),
         )]);
         let text = serde_json::to_string(&mark).unwrap();
