@@ -7,7 +7,7 @@ tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, clau
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99
 maintainer: holetz
 ---
 
@@ -229,6 +229,12 @@ mesmo protocolo de texto do chat de ajuste: uma ação JSON por chamada, sobre `
   em Markdown e `sources`, os ids das gravações em que se apoia). Até 8 consultas; depois, a próxima
   ação tem de ser `reply`, senão `chat_tool_limit`. Saída que não é ação válida recebe uma correção;
   a segunda é `provider_bad_output`.
+- **Ações de transcrição só com `transcripts:read`:** a rota pede só `summaries:read` (exigir mais
+  numa rota existente quebraria a v1), e o escopo vale para as ferramentas. `create_chat` guarda no
+  pedido se a credencial lê transcrições (sessão e credencial de aparelho sim; PAT só com
+  `transcripts:read`); sem isso, o harness usa `base_chat_system(transcripts=False)`, que não
+  lista `search_transcripts` nem `read_transcript`, e `parse_action` recusa essas ações (vão para a
+  correção). Como no MCP, que já exige `transcripts:read` na busca por texto.
 - **Fontes verificadas pelo server:** `sources` só mantém ids que apareceram nos resultados devolvidos
   ao agente, com o título do banco; um id inventado some.
 - **Dado, não instrução:** resumos, falas e resultados voltam em `<ferramenta>` delimitados, e o
