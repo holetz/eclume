@@ -65,6 +65,6 @@ fonte, sem duplicar sua prosa.
 - [docs/vision/](docs/vision/index.md) — direção sem prazo operacional.
 - [docs/project/](docs/project/index.md) — manual do repositório: referências de mercado e runbook do host.
 
-O workspace de specs é gerido pelo backend GitHub (`holetz/eclume`); o plano de construção é o
-épico `holetz/eclume#1`. Use as skills `quenching:specs:*` para consultar ou conduzir esse ciclo e
+O workspace de specs é gerido pelo backend GitHub (`holetz/eclume`); a direção do produto está em
+`docs/vision/`, e o épico `holetz/eclume#1` é o registro da primeira construção. Use as skills `quenching:specs:*` para consultar ou conduzir esse ciclo e
 `quenching:knowledge:*` para criar, editar ou mover conhecimento.
