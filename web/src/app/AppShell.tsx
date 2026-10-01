@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { CircleHelp, LogOut, Settings } from 'lucide-react'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
+import { ConnectionBanner } from './ConnectionBanner'
 import { ImportProvider } from '../features/import/ImportProvider'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
@@ -130,6 +131,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           </nav>
         }
       >
+        <ConnectionBanner />
         <ImportProvider>
           <Outlet />
         </ImportProvider>
