@@ -1,0 +1,25 @@
+<!-- @dsCard group="Components" name="Markers" subtitle="Marker count, player ticks, marker bar, transcript marker row" viewport="720x620" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Markers</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:720px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-6) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-4)}.cell{width:350px;border:2px solid var(--color-divider);overflow:hidden;background:var(--color-bg)}a{color:var(--color-accent-ink)}a:hover{color:var(--color-accent-600)}</style>
+</head>
+<body>
+<main class="demo">
+<div class="demo-head">Indicator</div>
+<div class="row"><span class="marker-count">3 markers</span><span class="text-muted" style="font-size:13px">Shown on the recording card, calendar event, transcript summary and phone list when a recording has markers.</span></div>
+<div class="demo-head">Player with marker ticks and marker bar</div>
+<div class="player"><button type="button" class="btn btn-primary btn-icon" aria-label="Play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z"></path></svg></button><span>00:12:40</span><div class="player-track"><progress class="progress" value="17.6" max="100"></progress><button type="button" class="player-tick" style="--at:5.9%" aria-label="Marker at 00:04:15"></button><button type="button" class="player-tick" style="--at:17.6%" aria-current="true" aria-label="Marker at 00:12:40"></button><button type="button" class="player-tick" style="--at:43.1%" aria-label="Marker at 00:31:05"></button></div><span class="text-muted">01:12:04</span></div>
+<div class="marker-bar"><span class="kicker">Markers</span><button type="button" class="marker-chip"><span class="mono">00:04:15</span><span>Start of agenda</span></button><button type="button" class="marker-chip"><span class="mono">00:12:40</span><span>Budget decision</span></button><button type="button" class="marker-chip" data-empty><span class="mono">00:31:05</span><span>Marker</span></button></div>
+<div class="demo-head">In the transcript</div>
+<div class="segment"><div class="segment-who"><span class="speaker speaker-2">Bruno Lima</span><span class="timecode">00:12:31</span></div><p class="segment-text">Higher by how much? Last month we were still below target.</p></div>
+<div class="segment-marker"><span class="marker-count">00:12:40</span><span class="segment-marker-note"><b>Budget decision</b><span>Marked on iPhone 15 · Jane</span></span></div>
+<div class="segment"><div class="segment-who"><span class="speaker speaker-1">Ana Ribeiro</span><span class="timecode">00:12:40</span></div><p class="segment-text">About twelve percent. So I propose we move the extra budget to onboarding this quarter.</p></div>
+<p class="note">A marker is a timestamp with an optional note, added on the phone or the desktop app while recording. It sits before the segment that contains its time. Clicking a tick, chip or marker row plays from that time. A marker without a note reads "Marker" in muted ink.</p>
+</main>
+</body>
+</html>

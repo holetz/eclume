@@ -1,0 +1,35 @@
+<!-- @dsCard group="Components" name="Calendar" subtitle="Week agenda, month grid and day-grouped list for the library" viewport="960x900" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Calendar</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:960px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-8) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-3)}.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-6);align-items:start}</style>
+</head>
+<body>
+<main class="demo">
+<div class="demo-head">Week · blocks sized by duration</div>
+<div class="cal-week" style="--cal-start:8"><span class="cal-head"></span><span class="cal-head">Mon<b>21</b></span><span class="cal-head">Tue<b>22</b></span><span class="cal-head">Wed<b>23</b></span><span class="cal-head">Thu<b>24</b></span><span class="cal-head">Fri<b>25</b></span><span class="cal-head" aria-current="date">Sat<b>26</b></span><span class="cal-head">Sun<b>27</b></span>
+<div class="cal-hours"><span>08:00</span><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span></div>
+<div class="cal-col"><a class="cal-event" href="#" style="--s:9;--d:1"><strong>Weekly planning</strong><span class="mono">09:00 · 58 min</span></a></div>
+<div class="cal-col"><a class="cal-event" href="#" style="--s:10.5;--d:1.7"><strong>Leadership circle · session 7</strong><span class="mono">10:30 · 1 h 40</span></a></div>
+<div class="cal-col"><a class="cal-event" href="#" data-kind="note" style="--s:8.3;--d:.1"><strong>Note · supplier call</strong></a><a class="cal-event" href="#" data-status="failed" style="--s:13;--d:.8"><strong>meeting-03.mkv</strong><span class="mono">Failed</span></a></div>
+<div class="cal-col"><a class="cal-event" href="#" style="--s:9;--d:1.2"><strong>Quarterly review</strong><span class="mono">09:00 · 1 h 12</span></a></div>
+<div class="cal-col"></div>
+<div class="cal-col"><div class="cal-now" style="--s:11.2"></div><a class="cal-event" href="#" data-status="processing" style="--s:10.5;--d:.65"><strong>1:1 Elisa / Ana</strong><span class="mono">Summarizing</span></a></div>
+<div class="cal-col"></div>
+</div>
+<p class="note"><code>.cal-event</code> takes <code>--s</code> (start hour) and <code>--d</code> (hours); the grid sets <code>--cal-start</code> and <code>--cal-hour</code>. Notes get a dotted rule, processing items sit on the ground with the status as a word, failures get a danger rule. The terracotta line is now.</p>
+<div class="demo-head">Month</div>
+<div class="cal-month"><span class="cal-dow">Mon</span><span class="cal-dow">Tue</span><span class="cal-dow">Wed</span><span class="cal-dow">Thu</span><span class="cal-dow">Fri</span><span class="cal-dow">Sat</span><span class="cal-dow">Sun</span>
+<div class="cal-cell" data-outside><b>31</b></div><div class="cal-cell"><b>1</b></div><div class="cal-cell"><b>2</b><span class="cal-dot">Weekly planning</span></div><div class="cal-cell"><b>3</b><span class="cal-dot">Onboarding · Guion</span><span class="cal-dot">Note</span></div><div class="cal-cell"><b>4</b></div><div class="cal-cell"><b>5</b></div><div class="cal-cell"><b>6</b></div>
+</div>
+<div class="demo-head">List · grouped by day</div>
+<div class="day-group"><div class="day-group-head"><b>Today · Sat 26 Sep</b><span class="text-muted" style="font-size:12px">2 items</span></div>
+<a class="rec-row" href="#"><span class="mono">10:30</span><span><strong>1:1 Elisa / Ana</strong> <span class="text-muted">· 38 min</span></span><span class="badge badge-progress">Summarizing</span></a>
+<a class="rec-row" href="#"><span class="mono">08:18</span><span><strong>Note · supplier call</strong> <span class="text-muted">· 1 min</span></span><span class="badge badge-success">Ready</span></a></div>
+</main>
+</body>
+</html>

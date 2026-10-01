@@ -1,0 +1,24 @@
+<!-- @dsCard group="Components" name="Transcript" subtitle="Segments with the six speaker hues" viewport="720x600" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Transcript</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:720px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-6) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-4)}</style>
+</head>
+<body>
+<main class="demo">
+<div class="demo-head">Speakers</div>
+<div class="row"><span class="speaker speaker-1">Ana Ribeiro</span><span class="speaker speaker-2">Bruno Lima</span><span class="speaker speaker-3">Carla Dias</span><span class="speaker speaker-4">Diego Souza</span><span class="speaker speaker-5">Elisa Prado</span><span class="speaker speaker-6">Speaker 6</span></div>
+<div class="demo-head">Segments</div>
+<div>
+<div class="segment" data-speaker="1"><div class="segment-who"><span class="speaker speaker-1">Ana Ribeiro</span><span class="timecode">00:03:12</span></div><p class="segment-text">Let's start with the pilot numbers. The regional team closed the quarter ahead of plan.</p></div>
+<div class="segment" data-speaker="2" aria-current="true"><div class="segment-who"><span class="speaker speaker-2">Bruno Lima</span><span class="timecode">00:03:27</span></div><p class="segment-text">Ahead, yes, but the <mark>onboarding</mark> backlog doubled. We should talk about that before we celebrate.</p></div>
+<div class="segment" data-speaker="3"><div class="segment-who"><span class="speaker speaker-3">Carla Dias</span><span class="timecode">00:03:41</span></div><p class="segment-text">Agreed. I can bring the breakdown by team to Thursday's session.</p></div>
+</div>
+<p class="note">Six hues on one OKLCH lightness and chroma, so no voice outweighs another; the dark theme lifts them all together. The segment playing now takes the highlight tint, and search hits use <code>&lt;mark&gt;</code>.</p>
+</main>
+</body>
+</html>
