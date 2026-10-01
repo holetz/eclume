@@ -3,7 +3,7 @@ import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { markersLabel } from '../library/calendar'
 import { hms, placeMarkers, useMarkerMutations, type Marker } from './markers'
-import { usePlayback } from './playback'
+import { usePlayback, usePlaybackTime } from './playback'
 import { SegmentEditor } from './SegmentEditor'
 import { findSegmentAt, speakerColorIndex, speakerName, type Segment, type Transcript } from './segments'
 import { SpeakersPanel } from './SpeakersPanel'
@@ -107,7 +107,8 @@ function Segments({
   markers: Marker[]
   recordingId: string
 }) {
-  const { currentMs, seek } = usePlayback()
+  const { seek } = usePlayback()
+  const currentMs = usePlaybackTime()
   const listRef = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)

@@ -1,7 +1,7 @@
 import { Pause, Play } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { currentMarkerId, hms, type Marker } from './markers'
-import { rateLabel, usePlayback } from './playback'
+import { rateLabel, usePlayback, usePlaybackTime } from './playback'
 import styles from './RecordingPage.module.css'
 
 /**
@@ -9,7 +9,8 @@ import styles from './RecordingPage.module.css'
  * tick por marcador, a duração e a velocidade.
  */
 export function Player({ markers }: { markers: Marker[] }) {
-  const { currentMs, durationMs, playing, rate, seek, toggle, cycleRate, error, retry } = usePlayback()
+  const { durationMs, playing, rate, seek, toggle, cycleRate, error, retry } = usePlayback()
+  const currentMs = usePlaybackTime()
   const current = currentMarkerId(markers, currentMs)
   const percent = (ms: number) => (durationMs > 0 ? Math.min(100, (ms / durationMs) * 100) : 0)
 
