@@ -2,14 +2,15 @@
 #
 #   bash deploy/e2e-real.sh
 #
-# As mesmas peças da produção (Caddy com `tls internal`, server, worker CPU com a CLI do Claude,
+# As mesmas peças da produção (Caddy com a CA `eclume`, server, worker CPU com a CLI do Claude,
 # worker de transcrição, Postgres, Redis, MinIO), sem nada em comum com ela: dados em tmpfs ou em
 # volumes que o `down -v` apaga, Caddy só em 127.0.0.1:18443 e o worker de transcrição com
 # `ECLUME_ENGINE=cpu`, sem GPU — não disputa VRAM com a produção nem com o Jellyfin. Server e web
 # saem do checkout (`:e2e`); o worker reaproveita a imagem `eclume-worker-gpu:prod`, que tem a
 # engine CPU (faster-whisper) e não vale reconstruir (~8 GB), com o código de `engines/` e
 # `worker-gpu/` do checkout montado na frente (PYTHONPATH). O compose roda no host (bind mounts
-# relativos). Senhas fixas: nada aqui sai do host.
+# relativos). Senhas fixas: nada aqui sai do host. A raiz do Caddy é uma raiz própria descartável,
+# restrita a 127.0.0.1, que o e2e-real.sh gera em ECLUME_E2E_CA_DIR antes da subida.
 name: eclume-e2e
 
 x-server-env: &server-env
@@ -43,6 +44,8 @@ services:
     configs:
       - source: caddyfile
         target: /etc/caddy/Caddyfile
+    volumes:
+      - ${ECLUME_E2E_CA_DIR:?o e2e-real.sh define a pasta da raiz descartável}:/etc/caddy/ca:ro
 
   web:
     image: eclume-web:e2e
@@ -172,9 +175,22 @@ configs:
         default_sni 127.0.0.1
         auto_https disable_redirects
         skip_install_trust
+        pki {
+          ca eclume {
+            name "eclume e2e"
+            root {
+              cert /etc/caddy/ca/raiz.crt
+              key /etc/caddy/ca/raiz.key
+            }
+          }
+        }
       }
       https://127.0.0.1:8443 {
-        tls internal
+        tls {
+          issuer internal {
+            ca eclume
+          }
+        }
         # Cabeçalhos genéricos para o que não vem do web (/api, /media, /mcp, /downloads); `?` não
         # sobrescreve o que o upstream já mandou (a CSP inteira do web).
         header {
