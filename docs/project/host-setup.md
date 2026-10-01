@@ -148,7 +148,7 @@ uma vez.
 
 Os agentes de sumarização desta produção usam o provider `claude-cli`, escolha deste host (a
 matriz dos quatro providers está em [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige)).
-A CLI que roda no worker vem da imagem construída com `ECLUME_CLAUDE_CLI=1` no `deploy/.env.prod`;
+A CLI que roda no worker vem da imagem construída com `ECLUME_CLAUDE_CLI=1` no `.env.prod` do deploy;
 a do host só serve para gerar o token.
 
 ```bash

@@ -283,7 +283,7 @@ software de licença aberta entra no build sem opções. A CLI, de versão fixad
 `ECLUME_CLAUDE_CLI=1`, que escolhe o estágio `claudecli-1` em vez do vazio `claudecli-0`. Uma
 imagem sem a CLI cadastra o `claude-cli` normalmente e o job falha com `provider_not_configured`
 ("Não foi possível executar claude"). O compose de produção passa o arg a partir do
-`deploy/.env.prod`, e o `deploy.sh` recusa um env que não declare `ECLUME_CLAUDE_CLI=0` ou `1`,
+`.env.prod` do deploy, e o `deploy.sh` recusa um env que não declare `ECLUME_CLAUDE_CLI=0` ou `1`,
 para a produção não perder a CLI por omissão.
 
 Com a CLI na imagem, o worker de agentes (`worker-agents`) que roda `claude-cli` acha o `claude` no `PATH` (ou em `ECLUME_CLAUDE_BIN`) e precisa de

@@ -66,11 +66,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.11{DIGEST} /uvx /usr/local/bin/uvx
 COPY --from=build /app /app
 FROM eclume-desktop-build:24.04
 FROM build
+FROM bu${{ALVO}} AS escolhido
+FROM node:${{VERSAO}}
 """
     problemas = fixacoes.problemas_dockerfile(texto, "x.Dockerfile")
     assert problemas == [
         "x.Dockerfile:1: FROM node:22-bookworm-slim sem @sha256:",
         "x.Dockerfile:3: COPY --from=ghcr.io/astral-sh/uv:0.11 sem @sha256:",
+        "x.Dockerfile:9: FROM node:${VERSAO} sem @sha256:",
     ]
 
 
