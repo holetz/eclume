@@ -1,14 +1,24 @@
-// Prova do web do usuário em produção (holetz/eclume#38), num navegador real e com a conta de smoke:
-// ECLUME_PROD_URL, ECLUME_PROD_EMAIL e ECLUME_PROD_PASSWORD (deploy/prova-web-prod.sh os preenche).
+// Prova do web do usuário (holetz/eclume#38) no staging (holetz/eclume#91), num navegador real e
+// com a conta descartável do `staging.sh subir`: ECLUME_PROVA_URL (padrão https://127.0.0.1:18444),
+// ECLUME_PROD_EMAIL e ECLUME_PROD_PASSWORD (deploy/prova-web-prod.sh os preenche). Recusa a URL de
+// produção: lá só roda o admin.spec.ts, de leitura.
 // Cria só o que desfaz: um campo temporário (excluído no fim) e um token só de leitura (revogado).
 // Os códigos de vínculo gerados vencem sozinhos em 10 minutos. Screenshots em test-results/prod/.
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
-const URL_BASE = process.env.ECLUME_PROD_URL ?? 'https://192.168.15.199:8443'
+const URL_BASE = process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
 const EMAIL = process.env.ECLUME_PROD_EMAIL
 const PASSWORD = process.env.ECLUME_PROD_PASSWORD
 const SHOTS = 'test-results/prod'
+test.use({ baseURL: URL_BASE })
+
+/** A produção (192.168.15.199:8443 ou ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
+function ehProducao(url: string): boolean {
+  const alvos = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
+  return alvos.some((a) => new URL(a).host === new URL(url).host)
+}
+
 const STAMP = new Date().toISOString().slice(0, 16).replace('T', ' ')
 
 /** "9:42" em segundos. */
@@ -28,7 +38,8 @@ async function apiDelete(page: Page, url: string) {
   await page.request.delete(url, { headers: { 'X-CSRF-Token': csrf } })
 }
 
-test('organizar, configurações e ajuda em produção', async ({ page }) => {
+test('organizar, configurações e ajuda no staging', async ({ page }) => {
+  expect(ehProducao(URL_BASE), `${URL_BASE} é a produção: esta prova escreve; use o staging`).toBe(false)
   test.skip(!EMAIL || !PASSWORD, 'exige ECLUME_PROD_EMAIL e ECLUME_PROD_PASSWORD')
   test.setTimeout(6 * 60_000)
   await page.setViewportSize({ width: 1440, height: 900 })

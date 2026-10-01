@@ -1,8 +1,8 @@
-// Prova da biblioteca e da gravação em produção (holetz/eclume#37), no navegador real e com a conta
-// de usuário: import de um M4A pelo modal com a data dos metadados, o evento na semana certa, o
-// pipeline até o resumo, a edição, o chat, o DOCX e a exclusão (a gravação da prova não fica).
-//   ECLUME_E2E_URL (https://192.168.15.199:8443), ECLUME_E2E_EMAIL, ECLUME_E2E_PASSWORD e
-//   ECLUME_E2E_AUDIO (um M4A com creation_time 2026-09-21T12:00:00Z).
+// Prova da biblioteca e da gravação (holetz/eclume#37) no staging (holetz/eclume#91), no navegador
+// real e com a conta descartável do `staging.sh subir`: import de um M4A pelo modal com a data dos
+// metadados, o evento na semana certa, o pipeline até o resumo, a edição, o chat, o DOCX e a exclusão.
+//   ECLUME_PROVA_URL (padrão https://127.0.0.1:18444), ECLUME_E2E_EMAIL, ECLUME_E2E_PASSWORD e
+//   ECLUME_E2E_AUDIO (um M4A com creation_time 2026-09-21T12:00:00Z). Recusa a URL de produção.
 // Roda com playwright.real.config.ts; os screenshots, claro e escuro, ficam em test-results/prod/.
 import { readFileSync } from 'node:fs'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
@@ -11,10 +11,17 @@ const EMAIL = process.env.ECLUME_E2E_EMAIL ?? ''
 const PASSWORD = process.env.ECLUME_E2E_PASSWORD ?? ''
 const AUDIO = process.env.ECLUME_E2E_AUDIO ?? ''
 const SHOTS = 'test-results/prod'
+const URL_BASE = process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
 const WEEK = '/?visao=semana&data=2026-09-21'
 
 // O creation_time do M4A é 12:00 UTC: 09:00 em Brasília, na segunda 21/09/2026.
-test.use({ timezoneId: 'America/Sao_Paulo' })
+test.use({ timezoneId: 'America/Sao_Paulo', baseURL: URL_BASE })
+
+/** A produção (192.168.15.199:8443 ou ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
+function ehProducao(url: string): boolean {
+  const alvos = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
+  return alvos.some((a) => new URL(a).host === new URL(url).host)
+}
 
 async function shoot(page: Page, name: string) {
   for (const [scheme, suffix] of [
@@ -40,12 +47,13 @@ async function expectAgents(request: APIRequestContext) {
   expect(serves('summaries') && serves('chat'), 'Admin → Agentes sem provider para resumos e chat').toBe(true)
 }
 
-test('biblioteca e gravação em produção: import com data, pipeline, edição, chat, DOCX e exclusão', async ({
+test('biblioteca e gravação no staging: import com data, pipeline, edição, chat, DOCX e exclusão', async ({
   page,
   request,
 }) => {
-  // Só na prova de produção: o e2e-real.sh roda os outros cenários sem estas variáveis.
-  test.skip(!EMAIL, 'só com ECLUME_E2E_EMAIL (prova de produção)')
+  // Só na prova no staging: o e2e-real.sh roda os outros cenários sem estas variáveis.
+  test.skip(!EMAIL, 'só com ECLUME_E2E_EMAIL (prova no staging)')
+  expect(ehProducao(URL_BASE), `${URL_BASE} é a produção: esta prova escreve; use o staging`).toBe(false)
   test.setTimeout(15 * 60_000)
   expect(PASSWORD && AUDIO, 'defina ECLUME_E2E_PASSWORD e ECLUME_E2E_AUDIO').toBeTruthy()
   await expectAgents(request)
