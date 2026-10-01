@@ -173,6 +173,8 @@ impl Client {
             let result = self.transport.send(request.clone());
             let retry_after = match &result {
                 Ok(response) if !is_transient(response.status) => return result,
+                // A interrupção é de propósito (a rede do eclume caiu): não se retenta.
+                Err(err) if eclume_recorder::is_interrupted(err) => return result,
                 Ok(response) => response
                     .header("retry-after")
                     .and_then(|value| value.trim().parse::<u64>().ok())
@@ -1264,6 +1266,22 @@ mod tests {
             .upload(&path, &create, None, &mut |_| Ok(()))
             .unwrap_err();
         assert!(err.downcast_ref::<UploadExpired>().is_some(), "{err:#}");
+    }
+
+    #[test]
+    fn interrupcao_nao_e_retentada() {
+        let script = Script::default().expect(
+            "POST /api/v1/uploads",
+            Err(anyhow::Error::new(eclume_recorder::SyncInterrupted)),
+        );
+        let (client, script, slept) = make_client(script);
+        let (path, create) = file();
+        let err = client
+            .upload(&path, &create, None, &mut |_| Ok(()))
+            .unwrap_err();
+        assert!(eclume_recorder::is_interrupted(&err), "{err:#}");
+        assert_eq!(script.seen().len(), 1);
+        assert!(slept.lock().unwrap().is_empty());
     }
 
     #[test]
