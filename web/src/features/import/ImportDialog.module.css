@@ -27,6 +27,10 @@
   max-width: 200px;
 }
 
+.language {
+  max-width: 220px;
+}
+
 /* Sem data no arquivo: a borda e a origem no tom de aviso, como no frame. */
 .date[data-warning] {
   border-color: var(--color-warning);

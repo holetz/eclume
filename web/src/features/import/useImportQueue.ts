@@ -39,6 +39,8 @@ export interface ImportItem {
   file: File
   probe: MediaProbe | null
   date: ImportDate
+  /** Idioma da transcrição deste arquivo (ou `auto`); sem ele, vale o da conta. */
+  language?: string
   state: ItemState
 }
 
@@ -48,6 +50,7 @@ export interface ImportQueue {
   sending: boolean
   add: (files: Iterable<File>) => void
   setDate: (id: string, value: string) => void
+  setLanguage: (id: string, language: string) => void
   remove: (id: string) => void
   send: () => void
   cancel: (id: string) => void
@@ -153,6 +156,11 @@ export function useImportQueue(): ImportQueue {
     [update],
   )
 
+  const setLanguage = useCallback(
+    (id: string, language: string) => update(id, (item) => ({ ...item, language })),
+    [update],
+  )
+
   const remove = useCallback(
     (id: string) => {
       const item = itemsRef.current.find((candidate) => candidate.id === id)
@@ -192,6 +200,7 @@ export function useImportQueue(): ImportQueue {
             durationMs: audio.durationSec * 1000,
             recordedAt: new Date(item.date.value).toISOString(),
             recordedAtSource: recordedAtSource(item.date),
+            language: item.language,
           },
           {
             uploadId: entry.uploadId,
@@ -262,5 +271,5 @@ export function useImportQueue(): ImportQueue {
   )
 
   const sending = items.some((item) => BUSY.includes(item.state.kind))
-  return { items, sending, add, setDate, remove, send, cancel, retry, clearFinished }
+  return { items, sending, add, setDate, setLanguage, remove, send, cancel, retry, clearFinished }
 }
