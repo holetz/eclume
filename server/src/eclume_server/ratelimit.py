@@ -5,7 +5,8 @@ as **falhas** por conta (`check_login`, `login_failed`, `login_succeeded`), comu
 aparelho: por par (conta, IP), e um teto global da conta que não barra IP que já entrou nela. Assim,
 as tentativas de um IP qualquer não trancam a dona da conta. A troca de código de pareamento tem
 ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes. O cadastro tem,
-além do teto por minuto, um teto diário de contas criadas por IP (`check_signups`).
+além do teto por minuto, um teto diário de contas criadas por IP (`check_signups`). As duas rotas
+públicas da redefinição de senha (conferir e redefinir) somam as tentativas na mesma chave por IP.
 O IP vem do uvicorn, que com `--proxy-headers` confia no `X-Forwarded-For` do Caddy.
 """
 

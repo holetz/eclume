@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 import redis
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -16,14 +17,14 @@ from eclume_server.accounts import (
     password_reset_info,
     reset_password,
 )
+from eclume_server.app import create_app
 from eclume_server_testing.api import PASSWORD, audio_bytes, upload_file
+from eclume_server_testing.conformance import CONFORMANCE
 from eclume_server_testing.fakes import drain_storage
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from fastapi.testclient import TestClient
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -235,3 +236,51 @@ def test_admin_gera_o_link_de_redefinicao_so_para_conta_ativa(
             await engine.dispose()
 
     assert run(info()) is None
+
+
+def test_rotas_publicas_conferem_e_redefinem_pelo_link(
+    client: TestClient, admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    account = make_user()
+    api = as_user(account)
+    secret = admin.post(f"/api/v1/admin/users/{account.user_id}/password-reset").json()["url"].split("#", 1)[1]
+    client.cookies.clear()
+
+    checked = client.post("/api/v1/auth/password-reset/check", json={"token": secret})
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["email"] == account.email
+    short = client.post("/api/v1/auth/password-reset", json={"token": secret, "new_password": "curta"})
+    assert (short.status_code, short.json()["errors"][0]["field"]) == (422, "new_password")
+
+    done = client.post("/api/v1/auth/password-reset", json={"token": secret, "new_password": NEW_PASSWORD})
+    assert done.status_code == 204, done.text
+    assert "eclume_session" not in client.cookies
+    assert api.get("/api/v1/me").status_code == 401
+    for path, body in (
+        ("/api/v1/auth/password-reset/check", {"token": secret}),
+        ("/api/v1/auth/password-reset", {"token": secret, "new_password": NEW_PASSWORD}),
+        ("/api/v1/auth/password-reset/check", {"token": "inexistente"}),
+    ):
+        again = client.post(path, json=body)
+        assert (again.status_code, again.json()["code"]) == (401, "invalid_reset_link")
+    assert client.post("/api/v1/auth/login", json={"email": account.email, "password": NEW_PASSWORD}).status_code == 204
+
+
+def test_rotas_publicas_da_redefinicao_limitam_tentativas_por_ip(services: Services):
+    store = redis.Redis.from_url(services.settings.redis_url)
+    for key in store.scan_iter("eclume:rl:auth_password_reset:*"):
+        store.delete(key)
+    settings = services.settings.model_copy(update={"credential_attempts_per_minute": 3})
+    with TestClient(create_app(settings), base_url="https://testserver") as limited:
+        limited.event_hooks["response"] = [CONFORMANCE.check]
+        codes = [
+            limited.post("/api/v1/auth/password-reset/check", json={"token": "chute"}).status_code,
+            limited.post(
+                "/api/v1/auth/password-reset", json={"token": "chute", "new_password": NEW_PASSWORD}
+            ).status_code,
+            limited.post("/api/v1/auth/password-reset/check", json={"token": "chute"}).status_code,
+        ]
+        assert codes == [401, 401, 401]
+        blocked = limited.post("/api/v1/auth/password-reset/check", json={"token": "chute"})
+        assert (blocked.status_code, blocked.json()["code"]) == (429, "rate_limited")
+        assert blocked.headers["Retry-After"]
