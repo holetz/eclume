@@ -2,7 +2,7 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-01
 audience: both
@@ -94,9 +94,10 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 | `caddy/data`, `caddy/config` | **CA interna do Caddy**: apagar gera uma CA nova e obriga a reinstalar a raiz em todos os clientes |
 | `models/` | cache de modelos do worker GPU |
 | `downloads/` | instaladores do desktop, `latest.json` e `eclume-root.crt` |
-| `secrets/` (700) | `env.prod`, `hf_token`, `admin-password`, chaves do updater — tudo 600 |
-| `backups/` | `pg/`, `minio/`, `caddy/` e `backup.log` |
-| `bin/` | `backup.sh` e `restaurar-backup.sh`, instalados pelo deploy |
+| `secrets/` (700) | `env.prod`, `hf_token`, `admin-password`, chaves do updater, keystore Android, `restic-password` e `restic-fora.env` — tudo 600 |
+| `backups/` | `restic/` (repositório cifrado), `minio/.espelho/`, `pre-deploy/`, `backup.log` e `ensaio.log` |
+| `estado/` (700) | `backup.json`, `fora.json`, `ensaio.json` (`ok`, `at`, `detalhe` de cada etapa noturna, lidos pelo `vigia.sh`), `secrets.sha256` e `vigia/` |
+| `bin/` | `backup.sh`, `restaurar-backup.sh`, `staging.sh` e `vigia.sh`, instalados pelo deploy |
 
 ## Deploy
 
@@ -242,10 +243,33 @@ scripts com LF em qualquer checkout. Sem `flock`, a trava vira o diretório `dep
 
 ## Validar
 
+**As provas que escrevem rodam no staging, nunca na produção** (holetz/eclume#91). O
+`eclume-staging` é um projeto compose efêmero no host (`deploy/docker-compose.staging.yml`), com o
+código do `main` e os dados do último backup restaurados do repositório fora do host, Caddy só em
+`https://127.0.0.1:18444`, transcrição em CPU e sem mDNS. `staging.sh subir` o deixa de pé com uma
+conta descartável (admin e usuário com o mesmo e-mail, em `~/eclume-staging/conta`) e a CA dele em
+`~/eclume-staging/ca/ca.crt`; `staging.sh derrubar` o apaga (`down -v`). Da estação, o túnel
+`ssh -L 18444:127.0.0.1:18444` o alcança.
+
+```bash
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh subir
+ssh holetz@192.168.15.199 cat eclume-staging/ca/ca.crt > /tmp/staging-ca.crt
+ssh -f -N -L 18444:127.0.0.1:18444 holetz@192.168.15.199
+ssh holetz@192.168.15.199 "sed -n 's/^ECLUME_PASSWORD=//p' eclume-staging/conta" \
+  | python3 deploy/smoke_prod.py --ca /tmp/staging-ca.crt --email staging@eclume.invalid
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh derrubar
+```
+
+**Na produção, só leitura:** `smoke_prod.py --somente-leitura` (health, SPA, `/downloads/`, cadastro
+e sessão de admin) e o painel de administração (`e2e-prod/admin.spec.ts`). Sem
+`--somente-leitura`, o smoke recusa com saída 2 a URL de produção (`https://192.168.15.199:8443` ou
+`ECLUME_PUBLIC_URL`) antes de qualquer requisição; `prova.spec.ts`, `producao.spec.ts` e o
+`mobile/e2e/prova.mjs` recusam do mesmo jeito.
+
 ```bash
 ssh holetz@192.168.15.199 cat /srv/eclume/downloads/eclume-root.crt > /tmp/eclume-root.crt
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-  | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt
+  | python3 deploy/smoke_prod.py --url https://192.168.15.199:8443 --ca /tmp/eclume-root.crt --somente-leitura
 ```
 
 O `smoke_prod.py` usa só a biblioteca padrão. Ele confere health, SPA (o `index.html` das rotas
@@ -263,14 +287,14 @@ os quatro formatos de exportação conferindo o `Content-Type` e a assinatura `P
 imprime `OK`. Um áudio já enviado volta `deduplicated`, e o smoke confere a transcrição que já
 existe; cada rodada acrescenta versões e marcadores à mesma gravação.
 
-**Processamento automático** (`--pipeline`): retranscreve uma gravação e espera as seis etapas do
+**Processamento automático** (`--pipeline`, no staging): retranscreve uma gravação e espera as seis etapas do
 pipeline `done` (recebido, pré-processamento, transcrição, campos, tipo de agenda e resumo), com a
 duração de cada uma, os campos automáticos, o tipo detectado e o resumo automático. Uma etapa
 `failed` ou `skipped` falha o smoke. Sem `--recording`, a gravação é a do áudio de fixture:
 
 ```bash
-ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-  | python3 deploy/smoke_prod.py --ca /tmp/eclume-root.crt --pipeline --recording <id de uma gravação real>
+ssh holetz@192.168.15.199 "sed -n 's/^ECLUME_PASSWORD=//p' eclume-staging/conta" \
+  | python3 deploy/smoke_prod.py --ca /tmp/staging-ca.crt --email staging@eclume.invalid --pipeline --recording <id de uma gravação restaurada>
 ```
 
 **Painel de administração no navegador** (`npm --prefix web run test:e2e:prod`, só leitura, no
@@ -284,15 +308,15 @@ usa o Edge.
 ECLUME_PROD_URL=https://192.168.15.199:8443 ECLUME_ADMIN_EMAIL=admin@example.com   ECLUME_ADMIN_PASSWORD="$(ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password)"   npm --prefix web run test:e2e:prod
 ```
 
-**Biblioteca e gravação no navegador** (`web/e2e-real/producao.spec.ts`, no Google Chrome do host):
-com a conta de usuário, confere pelo painel admin (mesma senha) que há provider para resumos e
+**Biblioteca e gravação no navegador** (`web/e2e-real/producao.spec.ts`, no Google Chrome do host,
+contra o staging): com a conta descartável, confere pelo painel admin (mesma senha) que há provider para resumos e
 chat, importa um M4A pelo modal e confere a data lida dos metadados, acha o evento na segunda
 21/09/2026 às 09:00, espera o pipeline até "Resumo pronto", edita o resumo, pede um ajuste ao
 chat, baixa o DOCX (assinatura `PK`) e exclui a gravação da prova. Os screenshots, claro e escuro,
 ficam no host em `~/build/<pasta>/test-results/prod/`.
 
 ```bash
-remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && ECLUME_E2E_URL=https://192.168.15.199:8443 ECLUME_E2E_EMAIL=admin@example.com ECLUME_E2E_PASSWORD="$(cat /srv/eclume/secrets/admin-password)" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
+remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && . ~/eclume-staging/conta && ECLUME_E2E_EMAIL="$ECLUME_EMAIL" ECLUME_E2E_PASSWORD="$ECLUME_PASSWORD" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
 ```
 
 **MCP e pareamento** (`deploy/smoke_mcp.py`, com o SDK `mcp`, então por `uv run`): confere que o
@@ -308,7 +332,8 @@ uv run eclume-server discover --timeout 10
 ```
 
 **Prova do web** (`bash deploy/prova-web-prod.sh`, `web/e2e-prod/prova.spec.ts`, no Chrome da
-estação ou com `E2E_CHANNEL=msedge`): entra pela tela com a conta do smoke (a senha é lida no host),
+estação ou com `E2E_CHANNEL=msedge`, contra o staging pelo túnel que o script abre): entra pela tela
+com a conta descartável (lida em `~/eclume-staging/conta` no host),
 cria um campo temporário, testa a regra nas últimas gravações e o exclui; gera o código de vínculo
 em App desktop e confere que a contagem começa entre 9:55 e 10:00 e desce; lê o QR de App móvel no
 próprio navegador (SVG → `<canvas>` → `jsqr`) e confere o `pair_url` com o código da tela; confere o
@@ -353,42 +378,73 @@ servidor pelo repositório de CAs do sistema. A raiz fica em
 
 ## Backup e restauração
 
-**Agendamento: cron do usuário `holetz`, às 03:30.** Ele não tem linger, então um timer systemd de
-usuário não rodaria fora de sessão. O `deploy.sh` instala o script e a linha do cron:
+**Agendamento: cron do usuário `holetz`.** Ele não tem linger, então um timer systemd de usuário
+não rodaria fora de sessão. O `deploy.sh` instala os scripts em `bin/`, gera
+`secrets/restic-password` e inicializa o repositório local na primeira vez, e grava as duas linhas:
 
 ```
 30 3 * * * ECLUME_DATA_DIR=/srv/eclume /srv/eclume/bin/backup.sh >> /srv/eclume/backups/backup.log 2>&1 # eclume-backup
+30 4 * * * ECLUME_DATA_DIR=/srv/eclume /srv/eclume/bin/staging.sh ensaio >> /srv/eclume/backups/ensaio.log 2>&1 # eclume-ensaio
 ```
 
-| Arquivo em `/srv/eclume/backups/` | O que é |
-|---|---|
-| `pg/roles-<data>.sql` | `pg_dumpall --roles-only` (o `eclume_app` é do cluster, não do banco) |
-| `pg/eclume-<data>.dump` | `pg_dump -Fc eclume` |
-| `caddy/caddy-pki-<data>.tgz` | a CA interna do Caddy |
-| `minio/.espelho/` | `mc mirror --remove` do bucket |
-| `minio/<data>/` | instantâneo do espelho por `rsync --link-dest`: um objeto igual ao do dia anterior é um hardlink e não ocupa disco de novo |
+**Snapshot restic cifrado, em dois repositórios.** O `backup.sh` roda o restic (imagem oficial
+fixada por digest, num contêiner como root com as fontes só leitura) e grava um snapshot em
+`backups/restic` (o local, para erro lógico) e o copia (`restic copy`) para o repositório **fora do
+host**, descrito em `secrets/restic-fora.env` (`RESTIC_REPOSITORY` e a credencial do destino; S3,
+B2, `rest-server` ou outro que o restic fale), com a mesma senha (`secrets/restic-password`). Os dois
+ficam fora do snapshot (seria circular): **a cópia de cada um fora do host é da dona**, num cofre. O
+repositório fora é criado uma vez com `restic init --copy-chunker-params` a partir do local, para a
+deduplicação valer na cópia.
 
-Ficam os **7 mais recentes** de cada (`MANTER`). Rodar duas vezes no mesmo dia substitui o
-backup do dia. O backup fica **no mesmo disco**: ele protege contra erro lógico e corrupção,
-não contra a perda do disco. Copiar `backups/` para fora do host é decisão do usuário. O espelho
-do MinIO (e a restauração) roda num contêiner `mc` com o root, ligado à rede interna `dados` do
-projeto (escolhida pelo nome, `*_dados`, entre as redes do MinIO).
+| No snapshot (`/eclume/…`) | O que é |
+|---|---|
+| `pg/roles.sql` | `pg_dumpall --roles-only` (o `eclume_app` é do cluster, não do banco) |
+| `pg/eclume.dump` | `pg_dump -Fc eclume` |
+| `pre-deploy/` | os dumps de antes das migrations (holetz/eclume#92) |
+| `minio/` | o espelho do bucket (`backups/minio/.espelho`, `mc mirror --remove`) |
+| `caddy/data/caddy/pki/` | a CA interna do Caddy, com `root.key` |
+| `secrets/` | `env.prod` (com `ECLUME_ENCRYPTION_KEY`), `admin-password`, `hf_token`, chave do updater e senha, keystore Android e senha — menos `restic-*` |
+
+Os dumps só existem em claro numa pasta temporária durante a rodada; fica em claro só o espelho do
+bucket (as gravações já estão no MinIO do mesmo disco). Retenção: **7 diários** (`MANTER`,
+`forget --keep-daily 7 --prune`) nos dois repositórios. **Janela de exclusão:** uma gravação
+excluída some do bucket na hora, mas sobrevive nos snapshots — local e fora do host — por até 7
+dias, e nos dumps `pre-deploy/` pelo tempo que eles ficarem. Cada etapa grava
+`estado/backup.json`, `estado/fora.json` e `estado/ensaio.json` (`ok`, `at`, `detalhe`), que o
+`vigia.sh` lê, e o backup grava `estado/secrets.sha256` (sha256 de `secrets/` e da PKI no snapshot).
+O `deploy.sh --plan` mostra a idade do último `ok` de cada etapa.
+
+**Ensaio noturno** (`staging.sh ensaio`, às 04:30): restaura o snapshot mais recente **do
+repositório fora** no `eclume-staging`, aplica o `migrate` do `main` sobre o banco restaurado e roda
+o `smoke_prod.py` contra ele. Confere também o que o smoke não vê: o sha256 de `secrets/` e da PKI
+restaurados contra `estado/secrets.sha256`, a impressão digital da raiz restaurada contra
+`downloads/eclume-root.crt`, o `content_hash` de um lote de 20 áudios restaurados e
+`restic check --read-data-subset` de 1/7 rotativo do repositório fora. Sai sempre com `down -v`;
+recusa com o disco em 90% ou mais. Falha deixa `estado/ensaio.json` com `ok: false` e o motivo.
 
 ```bash
 ssh holetz@192.168.15.199 /srv/eclume/bin/backup.sh                    # backup agora
-ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --teste   # prova o mais recente
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh ensaio            # ensaio agora
+ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --teste   # prova o mais recente, no host
 ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-25 --confirmo
 ```
 
-- **`--teste [<data>]`** restaura o dump num banco `eclume_restore_teste` e o instantâneo num
-  bucket `eclume-restore-teste`. Depois compara as contagens (usuários, gravações, transcrições,
-  resumos e objetos) com a produção e apaga os dois.
-- **`--aplicar <data> --confirmo`** para server e workers e recria o banco `eclume` a partir do
-  dump. Depois espelha o instantâneo de volta no bucket, sem apagar objetos que não estão no
-  backup, e sobe os serviços.
-- **Num host novo,** restaure `caddy-pki-<data>.tgz` em `/srv/eclume/caddy/data` **antes** do
-  primeiro deploy, para manter a CA dos clientes. Depois rode o deploy, e só então `--aplicar`.
-  Os papéis entram antes do dump.
+- **`[--repositorio local|fora] --teste [<snap>]`** restaura o snapshot (padrão `latest`; também o
+  id restic ou a data AAAA-MM-DD) numa pasta temporária, o dump num banco `eclume_restore_teste` e o
+  bucket num `eclume-restore-teste`. Depois compara as contagens (usuários, gravações,
+  transcrições, resumos e objetos) com a produção e apaga tudo.
+- **`[--repositorio local|fora] --aplicar <snap> --confirmo`** para server e workers e recria o
+  banco `eclume` a partir do dump. Depois espelha o bucket do snapshot de volta, sem apagar objetos
+  que não estão no backup, e sobe os serviços.
+- **`--banco <dump> --confirmo`** volta só o banco a um dump `pre-deploy/` (holetz/eclume#92).
+
+**Host novo.** Basta a senha do repositório e a credencial do destino, tiradas do cofre:
+
+1. Grave `/srv/eclume/secrets/restic-password` e `/srv/eclume/secrets/restic-fora.env` (700/600).
+2. `restaurar-backup.sh --host-novo /srv/eclume` devolve `secrets/` (com o `env.prod`) e a PKI do
+   Caddy em `caddy/data/caddy/pki`, **antes** do primeiro deploy, para manter a CA dos clientes.
+3. Rode o deploy (com o `env.prod` restaurado como `deploy/.env.prod`) e então
+   `restaurar-backup.sh --repositorio fora --aplicar latest --confirmo`.
 
 ## Operação
 
@@ -407,6 +463,9 @@ bash deploy/deploy.sh --context gpu-host --services "server web"   # só código
 - **Job de transcrição parado:** o worker CPU marca sozinho como falha recuperável (`worker_lost`,
   `job_lost`, `job_stalled`) o job que o worker GPU abandonou; o dono retranscreve ou o admin usa
   "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
+- **Staging** (`eclume-staging`, 127.0.0.1:18444): `staging.sh subir` para as provas,
+  `staging.sh derrubar` depois; o ensaio noturno o sobe e derruba sozinho. Falha do ensaio: veja
+  `estado/ensaio.json` e o fim de `backups/ensaio.log`.
 - **E2E do web contra o backend real** num stack efêmero, sem tocar a produção:
   `remote-run . 'bash deploy/e2e-real.sh'` ([frontend-web.md](../standards/code/frontend-web.md)).
 - **Token do Hugging Face:** grave em Administração → Locutores (vence o arquivo) ou troque
