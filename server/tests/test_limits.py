@@ -82,3 +82,8 @@ def test_erro_inesperado_vira_500_problem_json_e_vai_para_o_log(api: TestClient,
     assert response.json()["code"] == "internal_error"
     assert "falha de teste" not in response.text
     assert any(record.exc_info and "falha de teste" in str(record.exc_info[1]) for record in caplog.records)
+
+
+def test_app_real_recusa_o_corpo_grande_no_login(client: TestClient):
+    response = client.post("/api/v1/auth/login", content=b"{" + b" " * CREDENTIAL_LIMIT + b"}")
+    assert (response.status_code, response.json()["code"]) == (413, "payload_too_large")

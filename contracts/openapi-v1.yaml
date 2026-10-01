@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.13.0
+  version: 2.14.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -12,7 +12,12 @@ info:
     - Tudo sob `/api/v1`. Datas em RFC 3339 (UTC), durações em milissegundos, ids em UUID.
     - Listagens paginam por cursor opaco: `?cursor=&limit=`, resposta `{items, next_cursor}`;
       `next_cursor: null` é a última página.
-    - Erros em `application/problem+json` (RFC 9457) com o campo estável `code`.
+    - Erros em `application/problem+json` (RFC 9457) com o campo estável `code`. Desde a 2.14.0,
+      qualquer operação pode responder 500 `internal_error` (falha inesperada; o detalhe fica no
+      log do servidor) e qualquer operação com corpo, 413 `payload_too_large` (corpo acima do teto
+      da rota: 64 KiB nas rotas públicas de credencial `/auth/*`, `/admin/auth/*` e `/devices/*`,
+      os bytes da parte no `PUT` de parte, 1 MiB no resto e no `/mcp`), também sem
+      `Content-Length`.
     - Cada usuário tem a própria conta, isolada; não há organização. O painel admin usa uma
       conta e uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.
     - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores
@@ -158,6 +163,8 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/auth/logout:
     post:
@@ -227,6 +234,8 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/me:
     get:
@@ -258,8 +267,9 @@ paths:
       description: |
         Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
         do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
-        continua; os PATs continuam valendo. Só pela sessão do usuário, com o limite de tentativas
-        das credenciais.
+        continua. Com `revoke_tokens: true` (desde a 2.14.0), as credenciais de aparelho e os PATs
+        da conta também são revogados; ausente ou `false`, continuam valendo. Só pela sessão do
+        usuário, com o limite de tentativas das credenciais.
       security:
         - sessionCookie: []
       parameters:
@@ -607,6 +617,8 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/devices/pairing-codes:
     post:
@@ -692,6 +704,8 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/uploads:
     post:
@@ -856,6 +870,8 @@ paths:
       description: |
         Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT` num
         URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
+        `Content-Length` diferente do tamanho da parte é 409; sem o cabeçalho, o corpo é lido em
+        pedaços e passar do tamanho da parte é 413 `payload_too_large` (desde a 2.14.0).
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -884,6 +900,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/uploads/{upload_id}/complete:
     parameters:
@@ -895,7 +913,9 @@ paths:
       description: |
         Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor confere
         o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
-        Repetir o `complete` de um upload já concluído devolve a mesma gravação.
+        Repetir o `complete` de um upload já concluído devolve a mesma gravação. Desde a 2.14.0,
+        outro `complete` do mesmo upload em andamento (o servidor montando o objeto e conferindo o
+        hash) responde 409 `upload_completing` com `Retry-After`: é passageiro, tente de novo.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -927,7 +947,20 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >-
+            O upload expirou (`code: upload_expired`), não está mais aberto (`code: conflict`) ou
+            outro `complete` dele está em andamento (`code: upload_completing`, desde a 2.14.0, com
+            `Retry-After`).
+          headers:
+            Retry-After:
+              description: Com `upload_completing`, segundos até tentar de novo.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -2582,7 +2615,9 @@ paths:
         Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
         `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
         quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
-        cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429.
+        cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
+        2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
+        pelos resumos (sessão e credencial de aparelho leem as duas).
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
@@ -3305,6 +3340,8 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
   /api/v1/admin/auth/logout:
     post:
@@ -4043,12 +4080,33 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    PayloadTooLarge:
+      description: >-
+        Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o
+        teto em bytes.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            corpoGrande:
+              $ref: "#/components/examples/ProblemPayloadTooLarge"
+    InternalError:
+      description: >-
+        Falha inesperada do servidor (`code: internal_error`, desde a 2.14.0); o detalhe fica no
+        log do servidor, com o `X-Request-ID` da resposta.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     TooManyRequests:
       description: >-
         Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em
         andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas
-        rotas de credencial (login, cadastro, login de admin e `/devices/*`; por IP e, nos logins,
-        também por conta), com `Retry-After`.
+        rotas de credencial (login, cadastro, login de admin e `/devices/*`, por IP), com
+        `Retry-After`. Nos logins por senha, desde a 2.14.0, contam só as falhas: por par (conta,
+        IP), e um teto da conta que não barra IP que já entrou nela com sucesso; o sucesso zera o
+        par.
       headers:
         Retry-After:
           description: Segundos até a janela de tentativas reabrir.
@@ -4087,8 +4145,12 @@ components:
             `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
             aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
             vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-            vigor). Códigos novos entram de forma aditiva.
+            vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`.
+            Códigos novos entram de forma aditiva.
           type: string
+        limit:
+          description: Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0).
+          type: integer
         required_scopes:
           description: |
             Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
@@ -5661,6 +5723,12 @@ components:
           type: string
           minLength: 1
           format: password
+        revoke_tokens:
+          description: |
+            Desde a 2.14.0. `true` revoga também as credenciais de aparelho e os PATs da conta (os
+            aparelhos pedem login de novo); ausente vale `false`.
+          type: boolean
+          default: false
 
     AccountDeletion:
       type: object
@@ -7658,6 +7726,9 @@ components:
     ProblemNotFound:
       summary: Recurso inexistente ou invisível
       externalValue: ./fixtures/problem-not-found.json
+    ProblemPayloadTooLarge:
+      summary: Corpo acima do teto de uma rota de credencial
+      externalValue: ./fixtures/problem-payload-too-large.json
     ProblemValidation:
       summary: Campo inválido
       externalValue: ./fixtures/problem-validation.json
