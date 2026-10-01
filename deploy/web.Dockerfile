@@ -7,12 +7,14 @@
 #   docker --context gpu-host build -f deploy/web.Dockerfile -t eclume-web:prod .
 
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
-# O `tsc -b` do build também checa os testes, que importam contracts/fixtures por caminho relativo:
+# O `tsc -b` do build também checa os testes, que importam contracts/fixtures por caminho relativo,
+# e o build gera a referência da API (/referencia-api.html) do contracts/openapi-v1.bundled.yaml:
 # a árvore web/ + contracts/ é reproduzida como no repositório.
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY contracts/fixtures /app/contracts/fixtures
+COPY contracts/openapi-v1.bundled.yaml /app/contracts/openapi-v1.bundled.yaml
 COPY web/ ./
 RUN npm run build
 

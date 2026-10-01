@@ -77,7 +77,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `base-uri 'none'` e `object-src 'none'`, com `X-Content-Type-Options: nosniff` e
   `Referrer-Policy: no-referrer`. O app respeita: nenhum script ou estilo inline no `index.html`,
   nenhum recurso de outra origem (fontes e ícones vêm dos assets), o áudio de `/media` na mesma
-  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. O Caddy
+  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. A única
+  exceção é a referência da API (`/referencia-api.html` e `/referencia-api/*`, HTML do Redoc gerado
+  no build): o mesmo `script-src 'self'`, mas `style-src 'self' 'unsafe-inline'`, porque o Redoc
+  injeta o CSS em `<style>`; norma em [contrato-v1.md](../api/contrato-v1.md). O Caddy
   de borda repete `nosniff`, `Referrer-Policy` e `frame-ancestors 'none'` (sem sobrescrever a CSP
   do web) para `/api`, `/media`, `/mcp` e `/downloads`.
 
