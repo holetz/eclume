@@ -73,6 +73,30 @@ SSH="${ECLUME_SSH:-${endpoint#ssh://}}"
   echo "O contexto $CONTEXT não é ssh:// ($endpoint); defina ECLUME_SSH=usuario@host." >&2; exit 2; }
 host() { ssh -o BatchMode=yes "$SSH" "$@"; }
 
+# --- gate: o que vai à produção é um commit publicado, limpo e provado ---------------------------
+SHA="$(git rev-parse HEAD)"
+problemas=()
+[[ -z "$(git status --porcelain)" ]] || problemas+=("a árvore de trabalho tem mudanças; o deploy sai do commit $SHA limpo")
+if gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
+  gate_ok=1
+  gate="$(gh api "repos/$REPO/commits/$SHA/status" | python3 deploy/gate.py decidir)" || gate_ok=0
+else
+  problemas+=("o commit $SHA não está no GitHub (faça o push antes)")
+  gate_ok=0
+  gate="eclume/gate sem leitura (commit fora do GitHub)"
+fi
+if [[ "$gate_ok" -eq 0 && -n "$SEM_GATE" ]]; then
+  gate="$gate · dispensado: $SEM_GATE"
+elif [[ "$gate_ok" -eq 0 ]]; then
+  problemas+=("$gate (rode bash deploy/gate.sh ou dispense com --sem-gate \"motivo\")")
+fi
+# Recusa antes de tocar no env e no host; o --plan só mostra.
+if [[ "$PLAN_ONLY" -eq 0 && "${#problemas[@]}" -gt 0 ]]; then
+  printf 'Deploy recusado:
+' >&2; printf '  - %s
+' "${problemas[@]}" >&2; exit 2
+fi
+
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -120,24 +144,6 @@ COMPOSE=(docker compose -p eclume -f deploy/docker-compose.prod.yml --env-file "
 
 disk_pct() { host "df --output=pcent / | tail -n 1 | tr -dc 0-9"; }
 
-# --- gate: o que vai à produção é um commit publicado, limpo e provado ---------------------------
-SHA="$(git rev-parse HEAD)"
-problemas=()
-[[ -z "$(git status --porcelain)" ]] || problemas+=("a árvore de trabalho tem mudanças; o deploy sai do commit $SHA limpo")
-if gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
-  gate_ok=1
-  gate="$(gh api "repos/$REPO/commits/$SHA/status" | python3 deploy/gate.py decidir)" || gate_ok=0
-else
-  problemas+=("o commit $SHA não está no GitHub (faça o push antes)")
-  gate_ok=0
-  gate="eclume/gate sem leitura (commit fora do GitHub)"
-fi
-if [[ "$gate_ok" -eq 0 && -n "$SEM_GATE" ]]; then
-  gate="$gate · dispensado: $SEM_GATE"
-elif [[ "$gate_ok" -eq 0 ]]; then
-  problemas+=("$gate (rode bash deploy/gate.sh ou dispense com --sem-gate \"motivo\")")
-fi
-
 # --- plano ---------------------------------------------------------------------------------------
 pct="$(disk_pct)"
 echo "Commit $SHA · gate: $gate" >&2
@@ -152,9 +158,6 @@ for image in eclume-server:prod eclume-web:prod eclume-worker-gpu:prod; do
 done
 [[ "$PLAN_ONLY" -eq 0 ]] || exit 0
 
-if [[ "${#problemas[@]}" -gt 0 ]]; then
-  echo "Deploy recusado: ${problemas[*]}." >&2; exit 2
-fi
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: acima de ${DISK_LIMIT}%, deploy recusado." >&2; exit 3; }
 if [[ "$gate_ok" -eq 0 ]]; then
   gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \

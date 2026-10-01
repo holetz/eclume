@@ -104,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     desc.add_argument("--log", default="")
     sub.add_parser("alvos-do-push")
     args = parser.parse_args(argv)
+    # O Python da estação Windows escreveria no código de página do console.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     entrada = sys.stdin.read()
 
     if args.comando == "decidir":
