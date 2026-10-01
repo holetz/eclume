@@ -14,6 +14,8 @@ export default defineConfig({
       provider: playwright(),
       // O Chromium pelo Google Chrome (canal `chrome`, com os decoders proprietários); Firefox e
       // WebKit pelos navegadores do Playwright. O que um motor não decodifica é pulado com o motivo.
+      // O `deploy/pilares.sh web-browser` roda um motor de cada vez (`--project`): a medida de commit
+      // da transcrição longa no Chromium não pode dividir a máquina com a conversão dos outros dois.
       instances: [
         { browser: 'chromium', provider: playwright({ launchOptions: { channel: 'chrome' } }) },
         { browser: 'firefox' },

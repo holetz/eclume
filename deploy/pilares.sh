@@ -62,7 +62,10 @@ pilar_web_browser() {
   run npm --prefix web ci
   run npm --prefix web exec -- playwright install webkit firefox
   run npm --prefix web run fixtures
-  run npm --prefix web run test:browser
+  # Um motor de cada vez: a medida de commit do Chromium não divide a máquina com os outros.
+  for motor in chromium firefox webkit; do
+    run npm --prefix web run test:browser -- --project "$motor"
+  done
   run npm --prefix web run test:e2e
 }
 

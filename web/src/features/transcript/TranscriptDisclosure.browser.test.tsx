@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { describe, expect, it } from 'vitest'
+import { server } from 'vitest/browser'
 import { createQueryClient } from '../../app/queryClient'
 import { fixtures } from '../../test/fixtures'
 import { usePlayback, type PlaybackClock } from './playback'
@@ -29,7 +30,10 @@ const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floo
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe('transcrição longa no navegador', () => {
-  it('tick sem troca de fala comita em menos de 8 ms e a troca em menos de 16 ms (mediana de 20)', async () => {
+  it('tick sem troca de fala comita em menos de 8 ms e a troca em menos de 16 ms (mediana de 20)', async ({ skip }) => {
+    // O limiar é do Chromium (o motor da maior parte de quem usa); os outros motores rodam a lista
+    // nos testes de render e no smoke do E2E.
+    skip(server.browser !== 'chromium', 'a medida de commit é contrato só no Chromium')
     let clock: PlaybackClock | null = null
     let commitMs = 0
     function GrabClock({ children }: { children: ReactNode }) {
