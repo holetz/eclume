@@ -40,6 +40,10 @@ export const ponteTauri: Ponte = {
   },
   abrirConfiguracoesDoApp: () => invoke('plugin:eclume-gravador|abrir_configuracoes_do_app'),
   pedirIsencaoDeBateria: () => invoke('plugin:eclume-gravador|pedir_isencao_de_bateria'),
+  async consumirAtalho() {
+    const atalho = await invoke<{ gravar: boolean }>('plugin:eclume-gravador|consumir_atalho')
+    return atalho.gravar
+  },
   gravar: () => invoke('gravar'),
   pausar: () => invoke('pausar'),
   continuar: () => invoke('continuar'),

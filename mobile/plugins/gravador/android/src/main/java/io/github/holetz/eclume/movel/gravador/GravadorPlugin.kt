@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.webkit.WebView
+import java.util.concurrent.atomic.AtomicBoolean
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
@@ -48,9 +49,36 @@ class PararArgs {
     ],
 )
 class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
+    /** Um toque no atalho "Gravar agora" esperando a UI (`consumirAtalho`). */
+    private val atalhoPendente = AtomicBoolean(false)
+
     override fun load(webView: WebView) {
         Conectividade.acompanhar(activity)
         SyncWorker.agendar(activity)
+        // Partida a frio pelo atalho: o intent é o da Activity.
+        notarAtalho(activity.intent)
+    }
+
+    /** O app já aberto (a MainActivity é `singleTask`): o atalho chega aqui. */
+    override fun onNewIntent(intent: Intent) {
+        notarAtalho(intent)
+    }
+
+    /**
+     * Guarda o toque no atalho e troca a ação do intent por `MAIN`: a recriação da Activity e a volta
+     * pelos recentes não disparam outra gravação.
+     */
+    private fun notarAtalho(intent: Intent?) {
+        if (intent == null || !Atalho.ehGravarAgora(intent.action, intent.flags)) return
+        atalhoPendente.set(true)
+        intent.action = Intent.ACTION_MAIN
+        activity.intent = intent
+    }
+
+    /** `true` uma vez por toque no atalho; a UI decide gravar com a regra do botão Gravar. */
+    @Command
+    fun consumirAtalho(invoke: Invoke) {
+        invoke.resolve(JSObject().apply { put("gravar", atalhoPendente.getAndSet(false)) })
     }
 
     /** Sobe o serviço; o `invoke` é respondido pelo serviço depois do `startForeground`. */

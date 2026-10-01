@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123
 maintainer: holetz
 ---
 
@@ -169,7 +169,8 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 
 | Peça | O que faz |
 |---|---|
-| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`; no `load`, acompanha a rede e agenda o `SyncWorker` |
+| `GravadorPlugin` | permissões `microfone` e `notificacoes` (a UI as pede antes de gravar por `plugin:eclume-gravador\|request_permissions`); `iniciarServico` (respondido pelo serviço depois do `startForeground`, ou rejeitado com o motivo ou por prazo de 5 s), `atualizarServico`, `pararServico(motivo?, duracaoMs?)`, `descobrir(segundos)`, `estadoDoDispositivo` (com `notificacoes` e `isencaoDeBateria`: `concedida`, `pedir` ou `recusada`), `abrirConfiguracoesDoApp`, `pedirIsencaoDeBateria`, `abrirInstalador(caminho)`, `consumirAtalho` (`{gravar}`, `true` uma vez por toque no atalho); no `load`, acompanha a rede, agenda o `SyncWorker` e lê o atalho da partida a frio (`activity.intent`); no `onNewIntent`, o do app já aberto |
+| `Atalho` | a ação `io.github.holetz.eclume.movel.GRAVAR_AGORA` e a regra pura `ehGravarAgora(acao, flags)` (a ação, sem `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`), testada na JVM por `AtalhoTest` |
 | `ServicoDeGravacao` | `foregroundServiceType="microphone"`, iniciado com a Activity visível (o toque em Gravar), `START_NOT_STICKY`, com `PARTIAL_WAKE_LOCK`; as ações da notificação vão ao núcleo por `EclumeCore.acao`; na API 29+, `registerAudioRecordingCallback` enquanto grava (removido ao encerrar e no `onDestroy`): quando `isClientSilenced()` muda, `EclumeCore.acao("silenciado" \| "audivel")`, que marca "silenciado pelo sistema". Abaixo da API 29 não há sinal |
 | `Notificacao` | canal `gravacao` de importância baixa, sem som, pública na tela bloqueada; "Gravando" com o cronômetro do sistema (`setWhen` = agora − tempo de áudio) ou "Pausado · 00:42:10"; "2 marcadores · espaço para cerca de 9 h", ou "Microfone desconectado · reconectando", ou "Silenciado pelo sistema"; Pausar/Continuar, Marcador e Parar |
 | `EclumeCore` | `external fun acao`, `estado`, `syncPendentes` (com `interrompido`), `sondarPendentes`, `rede(wifiNaoMedido)` e `interromperSync`, implementadas em `src-tauri/src/jni.rs` sobre o núcleo global; devolvem JSON |
@@ -191,6 +192,14 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Isenção de bateria:** `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (o app não sai pela Play, onde a
   política o restringe). Antes do primeiro Gravar com `isencaoDeBateria: pedir`, o Início explica e
   oferece pedir; Configurações mostram o estado e oferecem pedir depois.
+- **Atalho "Gravar agora"** (`res/xml/shortcuts.xml` do app, com `ic_atalho_gravar` e o meta-data
+  `android.app.shortcuts` na `MainActivity`, que é `singleTask`): atalho estático com intent para a
+  `MainActivity` e a ação `GRAVAR_AGORA` (ação, não extra; `targetPackage` e `targetClass` escritos à
+  mão, acompanham o `applicationId`). O atalho só abre o app: nunca sobe o serviço (o de microfone
+  exige a Activity visível). O plugin guarda o toque num `AtomicBoolean` e troca a ação do intent da
+  Activity por `MAIN`, para recriação e recentes não dispararem de novo. O bloco das Configurações
+  rápidas (`BlocoGravar`, `TileService`) é a segunda etapa e ainda não está no app: abrirá a
+  Activity pela mesma ação.
 - **Manifesto** (app e plugin): `RECORD_AUDIO`, `FOREGROUND_SERVICE`,
   `FOREGROUND_SERVICE_MICROPHONE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`,
   `ACCESS_NETWORK_STATE`,
@@ -221,6 +230,11 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Sessão antes da fase:** com uma gravação ou a folha "Gravação salva" em curso, a tela é a de
   gravação, seja qual for a fase da conexão; com `sem_credencial`, ela mostra a faixa "Entre de novo
   para sincronizar" sem tirar Pausar, Marcador e Parar.
+- **Atalho:** o App chama `consumirAtalho()` na montagem e a cada volta à visibilidade. Consumido
+  na fase `conectado`, sem sessão nem folha, vai à rota `/` e segue o mesmo fluxo do botão Gravar
+  (`app/gravar.ts`: permissões, a explicação da bateria, `gravar` e as mensagens de erro); com sessão
+  ou folha, nada (a tela de gravação já está); em outra fase, é descartado e a tela da fase explica
+  o que falta. Cada toque vale uma vez.
 - **Permissões:** microfone negado mostra "Abrir configurações do app"; notificações bloqueadas
   viram a faixa "Notificações bloqueadas" no Início, com o mesmo botão.
 - **UI** (`mobile/ui/src`): React + TS, função do `EstadoApp` (`app/estado.ts`), com a ponte tipada
