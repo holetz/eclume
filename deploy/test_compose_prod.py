@@ -91,3 +91,38 @@ def test_credencial_minio_gpu_sem_apagar_nem_listar() -> None:
 )
 def test_credencial_nova_no_env_de_exemplo(name: str) -> None:
     assert re.search(rf"^{name}=troque-", ENV_EXAMPLE, re.MULTILINE)
+
+
+NETWORKS: dict[str, dict[str, Any]] = COMPOSE["networks"]
+PYTHON = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns")
+
+
+def _networks(service: str) -> set[str]:
+    return set(SERVICES[service].get("networks") or [])
+
+
+def test_rede_worker_gpu_longe_do_postgres_do_server_e_da_web() -> None:
+    gpu = _networks("worker-gpu")
+    assert gpu == {"fila-gpu", "saida"}
+    for other in ("postgres", "server", "web", "caddy"):
+        assert not gpu & _networks(other), f"worker-gpu divide rede com {other}"
+
+
+def test_rede_dados_e_fila_gpu_internas() -> None:
+    assert NETWORKS["dados"].get("internal") is True
+    assert NETWORKS["fila-gpu"].get("internal") is True
+    for service in ("postgres", "redis", "minio"):
+        assert _networks(service) <= {"dados", "fila-gpu"}, f"{service} fora das redes internas"
+
+
+def test_rede_de_cada_servico_declarada() -> None:
+    for name, service in SERVICES.items():
+        assert service.get("networks") or service.get("network_mode"), f"{name} sem rede declarada"
+    assert SERVICES["publish-ca"]["network_mode"] == "none"
+    assert SERVICES["mdns"]["network_mode"] == "host"
+
+
+@pytest.mark.parametrize("service", PYTHON)
+def test_rede_conteiner_python_sem_capabilities(service: str) -> None:
+    assert SERVICES[service]["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in SERVICES[service]["security_opt"]
