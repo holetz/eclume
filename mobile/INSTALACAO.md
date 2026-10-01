@@ -8,12 +8,12 @@ Precisa de Android 8.0 ou mais novo.
 
 ## Baixar o APK
 
-O APK fica no próprio servidor eclume, em `https://192.168.15.199:8443/downloads/movel/`. A página
+O APK fica neste servidor eclume, em `https://<endereço-do-servidor>:8443/downloads/movel/`. A página
 **Minhas configurações → App móvel** da web mostra o botão "Baixar o APK" e um QR que abre o
 download no celular.
 
 - **O navegador do celular não confia no certificado interno do eclume.** Na primeira visita, ou
-  instale a CA do servidor (`https://192.168.15.199:8443/downloads/eclume-root.crt`, em
+  instale a CA do servidor (`https://<endereço-do-servidor>:8443/downloads/eclume-root.crt`, em
   Configurações do Android → Segurança → Criptografia e credenciais → Instalar um certificado →
   Certificado de CA), ou aceite o aviso do navegador uma vez. O app em si não precisa disso: ele
   fixa a CA do servidor por conta própria.
@@ -35,7 +35,8 @@ download no celular.
   móvel) e toque em **Confiar**. Depois, entre com o **e-mail e a senha** da sua conta na web.
 - **Pelo código da web**, sem senha: na web, abra Minhas configurações → App móvel; no app, toque
   em **Ler um código da web** e aponte a câmera para o QR. O código vale 10 minutos.
-- **Digitando o endereço**: `192.168.15.199:8443`. O app mostra a impressão digital para você
+- **Digitando o endereço**: o deste servidor, no formato `endereço:8443` (o IP ou o nome do host,
+  com quem administra o servidor). O app mostra a impressão digital para você
   conferir com a web antes de confiar.
 - Se o login disser para aceitar o aviso de responsabilidade, aceite-o na web e entre de novo.
 
