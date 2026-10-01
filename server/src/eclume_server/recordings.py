@@ -243,8 +243,8 @@ async def insert_job(
     revision: int,
     *,
     error: tuple[str, str] | None = None,
-) -> dict[str, Any]:
-    """Cria o job da revisão; devolve as `options` do `transcribe`. Com `error`, nasce falho."""
+) -> None:
+    """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho."""
     platform = (await conn.execute(select(t.platform_settings))).mappings().one()
     options = transcribe_options(platform, recording["language"])
     values: dict[str, Any] = {
@@ -259,13 +259,10 @@ async def insert_job(
     await conn.execute(insert(t.transcription_jobs).values(**values))
     # O áudio está no bucket: a revisão nova começa com o recebido (falho, se o hash divergiu).
     await set_step(conn, recording, revision, "received", "failed" if error else "done", error=error)
-    return options
 
 
-async def start_next_revision(
-    conn: AsyncConnection, recording: Row, language: str | None
-) -> tuple[int, dict[str, Any]]:
-    """Cria o job da revisão seguinte e põe a gravação na fila; devolve `(revisão, options)`.
+async def start_next_revision(conn: AsyncConnection, recording: Row, language: str | None) -> int:
+    """Cria o job da revisão seguinte e põe a gravação na fila; devolve a revisão.
 
     A revisão é uma acima da maior entre a transcrição e o último job (retranscrever e retentar).
     `recording` traz `id`, `owner_id` e `job_revision` (a linha de `recording_select`).
@@ -274,26 +271,11 @@ async def start_next_revision(
         await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording["id"]))
     ).scalar()
     revision = max(transcript_revision or 0, recording["job_revision"] or 0) + 1
-    options = await insert_job(
-        conn, {"id": recording["id"], "owner_id": recording["owner_id"], "language": language}, revision
-    )
+    await insert_job(conn, {"id": recording["id"], "owner_id": recording["owner_id"], "language": language}, revision)
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording["id"]).values(status="queued", updated_at=func.now())
     )
-    return revision, options
-
-
-async def enqueue_transcription(
-    ctx: AppContext, recording_id: UUID, revision: int, audio_key: str, options: dict[str, Any]
-) -> None:
-    """Enfileira o `transcribe`; o token do HF da plataforma vai cifrado só no payload do job.
-
-    O texto cifrado não entra em `transcription_jobs.options`: o worker o abre com a mesma chave de
-    cifra do server (docs/standards/api/jobs-transcricao.md).
-    """
-    async with system_tx(ctx.engine) as conn:
-        payload = await transcribe_payload(conn, options)
-    await ctx.queue.enqueue_transcribe(recording_id, revision, audio_key, payload)
+    return revision
 
 
 async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any]) -> dict[str, Any]:

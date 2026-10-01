@@ -393,7 +393,10 @@ def test_embeddings_so_com_a_voz_ligada_na_plataforma(
     without = upload_file(api, audio_bytes(3000))
     run(services.sql(opt_in))
     with_opt_in = upload_file(api, audio_bytes(3000))
+    # As `options` são fixadas ao criar o job; um `transcribe` por conta na GPU, então duas rodadas.
     calls = {call[0]: call[2] for call in run_gpu(services.settings)}
+    run_cpu(services.settings)
+    calls |= {call[0]: call[2] for call in run_gpu(services.settings)}
     assert calls[without["id"]]["embeddings"] is False
     assert calls[with_opt_in["id"]]["embeddings"] is True
     run_cpu(services.settings)

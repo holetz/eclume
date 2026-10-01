@@ -18,6 +18,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.dispatch import next_for
 from eclume_server.fields import mark_edited
 from eclume_server.pagination import Cursor, Limit
 from eclume_server.pipeline import current_revision
@@ -28,7 +29,6 @@ from eclume_server.recordings import (
     Status,
     cancel_transcription,
     delete_recording_of,
-    enqueue_transcription,
     get_visible,
     list_library,
     lock_recording,
@@ -248,9 +248,9 @@ async def retranscribe(
                 update(t.recordings).where(t.recordings.c.id == recording_id).values(language=body.language)
             )
         language = body.language if body is not None and body.language else row["language"]
-        revision, options = await start_next_revision(conn, row, language)
+        await start_next_revision(conn, row, language)
         refreshed = await get_visible(conn, recording_id)
-    await enqueue_transcription(ctx, recording_id, revision, row["audio_key"], options)
+    await next_for(ctx.engine, ctx.queue.pool, principal.user_id)
     return (await render(ctx, principal.user_id, [refreshed]))[0]
 
 

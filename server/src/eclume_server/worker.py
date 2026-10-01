@@ -30,6 +30,7 @@ from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
 from eclume_server.db.session import make_engine, system_tx
+from eclume_server.dispatch import dispatch_waiting, next_for_recording
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
 from eclume_server.previews import run_preview
@@ -135,6 +136,7 @@ async def ingest_transcript(
         if result.closed:
             await ctx["redis"].delete(progress_key(recording_id))
         log.info("ingest_transcript %s: %s", recording_id, result.message)
+        await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
         return f"falhou: {INGEST_FAILED}"
     if outcome.persisted or outcome.gone:
         await ctx["redis"].delete(progress_key(recording_id))
@@ -146,6 +148,8 @@ async def ingest_transcript(
         # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição.
         await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
+    # A GPU ficou livre para esta conta: o próximo job retido dela entra na fila.
+    await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
     return outcome.message
 
 
@@ -275,6 +279,7 @@ async def transcription_failed(
     if result.closed:
         await ctx["redis"].delete(progress_key(recording_id))
     log.info("transcription_failed %s (revisão %s): %s", recording_id, revision, result.message)
+    await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
     return result.message
 
 
@@ -380,6 +385,11 @@ async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     return len(reaped) + await reap_stalled_chats(ctx["engine"])
 
 
+async def dispatch_transcriptions(ctx: dict[str, Any]) -> int:
+    """Rede do despacho na vez da conta: põe na GPU o job retido de quem não tem outro lá."""
+    return len(await dispatch_waiting(ctx["engine"], ctx["redis"]))
+
+
 async def drain_storage_deletions(ctx: dict[str, Any]) -> int:
     """Tira do bucket o que a fila de exclusão guarda (`storage_deletions.py`)."""
     return await drain(ctx["engine"], ctx["storage"])
@@ -430,6 +440,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(purge_expired, hour=3, minute=40, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
+            # O job retido cujo despacho não veio (reaper, cancelamento, exclusão, janela de minutos).
+            cron(dispatch_transcriptions, second=15, run_at_startup=False, unique=True),
             cron(resume_pipelines, minute=set(range(2, 60, 5)), run_at_startup=False, unique=True),
             cron(drain_storage_deletions, second=30, run_at_startup=False, unique=True),
             cron(reconcile_storage, weekday="sun", hour=4, minute=0, run_at_startup=False, unique=True),

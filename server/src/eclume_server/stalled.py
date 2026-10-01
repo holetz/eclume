@@ -201,7 +201,9 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
         rows = (
             await conn.execute(
                 select(jobs.c.id, jobs.c.recording_id, jobs.c.revision, jobs.c.state, jobs.c.options).where(
-                    jobs.c.state.in_(["queued", "running"]), jobs.c.queued_at <= now - grace
+                    # O job retido (sem despacho) espera a vez da conta no banco: não está morto.
+                    jobs.c.state.in_(["queued", "running"]),
+                    jobs.c.dispatched_at <= now - grace,
                 )
             )
         ).all()

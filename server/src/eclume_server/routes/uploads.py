@@ -26,6 +26,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.dispatch import next_for
 from eclume_server.fields import mark_edited
 from eclume_server.markers import MAX_BATCH, MarkerInput, upsert_markers
 from eclume_server.pagination import iso
@@ -40,7 +41,7 @@ from eclume_server.problems import (
     validation_failed,
 )
 from eclume_server.quotas import check_upload
-from eclume_server.recordings import enqueue_transcription, get_visible, insert_job, render
+from eclume_server.recordings import get_visible, insert_job, render
 from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
@@ -460,7 +461,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
     if recording is not None:
         return (await render(ctx, principal.user_id, [recording]))[0]
     _require_open(row)
-    enqueue: tuple[str, dict[str, Any]] | None = None
+    dispatch = False
     async with _completing(ctx, upload_id):
         try:
             actual = await _assemble(ctx, row, body)
@@ -473,12 +474,12 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
                 recording_id, discard = row["recording_id"], False
             else:
                 _require_open(row)
-                recording_id, enqueue, discard = await _finish(conn, row, principal, actual)
+                recording_id, dispatch, discard = await _finish(conn, row, principal, actual)
             recording = await get_visible(conn, recording_id)
     if discard:
         await ctx.storage.delete_recording(row["audio_key"], row["new_recording_id"])
-    if enqueue is not None:
-        await enqueue_transcription(ctx, recording_id, 1, *enqueue)
+    if dispatch:
+        await next_for(ctx.engine, ctx.queue.pool, principal.user_id)
     return (await render(ctx, principal.user_id, [recording]))[0]
 
 
@@ -549,12 +550,11 @@ def recorded_at_source(requested: dict[str, Any], source: str) -> str:
     return "capture" if source in {"desktop", "mobile"} else "user"
 
 
-async def _finish(
-    conn: AsyncConnection, row: Row, principal: Principal, actual: str
-) -> tuple[UUID, tuple[str, dict[str, Any]] | None, bool]:
+async def _finish(conn: AsyncConnection, row: Row, principal: Principal, actual: str) -> tuple[UUID, bool, bool]:
     """Grava gravação e job do objeto montado com hash `actual`.
 
-    Devolve a gravação, o que enfileirar e se o objeto, duplicado, deve ser apagado depois do commit.
+    Devolve a gravação, se há job a despachar e se o objeto, duplicado, deve ser apagado depois do
+    commit.
     """
     key = row["audio_key"]
     matches = actual == row["sha256"]
@@ -602,7 +602,7 @@ async def _finish(
             .values(status="deduplicated", recording_id=duplicate, completed_at=now)
         )
         await _add_markers(conn, duplicate, requested, principal)
-        return duplicate, None, True
+        return duplicate, False, True
     await conn.execute(insert(t.recordings).values(**values))
     await _add_markers(conn, recording_id, requested, principal)
     # Título e tags pedidos no upload são do usuário; sem título (o nome do arquivo), o automático o troca.
@@ -619,10 +619,10 @@ async def _finish(
         await apply_type(conn, inserted, agenda_type, "edited")
     recording = {"id": recording_id, "owner_id": principal.user_id, "language": values["language"]}
     error = None if matches else ("hash_mismatch", "O SHA-256 do arquivo recebido difere do declarado no upload.")
-    options = await insert_job(conn, recording, 1, error=error)
+    await insert_job(conn, recording, 1, error=error)
     await conn.execute(
         update(t.uploads)
         .where(t.uploads.c.id == row["id"])
         .values(status="completed", recording_id=recording_id, completed_at=now)
     )
-    return recording_id, ((key, options) if matches else None), False
+    return recording_id, matches, False

@@ -149,6 +149,8 @@ def test_idioma_automatico_vai_nulo_ao_transcribe(
     upload_file(member, audio_bytes(1500), title="Idioma a detectar")
     ((_, _, options),) = run_gpu(services.settings)
     assert options["language"] is None
+    # Um `transcribe` por conta na GPU: o próximo entra depois da ingestão deste.
+    run_cpu(services.settings)
     # O idioma da gravação, quando dito, vence o automático.
     upload_file(member, audio_bytes(1600), title="Em inglês", language="en")
     ((_, _, options),) = run_gpu(services.settings)
