@@ -90,6 +90,20 @@ describe('primeira execução', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Aceite o aviso')
   })
 
+  it('sem motivo, a tela Entrar não mostra aviso', async () => {
+    abrir(estadoBase({ conexao: { fase: 'sem_credencial', servidor: SERVIDOR } }))
+    expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
+    expect(document.querySelector('.alert-warning')).toBeNull()
+  })
+
+  it('mostra por que a credencial foi apagada acima do formulário', async () => {
+    const motivo = 'O certificado guardado deste servidor tinha um certificado a mais'
+    abrir(estadoBase({ conexao: { fase: 'sem_credencial', servidor: SERVIDOR, motivo } }))
+    expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
+    const aviso = screen.getByText(motivo)
+    expect(aviso.closest('.alert-warning')).not.toBeNull()
+  })
+
   it('lê o código da web e pareia sem senha', async () => {
     const ponte = ponteFalsa(estadoBase({ conexao: { fase: 'sem_servidor' } }))
     const qr = `${SERVIDOR.url}/parear?codigo=K7Q4MX&ca=${SERVIDOR.ca_sha256}`

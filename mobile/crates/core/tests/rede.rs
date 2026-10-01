@@ -657,3 +657,42 @@ fn credencial_revogada_na_leitura_volta_a_entrar() {
         EstadoConexao::SemCredencial { .. }
     ));
 }
+
+/// Reabre o núcleo conectado com `ca` no lugar do `ca.pem`.
+fn reaberto_com_ca(nome: &str, ca: &str) -> (eclume_mobile_core::Core, comum::Limpa) {
+    use eclume_mobile_core::{trancar, Core};
+
+    let (nucleo, roteiro, guard) = nucleo_conectado(nome);
+    let dirs = trancar(&nucleo).unwrap().dirs().clone();
+    drop(nucleo);
+    std::fs::write(dirs.ca(), ca).unwrap();
+    let transportes = Arc::new(comum::TransportesFalsos(roteiro));
+    let core = Core::abrir(dirs, "0.1.0", transportes).unwrap();
+    (core, guard)
+}
+
+#[test]
+fn ca_guardada_com_certificado_a_mais_pede_nova_entrada() {
+    use eclume_mobile_core::conexao::EstadoConexao;
+
+    let outra = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    let (core, _guard) = reaberto_com_ca("ca-a-mais", &format!("{}{outra}", comum::CA_PEM));
+    let EstadoConexao::SemCredencial { motivo, .. } = core.estado().unwrap().conexao else {
+        panic!("esperava a tela Entrar");
+    };
+    assert_eq!(motivo.as_deref(), Some(eclume_sync::pin::CA_TRIMMED));
+    assert!(!core.dirs().token().exists());
+    let ca = std::fs::read_to_string(core.dirs().ca()).unwrap();
+    assert_eq!(ca, comum::CA_PEM);
+
+    // Com um certificado só, nada muda.
+    let (core, _guard) = reaberto_com_ca("ca-unica", comum::CA_PEM);
+    assert!(matches!(
+        core.estado().unwrap().conexao,
+        EstadoConexao::Conectado { .. }
+    ));
+    assert_eq!(
+        std::fs::read_to_string(core.dirs().ca()).unwrap(),
+        comum::CA_PEM
+    );
+}

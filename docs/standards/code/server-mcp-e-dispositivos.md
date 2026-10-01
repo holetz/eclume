@@ -7,7 +7,7 @@ tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
 timestamp: 2026-09-28
 audience: both
 authority: current
-source: holetz/eclume#35, holetz/eclume#57
+source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#102
 maintainer: holetz
 ---
 
@@ -172,9 +172,19 @@ fixam a **raiz**, nunca o folha, sem instalar a CA no sistema:
    que sai da web autenticada) ou do TXT do mDNS (não autenticado: antes de mandar a senha, a
    pessoa confirma a impressão digital, como no endereço digitado);
 2. baixar `<url>/downloads/eclume-root.crt` numa conexão sem verificação;
-3. conferir o SHA-256 do DER; divergiu, descartar e parar;
-4. gravar o PEM e usá-lo como `ca_path` (raízes do SO + esta), o caminho que o `transport.rs` e o
-   updater do desktop já honram.
+3. conferir o SHA-256 do DER do **primeiro** certificado do arquivo (o mesmo que o
+   `server_info.py` publica em `ca_sha256`); divergiu, descartar e parar;
+4. gravar **só esse certificado** (o bloco PEM dele, recortado e relido com o mesmo DER) e confiar
+   só nele (`TrustMode::Pinned`), sem somá-lo às raízes do SO: uma cadeia que não leva à raiz
+   conferida é recusada mesmo que o SO confie nela. Certificados a mais no arquivo servido nunca
+   chegam ao disco, e um PEM fixado com mais de um é erro, nunca confiança ampliada.
+
+O primeiro certificado do `eclume-root.crt` é a raiz que assina a cadeia servida (o deploy publica
+o `root.crt` do Caddy); quem trocar a raiz mantém isso. Um app que já guardou uma CA fixada com
+mais de um certificado a regrava só com o primeiro na abertura, apaga a credencial local e pede
+nova entrada, mandando trocar a senha e desvincular a entrada antiga na web (holetz/eclume#102):
+nenhum servidor legítimo publica mais de um, então o caso é sinal de interceptação na primeira
+conexão.
 
 Com endereço digitado e sem impressão digital, o app confia na primeira CA (TOFU) e mostra a
 impressão digital ao usuário. A troca do código de pareamento e o login só acontecem depois da

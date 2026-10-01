@@ -15,6 +15,7 @@ use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
 };
+use eclume_sync::transport::TrustMode;
 use eclume_sync::{Client, PatSource, PatStore, QueueWait, RetryPolicy, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
@@ -500,6 +501,14 @@ impl AppState {
     /// config só é gravada quando a versão aberta muda; ilegível, é guardada ao lado e a janela
     /// avisa.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self> {
+        Self::open_with(data_dir, config_dir, PatStore::new(config_dir))
+    }
+
+    /// [`Self::open`] com o cofre do PAT dado (os testes passam um sem o chaveiro do SO). Uma CA
+    /// fixada com certificados a mais é regravada com um só ([`account::repair_pinned`]); a
+    /// credencial guardada pode ter passado por um interceptador, então é apagada e a janela pede
+    /// para entrar de novo.
+    fn open_with(data_dir: &Path, config_dir: &Path, pat: PatStore) -> Result<Self> {
         let queue = Queue::open(&data_dir.join("queue.sqlite"))?;
         let recovered = session::recover(&queue)?;
         let config_path = config_dir.join("config.json");
@@ -511,12 +520,26 @@ impl AppState {
                 log::warn!("falha ao registrar a versão aberta: {err:#}");
             }
         }
+        let ca_trimmed = account::repair_pinned(config_dir, &config).unwrap_or_else(|err| {
+            log::warn!("falha ao conferir a CA fixada: {err:#}");
+            false
+        });
+        if ca_trimmed {
+            log::warn!("{}", eclume_sync::pin::CA_TRIMMED);
+            if let Err(err) = pat.clear() {
+                log::warn!("falha ao apagar a credencial: {err:#}");
+            }
+            config.account = None;
+            if let Err(err) = config.save(&config_path) {
+                log::warn!("falha ao gravar a config sem a conta: {err:#}");
+            }
+        }
         let state = Self::new(
             queue,
             RecorderConfig::new(data_dir.join("gravacoes")),
             config_path,
             config,
-            PatStore::new(config_dir),
+            pat,
         );
         let mut notices = Vec::new();
         if let Some(copy) = unreadable {
@@ -534,6 +557,11 @@ impl AppState {
         let mut inner = state.inner()?;
         inner.update_to_notify = just_updated;
         inner.notice = (!notices.is_empty()).then(|| notices.join(" · "));
+        if ca_trimmed {
+            // O mesmo estado da CA trocada: sync parado e a primeira execução com o aviso.
+            inner.ca_changed = true;
+            inner.sync_notice = Some(eclume_sync::pin::CA_TRIMMED.into());
+        }
         drop(inner);
         Ok(state)
     }
@@ -969,7 +997,7 @@ impl AppState {
         Ok(Some(UploaderConfig {
             api_url,
             pat,
-            ca_path: inner.config.ca_path.clone(),
+            trust: account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()),
             client_version: CLIENT_VERSION.to_string(),
         }))
     }
@@ -1204,9 +1232,11 @@ impl AppState {
         Ok(url)
     }
 
-    /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].
-    pub fn ca_path(&self) -> Result<Option<PathBuf>> {
-        Ok(self.inner()?.config.ca_path.clone())
+    /// Em quem o TLS confia ([`account::trust_for`]), lendo só a config, sem passar pelo
+    /// chaveiro como [`Self::settings`]: o updater roda fora da thread do chaveiro.
+    pub fn trust(&self) -> Result<TrustMode> {
+        let inner = self.inner()?;
+        Ok(account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()))
     }
 
     pub fn settings(&self) -> Result<SettingsView> {
@@ -1445,7 +1475,7 @@ impl AppState {
             retries: 0,
             ..RetryPolicy::default()
         };
-        let transport = net.verified(config.ca_path.as_deref())?;
+        let transport = net.verified(&config.trust)?;
         let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
         let last_upload_at = self
             .lock_queue()?
@@ -2599,7 +2629,9 @@ mod tests {
         );
         let uploader = state.uploader_config().unwrap().unwrap();
         assert_eq!(uploader.pat, SECRET);
-        assert_eq!(uploader.ca_path, Some(pinned));
+        // A CA fixada pela primeira execução é a única em que o sync confia.
+        assert_eq!(uploader.trust, TrustMode::Pinned(pinned.clone()));
+        assert_eq!(state.trust().unwrap(), TrustMode::Pinned(pinned));
         let saved = Config::load(&dir.join("config.json"));
         assert_eq!(saved.account.unwrap().token_id.as_deref(), Some("t-1"));
 
@@ -2639,6 +2671,64 @@ mod tests {
         clear.clear_pat = true;
         state.save_settings(clear).unwrap();
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Abre o estado com uma conta, a credencial em arquivo e `pem` como a CA fixada.
+    fn opened_with_pinned(name: &str, pem: &str) -> (AppState, PathBuf, PathBuf) {
+        use crate::account::tests::{SECRET, URL};
+        use eclume_sync::pat::PAT_FILE;
+
+        let dir = std::env::temp_dir().join(format!("eclume-state-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pinned = dir.join(eclume_sync::pin::PINNED_FILE);
+        std::fs::write(&pinned, pem).unwrap();
+        std::fs::write(dir.join(PAT_FILE), SECRET).unwrap();
+        Config {
+            web_url: URL.into(),
+            ca_path: Some(pinned.clone()),
+            account: Some(Account {
+                email: "ana@exemplo.com.br".into(),
+                token_id: Some("t-1".into()),
+                server_name: None,
+            }),
+            ..Config::default()
+        }
+        .save(&dir.join("config.json"))
+        .unwrap();
+        let pat = PatStore::with_backend(dir.join(PAT_FILE), Box::new(NoKeyring), None);
+        let state = AppState::open_with(&dir, &dir, pat).unwrap();
+        (state, dir, pinned)
+    }
+
+    #[test]
+    fn ca_fixada_com_certificado_a_mais_pede_nova_entrada_na_abertura() {
+        use crate::account::tests::CA;
+
+        let other = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+        let (state, dir, pinned) = opened_with_pinned("ca-a-mais", &format!("{CA}{other}"));
+        let view = state.view().unwrap();
+        assert_eq!(view.connection, Connection::FirstRun);
+        assert_eq!(
+            view.sync_notice.as_deref(),
+            Some(eclume_sync::pin::CA_TRIMMED)
+        );
+        assert!(state.uploader_config().unwrap().is_none());
+        assert!(!dir.join(eclume_sync::pat::PAT_FILE).exists());
+        assert_eq!(Config::load(&dir.join("config.json")).account, None);
+        assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
+        drop(state);
+        std::fs::remove_dir_all(dir).unwrap();
+
+        // Com um certificado só, nada muda e ninguém precisa entrar de novo.
+        let (state, dir, pinned) = opened_with_pinned("ca-unica", CA);
+        let view = state.view().unwrap();
+        assert_eq!(view.connection, Connection::Account);
+        assert_eq!(view.sync_notice, None);
+        assert!(state.uploader_config().unwrap().is_some());
+        assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
+        drop(state);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

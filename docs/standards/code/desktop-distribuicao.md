@@ -7,7 +7,7 @@ tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90, holetz/eclume#109, holetz/eclume#126, holetz/eclume#102
 maintainer: holetz
 ---
 
@@ -212,10 +212,18 @@ abertura seguinte.
 - Só baixa e instala com o app **ocioso** (nem gravando, nem sincronizando) e só reinicia se
   continuar ocioso. No Windows, o instalador roda em modo `passive` e reabre o app. Build de
   depuração não se atualiza.
-- O TLS é o do sistema (rustls com `rustls-platform-verifier`): a CA raiz do Caddy instalada no
-  cliente vale para o updater. Desde a 0.1.1, a **CA extra** da config do sync (`ca_path`) também
-  vale: é somada às do sistema no cliente do updater por `UpdaterBuilder::configure_client` +
-  `tls_certs_merge`. Uma CA ilegível só gera aviso no log; a checagem segue com as do sistema.
+- O TLS segue a confiança do sync (`AppState::trust`, que lê só a config; ver
+  [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)), aplicada por
+  `UpdaterBuilder::configure_client` (holetz/eclume#102):
+  - **CA fixada** pela primeira execução: `tls_certs_only` com o único certificado dela, sem as
+    raízes do sistema. Uma CA fixada ilegível, ou com mais de um certificado, faz a checagem
+    **não rodar** (fica no log), sem cair nas raízes do sistema;
+  - **CA escolhida à mão** em Servidor · Avançado: `tls_certs_merge`, somada às do sistema; ilegível,
+    só gera aviso no log e a checagem segue com as do sistema;
+  - **sem CA própria**: o cliente padrão (rustls com `rustls-platform-verifier`), que enxerga a CA
+    instalada no SO.
+
+  O pacote continua conferido pela minisign; o TLS fixado protege o `latest.json` e o download.
   Nada de `dangerousAcceptInvalidCerts`.
 - `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor: o plugin fica fixado
   em `2.12` e o `reqwest` do app é o mesmo `0.13`, sem features próprias.

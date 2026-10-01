@@ -95,7 +95,7 @@ function Tela({
       return <Endereco conferir={conexao} ir={ir} />
     case 'sem_credencial':
       if (rota === '/ler-codigo') return <LerCodigo ir={ir} voltarPara="/entrar" />
-      return <Entrar servidor={conexao.servidor} ir={ir} />
+      return <Entrar servidor={conexao.servidor} motivo={conexao.motivo} ir={ir} />
     case 'conectado':
       if (rota === '/configuracoes') return <Configuracoes ir={ir} espacoLivre={estado.espaco_livre} />
       if (rota.startsWith('/gravacao/')) return <Detalhe id={decodeURIComponent(rota.slice(10))} ir={ir} />

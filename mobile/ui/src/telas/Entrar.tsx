@@ -3,8 +3,16 @@ import { Voltar } from '../app/Voltar'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
 import type { Servidor } from '../ponte/tipos'
 
-/** Entrar com a conta da web; o servidor já está fixado. */
-export function Entrar({ servidor, ir }: { servidor: Servidor; ir: (rota: string) => void }) {
+/** Entrar com a conta da web; o servidor já está fixado. `motivo`: por que a credencial sumiu. */
+export function Entrar({
+  servidor,
+  motivo,
+  ir,
+}: {
+  servidor: Servidor
+  motivo?: string
+  ir: (rota: string) => void
+}) {
   const ponte = usePonte()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
@@ -39,6 +47,13 @@ export function Entrar({ servidor, ir }: { servidor: Servidor; ir: (rota: string
           <span>{new URL(servidor.url).host}</span>
         </div>
       </div>
+      {motivo && (
+        <div className="m-section">
+          <div className="alert alert-warning">
+            <span>{motivo}</span>
+          </div>
+        </div>
+      )}
       <form className="m-section m-fill gap-4 alinha-topo" onSubmit={enviar}>
         <div className="field">
           <label htmlFor="email">E-mail</label>

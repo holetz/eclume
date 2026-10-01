@@ -10,8 +10,11 @@
 //! 3. **Endereço digitado**: sem impressão digital esperada (TOFU), a pessoa confere os blocos com
 //!    a web antes de "Confiar".
 //!
-//! Depois de fixada, só a CA do `ca.pem` vale (`TrustMode::Pinned`), e o `GET /api/v1/server` já
-//! fixado confirma o `ca_sha256`. O token do dispositivo fica no arquivo privado fora do backup.
+//! Depois de fixada, só a CA do `ca.pem` vale (`TrustMode::Pinned`, exatamente um certificado: o
+//! `pin.rs` grava só o primeiro, o da impressão digital), e o `GET /api/v1/server` já fixado
+//! confirma o `ca_sha256`. O token do dispositivo fica no arquivo privado fora do backup. Um
+//! `ca.pem` antigo com certificados a mais é regravado com um só na abertura (`Core::abrir`), e a
+//! credencial é apagada com o motivo [`pin::CA_TRIMMED`] (holetz/eclume#102).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -90,9 +93,12 @@ pub enum EstadoConexao {
         url: String,
         impressao: String,
     },
-    /// Servidor fixado, sem credencial (ou o servidor a recusou com 401): tela Entrar.
+    /// Servidor fixado, sem credencial (ou o servidor a recusou com 401): tela Entrar. O
+    /// `motivo`, quando há, explica por que a credencial foi apagada.
     SemCredencial {
         servidor: Servidor,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        motivo: Option<String>,
     },
     Conectado {
         servidor: Servidor,
@@ -137,6 +143,8 @@ pub struct Conexao {
     token: Option<String>,
     pendente: Option<CaPendente>,
     sem_credencial: bool,
+    /// Por que a credencial foi apagada, para a tela Entrar; some depois de entrar.
+    motivo: Option<String>,
 }
 
 impl Conexao {
@@ -156,6 +164,7 @@ impl Conexao {
             token,
             pendente: None,
             sem_credencial: false,
+            motivo: None,
         }
     }
 
@@ -171,7 +180,10 @@ impl Conexao {
         };
         match self.token() {
             Ok(Some(_)) if !self.sem_credencial => EstadoConexao::Conectado { servidor },
-            _ => EstadoConexao::SemCredencial { servidor },
+            _ => EstadoConexao::SemCredencial {
+                servidor,
+                motivo: self.motivo.clone(),
+            },
         }
     }
 
@@ -329,6 +341,7 @@ impl Conexao {
         self.credencial.save(&credencial.secret)?;
         self.token = Some(credencial.secret.clone());
         self.sem_credencial = false;
+        self.motivo = None;
         Ok(())
     }
 
@@ -337,6 +350,12 @@ impl Conexao {
     pub fn perdeu_credencial(&mut self) -> Result<()> {
         self.sem_credencial = true;
         self.esquecer_token()
+    }
+
+    /// A credencial foi apagada por `motivo`, que a tela Entrar mostra.
+    pub fn perdeu_credencial_por(&mut self, motivo: &str) -> Result<()> {
+        self.motivo = Some(motivo.to_string());
+        self.perdeu_credencial()
     }
 
     /// "Sair e esquecer o servidor": apaga o token, a CA e o servidor da config. As gravações

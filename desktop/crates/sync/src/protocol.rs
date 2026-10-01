@@ -231,12 +231,13 @@ impl Client {
         self.call_json("falha ao ler o idioma da conta", request)
     }
 
-    /// Monta o cliente real (TLS com a CA extra, a versão no `User-Agent`) a partir da config do
-    /// uploader: o mesmo que sobe as gravações lê o resumo delas.
+    /// Monta o cliente real (TLS pelo `trust` da config, a versão no `User-Agent`) a partir da
+    /// config do uploader: o mesmo que sobe as gravações lê o resumo delas.
     pub fn from_config(config: &crate::uploader::UploaderConfig) -> Result<Self> {
-        let transport = crate::transport::UreqTransport::new(
-            config.ca_path.as_deref(),
+        let transport = crate::transport::UreqTransport::with_trust(
+            &config.trust,
             &config.client_version,
+            crate::transport::REQUEST_TIMEOUT,
         )?;
         Self::new(
             Arc::new(transport),
