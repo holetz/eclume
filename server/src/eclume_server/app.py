@@ -16,6 +16,7 @@ from eclume_server import __version__
 from eclume_server.config import Settings, get_settings
 from eclume_server.context import AppContext
 from eclume_server.db.session import make_engine
+from eclume_server.limits import BodyLimitMiddleware
 from eclume_server.mcp_server.app import mount_mcp
 from eclume_server.problems import install_handlers
 from eclume_server.queue import Queue
@@ -93,5 +94,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_handlers(app)
     include_routes(app)
     mcp = mount_mcp(app)
+    app.add_middleware(BodyLimitMiddleware, part_size=settings.upload_part_size)
     app.add_middleware(RequestIdMiddleware)
     return app
