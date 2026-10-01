@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -104,6 +104,11 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   da conta). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
   credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
+- **Idioma da transcrição** (desde a 2.20.0): `GET /me/transcription` (sessão ou PAT com
+  `recordings:read`) devolve o idioma preferido da conta (`null` é o padrão do servidor) e
+  `platform_default`; o `PATCH` só com sessão. `language` no upload, no `PATCH` da gravação e no
+  retranscrever aceita `auto` (afrouxamento de entrada, aditivo); a ordem de resolução está em
+  [jobs-transcricao.md](jobs-transcricao.md).
 - **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha
   passageira (worker perdido, job sumido ou parado, falta de VRAM), que retranscrever ou
   `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
