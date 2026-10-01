@@ -36,3 +36,16 @@ Ferramenta de trabalho em desktop, na LAN, com sessões longas de leitura e revi
 ## Brand Commitments
 
 Paleta linho e nogueira do ecossistema Jane, Archivo + IBM Plex Mono, raio zero, fios de 2px, terracota só para gravação e falha; produto em pt-BR.
+
+## Product Principles
+
+Regras que valem para qualquer tela; uma proposta que as contrarie está desenhando outro produto.
+
+- **Conta isolada.** Cada conta vê só o que é dela; não há compartilhamento entre contas.
+- **Sem transcrição ao vivo.** O eclume trabalha sobre a gravação terminada.
+- **Nunca grava sem mostrar.** Toda gravação, em qualquer aparelho, tem indicação visível.
+- **O admin não vê conteúdo.** Quem administra cuida da configuração e da saúde da plataforma, sem
+  acesso às gravações, transcrições e resumos das contas.
+- **Quem grava responde pelo consentimento** de quem é gravado, pelo aceite do aviso no cadastro.
+- **O aparelho grava, o servidor processa.** O aparelho grava e envia; transcrever, classificar e
+  resumir é trabalho do servidor.
