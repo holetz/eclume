@@ -453,8 +453,10 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
     """
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
-        if row["status"] in {"completed", "deduplicated"}:
-            return (await render(ctx, principal.user_id, [await get_visible(conn, row["recording_id"])]))[0]
+        done = row["status"] in {"completed", "deduplicated"}
+        recording = await get_visible(conn, row["recording_id"]) if done else None
+    if recording is not None:
+        return (await render(ctx, principal.user_id, [recording]))[0]
     _require_open(row)
     enqueue: tuple[str, dict[str, Any]] | None = None
     async with _completing(ctx, upload_id):
