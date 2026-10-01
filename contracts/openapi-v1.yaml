@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.10.0
+  version: 2.11.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -4883,6 +4883,8 @@ components:
           type: string
           pattern: "^sha256:[0-9a-f]{64}$"
         owner:
+          description: "Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          deprecated: true
           $ref: "./transcript.schema.json#/$defs/UserRef"
         tags:
           type: array
@@ -5082,6 +5084,8 @@ components:
           type: string
           format: date-time
         owner:
+          description: "Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          deprecated: true
           $ref: "./transcript.schema.json#/$defs/UserRef"
         speakers:
           type: array
@@ -5184,6 +5188,8 @@ components:
                   minimum: 0
             - type: "null"
         created_by:
+          description: "Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          deprecated: true
           oneOf:
             - $ref: "./transcript.schema.json#/$defs/UserRef"
             - type: "null"
@@ -6455,7 +6461,8 @@ components:
           type: [string, "null"]
           format: uuid
         created_by:
-          description: Id do usuário que pediu a geração, editou ou pediu o ajuste.
+          description: "Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          deprecated: true
           type: [string, "null"]
           format: uuid
         created_at:
@@ -6617,7 +6624,8 @@ components:
                   type: string
             - type: "null"
         created_by:
-          description: Id do usuário que fez o pedido.
+          description: "Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          deprecated: true
           type: [string, "null"]
           format: uuid
         created_at:

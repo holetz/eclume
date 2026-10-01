@@ -20,12 +20,12 @@ export function FaixaDeRede({ rede, pendentes }: { rede: EstadoRede; pendentes: 
   switch (rede.estado) {
     case 'syncing':
       return (
-        <div className="m-net" style={{ display: 'grid', gap: 6, padding: '10px 20px' }}>
+        <div className="m-net m-net-detalhe">
           <div className="linha-entre">
             <span className="status-line" data-status="syncing">
               Sincronizando {rede.i} de {rede.n}
             </span>
-            <span className="text-muted mono" style={{ fontSize: 12 }}>
+            <span className="text-muted mono texto-12">
               {rede.pct} %{rede.bytes_s > 0 ? ` · ${taxa(rede.bytes_s)}` : ''}
             </span>
           </div>
@@ -50,7 +50,7 @@ export function FaixaDeRede({ rede, pendentes }: { rede: EstadoRede; pendentes: 
           <span className="status-line" data-status="away">
             O certificado do servidor mudou
           </span>
-          <span className="text-muted" style={{ fontSize: 13 }}>
+          <span className="text-muted texto-13">
             Nada sobe até parear de novo
           </span>
         </div>
@@ -62,7 +62,7 @@ export function FaixaDeRede({ rede, pendentes }: { rede: EstadoRede; pendentes: 
             Fora da rede do eclume
           </span>
           {pendentes > 0 && (
-            <span className="text-muted" style={{ fontSize: 13 }}>
+            <span className="text-muted texto-13">
               {pendentes} aguardando
             </span>
           )}

@@ -16,7 +16,7 @@ from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.pipeline import FAILED_STEP, record_gpu_steps, set_step
 from eclume_server.problems import not_found
-from eclume_server.serialize import Row, user_ref
+from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from eclume_server.storage import Storage
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 _SPEAKER_ID = re.compile(r"^S[0-9]+$")
 log = logging.getLogger(__name__)
 
@@ -370,10 +370,8 @@ def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
         r.kind,
         r.recorded_at_source,
         r.owner_id,
-        t.users.c.name.label("owner_name"),
-    ).select_from(
-        t.transcripts.join(t.recordings, r.id == t.transcripts.c.recording_id).join(t.users, t.users.c.id == r.owner_id)
-    )
+        requester_name().label("owner_name"),
+    ).select_from(t.transcripts.join(t.recordings, r.id == t.transcripts.c.recording_id))
 
 
 def speakers_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy

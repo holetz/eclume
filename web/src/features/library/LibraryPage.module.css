@@ -55,7 +55,9 @@
 }
 
 /* A semana rola dentro do próprio contêiner em tela estreita; a página não rola de lado. */
+/* A altura da janela da semana vem medida do componente (`--altura-visivel`); sem medida, a natural. */
 .weekScroll {
+  height: var(--altura-visivel, auto);
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -118,6 +120,29 @@
 
 .week {
   min-width: 720px;
+}
+
+/* O evento é um item de lista com o link ocupando a caixa: o DS desenha o `.cal-event` no item, e o
+   link herda a grade dele; o foco do teclado aparece no item. */
+.event:global(.cal-event) {
+  padding: 0;
+}
+
+.event:global(.cal-event):focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.eventLink {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  color: inherit;
+  text-decoration: none;
+  outline: none;
 }
 
 /* Eventos sobrepostos dividem a coluna em faixas (o DS não trata sobreposição). */

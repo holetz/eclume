@@ -22,9 +22,8 @@ export function Medidor({ nivel, pausado }: { nivel: number; pausado: boolean })
 
   return (
     <div
-      className="meter meter-lg"
+      className={pausado ? 'meter meter-lg medidor-pausado' : 'meter meter-lg'}
       aria-hidden="true"
-      style={pausado ? { color: 'var(--color-divider)' } : undefined}
     >
       {barras.map((altura, i) => (
         <i key={i} style={{ ['--h' as string]: `${Math.max(4, Math.round(altura * 100))}%` }} />

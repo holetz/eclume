@@ -184,13 +184,21 @@ class Storage:
 
     async def head_object(self, key: str) -> bool:
         """Se o objeto existe."""
+        return await self.object_size(key) is not None
+
+    async def object_size(self, key: str) -> int | None:
+        """O tamanho do objeto em bytes, ou `None` se ele não existe."""
         try:
-            await run_in_threadpool(self._s3.head_object, Bucket=self.bucket, Key=key)
+            response = await run_in_threadpool(self._s3.head_object, Bucket=self.bucket, Key=key)
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in {"404", "NoSuchKey", "NotFound"}:
-                return False
+                return None
             raise
-        return True
+        return response["ContentLength"]
+
+    async def copy_object(self, source: str, target: str) -> None:
+        """Copia o objeto dentro do bucket, no servidor (cópia gerenciada, em partes se grande)."""
+        await run_in_threadpool(self._s3.copy, {"Bucket": self.bucket, "Key": source}, self.bucket, target)
 
     async def list_objects(self, prefix: str) -> list[StoredObject]:
         """Os objetos sob `prefix`, com a data da última escrita."""

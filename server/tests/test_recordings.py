@@ -446,3 +446,19 @@ def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Ap
     deleter = session.pat("recordings:delete")
     assert deleter.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
     assert session.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
+
+
+def test_dono_obsoleto_e_o_proprio_usuario_sem_join(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    from eclume_server.recordings import recording_select  # noqa: PLC0415
+    from eclume_server.transcripts import transcript_select  # noqa: PLC0415
+
+    account = make_user(name="Mariana Couto")
+    api = as_user(account)
+    recording = upload_file(api, audio_bytes(106))
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["owner"] == {"id": str(account.user_id), "name": "Mariana Couto"}
+    # O nome vem do usuário da transação, não de um join com `users` por linha.
+    for query in (recording_select(), transcript_select()):
+        assert "JOIN users" not in str(query)

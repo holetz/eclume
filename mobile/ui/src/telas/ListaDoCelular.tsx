@@ -36,12 +36,12 @@ export function ListaDoCelular({
     <div className="m-section m-fill m-rolagem">
       <div className="linha-entre">
         <span className="kicker">Neste celular</span>
-        <span className="text-muted" style={{ fontSize: 12 }}>
+        <span className="text-muted texto-12">
           {resumo}
         </span>
       </div>
       {gravacoes.length === 0 ? (
-        <p className="text-muted" style={{ margin: 0, fontSize: 14 }}>
+        <p className="text-muted sem-margem texto-14">
           Nenhuma gravação ainda.
         </p>
       ) : (
