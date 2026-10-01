@@ -17,6 +17,7 @@ from typing import Any
 from arq.connections import RedisSettings
 from arq.worker import func
 
+from eclume_engines.fila import desserializar
 from eclume_engines.vram import VramMonitor
 from eclume_worker.config import GPU_QUEUE, WorkerConfig
 from eclume_worker.health import heartbeat_loop, withdraw
@@ -86,6 +87,8 @@ class WorkerSettings:
     # deploy drena o worker GPU sem matar transcrição em curso. O `stop_grace_period` do compose
     # cobre o `stop -t` do deploy.
     job_completion_wait = CONFIG.job_timeout_seconds
+    # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e o pickle antigo sem globais.
+    job_deserializer = desserializar
     redis_settings = RedisSettings.from_dsn(CONFIG.redis_url)
     on_startup = startup
     on_shutdown = shutdown

@@ -1,6 +1,7 @@
 """Pré-processamento com o ffmpeg de verdade, sobre áudios sintéticos (`lavfi`).
 
-Sem ffmpeg no PATH (a estação Windows), o módulo pula; no host e na imagem, roda.
+Sem ffmpeg no PATH (a estação Windows), esses testes pulam; no host e na imagem, rodam. A escolha do
+contêiner pelos bytes iniciais não precisa de ffmpeg e roda sempre.
 """
 
 from __future__ import annotations
@@ -18,13 +19,14 @@ from eclume_worker.preprocess import (
     PREPROCESS_FAILED,
     WARN_RNNOISE_MODEL_MISSING,
     PreprocessError,
+    demuxer,
     preprocess,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="sem ffmpeg no PATH")
+needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="sem ffmpeg no PATH")
 
 CONFIG: dict[str, Any] = {
     "denoise": {"enabled": True, "method": "afftdn", "strength": 0.6},
@@ -57,6 +59,7 @@ def _steps(result: Any) -> dict[str, dict[str, Any]]:
     return {step["step"]: step for step in result.steps}
 
 
+@needs_ffmpeg
 def test_corta_o_silencio_e_converte_para_16k_mono(tmp_path: Path):
     src = _make(tmp_path / "fala.ogg", SPEECH)
     result = preprocess(src, tmp_path, CONFIG, None)
@@ -76,6 +79,7 @@ def test_corta_o_silencio_e_converte_para_16k_mono(tmp_path: Path):
     assert result.info()["offset_ms"] == result.offset_ms
 
 
+@needs_ffmpeg
 def test_sem_modelo_do_rnnoise_usa_afftdn_com_aviso(tmp_path: Path):
     src = _make(tmp_path / "fala.ogg", SPEECH)
     config = {**CONFIG, "denoise": {"enabled": True, "method": "rnnoise", "strength": 0.5}}
@@ -84,6 +88,7 @@ def test_sem_modelo_do_rnnoise_usa_afftdn_com_aviso(tmp_path: Path):
     assert result.warnings == [WARN_RNNOISE_MODEL_MISSING]
 
 
+@needs_ffmpeg
 def test_falha_da_cadeia_cai_para_so_o_formato(tmp_path: Path):
     src = _make(tmp_path / "fala.ogg", SPEECH)
     broken = tmp_path / "quebrado.rnnn"
@@ -98,6 +103,7 @@ def test_falha_da_cadeia_cai_para_so_o_formato(tmp_path: Path):
     assert _wav(result.paths[0])[:2] == (1, 16_000)
 
 
+@needs_ffmpeg
 def test_estereo_de_duas_fontes_separa_os_canais(tmp_path: Path):
     graph = (
         "anullsrc=r=44100:cl=mono:d=1,asplit[s1][s2];sine=f=300:r=44100:d=2[v1];sine=f=900:r=44100:d=2[v2];"
@@ -111,12 +117,14 @@ def test_estereo_de_duas_fontes_separa_os_canais(tmp_path: Path):
     assert len({round(_wav(path)[2], 2) for path in result.paths}) == 1
 
 
+@needs_ffmpeg
 def test_mono_duplicado_nao_separa(tmp_path: Path):
     src = _make(tmp_path / "duplicado.ogg", SPEECH + ",pan=stereo|c0=c0|c1=c0")
     result = preprocess(src, tmp_path, CONFIG, None)
     assert (result.split, _steps(result)["split_channels"]["reason"]) == (False, "dual_mono")
 
 
+@needs_ffmpeg
 def test_tudo_desligado_so_converte(tmp_path: Path):
     src = _make(tmp_path / "fala.ogg", SPEECH)
     result = preprocess(src, tmp_path, None, None)
@@ -132,6 +140,7 @@ def test_tudo_desligado_so_converte(tmp_path: Path):
     assert _wav(result.paths[0])[2] == pytest.approx(7.0, abs=0.2)
 
 
+@needs_ffmpeg
 def test_audio_que_nao_abre(tmp_path: Path):
     src = tmp_path / "lixo.ogg"
     src.write_bytes(b"nao e audio" * 100)
@@ -140,6 +149,7 @@ def test_audio_que_nao_abre(tmp_path: Path):
     assert info.value.code == AUDIO_DECODE_FAILED
 
 
+@needs_ffmpeg
 def test_corte_que_falha_num_canal_nao_corta_nenhum(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     graph = (
         "anullsrc=r=44100:cl=mono:d=2,asplit[s1][s2];sine=f=300:r=44100:d=2[v1];sine=f=900:r=44100:d=2[v2];"
@@ -149,12 +159,12 @@ def test_corte_que_falha_num_canal_nao_corta_nenhum(tmp_path: Path, monkeypatch:
     real_run = module._run
     trims: list[str] = []
 
-    def second_trim_fails(*args: str) -> subprocess.CompletedProcess[str]:
+    def second_trim_fails(*args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if any("atrim=" in arg for arg in args):
             trims.append(args[-1])
             if len(trims) == 2:
                 return subprocess.CompletedProcess(args, 1, "", "falha simulada")
-        return real_run(*args)
+        return real_run(*args, **kwargs)
 
     monkeypatch.setattr(module, "_run", second_trim_fails)
     result = preprocess(src, tmp_path, CONFIG, None)
@@ -163,3 +173,93 @@ def test_corte_que_falha_num_canal_nao_corta_nenhum(tmp_path: Path, monkeypatch:
     # Os dois canais ficam inteiros (4 s), e nenhum temporário sobra.
     assert [round(_wav(path)[2]) for path in result.paths] == [4, 4]
     assert not list(tmp_path.glob("*.trim.wav"))
+
+
+ACEITOS = {
+    "ogg": b"OggS\x00\x02" + bytes(6),
+    "webm": b"\x1a\x45\xdf\xa3\x9f\x42\x86\x81\x01\x42\xf7\x81",
+    "m4a": b"\x00\x00\x00\x20ftypM4A ",
+    "mov": b"\x00\x00\x00\x14ftypqt  ",
+    "wav": b"RIFF\x24\x08\x00\x00WAVE",
+    "flac": b"fLaC\x00\x00\x00\x22" + bytes(4),
+    "mp3-id3": b"ID3\x04\x00\x00" + bytes(6),
+    "mp3": b"\xff\xfb\x90\x64" + bytes(8),
+    "aac": b"\xff\xf1\x50\x80" + bytes(8),
+}
+DEMUXER = {
+    "ogg": "ogg",
+    "webm": "matroska",
+    "m4a": "mov",
+    "mov": "mov",
+    "wav": "wav",
+    "flac": "flac",
+    "mp3-id3": "mp3",
+    "mp3": "mp3",
+    "aac": "aac",
+}
+RECUSADOS = {
+    "hls": b"#EXTM3U\n#EXT-X-VERSION:3\nhttp://exemplo/a.ts\n",
+    "concat": b"ffconcat version 1.0\nfile /etc/passwd\n",
+    "sdp": b"v=0\no=- 0 0 IN IP4 127.0.0.1\nm=audio 5004 RTP/AVP 96\n",
+    "riff-avi": b"RIFF\x00\x00\x00\x00AVI LIST",
+    "desconhecido": b"nao e audio" * 10,
+    "vazio": b"",
+}
+
+
+@pytest.mark.parametrize("name", ACEITOS)
+def test_conteiner_permitido_escolhe_o_demuxer_pelos_bytes(tmp_path: Path, name: str):
+    src = tmp_path / "audio.bin"
+    src.write_bytes(ACEITOS[name])
+    assert demuxer(src) == DEMUXER[name]
+
+
+@pytest.mark.parametrize("name", RECUSADOS)
+def test_conteiner_fora_da_lista_recusado_antes_do_ffmpeg(tmp_path: Path, name: str, monkeypatch: pytest.MonkeyPatch):
+    src = tmp_path / "audio.ogg"
+    src.write_bytes(RECUSADOS[name])
+
+    def no_subprocess(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("o ffmpeg não pode ver um contêiner recusado")
+
+    monkeypatch.setattr(module.subprocess, "run", no_subprocess)
+    with pytest.raises(PreprocessError) as info:
+        preprocess(src, tmp_path, CONFIG, None)
+    assert info.value.code == AUDIO_DECODE_FAILED
+    assert "lista permitida" in info.value.message
+
+
+def test_tempo_limite_cresce_com_a_duracao_ate_o_teto():
+    assert module._timeout(60_000) == module.FFMPEG_BASE_TIMEOUT_S + 60
+    assert module._timeout(None) == module.FFMPEG_MAX_TIMEOUT_S
+    assert module._timeout(10 * 3600 * 1000) == module.FFMPEG_MAX_TIMEOUT_S
+
+
+def test_ffmpeg_que_estoura_o_tempo_limite_falha(monkeypatch: pytest.MonkeyPatch):
+    def slow(*args: Any, **kwargs: Any) -> None:
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(module.subprocess, "run", slow)
+    result = module._run("-i", "x", timeout=5)
+    assert result.returncode != 0
+    assert "tempo limite" in result.stderr
+
+
+@needs_ffmpeg
+def test_entrada_leva_demuxer_e_protocol_whitelist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    src = _make(tmp_path / "fala.ogg", SPEECH)
+    calls: list[list[str]] = []
+    real_run = subprocess.run
+
+    def spy(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        assert kwargs.get("timeout")
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(module.subprocess, "run", spy)
+    preprocess(src, tmp_path, CONFIG, None)
+    inputs = [c for c in calls if c[0] in {"ffmpeg", "ffprobe"} and "-version" not in c]
+    assert inputs
+    for command in inputs:
+        assert command[command.index("-protocol_whitelist") + 1] == "file"
+        assert command[command.index("-f") + 1] in {"ogg", "wav"}

@@ -23,9 +23,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from arq.jobs import Job, JobResult, JobStatus
+from arq.jobs import DeserializationError, Job, JobResult, JobStatus
 from sqlalchemy import select
 
+from eclume_engines.fila import desserializar
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, progress_of_revision, transcribe_job_id
@@ -97,8 +98,14 @@ def _decode(values: dict[Any, Any]) -> dict[str, str]:
     }
 
 
-def _diagnose_complete(result: JobResult | None, *, now: datetime, settings: Settings) -> str | None:
+async def _diagnose_complete(job: Job, *, now: datetime, settings: Settings) -> str | None:
     """O `transcribe` terminou no arq, mas o job segue em aberto no banco."""
+    try:
+        result: JobResult | None = await job.result_info()
+    except DeserializationError:
+        # Um resultado em pickle com objeto (a exceção de um job que explodiu no arq) é recusado
+        # pelo unpickler sem globais: o `transcribe` sempre devolve um dict, então é falha.
+        return WORKER_LOST
     if result is None:
         return None
     # Falha no arq: o worker morreu e o retry do arq (max_tries=1) encerrou o job sem
@@ -127,12 +134,12 @@ async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram exp
     settings: Settings,
 ) -> str | None:
     """O código de falha que o job merece agora, ou `None` se ele ainda tem quem o termine."""
-    job = Job(job_id, redis, _queue_name=GPU_QUEUE)
+    job = Job(job_id, redis, _queue_name=GPU_QUEUE, _deserializer=desserializar)
     status = await job.status()
     if status in {JobStatus.queued, JobStatus.deferred}:
         return None  # fila atrasada não é falha
     if status == JobStatus.complete:
-        return _diagnose_complete(await job.result_info(), now=now, settings=settings)
+        return await _diagnose_complete(job, now=now, settings=settings)
 
     # O progresso de outra revisão não diz nada deste job.
     progress = progress_of_revision(_decode(await redis.hgetall(progress_key(recording_id))), revision) or {}
