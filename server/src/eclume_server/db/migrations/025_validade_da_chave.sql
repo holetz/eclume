@@ -8,3 +8,6 @@
 ALTER TABLE agent_providers ADD COLUMN key_set_at timestamptz;
 
 UPDATE agent_providers SET key_set_at = created_at WHERE api_key_encrypted IS NOT NULL;
+
+-- A data não é segredo: `eclume_app` lê a coluna, como as outras sem segredo (008, 011).
+GRANT SELECT (key_set_at) ON agent_providers TO eclume_app;
