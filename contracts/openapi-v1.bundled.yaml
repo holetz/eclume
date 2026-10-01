@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.15.0
+  version: 2.16.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -17,15 +17,18 @@ info:
     - **Cotas por conta** (desde a 2.15.0): armazenamento, tamanho por arquivo, uploads abertos,\n  minutos\
     \ de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403\n  `quota_exceeded`\
     \ com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a\n  gravação espera na fila até\
-    \ a janela abrir.\n- Cada usuário tem a própria conta, isolada; não há organização. O painel admin\
-    \ usa uma\n  conta e uma sessão próprias (`adminSessionCookie`), que só alcançam `/api/v1/admin/*`.\n\
-    - **Evolução só aditiva.** O cliente ignora propriedades que não conhece e tolera valores\n  de enum\
-    \ novos em respostas. A 2.0.0 é a única quebra sob `/api/v1` (fim da organização);\n  a próxima mudança\
-    \ incompatível vira `/api/v2`.\n- **Servidor MCP em `/mcp`** (fora de `/api/v1`, fora deste documento):\
-    \ Model Context\n  Protocol em HTTP streamable sem estado, com respostas JSON. Aceita só\n  `Authorization:\
-    \ Bearer eclp_…` (PAT pessoal ou de dispositivo); cada ferramenta exige os\n  escopos da operação\
-    \ equivalente desta API, e a recusa por escopo volta como erro de\n  ferramenta que nomeia o escopo.\
-    \ Sem credencial válida, 401 `unauthorized`. Detalhe em\n  `docs/standards/code/server-mcp-e-dispositivos.md`.\n"
+    \ a janela abrir.\n- **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue`\
+    \ diz por que\n  espera (fila do processador, vez da própria conta ou janela de minutos), a posição,\
+    \ uma\n  previsão rotulada como estimativa e se o processador está no ar.\n- Cada usuário tem a própria\
+    \ conta, isolada; não há organização. O painel admin usa uma\n  conta e uma sessão próprias (`adminSessionCookie`),\
+    \ que só alcançam `/api/v1/admin/*`.\n- **Evolução só aditiva.** O cliente ignora propriedades que\
+    \ não conhece e tolera valores\n  de enum novos em respostas. A 2.0.0 é a única quebra sob `/api/v1`\
+    \ (fim da organização);\n  a próxima mudança incompatível vira `/api/v2`.\n- **Servidor MCP em `/mcp`**\
+    \ (fora de `/api/v1`, fora deste documento): Model Context\n  Protocol em HTTP streamable sem estado,\
+    \ com respostas JSON. Aceita só\n  `Authorization: Bearer eclp_…` (PAT pessoal ou de dispositivo);\
+    \ cada ferramenta exige os\n  escopos da operação equivalente desta API, e a recusa por escopo volta\
+    \ como erro de\n  ferramenta que nomeia o escopo. Sem credencial válida, 401 `unauthorized`. Detalhe\
+    \ em\n  `docs/standards/code/server-mcp-e-dispositivos.md`.\n"
   license:
     name: MIT
     identifier: MIT
@@ -9318,7 +9321,7 @@ components:
       value:
         status: ok
         version: 0.1.0
-        contract_version: 2.15.0
+        contract_version: 2.16.0
         commit: 2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c
     HealthReady:
       summary: Postgres, Redis e MinIO no ar
@@ -9707,6 +9710,15 @@ components:
           queued_at: '2026-09-18T14:09:31Z'
           started_at: null
           finished_at: null
+          queue:
+            reason: processor_queue
+            ahead: 2
+            account_ahead: null
+            estimated_start_at: '2026-09-18T14:21:31Z'
+            resumes_at: null
+            processor:
+              online: true
+              offline_since: null
         pipeline:
         - step: received
           state: done
