@@ -12,6 +12,7 @@ mod mirror_sync;
 mod notify;
 pub mod shortcuts;
 pub mod state;
+mod supervise;
 mod sync;
 mod tray;
 mod updater;
@@ -211,37 +212,43 @@ impl Write for Tee {
 fn spawn_reaper(app: AppHandle) {
     std::thread::spawn(move || {
         let mut ticks: u64 = 0;
+        let mut backoff = supervise::Backoff::default();
         loop {
             std::thread::sleep(Duration::from_secs(1));
             ticks += 1;
-            match app.state::<AppState>().reap_finished() {
-                Ok(Some(reaped)) => {
-                    match reaped {
-                        Reaped::NoteSaved(recording) => notify::note_saved(recording.duration_ms),
-                        Reaped::NoteDiscarded => notify::note_discarded(),
-                        Reaped::Stopped { recording, reason } => {
-                            notify::recording_stopped(recording.duration_ms, reason);
-                        }
-                    }
-                    sync::nudge(&app);
-                    refresh_ui(&app);
-                }
-                Ok(None) => {}
-                Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
-            }
-            // A cada minuto, fecha a gravação cujo `.part` ficou preso ao parar.
-            if ticks.is_multiple_of(60) {
-                match app.state::<AppState>().sweep_orphans() {
-                    Ok(0) => {}
-                    Ok(_) => {
-                        sync::nudge(&app);
-                        refresh_ui(&app);
-                    }
-                    Err(err) => log::error!("falha na varredura de gravações órfãs: {err:#}"),
-                }
-            }
+            supervise::pass(&mut backoff, "reaper", || reap_once(&app, ticks));
         }
     });
+}
+
+/// Uma passada do reaper.
+fn reap_once(app: &AppHandle, ticks: u64) {
+    match app.state::<AppState>().reap_finished() {
+        Ok(Some(reaped)) => {
+            match reaped {
+                Reaped::NoteSaved(recording) => notify::note_saved(recording.duration_ms),
+                Reaped::NoteDiscarded => notify::note_discarded(),
+                Reaped::Stopped { recording, reason } => {
+                    notify::recording_stopped(recording.duration_ms, reason);
+                }
+            }
+            sync::nudge(app);
+            refresh_ui(app);
+        }
+        Ok(None) => {}
+        Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
+    }
+    // A cada minuto, fecha a gravação cujo `.part` ficou preso ao parar.
+    if ticks.is_multiple_of(60) {
+        match app.state::<AppState>().sweep_orphans() {
+            Ok(0) => {}
+            Ok(_) => {
+                sync::nudge(app);
+                refresh_ui(app);
+            }
+            Err(err) => log::error!("falha na varredura de gravações órfãs: {err:#}"),
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -22,25 +22,33 @@ pub fn spawn(app: AppHandle) {
         .spawn(move || {
             let mut detector =
                 DebouncedDetector::new(SystemSignals::new(), DebounceConfig::default());
+            let mut backoff = crate::supervise::Backoff::default();
             loop {
                 std::thread::sleep(POLL_INTERVAL);
-                let enabled = app.state::<AppState>().detection_enabled().unwrap_or(false);
-                // Desligada, a detecção só acompanha até o fim a reunião que já tinha visto.
-                if !enabled && detector.active().is_none() {
-                    continue;
-                }
-                let Some(event) = detector.poll() else {
-                    continue;
-                };
-                log::info!("reunião: {event:?}");
-                match app.state::<AppState>().on_meeting_event(&event) {
-                    Ok(action) => execute(&app, action),
-                    Err(err) => log::error!("falha ao tratar {event:?}: {err:#}"),
-                }
+                crate::supervise::pass(&mut backoff, "detecção de reuniões", || {
+                    poll_once(&app, &mut detector);
+                });
             }
         });
     if let Err(err) = spawned {
         log::error!("falha ao iniciar a detecção de reuniões: {err}");
+    }
+}
+
+/// Uma passada da detecção: consulta o detector e trata o evento, se houver.
+fn poll_once(app: &AppHandle, detector: &mut DebouncedDetector<SystemSignals>) {
+    let enabled = app.state::<AppState>().detection_enabled().unwrap_or(false);
+    // Desligada, a detecção só acompanha até o fim a reunião que já tinha visto.
+    if !enabled && detector.active().is_none() {
+        return;
+    }
+    let Some(event) = detector.poll() else {
+        return;
+    };
+    log::info!("reunião: {event:?}");
+    match app.state::<AppState>().on_meeting_event(&event) {
+        Ok(action) => execute(app, action),
+        Err(err) => log::error!("falha ao tratar {event:?}: {err:#}"),
     }
 }
 

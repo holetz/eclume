@@ -49,12 +49,15 @@ pub fn spawn(app: &AppHandle) {
         .name("eclume-sync".into())
         .spawn(move || {
             // Acorda a cada `INTERVAL` ou a cada cutucão; termina quando o app fecha o canal.
+            let mut backoff = crate::supervise::Backoff::default();
             while let Ok(()) | Err(RecvTimeoutError::Timeout) = rx.recv_timeout(INTERVAL) {
                 // Vários cutucões seguidos valem uma passada só.
                 while rx.try_recv().is_ok() {}
-                if let Err(err) = run_once(&app) {
-                    log::error!("falha no sync: {err:#}");
-                }
+                crate::supervise::pass(&mut backoff, "sync", || {
+                    if let Err(err) = run_once(&app) {
+                        log::error!("falha no sync: {err:#}");
+                    }
+                });
                 crate::refresh_ui(&app);
             }
         });

@@ -186,15 +186,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 /// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre). Pede
 /// por `refresh`, que despacha para a thread principal.
 fn spawn_note_clock(app: AppHandle) {
+    let mut backoff = crate::supervise::Backoff::default();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
-        let in_note = app
-            .state::<AppState>()
-            .view()
-            .is_ok_and(|view| view.recording_kind == Some(Kind::Note));
-        if in_note {
-            refresh(&app);
-        }
+        crate::supervise::pass(&mut backoff, "relógio da nota", || {
+            let in_note = app
+                .state::<AppState>()
+                .view()
+                .is_ok_and(|view| view.recording_kind == Some(Kind::Note));
+            if in_note {
+                refresh(&app);
+            }
+        });
     });
 }
 
