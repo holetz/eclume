@@ -7,7 +7,7 @@ tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
 maintainer: holetz
 ---
 
@@ -99,9 +99,12 @@ decisão do usuário, então `auto` nunca é padrão.
 1. `POST /api/v1/uploads` com `filename`, `content_type`, `size_bytes`, `sha256` hex,
    `recorded_at`, `recorded_at_source`, `kind`, `duration_ms`, `source`, `markers` (omitido quando
    vazio), `title` e `agenda_type_id` (os dois só quando a linha os tem: o celular os escolhe ao
-   parar), `language` (só com o idioma da transcrição escolhido na aba Áudio — `pt`, `es` ou
-   `en`, pelo `HttpUploader::with_language`; sem ele vale o padrão do servidor, e o celular não o
-   manda) e `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
+   parar), `language` (o da linha da fila, que o celular escolhe na folha "Gravação salva"; sem
+   ele, o do aparelho escolhido na aba Áudio — `auto`, `pt`, `es` ou `en`, pelo
+   `HttpUploader::with_language`; sem nenhum, a chave sai e vale o idioma da conta no servidor; a
+   aba Áudio nomeia esse padrão com o idioma real, lido de `GET /me/transcription` pelo comando
+   `account_language`: "Padrão da conta: Português", e "Detectar automaticamente" só para `auto`) e
+   `capture { meeting_app, device_name, client_version }`. Tudo vem da linha da fila
    ([desktop-gravacao.md](desktop-gravacao.md)):
 
 | Gravação | `filename` | `kind` | `source` | `recorded_at_source` | `content_type` |
