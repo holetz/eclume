@@ -150,6 +150,7 @@ async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -
                     insert(t.agent_providers)
                     .values(
                         api_key_encrypted=encrypt(ctx.settings, body.api_key) if body.api_key else None,
+                        key_set_at=func.now() if body.api_key else None,
                         **values,
                     )
                     .returning(t.agent_providers)
@@ -175,6 +176,7 @@ async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: 
         if key == "":
             raise invalid_field("api_key", "não pode ser vazia")
         values["api_key_encrypted"] = encrypt(ctx.settings, key) if key is not None else None
+        values["key_set_at"] = func.now() if key is not None else None
     if "used_for" in values:
         values["used_for"] = list(dict.fromkeys(values["used_for"]))
     async with system_tx(ctx.engine) as conn:

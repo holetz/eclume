@@ -142,7 +142,8 @@ def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, 
     return steps
 
 
-def _started(engine_info: dict[str, Any], fallback: datetime) -> datetime:
+def gpu_started(engine_info: dict[str, Any], fallback: datetime) -> datetime:
+    """O início real do job no worker GPU (`engine_info.started_at` ou o do hash de progresso)."""
     try:
         return datetime.fromisoformat(engine_info["started_at"])
     except (KeyError, TypeError, ValueError):
@@ -157,7 +158,7 @@ async def record_gpu_steps(conn: AsyncConnection, job: Row, engine_info: dict[st
     seguiu. Um worker sem pré-processamento deixa a etapa pulada.
     """
     recording, revision = {"id": job["recording_id"], "owner_id": job["owner_id"]}, job["revision"]
-    started = _started(engine_info, job["started_at"] or job["queued_at"])
+    started = gpu_started(engine_info, job["started_at"] or job["queued_at"])
     pre = engine_info.get("preprocess")
     if not isinstance(pre, dict):
         await set_step(

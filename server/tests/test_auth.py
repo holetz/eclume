@@ -20,6 +20,8 @@ from eclume_server_testing.harness import DATABASE_URL, run
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import pytest
+
     from eclume_server_testing.api import Account
     from eclume_server_testing.harness import Services
 
@@ -271,3 +273,29 @@ INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES
         ("desktop", ["recordings:read", "recordings:write", "recordings:delete"], "personal"),
         ("lumea", ["transcripts:read"], "personal"),
     ]
+
+
+def test_health_ready_com_tudo_no_ar(client: TestClient):
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "checks": [
+            {"name": "postgres", "status": "ok"},
+            {"name": "redis", "status": "ok"},
+            {"name": "storage", "status": "ok"},
+        ],
+    }
+    assert response.headers["x-request-id"]
+
+
+def test_health_ready_503_nomeia_o_que_caiu(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    async def fora() -> None:
+        raise ConnectionError
+
+    monkeypatch.setattr(client.app.state.ctx.storage, "head_bucket", fora)
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 503
+    checks = {c["name"]: c["status"] for c in response.json()["checks"]}
+    assert checks == {"postgres": "ok", "redis": "ok", "storage": "down"}
+    assert response.json()["status"] == "down"

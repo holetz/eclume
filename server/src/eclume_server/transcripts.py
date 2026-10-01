@@ -14,7 +14,7 @@ from sqlalchemy import delete, func, insert, select, text, update
 
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
-from eclume_server.pipeline import FAILED_STEP, record_gpu_steps, set_step
+from eclume_server.pipeline import FAILED_STEP, gpu_started, record_gpu_steps, set_step
 from eclume_server.problems import not_found
 from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.voice import capture_links, load_suggestions, platform_voice, restore_links, suggest
@@ -288,7 +288,13 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     await conn.execute(
         update(t.transcription_jobs)
         .where(t.transcription_jobs.c.id == job["id"])
-        .values(state="succeeded", finished_at=now, attempts=job["attempts"] + 1, engine_info=engine_info)
+        .values(
+            state="succeeded",
+            started_at=gpu_started(engine_info, job["started_at"] or job["queued_at"]),
+            finished_at=now,
+            attempts=job["attempts"] + 1,
+            engine_info=engine_info,
+        )
     )
     await record_gpu_steps(conn, job, engine_info, now)
     await conn.execute(
@@ -316,17 +322,21 @@ async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed`
     stage: str | None = None,
     *,
     revision: int | None = None,
+    started_at: str | None = None,
 ) -> Failed:
     """Marca como falho o job da revisão (sem ela, o mais recente) e a gravação, se em aberto.
 
     Trava a gravação antes do job, na mesma ordem da ingestão. `stage` é a etapa do progresso do
     worker GPU em que a falha aconteceu: no download ou no pré-processamento, falha o
-    pré-processamento; nas demais (ou sem ela), a transcrição.
+    pré-processamento; nas demais (ou sem ela), a transcrição. `started_at` é o início do job no
+    worker GPU (do hash de progresso); sem ele, vale o já gravado ou a entrada na fila.
     """
     now = datetime.now(UTC)
     _, job = await _lock_open_job(conn, recording_id, revision)
     if job is None:
         return Failed(_obsolete(revision))
+    # O relógio do worker pode estar adiantado: o início nunca passa do fim.
+    started = min(gpu_started({"started_at": started_at}, job["started_at"] or job["queued_at"]), now)
     await conn.execute(
         update(t.transcription_jobs)
         .where(t.transcription_jobs.c.id == job["id"])
@@ -334,6 +344,7 @@ async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed`
             state="failed",
             error_code=error_code or "engine_error",
             error_message=message or "",
+            started_at=started,
             finished_at=now,
             attempts=job["attempts"] + 1,
         )
@@ -348,7 +359,7 @@ async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed`
         FAILED_STEP.get(stage or "", "transcription"),
         "failed",
         error=(error_code or "engine_error", message or ""),
-        started_at=job["started_at"] or job["queued_at"],
+        started_at=started,
         finished_at=now,
     )
     return Failed(f"job {job['id']} falhou: {error_code}", closed=True)

@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93
 maintainer: holetz
 ---
 
@@ -165,6 +165,12 @@ O worker grava `HSET eclume:progress:{recording_id}` com `revision`, `stage` (`d
 `preprocess`, `asr`, `align`, `diarize`, `embed` ou `upload`), `pct` (0–100) e `updated_at`, com TTL
 de 1 dia. O server lê para o estado do job. O hash traz também `started_at` (RFC 3339 UTC), o início
 do job, gravado desde a primeira escrita.
+
+`transcription_jobs.started_at` é o início real do job no worker GPU (holetz/eclume#93): no
+sucesso, o `engine_info.started_at` do `ingest_transcript`; na falha, o `started_at` do hash de
+progresso lido pelo `transcription_failed` (nunca depois do fim). Sem nenhum dos dois, fica o já
+gravado ou a entrada na fila. As durações do pré-processamento e da transcrição partem desse início,
+sem a espera na fila.
 
 O `revision` (holetz/eclume#95) diz de qual revisão é o progresso: a tela da gravação, a Saúde do
 admin e o reaper só usam o hash cuja revisão é a do job em aberto; o hash sem o campo (worker

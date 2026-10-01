@@ -24,6 +24,7 @@ from arq.worker import func
 from sqlalchemy import delete, select, update
 
 from eclume_engines.fila import desserializar
+from eclume_engines.registro import configurar_logs, contexto_do_job
 from eclume_server.agenda_types import ensure_type, run_detect
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
@@ -75,7 +76,8 @@ TERMINAL_UPLOADS = ("completed", "deduplicated", "aborted", "expired")
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    """Engine e storage do processo; `ctx["settings"]` substitui o ambiente (testes)."""
+    """Log, engine e storage do processo; `ctx["settings"]` substitui o ambiente (testes)."""
+    configurar_logs()
     settings: Settings = ctx.get("settings") or get_settings()
     ctx["settings"] = settings
     ctx["engine"] = make_engine(settings.database_url)
@@ -85,6 +87,14 @@ async def startup(ctx: dict[str, Any]) -> None:
 async def shutdown(ctx: dict[str, Any]) -> None:
     """Fecha o pool do banco."""
     await ctx["engine"].dispose()
+
+
+async def job_start(ctx: dict[str, Any]) -> None:
+    """Põe `job_id`, `recording_id` e `revision` no contexto de log do job que vai rodar.
+
+    O arq chama isto na task do job, antes da função; o contexto vale só para aquele job.
+    """
+    contexto_do_job(ctx.get("job_id"))
 
 
 async def ingest_transcript(
@@ -251,9 +261,14 @@ async def transcription_failed(
     o reaper cobre o job.
     """
     revision = return_revision("transcription_failed", recording_id, ctx.get("job_id"))
+    started_at = await ctx["redis"].hget(progress_key(recording_id), "started_at")
+    if isinstance(started_at, bytes):
+        started_at = started_at.decode()
     try:
         async with system_tx(ctx["engine"]) as conn:
-            result = await fail(conn, UUID(recording_id), error_code, message, stage, revision=revision)
+            result = await fail(
+                conn, UUID(recording_id), error_code, message, stage, revision=revision, started_at=started_at
+            )
     except Exception as exc:
         _retry_if_transient(ctx, "transcription_failed", recording_id, exc)
         raise
@@ -426,6 +441,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
         "on_shutdown": shutdown,
+        "on_job_start": job_start,
         "ctx": {"settings": settings},
         # Fase A da fila sem pickle: lê JSON e o pickle antigo sem globais.
         "job_deserializer": desserializar,
@@ -444,6 +460,7 @@ def agent_worker_settings(settings: Settings) -> dict[str, Any]:
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
         "on_shutdown": shutdown,
+        "on_job_start": job_start,
         "ctx": {"settings": settings},
         "job_deserializer": desserializar,
     }
@@ -463,6 +480,7 @@ class WorkerSettings:
     redis_settings = _FROM_ENV["redis_settings"]
     on_startup = _FROM_ENV["on_startup"]
     on_shutdown = _FROM_ENV["on_shutdown"]
+    on_job_start = _FROM_ENV["on_job_start"]
     ctx = _FROM_ENV["ctx"]
     max_jobs = _FROM_ENV["max_jobs"]
     job_deserializer = _FROM_ENV["job_deserializer"]
@@ -479,5 +497,6 @@ class AgentWorkerSettings:
     redis_settings = _AGENTS_FROM_ENV["redis_settings"]
     on_startup = _AGENTS_FROM_ENV["on_startup"]
     on_shutdown = _AGENTS_FROM_ENV["on_shutdown"]
+    on_job_start = _AGENTS_FROM_ENV["on_job_start"]
     ctx = _AGENTS_FROM_ENV["ctx"]
     job_deserializer = _AGENTS_FROM_ENV["job_deserializer"]

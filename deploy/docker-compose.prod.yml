@@ -106,8 +106,9 @@ services:
     volumes:
       # A CA raiz publicada pelo `publish-ca`: a impressão digital do descritor (cache pelo mtime).
       - ${ECLUME_DATA_DIR}/downloads:/srv/downloads:ro
+    # Prontidão: Postgres, Redis ou MinIO fora deixam o server unhealthy (e o vigia.sh avisa).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -129,6 +130,13 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    healthcheck:
+      # A chave eclume:{fila}:health-check que o arq renova a cada 15 s (TTL 16 s).
+      test: ["CMD", "eclume-server", "sonda", "fila", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Fila eclume:agents: tipo de agenda, campos, resumos, chats e pré-visualizações, com
   # ECLUME_AGENT_MAX_JOBS vagas; a ingestão não espera atrás deles.
@@ -147,6 +155,13 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    healthcheck:
+      # A chave eclume:{fila}:health-check que o arq renova a cada 15 s (TTL 16 s).
+      test: ["CMD", "eclume-server", "sonda", "fila", "agents"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Fila eclume:gpu (imagem da holetz/eclume#8, ~8 GB). max_jobs=1 vem do WorkerSettings.
   worker-gpu:
@@ -184,6 +199,13 @@ services:
       - ${ECLUME_DATA_DIR}/models:/models
       # Só o token: a pasta secrets também guarda o env de produção e a senha do admin.
       - ${ECLUME_DATA_DIR}/secrets/hf_token:/run/secrets/hf_token:ro
+    # O heartbeat eclume:gpu:health (a cada 15 s, TTL 45 s); começa antes da carga do modelo.
+    healthcheck:
+      test: ["CMD", "python", "-m", "eclume_worker.health", "--sonda"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     deploy:
       resources:
         reservations:

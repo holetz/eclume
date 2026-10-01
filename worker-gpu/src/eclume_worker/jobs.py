@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from eclume_engines import DEFAULT_ENGINE, EngineError, EngineOptions, get_engine
 from eclume_engines.hf_token import resolve_hf_token
+from eclume_engines.registro import contexto_do_job
 from eclume_worker import __version__
 from eclume_worker.config import DEFAULT_QUEUE
 from eclume_worker.preprocess import PreprocessError, PreprocessResult, preprocess
@@ -319,6 +320,7 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
     redis = ctx["redis"]
     revision = parse_revision(ctx.get("job_id"))
     registry.current_job = ctx.get("job_id") or return_job_id("transcribe", recording_id, revision)
+    contexto_do_job(registry.current_job, recording_id, revision)
     try:
         cancel = cancel_key(recording_id, revision)
         if await redis.exists(cancel):

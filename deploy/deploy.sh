@@ -334,6 +334,12 @@ host "cat > '$DATA_DIR/bin/restaurar-backup.sh' && chmod 755 '$DATA_DIR/bin/rest
 host "(crontab -l 2>/dev/null | grep -v '# eclume-backup$' || true
   echo '30 3 * * * ECLUME_DATA_DIR=$DATA_DIR $DATA_DIR/bin/backup.sh >> $DATA_DIR/backups/backup.log 2>&1 # eclume-backup'
 ) | crontab -"
+# Verificador da produção (alertas) a cada 5 min; estado por condição em estado/vigia/.
+host "install -d -m 700 '$DATA_DIR/estado' '$DATA_DIR/estado/vigia'
+  cat > '$DATA_DIR/bin/vigia.sh' && chmod 755 '$DATA_DIR/bin/vigia.sh'" < "$TREE/deploy/vigia.sh"
+host "(crontab -l 2>/dev/null | grep -v '# eclume-vigia$' || true
+  echo '*/5 * * * * ECLUME_DATA_DIR=$DATA_DIR $DATA_DIR/bin/vigia.sh >> $DATA_DIR/estado/vigia/vigia.log 2>&1 # eclume-vigia'
+) | crontab -"
 
 # --- build no daemon do host, a partir da árvore do SHA --------------------------------------------
 export BUILDKIT_PROGRESS=plain COMPOSE_PROGRESS=plain

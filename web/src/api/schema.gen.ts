@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prontidão — Postgres, Redis e MinIO respondem
+         * @description Desde a 2.13.0. Roda as sondas de Postgres, Redis e armazenamento em paralelo, com teto de
+         *     2 s cada. Pública: devolve só o nome e `ok`/`down` de cada uma, sem latência nem mensagem
+         *     de erro. `/api/v1/health` segue estático, como sinal de vida.
+         */
+        get: operations["getHealthReady"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1954,6 +1976,16 @@ export interface components {
             contract_version: string;
             /** @description Desde a 2.12.0: o SHA do git de que a imagem do servidor foi construída (o deploy o grava). Ausente fora de uma imagem de produção. */
             commit?: string;
+        };
+        HealthReady: {
+            /** @enum {string} */
+            status: "ok" | "down";
+            checks: {
+                /** @enum {string} */
+                name: "postgres" | "redis" | "storage";
+                /** @enum {string} */
+                status: "ok" | "down";
+            }[];
         };
         LoginRequest: {
             /** Format: email */
@@ -3897,6 +3929,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    getHealthReady: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Todas as dependências respondem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthReady"];
+                };
+            };
+            /** @description Alguma dependência não respondeu em 2 s; `checks` diz qual. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthReady"];
                 };
             };
         };
