@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117
 maintainer: holetz
 ---
 
@@ -102,6 +102,14 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   contam) e nos pedidos ao agente (gerar resumo, chat do resumo, chat da base, pré-visualizações).
   Os minutos de áudio nunca recusam: a gravação espera na fila até a janela abrir. A conta tem no
   máximo 3 resumos na fila ou rodando; além disso, **429** `rate_limited`.
+- **Espera na fila** (2.16.0): enquanto o job está `queued`, `Job.queue` (`JobQueue`) diz por que
+  a gravação espera — `reason` em `processor_queue` (já na fila do processador, com `ahead`, os
+  jobs que começam antes, contando o que roda), `account_turn` (retida pela fila justa, com
+  `account_ahead`, as gravações da própria conta antes) ou `quota_window` (minutos de 24 h
+  esgotados, com `resumes_at`) — e `processor` (`online`, `offline_since`). `estimated_start_at` é
+  previsão pela duração real das últimas transcrições, `null` sem histórico ou com o processador
+  fora do ar, e todo cliente a rotula como estimativa. Fora de `queued`, `queue` é `null`. Só
+  contagens e horários: nada de outra conta. `reason` é enum aberto.
 - **Teto do corpo** (2.14.0): **413** `payload_too_large` em qualquer operação com corpo, com
   `limit` (bytes), recusado pelo `Content-Length` antes de ler ou contado enquanto chega quando o
   cabeçalho falta. Tetos: 64 KiB nas rotas públicas de credencial (`/auth/*`, `/admin/auth/*`,

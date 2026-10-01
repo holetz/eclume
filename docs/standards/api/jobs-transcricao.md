@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg.
-resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/dispatch.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
+description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg, e a espera na fila (`Job.queue`) com o último visto do processador e a estimativa pelo histórico.
+resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/queue_status.py, server/src/eclume_server/dispatch.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117
 maintainer: holetz
 ---
 
@@ -208,6 +208,11 @@ Hash ausente = worker parado há mais de 45 s. Campos, todos texto:
 O `vram_mb` do modelo é o uso do dispositivo depois de carregá-lo menos o de antes. O server lê o
 hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)).
 
+**Último visto.** O cron `reap_stalled_jobs` (a cada minuto) grava em `eclume:gpu:last_seen` o
+`updated_at` do heartbeat presente, antes de olhar os jobs e mesmo sem job aberto. Com o hash
+ausente, esse valor é o "fora do ar desde" da espera na fila (precisão de 1 min); sem ele, nunca
+houve heartbeat. Nada muda no worker GPU.
+
 ## O server ingere
 
 `ingest_transcript` persiste a transcrição no Postgres, indexa para FTS e guarda os embeddings
@@ -330,6 +335,21 @@ fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
 - **Ingestão tolerante.** O raw é lido com padrões para o que faltar e ignorando o que não se
   conhece; um id de locutor fora de `S<n>` é renumerado na ordem em que aparece, e o mesmo mapa
   vale para os embeddings. Com o job já `succeeded`, `ingest_transcript` não faz nada.
+- **Espera na fila** (`queue_status.py`, holetz/eclume#117). `Job.queue` é calculado na leitura
+  (`render`), só para as gravações com job `queued` sem progresso, uma vez por resposta: um
+  `ZRANGE` de `eclume:gpu`, a presença do heartbeat, o último visto e, para os retidos, uma
+  consulta da conta. Despachado (`dispatched_at`): `processor_queue` com `ahead` = posição do
+  `_job_id` no ZSET, que inclui o job rodando. Retido: `quota_window` com `resumes_at` quando a
+  conta, sem job despachado, está fora dos minutos de 24 h (o instante em que o despacho mais
+  antigo que a põe abaixo da cota sai da janela); senão `account_turn` com `account_ahead` = os
+  jobs abertos da conta antes dele (o despachado primeiro, depois os retidos por `queued_at`).
+  `processor.online` = heartbeat presente.
+- **Estimativa.** Ritmo = mediana de `(finished_at − started_at) / duration_ms` das últimas 20
+  transcrições bem-sucedidas em 7 dias, de toda a plataforma (só números, papel de conexão), e a
+  mediana do processamento; guardado 5 min em `eclume:queue:pace`; com menos de 5 amostras, sem
+  estimativa. Início estimado = agora + a soma, para cada job à frente, de `duration_ms × ritmo`
+  (sem duração, a mediana do processamento), descontado do que roda o tempo decorrido desde o
+  `started_at` do hash de progresso (nunca negativo). Processador fora do ar: `null`.
 - **Prova.** `server/tests/test_pipeline.py` roda o ciclo com o worker GPU fake de
   `server/tests/eclume_server_testing/fakes.py` e o worker CPU real.
 
