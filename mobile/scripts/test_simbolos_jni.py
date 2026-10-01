@@ -35,10 +35,11 @@ NM = f"""0000000000123456 T {PREFIXO}acao
 0000000000123999 T {PREFIXO}syncPendentes
 0000000000200000 T JNI_OnLoad
 """
-DEX = """P d 3 3 300 io.github.holetz.eclume.movel.gravador
-C r 1 2 120 io.github.holetz.eclume.movel.gravador.EclumeCore
-M r 0 1 10 io.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String acao(java.lang.String)
-M r 0 1 10 io.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String syncPendentes(java.lang.String)
+# Formato real do apkanalyzer: tipo e estado separados por espaço, o resto por tabulação.
+DEX = """P d 3\t3\t300\tio.github.holetz.eclume.movel.gravador
+C d 1\t2\t120\tio.github.holetz.eclume.movel.gravador.EclumeCore
+M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String acao(java.lang.String)
+M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String syncPendentes(java.lang.String)
 """
 
 

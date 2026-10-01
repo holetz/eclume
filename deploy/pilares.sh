@@ -180,7 +180,6 @@ with zipfile.ZipFile(sys.argv[1]) as apk, open(sys.argv[2], "wb") as so:
 PY
   "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D --defined-only "$chaves/lib.so" > "$chaves/nm.txt"
   "$sdk/cmdline-tools/latest/bin/apkanalyzer" dex packages "$apk" > "$chaves/dex.txt"
-  grep -F EclumeCore "$chaves/dex.txt" | head -n 20 || echo "EclumeCore fora da saída do apkanalyzer"
   run python3 mobile/scripts/simbolos_jni.py --nm "$chaves/nm.txt" --dex "$chaves/dex.txt" \
     --kotlin mobile/plugins/gravador/android/src/main/java/io/github/holetz/eclume/movel/gravador/EclumeCore.kt
   rm -rf "$chaves" "$gradle/keystore.properties"
