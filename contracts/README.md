@@ -1,8 +1,17 @@
 # contracts
 
-Fonte da verdade do contrato entre o eclume e os seus clientes: o frontend web, o app desktop e
-integrações por PAT, a começar pelo importador do lumea. As convenções e as regras de evolução
-estão no standard [docs/standards/api/contrato-v1.md](../docs/standards/api/contrato-v1.md).
+Fonte da verdade da API v1 do eclume: o que qualquer cliente — o web, os apps, o seu programa ou
+um assistente de IA — pode pedir a um servidor eclume e o que recebe de volta. As convenções e as
+regras de evolução estão no standard
+[docs/standards/api/contrato-v1.md](../docs/standards/api/contrato-v1.md).
+
+- **Referência navegável.** Todo servidor eclume serve a referência gerada deste contrato, na
+  versão que ele roda, em `https://<servidor>/referencia-api.html` (rotas, escopos, parâmetros,
+  esquemas e exemplos, sem nada de fora da origem). O web a gera do `openapi-v1.bundled.yaml` no
+  build.
+- **Guia de integração.** Do token à sincronização incremental, com erros, limites e o MCP:
+  [docs/how-to/integrar-com-a-api.md](../docs/how-to/integrar-com-a-api.md).
+- **Mock.** Para escrever um cliente sem servidor, o mock abaixo responde com os exemplos.
 
 | Arquivo | O que é |
 |---|---|
@@ -42,7 +51,9 @@ cada rota responde com o exemplo declarado, que vem de `fixtures/`.
   do lumea na bridge padrão alcançar o mock, suba com `ECLUME_MOCK_BIND=172.17.0.1` e use
   `http://172.17.0.1:4010`, ou `extra_hosts: ["host.docker.internal:host-gateway"]` no serviço.
 
-### Como o lumea usa (holetz/lumea#13)
+## Exemplos de uso
+
+### O lumea, importador por PAT (holetz/lumea#13)
 
 1. Com um checkout do eclume ao lado (`~/Projetos/eclume`), suba o mock:
    `docker compose -f ~/Projetos/eclume/deploy/docker-compose.mock.yml up -d --wait`.
@@ -52,13 +63,13 @@ cada rota responde com o exemplo declarado, que vem de `fixtures/`.
 4. Nos testes unitários do lumea, copie as fixtures necessárias (`transcript-3-locutores.json`,
    `transcript-page.json`) em vez de depender do mock; o teste de integração usa o mock.
 
-### Como o desktop usa (holetz/eclume#13)
+### O app desktop, upload retomável (holetz/eclume#13)
 
 `POST /api/v1/uploads` (com `Prefer: code=201`), `PUT` de cada parte na `url` recebida,
 `POST /api/v1/uploads/{id}/complete` e polling de `GET /api/v1/recordings/{id}` até `transcribed`
 ou `failed`. Retomada: `GET /api/v1/uploads/{id}` e `POST /api/v1/uploads/{id}/part-urls`.
 
-## Mapeamento para o `transcricao.md` do lumea
+### O mapeamento para o `transcricao.md` do lumea
 
 O JSON v1 gera o frontmatter de `transcricao.md` (`lumea/assets/meet/transcribe/store.py`,
 `models.py`) sem perda. O teste `test_json_v1_gera_o_frontmatter_do_lumea_sem_perda` prova o
