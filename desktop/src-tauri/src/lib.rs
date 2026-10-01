@@ -413,6 +413,7 @@ pub fn run() {
             commands::pick_ca_file,
             commands::pick_mirror_dir,
             commands::mirror_status,
+            commands::account_language,
             commands::mirror_sync_now,
         ])
         .run(tauri::generate_context!())

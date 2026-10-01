@@ -192,6 +192,21 @@ pub struct MeAuth {
 }
 
 /// Uma Collection de `GET /api/v1/collections` (plana: sem hierarquia).
+/// O idioma de transcrição da conta: `GET /api/v1/me/transcription` (contrato 2.20.0).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct TranscriptionPreference {
+    /// O escolhido pela conta (`pt`, `auto`…); `None` é o padrão do servidor.
+    pub language: Option<String>,
+    pub platform_default: String,
+}
+
+impl TranscriptionPreference {
+    /// O idioma que vale para a conta: o escolhido, senão o do servidor.
+    pub fn effective(&self) -> &str {
+        self.language.as_deref().unwrap_or(&self.platform_default)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CollectionInfo {
     pub id: String,

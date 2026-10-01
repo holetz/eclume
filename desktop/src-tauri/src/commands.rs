@@ -148,6 +148,18 @@ pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
     to_js(crate::open_web(&app, &state))
 }
 
+/// O idioma de transcrição que vale para a conta (`GET /me/transcription`), para a aba Áudio
+/// nomear o padrão; `None` sem conta ou sem resposta do servidor.
+#[tauri::command(async)]
+pub fn account_language(state: State<'_, AppState>) -> Option<String> {
+    let config = state.uploader_config().ok()??;
+    let preference = eclume_sync::Client::from_config(&config)
+        .and_then(|client| client.transcription_preference())
+        .map_err(|err| log::warn!("{err:#}"))
+        .ok()?;
+    Some(preference.effective().to_string())
+}
+
 #[tauri::command(async)]
 pub fn settings(state: State<'_, AppState>) -> CommandResult<SettingsView> {
     to_js(state.settings())

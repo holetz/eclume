@@ -27,6 +27,14 @@ const TESTES = {
   system: "Toque algo para testar",
 };
 
+/** Os idiomas que a aba Áudio nomeia, para dizer qual é o padrão da conta. */
+const NOMES_DE_IDIOMA = {
+  auto: "Detectar automaticamente",
+  pt: "Português",
+  es: "Español",
+  en: "English",
+};
+
 /** "Nenhum" no microfone ou no áudio do sistema. */
 const NENHUM = "none";
 
@@ -157,7 +165,15 @@ export function montar(secao, app) {
     if (nome === "audio") {
       lerMicrofones();
       lerSaidas();
+      lerIdiomaDaConta();
     }
+  }
+
+  /** Nomeia o padrão com o idioma real da conta ("Padrão da conta: Português"). */
+  async function lerIdiomaDaConta() {
+    const idioma = await app.invoke("account_language").catch(() => null);
+    const nome = idioma && (NOMES_DE_IDIOMA[idioma] ?? NOMES_DE_IDIOMA[idioma.split("-")[0]] ?? idioma);
+    $("#idioma-padrao", secao).textContent = nome ? `Padrão da conta: ${nome}` : "Padrão da conta";
   }
 
   async function salvar(mudancas, sucesso) {
