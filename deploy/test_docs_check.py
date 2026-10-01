@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 _spec = importlib.util.spec_from_file_location("docs_check", Path(__file__).with_name("docs_check.py"))
 assert _spec is not None
@@ -114,3 +116,19 @@ def test_glossario_em_ordem_sem_caixa_nem_acento() -> None:
     assert docs_check.problemas_do_glossario(texto) == [
         "docs/glossary.md:8: 'bola' fora da ordem alfabética (depois de 'Canto')",
     ]
+
+
+def test_quenching_na_mesma_ref_no_gate_e_na_ci() -> None:
+    """O `cq` do pilar `docs` é o mesmo commit do holetz/quenching na imagem do gate e no job da CI."""
+    raiz = Path(__file__).resolve().parent.parent
+    dockerfile = (raiz / "deploy/gate.Dockerfile").read_text(encoding="utf-8")
+    ci = yaml.safe_load((raiz / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    gate = re.search(r"^ARG QUENCHING_SHA=([0-9a-f]{40})$", dockerfile, re.MULTILINE)
+    assert gate is not None
+    refs = [
+        passo["with"]["ref"]
+        for passo in ci["jobs"]["docs"]["steps"]
+        if (passo.get("with") or {}).get("repository") == "holetz/quenching"
+    ]
+    assert refs == [gate[1]]
+    assert any("bash deploy/pilares.sh docs" in str(passo.get("run", "")) for passo in ci["jobs"]["docs"]["steps"])
