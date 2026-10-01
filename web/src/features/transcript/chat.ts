@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import { hms } from './markers'
 import { chatKey, summaryKey } from './queries'
 
@@ -85,7 +86,7 @@ export function useChatReply(recordingId: string, messageId: string | null) {
     enabled: messageId !== null,
     queryFn: () =>
       unwrap(api.GET('/api/v1/summary-chat-messages/{message_id}', { params: { path: { message_id: messageId! } } })),
-    refetchInterval: (query) => (query.state.data && !isOpen(query.state.data) ? false : POLL_MS),
+    refetchInterval: pollWhile((data: ChatMessage | undefined) => !data || isOpen(data), POLL_MS),
   })
   const data = reply.data
   useEffect(() => {

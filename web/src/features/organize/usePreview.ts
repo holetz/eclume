@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import type { Preview } from './queries'
 
-export const PREVIEW_POLL_MS = 1500
+export const PREVIEW_POLL_MS = 2000
 
 type PreviewState = 'idle' | 'queued' | 'running' | 'done' | 'failed' | 'expired'
 
@@ -39,7 +40,7 @@ export function usePreview<TBody>(start: (body: TBody) => Promise<Preview>): Pre
       unwrap(api.GET('/api/v1/previews/{preview_id}', { params: { path: { preview_id: previewId! } } })),
     enabled: previewId !== null,
     retry: false,
-    refetchInterval: (q) => (isActive(q.state.data?.status) ? PREVIEW_POLL_MS : false),
+    refetchInterval: pollWhile((data: Preview | undefined) => isActive(data?.status), PREVIEW_POLL_MS),
   })
 
   const run = useCallback(

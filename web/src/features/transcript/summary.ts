@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import { recordingKey, summaryKey } from './queries'
 
 type Summary = Schemas['Summary']
@@ -16,7 +17,7 @@ export function useSummaryState(recordingId: string, enabled = true) {
     enabled,
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}/summary', { params: { path: { recording_id: recordingId } } })),
-    refetchInterval: (query) => (query.state.data?.pending ? POLL_MS : false),
+    refetchInterval: pollWhile((data: SummaryState | undefined) => !!data?.pending, POLL_MS),
   })
 }
 
