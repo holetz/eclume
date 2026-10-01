@@ -179,7 +179,7 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 - Métodos da v3: `set_kind`, `begin_import` (a importação já nasce `pending`,
   [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` e
   `markers(recording_id)`. Da v4: `set_source`, `set_details_pending`, `save_details(id, título,
-  tipo)` (vazios viram nulos; libera o sync; só antes do upload) e `release_details_pending`. Da
+  tipo, idioma)` (vazios viram nulos; libera o sync; só antes do upload; o idioma desde a v6) e `release_details_pending`. Da
   v5: `set_server_title(remote_id, título)`, que devolve se mudou alguma linha.
 
 ```
