@@ -8,11 +8,11 @@
 # Build a partir da raiz do repositório, no host GPU:
 #   docker --context gpu-host build -t eclume-worker-gpu:dev -f worker-gpu/Dockerfile .
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 
 # Estágio único de propósito: num multi-stage, o .venv (~7 GB) existiria duas vezes no disco do
 # host (cache do builder e camada final). O uv vem do binário da imagem oficial.
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7 /uv /usr/local/bin/uv
 
 # ffmpeg decodifica o Opus (whisperx.load_audio), fornece as libs do torchcodec e faz o
 # pré-processamento (arnndn, afftdn, loudnorm, silencedetect, atrim, pan).

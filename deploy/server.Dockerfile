@@ -9,11 +9,11 @@
 # A CLI `claude` do provider `claude-cli` (docs/standards/code/server-agentes.md). O pacote npm
 # traz o binário nativo em bin/claude.exe: só ele entra na imagem final, sem Node. Versão fixada
 # na mesma do host (~/.local/bin/claude).
-FROM node:22-bookworm-slim AS claudecli
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS claudecli
 RUN npm install -g @anthropic-ai/claude-code@2.1.282
 
-FROM python:3.12-slim-bookworm AS build
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS build
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -32,7 +32,7 @@ COPY server/src server/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package eclume-server --no-editable
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 COPY --from=claudecli /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /usr/local/bin/claude
 COPY --from=build /app/.venv /app/.venv
 # uid 1000 é o dono de /srv/eclume e de ~/.claude/.credentials.json no host: o worker CPU monta a

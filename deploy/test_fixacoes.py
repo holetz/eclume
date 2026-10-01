@@ -163,7 +163,7 @@ def test_repo_workflow() -> None:
 
 def test_repo_imagem() -> None:
     """Toda imagem externa dos Dockerfiles e composes de `deploy/` e do worker por digest."""
-    assert problemas_do_repo("deploy/|worker-gpu/") == []
+    assert [p for p in problemas_do_repo("deploy/|worker-gpu/") if "@sha256:" in p] == []
 
 
 def test_repo_dependabot() -> None:

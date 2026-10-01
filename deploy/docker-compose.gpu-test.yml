@@ -18,7 +18,7 @@ x-s3: &s3
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     ports:
       - "127.0.0.1:${ECLUME_GPU_TEST_REDIS_PORT:-16379}:6379"
     healthcheck:
@@ -29,7 +29,7 @@ services:
 
   minio:
     # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER:-eclume}
@@ -44,7 +44,7 @@ services:
 
   minio-init:
     # O mc vem na mesma imagem do servidor.
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     depends_on:
       minio:
         condition: service_healthy
