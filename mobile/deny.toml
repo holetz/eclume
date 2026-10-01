@@ -1,0 +1,6 @@
+# cargo-deny do pilar `auditoria` (deploy/pilares.sh): `cargo deny --locked check advisories` falha
+# em advisory do RustSec que afete o Cargo.lock deste workspace. Exceção só com motivo e prazo:
+#   ignore = [{ id = "RUSTSEC-AAAA-NNNN", reason = "<motivo> · prazo AAAA-MM-DD" }]
+# Contrato: docs/standards/code/monorepo.md.
+[advisories]
+ignore = []

@@ -6,13 +6,13 @@
 #
 # Uso: bash deploy/pilares.sh <pilar>     roda os comandos do pilar, parando no primeiro que falha
 #      bash deploy/pilares.sh --lista     enumera os pilares, um por linha
-# Pilares: python contracts web web-browser desktop mobile windows (este só no gate).
+# Pilares: python contracts web web-browser desktop mobile windows auditoria (os dois últimos só no gate).
 # Contrato: docs/standards/code/monorepo.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PILARES=(python contracts web web-browser desktop mobile windows)
+PILARES=(python contracts web web-browser desktop mobile windows auditoria)
 
 # Um grupo dobrável por comando no log da CI; no gate, só um cabeçalho.
 run() {
@@ -103,8 +103,32 @@ pilar_windows() {
     --target x86_64-pc-windows-msvc -- -D warnings
 }
 
+# Vulnerabilidades conhecidas das dependências de produção: pip-audit sobre o uv.lock, npm audit
+# (alta ou crítica) nos projetos que vão para o usuário e cargo-deny (advisories) nos workspaces
+# Rust. Exceção só com motivo e prazo: deploy/auditoria-excecoes.txt (Python), `overrides` no
+# package.json (npm) e o [advisories] ignore de desktop/deny.toml e mobile/deny.toml (Rust). Só no
+# gate: precisa da rede e das ferramentas da imagem eclume-gate.
+pilar_auditoria() {
+  local req ignorar=() id prazo
+  req="$(mktemp)"
+  run uv export --locked --all-packages --no-hashes --no-emit-workspace --format requirements-txt -o "$req"
+  # Linha da exceção: <id> <prazo AAAA-MM-DD> <motivo>; vencida, deixa de valer e o pilar falha.
+  while read -r id prazo _; do
+    [[ -z "$id" || "$id" == \#* ]] && continue
+    if [[ "$prazo" > "$(date +%F)" ]]; then ignorar+=(--ignore-vuln "$id"); fi
+  done < deploy/auditoria-excecoes.txt
+  run pip-audit --no-deps --disable-pip -r "$req" "${ignorar[@]}"
+  rm -f "$req"
+  for projeto in web mobile desktop; do
+    run npm --prefix "$projeto" audit --omit=dev --audit-level=high
+  done
+  for ws in desktop mobile; do
+    (cd "$ROOT/$ws" && run cargo deny --locked check advisories)
+  done
+}
+
 case "${1:-}" in
   --lista) printf '%s\n' "${PILARES[@]}" ;;
-  python|contracts|web|web-browser|desktop|mobile|windows) "pilar_${1//-/_}" ;;
+  python|contracts|web|web-browser|desktop|mobile|windows|auditoria) "pilar_${1//-/_}" ;;
   *) echo "Uso: bash deploy/pilares.sh <$(IFS='|'; echo "${PILARES[*]}")> | --lista" >&2; exit 2 ;;
 esac
