@@ -154,8 +154,13 @@ de pixels: a comparação é revisada.
   Menu; clicar no link da rota atual fecha. Vale para o app e o admin (`ShellFrame`).
 - **axe no E2E** (`web/e2e/a11y.spec.ts`, `@axe-core/playwright`): entrar, biblioteca, gravação,
   Pessoas, Busca, Campos e, no admin, Usuários e Saúde, nos temas claro e escuro, sem violação
-  WCAG 2.1 A/AA. Exceção única e temporária: o `.table th` do DS (60% do texto) não chega a 4,5:1
-  no claro; sai com a correção na fonte do DS (holetz/eclume#122). O contraste de borda de
-  controle (1.4.11), que o axe não mede, fica para o teste de tokens da mesma spec.
+  WCAG 2.1 A/AA e sem exceção.
+- **Contraste como teste** (`web/src/styles/contrast.test.ts`): lê `:root` e
+  `:root[data-theme='dark']` do `eclume.css`, resolve `var()` e `color-mix(... transparent)` sobre o
+  fundo e afirma, nos dois temas e sobre fundo e superfície, as bordas de controle (`.input`,
+  `.btn-secondary`, `.check .box`, `.switch .track`, todas em `--color-control-border`) com pelo
+  menos 3:1 (1.4.11, que o axe não mede) e os textos secundário, de aviso, de sucesso, de erro e do
+  cabeçalho de tabela com pelo menos 4,5:1. O valor muda na fonte (`design-system/styles.css`),
+  nunca numa cópia.
 - **Cópia fiel no celular.** `mobile/ui/src/styles/copia.test.ts` confere que o `eclume.css` do
   celular é igual ao do web, como o `ui_assets` faz com o do desktop.
