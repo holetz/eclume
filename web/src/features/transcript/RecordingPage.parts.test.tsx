@@ -1,9 +1,11 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
+
+beforeAll(() => preloadRoute('/gravacoes/x'))
 
 afterEach(() => vi.unstubAllGlobals())
 

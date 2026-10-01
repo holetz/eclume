@@ -1,10 +1,12 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { safeReturnPath } from '../../app/session'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
+
+beforeAll(() => preloadRoute('/ajuda'))
 
 afterEach(() => {
   vi.unstubAllGlobals()

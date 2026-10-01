@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch } from '../../test/http'
-import { renderApp } from '../../test/render'
+import { preloadRoute, renderApp } from '../../test/render'
+
+beforeAll(() => preloadRoute('/pessoas/x'))
 
 afterEach(() => vi.unstubAllGlobals())
 
