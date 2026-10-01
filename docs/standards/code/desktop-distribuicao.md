@@ -7,7 +7,7 @@ tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89
+source: holetz/eclume#16, holetz/eclume#26, holetz/eclume#40, holetz/eclume#57, holetz/eclume#60, holetz/eclume#88, holetz/eclume#89, holetz/eclume#90
 maintainer: holetz
 ---
 
@@ -60,7 +60,12 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   `--sem-gate "<motivo>"` dispensa só o status e publica no commit o rastro
   `eclume/gate-dispensa` = `failure` com o motivo; árvore limpa e commit no GitHub seguem exigidos. Sem `--publicar` é **ensaio**: os
   artefatos ficam em `~/eclume-build/release/dist-<versão>/` no host e nada é publicado.
-- O build roda no contêiner de `desktop/build.Dockerfile` (`eclume-desktop-build:24.04`) com
+- A imagem de build sai de `desktop/build.Dockerfile` com o contexto mínimo (só o
+  `desktop/rust-toolchain.toml`): Ubuntu 24.04 e Node por digest, o Rust do arquivo, e a tag
+  `eclume-desktop-build:<versão do Rust>` (a Windows idem, com o `cargo-xwin` de versão fixada).
+  A CLI do Tauri sai de `desktop/package-lock.json`: um contêiner **sem a chave do updater** roda
+  `npm ci --ignore-scripts`, e só depois o build, com a chave, executa `npx --no-install tauri`.
+- O build roda no contêiner dessa imagem com
   `--cpus 2`, `CARGO_BUILD_JOBS=2` e `nice`, como o uid 1000; `target/` (`target-linux`,
   `target-windows`) e o registry do cargo (`~/eclume-build/cargo-registry`) persistem no host
   para os builds seguintes serem incrementais. O script recusa começar com o disco do host em
@@ -79,17 +84,19 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 ## Workflow `desktop-release.yml` — a alternativa
 
 - Dispara **só** por `workflow_dispatch`: a tag que o release no host cria não o dispara. Faz o
-  mesmo release no GitHub Actions — Linux sempre; Windows (`nsis,msi`, em `windows-latest`) com
+  mesmo release no GitHub Actions — Linux sempre; Windows (`nsis,msi`, em `windows-2025`) com
   a entrada `windows`, ligada por padrão (o minuto custa 2×; desmarque para só Linux). `publicar: false`
   (padrão) é ensaio — os artefatos ficam no run. Para publicar, o job `plano` confere
   `eclume/gate` = `success` no commit (permissão `statuses: read`, `deploy/gate.py decidir`) e
   falha sem ele; aqui não há dispensa — quem precisa dispensar publica pelo host.
-- A CLI do Tauri roda por `npx @tauri-apps/cli@2 build --ci --bundles <lista>`, sem
-  `tauri-action`: o `latest.json` dela apontaria para URLs privadas do GitHub.
+- A CLI do Tauri é a de `desktop/package-lock.json` (versão exata, a mesma do mobile), instalada
+  por `npm --prefix desktop ci --ignore-scripts` num passo sem os secrets e executada por
+  `npx --no-install tauri build --ci --bundles <lista>`, sem `tauri-action`: o `latest.json` dela
+  apontaria para URLs privadas do GitHub.
 - O código só-Windows compila e passa no `clippy -D warnings` a cada gate do host, por compilação
   cruzada (pilar `windows`). A prova de **execução** num Windows de verdade segue manual:
   `desktop-plataformas.yml` (à mão) faz o `cargo check` do workspace e roda os testes de
-  `eclume-mirror` e `eclume-sync` em `windows-latest`.
+  `eclume-mirror` e `eclume-sync` em `windows-2025`.
 
 ## Servidor embutido no instalador
 
