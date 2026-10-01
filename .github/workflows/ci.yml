@@ -5,7 +5,13 @@
 # Economia de minutos: mudança só de documentação não dispara a CI (`paths-ignore`), e o job
 # `mudancas` liga só os jobs dos pilares tocados. Cada job cobra ao menos 1 minuto; os filtros
 # seguem as dependências entre pilares (o server e o web leem o contrato, o desktop lê o CSS do
-# web, o mobile compila `desktop/crates`). Mexer neste arquivo roda tudo; `workflow_dispatch` também.
+# web, o mobile compila `desktop/crates`). Mexer neste arquivo ou em `deploy/pilares.sh` roda tudo;
+# `workflow_dispatch` também, e o noturno (`schedule`) roda tudo só se o `main` mudou desde o último
+# noturno verde.
+#
+# Os comandos de cada pilar vêm de `deploy/pilares.sh`, a mesma fonte do gate do host
+# (`deploy/gate.sh`, status `eclume/gate`); cada job aqui só prepara o ambiente e chama o seu pilar.
+# O pilar `windows` é só do gate. `deploy/test_gate.py` falha se um job deixar de chamar o seu pilar.
 name: ci
 
 on:
@@ -27,6 +33,8 @@ on:
       - "*.md"
       - "LICENSE"
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # 03:00 em Brasília
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -42,19 +50,28 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     outputs:
-      python: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.python == 'true' }}
-      contracts: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.contracts == 'true' }}
-      web: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.web == 'true' }}
-      web-browser: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.web-browser == 'true' }}
-      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.desktop == 'true' }}
-      mobile: ${{ github.event_name == 'workflow_dispatch' || steps.filtro.outputs.mobile == 'true' }}
+      python: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.python == 'true') }}
+      contracts: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.contracts == 'true') }}
+      web: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.web == 'true') }}
+      web-browser: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.web-browser == 'true') }}
+      desktop: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.desktop == 'true') }}
+      mobile: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.mobile == 'true') }}
     steps:
       # No PR a lista de arquivos vem da API; no push em main o filtro compara com o commit
       # anterior ao push e precisa do checkout.
       - if: github.event_name == 'push'
         uses: actions/checkout@v7
-      - if: github.event_name != 'workflow_dispatch'
+      # O noturno só gasta minutos quando o `main` mudou desde o último noturno verde.
+      - if: github.event_name == 'schedule'
+        id: noturno
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ultimo="$(gh run list -R "$GITHUB_REPOSITORY" -w ci -e schedule -s success -L 1 --json headSha --jq '.[0].headSha // ""')"
+          if [ "$ultimo" = "$GITHUB_SHA" ]; then echo "pular=true" >> "$GITHUB_OUTPUT"; fi
+      - if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
         id: filtro
         uses: dorny/paths-filter@v4
         with:
@@ -62,6 +79,7 @@ jobs:
           filters: |
             ci: &ci
               - ".github/workflows/ci.yml"
+              - "deploy/pilares.sh"
             uv: &uv
               - "pyproject.toml"
               - "uv.lock"
@@ -75,6 +93,10 @@ jobs:
               - "contracts/**"
               - "mobile/scripts/**"
               - "deploy/docker-compose.test.yml"
+              - "deploy/gate.py"
+              - "deploy/test_gate.py"
+              - ".github/workflows/desktop-release.yml"
+              - ".github/workflows/mobile-release.yml"
             contracts:
               - *ci
               - *uv
@@ -108,15 +130,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
-      - run: uv sync --all-packages --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
       - name: Serviços de teste do server (Postgres, Redis, MinIO)
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
-      - run: uv run pytest
-        env:
-          # A suíte do server falha, em vez de pular, se os serviços não estiverem no ar.
-          ECLUME_TEST_REQUIRE_SERVICES: "1"
+      - run: bash deploy/pilares.sh python
       - if: failure()
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml logs
 
@@ -130,13 +146,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
-      - run: uv sync --all-packages --locked
-      - run: uv run python contracts/tools/bundle.py --check
-      - run: uv run pytest contracts/tests
-      - name: Smoke do mock server (Prism)
-        run: |
-          docker compose -f deploy/docker-compose.mock.yml up -d --wait
-          bash contracts/tests/smoke-mock.sh
+      - name: Mock server (Prism)
+        run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
+      - run: bash deploy/pilares.sh contracts
       - if: failure()
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
@@ -145,9 +157,6 @@ jobs:
     if: needs.mudancas.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -155,11 +164,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run gen:api -- --check
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - run: bash deploy/pilares.sh web
 
   # Testes que precisam de navegador: a conversão de mídia (vitest browser mode) e o E2E do app
   # contra o mock do contrato. Os dois usam o Google Chrome que já vem no runner (canal `chrome`,
@@ -169,9 +174,6 @@ jobs:
     if: needs.mudancas.outputs.web-browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: web
     env:
       E2E_CHANNEL: chrome
     steps:
@@ -185,16 +187,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
-      - run: npm ci
-      - name: Testes de navegador da conversão
-        run: npm run fixtures && npm run test:browser
       - name: Mock server (Prism)
-        working-directory: .
         run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
-      - name: E2E contra o mock
-        run: npm run test:e2e
+      - run: bash deploy/pilares.sh web-browser
       - if: failure()
-        working-directory: .
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   desktop:
@@ -217,19 +213,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
-      - run: cargo fmt --manifest-path desktop/Cargo.toml --all --check
-      - run: cargo check --manifest-path desktop/Cargo.toml --workspace --locked
-      - run: cargo clippy --manifest-path desktop/Cargo.toml --workspace --locked -- -D warnings
-      - run: cargo test --manifest-path desktop/Cargo.toml --workspace --locked
-      # A UI da janela (desktop/ui) num Chromium, com o Tauri simulado.
+      # A UI da janela (desktop/ui) roda num Chromium: as dependências de sistema dele vêm daqui.
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/ui-tests/package-lock.json
-      - run: npm --prefix desktop/ui-tests ci
-      - run: npm --prefix desktop/ui-tests exec -- playwright install --with-deps chromium
-      - run: npm --prefix desktop/ui-tests test
+      - run: |
+          npm --prefix desktop/ui-tests ci
+          npm --prefix desktop/ui-tests exec -- playwright install --with-deps chromium
+      # Diagnóstico do `Bus error` no link: disco e memória antes do cargo.
+      - name: Disco e memória
+        run: df -h && free -m
+      - run: bash deploy/pilares.sh desktop
 
   mobile:
     needs: mudancas
@@ -250,10 +246,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - run: npm --prefix mobile ci
-      - run: npm --prefix mobile run lint
-      - run: npm --prefix mobile test
-      - run: npm --prefix mobile run build
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -261,18 +253,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: mobile
-      - run: cargo fmt --manifest-path mobile/Cargo.toml --all --check
-      - run: cargo check --manifest-path mobile/Cargo.toml --workspace --locked
-      - run: cargo clippy --manifest-path mobile/Cargo.toml --workspace --locked -- -D warnings
-      - run: cargo test --manifest-path mobile/Cargo.toml --workspace --locked
-      # O núcleo compila para o Android sem o gradle: prova a compilação cruzada do libopus (cmake)
-      # e do SQLite com o NDK que o runner já traz.
-      - name: Núcleo para aarch64-linux-android
-        run: |
-          ndk="$ANDROID_NDK_LATEST_HOME"
-          bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
-          export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
-          export AR_aarch64_linux_android="$bin/llvm-ar"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$bin/aarch64-linux-android26-clang"
-          cargo check --manifest-path mobile/Cargo.toml -p eclume-mobile-core --target aarch64-linux-android --locked
+      # O pilar compila o núcleo para o Android com o NDK que o runner já traz
+      # (ANDROID_NDK_LATEST_HOME).
+      - run: bash deploy/pilares.sh mobile

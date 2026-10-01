@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 _spec = importlib.util.spec_from_file_location("gate", Path(__file__).with_name("gate.py"))
 assert _spec is not None
@@ -143,3 +144,32 @@ def test_alvos_do_push_pela_linha_de_comando(
     codigo, saida = rodar(["alvos-do-push"], f"refs/heads/main {SHA} refs/heads/main {'b' * 40}\n", monkeypatch, capsys)
     assert codigo == 0
     assert saida.split() == [SHA]
+
+
+# --- contrato com a CI ----------------------------------------------------------------------------
+
+RAIZ = Path(__file__).resolve().parent.parent
+WORKFLOWS = RAIZ / ".github" / "workflows"
+
+
+def comandos(job: dict[str, object]) -> str:
+    """Todo o `run:` de um job do workflow, numa string só."""
+    passos = job.get("steps") or []
+    assert isinstance(passos, list)
+    return "\n".join(str(passo.get("run", "")) for passo in passos)
+
+
+def test_cada_job_da_ci_chama_o_seu_pilar() -> None:
+    """Cada job de pilar do `ci.yml` chama `deploy/pilares.sh <job>`; o `windows` é só do gate."""
+    jobs = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["jobs"]
+    pilares_da_ci = set(jobs) - {"mudancas"}
+    assert pilares_da_ci == set(gate.PILARES) - {"windows"}
+    for nome in pilares_da_ci:
+        assert f"bash deploy/pilares.sh {nome}" in comandos(jobs[nome]), nome
+    assert "pilares.sh windows" not in (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+
+def test_pilares_sh_lista_os_mesmos_pilares_do_gate() -> None:
+    """O `--lista` do `pilares.sh` e o `gate.PILARES` andam juntos."""
+    texto = (RAIZ / "deploy" / "pilares.sh").read_text(encoding="utf-8")
+    assert f"PILARES=({' '.join(gate.PILARES)})" in texto
