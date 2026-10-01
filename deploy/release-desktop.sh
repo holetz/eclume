@@ -15,7 +15,8 @@
 #   --sem-windows  deixa o Windows de fora (por padrão o release inclui o instalador NSIS,
 #               compilado por compilação cruzada; `--windows` segue aceito e não muda nada).
 #   --publicar  cria a tag e o GitHub Release; sem ele é ensaio e os artefatos ficam no host.
-#   --notas     notas do release, que o app mostra no aviso "Atualizado para X".
+#   --notas     notas do release, que o app mostra no aviso "Atualizado para X"; sem ele, a seção da
+#               versão no desktop/CHANGELOG.md (docs/standards/code/versionamento.md).
 #   --sem-gate  com --publicar, dispensa só o status eclume/gate = success no commit e deixa nele o
 #               rastro eclume/gate-dispensa com o motivo; o ensaio não exige gate.
 #   --sem-assinatura  aceita publicar o instalador Windows sem assinatura de código quando o host
@@ -71,7 +72,8 @@ host() { ssh -o BatchMode=yes "$SSH" "$@"; }
 VERSAO="$(python3 -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")"
 TAG="desktop-v$VERSAO"
 SHA="$(git rev-parse HEAD)"
-NOTAS="${NOTAS:-eclume desktop $VERSAO}"
+[[ -n "$NOTAS" ]] || NOTAS="$(python3 deploy/versao.py notas desktop "$VERSAO")" \
+  || { echo "Falta a seção [$VERSAO] no desktop/CHANGELOG.md: escreva-a ou passe --notas." >&2; exit 2; }
 ALVOS=(linux)
 [[ "$WINDOWS" -eq 0 ]] || ALVOS+=(windows)
 SERVER_URL="${ECLUME_SERVER_URL:-$(gh variable get ECLUME_SERVER_URL -R "$REPO")}"

@@ -1,7 +1,7 @@
 # Changelog do app do celular
 
 O que muda no app do celular do eclume (Android). A seção de cada versão é a nota do release: o
-workflow `mobile-release.yml` a põe no `movel.json`. O formato segue o
+`deploy/release-movel.sh` a põe no `movel.json`. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões, o
 [SemVer](https://semver.org/lang/pt-BR/); a norma está em
 [versionamento.md](../docs/standards/code/versionamento.md).
