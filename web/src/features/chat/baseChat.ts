@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 
 export type BaseChat = Schemas['BaseChat']
 type Turn = Schemas['BaseChatTurn']
@@ -30,7 +31,7 @@ export function useBaseChat(id: string) {
         }),
       ),
     retry: false,
-    refetchInterval: (query) => (isActive(query.state.data) ? BASE_CHAT_POLL_MS : false),
+    refetchInterval: pollWhile((data: BaseChat | undefined) => isActive(data), BASE_CHAT_POLL_MS),
   })
 }
 

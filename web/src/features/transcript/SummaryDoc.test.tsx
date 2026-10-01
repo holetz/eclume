@@ -6,7 +6,10 @@ import { empty, json } from '../../test/http'
 import { renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  window.sessionStorage.clear()
+})
 
 const ONE_ON_ONE = '01928f3a-1c00-7a00-8000-000000000902'
 
@@ -341,6 +344,61 @@ describe('edição do resumo', () => {
     const bodies = await Promise.all(http.requests('PUT /api/v1/recordings/:id/summary').map((r) => r.json()))
     expect(bodies.map((body) => body.base_version)).toEqual([2, 3])
     expect(bodies[1].content_md).toBe('# Meu rascunho')
+  })
+
+  it('guarda o rascunho na aba, reencontra depois de recarregar e apaga ao descartar', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi()
+    const first = renderApp(`/gravacoes/${RECORDING}`)
+    const text = within(await openEditor()).getByRole('textbox')
+    await user.clear(text)
+    await user.type(text, '# Rascunho guardado')
+    const key = `eclume-resumo-rascunho:${RECORDING}`
+    await waitFor(() =>
+      expect(JSON.parse(window.sessionStorage.getItem(key) ?? 'null')).toEqual({
+        base_version: 2,
+        content_md: '# Rascunho guardado',
+      }),
+    )
+
+    first.unmount()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    expect(within(editor).getByRole('textbox')).toHaveValue('# Rascunho guardado')
+    expect(within(editor).queryByRole('alert')).not.toBeInTheDocument()
+    await user.click(within(editor).getByRole('button', { name: 'Cancelar' }))
+    const confirm = screen.getByRole('dialog', { name: 'Descartar a edição?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Descartar' }))
+    expect(window.sessionStorage.getItem(key)).toBeNull()
+  })
+
+  it('rascunho guardado sobre uma versão antiga volta com o aviso de conflito', async () => {
+    window.sessionStorage.setItem(
+      `eclume-resumo-rascunho:${RECORDING}`,
+      JSON.stringify({ base_version: 1, content_md: '# Rascunho antigo' }),
+    )
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    expect(within(editor).getByRole('textbox')).toHaveValue('# Rascunho antigo')
+    expect(within(editor).getByText('O resumo mudou enquanto você editava (agora na versão 2).')).toBeInTheDocument()
+    expect(within(editor).getByRole('button', { name: 'Salvar sobre a versão 2' })).toBeInTheDocument()
+  })
+
+  it('sair pela barra com rascunho pede confirmação, e continuar editando mantém o texto', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const editor = await openEditor()
+    const text = within(editor).getByRole('textbox')
+    await user.type(text, ' mais')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    await user.click(within(nav).getByRole('link', { name: 'Biblioteca' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Descartar a edição?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Continuar editando' }))
+    expect(screen.queryByRole('dialog', { name: 'Descartar a edição?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Editando o resumo' })).toBeInTheDocument()
+    expect(text).toHaveValue(`${fixtures.summaryState().current!.content_md} mais`)
   })
 
   it('volta à gerada com confirmação', async () => {

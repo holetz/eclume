@@ -34,6 +34,49 @@ describe('player e marcadores', () => {
     )
   })
 
+  it('renova a assinatura vencida uma vez e retoma do instante, tocando; na segunda falha, mostra o erro', async () => {
+    const user = userEvent.setup()
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const player = await screen.findByRole('group', { name: 'Player' })
+    const first = audio().getAttribute('src')
+    fireEvent.loadedMetadata(audio())
+    await user.click(within(player).getByRole('button', { name: 'Tocar' }))
+    fireEvent.play(audio())
+    fireEvent.playing(audio())
+    audio().currentTime = 65
+    fireEvent.timeUpdate(audio())
+    vi.mocked(audio().play).mockClear()
+
+    fireEvent.error(audio())
+    expect(audio().getAttribute('src')).not.toBe(first)
+    expect(audio().getAttribute('src')).toContain(`/api/v1/recordings/${RECORDING}/audio?`)
+    audio().currentTime = 0
+    fireEvent.loadedMetadata(audio())
+    expect(audio().currentTime).toBe(65)
+    expect(audio().play).toHaveBeenCalled()
+    expect(within(player).queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.error(audio())
+    const alert = within(player).getByRole('alert')
+    expect(alert).toHaveTextContent('O áudio não carregou.')
+    expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
+    const failed = audio().getAttribute('src')
+    await user.click(within(alert).getByRole('button', { name: 'Tentar de novo' }))
+    expect(within(player).queryByRole('alert')).not.toBeInTheDocument()
+    expect(audio().getAttribute('src')).not.toBe(failed)
+  })
+
+  it('num navegador que não toca Ogg Opus, o player diz isso em vez de ficar mudo', async () => {
+    mockTranscriptApi()
+    renderApp(`/gravacoes/${RECORDING}`)
+    const player = await screen.findByRole('group', { name: 'Player' })
+    vi.spyOn(audio(), 'canPlayType').mockReturnValue('')
+    fireEvent.error(audio())
+    expect(within(player).getByRole('alert')).toHaveTextContent('Este navegador não toca o áudio do eclume (Ogg Opus).')
+    expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
+  })
+
   it('posiciona pela trilha e troca a velocidade em ciclo', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()

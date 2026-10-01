@@ -72,8 +72,12 @@ pub enum NoteToggle {
 /// Uma gravação que terminou sozinha e foi fechada pelo reaper.
 #[derive(Debug)]
 pub enum Reaped {
-    /// As fontes de áudio caíram.
-    SourcesEnded(QueuedRecording),
+    /// A gravação parou sozinha: as fontes de áudio caíram ([`StopReason::SourcesEnded`]) ou a
+    /// gravação falhou ([`StopReason::Failed`]).
+    Stopped {
+        recording: QueuedRecording,
+        reason: StopReason,
+    },
     /// A nota parou no silêncio e foi para a fila.
     NoteSaved(QueuedRecording),
     /// A nota não teve voz: saiu da fila e do disco.
@@ -412,15 +416,20 @@ fn non_empty(value: Option<String>) -> Option<String> {
 
 impl AppState {
     /// Abre a fila em `data_dir`, recupera gravações interrompidas e lê a config e o PAT de
-    /// `config_dir`.
+    /// `config_dir`. Um `.part` preso não impede a abertura: a linha fica para a varredura. A
+    /// config só é gravada quando a versão aberta muda; ilegível, é guardada ao lado e a janela
+    /// avisa.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self> {
         let queue = Queue::open(&data_dir.join("queue.sqlite"))?;
         let recovered = session::recover(&queue)?;
         let config_path = config_dir.join("config.json");
-        let mut config = Config::load(&config_path);
+        let (mut config, unreadable) = Config::load_checked(&config_path);
+        let previous_version = config.last_version.clone();
         let just_updated = config.open_version(CURRENT_VERSION);
-        if let Err(err) = config.save(&config_path) {
-            log::warn!("falha ao registrar a versão aberta: {err:#}");
+        if config.last_version != previous_version {
+            if let Err(err) = config.save(&config_path) {
+                log::warn!("falha ao registrar a versão aberta: {err:#}");
+            }
         }
         let state = Self::new(
             queue,
@@ -429,13 +438,23 @@ impl AppState {
             config,
             PatStore::new(config_dir),
         );
-        state.inner()?.update_to_notify = just_updated;
+        let mut notices = Vec::new();
+        if let Some(copy) = unreadable {
+            notices.push(format!(
+                "A configuração estava ilegível e voltou ao padrão; a cópia está em {}",
+                copy.display()
+            ));
+        }
         if !recovered.is_empty() {
-            state.inner()?.notice = Some(format!(
+            notices.push(format!(
                 "{} gravação(ões) interrompida(s) recuperada(s)",
                 recovered.len()
             ));
         }
+        let mut inner = state.inner()?;
+        inner.update_to_notify = just_updated;
+        inner.notice = (!notices.is_empty()).then(|| notices.join(" · "));
+        drop(inner);
         Ok(state)
     }
 
@@ -706,11 +725,32 @@ impl AppState {
                 log::info!("nota {} descartada: sem voz", recording.id);
                 Reaped::NoteDiscarded
             }
-            _ => {
+            Some(StopReason::SourcesEnded) => {
                 self.inner()?.notice = Some("a gravação parou: as fontes de áudio caíram".into());
-                Reaped::SourcesEnded(recording)
+                Reaped::Stopped {
+                    recording,
+                    reason: StopReason::SourcesEnded,
+                }
+            }
+            // Sem motivo, a thread de gravação entrou em pânico: conta como falha.
+            _ => {
+                self.inner()?.notice = Some("a gravação parou: falha ao gravar".into());
+                Reaped::Stopped {
+                    recording,
+                    reason: StopReason::Failed,
+                }
             }
         }))
+    }
+
+    /// Fecha as gravações que ficaram em `recording` sem sessão viva (o `.part` estava preso ao
+    /// parar), sem esperar a próxima abertura. Segura o estado durante a varredura: nenhuma
+    /// gravação começa no meio dela (ordem estado → fila).
+    pub fn sweep_orphans(&self) -> Result<usize> {
+        let inner = self.inner()?;
+        let live: Vec<&str> = inner.active.iter().map(ActiveRecording::id).collect();
+        let recovered = session::recover_orphans(&*self.lock_queue()?, &live)?;
+        Ok(recovered.len())
     }
 
     /// Um evento do detector, pela máquina de gravação automática; o chamador executa a ação.
@@ -1390,10 +1430,104 @@ mod tests {
     fn estado_fecha_gravacao_cujas_fontes_acabaram() {
         let (state, dir) = state("colhe");
         state.start_recording(|| sine_sources(0)).unwrap();
-        assert!(matches!(reap(&state), Reaped::SourcesEnded(_)));
+        assert!(matches!(
+            reap(&state),
+            Reaped::Stopped {
+                reason: StopReason::SourcesEnded,
+                ..
+            }
+        ));
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
         assert_eq!(state.view().unwrap().counts.pending, 1);
         assert!(state.reap_finished().unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_varre_a_orfa_sem_tocar_a_gravacao_viva() {
+        let (state, dir) = state("varredura");
+        state.start_recording(|| sine_sources(30)).unwrap();
+        let orphan = dir.join("gravacoes").join("orfa.ogg.part");
+        std::fs::write(&orphan, b"OggS").unwrap();
+        state
+            .lock_queue()
+            .unwrap()
+            .begin("orfa", &orphan, 1)
+            .unwrap();
+
+        assert_eq!(state.sweep_orphans().unwrap(), 1);
+        assert_eq!(state.status().unwrap(), AppStatus::Recording);
+        let row = state.lock_queue().unwrap().get("orfa").unwrap().unwrap();
+        assert!(row.interrupted);
+        assert_eq!(state.sweep_orphans().unwrap(), 0);
+        state.stop_recording().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_abre_com_part_preso() {
+        let dir = std::env::temp_dir().join(format!("eclume-state-preso-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("presa.ogg.part");
+        std::fs::write(&part, b"OggS").unwrap();
+        // `rename(arquivo, diretório)` falha: simula o `.part` preso.
+        std::fs::create_dir(dir.join("presa.ogg")).unwrap();
+        Queue::open(&dir.join("queue.sqlite"))
+            .unwrap()
+            .begin("presa", &part, 1)
+            .unwrap();
+
+        let state = AppState::open(&dir, &dir).unwrap();
+        let row = state.lock_queue().unwrap().get("presa").unwrap().unwrap();
+        assert_eq!(row.status, eclume_recorder::queue::Status::Recording);
+        drop(state);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_abre_grava_a_config_so_quando_a_versao_muda() {
+        let dir = std::env::temp_dir().join(format!("eclume-state-versao-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let config_path = dir.join("config.json");
+        drop(AppState::open(&dir, &dir).unwrap());
+        let first = std::fs::metadata(&config_path).unwrap().modified().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+
+        drop(AppState::open(&dir, &dir).unwrap());
+        let second = std::fs::metadata(&config_path).unwrap().modified().unwrap();
+        assert_eq!(first, second);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_abre_com_config_ilegivel_e_avisa_na_janela() {
+        let dir =
+            std::env::temp_dir().join(format!("eclume-state-ilegivel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.json"), "{ quebrado").unwrap();
+
+        let state = AppState::open(&dir, &dir).unwrap();
+        let notice = state.view().unwrap().notice.unwrap();
+        assert!(
+            notice
+                .starts_with("A configuração estava ilegível e voltou ao padrão; a cópia está em"),
+            "{notice}"
+        );
+        let copies = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("config.json.ilegivel-")
+            })
+            .count();
+        assert_eq!(copies, 1);
+        drop(state);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -1,0 +1,57 @@
+# Atualizações de dependências do eclume: PRs semanais, agrupados por ecossistema, com espera de 7
+# dias depois da publicação (cooldown). Um PR do Dependabot só entra com o status eclume/gate =
+# success no SHA dele (bash deploy/gate.sh <ref>), já que a CI está parada. deploy/test_fixacoes.py
+# falha se um diretório com manifesto ficar sem entrada aqui. Contrato: docs/standards/code/monorepo.md.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: "/"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {uv: {patterns: ["*"]}}
+  - package-ecosystem: npm
+    directories:
+      - "/web"
+      - "/mobile"
+      - "/desktop"
+      - "/desktop/ui-tests"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {npm: {patterns: ["*"]}}
+  - package-ecosystem: cargo
+    directories:
+      - "/desktop"
+      - "/mobile"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {cargo: {patterns: ["*"]}}
+  - package-ecosystem: gradle
+    directory: "/mobile/src-tauri/gen/android"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {gradle: {patterns: ["*"]}}
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {github-actions: {patterns: ["*"]}}
+  - package-ecosystem: docker
+    directories:
+      - "/deploy"
+      - "/desktop"
+      - "/worker-gpu"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {docker: {patterns: ["*"]}}
+  - package-ecosystem: docker-compose
+    directory: "/deploy"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {docker-compose: {patterns: ["*"]}}
+  - package-ecosystem: rust-toolchain
+    directories:
+      - "/desktop"
+      - "/mobile"
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups: {rust-toolchain: {patterns: ["*"]}}

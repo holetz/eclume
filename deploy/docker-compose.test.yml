@@ -6,7 +6,7 @@ name: eclume-test
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       POSTGRES_USER: eclume
       POSTGRES_PASSWORD: eclume
@@ -22,7 +22,7 @@ services:
       retries: 30
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     ports:
       - "127.0.0.1:${ECLUME_TEST_REDIS_PORT:-56479}:6379"
     healthcheck:
@@ -33,7 +33,7 @@ services:
 
   minio:
     # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data
     environment:
       MINIO_ROOT_USER: eclume

@@ -6,7 +6,7 @@
 # Build a partir da RAIZ do repositório (contexto filtrado por deploy/web.Dockerfile.dockerignore):
 #   docker --context gpu-host build -f deploy/web.Dockerfile -t eclume-web:prod .
 
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
 # O `tsc -b` do build também checa os testes, que importam contracts/fixtures por caminho relativo:
 # a árvore web/ + contracts/ é reproduzida como no repositório.
 WORKDIR /app/web
@@ -16,7 +16,7 @@ COPY contracts/fixtures /app/contracts/fixtures
 COPY web/ ./
 RUN npm run build
 
-FROM caddy:2.11
+FROM caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
 COPY deploy/web.Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/web/dist /srv
 EXPOSE 80

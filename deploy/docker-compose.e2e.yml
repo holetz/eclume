@@ -34,7 +34,7 @@ x-server-image: &server-image
 
 services:
   caddy:
-    image: caddy:2.11
+    image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     depends_on:
       server: {condition: service_healthy}
       web: {condition: service_started}
@@ -97,7 +97,7 @@ services:
       - ../worker-gpu/src:/src/worker:ro
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       POSTGRES_USER: eclume
       POSTGRES_PASSWORD: eclume-e2e
@@ -111,7 +111,7 @@ services:
       retries: 30
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -119,7 +119,7 @@ services:
       retries: 30
 
   minio:
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: eclume
@@ -136,7 +136,7 @@ services:
 
   minio-init:
     profiles: [tools]
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     depends_on:
       minio: {condition: service_healthy}
     entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 eclume eclume-e2e-secret >/dev/null && mc mb --ignore-existing local/eclume"]

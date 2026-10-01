@@ -122,13 +122,21 @@ def _public_checks(api: Api) -> None:
         status, headers, body = api.raw("GET", path)
         if status != 200 or b'id="root"' not in body:  # noqa: PLR2004
             _fail(f"{path} não devolveu o index.html do SPA ({status})")
+        if "immutable" in headers.get("Cache-Control", ""):
+            _fail(f"{path} saiu com cache longo: {headers.get('Cache-Control')}")
+    # Chunk de um deploy anterior: 404 sem cache longo, nunca o index.html guardado por um ano.
+    status, headers, _ = api.raw("GET", "/assets/nao-existe-smoke.js")
+    if status != 404 or "immutable" in headers.get("Cache-Control", ""):  # noqa: PLR2004
+        _fail(f"/assets ausente → {status} {headers.get('Cache-Control')}")
     status, headers, _ = api.raw("GET", "/downloads/latest.json")
     if status != 200 or "json" not in headers.get("Content-Type", ""):  # noqa: PLR2004
         _fail(f"/downloads/latest.json → {status} {headers.get('Content-Type')}")
     signup = api.json("GET", "/api/v1/auth/signup")
     if not signup["open"] or not signup["notice"]["version"]:
         _fail(f"cadastro fechado ou sem o aviso: {signup}")
-    _step(f"health, SPA, /downloads/latest.json e cadastro aberto (aviso v{signup['notice']['version']}) ok")
+    _step(
+        f"health, SPA, asset ausente 404, /downloads/latest.json e cadastro aberto (aviso v{signup['notice']['version']}) ok"
+    )
 
 
 def _ensure_provider(api: Api) -> str:

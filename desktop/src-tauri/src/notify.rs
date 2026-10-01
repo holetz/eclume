@@ -3,10 +3,17 @@
 //! SO deixa responder pela notificação — Linux (D-Bus, `notify-rust`), Windows (toast com botões,
 //! `tauri-winrt-notification`) e macOS (`mac-notification-sys`) —, e a mesma pergunta fica na
 //! bandeja e na janela, porque o SO pode suprimir a notificação (modo foco, não perturbe).
+//!
+//! No Windows, todo aviso sai pelo toast com o AUMID do app instalado, para ter o nome e o ícone
+//! do eclume (o do PowerShell só em dev). No Linux, as ações esperam no máximo
+//! [`ACTIONS_DEADLINE`]: vencido o prazo, a notificação é fechada e a thread termina.
 
 use std::sync::Arc;
+#[cfg(all(unix, not(target_os = "macos")))]
+use std::time::Duration;
 
 use eclume_detect::AppKey;
+use eclume_recorder::session::StopReason;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
@@ -19,6 +26,14 @@ const ACTION_COPY: &str = "copiar";
 const ACTION_OPEN: &str = "abrir";
 const LABEL_COPY: &str = "Copiar";
 const LABEL_OPEN: &str = "Abrir";
+/// Quanto uma notificação com ações espera resposta no Linux. A pergunta e o resumo seguem na
+/// bandeja, na janela e no web, então ela pode expirar.
+#[cfg(all(unix, not(target_os = "macos")))]
+const ACTIONS_DEADLINE: Duration = Duration::from_secs(15 * 60);
+
+/// O AUMID dos toasts: o `identifier` do app, guardado por [`init`].
+#[cfg(target_os = "windows")]
+static APP_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Duas ações `(id, rótulo)`: a principal e a outra.
 type Actions = [(&'static str, &'static str); 2];
@@ -38,6 +53,8 @@ pub enum Notice {
     NoteDiscarded,
     /// "Nova nota" com outra gravação em andamento.
     Busy,
+    /// A gravação parou sozinha (fontes caíram ou falha), com o tempo salvo.
+    RecordingStopped(Option<i64>, StopReason),
 }
 
 impl Notice {
@@ -66,6 +83,18 @@ impl Notice {
                 "Já há uma gravação em andamento".into(),
                 "Pare a gravação atual para gravar uma nota.".into(),
             ),
+            Self::RecordingStopped(ms, reason) => (
+                "A gravação parou".into(),
+                format!(
+                    "{} salvos · {}",
+                    duration(ms),
+                    if reason == StopReason::SourcesEnded {
+                        "as fontes de áudio caíram"
+                    } else {
+                        "falha ao gravar"
+                    }
+                ),
+            ),
         }
     }
 }
@@ -76,7 +105,39 @@ pub fn show(notice: Notice) {
     info(&title, &body);
 }
 
+/// Guarda o que os avisos precisam do app (o AUMID do Windows); chamado no setup.
+pub fn init(app: &AppHandle) {
+    #[cfg(target_os = "windows")]
+    let _ = APP_ID.set(app.config().identifier.clone());
+    #[cfg(not(target_os = "windows"))]
+    let _ = app;
+}
+
+/// O AUMID do toast: o do app instalado; em dev (ou antes de [`init`]), o do PowerShell, que
+/// sempre existe.
+#[cfg(target_os = "windows")]
+fn toast_app_id() -> String {
+    use tauri_winrt_notification::Toast;
+
+    match APP_ID.get() {
+        Some(id) if !tauri::is_dev() => id.clone(),
+        _ => Toast::POWERSHELL_APP_ID.to_string(),
+    }
+}
+
 /// Notificação informativa, sem ação.
+#[cfg(target_os = "windows")]
+pub fn info(title: &str, body: &str) {
+    use tauri_winrt_notification::Toast;
+
+    let result = Toast::new(&toast_app_id()).title(title).text1(body).show();
+    if let Err(err) = result {
+        log::warn!("falha ao notificar \"{title}\": {err}");
+    }
+}
+
+/// Notificação informativa, sem ação.
+#[cfg(not(target_os = "windows"))]
 pub fn info(title: &str, body: &str) {
     let result = notify_rust::Notification::new()
         .appname(crate::APP_NAME)
@@ -96,6 +157,11 @@ pub fn note_saved(duration_ms: Option<i64>) {
 /// A nota não teve voz e foi descartada.
 pub fn note_discarded() {
     show(Notice::NoteDiscarded);
+}
+
+/// A gravação parou sozinha: as fontes caíram ou a gravação falhou.
+pub fn recording_stopped(duration_ms: Option<i64>, reason: StopReason) {
+    show(Notice::RecordingStopped(duration_ms, reason));
 }
 
 /// "Nova nota" com outra gravação em andamento.
@@ -178,13 +244,42 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
             .appname(crate::APP_NAME)
             .summary(&title)
             .body(&body)
-            .timeout(notify_rust::Timeout::Never);
+            .timeout(notify_rust::Timeout::Milliseconds(
+                u32::try_from(ACTIONS_DEADLINE.as_millis()).unwrap_or(u32::MAX),
+            ));
         for (id, label) in actions {
             notification.action(id, label);
         }
         match notification.show() {
-            Ok(handle) => handle.wait_for_action(|action| on(&app, action)),
+            Ok(handle) => {
+                let answered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                close_after_deadline(notification, handle.id(), Arc::clone(&answered));
+                handle.wait_for_action(|action| on(&app, action));
+                answered.store(true, std::sync::atomic::Ordering::Release);
+            }
             Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
+        }
+    });
+}
+
+/// Vencido o prazo sem resposta, fecha a notificação `id`: o servidor emite o fechamento e a
+/// espera de [`with_actions`] termina. O GNOME ignora o prazo pedido na notificação, por isso o
+/// fechamento explícito.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn close_after_deadline(
+    mut notification: notify_rust::Notification,
+    id: u32,
+    answered: Arc<std::sync::atomic::AtomicBool>,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(ACTIONS_DEADLINE);
+        if answered.load(std::sync::atomic::Ordering::Acquire) {
+            return;
+        }
+        // Substitui a mesma notificação (mesmo id) só para obter o handle que a fecha.
+        match notification.id(id).show() {
+            Ok(handle) => handle.close(),
+            Err(err) => log::debug!("falha ao fechar a notificação {id}: {err}"),
         }
     });
 }
@@ -193,12 +288,7 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
 fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, on: OnAction) {
     use tauri_winrt_notification::{Duration, Toast};
 
-    // Instalado, o toast usa o AUMID do app; em dev, o do PowerShell, que sempre existe.
-    let app_id = if tauri::is_dev() {
-        Toast::POWERSHELL_APP_ID.to_string()
-    } else {
-        app.config().identifier.clone()
-    };
+    let app_id = toast_app_id();
     let handle = app.clone();
     let [(first, first_label), (second, second_label)] = actions;
     let shown = Toast::new(&app_id)
@@ -276,6 +366,17 @@ mod tests {
         assert_eq!(
             text(Notice::NoteDiscarded),
             "Nota descartada · não ouvimos voz"
+        );
+        assert_eq!(
+            text(Notice::RecordingStopped(
+                Some(12 * 60_000),
+                StopReason::SourcesEnded
+            )),
+            "A gravação parou · 12 min salvos · as fontes de áudio caíram"
+        );
+        assert_eq!(
+            text(Notice::RecordingStopped(Some(42_000), StopReason::Failed)),
+            "A gravação parou · 42 s salvos · falha ao gravar"
         );
         assert_eq!((LABEL_RECORD, LABEL_IGNORE), ("Gravar", "Agora não"));
         let (title, body) = summary_text("Kickoff do programa");

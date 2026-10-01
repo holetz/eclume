@@ -2,9 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { pollWhile } from '../../app/polling'
 import { TOKENS_KEY } from '../tokens/scopes'
 
 type PairingCode = Schemas['PairingCode']
+
+const PAIRING_POLL_MS = 3000
 
 /** Quanto faltava quando a resposta chegou, medido no relógio do servidor, e o `performance.now()` de então. */
 interface CountdownAnchor {
@@ -89,7 +92,7 @@ function usePairingStatus(id: string, counting: boolean) {
     queryFn: () =>
       unwrap(api.GET('/api/v1/devices/pairing-codes/{pairing_code_id}', { params: { path: { pairing_code_id: id } } })),
     enabled: counting,
-    refetchInterval: (query) => (query.state.data?.status === 'pending' || !query.state.data ? 3000 : false),
+    refetchInterval: pollWhile((data: PairingCode | undefined) => !data || data.status === 'pending', PAIRING_POLL_MS),
   })
   const used = status.data?.status === 'used'
 

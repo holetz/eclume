@@ -142,7 +142,8 @@ hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)
 `ingest_transcript` persiste a transcrição no Postgres, indexa para FTS e guarda os embeddings
 (coluna pgvector, dimensão pelo modelo). Na mesma transação, restaura os vínculos
 locutor↔pessoa de uma retranscrição e compara os locutores com as impressões de voz das pessoas
-com consentimento, gravando as sugestões acima do limiar
+do diretório da conta (com a identificação por voz ligada na plataforma), gravando as sugestões
+acima do limiar
 ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
 da gravação para `transcribed`.
 

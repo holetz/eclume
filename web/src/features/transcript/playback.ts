@@ -14,7 +14,16 @@ export interface Playback {
   toggle: () => void
   /** Passa para a próxima velocidade: 1×, 1,25×, 1,5× e 2×. */
   cycleRate: () => void
+  /**
+   * O áudio que não carregou depois da renovação automática (`network`), ou o navegador que não toca
+   * Ogg Opus (`format`); `null` com o áudio em ordem.
+   */
+  error: PlaybackError | null
+  /** Pede uma assinatura nova e retoma do mesmo instante. */
+  retry: () => void
 }
+
+export type PlaybackError = 'network' | 'format'
 
 export const PlaybackContext = createContext<Playback | null>(null)
 

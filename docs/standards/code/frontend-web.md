@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, minhas configurações, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111
 maintainer: holetz
 ---
 
@@ -43,6 +43,21 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   zera essa sessão no cache a cada 401 fora do login e **fora de `/api/v1/admin/`** (o 401 do
   painel é da sessão de admin), e a guarda `RequireSession` leva a `/entrar?volta=<rota>`; `volta`
   só aceita caminho interno.
+- **A sessão não cai por um refetch.** `RequireSession` e `RequireAdmin` só mostram "Tentar de
+  novo" com `isError` **e sem dado em cache**: um refetch de `/me` (ou `/admin/me`) que falha sobre
+  a sessão carregada mantém o shell, a fila de importação, o rascunho do resumo e o chat. A sessão
+  só cai por 401.
+- **Faixa de conexão** (`ConnectionBanner`, no topo do `AppShell`): sem rede (`onlineManager`) ou
+  com `/me` falhando sobre a sessão em cache, um `.alert-warning` com `role="status"` diz "Sem
+  conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…", relê
+  `/me` a cada 10 s enquanto o servidor não responde e some sozinha. Consultas e mutações já
+  pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só dá o motivo.
+- **O que é de uma conta não atravessa para outra** (`app/accountScope.ts`): a aba guarda o id da
+  última conta (`eclume-conta` no `sessionStorage`, marcado pelo login, pelo cadastro e pela
+  sessão que já vinha do cookie). Entrar com outra conta remove as consultas fora de `['admin']`
+  (menos a sessão recém-lida) e os rascunhos `eclume-resumo-rascunho:*`. Um 401 com a sessão
+  aberta remove as consultas fora de `['admin']` e zera `['me']`, sem apagar rascunhos: a mesma
+  conta que volta os reencontra. O `useLogout` usa a mesma remoção.
 
 ## Estrutura de pastas
 
@@ -73,6 +88,30 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   biblioteca e do login, cada uma no seu chunk; o bundle inicial caiu de ~477 KB para ~280 KB
   (89 KB gzip). O chunk do WebCodecs (Mediabunny, ~560 KB) só carrega na conversão do import, e
   o aviso de chunk grande do Vite que ainda aparece é dele.
+- **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
+  `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
+  `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
+  `createMemoryRouter`. As telas buscam dados pelo React Query: nada de loaders, actions nem o
+  `lazy` do roteador.
+- **Erro por rota, sem tela branca.** Há dois `errorElement`: o `RootError` na raiz (página
+  inteira, para login, cadastro, parear e `/admin/*`) e o `RouteError` numa rota sem caminho filha
+  do `RequireSession`, que aparece no `Outlet` do shell com a barra, o cabeçalho e a fila de
+  importação de pé; a troca de localização reinicia o boundary, então a barra tira do erro. A
+  falha de chunk (mensagem do `import()` dinâmico do Chromium, Firefox ou WebKit, ou o preload do
+  Vite) vira "O eclume foi atualizado"; a exceção comum, "Algo deu errado nesta tela". As duas têm
+  "Recarregar", nunca mostram pilha e registram no `console.error`.
+- **Recarga única por chunk antigo** (`app/chunkReload.ts`, registrado no `main.tsx`): no
+  `vite:preloadError`, se a última recarga por chunk (carimbo `eclume-recarga-chunk` no
+  `sessionStorage`) tem mais de 60 s, grava o carimbo, cancela o evento e recarrega; senão o erro
+  segue para o `RouteError`. A janela de tempo, e não uma bandeira eterna, deixa um segundo deploy
+  na mesma aba recarregar de novo. O estático da imagem `eclume-web` responde `404` sem
+  `immutable` para `/assets/*` ausente, então o `import()` falha rápido e com motivo.
+- **Guarda de saída** (`app/useLeaveGuard.tsx`): com alterações não salvas, fechar ou recarregar a
+  aba dispara o aviso do navegador (`beforeunload`), e ir para outra rota do app pede confirmação
+  pelo `useBlocker`, só quando o `pathname` muda (o `?t=` da gravação e a seleção na URL passam);
+  devolve o diálogo com "Continuar editando" e "Descartar". Usam o guarda a edição do resumo e a
+  seleção de Campos personalizados e Tipos de agenda; o `ImportProvider` fica só com o
+  `beforeunload`, porque vive no shell e não desmonta na navegação interna.
 - **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
   (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
   como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
@@ -159,8 +198,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Aceite do aviso em vigor:** com `notice_required: true` em `/me`, o `RequireSession` mostra o
   `NoticePage` (na `.auth`) no lugar do shell, até `POST /me/notice` com a versão lida de
   `GET /auth/signup`.
-- **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
-  só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
+- **Estado de servidor com TanStack Query.** O polling de espera é declarativo e tem um ritmo só
+  (`app/polling.ts`, `pollWhile(estáEsperando, inicial)`): o intervalo inicial (2–3 s) nos
+  primeiros 2 min de espera, depois dobrando a cada minuto até 30 s, e nada com a consulta em
+  `error`; voltar para a aba ou a rede voltar recomeçam do inicial. Vale para biblioteca,
+  gravação, resumo, chat da gravação, chat da base, pré-visualização e código de vínculo; a Saúde
+  do admin fica fora (15 s por desenho). O padrão global é `refetchOnWindowFocus: false`; as
+  gravações (período, lista, gravação), o estado do resumo e o histórico do chat ligam a releitura
+  no foco, para uma gravação do desktop ou do celular aparecer sem recarregar. Formulários
+  (Campos, Tipos de agenda, Conta) não são relidos debaixo de quem edita. Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
 - **Arquivo `.tsx` exporta só componentes** (regra do react-refresh): hooks, constantes e
   funções puras ficam em `.ts` ao lado. **Nunca com o mesmo nome em caixa diferente**
@@ -217,7 +263,7 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   a altura da tela por igual (mínimo de 96px por célula).
 - **Estado em palavra** (`recordingState()`, de `status` e do `pipeline`): falhou (régua de
   perigo), em andamento com a etapa corrente ("Resumindo", "Transcrevendo", "Na fila"...) ou pronta
-  (com "Sem resumo" quando a etapa do resumo falhou). Nota por voz tem a régua pontilhada;
+  (com "Sem resumo" quando a etapa do resumo falhou). Nota de voz tem a régua pontilhada;
   marcadores aparecem como `.marker-count`. O `aria-label` do evento diz tudo:
   "Reunião de equipe, 09:00, 58 min, Resumindo, 3 marcadores".
 - **Consulta** (`queries.ts`): o período vai em `GET /recordings` com `from`, `to`,
@@ -236,7 +282,10 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `Dialog` aberto por "Filtros (N)".
 - **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
   recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
-  `importar` (`eclume-biblioteca-ultima`). "Limpar filtros" tira tudo menos `visao` e `data`.
+  `importar` (`eclume-biblioteca-ultima:<user_id>`, por conta, porque guarda ids de pessoa, tag,
+  coleção e campo; a chave global antiga sai na primeira leitura). As outras preferências
+  (densidade, movimento, colunas, expediente, painel recolhido) são por aparelho. "Limpar filtros"
+  tira tudo menos `visao` e `data`.
 - **Restauração uma vez só**: quando `/` abre sem parâmetros, a página volta à última biblioteca
   guardada (ou abre na visão da tela Ambiente) por um `replace`, e a flag `restoring` cai assim que
   a URL restaurada chega. Depois disso, marcar e desmarcar filtros, trocar a visão e andar pelas
@@ -263,11 +312,12 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   [formato-audio-upload.md](formato-audio-upload.md)). O upload manda `recorded_at` e
   `recorded_at_source` (`file_metadata` sem edição; `user` quando editada ou vinda do fallback) e
   não manda `title`.
-- **A fila vive no shell** (`ImportProvider` no `AppShell`, `useImportQueue`, `importContext.ts`):
+- **A fila vive no shell** (`ImportProvider` envolvendo o `ShellFrame` do `AppShell`, `useImportQueue`, `importContext.ts`):
   fechar o modal ou navegar não perde o envio. Os arquivos são convertidos e enviados **um por
   vez**; cancelar aborta e apaga o upload; "Tentar de novo" retoma pelo `uploadId` ou reconverte.
   A fila guarda os itens num ref, a fonte da verdade do laço de envio, e o estado só espelha o ref
-  (o laço não espera o React renderizar). Enquanto há conversão ou envio, o `beforeunload` avisa.
+  (o laço não espera o React renderizar). Enquanto há conversão ou envio, o `beforeunload` avisa,
+  e "Sair" pede confirmação ("O envio em andamento será interrompido.").
   Terminado um envio, a biblioteca é relida (`['recordings']`).
 
 ## Página da gravação
@@ -284,12 +334,18 @@ desce; abaixo de 56rem, os campos também):
   volta com "Gravação excluída.".
 - **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts`): as seis etapas no `ol.pipeline`, o motivo
   de uma etapa pulada ou que falhou em texto acessível e em `title`, o progresso do worker com a
-  transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê a cada 3 s enquanto
-  está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+  transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
+  `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
 - **Reprodução compartilhada** (`PlaybackProvider`, `playback.ts`): um único `<audio>` liga o
   player compacto (tocar, trilha com `range` para teclado, um `.player-tick` por marcador, a
   velocidade 1×–2×), a `.marker-bar` (ficha por marcador, que toca dali, e "Marcado no
-  <dispositivo>" quando é um só) e as falas.
+  <dispositivo>" quando é um só) e as falas. O `src` é `/recordings/{id}/audio`, que responde 302
+  para uma URL assinada de 1 h: no `error` do `<audio>`, o provider troca o `src`
+  (`?renovacao=<n>`, para não reaproveitar o 302), volta ao mesmo instante e à velocidade no
+  `loadedmetadata` e retoma tocando se tocava, uma vez sozinho (de novo depois de voltar a tocar);
+  a segunda falha expõe `error` no contexto e o player mostra "O áudio não carregou" com "Tentar de
+  novo", com o tocar desabilitado. Erro antes do primeiro carregamento num navegador cujo
+  `canPlayType('audio/ogg; codecs=opus')` é vazio vira o aviso de que ele não toca Ogg Opus.
 - **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
   locutores, falas e marcadores; aberta, tem o bloco Locutores (renomear, ligar pessoa, sugestões,
   juntar), "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
@@ -297,7 +353,7 @@ desce; abaixo de 56rem, os campos também):
   marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
   sem tocar e rola até a fala.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
-  referência e geração em andamento, relido a cada 3 s com pendência) com a `.doc-bar` (tipo,
+  referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
   Excluir resumo) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
   um ("Escolha um tipo de agenda para gerar o resumo.").
@@ -313,7 +369,12 @@ desce; abaixo de 56rem, os campos também):
 - **Edição** (`SummaryEditor`): o Markdown num `textarea` na tipografia do `.doc`, salvo com
   `base_version` = a versão aberta. O 409 `summary_changed` guarda o rascunho e oferece "Ver a
   versão N" (a comparação do rascunho com a nova) e "Salvar sobre a versão N". "Voltar à gerada"
-  pede confirmação. **Comparar** é um diff por linha no cliente (`summary-diff.ts`, LCS), com
+  pede confirmação. O rascunho sobrevive a recarregar a aba (`summaryDraft.ts`): fica no
+  `sessionStorage` em `eclume-resumo-rascunho:<recording_id>`, com a `base_version`, gravado ~500 ms
+  depois da última tecla; ao reabrir a edição, volta direto se a base é a versão aberta e com o
+  aviso de conflito se a base ficou para trás. Salvar, descartar (pelo Cancelar ou pelo guarda de
+  saída) e voltar à gerada apagam o rascunho guardado. Sair da gravação com rascunho pede
+  "Descartar a edição?" (o guarda de saída). **Comparar** é um diff por linha no cliente (`summary-diff.ts`, LCS), com
   `<del>`/`<ins>` e o sinal −/+ para quem não enxerga cor.
 - **Campos** (`FieldsPanel`, `fields.ts`, componente "Filled fields" variante A): título e tags
   primeiro, depois os campos do usuário, com o selo de origem (Automático tracejado, Editado
@@ -324,7 +385,7 @@ desce; abaixo de 56rem, os campos também):
 - **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma
   `.msg-note` por leitura do agente ("Leu a transcrição, 00:03:20–00:04:20", "Buscou “orçamento”
   na transcrição · 3 trechos"); enviar recebe o 202 com as duas mensagens, e a resposta é
-  consultada a cada 2 s até `done` ou `failed`. O composer espera com um pedido em aberto (e no
+  consultada no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`. O composer espera com um pedido em aberto (e no
   409 `chat_busy`) e sem resumo atual.
 
 ## Pessoas, busca e coleções
@@ -363,8 +424,8 @@ desce; abaixo de 56rem, os campos também):
   (`/admin/locutores`).
 - **Campos personalizados** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
   do DS: lista à esquerda (seleção em `?campo=`/`?tipo=`, `novo` para o rascunho) e painel à
-  direita. Trocar de item com alterações pede "Descartar alterações?"; sair da rota só avisa pelo
-  `beforeunload`, porque o app usa `BrowserRouter` e o `useBlocker` exige data router. Campos
+  direita. Trocar de item com alterações pede "Descartar alterações?", e sair da rota também (o
+  guarda de saída, com o aviso do navegador ao fechar a aba). Campos
   personalizados não lista o título embutido (o título vem do tipo de agenda) e mostra as tags
   como embutido (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora. Em Tipos
   de agenda, o tipo padrão (`fallback`) fica no topo com o `.badge` "Padrão", sem Excluir e sem
@@ -373,7 +434,7 @@ desce; abaixo de 56rem, os campos também):
 - **Pré-visualização por consulta ao job** (`organize/usePreview.ts`): "Testar numa gravação"
   (`POST /fields/preview`, sem `recording_ids`: as 3 últimas transcritas) e "Pré-visualizar numa
   gravação" (`POST /agenda-types/preview`) devolvem 202 com o job, e a tela consulta
-  `GET /previews/{id}` a cada 1,5 s até `done` ou `failed`; 404 vira expirada, e um pedido novo
+  `GET /previews/{id}` no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`; 404 vira expirada, e um pedido novo
   descarta o anterior. Nada é gravado, e a pré-visualização de tipo some quando o rascunho muda.
 - **Coleção convive com tag**: a coleção agrupa gravações; a tag marca assuntos. Ela aparece no
   painel de campos da gravação, no filtro da biblioteca (`colecao`) e numa ficha da busca, e
@@ -421,7 +482,7 @@ desce; abaixo de 56rem, os campos também):
 - **Código de vínculo** (`connect/pairing.ts`): cada página gera o seu (App desktop por botão, App
   móvel ao abrir), porque um código novo anula o anterior. A contagem regressiva ancora em
   `expires_at` menos o header `Date` da resposta, medida por `performance.now()`, e não depende do
-  relógio do computador. O estado é consultado a cada 3 s enquanto `pending` e a contagem não
+  relógio do computador. O estado é consultado no ritmo de `pollWhile` (3 s de início) enquanto `pending` e a contagem não
   zerou; `used` atualiza as listas de tokens e mostra "Pareado: <aparelho>". O leitor de tela só
   ouve "Falta 1 minuto" e "Código vencido".
 - **QR gerado no navegador** (`connect/qr.ts`, `QrCode.tsx`): a matriz do pacote `qrcode`
@@ -429,7 +490,7 @@ desce; abaixo de 56rem, os campos também):
   silêncio de 4 módulos e preto sobre branco nos dois temas. O conteúdo é o `pair_url` do
   contrato. `/parear` é a página pública onde cai quem lê o QR com a câmera comum: explica que o
   código é do app e não chama a API.
-- **Instaladores** (`desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
+- **Instaladores** (`web/src/features/desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
   (mesma origem, fora do `/api`), valida `versao` e `instaladores[]`
   ([desktop-distribuicao.md](desktop-distribuicao.md)) e mostra o `recomendado` de cada sistema,
   com o sistema atual primeiro; sem manifesto ou com ele inválido, os cartões dizem que os
@@ -463,7 +524,8 @@ Depois de recarregar, o import recomeça pela conversão.
 - **Unitários** (`npm test`, vitest + jsdom + Testing Library): `mockFetch()` substitui o `fetch`
   por rotas `"MÉTODO /caminho/:param"`, respondendo com as fixtures de `contracts/fixtures/`
   (`src/test/fixtures.ts`, tipadas pelo schema). `renderApp(rota)` monta o app inteiro numa
-  rota. O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
+  rota, com a mesma árvore `routes` num `createMemoryRouter` (o `useBlocker` só funciona dentro de
+  um data router). O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
   `fetch` do Node).
 - **Fuso fixo**: os unitários rodam em `America/Sao_Paulo` (`process.env.TZ` no `vite.config.ts`)
   e o Playwright também (`timezoneId`), o fuso das fixtures; a biblioteca posiciona pela hora local.
