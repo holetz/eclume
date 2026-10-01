@@ -3,7 +3,7 @@
 
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use anyhow::{anyhow, Context, Result};
@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::api::{Capture, MarkerInput, UploadCreate};
 use crate::protocol::Client;
+use crate::transport::TrustMode;
 
 /// Tipo do arquivo que o desktop grava (Ogg/Opus mono 16 kHz), o de uma linha sem `content_type`.
 pub const CONTENT_TYPE: &str = "audio/ogg; codecs=opus";
@@ -23,8 +24,9 @@ pub struct UploaderConfig {
     /// Endereço da API (`https://host:8443`), sem o `/api/v1`.
     pub api_url: String,
     pub pat: String,
-    /// PEM com a CA extra a confiar.
-    pub ca_path: Option<PathBuf>,
+    /// Em quem o TLS confia: a CA fixada (`Pinned`), a escolhida à mão ou nenhuma
+    /// (`PlatformPlus`).
+    pub trust: TrustMode,
     /// `eclume-desktop/<versão>`.
     pub client_version: String,
 }

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use eclume_sync::api::ServerInfo;
-use eclume_sync::transport::{Transport, UreqTransport};
+use eclume_sync::transport::{Transport, TrustMode, UreqTransport, REQUEST_TIMEOUT};
 use eclume_sync::{pin, Client, Devices, RetryPolicy};
 use serde::Serialize;
 
@@ -23,7 +23,7 @@ const PENDING_DIR: &str = "servidor-pendente";
 /// A rede: um transporte sem verificação só para baixar a CA raiz, e o verificado.
 pub trait Net: Send + Sync {
     fn insecure(&self) -> Arc<dyn Transport>;
-    fn verified(&self, ca_path: Option<&Path>) -> Result<Arc<dyn Transport>>;
+    fn verified(&self, trust: &TrustMode) -> Result<Arc<dyn Transport>>;
 }
 
 /// A rede de verdade, em `ureq`.
@@ -34,8 +34,27 @@ impl Net for RealNet {
         Arc::new(UreqTransport::insecure(CLIENT_VERSION))
     }
 
-    fn verified(&self, ca_path: Option<&Path>) -> Result<Arc<dyn Transport>> {
-        Ok(Arc::new(UreqTransport::new(ca_path, CLIENT_VERSION)?))
+    fn verified(&self, trust: &TrustMode) -> Result<Arc<dyn Transport>> {
+        let transport = UreqTransport::with_trust(trust, CLIENT_VERSION, REQUEST_TIMEOUT)?;
+        Ok(Arc::new(transport))
+    }
+}
+
+/// Em quem o app confia para falar com o servidor, pela origem do `ca_path`: a CA fixada pela
+/// primeira execução confia só nela (`Pinned`); uma escolhida à mão em "Avançado" soma-se às
+/// raízes do SO; sem CA (certificado público ou `http://` de dev), o verificador da plataforma.
+pub fn trust_for(config_dir: &Path, ca_path: Option<&Path>) -> TrustMode {
+    match ca_path {
+        Some(path) if is_pinned(config_dir, Some(path)) => TrustMode::Pinned(path.to_path_buf()),
+        other => TrustMode::PlatformPlus(other.map(Path::to_path_buf)),
+    }
+}
+
+/// A CA baixada e conferida na primeira execução (ainda pendente) é fixada; sem ela, o sistema.
+fn pending_trust(ca_path: Option<&Path>) -> TrustMode {
+    match ca_path {
+        Some(path) => TrustMode::Pinned(path.to_path_buf()),
+        None => TrustMode::PlatformPlus(None),
     }
 }
 
@@ -145,13 +164,13 @@ pub fn prepare(
         if !cfg!(debug_assertions) && !is_loopback(url) {
             bail!("endereço sem https: use https:// (http:// só vale em localhost)");
         }
-        let info = server_info(net.verified(None)?, url)?;
+        let info = server_info(net.verified(&pending_trust(None))?, url)?;
         return Ok(prepared(info, url, None, TrustedBy::Unencrypted, None));
     }
     match pin::fetch_root(&*net.insecure(), url, expected) {
         Ok(root) => {
             let path = pin::save(&root, &config_dir.join(PENDING_DIR))?;
-            let info = server_info(net.verified(Some(&path))?, url)?;
+            let info = server_info(net.verified(&pending_trust(Some(&path)))?, url)?;
             pin::confirm(&info, &root.sha256)?;
             let trusted_by = if expected.is_some() && vouched {
                 TrustedBy::Fingerprint
@@ -169,7 +188,7 @@ pub fn prepare(
         Err(err) if expected.is_some() => Err(err),
         Err(err) => {
             log::info!("sem CA própria em {url} ({err:#}); usando as raízes do sistema");
-            let info = server_info(net.verified(None)?, url)?;
+            let info = server_info(net.verified(&pending_trust(None))?, url)?;
             Ok(prepared(info, url, None, TrustedBy::System, None))
         }
     }
@@ -238,7 +257,7 @@ pub fn sign_in(
     if server.trusted_by == TrustedBy::FirstUse && !server.confirmed {
         bail!("Confira a impressão digital do servidor antes de entrar");
     }
-    let transport = net.verified(server.ca_path.as_deref())?;
+    let transport = net.verified(&pending_trust(server.ca_path.as_deref()))?;
     let devices = Devices::new(Arc::clone(&transport), &server.url)?;
     let (credential, email) = match login {
         Login::Password { email, password } => (
@@ -321,12 +340,12 @@ pub(crate) mod tests {
     pub const SECRET: &str = "eclp_Vb3kQ8rT2wY6uI1oP4aS7dF0gH3jK9lZ5xC";
 
     /// Rede roteirizada: um roteiro só para os dois transportes, conferido em ordem por
-    /// `<verificado|inseguro> MÉTODO caminho`; guarda a CA com que cada transporte verificado
-    /// foi criado.
+    /// `<verificado|inseguro> MÉTODO caminho`; guarda a confiança com que cada transporte
+    /// verificado foi criado.
     #[derive(Default)]
     pub struct ScriptNet {
         steps: Mutex<VecDeque<(String, Result<HttpResponse>)>>,
-        pub ca_paths: Mutex<Vec<Option<PathBuf>>>,
+        pub trusts: Mutex<Vec<TrustMode>>,
     }
 
     struct Leg {
@@ -374,12 +393,8 @@ pub(crate) mod tests {
             })
         }
 
-        fn verified(&self, ca_path: Option<&Path>) -> Result<Arc<dyn Transport>> {
-            self.0
-                .ca_paths
-                .lock()
-                .unwrap()
-                .push(ca_path.map(Path::to_path_buf));
+        fn verified(&self, trust: &TrustMode) -> Result<Arc<dyn Transport>> {
+            self.0.trusts.lock().unwrap().push(trust.clone());
             Ok(Arc::new(Leg {
                 net: Arc::clone(&self.0),
                 kind: "verificado",
@@ -464,10 +479,13 @@ pub(crate) mod tests {
         assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
         assert!(!pending.exists());
         assert!(is_pinned(&dir, signed.ca_path.as_deref()));
-        // O descritor e o login vão pelo transporte verificado com a CA baixada.
+        // O descritor e o login vão pelo transporte que confia só na CA baixada.
         assert_eq!(
-            *net.ca_paths.lock().unwrap(),
-            vec![Some(pending.clone()), Some(pending)]
+            *net.trusts.lock().unwrap(),
+            vec![
+                TrustMode::Pinned(pending.clone()),
+                TrustMode::Pinned(pending),
+            ]
         );
     }
 
@@ -594,7 +612,10 @@ pub(crate) mod tests {
         let server = prepare(&shared, &dir, URL, None, false).unwrap();
         assert_eq!(server.trusted_by, TrustedBy::System);
         assert_eq!(server.ca_path, None);
-        assert_eq!(*net.ca_paths.lock().unwrap(), vec![None]);
+        assert_eq!(
+            *net.trusts.lock().unwrap(),
+            vec![TrustMode::PlatformPlus(None)]
+        );
     }
 
     #[test]
@@ -651,6 +672,22 @@ pub(crate) mod tests {
         assert!(ca_changed(&shared, URL, &pinned).is_err());
         assert!(!is_pinned(&dir, Some(Path::new("/etc/ssl/outra.pem"))));
         assert!(!is_pinned(&dir, None));
+    }
+
+    #[test]
+    fn a_confianca_sai_da_origem_da_ca() {
+        let dir = dir("confianca");
+        let pinned = dir.join(pin::PINNED_FILE);
+        assert_eq!(
+            trust_for(&dir, Some(&pinned)),
+            TrustMode::Pinned(pinned.clone())
+        );
+        let chosen = Path::new("/etc/ssl/escolhida.pem");
+        assert_eq!(
+            trust_for(&dir, Some(chosen)),
+            TrustMode::PlatformPlus(Some(chosen.to_path_buf()))
+        );
+        assert_eq!(trust_for(&dir, None), TrustMode::PlatformPlus(None));
     }
 
     #[test]

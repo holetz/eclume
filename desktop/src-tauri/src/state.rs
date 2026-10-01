@@ -15,6 +15,7 @@ use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
 };
+use eclume_sync::transport::TrustMode;
 use eclume_sync::{Client, PatSource, PatStore, QueueWait, RetryPolicy, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
@@ -969,7 +970,7 @@ impl AppState {
         Ok(Some(UploaderConfig {
             api_url,
             pat,
-            ca_path: inner.config.ca_path.clone(),
+            trust: account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()),
             client_version: CLIENT_VERSION.to_string(),
         }))
     }
@@ -1202,6 +1203,13 @@ impl AppState {
             bail!("servidor não configurado");
         }
         Ok(url)
+    }
+
+    /// Em quem o TLS confia ([`account::trust_for`]), lendo só a config, sem passar pelo
+    /// chaveiro como [`Self::settings`]: o updater roda fora da thread do chaveiro.
+    pub fn trust(&self) -> Result<TrustMode> {
+        let inner = self.inner()?;
+        Ok(account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()))
     }
 
     /// A CA extra fixada, sem passar pelo chaveiro como [`Self::settings`].
@@ -1445,7 +1453,7 @@ impl AppState {
             retries: 0,
             ..RetryPolicy::default()
         };
-        let transport = net.verified(config.ca_path.as_deref())?;
+        let transport = net.verified(&config.trust)?;
         let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
         let last_upload_at = self
             .lock_queue()?
@@ -2599,7 +2607,9 @@ mod tests {
         );
         let uploader = state.uploader_config().unwrap().unwrap();
         assert_eq!(uploader.pat, SECRET);
-        assert_eq!(uploader.ca_path, Some(pinned));
+        // A CA fixada pela primeira execução é a única em que o sync confia.
+        assert_eq!(uploader.trust, TrustMode::Pinned(pinned.clone()));
+        assert_eq!(state.trust().unwrap(), TrustMode::Pinned(pinned));
         let saved = Config::load(&dir.join("config.json"));
         assert_eq!(saved.account.unwrap().token_id.as_deref(), Some("t-1"));
 
