@@ -108,6 +108,19 @@ describe('tipos de agenda', () => {
     expect(within(panel).getByRole('button', { name: 'Sobre como montar o título' })).toBeInTheDocument()
   })
 
+  it('o pedido do chat entra no rascunho das instruções do tipo, protegido pelo aviso de descartar', async () => {
+    const http = mockAgendaTypes()
+    const { router } = renderApp('/config/agendas')
+    await screen.findByRole('list', { name: 'Tipos de agenda' })
+    await router.navigate(`/config/agendas?tipo=${UM_A_UM}`, { state: { instructionsRequest: 'Liste as decisões em tabela.' } })
+    const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
+    const instructions = within(panel).getByLabelText('Instruções do resumo') as HTMLTextAreaElement
+    expect(instructions.value).toMatch(/até quando\.\n\nListe as decisões em tabela\.$/)
+    expect(http.requests('PATCH /api/v1/agenda-types/:id')).toHaveLength(0)
+    await userEvent.click(screen.getByRole('button', { name: /^Reunião de equipe/ }))
+    expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
+  })
+
   it('oferece os marcadores, com as chaves dos campos do usuário, e os insere no cursor', async () => {
     const http = mockAgendaTypes()
     renderApp(`/config/agendas?tipo=${UM_A_UM}`)

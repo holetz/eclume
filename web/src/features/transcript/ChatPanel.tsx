@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
 import { isOpen, MAX_MESSAGE, readNote, useChat, useChatReply, useSendChat, type ChatMessage } from './chat'
 import styles from './RecordingPage.module.css'
@@ -41,11 +42,18 @@ interface ChatPanelProps {
   hasTranscript: boolean
   /** Há resumo atual: sem ele, o chat não tem sobre o que trabalhar. */
   hasSummary: boolean
+  /** O tipo de agenda da gravação: depois de um ajuste, o pedido pode ir para as instruções dele. */
+  agendaTypeId?: string | null
   className?: string
 }
 
+/** O `state` da navegação que leva um pedido do chat ao rascunho das instruções do tipo. */
+export interface InstructionsRequestState {
+  instructionsRequest: string
+}
+
 /** O `aside.chat` "Ajustar o resumo": histórico, notas de leitura da transcrição e o composer. */
-export function ChatPanel({ recordingId, hasTranscript, hasSummary, className = '' }: ChatPanelProps) {
+export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId = null, className = '' }: ChatPanelProps) {
   const chat = useChat(recordingId, hasTranscript)
   const send = useSendChat(recordingId)
   const [text, setText] = useState('')
@@ -73,6 +81,11 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, className = 
   }
 
   const request = (reply: ChatMessage) => messages.find((message) => message.id === reply.reply_to)?.content ?? ''
+  // O último ajuste que mudou o resumo: o pedido dele pode virar regra do tipo.
+  const lastAdjustment = messages.findLast(
+    (message) => message.role === 'assistant' && message.status === 'done' && message.summary_id !== null,
+  )
+  const adjustmentRequest = lastAdjustment ? request(lastAdjustment) : ''
 
   return (
     <aside className={`chat ${className}`} aria-label="Ajustar o resumo">
@@ -97,6 +110,15 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, className = 
           ) : (
             <AgentMessage key={message.id} message={message} onRetry={() => submit(request(message))} />
           ),
+        )}
+        {agendaTypeId && adjustmentRequest && (
+          <Link
+            to={`/config/agendas?tipo=${agendaTypeId}`}
+            state={{ instructionsRequest: adjustmentRequest } satisfies InstructionsRequestState}
+            className="btn btn-ghost btn-sm"
+          >
+            Levar este pedido para as instruções do tipo
+          </Link>
         )}
       </div>
       <form className="composer" onSubmit={onSubmit}>

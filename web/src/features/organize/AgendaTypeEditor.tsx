@@ -45,12 +45,18 @@ interface AgendaTypeEditorProps {
   onDirtyChange: (dirty: boolean) => void
   onSaved: (type: AgendaType) => void
   onDeleted: () => void
+  /** Um pedido do chat do resumo, acrescentado ao rascunho das instruções do resumo, sem salvar. */
+  summaryAddition?: string
 }
 
-export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: AgendaTypeEditorProps) {
+export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summaryAddition }: AgendaTypeEditorProps) {
   const id = useId()
   const initial = draftOf(type)
-  const [draft, setDraft] = useState<AgendaTypeDraft>(initial)
+  const [draft, setDraft] = useState<AgendaTypeDraft>(() =>
+    summaryAddition
+      ? { ...initial, summary_instructions: `${initial.summary_instructions.trimEnd()}\n\n${summaryAddition}`.trimStart() }
+      : initial,
+  )
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [picking, setPicking] = useState(false)
   // O rascunho que a pré-visualização em tela usou: editar depois disso a invalida.
@@ -235,6 +241,11 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted }: Ag
           onChange={(event) => set({ summary_instructions: event.target.value })}
         />
         {hint('summary_instructions', 'Em Markdown. O resumo segue estas instruções.')}
+        {summaryAddition && (
+          <p className="alert alert-info" role="status">
+            O pedido do chat entrou no fim das instruções do resumo. Revise e salve para valer nos próximos resumos.
+          </p>
+        )}
       </div>
 
       {save.isError && !Object.keys(errors).length && (

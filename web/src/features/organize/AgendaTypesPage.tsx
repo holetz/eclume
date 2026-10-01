@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
+import { useLocation } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { markAgendaTypesSeen } from '../../app/preferences'
 import { PageHead } from '../../app/PageHead'
+import type { InstructionsRequestState } from '../transcript/ChatPanel'
 import { AgendaTypeEditor } from './AgendaTypeEditor'
 import styles from './Organize.module.css'
 import { useAgendaTypes, type AgendaType } from './queries'
@@ -33,6 +35,9 @@ export function AgendaTypesPage() {
     (a, b) => Number(b.fallback) - Number(a.fallback) || a.position - b.position,
   )
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('tipo')
+  // O pedido que o chat do resumo mandou para este tipo, no `state` da navegação.
+  const location = useLocation()
+  const instructionsRequest = (location.state as Partial<InstructionsRequestState> | null)?.instructionsRequest
   const current = selected === NEW ? null : (items.find((t) => t.id === selected) ?? (selected ? undefined : items[0]))
 
   return (
@@ -79,6 +84,7 @@ export function AgendaTypesPage() {
               onDirtyChange={setDirty}
               onSaved={(saved) => apply(saved.id)}
               onDeleted={() => apply(null)}
+              summaryAddition={current && current.id === selected ? instructionsRequest : undefined}
             />
           )}
         </div>
