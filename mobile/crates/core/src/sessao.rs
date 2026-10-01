@@ -185,6 +185,18 @@ impl Sessao {
         session::recover(&*trancar(fila)?)
     }
 
+    /// O microfone e o silêncio da gravação em curso, sem ler a fila: o laço os confere a cada
+    /// passada, mesmo com o app invisível, para redesenhar a notificação quando mudam.
+    pub fn sinais(&self) -> Option<(EstadoMicrofone, bool)> {
+        self.ativa.as_ref()?;
+        let microfone = if self.microfone_fora_desde().is_some() {
+            EstadoMicrofone::Reconectando
+        } else {
+            EstadoMicrofone::Ok
+        };
+        Some((microfone, self.silenciada))
+    }
+
     pub fn estado(&self, fila: &Mutex<Queue>) -> Result<Option<EstadoSessao>> {
         let Some(ativa) = &self.ativa else {
             return Ok(None);

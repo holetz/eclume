@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use comum::{dirs_temp, Roteiro, TransportesFalsos};
 use eclume_mobile_core::sessao::EstadoMicrofone;
-use eclume_mobile_core::{Core, Selo};
+use eclume_mobile_core::{Core, MotivoDaParada, Selo};
 use eclume_recorder::source::SineSource;
 use eclume_recorder::{AudioSource, Queue, Source, SourceState, Status};
 
@@ -130,8 +130,13 @@ fn limites_param_sem_espaco_e_avisam() {
     // Menos de 5 min livres: para e salva sozinho.
     core.atualizar_aparelho(12, false, 600_000);
     assert_eq!(core.estado().unwrap().avisos.bateria.unwrap().pct, 12);
-    let parada = core.verificar_limites().unwrap().unwrap();
+    let (parada, motivo) = core.verificar_limites().unwrap().unwrap();
     assert_eq!(parada.status, Status::Pending);
+    assert_eq!(motivo, MotivoDaParada::SemEspaco);
+    assert_eq!(
+        serde_json::to_value(motivo).unwrap(),
+        serde_json::json!("sem_espaco")
+    );
     assert!(core.estado().unwrap().sessao.is_none());
     assert!(core.estado().unwrap().avisos.bateria.is_none());
 }

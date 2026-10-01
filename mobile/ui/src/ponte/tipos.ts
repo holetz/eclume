@@ -42,6 +42,21 @@ export interface EstadoSessao {
   silenciada: boolean
 }
 
+/** O que a UI pede antes de gravar: o microfone (obrigatório) e as notificações. */
+export interface Permissoes {
+  microfone: boolean
+  notificacoes: boolean
+}
+
+/** A isenção da otimização de bateria: `pedir` antes da primeira vez, `recusada` depois. */
+export type IsencaoDeBateria = 'concedida' | 'pedir' | 'recusada'
+
+/** O que o aparelho diz das permissões que ficam nas configurações do sistema. */
+export interface Aparelho {
+  notificacoes: boolean
+  isencaoDeBateria: IsencaoDeBateria
+}
+
 export interface Folha {
   id: string
   iniciada_em: number

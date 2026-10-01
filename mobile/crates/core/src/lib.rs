@@ -50,6 +50,27 @@ pub struct Folha {
     pub marcadores: usize,
 }
 
+/// Por que a gravação parou sem pedido; o serviço mostra o motivo na notificação "A gravação
+/// parou".
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MotivoDaParada {
+    /// Menos de 5 min de gravação no espaço livre.
+    SemEspaco,
+    /// A fonte de áudio acabou (ou a gravação falhou) sozinha.
+    FonteEncerrada,
+}
+
+impl MotivoDaParada {
+    /// O texto curto do aviso.
+    pub fn texto(self) -> &'static str {
+        match self {
+            Self::SemEspaco => "pouco espaço livre",
+            Self::FonteEncerrada => "o microfone parou",
+        }
+    }
+}
+
 /// Tudo o que a UI desenha: ela é função deste estado.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EstadoApp {
@@ -303,6 +324,16 @@ impl Core {
         mudou
     }
 
+    /// Se a UI está visível (o laço do app desacelera com ela escondida).
+    pub fn visivel(&self) -> bool {
+        self.visivel
+    }
+
+    /// O microfone e o silêncio da gravação em curso, sem ler a fila (ver [`Sessao::sinais`]).
+    pub fn sinais_da_sessao(&self) -> Option<(crate::sessao::EstadoMicrofone, bool)> {
+        self.sessao.sinais()
+    }
+
     pub fn definir_visivel(&mut self, visivel: bool) {
         self.visivel = visivel;
     }
@@ -476,6 +507,20 @@ impl Core {
         Ok(gravacao)
     }
 
+    /// O Android recusou o serviço em primeiro plano: para a gravação recém-aberta e a tira do
+    /// celular (fila e disco), sem folha "Gravação salva", para não sobrar gravação desprotegida.
+    pub fn desfazer_gravacao(&mut self) -> Result<()> {
+        let gravacao = self.sessao.parar(&self.fila)?;
+        self.folha = None;
+        self.trancar_fila()?.discard(&gravacao.id)?;
+        match std::fs::remove_file(&gravacao.path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => log::warn!("falha ao apagar {}: {err}", gravacao.path.display()),
+        }
+        Ok(())
+    }
+
     /// "Salvar" ou "Pular" na folha.
     pub fn salvar(&mut self, id: &str, titulo: Option<&str>, tipo: Option<&str>) -> Result<()> {
         Sessao::salvar(&self.fila, id, titulo, tipo)?;
@@ -496,15 +541,22 @@ impl Core {
     }
 
     /// Os limites da gravação: fecha a que terminou sozinha e para a que ficou sem espaço.
-    /// Devolve a gravação fechada, para o chamador avisar.
-    pub fn verificar_limites(&mut self) -> Result<Option<QueuedRecording>> {
-        let sem_espaco = self
-            .espaco_livre
-            .is_some_and(|livre| estimativas::deve_parar_por_espaco(livre, self.bitrate()));
-        if self.sessao.gravando() && (sem_espaco || self.sessao.terminou_sozinha()) {
-            return self.parar().map(Some);
+    /// Devolve a gravação fechada e o motivo, para o chamador avisar.
+    pub fn verificar_limites(&mut self) -> Result<Option<(QueuedRecording, MotivoDaParada)>> {
+        if !self.sessao.gravando() {
+            return Ok(None);
         }
-        Ok(None)
+        let motivo = if self
+            .espaco_livre
+            .is_some_and(|livre| estimativas::deve_parar_por_espaco(livre, self.bitrate()))
+        {
+            MotivoDaParada::SemEspaco
+        } else if self.sessao.terminou_sozinha() {
+            MotivoDaParada::FonteEncerrada
+        } else {
+            return Ok(None);
+        };
+        self.parar().map(|gravacao| Some((gravacao, motivo)))
     }
 
     // --- gravações locais -----------------------------------------------------------------------

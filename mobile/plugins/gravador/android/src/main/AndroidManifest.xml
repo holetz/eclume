@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- O pedido de isenção da otimização de bateria (o app não sai pela Play, onde a política o
+         restringe). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application>
         <!-- O microfone continua com a tela bloqueada: serviço em primeiro plano do tipo microfone,
@@ -15,5 +18,9 @@
             android:name=".ServicoDeGravacao"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <!-- A vigia do processo que morre gravando: alarme interno, não exportado. -->
+        <receiver
+            android:name=".VigiaDaGravacao"
+            android:exported="false" />
     </application>
 </manifest>

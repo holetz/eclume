@@ -4,12 +4,14 @@
 import { createContext, useContext } from 'react'
 import type {
   Achado,
+  Aparelho,
   Atualizacao,
   Configuracoes,
   DetalheLocal,
   EstadoApp,
   GravacaoLocal,
   Marcador,
+  Permissoes,
   Preferencias,
   TipoDeAgenda,
 } from './tipos'
@@ -29,8 +31,14 @@ export interface Ponte {
   lerCodigo(): Promise<string | null>
   cancelarLeitura(): Promise<void>
   parear(texto: string): Promise<void>
-  /** Pede microfone e notificações; devolve se o microfone foi concedido. */
-  permissoes(): Promise<boolean>
+  /** Pede microfone e notificações; devolve o que foi concedido. */
+  permissoes(): Promise<Permissoes>
+  /** As notificações e a isenção da otimização de bateria, como o sistema as tem agora. */
+  aparelho(): Promise<Aparelho>
+  /** Abre a tela do sistema com as permissões do app. */
+  abrirConfiguracoesDoApp(): Promise<void>
+  /** Pede a isenção da otimização de bateria (o diálogo do sistema). */
+  pedirIsencaoDeBateria(): Promise<void>
   gravar(): Promise<string>
   pausar(): Promise<void>
   continuar(): Promise<void>

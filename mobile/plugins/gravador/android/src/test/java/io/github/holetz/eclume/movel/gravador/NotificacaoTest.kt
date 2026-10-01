@@ -2,6 +2,7 @@ package io.github.holetz.eclume.movel.gravador
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NotificacaoTest {
@@ -36,6 +37,33 @@ class NotificacaoTest {
             TextosDaNotificacao.texto(gravando.copy(reconectando = true)),
         )
         assertEquals("Silenciado pelo sistema", TextosDaNotificacao.texto(gravando.copy(silenciada = true)))
+    }
+
+    @Test
+    fun respostaDoNucleoTemTresCasos() {
+        val comSessao = RespostaDoNucleo.ler(
+            """{"sessao": {"audio_ms": 1000, "pausada": false, "marcadores": [{}], "microfone": "ok"},
+                "espaco_livre": "cerca de 9 h"}""",
+        )
+        assertEquals(
+            RespostaDoNucleo.ComSessao(SessaoNaNotificacao(1000, false, 1, "cerca de 9 h")),
+            comSessao,
+        )
+        assertEquals(RespostaDoNucleo.SemSessao, RespostaDoNucleo.ler("""{"sessao": null}"""))
+        assertEquals(
+            RespostaDoNucleo.Erro("pânico: núcleo quebrado"),
+            RespostaDoNucleo.ler("""{"erro": "pânico: núcleo quebrado"}"""),
+        )
+        assertTrue(RespostaDoNucleo.ler("não é json") is RespostaDoNucleo.Erro)
+        assertTrue(RespostaDoNucleo.ler(null) is RespostaDoNucleo.Erro)
+        assertNull(SessaoNaNotificacao.doEstado("""{"erro": "x"}"""))
+    }
+
+    @Test
+    fun avisoDeQuandoAGravacaoPara() {
+        assertEquals("A gravação parou", TextosDaNotificacao.PAROU)
+        assertEquals("pouco espaço livre · 00:12:30 salvos", TextosDaNotificacao.parou("pouco espaço livre", 750_000L))
+        assertEquals("o microfone parou", TextosDaNotificacao.parou("o microfone parou", null))
     }
 
     @Test

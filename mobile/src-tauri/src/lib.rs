@@ -20,6 +20,29 @@ pub(crate) fn microfone() -> anyhow::Result<Box<dyn AudioSource>> {
     Ok(Box::new(eclume_audio_capture::MicSource::open()?))
 }
 
+/// A resposta de uma chamada da ponte JNI, isolada de pânico: um erro vira `{"erro": …}` e um
+/// pânico vira `{"erro": "pânico: …"}`, sem abortar o processo (o workspace não usa
+/// `panic = "abort"`). Fica fora do `cfg(android)` para ser testada no host.
+// Usada só pela ponte do Android; os testes a exercitam no host.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn responder(
+    f: impl FnOnce() -> anyhow::Result<serde_json::Value>,
+) -> serde_json::Value {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(Ok(valor)) => valor,
+        Ok(Err(err)) => serde_json::json!({ "erro": format!("{err:#}") }),
+        Err(panico) => {
+            let mensagem = panico
+                .downcast_ref::<&str>()
+                .map(|m| (*m).to_string())
+                .or_else(|| panico.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "sem mensagem".into());
+            log::error!("pânico na ponte JNI: {mensagem}");
+            serde_json::json!({ "erro": format!("pânico: {mensagem}") })
+        }
+    }
+}
+
 /// Os diretórios do núcleo a partir da pasta de dados do app: `eclume/` para config, CA, fila e
 /// gravações, e `no_backup/` (o `noBackupFilesDir` do Android) para o token.
 pub(crate) fn dirs_de(base: &std::path::Path) -> Dirs {
@@ -30,8 +53,8 @@ pub(crate) fn dirs_de(base: &std::path::Path) -> Dirs {
 }
 
 /// O serviço em primeiro plano do Android (notificação e microfone com a tela bloqueada), pelo
-/// plugin `gravador`. Cada chamada corre numa thread própria: o lado Kotlin responde na thread de
-/// quem chama, e nenhum comando deve esperar por ele.
+/// plugin `gravador`. O lado Kotlin responde na thread de quem chama: `iniciar` bloqueia (o
+/// `gravar` o chama numa thread de bloqueio) e as outras chamadas correm numa thread própria.
 pub(crate) mod servico {
     use tauri::{AppHandle, Runtime};
     use tauri_plugin_eclume_gravador::GravadorExt;
@@ -51,8 +74,11 @@ pub(crate) mod servico {
         });
     }
 
-    pub fn iniciar<R: Runtime>(app: &AppHandle<R>) {
-        em_segundo_plano(app, "iniciar", |g| g.iniciar_servico());
+    /// Sobe o serviço e espera o primeiro plano (bloqueia; nunca na thread principal).
+    pub fn iniciar<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        app.gravador()
+            .iniciar_servico()
+            .map_err(|err| err.to_string())
     }
 
     pub fn atualizar<R: Runtime>(app: &AppHandle<R>) {
@@ -60,7 +86,17 @@ pub(crate) mod servico {
     }
 
     pub fn parar<R: Runtime>(app: &AppHandle<R>) {
-        em_segundo_plano(app, "parar", |g| g.parar_servico());
+        em_segundo_plano(app, "parar", |g| g.parar_servico(None));
+    }
+
+    /// A gravação parou sem pedido: o serviço avisa "A gravação parou" com o motivo e sai.
+    pub fn parar_com_aviso<R: Runtime>(app: &AppHandle<R>, motivo: &'static str, duracao_ms: i64) {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Err(err) = app.gravador().parar_servico(Some((motivo, duracao_ms))) {
+                log::warn!("serviço de gravação (parar com aviso): {err}");
+            }
+        });
     }
 }
 
@@ -216,6 +252,27 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn responder_transforma_erro_e_panico_em_json() {
+        assert_eq!(
+            responder(|| Ok(serde_json::json!({ "ok": true }))),
+            serde_json::json!({ "ok": true })
+        );
+        assert_eq!(
+            responder(|| Err(anyhow::anyhow!("sem sessão"))),
+            serde_json::json!({ "erro": "sem sessão" })
+        );
+        assert_eq!(
+            responder(|| panic!("núcleo quebrado")),
+            serde_json::json!({ "erro": "pânico: núcleo quebrado" })
+        );
+        let dinamica = String::from("índice 3");
+        assert_eq!(
+            responder(move || panic!("{dinamica}")),
+            serde_json::json!({ "erro": "pânico: índice 3" })
+        );
+    }
 
     #[test]
     fn token_fica_fora_da_pasta_de_dados() {

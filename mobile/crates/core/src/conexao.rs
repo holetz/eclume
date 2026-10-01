@@ -132,6 +132,9 @@ pub struct Conexao {
     dirs: Dirs,
     transportes: Arc<dyn Transportes>,
     credencial: PatStore,
+    /// O token do arquivo, lido uma vez na abertura e trocado em entrar, parear, sair e perda da
+    /// credencial: o estado, lido a cada 250 ms, não relê o disco.
+    token: Option<String>,
     pendente: Option<CaPendente>,
     sem_credencial: bool,
 }
@@ -139,10 +142,18 @@ pub struct Conexao {
 impl Conexao {
     pub fn new(dirs: Dirs, transportes: Arc<dyn Transportes>) -> Self {
         let credencial = PatStore::with_backend(dirs.token(), Box::new(NoKeyring), None);
+        let token = match credencial.load() {
+            Ok(lido) => lido.map(|(token, _)| token),
+            Err(err) => {
+                log::warn!("falha ao ler a credencial: {err:#}");
+                None
+            }
+        };
         Self {
             dirs,
             transportes,
             credencial,
+            token,
             pendente: None,
             sem_credencial: false,
         }
@@ -164,9 +175,15 @@ impl Conexao {
         }
     }
 
-    /// O token do dispositivo, se houver.
+    /// O token do dispositivo, se houver (da memória: ver o campo `token`).
     pub fn token(&self) -> Result<Option<String>> {
-        Ok(self.credencial.load()?.map(|(token, _)| token))
+        Ok(self.token.clone())
+    }
+
+    /// Apaga a credencial do arquivo e da memória.
+    fn esquecer_token(&mut self) -> Result<()> {
+        self.token = None;
+        self.credencial.clear()
     }
 
     /// O transporte fixado para baixar a atualização.
@@ -255,7 +272,7 @@ impl Conexao {
             .is_some_and(|antigo| antigo.url != url)
         {
             // Trocar de servidor invalida a credencial do anterior.
-            self.credencial.clear()?;
+            self.esquecer_token()?;
             config.tipos_de_agenda.clear();
         }
         config.servidor = Some(Servidor {
@@ -310,6 +327,7 @@ impl Conexao {
         std::fs::create_dir_all(&self.dirs.sem_backup)
             .with_context(|| format!("falha ao criar {}", self.dirs.sem_backup.display()))?;
         self.credencial.save(&credencial.secret)?;
+        self.token = Some(credencial.secret.clone());
         self.sem_credencial = false;
         Ok(())
     }
@@ -318,14 +336,14 @@ impl Conexao {
     /// gravações locais.
     pub fn perdeu_credencial(&mut self) -> Result<()> {
         self.sem_credencial = true;
-        self.credencial.clear()
+        self.esquecer_token()
     }
 
     /// "Sair e esquecer o servidor": apaga o token, a CA e o servidor da config. As gravações
     /// ficam e sobem no próximo servidor pareado.
     pub fn sair(&mut self, config: &mut Config) -> Result<()> {
         self.pendente = None;
-        self.credencial.clear()?;
+        self.esquecer_token()?;
         match std::fs::remove_file(self.dirs.ca()) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}

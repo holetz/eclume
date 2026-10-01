@@ -56,6 +56,18 @@ pareamento.
 ## Em alguns fabricantes
 
 Aparelhos com economia de bateria agressiva (Xiaomi, Samsung, Huawei, entre outros) podem encerrar
-apps em segundo plano. Se uma gravação longa for interrompida, libere o eclume nas configurações de
-bateria do Android ("Sem restrições" ou "Não otimizar"). A gravação interrompida não se perde: ela
-fica salva até o ponto em que parou e aparece como "Interrompida".
+apps em segundo plano. No primeiro Gravar, o eclume explica e pede para funcionar em segundo plano
+(a isenção da otimização de bateria): toque em **Permitir** e confirme no Android. Se escolher
+"Agora não", o pedido fica em **Configurações → Gravação → Gravar com a tela bloqueada**.
+
+Alguns fabricantes têm uma economia própria além da do Android:
+
+- **Samsung:** Configurações → Bateria → Limites de uso em segundo plano → tire o eclume de
+  "Apps em suspensão" e "Apps em suspensão profunda".
+- **Xiaomi:** Configurações → Apps → eclume → Economia de bateria → **Sem restrições**, e ligue a
+  **Inicialização automática**.
+
+Se o sistema ainda assim encerrar o eclume no meio de uma gravação, em alguns minutos aparece a
+notificação **"A gravação foi interrompida · Toque para abrir"**. A gravação não se perde: ela fica
+salva até o ponto em que parou e aparece como "Interrompida". Quando a gravação para sozinha (pouco
+espaço livre, microfone que parou), sai a notificação "A gravação parou" com o motivo.
