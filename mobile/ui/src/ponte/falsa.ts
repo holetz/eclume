@@ -86,6 +86,7 @@ export function ponteFalsa(inicial: EstadoApp = estadoBase()): PonteFalsa {
     aparelho: vi.fn(async () => ({ notificacoes: true, isencaoDeBateria: 'concedida' as const })),
     abrirConfiguracoesDoApp: vi.fn(async () => {}),
     pedirIsencaoDeBateria: vi.fn(async () => {}),
+    consumirAtalho: vi.fn(async () => false),
     gravar: vi.fn(async () => 'g1'),
     pausar: vi.fn(async () => {}),
     continuar: vi.fn(async () => {}),

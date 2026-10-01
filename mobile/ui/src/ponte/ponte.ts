@@ -39,6 +39,8 @@ export interface Ponte {
   abrirConfiguracoesDoApp(): Promise<void>
   /** Pede a isenção da otimização de bateria (o diálogo do sistema). */
   pedirIsencaoDeBateria(): Promise<void>
+  /** `true` uma vez por toque no atalho "Gravar agora" do ícone. */
+  consumirAtalho(): Promise<boolean>
   gravar(): Promise<string>
   pausar(): Promise<void>
   continuar(): Promise<void>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { tamanho } from '../app/formatos'
+import { gravar as fluxoDeGravar, gravarDepoisDaBateria, type PassoDoGravar, SEM_MICROFONE } from '../app/gravar'
 import { IconeAjustes } from '../app/Icones'
 import { Marca } from '../app/Marca'
 import { mensagemDeErro, usePonte } from '../ponte/ponte'
@@ -14,15 +15,28 @@ function resumo(estado: EstadoApp): string {
   return estado.pendentes === 1 ? '1 aguardando' : `${estado.pendentes} aguardando`
 }
 
-/** Início: a faixa de rede, o botão Gravar e as gravações deste celular. */
-export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) => void }) {
+/**
+ * Início: a faixa de rede, o botão Gravar e as gravações deste celular. Cada novo `pedidoDeGravar`
+ * (o atalho "Gravar agora" do ícone) roda o mesmo fluxo do botão, quando o aparelho já foi lido.
+ */
+export function Inicio({
+  estado,
+  ir,
+  pedidoDeGravar = 0,
+}: {
+  estado: EstadoApp
+  ir: (rota: string) => void
+  pedidoDeGravar?: number
+}) {
   const ponte = usePonte()
   const [gravacoes, setGravacoes] = useState<GravacaoLocal[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [semMicrofone, setSemMicrofone] = useState(false)
   const [aparelho, setAparelho] = useState<Aparelho | null>(null)
+  const [aparelhoLido, setAparelhoLido] = useState(false)
   const [explicandoBateria, setExplicandoBateria] = useState(false)
+  const pedidoAtendido = useRef(0)
 
   useEffect(() => {
     let ativo = true
@@ -30,6 +44,7 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
       .aparelho()
       .then((lido) => ativo && setAparelho(lido))
       .catch(() => {})
+      .finally(() => ativo && setAparelhoLido(true))
     return () => {
       ativo = false
     }
@@ -48,44 +63,45 @@ export function Inicio({ estado, ir }: { estado: EstadoApp; ir: (rota: string) =
     }
   }, [ponte, chave])
 
+  function mostrar(passo: PassoDoGravar) {
+    if (passo.passo === 'sem_microfone') {
+      setSemMicrofone(true)
+      setErro(SEM_MICROFONE)
+    } else if (passo.passo === 'explicar_bateria') {
+      setExplicandoBateria(true)
+    } else if (passo.passo === 'erro') {
+      setErro(passo.mensagem)
+    }
+  }
+
   async function gravar() {
     setOcupado(true)
     setErro(null)
     setSemMicrofone(false)
-    try {
-      const permitido = await ponte.permissoes()
-      setAparelho((atual) => atual && { ...atual, notificacoes: permitido.notificacoes })
-      if (!permitido.microfone) {
-        setSemMicrofone(true)
-        setErro('Sem o microfone, o eclume não grava. Permita o microfone nas configurações do app.')
-        return
-      }
-      // Antes do primeiro Gravar sem a isenção, explica por que ela importa.
-      if (aparelho?.isencaoDeBateria === 'pedir') {
-        setExplicandoBateria(true)
-        return
-      }
-      await ponte.gravar()
-    } catch (e) {
-      setErro(mensagemDeErro(e))
-    } finally {
-      setOcupado(false)
-    }
+    const passo = await fluxoDeGravar(ponte, aparelho, (notificacoes) =>
+      setAparelho((atual) => atual && { ...atual, notificacoes }),
+    )
+    mostrar(passo)
+    setOcupado(false)
   }
 
   async function seguirDaBateria(pedir: boolean) {
     setExplicandoBateria(false)
     setOcupado(true)
-    try {
-      if (pedir) await ponte.pedirIsencaoDeBateria()
-      setAparelho(await ponte.aparelho())
-      await ponte.gravar()
-    } catch (e) {
-      setErro(mensagemDeErro(e))
-    } finally {
-      setOcupado(false)
-    }
+    const resultado = await gravarDepoisDaBateria(ponte, pedir)
+    if (resultado.aparelho) setAparelho(resultado.aparelho)
+    mostrar(resultado.passo)
+    setOcupado(false)
   }
+
+  // O atalho "Gravar agora": o mesmo fluxo do botão, uma vez por pedido.
+  useEffect(() => {
+    if (!aparelhoLido || pedidoDeGravar <= pedidoAtendido.current) return
+    pedidoAtendido.current = pedidoDeGravar
+    void gravar()
+    // `gravar` lê o aparelho deste render; o pedido é o gatilho.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoDeGravar, aparelhoLido])
 
   async function abrirConfiguracoesDoApp() {
     try {
