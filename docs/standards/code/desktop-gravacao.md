@@ -213,6 +213,29 @@ Implementados pela `holetz/eclume#13`; o detalhe está em
   servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
   pode ser sobreposto por `ECLUME_WEB_URL`.
 - Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
+- **Parada fora do lock:** `AppState::stop_recording` tira `active` sob o estado e guarda o id em
+  `stopping`; sem lock nenhum, `ActiveRecording::close` (sinal, join da thread de gravação,
+  desmontagem do driver, `fsync`, `rename`); com a fila, `Closed::deliver`; sob o estado, limpa
+  `stopping`. Enquanto `stopping` existe, o estado visível segue "Gravando", iniciar ou parar de
+  novo é `Busy` e a varredura de órfãs conta o id como vivo. "Sair" fecha a gravação numa thread e
+  chama `app.exit(0)` ao fim. Nenhum join de thread de captura espera sem prazo:
+  `join_with_deadline` (`eclume-audio-capture`, 3 s) solta a thread presa com aviso no log.
+- **Laços isolados de pânico:** o reaper, o sync, a pasta sincronizada, a detecção e o relógio da
+  nota rodam cada passada por `supervise::pass` (`catch_unwind`); um pânico fica no log (com o
+  backtrace do hook) e o laço espera 1 s dobrando até 60 s, zerada no sucesso. O updater roda cada
+  checagem numa subtarefa e trata o `JoinError` de pânico do mesmo jeito. Um mutex envenenado não
+  inutiliza o app: o estado e a fila seguem pelo `into_inner`, com o envenenamento no log.
+- **Flag de "em curso" só por guarda:** `syncing`, `mirror.running` e `importing` se desligam no
+  `Drop` de uma guarda (`AppState::syncing`, `mirror_running`, `import_guard`), que pega o estado
+  mesmo envenenado: "Sincronizando" e "Já há uma importação em andamento" não ficam presos depois
+  de um pânico.
+- **Comandos `#[tauri::command(async)]`:** comando síncrono só lê ou escreve memória e a fila
+  SQLite. Chaveiro, processo externo (`gsettings`), registro de início automático, arquivos fora
+  da fila e rede vão em `#[tauri::command(async)]` (hoje `settings`, `save_settings`, `sign_out`,
+  `storage_info`, `confirm_server`, `open_data_dir`, `open_log_dir`, além dos de rede). Abrir
+  Configurações não consulta o chaveiro: a origem da credencial fica em cache no estado,
+  atualizada ao entrar, sair e salvar. Um comando `async` nunca chama API do Tauri que despacha
+  para a thread principal (atalhos, bandeja, janela) com o estado ou a fila presos.
 - Quando a gravação para sozinha porque as fontes caíram ou porque a gravação falhou, o reaper
   (a cada segundo) fecha a linha e sai uma notificação do SO: "A gravação parou" com "<tempo>
   salvos · as fontes de áudio caíram" ou "<tempo> salvos · falha ao gravar"; a janela mostra o
@@ -231,7 +254,8 @@ Implementados pela `holetz/eclume#13`; o detalhe está em
 - O log (`info`, ou o filtro de `RUST_LOG`) vai para o stderr e para `eclume.log` no diretório de
   logs do app (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` no Windows,
   `~/.local/share/io.github.holetz.eclume/logs` no Linux, `~/Library/Logs/io.github.holetz.eclume`
-  no macOS). Acima de 5 MB, o arquivo vira `eclume.log.1` na próxima abertura. No Windows o release
+  no macOS). Acima de 5 MB, o arquivo vira `eclume.log.1`, na abertura e também com o app aberto
+  (o `Tee` conta os bytes e gira sob o lock do `env_logger`). No Windows o release
   não tem console, então o arquivo é o único registro de falhas de captura, sync e atualização.
   A primeira linha de cada abertura traz a versão e o SO. Um panic vai para o mesmo log (hook
   próprio) com a thread, o local e o backtrace: o hook padrão só escreve no stderr, que o app
