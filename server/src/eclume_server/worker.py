@@ -260,9 +260,14 @@ async def transcription_failed(
     o reaper cobre o job.
     """
     revision = return_revision("transcription_failed", recording_id, ctx.get("job_id"))
+    started_at = await ctx["redis"].hget(progress_key(recording_id), "started_at")
+    if isinstance(started_at, bytes):
+        started_at = started_at.decode()
     try:
         async with system_tx(ctx["engine"]) as conn:
-            result = await fail(conn, UUID(recording_id), error_code, message, stage, revision=revision)
+            result = await fail(
+                conn, UUID(recording_id), error_code, message, stage, revision=revision, started_at=started_at
+            )
     except Exception as exc:
         _retry_if_transient(ctx, "transcription_failed", recording_id, exc)
         raise
