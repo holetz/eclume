@@ -47,6 +47,8 @@ JOB_STALLED = "job_stalled"
 # A transcrição ficou pronta no worker GPU, mas a ingestão no worker CPU falhou ou nunca aconteceu.
 INGEST_FAILED = "ingest_failed"
 INGEST_FAILED_MESSAGE = "A transcrição ficou pronta, mas não foi possível gravá-la. Tente de novo."
+# O dono cancelou a transcrição (ou excluiu a gravação): estado do job e código do erro.
+CANCELLED = "cancelled"
 # Falhas passageiras: retentar (retranscrever ou `POST /admin/jobs/{id}/retry`) tende a resolver.
 RETRYABLE_CODES = frozenset(
     {
@@ -54,6 +56,7 @@ RETRYABLE_CODES = frozenset(
         JOB_LOST,
         JOB_STALLED,
         INGEST_FAILED,
+        CANCELLED,
         "gpu_oom",
         "out_of_memory",
         "audio_download_failed",

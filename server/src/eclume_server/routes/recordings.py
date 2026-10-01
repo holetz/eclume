@@ -26,6 +26,7 @@ from eclume_server.recordings import (
     Library,
     Sort,
     Status,
+    cancel_transcription,
     delete_recording_of,
     enqueue_transcription,
     get_visible,
@@ -251,3 +252,10 @@ async def retranscribe(
         refreshed = await get_visible(conn, recording_id)
     await enqueue_transcription(ctx, recording_id, revision, row["audio_key"], options)
     return (await render(ctx, principal.user_id, [refreshed]))[0]
+
+
+@router.post("/recordings/{recording_id}/cancel", status_code=202)
+async def cancel_recording_transcription(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Cancela a transcrição em curso ou na fila; o worker GPU para no próximo ponto de checagem."""
+    row = await cancel_transcription(ctx, principal.user_id, recording_id)
+    return (await render(ctx, principal.user_id, [row]))[0]

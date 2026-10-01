@@ -56,6 +56,15 @@ def summary_chat_job_id(message_id: UUID | str) -> str:
     return f"summary_chat:{message_id}"
 
 
+# Pedido de cancelamento de um `transcribe`, que o worker GPU confere (cooperativo).
+CANCEL_TTL_S = 7 * 24 * 3600
+
+
+def cancel_key(recording_id: UUID | str, revision: int) -> str:
+    """Chave que pede ao worker GPU para parar o `transcribe` da revisão."""
+    return f"eclume:cancel:{recording_id}:{revision}"
+
+
 def progress_key(recording_id: UUID | str) -> str:
     """Hash de progresso que o worker GPU grava."""
     return f"eclume:progress:{recording_id}"
@@ -162,6 +171,11 @@ class Queue:
         await self.pool.enqueue_job(
             "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=AGENT_QUEUE
         )
+
+    async def request_cancel(self, jobs: list[tuple[UUID, int]]) -> None:
+        """Pede ao worker GPU para parar os `transcribe` de `(gravação, revisão)`."""
+        for recording_id, revision in jobs:
+            await self.pool.set(cancel_key(recording_id, revision), "1", ex=CANCEL_TTL_S)
 
     async def enqueue_purge_embedding_objects(self) -> None:
         """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""

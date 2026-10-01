@@ -377,6 +377,62 @@ def test_retranscrever_em_corrida_responde_409(
     run(services.sql(failed))
 
 
+def _cancel_requested(services: Services, recording_id: str, revision: int = 1) -> bool:
+    return bool(redis.Redis.from_url(services.settings.redis_url).exists(f"eclume:cancel:{recording_id}:{revision}"))
+
+
+def test_cancelar_a_transcricao_em_curso(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(103))
+    rid = recording["id"]
+    # O worker GPU está no pré-processamento desta revisão.
+    redis.Redis.from_url(services.settings.redis_url).hset(
+        f"eclume:progress:{rid}", mapping={"revision": "1", "stage": "preprocess", "pct": "5", "updated_at": "agora"}
+    )
+    assert api.pat("recordings:read").post(f"/api/v1/recordings/{rid}/cancel").status_code == 403
+
+    cancelled = api.post(f"/api/v1/recordings/{rid}/cancel")
+    assert cancelled.status_code == 202, cancelled.text
+    body = cancelled.json()
+    assert body["status"] == "failed"
+    assert body["job"]["state"] == "cancelled"
+    assert body["job"]["error"] == {"code": "cancelled", "message": "Transcrição cancelada.", "retryable": True}
+    assert body["job"]["finished_at"] is not None
+    steps = {step["step"]: step for step in body["pipeline"]}
+    assert (steps["preprocessing"]["state"], steps["preprocessing"]["reason"]) == ("skipped", "cancelled")
+    assert steps["transcription"]["state"] == "pending"
+    assert _cancel_requested(services, rid)
+
+    # Sem job em aberto, 409; "Transcrever de novo" é a volta.
+    again = api.post(f"/api/v1/recordings/{rid}/cancel")
+    assert (again.status_code, again.headers["content-type"]) == (409, "application/problem+json")
+    retried = api.post(f"/api/v1/recordings/{rid}/retranscribe")
+    assert retried.status_code == 202
+    assert retried.json()["job"]["state"] == "queued"
+    assert not _cancel_requested(services, rid, 2)
+
+
+def test_cancelar_na_fila_pula_a_transcricao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(104))
+    body = api.post(f"/api/v1/recordings/{recording['id']}/cancel").json()
+    steps = {step["step"]: step for step in body["pipeline"]}
+    assert (steps["transcription"]["state"], steps["transcription"]["reason"]) == ("skipped", "cancelled")
+    other = as_user(make_user())
+    assert other.post(f"/api/v1/recordings/{recording['id']}/cancel").status_code == 404
+
+
+def test_excluir_a_gravacao_cancela_o_job_em_aberto(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(105))
+    assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
+    assert _cancel_requested(services, recording["id"])
+
+
 def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     session = as_user(make_user())
     recording = upload_file(session, audio_bytes(101))
