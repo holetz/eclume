@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,7 @@ import { AppShell, type ShellUser } from './AppShell'
 import { featuredItem, isItemActive, NAV_ITEMS, navGroups } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
+import { mockFetch } from '../test/http'
 import { createQueryClient } from './queryClient'
 
 // A fila real, com o "enviando" controlado pelo teste (converter e subir de verdade fica no ImportDialog.test).
@@ -15,6 +16,8 @@ vi.mock('../features/import/useImportQueue', async (original) => {
   const actual = await original<typeof import('../features/import/useImportQueue')>()
   return { ...actual, useImportQueue: () => ({ ...actual.useImportQueue(), sending: importState.sending }) }
 })
+
+afterEach(() => vi.unstubAllGlobals())
 
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
@@ -131,6 +134,16 @@ describe('AppShell', () => {
     expect(first.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(firstGroup).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('link', { name: 'Perguntas' })).not.toBeInTheDocument()
+  })
+
+  it('Perguntar perde o destaque, não o lugar, enquanto a conta não tem gravação', async () => {
+    mockFetch({ 'GET /api/v1/recordings': () => ({ items: [], next_cursor: null }) })
+    renderShell(member, vi.fn(), '/pessoas')
+    const nav = screen.getByRole('navigation', { name: 'Principal' })
+    const [first] = within(nav).getAllByRole('link')
+    expect(first).toHaveAccessibleName('Perguntar')
+    await waitFor(() => expect(first).toHaveClass('btn', 'btn-secondary'))
+    expect(first).not.toHaveClass('btn-primary')
   })
 
   it('Perguntar não acende fora da rota /perguntas', () => {

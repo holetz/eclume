@@ -23,7 +23,10 @@ interface GroupedItem extends NavEntry {
   featured?: never
 }
 
-/** O item destacado da barra lateral: a ação primária, acima dos grupos, sem grupo nem título. */
+/**
+ * O item destacado da barra lateral: a ação primária, acima dos grupos, sem grupo nem título. Com a
+ * conta sem gravação, o shell o desenha como secundário, sem tirá-lo do lugar.
+ */
 export interface FeaturedItem extends NavEntry {
   featured: true
   icon: LucideIcon
