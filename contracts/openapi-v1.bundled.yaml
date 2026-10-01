@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.18.0
+  version: 2.19.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -431,7 +431,8 @@ paths:
       summary: Mudar a atribuição automática de locutores da conta
       description: 'Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os
         vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão
-        é 0,75.'
+        é 0,75. Desde a 2.19.0, `keep_samples: false` apaga na hora as amostras, os vetores por gravação
+        e as sugestões pendentes da conta.'
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -629,6 +630,37 @@ paths:
               examples:
                 producao:
                   $ref: '#/components/examples/ServerInfo'
+  /api/v1/privacy:
+    get:
+      tags:
+      - meta
+      operationId: getPrivacyInfo
+      summary: Para onde vai cada dado, conforme a configuração em vigor
+      description: 'Desde a 2.19.0. Diz, para a transcrição e para cada finalidade de agente, se o dado
+        é
+
+        processado neste servidor, na rede local ou fora dele, com o nome de quem processa quando
+
+        sai. Pública como `GET /server`, porque quem se cadastra precisa saber antes de aceitar o
+
+        aviso; nunca devolve endereço, modelo, chave nem o nome que o admin deu ao provider. A
+
+        configuração muda em runtime: o cliente não guarda a resposta por tempo indeterminado.
+
+        O áudio e a transcrição ficam sempre guardados neste servidor.
+
+        '
+      security: []
+      responses:
+        '200':
+          description: Destinos em vigor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyInfo'
+              examples:
+                agente_externo:
+                  $ref: '#/components/examples/PrivacyInfo'
   /api/v1/auth/password-reset/check:
     post:
       tags:
@@ -5200,6 +5232,9 @@ components:
       - enabled
       - threshold
       - platform_enabled
+      - keep_samples
+      - sample_count
+      - voiceprint_people
       properties:
         enabled:
           type: boolean
@@ -5211,6 +5246,19 @@ components:
         platform_enabled:
           description: A identificação por voz está ligada na plataforma; desligada, nada é atribuído.
           type: boolean
+        keep_samples:
+          description: Desde a 2.19.0. A conta guarda amostras e impressões de voz (padrão `true`). Desligada,
+            nada de voz da conta é calculado, comparado ou guardado; o desligamento apaga na hora as amostras,
+            os vetores por gravação e as sugestões pendentes da conta.
+          type: boolean
+        sample_count:
+          description: Desde a 2.19.0. Quantas amostras de voz a conta guarda.
+          type: integer
+          minimum: 0
+        voiceprint_people:
+          description: Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra).
+          type: integer
+          minimum: 0
     VoiceAssignmentPatch:
       type: object
       additionalProperties: false
@@ -5222,6 +5270,11 @@ components:
           type: number
           minimum: 0.5
           maximum: 0.99
+        keep_samples:
+          description: Desde a 2.19.0. `false` apaga na hora as amostras, os vetores por gravação e as
+            sugestões pendentes da conta; os arquivos de voz do armazenamento saem logo depois. `true`
+            volta a guardar a partir das próximas transcrições, sem recuperar o que saiu.
+          type: boolean
     NextCursor:
       description: Cursor da próxima página, ou `null` na última.
       type:
@@ -5328,6 +5381,52 @@ components:
         contract_version:
           description: Versão deste contrato que o servidor implementa.
           type: string
+    PrivacyInfo:
+      description: Desde a 2.19.0. Para onde vai cada dado, conforme a configuração em vigor.
+      type: object
+      required:
+      - destinations
+      properties:
+        destinations:
+          description: Um item por finalidade, na ordem de `DataPurpose`.
+          type: array
+          items:
+            $ref: '#/components/schemas/DataDestination'
+    DataPurpose:
+      description: '`transcription` é o áudio virando texto; as demais são as finalidades de agente (resumos,
+        campos, chat e detecção do tipo de agenda).'
+      type: string
+      enum:
+      - transcription
+      - summaries
+      - fields
+      - chat
+      - agenda_detection
+    DataDestination:
+      type: object
+      required:
+      - purpose
+      - location
+      - processor
+      properties:
+        purpose:
+          $ref: '#/components/schemas/DataPurpose'
+        location:
+          description: '`server`: neste servidor; `local_network`: em outra máquina da rede local; `external`:
+            fora do servidor e da rede; `disabled`: nenhum provider habilitado para a finalidade, e nada
+            é enviado. Na dúvida, o servidor responde `external`.'
+          type: string
+          enum:
+          - server
+          - local_network
+          - external
+          - disabled
+        processor:
+          description: 'Com `external`, quem processa: o fornecedor (por exemplo `Anthropic`) ou só o
+            host do endereço (por exemplo `api.deepseek.com`); `null` nos demais.'
+          type:
+          - string
+          - 'null'
     DeviceLogin:
       type: object
       required:
@@ -9583,6 +9682,9 @@ components:
         enabled: true
         threshold: 0.8
         platform_enabled: true
+        keep_samples: true
+        sample_count: 7
+        voiceprint_people: 3
     VoiceAssignmentPatchRequest:
       summary: Subir o limiar para 0,80
       value:
@@ -9640,6 +9742,25 @@ components:
         ca_sha256: 3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
         version: 0.1.0
         contract_version: 2.9.0
+    PrivacyInfo:
+      summary: Transcrição no servidor, resumos e chat na Anthropic
+      value:
+        destinations:
+        - purpose: transcription
+          location: server
+          processor: null
+        - purpose: summaries
+          location: external
+          processor: Anthropic
+        - purpose: fields
+          location: local_network
+          processor: null
+        - purpose: chat
+          location: external
+          processor: Anthropic
+        - purpose: agenda_detection
+          location: disabled
+          processor: null
     DeviceLoginRequest:
       summary: Notebook entrando com e-mail e senha
       value:

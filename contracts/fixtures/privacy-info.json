@@ -1,0 +1,9 @@
+{
+  "destinations": [
+    {"purpose": "transcription", "location": "server", "processor": null},
+    {"purpose": "summaries", "location": "external", "processor": "Anthropic"},
+    {"purpose": "fields", "location": "local_network", "processor": null},
+    {"purpose": "chat", "location": "external", "processor": "Anthropic"},
+    {"purpose": "agenda_detection", "location": "disabled", "processor": null}
+  ]
+}
