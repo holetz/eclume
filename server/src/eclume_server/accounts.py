@@ -124,20 +124,17 @@ async def change_password(
     await conn.execute(others)
 
 
-async def delete_user(conn: AsyncConnection, user_id: UUID, password: str) -> list[tuple[str | None, UUID]]:
+async def delete_user(conn: AsyncConnection, user_id: UUID, password: str) -> None:
     """Apaga a conta e tudo o que é dela (as FKs levam em cascata); senha errada é `AccountError`.
 
-    Devolve `(audio_key, recording_id)` de cada gravação, para quem chamou apagar os objetos do
-    armazenamento depois do commit.
+    Os gatilhos das gravações e dos uploads em andamento põem os objetos na fila de exclusão do
+    bucket na mesma transação.
     """
     stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
     if not verify_password(stored, password):
         msg = "senha incorreta"
         raise WrongPasswordError(msg)
-    r = t.recordings.c
-    objects = [(key, rid) for key, rid in (await conn.execute(select(r.audio_key, r.id).where(r.owner_id == user_id)))]
     await conn.execute(delete(t.users).where(t.users.c.id == user_id))
-    return objects
 
 
 async def create_admin(conn: AsyncConnection, *, email: str, name: str, password: str) -> UUID:

@@ -282,6 +282,7 @@ def test_pat_de_outro_usuario_nao_enxerga_nada(scenario: dict[str, Any]):
         "SELECT * FROM admins",
         "SELECT * FROM admin_sessions",
         "SELECT * FROM sessions",
+        "SELECT * FROM storage_deletions",
         "UPDATE platform_settings SET updated_at = now()",
     ],
 )
