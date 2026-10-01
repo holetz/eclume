@@ -326,11 +326,23 @@ pub fn buscar_tipos_de_agenda(
         .collect())
 }
 
-/// Uma etapa do processamento no servidor (`PipelineStep`).
+/// Uma etapa do processamento no servidor (`PipelineStep`), com o código do motivo de uma etapa
+/// pulada (`reason`) e o erro de uma que falhou; servidor sem esses campos vira `None`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Etapa {
     pub step: String,
     pub state: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub error: Option<ErroDaEtapa>,
+}
+
+/// O erro de uma etapa que falhou (`PipelineStep.error`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ErroDaEtapa {
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Deserialize)]
