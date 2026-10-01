@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99
 maintainer: holetz
 ---
 
@@ -36,6 +36,9 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_PUBLIC_URL` | a da requisição | base absoluta das URLs devolvidas ao cliente |
 | `ECLUME_COOKIE_SECURE` | `true` | `false` só em dev por HTTP puro |
 | `ECLUME_SESSION_TTL_DAYS`, `ECLUME_ADMIN_SESSION_TTL_HOURS` | `14`, `12` | validade da sessão de usuário e da sessão de admin |
+| `ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE` | `10` | tentativas por IP e rota nas rotas de credencial ([Autenticação](#autenticação)) |
+| `ECLUME_LOGIN_FAILURES_PER_PAIR`, `ECLUME_LOGIN_FAILURES_PER_ACCOUNT` | `10`, `100` | falhas de login por par (conta, IP) em 15 min e da conta em 1 h ([Autenticação](#autenticação)) |
+| `ECLUME_UPLOAD_PART_SIZE` | `8388608` | tamanho da parte do upload e teto do corpo do `PUT` de parte; acima de 9 MiB, subir também o `request_body` do Caddy de borda |
 | `ECLUME_SIGNUP_OPEN` | `true` | cadastro aberto; `false` fecha o `POST /auth/signup` (403 `signup_closed`) sem deploy de código |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
@@ -55,6 +58,13 @@ Tudo por ambiente (`eclume_server/config.py`):
   `[A-Za-z0-9._-]`, ou um novo (uuid4 hex) — e as linhas de log da requisição levam o mesmo valor.
 - **Log de acesso:** `eclume_server.acesso` grava método, caminho, status e duração. O
   `uvicorn.access` fica calado.
+- **500 inesperado:** o handler genérico de `problems.py` responde `problem+json` com
+  `code: internal_error`, sem detalhe, e grava a exceção com o traceback em
+  `eclume_server.problems` (nível `ERROR`), com o `request_id` da resposta.
+- **Teto do corpo:** `limits.BodyLimitMiddleware`, ASGI puro, escolhe o teto pelo caminho (64 KiB
+  nas credenciais, `ECLUME_UPLOAD_PART_SIZE` no `PUT` de parte, 1 MiB no resto e no `/mcp`), recusa
+  pelo `Content-Length` sem ler e conta os bytes de `receive` quando o cabeçalho falta; passado o
+  teto, descarta o que o app responderia e devolve 413 `payload_too_large`.
 - **Nunca no log:** query string (as URLs de parte e de áudio são assinadas), cabeçalhos de
   credencial, e-mail, título, texto de transcrição ou resumo, tokens e chaves.
 
@@ -175,7 +185,12 @@ Duas contas distintas, com credenciais que não se cruzam: a **conta de usuário
 sessão e PAT, e a **conta de admin** (`admins`), com sessão própria. O mesmo e-mail pode existir
 nas duas.
 
-- **Senha** com argon2id nas duas contas. **Sessão de usuário:** token aleatório no cookie
+- **Senha** com argon2id nas duas contas, **fora do event loop e fora de transação**:
+  `security.hash_password_async`/`verify_password_async` rodam o argon2 numa thread com um
+  semáforo de 4 por event loop (`PASSWORD_THREADS`: cada hash usa 64 MiB, e o pool padrão abriria
+  espaço para 2,5 GiB numa rajada). O login lê a conta numa transação, confere a senha fora dela e
+  grava em outra; o hash de uma senha nova (`accounts.new_password_hash`) é calculado antes de
+  abrir a transação. **Sessão de usuário:** token aleatório no cookie
   `eclume_session` (HttpOnly, Secure, SameSite=Lax, 14 dias) e `eclume_csrf` legível; o banco
   guarda o SHA-256 do token e o CSRF (`sessions`). Método mutável com sessão exige `X-CSRF-Token`
   igual ao CSRF da sessão.
@@ -197,11 +212,19 @@ nas duas.
   PAT não é barrado (ver [Cadastro e aviso](#cadastro-e-aviso)).
 - **Limite de tentativas** (`ratelimit.py`): janela fixa de 1 minuto no Redis
   (`INCR` + `EXPIRE` em `eclume:rl:<rota>:<ip>`), 10 tentativas por IP em `/auth/login`,
-  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`; os logins contam
-  também por conta, e a troca de código tem um teto global (ver
-  [server-mcp-e-dispositivos](server-mcp-e-dispositivos.md)). Estourado, **429**
-  `rate_limited` com `Retry-After` (segundos até a janela reabrir). O IP é o do uvicorn com
-  `--proxy-headers`, que confia no `X-Forwarded-For` do Caddy.
+  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`, e a troca de código tem
+  um teto global (ver [server-mcp-e-dispositivos](server-mcp-e-dispositivos.md)). Estourado,
+  **429** `rate_limited` com `Retry-After` (segundos até a janela reabrir). O IP é o do uvicorn
+  com `--proxy-headers`, que confia no `X-Forwarded-For` do Caddy.
+- **Falhas de login por conta** (`check_login`, `login_failed`, `login_succeeded`), com escopo
+  `user` (navegador e aparelho somam) ou `admin`: antes de conferir a senha, 429 se o par
+  `eclume:rl:{escopo}_fail:{email}:{ip}` chegou a `ECLUME_LOGIN_FAILURES_PER_PAIR` falhas (janela
+  de 15 min) ou se a conta `eclume:rl:{escopo}_fail:{email}` chegou a
+  `ECLUME_LOGIN_FAILURES_PER_ACCOUNT` (janela de 1 h) e o IP não está em
+  `eclume:rl:{escopo}_known:{email}` (sorted set dos IPs com login certo nos últimos 30 dias).
+  A falha soma nos dois contadores; o sucesso zera o par e grava o IP como conhecido. Contar só
+  falhas, e poupar o IP conhecido, impede que as tentativas de um IP qualquer tranquem a dona da
+  conta, sem abrir força bruta distribuída sem teto.
 - **Sessão de admin:** `POST /admin/auth/login` abre `eclume_admin_session` (HttpOnly, Secure,
   SameSite=Strict, `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`) e `eclume_admin_csrf`
   legível (`Path=/`), guardados em `admin_sessions`. `auth.require_admin` é a dependência de toda
@@ -246,11 +269,16 @@ nas duas.
 
 Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais (`attempts`):
 
-- **Trocar a senha:** `POST /me/password` com `current_password` e `new_password`
-  (`accounts.change_password`). Senha atual errada → 422 em `current_password`; nova com menos de
-  12 caracteres → 422 em `new_password`. Grava o hash novo e apaga as outras sessões da conta; a
-  corrente continua. Os PATs continuam valendo.
-- **Excluir a conta:** `POST /me/delete` com `password` (`accounts.delete_user`). Senha errada →
+- **Trocar a senha:** `POST /me/password` com `current_password`, `new_password` e
+  `revoke_tokens` opcional (`accounts.confirm_password` e `accounts.change_password`). Senha atual
+  errada → 422 em `current_password`; nova com menos de 12 caracteres → 422 em `new_password`.
+  Grava o hash novo e apaga as outras sessões da conta; a corrente continua. Com
+  `revoke_tokens: true`, grava `revoked_at` em todos os `api_tokens` da conta (credenciais de
+  aparelho e PATs), como o desativar do admin; sem ele, os tokens continuam. O web manda `true` por
+  padrão: quem troca a senha por suspeita de vazamento espera que o acesso vazado acabe (reverte a
+  decisão da #86 de manter os PATs).
+- **Excluir a conta:** `POST /me/delete` com `password` (`accounts.confirm_password`, depois
+  `accounts.delete_user`). Senha errada →
   422 em `password`, e nada muda. Apaga o usuário, e as FKs levam em cascata tudo o que é dele;
   depois do commit, a rota apaga os objetos de cada gravação no armazenamento
   (`storage.delete_recording`) e responde 204 com os cookies da sessão apagados, como o logout.
@@ -264,8 +292,9 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   preservado por manter um só origin, sem CORS e sem expor o MinIO; o volume real (Opus a
   ~15 MB/h) cabe na API. A URL é opaca para o cliente: trocar por pré-assinada depois não quebra
   ninguém.
-- Partes de `ECLUME_UPLOAD_PART_SIZE` (8 MiB; última menor), no máximo 10 000; tamanho errado →
-  409. `parts_received` vem do `ListParts`. As primeiras 100 URLs vêm na criação; o resto por
+- Partes de `ECLUME_UPLOAD_PART_SIZE` (8 MiB; última menor), no máximo 10 000; `Content-Length`
+  diferente do esperado → 409. O corpo é lido em pedaços (`request.stream()`) e passar do tamanho
+  da parte é 413 `payload_too_large` sem ler o resto. `parts_received` vem do `ListParts`. As primeiras 100 URLs vêm na criação; o resto por
   `part-urls`. Upload vale 7 dias; o worker CPU aborta os vencidos a cada 30 min. O MinIO de todo
   compose guarda o multipart incompleto por `MINIO_API_STALE_UPLOADS_EXPIRY=192h` (8 dias, acima
   dos 7), para a retomada valer até o fim.
@@ -278,7 +307,14 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
 - **Dedup e retomada por hash:** mesmo `sha256` de uma gravação do usuário → 200 `deduplicated`;
   de um upload `in_progress` dele → o mesmo upload, com URLs das partes que faltam.
 - **`complete`** fecha o multipart, relê o objeto em streaming para conferir o SHA-256 e cria
-  gravação e job. Hash divergente → gravação `failed` com `job.error.code = hash_mismatch`, e a
+  gravação e job, em três passos e **sem S3 dentro de transação**: (1) transação curta lê e confere
+  o upload; (2) fora de transação, sob a trava `eclume:upload:completing:{id}` (`SET NX`, TTL de
+  2 min renovado a cada 30 s enquanto o S3 trabalha), monta o multipart e calcula o hash; (3)
+  transação curta com `FOR UPDATE` cria gravação e job e marca `completed`; a exclusão do objeto
+  duplicado vem depois do commit. Outro `complete` com a trava presa → 409 `upload_completing` com
+  `Retry-After`; a trava de um processo morto vence e o próximo `complete` retoma (o passo 2 é
+  idempotente pelo objeto já montado). Escolhida contra um estado `completing` no banco, que
+  pediria migração e um valor novo que desktop e celular teriam de tolerar. Hash divergente → gravação `failed` com `job.error.code = hash_mismatch`, e a
   gravação guarda o hash **real**, deixando o declarado livre para um novo upload. `complete`
   repetido devolve a mesma gravação.
 - **Chaves:** áudio em `users/{dono}/recordings/{gravação}/audio`; artefatos do worker em
