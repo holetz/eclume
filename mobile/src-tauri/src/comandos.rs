@@ -163,9 +163,15 @@ pub fn salvar<R: Runtime>(
     id: String,
     titulo: Option<String>,
     tipo_de_agenda_id: Option<String>,
+    idioma: Option<String>,
 ) -> Resultado<()> {
     com_nucleo(&app, |c| {
-        c.salvar(&id, titulo.as_deref(), tipo_de_agenda_id.as_deref())
+        c.salvar(
+            &id,
+            titulo.as_deref(),
+            tipo_de_agenda_id.as_deref(),
+            idioma.as_deref(),
+        )
     })?;
     // Ao parar, a sonda roda de novo: a gravação pode subir já, ou com o app fechado pelo
     // trabalho de sync, no próximo Wi-Fi do eclume.
@@ -213,6 +219,12 @@ pub fn tipos_de_agenda() -> Resultado<Vec<TipoDeAgenda>> {
         .config()
         .tipos_de_agenda
         .clone())
+}
+
+/// As opções de idioma da folha "Gravação salva", com o padrão da conta nomeado.
+#[tauri::command]
+pub fn idiomas() -> Resultado<Vec<eclume_mobile_core::OpcaoDeIdioma>> {
+    Ok(trancar(nucleo()?).map_err(texto)?.opcoes_de_idioma())
 }
 
 /// O que a tela Configurações mostra.

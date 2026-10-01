@@ -515,6 +515,14 @@ fn nucleo_conectado(nome: &str) -> (Arc<Mutex<eclume_mobile_core::Core>>, Roteir
             serde_json::json!({"items": [{"id": "t1", "name": "Reunião"}], "next_cursor": null}),
         ),
     );
+    roteiro.responde(
+        "GET",
+        "/api/v1/me/transcription",
+        json(
+            200,
+            serde_json::json!({"language": null, "platform_default": "pt"}),
+        ),
+    );
     roteiro.responde("GET", "/downloads/movel.json", comum::texto(404, ""));
     let nucleo = Arc::new(Mutex::new(
         Core::abrir(
@@ -557,6 +565,11 @@ fn ciclo_completo_nao_trava_o_nucleo() {
     let core = trancar(&nucleo).unwrap();
     assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
     assert_eq!(core.config().tipos_de_agenda[0].nome, "Reunião");
+    // O padrão da conta vem nomeado na folha, também fora da rede depois.
+    let opcoes = core.opcoes_de_idioma();
+    assert_eq!(opcoes[0].valor, "");
+    assert_eq!(opcoes[0].rotulo, "Padrão da conta: Português");
+    assert_eq!(opcoes[1].valor, "auto");
 }
 
 /// O processo aberto só para o `SyncWorker` não tem a tela para avisar o Wi-Fi: o ciclo do worker

@@ -13,6 +13,7 @@ import type {
   Marcador,
   Permissoes,
   Preferencias,
+  OpcaoDeIdioma,
   TipoDeAgenda,
 } from './tipos'
 
@@ -47,7 +48,7 @@ export interface Ponte {
   marcar(nota?: string | null): Promise<Marcador>
   anotarMarcador(clientId: string, nota: string | null): Promise<Marcador>
   parar(): Promise<string>
-  salvar(id: string, titulo: string | null, tipoDeAgendaId: string | null): Promise<void>
+  salvar(id: string, titulo: string | null, tipoDeAgendaId: string | null, idioma: string | null): Promise<void>
   sincronizarAgora(): Promise<void>
   gravacoes(): Promise<GravacaoLocal[]>
   gravacao(id: string): Promise<DetalheLocal>
@@ -58,6 +59,8 @@ export interface Ponte {
   excluirLocal(id: string): Promise<void>
   excluirSincronizadas(): Promise<number>
   tiposDeAgenda(): Promise<TipoDeAgenda[]>
+  /** O padrão da conta nomeado, Detectar automaticamente e a lista curta de idiomas. */
+  idiomas(): Promise<OpcaoDeIdioma[]>
   configuracoes(): Promise<Configuracoes>
   salvarConfiguracoes(preferencias: Preferencias): Promise<void>
   sair(): Promise<void>

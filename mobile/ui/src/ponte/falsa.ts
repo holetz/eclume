@@ -112,6 +112,13 @@ export function ponteFalsa(inicial: EstadoApp = estadoBase()): PonteFalsa {
       { id: 't1', nome: 'Reunião de equipe' },
       { id: 't2', nome: 'Visita ao cliente' },
     ]),
+    idiomas: vi.fn(async () => [
+      { valor: '', rotulo: 'Padrão da conta: Português' },
+      { valor: 'auto', rotulo: 'Detectar automaticamente' },
+      { valor: 'pt', rotulo: 'Português' },
+      { valor: 'es', rotulo: 'Español' },
+      { valor: 'en', rotulo: 'English' },
+    ]),
     configuracoes: vi.fn(async () => ponte.config),
     salvarConfiguracoes: vi.fn(async () => {}),
     sair: vi.fn(async () => {}),

@@ -249,6 +249,7 @@ pub fn run() {
             comandos::excluir_local,
             comandos::excluir_sincronizadas,
             comandos::tipos_de_agenda,
+            comandos::idiomas,
             comandos::configuracoes,
             comandos::salvar_configuracoes,
             comandos::sair,

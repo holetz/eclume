@@ -153,3 +153,9 @@ export interface Atualizacao {
   versao: string
   notas: string | null
 }
+
+/** Uma opção do seletor de idioma da folha "Gravação salva"; `valor` vazio é o padrão da conta. */
+export interface OpcaoDeIdioma {
+  valor: string
+  rotulo: string
+}

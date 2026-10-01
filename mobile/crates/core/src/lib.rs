@@ -40,6 +40,30 @@ pub fn client_version(version: &str) -> String {
     format!("{CLIENT_PREFIX}/{version}")
 }
 
+/// Os idiomas que a folha "Gravação salva" oferece, além do padrão da conta.
+const IDIOMAS: [(&str, &str); 4] = [
+    ("auto", "Detectar automaticamente"),
+    ("pt", "Português"),
+    ("es", "Español"),
+    ("en", "English"),
+];
+
+/// O nome de um idioma da lista curta (`pt-BR` vira `pt`); fora dela, o próprio código.
+fn nome_do_idioma(idioma: &str) -> &str {
+    let base = idioma.split('-').next().unwrap_or(idioma);
+    IDIOMAS
+        .iter()
+        .find(|(valor, _)| *valor == base)
+        .map_or(idioma, |(_, rotulo)| rotulo)
+}
+
+/// Uma opção do seletor de idioma da folha.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OpcaoDeIdioma {
+    pub valor: String,
+    pub rotulo: String,
+}
+
 /// A folha "Gravação salva", aberta depois de parar.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Folha {
@@ -477,6 +501,32 @@ impl Core {
         self.leitura(REQUEST_TIMEOUT)
     }
 
+    pub fn guardar_idioma_da_conta(&mut self, idioma: String) -> Result<()> {
+        if self.config.idioma_da_conta.as_deref() != Some(idioma.as_str()) {
+            self.config.idioma_da_conta = Some(idioma);
+            self.salvar_config()?;
+        }
+        Ok(())
+    }
+
+    /// As opções de idioma da folha "Gravação salva": o padrão da conta nomeado, Detectar e a
+    /// lista curta. O valor vazio é o padrão (a gravação sobe sem idioma e vale o da conta).
+    pub fn opcoes_de_idioma(&self) -> Vec<OpcaoDeIdioma> {
+        let padrao = match self.config.idioma_da_conta.as_deref() {
+            Some(idioma) => format!("Padrão da conta: {}", nome_do_idioma(idioma)),
+            None => "Padrão da conta".to_string(),
+        };
+        std::iter::once(OpcaoDeIdioma {
+            valor: String::new(),
+            rotulo: padrao,
+        })
+        .chain(IDIOMAS.iter().map(|(valor, rotulo)| OpcaoDeIdioma {
+            valor: (*valor).to_string(),
+            rotulo: (*rotulo).to_string(),
+        }))
+        .collect()
+    }
+
     pub fn guardar_tipos(&mut self, tipos: Vec<config::TipoDeAgenda>) -> Result<()> {
         if self.config.tipos_de_agenda != tipos {
             self.config.tipos_de_agenda = tipos;
@@ -561,8 +611,14 @@ impl Core {
     }
 
     /// "Salvar" ou "Pular" na folha.
-    pub fn salvar(&mut self, id: &str, titulo: Option<&str>, tipo: Option<&str>) -> Result<()> {
-        Sessao::salvar(&self.fila, id, titulo, tipo)?;
+    pub fn salvar(
+        &mut self,
+        id: &str,
+        titulo: Option<&str>,
+        tipo: Option<&str>,
+        idioma: Option<&str>,
+    ) -> Result<()> {
+        Sessao::salvar(&self.fila, id, titulo, tipo, idioma)?;
         if self.folha.as_ref().is_some_and(|f| f.id == id) {
             self.folha = None;
         }
@@ -842,6 +898,10 @@ impl PlanoDeLeitura {
         sync::buscar_tipos_de_agenda(self.transporte.as_ref(), &self.servidor, &self.token)
     }
 
+    pub fn idioma_da_conta(&self) -> Result<String> {
+        sync::buscar_idioma_da_conta(self.transporte.as_ref(), &self.servidor, &self.token)
+    }
+
     pub fn titulos(&self, desde: &str) -> Result<sync::Titulos> {
         sync::buscar_titulos(self.transporte.as_ref(), &self.servidor, &self.token, desde)
     }
@@ -1001,6 +1061,11 @@ pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder
             match plano.tipos() {
                 Ok(tipos) => trancar(nucleo)?.guardar_tipos(tipos)?,
                 Err(err) => leitura_falhou(nucleo, &err)?,
+            }
+            // Servidor anterior à 2.20.0 não tem a rota: a folha fica com "Padrão da conta".
+            match plano.idioma_da_conta() {
+                Ok(idioma) => trancar(nucleo)?.guardar_idioma_da_conta(idioma)?,
+                Err(err) => log::warn!("{err:#}"),
             }
         }
     }
