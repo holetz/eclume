@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Layout do monorepo e comandos por pilar
-description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml
-tags: [code, monorepo, toolchain, ci]
-timestamp: 2026-09-27
+description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI, o gate do host e as specs usam.
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, .githooks/pre-push
+tags: [code, monorepo, toolchain, ci, gate]
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89
 maintainer: holetz
 ---
 
@@ -171,24 +171,59 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 `deploy/docker-compose.test.yml` sobe os mesmos três serviços para a suíte do server, com dados em
 `tmpfs` e portas próprias (`55532`, `56479`, `59100`); rode-o sempre com `-p eclume-test`.
 
-## CI — `.github/workflows/ci.yml`
+## CI e gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` e `deploy/gate.sh`
 
-Jobs `ubuntu-latest` independentes, em `pull_request` e em `push` para `main`: `python`,
-`contracts`, `web`, `desktop` e `mobile`, cada um rodando os comandos acima (com `--locked` no uv e
-no cargo; `gen:api -- --check` no web), e `web-browser`, que roda os testes de navegador da conversão
-e o E2E contra o mock no Google Chrome do runner (`E2E_CHANNEL=chrome`).
-O job `python` sobe antes os serviços de `deploy/docker-compose.test.yml` e roda o pytest com
-`ECLUME_TEST_REQUIRE_SERVICES=1`, para que a suíte do server nunca pule na CI.
+Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
+(`--lista` enumera os sete: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile` e
+`windows`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
+`CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
+mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
+serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam o mesmo script;
+`deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows` entrar na CI.
+
+**CI (aviso, não requisito de publicação).** Jobs `ubuntu-latest` independentes, em `pull_request`,
+em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
+`web-browser`, `desktop` e `mobile`, cada um com o seu setup (actions, apt, serviços de
+`deploy/docker-compose.test.yml` no `python`, mock no `contracts` e no `web-browser`, dependências do
+Chromium no `desktop`) e uma chamada a `bash deploy/pilares.sh <job>`. O `web-browser` usa o Google
+Chrome do runner (`E2E_CHANNEL=chrome`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
+a suíte do server nunca pular; o `desktop` imprime `df -h` e `free -m` antes do cargo.
 Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
 de documentação (`docs/`, `.design/`, `.impeccable/`, `.claude/`, os `.md` da raiz) não dispara o
 workflow, e o job `mudancas` (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo
 de que ele depende, foi tocado: o `python` e o `web` também rodam com `contracts/`, o `desktop` com
-`web/src/styles/eclume.css` e o `mobile` com `desktop/crates/`. Mudar o `ci.yml` ou disparar o
-workflow à mão roda todos os jobs; cada job tem `timeout-minutes`. Ao criar uma dependência nova
-entre pilares, acrescente o caminho ao filtro do job que a consome.
-macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o workflow manual
-`.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop no Windows sob demanda
-(`gh workflow run desktop-plataformas.yml`), e o macOS fica fora até o repositório ficar público.
-Os instaladores do desktop saem do host, por `deploy/release-desktop.sh`, sem gastar minutos de
-Actions; o `.github/workflows/desktop-release.yml` é a alternativa, só à mão. O processo está em
+`web/src/styles/eclume.css`, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
+`deploy/test_gate.py` e os workflows de release. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
+disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
+último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,
+acrescente o caminho ao filtro do job que a consome.
+
+**Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os sete pilares, cada um num contêiner da
+imagem `eclume-gate:24.04` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
+1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
+`eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
+execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
+commit: `pending` enquanto roda, `success` só com os sete pilares verdes numa execução completa,
+`failure` nomeando os pilares que falharam e `error` quando o gate não consegue provar; o log fica em
+`~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
+uma parte e nunca publica. O pilar `windows` (`cargo xwin clippy` do desktop para
+`x86_64-pc-windows-msvc`, `-D warnings`) é só do gate.
+Nenhum caminho que publica aceita um SHA sem `eclume/gate` = `success`: `deploy/deploy.sh`,
+`deploy/release-desktop.sh --publicar`, `desktop-release.yml` e `mobile-release.yml`. A saída de
+emergência é `--sem-gate "<motivo>"`, por invocação, no `deploy.sh` e no `release-desktop.sh`:
+dispensa só o status (árvore limpa e commit no GitHub seguem exigidos) e deixa no commit o status
+`eclume/gate-dispensa` = `failure` com o motivo. Os workflows de release não têm dispensa.
+
+**Hook de pre-push.** `.githooks/pre-push`, ativado uma vez por clone com
+`git config core.hooksPath .githooks`, dispara `bash deploy/gate.sh --fundo <sha>` para cada
+atualização de `refs/heads/main` do push: o gate roda no host em segundo plano e o push nunca espera
+nem falha por ele (host fora do alcance vira aviso). Ramos de trabalho rodam o gate à mão.
+
+macOS e Windows ficam fora da CI de PR enquanto o repositório for privado; o código só-Windows do
+desktop compila a cada gate (pilar `windows`), e o workflow manual
+`.github/workflows/desktop-plataformas.yml` faz `cargo check` do desktop num Windows de verdade sob
+demanda (`gh workflow run desktop-plataformas.yml`); o macOS fica fora até o repositório ficar
+público. Os instaladores do desktop saem do host, por `deploy/release-desktop.sh`, sem gastar minutos
+de Actions; o `.github/workflows/desktop-release.yml` é a alternativa, só à mão. O processo está em
 [desktop-distribuicao.md](desktop-distribuicao.md).
