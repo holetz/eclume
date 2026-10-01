@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119
 maintainer: holetz
 ---
 
@@ -50,7 +50,9 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   uso da conta (`usage`) e a sobreposição das cotas (`quotas`, só os campos sobrepostos ou `null`),
   `PATCH /admin/users/{id}` aceita `quotas` (troca a sobreposição inteira; `null` volta ao padrão)
   com `active` opcional, e `DELETE /admin/users/{id}` (204; inexistente, 404) exclui a conta como
-  o `POST /me/delete`, sem a senha, e libera o e-mail.
+  o `POST /me/delete`, sem a senha, e libera o e-mail. Desde a 2.18.0,
+  `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`; conta desativada, **409**
+  `conflict`) gera o link de redefinição de senha da conta; o admin nunca vê nem define a senha.
 - **Escopos do PAT:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, a
   exclusão de gravação), `transcripts:read`,
   `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
@@ -74,7 +76,8 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   armazenamento), `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
-  de admin e `/devices/*`) têm limite de tentativas por IP e rota: estourado, **429**
+  de admin, `/devices/*` e, desde a 2.18.0, as duas rotas da redefinição de senha, que somam a
+  mesma chave) têm limite de tentativas por IP e rota: estourado, **429**
   `rate_limited` com `Retry-After`. Desde a 2.14.0, os logins por senha (navegador, aparelho e
   admin, este com contadores próprios) contam também as **falhas** da conta: por par (conta, IP),
   10 em 15 min, e um teto da conta, 100 em 1 h, que não barra IP que entrou nela com sucesso nos
@@ -83,6 +86,13 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Troca de senha** (`POST /me/password`): desde a 2.14.0, `revoke_tokens` opcional; `true`
   revoga, além das outras sessões, as credenciais de aparelho e os PATs da conta. Ausente vale
   `false`, o comportamento anterior (os tokens continuam). O web manda `true` por padrão.
+- **Redefinição de senha por link** (desde a 2.18.0): o link `<url pública>/redefinir-senha#<segredo>`
+  leva o segredo no fragmento, que a página manda no corpo de `POST /auth/password-reset/check`
+  (200 `PasswordResetInfo`, o e-mail e a validade, sem consumir) e de `POST /auth/password-reset`
+  (204; troca a senha, consome o link e encerra todas as sessões da conta, sem abrir outra;
+  aparelhos e PATs seguem valendo). Ambas são públicas (`security: []`). Link inexistente,
+  vencido, usado ou de conta desativada é sempre **401** `invalid_reset_link`, a mesma resposta
+  para não servir de oráculo; senha curta é **422** `validation_failed` sem consumir o link.
 - **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
   impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
