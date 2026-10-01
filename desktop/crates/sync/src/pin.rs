@@ -3,9 +3,15 @@
 //! O Caddy `tls internal` troca o certificado folha a cada ~12 h e não envia a raiz na cadeia, por
 //! isso o app fixa a **raiz**: baixa `<url>/downloads/eclume-root.crt` numa conexão sem
 //! verificação (só esse arquivo), confere o SHA-256 do DER do primeiro certificado com a impressão
-//! digital esperada (do instalador, do mDNS ou do QR) e grava o PEM, que o `transport.rs` e o
-//! updater somam às raízes do SO. Sem impressão digital esperada, confia na primeira (TOFU) e a
-//! mostra à pessoa. O descritor `GET /api/v1/server`, já com verificação, confirma o que veio.
+//! digital esperada (do instalador, do mDNS ou do QR) e grava **só esse certificado**, o único em
+//! que o `transport.rs` (`TrustMode::Pinned`) e o updater confiam, sem somá-lo às raízes do SO
+//! (holetz/eclume#102). Certificados a mais no arquivo servido nunca chegam ao disco. Sem impressão
+//! digital esperada, confia na primeira (TOFU) e a mostra à pessoa. O descritor
+//! `GET /api/v1/server`, já com verificação, confirma o que veio.
+//!
+//! Um arquivo fixado gravado antes com mais de um certificado é regravado só com o primeiro por
+//! [`trim_saved`]; o app trata o caso como possível interceptação e pede nova entrada
+//! ([`CA_TRIMMED`]).
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +29,14 @@ pub const ROOT_PATH: &str = "/downloads/eclume-root.crt";
 pub const PINNED_FILE: &str = "servidor-ca.pem";
 /// A mensagem quando a raiz do servidor não é mais a fixada.
 pub const CA_CHANGED: &str = "O certificado do servidor mudou";
+/// A mensagem quando a CA fixada guardada tinha certificados a mais e foi regravada só com o
+/// primeiro: a primeira conexão pode ter passado por um interceptador.
+pub const CA_TRIMMED: &str = "O certificado guardado deste servidor tinha um certificado a mais: \
+                              a primeira conexão pode ter sido interceptada. Entre de novo e, na \
+                              web, troque a senha e desvincule a entrada antiga deste aparelho.";
+
+const BEGIN_CERT: &[u8] = b"-----BEGIN CERTIFICATE-----";
+const END_CERT: &[u8] = b"-----END CERTIFICATE-----";
 
 /// A raiz baixada e a sua impressão digital.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,16 +68,44 @@ pub fn normalize_fingerprint(value: &str) -> Result<String> {
     Ok(hex)
 }
 
-/// O PEM e a impressão digital do primeiro certificado.
-pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
-    let der = ureq::tls::parse_pem(pem)
-        .find_map(|item| match item {
+/// O DER de cada certificado do PEM, na ordem; itens que não são certificado são ignorados.
+fn certificates(pem: &[u8]) -> Vec<Vec<u8>> {
+    ureq::tls::parse_pem(pem)
+        .filter_map(|item| match item {
             Ok(PemItem::Certificate(cert)) => Some(cert.der().to_vec()),
             _ => None,
         })
-        .ok_or_else(|| anyhow!("a CA do servidor não é um certificado PEM"))?;
+        .collect()
+}
+
+/// O primeiro bloco `CERTIFICATE` do texto, com o fim de linha que o encerra.
+fn first_block(pem: &[u8]) -> Option<&[u8]> {
+    let start = find(pem, BEGIN_CERT)?;
+    let end = start + find(&pem[start..], END_CERT)? + END_CERT.len();
+    let rest = &pem[end..];
+    let newline = if rest.starts_with(b"\r\n") {
+        2
+    } else {
+        usize::from(rest.starts_with(b"\n"))
+    };
+    Some(&pem[start..end + newline])
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// O PEM do primeiro certificado (só ele) e a sua impressão digital. O bloco é recortado do texto
+/// recebido e relido: tem de dar exatamente um certificado, o mesmo DER do primeiro do arquivo.
+pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
+    let not_pem = || anyhow!("a CA do servidor não é um certificado PEM");
+    let der = certificates(pem).into_iter().next().ok_or_else(not_pem)?;
+    let block = first_block(pem).ok_or_else(not_pem)?;
+    if certificates(block) != [der.as_slice()] {
+        bail!("a CA do servidor não pôde ser separada do primeiro certificado do arquivo");
+    }
     Ok(RootCa {
-        pem: pem.to_vec(),
+        pem: block.to_vec(),
         sha256: sha256_hex(&der),
     })
 }
@@ -101,6 +143,27 @@ pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Regrava o arquivo fixado em `path` só com o primeiro certificado (temporário + `rename`) e
+/// devolve quantos descartou; com um certificado só, o arquivo não é tocado e devolve 0.
+pub fn trim_saved(path: &Path) -> Result<usize> {
+    let pem = std::fs::read(path)
+        .with_context(|| format!("falha ao ler {}", path.display()))?;
+    let total = certificates(&pem).len();
+    if total <= 1 {
+        return Ok(0);
+    }
+    let root = root_from_pem(&pem)
+        .with_context(|| format!("CA inválida em {}", path.display()))?;
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(".novo");
+    let temp = PathBuf::from(temp);
+    std::fs::write(&temp, &root.pem)
+        .with_context(|| format!("falha ao gravar {}", temp.display()))?;
+    std::fs::rename(&temp, path)
+        .with_context(|| format!("falha ao substituir {}", path.display()))?;
+    Ok(total - 1)
+}
+
 /// Confere, pelo descritor lido já com verificação, que o servidor anuncia a raiz fixada. Um
 /// descritor sem `ca_sha256` (raiz ainda não publicada) não contradiz nada.
 pub fn confirm(info: &ServerInfo, pinned: &str) -> Result<()> {
@@ -118,6 +181,7 @@ mod tests {
 
     const CA: &str = include_str!("../tests/fixtures/ca-teste.pem");
     const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
+    const OTHER_CA: &str = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
 
     fn pem(body: &str) -> Result<HttpResponse> {
         Ok(HttpResponse {
@@ -144,6 +208,53 @@ mod tests {
         let two = format!("{CA}{CA}");
         assert_eq!(root_from_pem(two.as_bytes()).unwrap().sha256, CA_SHA256);
         assert!(root_from_pem(b"<html>login</html>").is_err());
+    }
+
+    fn crlf(pem: &str) -> String {
+        pem.replace("\r\n", "\n").replace('\n', "\r\n")
+    }
+
+    #[test]
+    fn a_raiz_e_so_o_primeiro_certificado() {
+        let lf = CA.replace("\r\n", "\n");
+        for body in [
+            format!("{CA}{OTHER_CA}"),
+            format!("texto antes do bloco\n{lf}{OTHER_CA}"),
+            crlf(&format!("{CA}{OTHER_CA}")),
+        ] {
+            let root = root_from_pem(body.as_bytes()).unwrap();
+            assert_eq!(root.sha256, CA_SHA256);
+            assert_eq!(certificates(&root.pem).len(), 1, "{body}");
+            assert!(root.pem.starts_with(BEGIN_CERT));
+        }
+        let other_first = format!("{OTHER_CA}{CA}");
+        assert_ne!(
+            root_from_pem(other_first.as_bytes()).unwrap().sha256,
+            CA_SHA256
+        );
+    }
+
+    #[test]
+    fn save_grava_um_certificado_e_trim_saved_regrava_o_antigo() {
+        let dir = std::env::temp_dir().join(format!("eclume-pin-trim-{}", std::process::id()));
+        let two = format!("{CA}{OTHER_CA}");
+        let root = root_from_pem(two.as_bytes()).unwrap();
+        let path = save(&root, &dir).unwrap();
+        assert_eq!(crate::transport::read_pem_certs(&path).unwrap().len(), 1);
+        assert_eq!(trim_saved(&path).unwrap(), 0);
+
+        std::fs::write(&path, &two).unwrap();
+        assert_eq!(trim_saved(&path).unwrap(), 1);
+        let kept = std::fs::read(&path).unwrap();
+        assert_eq!(certificates(&kept).len(), 1);
+        assert_eq!(root_from_pem(&kept).unwrap().sha256, CA_SHA256);
+        assert_eq!(trim_saved(&path).unwrap(), 0);
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            kept,
+            "um certificado só não é tocado"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
