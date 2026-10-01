@@ -4,7 +4,8 @@ Cada rota conta por IP numa janela fixa de 1 minuto (`attempts`). Os logins por 
 as **falhas** por conta (`check_login`, `login_failed`, `login_succeeded`), comuns ao navegador e ao
 aparelho: por par (conta, IP), e um teto global da conta que não barra IP que já entrou nela. Assim,
 as tentativas de um IP qualquer não trancam a dona da conta. A troca de código de pareamento tem
-ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes.
+ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes. O cadastro tem,
+além do teto por minuto, um teto diário de contas criadas por IP (`check_signups`).
 O IP vem do uvicorn, que com `--proxy-headers` confia no `X-Forwarded-For` do Caddy.
 """
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING, Annotated
+from uuid import uuid4
 
 from fastapi import Depends, Request
 
@@ -26,6 +28,7 @@ PAIR_GLOBAL_FACTOR = 6
 FAILURE_WINDOW_SECONDS = 15 * 60
 ACCOUNT_WINDOW_SECONDS = 60 * 60
 KNOWN_IP_SECONDS = 30 * 24 * 60 * 60
+SIGNUP_WINDOW_SECONDS = 24 * 60 * 60
 
 
 async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
@@ -86,6 +89,30 @@ async def login_succeeded(ctx: AppContext, scope: str, email: str, ip: str) -> N
     await redis.zadd(known, {ip: now})
     await redis.zremrangebyscore(known, "-inf", now - KNOWN_IP_SECONDS)
     await redis.expire(known, KNOWN_IP_SECONDS)
+
+
+def _signup_key(ip: str) -> str:
+    return f"eclume:rl:signup_day:{ip}"
+
+
+async def check_signups(ctx: AppContext, ip: str) -> None:
+    """429 se o IP já criou o teto diário de contas (janela móvel de 24 h)."""
+    redis = ctx.queue.pool
+    key = _signup_key(ip)
+    now = time.time()
+    await redis.zremrangebyscore(key, "-inf", now - SIGNUP_WINDOW_SECONDS)
+    if await redis.zcard(key) >= ctx.settings.signups_per_ip_per_day:
+        [(_, oldest)] = await redis.zrange(key, 0, 0, withscores=True)
+        retry_after = max(int(oldest + SIGNUP_WINDOW_SECONDS - now), 1)
+        raise rate_limited("Cadastros demais a partir deste endereço hoje; tente amanhã.", retry_after)
+
+
+async def signup_created(ctx: AppContext, ip: str) -> None:
+    """Conta o cadastro criado no teto diário do IP."""
+    redis = ctx.queue.pool
+    key = _signup_key(ip)
+    await redis.zadd(key, {str(uuid4()): time.time()})
+    await redis.expire(key, SIGNUP_WINDOW_SECONDS)
 
 
 async def _ttl(ctx: AppContext, key: str) -> int:

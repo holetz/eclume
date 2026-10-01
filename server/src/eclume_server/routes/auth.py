@@ -33,7 +33,15 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.health import readiness
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.quotas import usage
-from eclume_server.ratelimit import attempts, check_login, client_ip, login_failed, login_succeeded
+from eclume_server.ratelimit import (
+    attempts,
+    check_login,
+    check_signups,
+    client_ip,
+    login_failed,
+    login_succeeded,
+    signup_created,
+)
 from eclume_server.recordings import open_jobs_of
 from eclume_server.security import new_session_token, sha256_hex
 from eclume_server.serialize import user_json
@@ -134,13 +142,17 @@ async def signup_info(ctx: Ctx) -> dict[str, Any]:
 
 
 @router.post("/auth/signup", status_code=204)
-async def signup(body: SignupRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_signup"))]) -> Response:
+async def signup(
+    body: SignupRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_signup"))]
+) -> Response:
     """Cria a conta com o aceite do aviso e abre a sessão, como o login."""
     if not ctx.settings.signup_open:
         raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
     if not body.name.strip():
         raise invalid_field("name", "não pode ser vazio")
     _check_notice(body.notice_version)
+    ip = client_ip(request)
+    await check_signups(ctx, ip)
     password_hash = await new_password_hash(body.password)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
@@ -155,7 +167,9 @@ async def signup(body: SignupRequest, ctx: Ctx, _: Annotated[None, Depends(attem
         except EmailTakenError as exc:
             raise conflict("Já existe uma conta com este e-mail.", code="email_taken") from exc
         await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
-        return await _open_session(conn, ctx, user_id, now)
+        response = await _open_session(conn, ctx, user_id, now)
+    await signup_created(ctx, ip)
+    return response
 
 
 async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, now: datetime) -> Response:
