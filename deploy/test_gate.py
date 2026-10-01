@@ -173,3 +173,20 @@ def test_pilares_sh_lista_os_mesmos_pilares_do_gate() -> None:
     """O `--lista` do `pilares.sh` e o `gate.PILARES` andam juntos."""
     texto = (RAIZ / "deploy" / "pilares.sh").read_text(encoding="utf-8")
     assert f"PILARES=({' '.join(gate.PILARES)})" in texto
+
+
+@pytest.mark.parametrize("arquivo", ["desktop-release.yml", "mobile-release.yml"])
+def test_workflows_de_release_conferem_o_gate_antes_de_publicar(arquivo: str) -> None:
+    """Quando vão publicar, os releases pelo Actions conferem o `eclume/gate` do commit, sem dispensa."""
+    jobs = yaml.safe_load((WORKFLOWS / arquivo).read_text(encoding="utf-8"))["jobs"]
+    conferem = [
+        (nome, passo)
+        for nome, job in jobs.items()
+        for passo in job.get("steps") or []
+        if "deploy/gate.py decidir" in str(passo.get("run", ""))
+    ]
+    assert len(conferem) == 1, arquivo
+    nome, passo = conferem[0]
+    assert "publicar == 'true'" in passo["if"]
+    assert "--sem-gate" not in passo["run"]
+    assert jobs[nome]["permissions"]["statuses"] == "read"

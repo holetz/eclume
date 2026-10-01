@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      statuses: read
     steps:
       - uses: actions/checkout@v7
       - id: plano
@@ -53,6 +54,13 @@ jobs:
           fi
           { echo "versao=$versao"; echo "tag=$tag"; echo "publicar=$PUBLICAR"; } >> "$GITHUB_OUTPUT"
           echo "versão $versao, tag $tag, publicar=$PUBLICAR"
+      # Publicar exige o gate do host verde neste commit (status eclume/gate); sem dispensa aqui:
+      # quem precisa dispensar publica pelo host (--sem-gate). Contrato: docs/standards/code/monorepo.md.
+      - name: Gate do commit
+        if: steps.plano.outputs.publicar == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" | python3 deploy/gate.py decidir
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
