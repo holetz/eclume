@@ -212,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     p_notas.add_argument("linha", choices=LINHAS)
     p_notas.add_argument("versao")
     args = parser.parse_args(argv)
+    for fluxo in (sys.stdout, sys.stderr):  # as notas vão para o release em UTF-8, também no Windows
+        fluxo.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
     try:
         if args.comando == "atual":
