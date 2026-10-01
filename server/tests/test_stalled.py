@@ -132,7 +132,18 @@ def test_job_sumido_da_fila_vira_job_lost_recuperavel_e_retranscreve(
     # A primeira varredura só registra a suspeita.
     assert _sweep(services, now + LATER, recording["id"]) is None
     assert _state(api, recording["id"])["status"] == "queued"
-    assert _sweep(services, now + LATER + AFTER_GRACE, recording["id"]) == "job_lost"
+    # Nunca rodou: volta à fila uma vez, com o mesmo `_job_id` e o áudio da gravação.
+    assert _sweep(services, now + LATER + AFTER_GRACE, recording["id"]) == "requeued"
+    job_id = transcribe_job_id(recording["id"], 1)
+    requeued = run(_with_redis(services, lambda pool: pool.zscore(GPU_QUEUE, job_id)))
+    assert requeued is not None
+    assert _state(api, recording["id"])["status"] == "queued"
+
+    # Perdido de novo: com a marca, o veredito segue `job_lost`.
+    _prepare(services, recording["id"], vanish)
+    later = now + LATER + AFTER_GRACE
+    assert _sweep(services, later + LATER, recording["id"]) is None
+    assert _sweep(services, later + LATER + AFTER_GRACE, recording["id"]) == "job_lost"
 
     body = _state(api, recording["id"])
     assert body["status"] == "failed"

@@ -170,11 +170,15 @@ class ClaudeCliProvider:
                     proc.communicate(with_context(context, prompt).encode()), self.config.timeout_s
                 )
             except TimeoutError as exc:
-                proc.kill()
-                await proc.wait()
                 raise ProviderError(
                     PROVIDER_TIMEOUT, f"claude -p passou de {self.config.timeout_s:.0f} s sem responder."
                 ) from exc
+            finally:
+                # O processo não sobrevive ao job: teto próprio, timeout do arq (`CancelledError`) ou
+                # parada do worker o matam aqui.
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
         result = _parse(stdout.decode(errors="replace"))
         if proc.returncode == 0 and result is not None and not result.get("is_error"):
             text = str(result.get("result") or "").strip()

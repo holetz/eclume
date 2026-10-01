@@ -127,7 +127,7 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   da GPU, VRAM usada e total e utilização; no SIGTERM, apaga o hash. Hash ausente = worker parado
   há mais de 45 s → `worker: null` e `gpu: null`. Os campos estão no
   [contrato de jobs](../api/jobs-transcricao.md).
-- **Filas:** por fila arq (`eclume:gpu`, `eclume:default`), `running` = ids do zset com
+- **Filas:** por fila arq (`eclume:gpu`, `eclume:default`, `eclume:agents`), `running` = ids do zset com
   `arq:in-progress:<id>`, `queued` = o resto. São números da instância, sem ids nem conteúdo.
 - **Jobs e falhas da plataforma**, lidos com o papel de conexão: `running_jobs` são os
   `transcription_jobs` `queued`/`running` com etapa, progresso e o `updated_at` do hash de
@@ -150,7 +150,7 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   | `redis` | `PING` |
   | `storage` | `head_bucket`; acima de 1 s, `degraded` |
   | `gpu_worker` | o heartbeat `eclume:gpu:health` |
-  | `cpu_worker` | a chave `eclume:default:health-check` do arq, renovada a cada 15 s (`health_check_interval`) |
+  | `cpu_worker` | as chaves `eclume:default:health-check` e `eclume:agents:health-check` do arq (os dois workers CPU), renovadas a cada 15 s (`health_check_interval`); faltando uma, `down` com o detalhe `sem worker em <fila>` |
   | `mcp` | `absent` até holetz/eclume#35 |
 
   A cota do bucket não aparece: a API S3 não a expõe.

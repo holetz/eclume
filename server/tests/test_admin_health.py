@@ -12,7 +12,7 @@ import redis
 from sqlalchemy import text
 
 from eclume_server.agents.base import ProviderError
-from eclume_server.health import CPU_HEALTH_KEY, connected_assistants
+from eclume_server.health import AGENT_HEALTH_KEY, CPU_HEALTH_KEY, connected_assistants
 from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import FakeAgents, run_cpu, run_gpu
@@ -64,6 +64,7 @@ def test_sem_worker_e_sem_jobs(
     assert body["queues"] == [
         {"name": "eclume:gpu", "queued": 0, "running": 0},
         {"name": "eclume:default", "queued": 0, "running": 0},
+        {"name": "eclume:agents", "queued": 0, "running": 0},
     ]
     user = as_user(make_user())
     assert user.get(URL).status_code == 401
@@ -241,7 +242,7 @@ def test_etapas_das_ultimas_24h(
 
 
 def test_servicos(admin: Api, cache: redis.Redis):
-    cache.delete(GPU_HEALTH_KEY, CPU_HEALTH_KEY)
+    cache.delete(GPU_HEALTH_KEY, CPU_HEALTH_KEY, AGENT_HEALTH_KEY)
     services = {item["name"]: item for item in admin.get(URL).json()["services"]}
     assert list(services) == ["api", "postgres", "redis", "storage", "gpu_worker", "cpu_worker", "mcp"]
     assert {name: item["status"] for name, item in services.items()} == {
@@ -256,12 +257,21 @@ def test_servicos(admin: Api, cache: redis.Redis):
     assert services["postgres"]["detail"] == "RLS ativa"
     assert all(item["latency_ms"] is not None for item in services.values())
 
+    assert services["cpu_worker"]["detail"] == "sem worker em eclume:default, eclume:agents"
+
     cache.hset(GPU_HEALTH_KEY, mapping=BEAT)
     cache.set(CPU_HEALTH_KEY, b"Oct-01 12:00:00 j_complete=1")
     services = {item["name"]: item for item in admin.get(URL).json()["services"]}
     assert (services["gpu_worker"]["status"], services["gpu_worker"]["detail"]) == ("healthy", "whisperx-local")
+    # Só o worker da ingestão de pé: o de agentes falta.
+    assert (services["cpu_worker"]["status"], services["cpu_worker"]["detail"]) == (
+        "down",
+        "sem worker em eclume:agents",
+    )
+    cache.set(AGENT_HEALTH_KEY, b"Oct-01 12:00:00 j_complete=1")
+    services = {item["name"]: item for item in admin.get(URL).json()["services"]}
     assert services["cpu_worker"]["status"] == "healthy"
-    cache.delete(CPU_HEALTH_KEY)
+    cache.delete(CPU_HEALTH_KEY, AGENT_HEALTH_KEY)
 
 
 def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(

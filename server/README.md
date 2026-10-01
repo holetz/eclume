@@ -13,4 +13,5 @@ uv run eclume-server migrate
 uv run eclume-server admin create --email <e-mail> --name "<nome>" --password-stdin
 uv run uvicorn eclume_server.app:create_app --factory
 uv run arq eclume_server.worker.WorkerSettings
+uv run arq eclume_server.worker.AgentWorkerSettings
 ```

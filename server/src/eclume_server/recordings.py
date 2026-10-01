@@ -12,12 +12,12 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.fields import field_filters
 from eclume_server.pagination import decode_cursor, encode_cursor, iso
 from eclume_server.people import attribute_conditions, participant_filter
-from eclume_server.pipeline import load_pipelines, pipeline_json, set_step
-from eclume_server.problems import not_found
-from eclume_server.queue import transcribe_options
+from eclume_server.pipeline import FAILED_STEP, load_pipelines, pipeline_json, set_step
+from eclume_server.problems import conflict, not_found
+from eclume_server.queue import progress_of_revision, transcribe_options
 from eclume_server.serialize import Row, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
-from eclume_server.stalled import is_retryable
+from eclume_server.stalled import CANCELLED, is_retryable
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -156,14 +156,73 @@ async def lock_recording(conn: AsyncConnection, recording_id: UUID) -> Any:  # n
     return await get_visible(conn, recording_id)
 
 
+CANCELLED_MESSAGE = "Transcrição cancelada."
+_OPEN = ("queued", "running")
+
+
+async def cancel_open_job(conn: AsyncConnection, row: Row, progress: dict[str, str] | None) -> int | None:
+    """Cancela o job em aberto da gravação já travada (`lock_recording`); devolve a revisão cancelada.
+
+    Job `cancelled`, gravação `failed` e a etapa em curso — o pré-processamento, se o progresso da
+    revisão está no download ou nele; senão, a transcrição — `skipped` com o motivo `cancelled`.
+    Quem chama pede a parada ao worker GPU depois do commit (`Queue.request_cancel`).
+    """
+    if row["job_state"] not in _OPEN:
+        return None
+    revision = row["job_revision"]
+    raw = progress_of_revision(progress, revision)
+    jobs = t.transcription_jobs
+    await conn.execute(
+        update(jobs)
+        .where(jobs.c.id == row["job_id"])
+        .values(state=CANCELLED, error_code=CANCELLED, error_message=CANCELLED_MESSAGE, finished_at=func.now())
+    )
+    await conn.execute(
+        update(t.recordings).where(t.recordings.c.id == row["id"]).values(status="failed", updated_at=func.now())
+    )
+    step = FAILED_STEP.get((raw or {}).get("stage", ""), "transcription")
+    await set_step(conn, row, revision, step, "skipped", detail={"reason": CANCELLED})
+    return revision
+
+
+async def cancel_transcription(ctx: AppContext, user_id: UUID, recording_id: UUID) -> Any:  # noqa: ANN401
+    """`POST /recordings/{id}/cancel`: cancela o job em aberto (409 sem ele); devolve a gravação.
+
+    A RLS decide o acesso (404 para a gravação de outro); o job muda com o papel de conexão, porque
+    o usuário não escreve em `transcription_jobs` — o mesmo caminho do worker que o fecha.
+    """
+    async with user_tx(ctx.engine, user_id) as conn:
+        await get_visible(conn, recording_id)
+    progress = (await ctx.queue.raw_progress([recording_id])).get(recording_id)
+    async with system_tx(ctx.engine) as conn:
+        row = await lock_recording(conn, recording_id)
+        revision = await cancel_open_job(conn, row, progress)
+        if revision is None:
+            raise conflict("Não há transcrição em andamento para cancelar.")
+    await ctx.queue.request_cancel([(recording_id, revision)])
+    async with user_tx(ctx.engine, user_id) as conn:
+        return await get_visible(conn, recording_id)
+
+
+async def open_jobs_of(conn: AsyncConnection, owner_id: UUID) -> list[tuple[UUID, int]]:
+    """`(gravação, revisão)` dos jobs de transcrição em aberto da conta, para cancelar ao excluí-la."""
+    jobs = t.transcription_jobs.c
+    query = select(jobs.recording_id, jobs.revision).where(jobs.owner_id == owner_id, jobs.state.in_(_OPEN))
+    return [(recording_id, revision) for recording_id, revision in await conn.execute(query)]
+
+
 async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID) -> None:
     """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
 
-    As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
+    As FKs levam os filhos em cascata, o job em aberto inclusive; depois do commit, o worker GPU é
+    avisado para parar e liberar a GPU, e um resultado que ainda chegue encontra a gravação apagada
+    e não faz nada.
     """
     async with user_tx(ctx.engine, user_id) as conn:
-        row = await get_visible(conn, recording_id)
+        row = await lock_recording(conn, recording_id)
         await conn.execute(delete(t.recordings).where(t.recordings.c.id == recording_id))
+    if row["job_state"] in _OPEN:
+        await ctx.queue.request_cancel([(recording_id, row["job_revision"])])
     await ctx.storage.delete_recording(row["audio_key"], recording_id)
 
 
@@ -231,9 +290,14 @@ async def enqueue_transcription(
     cifra do server (docs/standards/api/jobs-transcricao.md).
     """
     async with system_tx(ctx.engine) as conn:
-        hf_token = await secret_encrypted(conn, HF_TOKEN)
-    payload = {**options, "hf_token_encrypted": hf_token} if hf_token else options
+        payload = await transcribe_payload(conn, options)
     await ctx.queue.enqueue_transcribe(recording_id, revision, audio_key, payload)
+
+
+async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any]) -> dict[str, Any]:
+    """As `options` do `transcribe` com o token do HF da plataforma cifrado (papel de conexão)."""
+    hf_token = await secret_encrypted(conn, HF_TOKEN)
+    return {**options, "hf_token_encrypted": hf_token} if hf_token else options
 
 
 # --- biblioteca ----------------------------------------------------------------------------------

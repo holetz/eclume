@@ -26,14 +26,15 @@ from typing import TYPE_CHECKING, Any
 
 from arq.connections import RedisSettings
 from arq.worker import Worker, func
+from redis.asyncio import Redis
 
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError, with_context
 from eclume_server.agents.base_chat import BASE_CHAT_SYSTEM
 from eclume_server.agents.chat import CHAT_SYSTEM
 from eclume_server.agents.extraction import DETECT_SYSTEM, FIELDS_SYSTEM
-from eclume_server.queue import DEFAULT_QUEUE, GPU_QUEUE, progress_key
+from eclume_server.queue import AGENT_QUEUE, DEFAULT_QUEUE, GPU_QUEUE, progress_key
 from eclume_server.storage import Storage, artifacts_prefix
-from eclume_server.worker import worker_settings
+from eclume_server.worker import agent_worker_settings, worker_settings
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.harness import run
 
@@ -260,19 +261,40 @@ class _FakeAgent:
         return Completion(text=text, model=f"{self.config.model}-fake")
 
 
+_CPU_ROUNDS = 20
+
+
 def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
-    """Drena `eclume:default` com o worker CPU real do server e agentes falsos; devolve os agentes."""
+    """Drena `eclume:default` e `eclume:agents` com os workers CPU reais do server e agentes falsos.
+
+    Uma fila enfileira na outra (a ingestão abre a cadeia por agente), então os dois workers rodam
+    em laço até as duas esvaziarem. Devolve os agentes.
+    """
     agents = agents or FakeAgents()
-    params = worker_settings(settings) | {"cron_jobs": None}
-    # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
-    params["ctx"] = params["ctx"] | {
-        "provider_factory": agents,
-        "retry_delays": (0, 0),
-        "gpu_retry_s": 0,
-        "ingest_retry_delays": (0, 0, 0),
-    }
-    run(_drain(params.pop("functions"), **params))
-    return agents
+    for _ in range(_CPU_ROUNDS):
+        for make in (worker_settings, agent_worker_settings):
+            params = make(settings) | {"cron_jobs": None}
+            # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
+            params["ctx"] = params["ctx"] | {
+                "provider_factory": agents,
+                "retry_delays": (0, 0),
+                "gpu_retry_s": 0,
+                "ingest_retry_delays": (0, 0, 0),
+            }
+            run(_drain(params.pop("functions"), **params))
+        if not run(_pending(settings)):
+            return agents
+    msg = f"as filas do worker CPU não esvaziaram em {_CPU_ROUNDS} rodadas"
+    raise AssertionError(msg)
+
+
+async def _pending(settings: Settings) -> int:
+    """Jobs ainda nas filas dos workers CPU."""
+    client = Redis.from_url(settings.redis_url)
+    try:
+        return sum([await client.zcard(DEFAULT_QUEUE), await client.zcard(AGENT_QUEUE)])
+    finally:
+        await client.aclose()
 
 
 async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401

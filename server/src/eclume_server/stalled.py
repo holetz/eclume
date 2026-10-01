@@ -8,6 +8,10 @@ como falha **recuperável** o que não tem mais quem o termine — inclusive o `
 cuja ingestão nunca chegou (`ingest_failed`).
 Regras em docs/standards/api/jobs-transcricao.md §Job morto.
 
+O `transcribe` cujo enfileiramento se perdeu (job `queued` no banco, sumido do arq, sem progresso)
+volta à fila uma vez antes de virar `job_lost`: ele nunca rodou, então não repete OOM nem áudio
+ruim. A marca `eclume:reaper:requeued:<_job_id>` (7 dias) impede a segunda volta.
+
 Nada é marcado na primeira vez que parece morto: a suspeita fica registrada no Redis e só vira
 falha se continuar igual depois da graça (`job_grace_seconds`), o que cobre o worker que acabou
 de pegar o job e ainda não publicou progresso nem heartbeat.
@@ -43,6 +47,8 @@ JOB_STALLED = "job_stalled"
 # A transcrição ficou pronta no worker GPU, mas a ingestão no worker CPU falhou ou nunca aconteceu.
 INGEST_FAILED = "ingest_failed"
 INGEST_FAILED_MESSAGE = "A transcrição ficou pronta, mas não foi possível gravá-la. Tente de novo."
+# O dono cancelou a transcrição (ou excluiu a gravação): estado do job e código do erro.
+CANCELLED = "cancelled"
 # Falhas passageiras: retentar (retranscrever ou `POST /admin/jobs/{id}/retry`) tende a resolver.
 RETRYABLE_CODES = frozenset(
     {
@@ -50,6 +56,7 @@ RETRYABLE_CODES = frozenset(
         JOB_LOST,
         JOB_STALLED,
         INGEST_FAILED,
+        CANCELLED,
         "gpu_oom",
         "out_of_memory",
         "audio_download_failed",
@@ -63,6 +70,9 @@ _MESSAGES = {
     INGEST_FAILED: INGEST_FAILED_MESSAGE,
 }
 _SUSPECT_PREFIX = "eclume:reaper:suspect:"
+_REQUEUED_PREFIX = "eclume:reaper:requeued:"
+REQUEUED_TTL_S = 7 * 24 * 3600
+REQUEUED = "requeued"
 
 
 def is_retryable(code: str | None) -> bool:
@@ -155,6 +165,26 @@ async def _confirmed(redis: ArqRedis, job_key: str, code: str | None, now: datet
     return True
 
 
+async def _requeue_once(
+    engine: AsyncEngine, redis: ArqRedis, recording_id: UUID, job_key: str, options: dict[str, Any] | None
+) -> bool:
+    """Reenfileira o `transcribe` perdido, se ainda não voltou uma vez; diz se reenfileirou."""
+    # `recordings` importa daqui (`is_retryable`): o import fica na função.
+    from eclume_server.recordings import transcribe_payload  # noqa: PLC0415
+
+    if not await redis.set(_REQUEUED_PREFIX + job_key, "1", ex=REQUEUED_TTL_S, nx=True):
+        return False
+    async with system_tx(engine) as conn:
+        audio_key = (
+            await conn.execute(select(t.recordings.c.audio_key).where(t.recordings.c.id == recording_id))
+        ).scalar()
+        if audio_key is None:
+            return False
+        payload = await transcribe_payload(conn, options or {})
+    await redis.enqueue_job("transcribe", str(recording_id), audio_key, payload, _job_id=job_key, _queue_name=GPU_QUEUE)
+    return True
+
+
 async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: datetime | None = None) -> list[str]:
     """Marca como falha recuperável os jobs sem quem os termine; devolve o que marcou, para o log."""
     now = now or datetime.now(UTC)
@@ -163,7 +193,7 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
     async with system_tx(engine) as conn:
         rows = (
             await conn.execute(
-                select(jobs.c.id, jobs.c.recording_id, jobs.c.revision).where(
+                select(jobs.c.id, jobs.c.recording_id, jobs.c.revision, jobs.c.state, jobs.c.options).where(
                     jobs.c.state.in_(["queued", "running"]), jobs.c.queued_at <= now - grace
                 )
             )
@@ -173,12 +203,22 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
     raw_beat = await redis.hgetall(GPU_HEALTH_KEY)
     beat = _decode(raw_beat) if raw_beat else None
     reaped = []
-    for job_row_id, recording_id, revision in rows:
+    for job_row_id, recording_id, revision, state, options in rows:
         job_key = transcribe_job_id(recording_id, revision)
         code = await diagnose(
             redis, job_key, recording_id=recording_id, revision=revision, beat=beat, now=now, settings=settings
         )
         if not await _confirmed(redis, job_key, code, now, settings.job_grace_seconds):
+            continue
+        if (
+            code == JOB_LOST
+            and state == "queued"
+            and await _requeue_once(engine, redis, recording_id, job_key, options)
+        ):
+            log.warning(
+                "job %s (gravação %s): transcribe perdido antes de rodar; de volta à fila", job_row_id, recording_id
+            )
+            reaped.append(f"{recording_id}: {REQUEUED}")
             continue
         async with system_tx(engine) as conn:
             result = await fail(conn, recording_id, code, _MESSAGES[code], revision=revision)

@@ -20,6 +20,7 @@ const REASONS: Record<string, string> = {
   set_by_user: 'o tipo foi escolhido por você',
   no_agenda_type: 'a gravação não tem tipo de agenda',
   before_pipeline: 'gravação anterior ao processamento automático',
+  cancelled: 'a transcrição foi cancelada',
 }
 
 export function stepLabel(step: Pick<PipelineStep, 'step' | 'state'>): string {

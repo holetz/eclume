@@ -2,12 +2,12 @@
 type: standard
 title: Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
 description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat).
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py
 tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96
 maintainer: holetz
 ---
 
@@ -223,9 +223,24 @@ mesmo protocolo de texto do chat de ajuste: uma ação JSON por chamada, sobre `
   até 2 em aberto por conta (429), job `base_chat` no worker CPU sem nova tentativa e com o teto de
   5 minutos do chat de ajuste. O histórico da conversa é do cliente, que reenvia as últimas 10 mensagens.
 
+## O worker de agentes
+
+Os jobs por agente — `detect_agenda_type`, `fill_fields`, `summarize`, `summary_chat`,
+`base_chat` e `run_preview` — rodam na fila `eclume:agents`, consumida por
+`arq eclume_server.worker.AgentWorkerSettings` (serviço `worker-agents`) com
+`max_jobs = ECLUME_AGENT_MAX_JOBS` (padrão 4): no máximo tantas chamadas a agente juntas, e a
+ingestão, em `eclume:default`, nunca espera atrás delas (holetz/eclume#96).
+
+- **O `claude -p` morre com o job.** `ClaudeCliProvider.complete` mata e espera o processo num
+  `finally` sempre que ele ainda roda: o teto próprio, o timeout do arq (`CancelledError`) e a
+  parada do worker não deixam processo órfão.
+- **Resumo perdido.** A retomada ([processamento-automatico.md](processamento-automatico.md))
+  reenfileira o resumo `queued`/`running` há mais de 5 min que sumiu do arq e marca `failed`
+  (`internal_error`) o que o arq deu por concluído sem fechar.
+
 ## O job `summarize`
 
-Função arq do worker CPU com `timeout` de 30 min e `max_tries` alto: quem conta as tentativas é
+Função arq do worker de agentes com `timeout` de 30 min e `max_tries` alto: quem conta as tentativas é
 `summaries.attempts`. Lê a transcrição do banco com o papel de sistema, marca `running`, chama o
 provider e grava `done` (com `content_md` e o `model` que respondeu) ou `failed` (com `error`).
 Um teto interno de 25 min garante `failed` em vez de `running` eterno. Resumo apagado ou já
@@ -246,7 +261,7 @@ sistema e as instruções.
 
 ## Deploy
 
-O worker CPU que roda `claude-cli` precisa da CLI `claude` no `PATH` (ou `ECLUME_CLAUDE_BIN`) e de
+O worker de agentes (`worker-agents`) que roda `claude-cli` precisa da CLI `claude` no `PATH` (ou `ECLUME_CLAUDE_BIN`) e de
 `CLAUDE_CODE_OAUTH_TOKEN`, o token de longa duração que `claude setup-token` gera (1 ano, sem
 renovação). **Não monte a sessão OAuth do host** (`~/.claude/.credentials.json`): o `claude` do
 host renova o token reescrevendo o arquivo (inode novo), o bind mount de arquivo único fica no

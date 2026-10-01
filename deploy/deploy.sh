@@ -151,7 +151,7 @@ for p in "${problemas[@]}"; do echo "  aviso: $p" >&2; done
 echo "Daemon: contexto $CONTEXT · SSH: $SSH · dados: $DATA_DIR · URL: $PUBLIC_URL" >&2
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%)" >&2
 echo "Construir: ${BUILD[*]:-nada (--sem-build)}" >&2
-echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-gpu web caddy → publish-ca → mdns" >&2
+echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-agents worker-gpu web caddy → publish-ca → mdns" >&2
 for image in eclume-server:prod eclume-web:prod eclume-worker-gpu:prod; do
   if docker image inspect "$image" >/dev/null 2>&1; then echo "  imagem $image: presente" >&2
   else echo "  imagem $image: ausente" >&2; fi
@@ -210,7 +210,7 @@ echo "Subindo a infraestrutura…" >&2
 "${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm migrate
 echo "Subindo os serviços…" >&2
-"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 server worker-cpu worker-gpu web
+"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 server worker-cpu worker-agents worker-gpu web
 # O compose não recria um container quando só o `configs.content` muda: o Caddy é sempre recriado,
 # para o Caddyfile do checkout valer. A CA está no volume e sobrevive.
 "${COMPOSE[@]}" up -d --no-build --force-recreate --wait --wait-timeout 60 caddy

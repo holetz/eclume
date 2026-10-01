@@ -3,7 +3,8 @@
 Worker GPU do eclume (`eclume_worker`): consome o job `transcribe` da fila arq `eclume:gpu`, um
 por vez. Ele baixa o áudio do S3, roda a engine (`whisperx-local` por padrão) e grava
 `transcript.raw.json` e `speaker_embeddings.json`. Depois enfileira `ingest_transcript`, ou
-`transcription_failed` em falha, em `eclume:default`. O contrato está em
+`transcription_failed` em falha, em `eclume:default`; com a chave `eclume:cancel:{id}:{revisão}`
+gravada pelo server, para no próximo ponto de checagem, sem retorno. O contrato está em
 [docs/standards/api/jobs-transcricao.md](../docs/standards/api/jobs-transcricao.md).
 
 ```bash
