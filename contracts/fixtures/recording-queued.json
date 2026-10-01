@@ -34,7 +34,15 @@
     "error": null,
     "queued_at": "2026-09-18T14:09:31Z",
     "started_at": null,
-    "finished_at": null
+    "finished_at": null,
+    "queue": {
+      "reason": "processor_queue",
+      "ahead": 2,
+      "account_ahead": null,
+      "estimated_start_at": "2026-09-18T14:21:31Z",
+      "resumes_at": null,
+      "processor": { "online": true, "offline_since": null }
+    }
   },
   "pipeline": [
     {

@@ -4,7 +4,7 @@
 import { el, trocar, $ } from "../dom.js";
 import { versao } from "../tauri.js";
 import { rotuloDoServidor } from "./primeira-execucao.js";
-import { ESTADOS_APARELHO } from "../vocabulario.js";
+import { ESTADOS_APARELHO, fraseDaEspera } from "../vocabulario.js";
 
 const MIN = 60_000;
 const DIA = 24 * 60 * MIN;
@@ -326,18 +326,21 @@ export function montar(secao, app) {
     $("#conta-acao", secao).textContent = estado.connection === "account" ? "Sair" : "Servidor";
   }
 
-  function desenharFila(gravacoes, agora) {
+  function desenharFila(gravacoes, esperas, agora) {
     trocar(
       fila,
       gravacoes.map((gravacao) => {
         const { rotulo, tom } = SITUACOES[gravacao.status] ?? { rotulo: gravacao.status, tom: "neutral" };
         const erro = gravacao.status === "failed" && gravacao.last_error;
+        // Enviada há menos de 24 h e com a transcrição na fila do servidor: por que espera.
+        const espera = gravacao.status === "synced" && fraseDaEspera(esperas?.[gravacao.remote_id], new Date(agora));
         return el(
           "li",
           { dataset: { id: gravacao.id } },
           el("span", {}, rotuloDaGravacao(gravacao, agora)),
           el("span", { class: tom === "neutral" ? "badge" : `badge badge-${tom}` }, rotulo),
           erro ? el("span", { class: "fila-erro" }, erro) : null,
+          espera ? el("span", { class: "fila-espera" }, espera) : null,
         );
       }),
     );
@@ -375,7 +378,7 @@ export function montar(secao, app) {
       desenharAviso(estado);
       desenharAtualizacao(estado);
       desenharConta(estado);
-      desenharFila(gravacoes, agora);
+      desenharFila(gravacoes, estado.queue_waits, agora);
     },
   };
 }

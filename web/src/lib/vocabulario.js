@@ -92,3 +92,64 @@ export function motivo(codigo) {
 export function nomeDaEtapa(etapa) {
   return ETAPAS.find((item) => item.etapa === etapa)?.nome ?? etapa
 }
+
+/** @param {number} n */
+function doisDigitos(n) {
+  return String(n).padStart(2, '0')
+}
+
+/**
+ * O horário de um instante RFC 3339: "14:02" no mesmo dia, "02/10 às 14:02" em outro.
+ * @param {string} instante
+ * @param {Date} agora
+ * @returns {string}
+ */
+function horario(instante, agora) {
+  const data = new Date(instante)
+  const hora = `${doisDigitos(data.getHours())}:${doisDigitos(data.getMinutes())}`
+  if (data.toDateString() === agora.toDateString()) return hora
+  return `${doisDigitos(data.getDate())}/${doisDigitos(data.getMonth() + 1)} às ${hora}`
+}
+
+/**
+ * Quanto falta até um instante, em palavras: "menos de 1 min", "cerca de 12 min", "cerca de 1 h 20 min".
+ * @param {string} instante
+ * @param {Date} agora
+ * @returns {string}
+ */
+function prazo(instante, agora) {
+  const minutos = Math.round((new Date(instante).getTime() - agora.getTime()) / 60000)
+  if (minutos < 1) return 'menos de 1 min'
+  if (minutos < 60) return `cerca de ${minutos} min`
+  const resto = minutos % 60
+  return `cerca de ${Math.floor(minutos / 60)} h${resto ? ` ${resto} min` : ''}`
+}
+
+/**
+ * A frase da espera de uma gravação na fila de transcrição (`Job.queue`), a mesma nos três
+ * clientes; `null` sem espera. A previsão de início vem sempre rotulada como estimativa.
+ * @param {{ reason: string, ahead?: number | null, account_ahead?: number | null, estimated_start_at?: string | null, resumes_at?: string | null, processor?: { online: boolean, offline_since?: string | null } } | null | undefined} fila
+ * @param {Date} [agora]
+ * @returns {string | null}
+ */
+export function fraseDaEspera(fila, agora = new Date()) {
+  if (!fila) return null
+  const processador = fila.processor
+  if (processador && !processador.online) {
+    const desde = processador.offline_since ? ` desde ${horario(processador.offline_since, agora)}` : ''
+    return `O processador está fora do ar${desde}; sua gravação está guardada e entra quando ele voltar.`
+  }
+  if (fila.reason === 'account_turn') {
+    const antes = fila.account_ahead ?? 0
+    if (antes === 0) return 'Na vez da sua conta: é a próxima gravação sua a entrar na fila.'
+    return antes === 1 ? 'Atrás de 1 gravação sua que chegou antes.' : `Atrás de ${antes} gravações suas que chegaram antes.`
+  }
+  if (fila.reason === 'quota_window') {
+    const quando = fila.resumes_at ? `às ${horario(fila.resumes_at, agora)}` : 'quando a janela liberar'
+    return `Seus minutos de transcrição das últimas 24 h acabaram; a gravação entra ${quando}.`
+  }
+  const partes = []
+  if (fila.ahead != null) partes.push(`${fila.ahead + 1}ª na fila`)
+  if (fila.estimated_start_at) partes.push(`começa em ${prazo(fila.estimated_start_at, agora)} (estimativa)`)
+  return partes.length > 0 ? partes.join(' · ') : 'Aguardando a vez na fila de transcrição.'
+}

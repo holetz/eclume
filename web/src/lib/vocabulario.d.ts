@@ -14,3 +14,13 @@ export const ESTADOS_ETAPA: Record<EstadoEtapa, string>
 export const MOTIVOS: Readonly<Record<string, string>>
 export function motivo(codigo: string): string
 export function nomeDaEtapa(etapa: string): string
+
+export interface FilaDaEspera {
+  reason: string
+  ahead?: number | null
+  account_ahead?: number | null
+  estimated_start_at?: string | null
+  resumes_at?: string | null
+  processor?: { online: boolean; offline_since?: string | null }
+}
+export function fraseDaEspera(fila: FilaDaEspera | null | undefined, agora?: Date): string | null

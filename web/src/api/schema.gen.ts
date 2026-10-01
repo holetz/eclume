@@ -2462,6 +2462,54 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             finished_at: string | null;
+            /**
+             * @description Por que o job espera, enquanto `state` é `queued`; `null` em qualquer outro estado.
+             *     Ausente em servidores anteriores à 2.16.0 (holetz/eclume#117).
+             */
+            queue?: components["schemas"]["JobQueue"] | null;
+        };
+        /**
+         * @description A espera de um job `queued`, calculada na leitura. Só contagens e horários: nada de outra
+         *     conta. Esperar nunca vira falha; o job segue `queued`.
+         */
+        JobQueue: {
+            /**
+             * @description `processor_queue` (na fila do processador de transcrição), `account_turn` (atrás de
+             *     outras gravações da própria conta, pela fila justa) ou `quota_window` (a conta passou
+             *     dos minutos de transcrição de 24 h). Enum aberto: clientes toleram valor novo.
+             * @enum {string}
+             */
+            reason: "processor_queue" | "account_turn" | "quota_window";
+            /**
+             * @description Em `processor_queue`, quantos jobs começam antes deste, contando o que está rodando;
+             *     `null` nos outros motivos ou se o job não está na fila do processador.
+             */
+            ahead: number | null;
+            /** @description Em `account_turn`, quantas gravações da própria conta vêm antes; `null` nos outros. */
+            account_ahead: number | null;
+            /**
+             * Format: date-time
+             * @description Previsão de início, pela duração real das últimas transcrições; é estimativa, e os
+             *     clientes a rotulam assim. `null` sem histórico suficiente, com o processador fora do
+             *     ar ou fora de `processor_queue`.
+             */
+            estimated_start_at: string | null;
+            /**
+             * Format: date-time
+             * @description Em `quota_window`, quando a janela de 24 h volta a ter minutos; `null` nos outros.
+             */
+            resumes_at: string | null;
+            processor: components["schemas"]["ProcessorStatus"];
+        };
+        /** @description Se o processador de transcrição está no ar, pelo heartbeat do worker GPU. */
+        ProcessorStatus: {
+            online: boolean;
+            /**
+             * Format: date-time
+             * @description Fora do ar, o último heartbeat visto (precisão de 1 min); `null` no ar ou se nunca
+             *     houve heartbeat.
+             */
+            offline_since: string | null;
         };
         /**
          * @description `meeting` (reunião, o padrão) ou `note` (nota por voz).

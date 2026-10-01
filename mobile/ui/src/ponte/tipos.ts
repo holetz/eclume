@@ -1,5 +1,7 @@
 // Os tipos que o núcleo Rust serializa (eclume-mobile-core); a UI é função do `EstadoApp`.
 
+import type { FilaDaEspera } from '../app/vocabulario.js'
+
 export interface Servidor {
   url: string
   nome: string
@@ -110,6 +112,8 @@ export interface DetalheLocal {
   caminho: string | null
   marcadores: Marcador[]
   etapas: Etapa[] | null
+  /** Por que a transcrição espera na fila (`Job.queue`); a frase sai de `fraseDaEspera`. */
+  espera?: FilaDaEspera | null
 }
 
 export interface TipoDeAgenda {

@@ -327,13 +327,46 @@ fn tipos_de_agenda_e_etapas_no_servidor() {
         .headers
         .iter()
         .any(|(k, v)| k == "Authorization" && v == "Bearer eclp_x"));
-    let etapas = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
+    let no_servidor = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto").unwrap();
+    // Servidor anterior à 2.16.0, sem `job.queue`: sem espera.
+    assert_eq!(no_servidor.espera, None);
+    let etapas = no_servidor.etapas;
     assert_eq!(etapas[1].state, "active");
     assert_eq!(etapas[1].reason, None);
     assert_eq!(etapas[2].reason.as_deref(), Some("no_provider"));
     assert_eq!(
         etapas[3].error.as_ref().map(|e| e.message.as_str()),
         Some("O agente não respondeu.")
+    );
+}
+
+#[test]
+fn espera_na_fila_do_servidor() {
+    let roteiro = Roteiro::default();
+    roteiro.responde(
+        "GET",
+        "/api/v1/recordings/rec-remoto",
+        json(
+            200,
+            serde_json::json!({"id": "rec-remoto", "pipeline": [], "job": {"state": "queued", "queue": {
+                "reason": "processor_queue", "ahead": 2, "account_ahead": null,
+                "estimated_start_at": "2026-10-01T14:14:00Z", "resumes_at": null,
+                "processor": {"online": false, "offline_since": "2026-10-01T14:02:00Z"}
+            }}}),
+        ),
+    );
+    let espera = buscar_etapas(&roteiro, &servidor(), "eclp_x", "rec-remoto")
+        .unwrap()
+        .espera
+        .unwrap();
+    assert_eq!(espera.reason, "processor_queue");
+    assert_eq!(espera.ahead, Some(2));
+    assert_eq!(espera.account_ahead, None);
+    let processador = espera.processor.unwrap();
+    assert!(!processador.online);
+    assert_eq!(
+        processador.offline_since.as_deref(),
+        Some("2026-10-01T14:02:00Z")
     );
 }
 

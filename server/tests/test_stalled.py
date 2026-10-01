@@ -18,7 +18,7 @@ from arq.worker import func
 
 from eclume_engines.fila import serializar
 from eclume_server.db.session import make_engine
-from eclume_server.queue import GPU_HEALTH_KEY, GPU_QUEUE, progress_key, transcribe_job_id
+from eclume_server.queue import GPU_HEALTH_KEY, GPU_LAST_SEEN_KEY, GPU_QUEUE, progress_key, transcribe_job_id
 from eclume_server.stalled import reap
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import _drain
@@ -377,3 +377,18 @@ def test_job_retido_na_vez_da_conta_nao_e_morto(
     assert _sweep(services, now + LATER, waiting["id"]) is None
     assert _sweep(services, now + LATER + AFTER_GRACE, waiting["id"]) is None
     assert _state(api, waiting["id"])["status"] == "queued"
+
+
+def test_varredura_grava_o_ultimo_visto_mesmo_sem_job(services: Services):
+    """O "fora do ar desde" da espera: o cron guarda o `updated_at` do heartbeat a cada execução."""
+    run(_with_redis(services, lambda pool: pool.delete(GPU_LAST_SEEN_KEY)))
+    run(_with_redis(services, _heartbeat(busy=False)))
+    seen = run(_with_redis(services, lambda pool: pool.hget(GPU_HEALTH_KEY, "updated_at")))
+    _sweep(services, datetime.now(UTC), "nenhuma")
+    assert run(_with_redis(services, lambda pool: pool.get(GPU_LAST_SEEN_KEY))) == seen
+
+    # Sem heartbeat, o último visto fica.
+    _clear_heartbeat(services)
+    _sweep(services, datetime.now(UTC), "nenhuma")
+    assert run(_with_redis(services, lambda pool: pool.get(GPU_LAST_SEEN_KEY))) == seen
+    run(_with_redis(services, lambda pool: pool.delete(GPU_LAST_SEEN_KEY)))

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, select, true, tuple_, update
 
+from eclume_server import queue_status
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.fields import field_filters
@@ -63,7 +64,9 @@ def recording_select() -> Select:
     )
 
 
-def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, Any] | None:
+def _job_json(
+    row: Row, progress: tuple[str | None, float] | None, queue: dict[str, Any] | None
+) -> dict[str, Any] | None:
     if row["job_id"] is None:
         return None
     state = row["job_state"]
@@ -89,12 +92,18 @@ def _job_json(row: Row, progress: tuple[str | None, float] | None) -> dict[str, 
         "queued_at": iso(row["job_queued_at"]),
         "started_at": iso(row["job_started_at"]),
         "finished_at": iso(row["job_finished_at"]),
+        "queue": queue if state == "queued" else None,
     }
 
 
-def recording_json(row: Row, pipeline: list[Row], progress: tuple[str | None, float] | None = None) -> dict[str, Any]:
-    """Schema `Recording`, com as etapas e o progresso em curso publicado pelo worker GPU."""
-    job = _job_json(row, progress)
+def recording_json(
+    row: Row,
+    pipeline: list[Row],
+    progress: tuple[str | None, float] | None = None,
+    queue: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Schema `Recording`, com as etapas, o progresso publicado pelo worker GPU e a espera na fila."""
+    job = _job_json(row, progress, queue)
     agenda_type = None
     if row["agenda_type_id"] is not None:
         agenda_type = {
@@ -229,12 +238,17 @@ async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID
 
 
 async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[str, Any]]:
-    """Formas JSON, com as etapas do pipeline e o progresso do Redis para os jobs em aberto."""
+    """Formas JSON, com as etapas do pipeline, o progresso do Redis e a espera dos jobs em aberto."""
     open_jobs = {row["id"]: row["job_revision"] for row in rows if row["job_state"] in {"queued", "running"}}
     progress = await ctx.queue.progress(open_jobs)
+    waiting = [row for row in rows if row["job_state"] == "queued" and row["id"] not in progress]
+    queues = await queue_status.waiting(ctx.engine, ctx.queue, waiting)
     async with user_tx(ctx.engine, user_id) as conn:
         pipelines = await load_pipelines(conn, [row["id"] for row in rows])
-    return [recording_json(row, pipelines.get(row["id"], []), progress.get(row["id"])) for row in rows]
+    return [
+        recording_json(row, pipelines.get(row["id"], []), progress.get(row["id"]), queues.get(row["id"]))
+        for row in rows
+    ]
 
 
 async def insert_job(

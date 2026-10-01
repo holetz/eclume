@@ -134,17 +134,17 @@ fn run_once(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// Avisa o resumo pronto das gravações enviadas nas últimas 24 h. Sem o arquivo de avisados
+/// Lê as gravações enviadas nas últimas 24 h: avisa o resumo pronto (se o aviso está ligado) e
+/// guarda a espera na fila de cada uma para a janela, na mesma leitura. Sem o arquivo de avisados
 /// (a primeira abertura desta versão), as gravações já enviadas contam como avisadas: a
 /// atualização não dispara uma rajada de avisos antigos.
 fn check_summaries(app: &AppHandle, state: &AppState) -> Result<()> {
     let now = now_ms();
-    if !state.notify_summary()?
-        || now - LAST_SUMMARY_CHECK.load(Ordering::Relaxed) < SUMMARY_EVERY_MS
-    {
+    if now - LAST_SUMMARY_CHECK.load(Ordering::Relaxed) < SUMMARY_EVERY_MS {
         return Ok(());
     }
     LAST_SUMMARY_CHECK.store(now, Ordering::Relaxed);
+    let notify = state.notify_summary()?;
     let path = state.data_dir().join(NOTIFIED_FILE);
     let synced = lock(state.queue())?.by_status(Status::Synced)?;
     let Some(mut notified) = load_notified(&path) else {
@@ -155,6 +155,7 @@ fn check_summaries(app: &AppHandle, state: &AppState) -> Result<()> {
         return save_notified(&path, &seeded);
     };
     let candidates = summary_candidates(&synced, &notified, now);
+    let mut waits = BTreeMap::new();
     if !candidates.is_empty() {
         let Some(config) = state.uploader_config()? else {
             return Ok(());
@@ -162,23 +163,35 @@ fn check_summaries(app: &AppHandle, state: &AppState) -> Result<()> {
         let client = Client::from_config(&config)?;
         let web_url = state.web_url()?;
         for (remote_id, title) in candidates {
-            match client.summary(&remote_id) {
-                Ok(SummaryPoll::Ready(markdown)) => {
-                    let url = recording_url(&web_url, &remote_id);
-                    crate::notify::summary_ready(app, &title, markdown, url);
-                    notified.insert(remote_id, now);
-                }
-                Ok(SummaryPoll::Gone) => {
-                    notified.insert(remote_id, now);
-                }
-                Ok(SummaryPoll::Waiting) => {}
+            let check = match client.check_recording(&remote_id, notify) {
+                Ok(check) => check,
                 // Servidor fora: a próxima volta tenta de novo.
                 Err(err) => {
                     log::info!("resumo de {remote_id}: {err:#}");
                     break;
                 }
+            };
+            if let Some(wait) = check.wait {
+                waits.insert(remote_id.clone(), wait);
+            }
+            if !notify {
+                continue;
+            }
+            match check.summary {
+                SummaryPoll::Ready(markdown) => {
+                    let url = recording_url(&web_url, &remote_id);
+                    crate::notify::summary_ready(app, &title, markdown, url);
+                    notified.insert(remote_id, now);
+                }
+                SummaryPoll::Gone => {
+                    notified.insert(remote_id, now);
+                }
+                SummaryPoll::Waiting => {}
             }
         }
+    }
+    if state.set_queue_waits(waits)? {
+        crate::refresh_ui(app);
     }
     notified.retain(|_, at| now - *at < NOTIFIED_KEEP_MS);
     save_notified(&path, &notified)

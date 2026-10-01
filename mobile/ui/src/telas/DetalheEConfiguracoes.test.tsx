@@ -60,6 +60,26 @@ describe('Detalhe da gravação', () => {
     expect(screen.getByText('O servidor mantém a cópia dele.')).toBeInTheDocument()
   })
 
+  it('na fila do servidor, diz por que a transcrição espera', async () => {
+    abrir('/gravacao/g1', (p) => {
+      p.detalhe = {
+        gravacao: gravacaoLocal(),
+        caminho: '/data/eclume/gravacoes/g1.ogg',
+        marcadores: [],
+        etapas: [{ step: 'received', state: 'done' }],
+        espera: {
+          reason: 'account_turn',
+          ahead: null,
+          account_ahead: 1,
+          estimated_start_at: null,
+          resumes_at: null,
+          processor: { online: true, offline_since: null },
+        },
+      }
+    })
+    expect(await screen.findByRole('status')).toHaveTextContent('Atrás de 1 gravação sua que chegou antes.')
+  })
+
   it('aguardando, não oferece excluir nem mostra o servidor', async () => {
     abrir('/gravacao/g1', (p) => {
       p.detalhe = {

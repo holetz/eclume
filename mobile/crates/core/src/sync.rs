@@ -345,19 +345,59 @@ pub struct ErroDaEtapa {
     pub message: String,
 }
 
+/// Por que a transcrição espera na fila (`Job.queue`, contrato 2.16.0); a frase sai de
+/// `fraseDaEspera` no vocabulário da UI. Servidor anterior: `None`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Espera {
+    pub reason: String,
+    #[serde(default)]
+    pub ahead: Option<u32>,
+    #[serde(default)]
+    pub account_ahead: Option<u32>,
+    #[serde(default)]
+    pub estimated_start_at: Option<String>,
+    #[serde(default)]
+    pub resumes_at: Option<String>,
+    #[serde(default)]
+    pub processor: Option<Processador>,
+}
+
+/// Se o processador de transcrição está no ar (`ProcessorStatus`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Processador {
+    pub online: bool,
+    #[serde(default)]
+    pub offline_since: Option<String>,
+}
+
+/// O que o detalhe lê da gravação no servidor: as etapas e a espera na fila.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NoServidor {
+    pub etapas: Vec<Etapa>,
+    pub espera: Option<Espera>,
+}
+
+#[derive(Deserialize)]
+struct JobDaApi {
+    #[serde(default)]
+    queue: Option<Espera>,
+}
+
 #[derive(Deserialize)]
 struct GravacaoDaApi {
     #[serde(default)]
     pipeline: Vec<Etapa>,
+    #[serde(default)]
+    job: Option<JobDaApi>,
 }
 
-/// As etapas da gravação no servidor (`GET /recordings/{id}`).
+/// As etapas e a espera na fila da gravação no servidor (`GET /recordings/{id}`).
 pub fn buscar_etapas(
     transporte: &dyn Transport,
     servidor: &Servidor,
     token: &str,
     remote_id: &str,
-) -> Result<Vec<Etapa>> {
+) -> Result<NoServidor> {
     let gravacao: GravacaoDaApi = get_json(
         transporte,
         servidor,
@@ -365,7 +405,10 @@ pub fn buscar_etapas(
         &format!("/recordings/{remote_id}"),
         "falha ao ler a gravação no servidor",
     )?;
-    Ok(gravacao.pipeline)
+    Ok(NoServidor {
+        etapas: gravacao.pipeline,
+        espera: gravacao.job.and_then(|job| job.queue),
+    })
 }
 
 /// O `movel.json` do servidor (holetz/eclume#41, docs/standards/code/mobile-distribuicao.md).

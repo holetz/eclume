@@ -15,7 +15,7 @@ use eclume_recorder::{
     Kind, Marker, MeetingEvent, NewImport, Queue, QueueCounts, QueuedRecording, RecordedAtSource,
     METER_BARS,
 };
-use eclume_sync::{Client, PatSource, PatStore, RetryPolicy, UploaderConfig};
+use eclume_sync::{Client, PatSource, PatStore, QueueWait, RetryPolicy, UploaderConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::account::{self, Login, Net, PreparedServer, SignedIn};
@@ -178,6 +178,9 @@ pub struct StatusView {
     pub notice: Option<String>,
     /// O que impede o sync (PAT ausente) ou o último erro dele.
     pub sync_notice: Option<String>,
+    /// Por que a transcrição espera no servidor, por id remoto, das gravações enviadas há menos
+    /// de 24 h cujo job está na fila (`Job.queue`).
+    pub queue_waits: BTreeMap<String, QueueWait>,
     /// "Atualizado para X", até a pessoa fechar o aviso.
     pub updated: Option<PendingUpdate>,
     /// Primeira execução, PAT antigo ou conta.
@@ -362,6 +365,7 @@ struct Inner {
     auto: AutoRecorder,
     notice: Option<String>,
     sync_notice: Option<String>,
+    queue_waits: BTreeMap<String, QueueWait>,
     /// A pasta sincronizada: o ciclo em curso e o resultado do último.
     mirror: MirrorStatus,
     /// Como ficou o registro de cada atalho global.
@@ -558,6 +562,7 @@ impl AppState {
                 auto: AutoRecorder::default(),
                 notice: None,
                 sync_notice: None,
+                queue_waits: BTreeMap::new(),
                 mirror: MirrorStatus::default(),
                 shortcut_registrations: Registrations::new(),
                 shortcut_mode: ShortcutMode::default(),
@@ -636,6 +641,7 @@ impl AppState {
                 .effective_web_url(std::env::var(config::WEB_URL_ENV).ok()),
             notice: inner.notice.clone(),
             sync_notice: inner.sync_notice.clone(),
+            queue_waits: inner.queue_waits.clone(),
             updated: inner.config.update_notice(CURRENT_VERSION).cloned(),
             connection: connection(&inner),
             account: inner.config.account.clone(),
@@ -933,6 +939,14 @@ impl AppState {
     pub fn set_sync_notice(&self, notice: Option<String>) -> Result<()> {
         self.inner()?.sync_notice = notice;
         Ok(())
+    }
+
+    /// A espera na fila das gravações enviadas; devolve se mudou.
+    pub fn set_queue_waits(&self, waits: BTreeMap<String, QueueWait>) -> Result<bool> {
+        let mut inner = self.inner()?;
+        let changed = inner.queue_waits != waits;
+        inner.queue_waits = waits;
+        Ok(changed)
     }
 
     /// O que o uploader precisa; `None` sem PAT configurado.

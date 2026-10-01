@@ -424,6 +424,7 @@ mod tests {
             web_url: String::new(),
             notice: None,
             sync_notice: None,
+            queue_waits: Default::default(),
             updated: None,
             connection: crate::config::Connection::Account,
             account: None,

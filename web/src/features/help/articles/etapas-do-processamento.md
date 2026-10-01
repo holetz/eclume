@@ -39,3 +39,19 @@ Cada etapa diz o estado em palavra, ao lado do nome, sem depender da cor da barr
 Uma gravação fica **Pronta** quando a última etapa termina, pulada ou não. Na biblioteca, ela
 aparece **Na fila** enquanto espera a vez da transcrição, com o nome da etapa enquanto anda, e
 **Falhou** ou **Cancelada** quando a transcrição não terminou.
+
+## Por que a gravação espera na fila
+
+Enquanto a gravação está **Na fila**, a página dela diz por que espera, numa frase:
+
+- **Na fila do processador:** a posição ("3ª na fila") e, quando há histórico, quando deve começar
+  ("começa em cerca de 12 min (estimativa)"). A previsão sai da duração das últimas transcrições e
+  é só uma estimativa.
+- **Atrás das suas gravações:** o servidor transcreve uma gravação de cada conta por vez; as suas
+  entram na ordem em que chegaram, e a frase diz quantas vêm antes.
+- **Minutos de 24 h esgotados:** a conta passou dos minutos de transcrição das últimas 24 h, e a
+  frase diz a que horas a gravação entra.
+- **Processador fora do ar:** a frase diz desde quando. A gravação está guardada e entra sozinha
+  quando ele voltar.
+
+Esperar nunca vira falha: a gravação segue na fila até a vez dela.
