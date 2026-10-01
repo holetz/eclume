@@ -4,7 +4,7 @@ title: Runbook do host GPU
 description: Como preparar o servidor 192.168.15.199 (Ubuntu 24.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context.
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#1, holetz/eclume#28, holetz/eclume#41
@@ -207,8 +207,9 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   navegadores do Playwright e do `cargo-xwin` (~15 GB depois de duas execuções; acima de
   `ECLUME_GATE_CACHE_GB`, 25 GB, os target/ recomeçam). Para liberar disco, apague a pasta inteira:
   a próxima execução reconstrói.
-- Imagens: `eclume-gate:24.04` (`deploy/gate.Dockerfile`), sobre `eclume-desktop-build-windows:24.04`
-  e `eclume-desktop-build:24.04`, que o gate constrói se faltarem. O primeiro build da imagem do
+- Imagens: `eclume-gate:<Rust>` (`deploy/gate.Dockerfile`), sobre `eclume-desktop-build-windows:<Rust>`
+  e `eclume-desktop-build:<Rust>` (a versão de `desktop/rust-toolchain.toml`), que o gate constrói
+  se faltarem; as de tag `24.04` são da época anterior à fixação e podem ser apagadas. O primeiro build da imagem do
   gate levou ~20 minutos.
 - Projeto compose `eclume-gate` (Postgres, Redis, MinIO e o mock em `127.0.0.1:55632`, `56579`,
   `59200` e `4210`), derrubado com `down -v` ao fim; nunca toca o projeto `eclume`.
