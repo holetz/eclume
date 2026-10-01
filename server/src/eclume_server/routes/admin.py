@@ -2,8 +2,7 @@
 
 O admin lê só dados da conta, a contagem de gravações e o uso, nunca o conteúdo; muda `active` e a
 sobreposição das cotas, gera o link de redefinição de senha (nunca vê nem define a senha) e exclui a
-conta. Roda com o papel de conexão: as contas não são do admin
-para a RLS.
+conta. Roda com o papel de conexão: as contas não são do admin para a RLS.
 """
 
 from __future__ import annotations

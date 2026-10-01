@@ -1978,7 +1978,7 @@ export interface paths {
         head?: never;
         /**
          * Desativar ou reativar um usuário, ou sobrepor as cotas dele
-         * @description Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
+         * @description Desativar encerra as sessões e revoga os PATs do usuário (desde a 2.18.0, também vence o link de redefinição de senha pendente). Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
          */
         patch: operations["updateUser"];
         trace?: never;
