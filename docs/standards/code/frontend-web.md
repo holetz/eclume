@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111
 maintainer: holetz
 ---
 
@@ -43,6 +43,21 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   zera essa sessão no cache a cada 401 fora do login e **fora de `/api/v1/admin/`** (o 401 do
   painel é da sessão de admin), e a guarda `RequireSession` leva a `/entrar?volta=<rota>`; `volta`
   só aceita caminho interno.
+- **A sessão não cai por um refetch.** `RequireSession` e `RequireAdmin` só mostram "Tentar de
+  novo" com `isError` **e sem dado em cache**: um refetch de `/me` (ou `/admin/me`) que falha sobre
+  a sessão carregada mantém o shell, a fila de importação, o rascunho do resumo e o chat. A sessão
+  só cai por 401.
+- **Faixa de conexão** (`ConnectionBanner`, no topo do `AppShell`): sem rede (`onlineManager`) ou
+  com `/me` falhando sobre a sessão em cache, um `.alert-warning` com `role="status"` diz "Sem
+  conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…", relê
+  `/me` a cada 10 s enquanto o servidor não responde e some sozinha. Consultas e mutações já
+  pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só dá o motivo.
+- **O que é de uma conta não atravessa para outra** (`app/accountScope.ts`): a aba guarda o id da
+  última conta (`eclume-conta` no `sessionStorage`, marcado pelo login, pelo cadastro e pela
+  sessão que já vinha do cookie). Entrar com outra conta remove as consultas fora de `['admin']`
+  (menos a sessão recém-lida) e os rascunhos `eclume-resumo-rascunho:*`. Um 401 com a sessão
+  aberta remove as consultas fora de `['admin']` e zera `['me']`, sem apagar rascunhos: a mesma
+  conta que volta os reencontra. O `useLogout` usa a mesma remoção.
 
 ## Estrutura de pastas
 
@@ -183,8 +198,15 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Aceite do aviso em vigor:** com `notice_required: true` em `/me`, o `RequireSession` mostra o
   `NoticePage` (na `.auth`) no lugar do shell, até `POST /me/notice` com a versão lida de
   `GET /auth/signup`.
-- **Estado de servidor com TanStack Query.** O polling é declarativo (`refetchInterval` de 3 s
-  só enquanto há job ou resumo `queued`/`running`). Mutações gravam no cache o que a resposta
+- **Estado de servidor com TanStack Query.** O polling de espera é declarativo e tem um ritmo só
+  (`app/polling.ts`, `pollWhile(estáEsperando, inicial)`): o intervalo inicial (2–3 s) nos
+  primeiros 2 min de espera, depois dobrando a cada minuto até 30 s, e nada com a consulta em
+  `error`; voltar para a aba ou a rede voltar recomeçam do inicial. Vale para biblioteca,
+  gravação, resumo, chat da gravação, chat da base, pré-visualização e código de vínculo; a Saúde
+  do admin fica fora (15 s por desenho). O padrão global é `refetchOnWindowFocus: false`; as
+  gravações (período, lista, gravação), o estado do resumo e o histórico do chat ligam a releitura
+  no foco, para uma gravação do desktop ou do celular aparecer sem recarregar. Formulários
+  (Campos, Tipos de agenda, Conta) não são relidos debaixo de quem edita. Mutações gravam no cache o que a resposta
   devolve, sem refazer a leitura.
 - **Arquivo `.tsx` exporta só componentes** (regra do react-refresh): hooks, constantes e
   funções puras ficam em `.ts` ao lado. **Nunca com o mesmo nome em caixa diferente**
@@ -260,7 +282,10 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `Dialog` aberto por "Filtros (N)".
 - **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
   recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
-  `importar` (`eclume-biblioteca-ultima`). "Limpar filtros" tira tudo menos `visao` e `data`.
+  `importar` (`eclume-biblioteca-ultima:<user_id>`, por conta, porque guarda ids de pessoa, tag,
+  coleção e campo; a chave global antiga sai na primeira leitura). As outras preferências
+  (densidade, movimento, colunas, expediente, painel recolhido) são por aparelho. "Limpar filtros"
+  tira tudo menos `visao` e `data`.
 - **Restauração uma vez só**: quando `/` abre sem parâmetros, a página volta à última biblioteca
   guardada (ou abre na visão da tela Ambiente) por um `replace`, e a flag `restoring` cai assim que
   a URL restaurada chega. Depois disso, marcar e desmarcar filtros, trocar a visão e andar pelas
@@ -287,11 +312,12 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   [formato-audio-upload.md](formato-audio-upload.md)). O upload manda `recorded_at` e
   `recorded_at_source` (`file_metadata` sem edição; `user` quando editada ou vinda do fallback) e
   não manda `title`.
-- **A fila vive no shell** (`ImportProvider` no `AppShell`, `useImportQueue`, `importContext.ts`):
+- **A fila vive no shell** (`ImportProvider` envolvendo o `ShellFrame` do `AppShell`, `useImportQueue`, `importContext.ts`):
   fechar o modal ou navegar não perde o envio. Os arquivos são convertidos e enviados **um por
   vez**; cancelar aborta e apaga o upload; "Tentar de novo" retoma pelo `uploadId` ou reconverte.
   A fila guarda os itens num ref, a fonte da verdade do laço de envio, e o estado só espelha o ref
-  (o laço não espera o React renderizar). Enquanto há conversão ou envio, o `beforeunload` avisa.
+  (o laço não espera o React renderizar). Enquanto há conversão ou envio, o `beforeunload` avisa,
+  e "Sair" pede confirmação ("O envio em andamento será interrompido.").
   Terminado um envio, a biblioteca é relida (`['recordings']`).
 
 ## Página da gravação
@@ -308,12 +334,18 @@ desce; abaixo de 56rem, os campos também):
   volta com "Gravação excluída.".
 - **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts`): as seis etapas no `ol.pipeline`, o motivo
   de uma etapa pulada ou que falhou em texto acessível e em `title`, o progresso do worker com a
-  transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê a cada 3 s enquanto
-  está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+  transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
+  `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
 - **Reprodução compartilhada** (`PlaybackProvider`, `playback.ts`): um único `<audio>` liga o
   player compacto (tocar, trilha com `range` para teclado, um `.player-tick` por marcador, a
   velocidade 1×–2×), a `.marker-bar` (ficha por marcador, que toca dali, e "Marcado no
-  <dispositivo>" quando é um só) e as falas.
+  <dispositivo>" quando é um só) e as falas. O `src` é `/recordings/{id}/audio`, que responde 302
+  para uma URL assinada de 1 h: no `error` do `<audio>`, o provider troca o `src`
+  (`?renovacao=<n>`, para não reaproveitar o 302), volta ao mesmo instante e à velocidade no
+  `loadedmetadata` e retoma tocando se tocava, uma vez sozinho (de novo depois de voltar a tocar);
+  a segunda falha expõe `error` no contexto e o player mostra "O áudio não carregou" com "Tentar de
+  novo", com o tocar desabilitado. Erro antes do primeiro carregamento num navegador cujo
+  `canPlayType('audio/ogg; codecs=opus')` é vazio vira o aviso de que ele não toca Ogg Opus.
 - **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
   locutores, falas e marcadores; aberta, tem o bloco Locutores (renomear, ligar pessoa, sugestões,
   juntar), "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
@@ -321,7 +353,7 @@ desce; abaixo de 56rem, os campos também):
   marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
   sem tocar e rola até a fala.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
-  referência e geração em andamento, relido a cada 3 s com pendência) com a `.doc-bar` (tipo,
+  referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
   Excluir resumo) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
   um ("Escolha um tipo de agenda para gerar o resumo.").
@@ -353,7 +385,7 @@ desce; abaixo de 56rem, os campos também):
 - **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma
   `.msg-note` por leitura do agente ("Leu a transcrição, 00:03:20–00:04:20", "Buscou “orçamento”
   na transcrição · 3 trechos"); enviar recebe o 202 com as duas mensagens, e a resposta é
-  consultada a cada 2 s até `done` ou `failed`. O composer espera com um pedido em aberto (e no
+  consultada no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`. O composer espera com um pedido em aberto (e no
   409 `chat_busy`) e sem resumo atual.
 
 ## Pessoas, busca e coleções
@@ -402,7 +434,7 @@ desce; abaixo de 56rem, os campos também):
 - **Pré-visualização por consulta ao job** (`organize/usePreview.ts`): "Testar numa gravação"
   (`POST /fields/preview`, sem `recording_ids`: as 3 últimas transcritas) e "Pré-visualizar numa
   gravação" (`POST /agenda-types/preview`) devolvem 202 com o job, e a tela consulta
-  `GET /previews/{id}` a cada 1,5 s até `done` ou `failed`; 404 vira expirada, e um pedido novo
+  `GET /previews/{id}` no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`; 404 vira expirada, e um pedido novo
   descarta o anterior. Nada é gravado, e a pré-visualização de tipo some quando o rascunho muda.
 - **Coleção convive com tag**: a coleção agrupa gravações; a tag marca assuntos. Ela aparece no
   painel de campos da gravação, no filtro da biblioteca (`colecao`) e numa ficha da busca, e
@@ -450,7 +482,7 @@ desce; abaixo de 56rem, os campos também):
 - **Código de vínculo** (`connect/pairing.ts`): cada página gera o seu (App desktop por botão, App
   móvel ao abrir), porque um código novo anula o anterior. A contagem regressiva ancora em
   `expires_at` menos o header `Date` da resposta, medida por `performance.now()`, e não depende do
-  relógio do computador. O estado é consultado a cada 3 s enquanto `pending` e a contagem não
+  relógio do computador. O estado é consultado no ritmo de `pollWhile` (3 s de início) enquanto `pending` e a contagem não
   zerou; `used` atualiza as listas de tokens e mostra "Pareado: <aparelho>". O leitor de tela só
   ouve "Falta 1 minuto" e "Código vencido".
 - **QR gerado no navegador** (`connect/qr.ts`, `QrCode.tsx`): a matriz do pacote `qrcode`
