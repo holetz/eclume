@@ -194,6 +194,72 @@ fn sync_sobe_com_andamento_e_retencao_apaga_so_o_confirmado() {
     assert_eq!(excluir_sincronizadas(&fila).unwrap(), (0, 0));
 }
 
+/// O Wi-Fi cai depois da primeira parte: a segunda não sai, a gravação volta à fila sem gastar
+/// tentativa e, no próximo Wi-Fi, sobe só a parte que falta.
+#[test]
+fn wifi_que_cai_no_meio_interrompe_e_retoma_das_partes_que_faltam() {
+    let (dirs, _guard) = dirs_temp("sync-interrompido");
+    let roteiro = Roteiro::default();
+    roteiro_de_upload(&roteiro);
+    let medidor = Arc::new(Medidor::default());
+    {
+        let medidor = Arc::clone(&medidor);
+        roteiro.responde_com("PUT", "/api/v1/uploads/up-1/parts/1", move || {
+            // O callback do sistema avisa a troca de rede enquanto a parte 1 sobe.
+            medidor.interromper();
+            Ok(HttpResponse {
+                status: 200,
+                headers: vec![("etag".into(), "\"e1\"".into())],
+                body: Vec::new(),
+            })
+        });
+    }
+    let fila = Arc::new(Mutex::new(Queue::open(&dirs.fila()).unwrap()));
+    gravacao(&fila.lock().unwrap(), &dirs.gravacoes(), "g1", 10);
+    let up = uploader(
+        Arc::new(roteiro.clone()),
+        Arc::clone(&medidor),
+        &servidor(),
+        "eclp_dispositivo",
+        Arc::clone(&fila),
+        "eclume-android/0.1.0",
+        "Pixel 8",
+    )
+    .unwrap();
+
+    let relatorio = sincronizar(&fila, &up, &medidor).unwrap();
+    assert_eq!((relatorio.synced, relatorio.failed), (0, 0));
+    assert_eq!(roteiro.quantos("PUT", "/api/v1/uploads/up-1/parts/1"), 1);
+    assert_eq!(roteiro.quantos("PUT", "/api/v1/uploads/up-1/parts/2"), 0);
+    assert_eq!(roteiro.quantos("POST", "/api/v1/uploads/up-1/complete"), 0);
+    let rec = fila.lock().unwrap().get("g1").unwrap().unwrap();
+    assert_eq!((rec.status, rec.attempts), (Status::Pending, 0));
+    assert_eq!(rec.upload_id.as_deref(), Some("up-1"));
+
+    // De volta ao Wi-Fi do eclume: o servidor já tem a parte 1, e só a 2 sobe.
+    roteiro.responde(
+        "GET",
+        "/api/v1/uploads/up-1",
+        json(
+            200,
+            serde_json::json!({
+                "id": "up-1", "status": "in_progress", "part_size": 6, "part_count": 2,
+                "parts_received": [{"part_number": 1, "etag": "\"e1\""}], "recording_id": null,
+                "parts": [
+                    {"part_number": 2, "url": format!("{URL}/api/v1/uploads/up-1/parts/2"), "headers": {}}
+                ]
+            }),
+        ),
+    );
+    medidor.retomar();
+    let relatorio = sincronizar(&fila, &up, &medidor).unwrap();
+    assert_eq!(relatorio.synced, 1);
+    assert_eq!(roteiro.quantos("PUT", "/api/v1/uploads/up-1/parts/1"), 1);
+    assert_eq!(roteiro.quantos("PUT", "/api/v1/uploads/up-1/parts/2"), 1);
+    let rec = fila.lock().unwrap().get("g1").unwrap().unwrap();
+    assert_eq!(rec.status, Status::Synced);
+}
+
 #[test]
 fn sync_nota_o_401_e_a_folha_aberta_segura_a_gravacao() {
     let (dirs, _guard) = dirs_temp("sync-401");
@@ -424,6 +490,53 @@ fn ciclo_do_worker_sonda_sem_a_tela() {
     let core = trancar(&nucleo).unwrap();
     assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
     assert_eq!(core.config().tipos_de_agenda[0].nome, "Reunião");
+}
+
+/// A sonda do worker diz se está na rede e o que aguarda; o ciclo dele, se foi interrompido.
+#[test]
+fn sondagem_e_relatorio_do_worker() {
+    use eclume_mobile_core::{ciclo_do_worker, sondar_do_worker, trancar};
+
+    let (nucleo, roteiro, _guard) = nucleo_conectado("worker-sonda");
+    let sondagem = sondar_do_worker(&nucleo).unwrap();
+    assert!(sondagem.na_rede);
+    assert_eq!((sondagem.pendentes, sondagem.bytes), (0, 0));
+    assert_eq!(ciclo_do_worker(&nucleo).unwrap(), None);
+
+    let dirs_fila = {
+        let core = trancar(&nucleo).unwrap();
+        let fila = core.fila();
+        let fila = fila.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("eclume-worker-{}", std::process::id()));
+        gravacao(&fila, &dir, "g1", 10);
+        dir
+    };
+    assert_eq!(
+        (
+            sondar_do_worker(&nucleo).unwrap().pendentes,
+            sondar_do_worker(&nucleo).unwrap().bytes
+        ),
+        (1, 10)
+    );
+
+    // O sistema para o worker no meio: a parte 1 sobe, e o resto espera.
+    roteiro_de_upload(&roteiro);
+    let n = Arc::clone(&nucleo);
+    roteiro.responde_com("PUT", "/api/v1/uploads/up-1/parts/1", move || {
+        trancar(&n).unwrap().interromper_sync();
+        Ok(HttpResponse {
+            status: 200,
+            headers: vec![("etag".into(), "\"e1\"".into())],
+            body: Vec::new(),
+        })
+    });
+    let relatorio = ciclo_do_worker(&nucleo).unwrap().unwrap();
+    assert!(relatorio.interrompido);
+    assert_eq!(
+        (relatorio.relatorio.synced, relatorio.relatorio.failed),
+        (0, 0)
+    );
+    let _ = std::fs::remove_dir_all(dirs_fila);
 }
 
 /// Um 401 numa leitura autenticada (os tipos de agenda), sem nada para subir, também leva a Entrar.
