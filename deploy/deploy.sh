@@ -6,8 +6,9 @@
 #                            [--sem-gpu] [--sem-build] [--gerar-env] [--sem-gate "motivo"]
 #                            [--fora-do-main "motivo"] [--voltar SHA] [--substituir-env]
 #                            [--espera-gpu MINUTOS] [--interromper-gpu]
-#   --plan            só mostra o que faria (somente leitura): SHA em produção e alvo, commits entre
-#                     eles, migrations pendentes, env × host, GPU ocupada e o estado do gate.
+#   --plan            só mostra o que faria (somente leitura): SHA em produção e alvo, a versão do
+#                     produto e a tag que o deploy criaria, commits entre eles, migrations
+#                     pendentes, env × host, GPU ocupada e o estado do gate.
 #   --context         contexto Docker do host (ou $ECLUME_DOCKER_CONTEXT); obrigatório, sem padrão.
 #   --sem-gpu         host sem GPU NVIDIA: acrescenta deploy/docker-compose.cpu.yml (worker de
 #                     transcrição na engine cpu, sem reserva de GPU e sem diarização).
@@ -247,6 +248,25 @@ export ECLUME_COMMIT="$SHA"
 COMPOSE=(docker compose -p eclume -f "$TREE/deploy/docker-compose.prod.yml" --env-file "$COMPOSE_ENV")
 [[ "$SEM_GPU" -eq 0 ]] || COMPOSE+=(-f "$TREE/deploy/docker-compose.cpu.yml")
 
+# --- versão do produto: o primeiro deploy dela cria a tag v<versão> no SHA (versionamento.md) -------
+# Sem tag no retorno, com a tag já criada ou com entradas em [Não lançado], que pedem cortar a versão.
+VERSAO=""
+TAG_VERSAO=""
+[[ ! -f "$TREE/deploy/versao.py" ]] || VERSAO="$("$PYTHON" "$TREE/deploy/versao.py" --raiz "$TREE" atual produto || true)"
+if [[ -z "$VERSAO" ]]; then
+  versao_plano="sem deploy/versao.py no alvo"
+elif [[ -n "$VOLTAR" ]]; then
+  versao_plano="$VERSAO (retorno: sem tag)"
+elif git rev-parse -q --verify "refs/tags/v$VERSAO" >/dev/null \
+  || git ls-remote --exit-code --tags origin "refs/tags/v$VERSAO" >/dev/null 2>&1; then
+  versao_plano="$VERSAO (a tag v$VERSAO já existe)"
+elif [[ -n "$("$PYTHON" "$TREE/deploy/versao.py" --raiz "$TREE" notas produto "Não lançado" || true)" ]]; then
+  versao_plano="$VERSAO, sem tag: o CHANGELOG.md tem entradas em [Não lançado]; corte a versão antes"
+else
+  TAG_VERSAO="v$VERSAO"
+  versao_plano="$VERSAO (o deploy cria e envia a tag $TAG_VERSAO)"
+fi
+
 # --- CA do HTTPS: a ativa (ECLUME_TLS_CA) e a raiz própria com restrição de nome --------------------
 # Rotação em três passos (anunciar, virar, aposentar): docs/project/deploy-producao.md, "CA raiz nos
 # clientes". Uma árvore sem a CA `eclume` (um --voltar para antes dela) não usa a raiz própria.
@@ -314,6 +334,7 @@ disk_pct() { host "df --output=pcent / | tail -n 1 | tr -dc 0-9"; }
 # --- plano ---------------------------------------------------------------------------------------
 pct="$(disk_pct)"
 echo "Alvo $SHA · gate: $gate" >&2
+echo "Versão do produto: $versao_plano" >&2
 if [[ -n "$PROD_SHA" ]]; then
   if [[ -z "$VOLTAR" ]] && git cat-file -e "$PROD_SHA^{commit}" 2>/dev/null; then
     between="$(git rev-list --count "$PROD_SHA..$SHA" 2>/dev/null || echo '?')"
@@ -567,3 +588,10 @@ if [[ "$uses_own_ca" -eq 1 ]]; then
   fi
 fi
 echo "Deploy concluído: $SHA em $PUBLIC_URL (health e descritor ok, CA $TLS_CA $fingerprint, disco $(disk_pct)%)." >&2
+if [[ -n "$TAG_VERSAO" ]]; then
+  if git tag -a "$TAG_VERSAO" "$SHA" -m "eclume $VERSAO" && git push -q origin "refs/tags/$TAG_VERSAO"; then
+    echo "Tag $TAG_VERSAO criada em $SHA e enviada." >&2
+  else
+    echo "Aviso: a tag $TAG_VERSAO não foi criada ou enviada; crie-a em $SHA (git tag -a, git push)." >&2
+  fi
+fi
