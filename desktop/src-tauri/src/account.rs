@@ -14,7 +14,7 @@ use eclume_sync::transport::{Transport, TrustMode, UreqTransport, REQUEST_TIMEOU
 use eclume_sync::{pin, Client, Devices, RetryPolicy};
 use serde::Serialize;
 
-use crate::config::{validate_web_url, Account};
+use crate::config::{validate_web_url, Account, Config};
 use crate::state::CLIENT_VERSION;
 
 /// Onde a CA de um servidor escolhido fica até a pessoa entrar nele.
@@ -313,6 +313,16 @@ pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
 /// O `ca_path` é a CA fixada pela primeira execução (e não uma escolhida à mão em "Avançado").
 pub fn is_pinned(config_dir: &Path, ca_path: Option<&Path>) -> bool {
     ca_path.is_some_and(|path| path == config_dir.join(pin::PINNED_FILE))
+}
+
+/// Regrava a CA fixada pela primeira execução só com o primeiro certificado ([`pin::trim_saved`])
+/// e diz se havia certificados a mais: sinal de que a primeira conexão pode ter sido interceptada.
+/// Uma CA escolhida à mão em "Avançado" nunca é tocada.
+pub fn repair_pinned(config_dir: &Path, config: &Config) -> Result<bool> {
+    match config.ca_path.as_deref() {
+        Some(path) if is_pinned(config_dir, Some(path)) => Ok(pin::trim_saved(path)? > 0),
+        _ => Ok(false),
+    }
 }
 
 /// Sem servidor escolhido, não há onde entrar.
@@ -672,6 +682,35 @@ pub(crate) mod tests {
         assert!(ca_changed(&shared, URL, &pinned).is_err());
         assert!(!is_pinned(&dir, Some(Path::new("/etc/ssl/outra.pem"))));
         assert!(!is_pinned(&dir, None));
+    }
+
+    #[test]
+    fn so_a_ca_fixada_com_certificado_a_mais_e_regravada() {
+        let dir = dir("reparo");
+        let other = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+        let two = format!("{CA}{other}");
+        let pinned = dir.join(pin::PINNED_FILE);
+        let config = Config {
+            ca_path: Some(pinned.clone()),
+            ..Config::default()
+        };
+        std::fs::write(&pinned, CA).unwrap();
+        assert!(!repair_pinned(&dir, &config).unwrap());
+        assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
+
+        std::fs::write(&pinned, &two).unwrap();
+        assert!(repair_pinned(&dir, &config).unwrap());
+        assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
+
+        let chosen = dir.join("escolhida.pem");
+        std::fs::write(&chosen, &two).unwrap();
+        let config = Config {
+            ca_path: Some(chosen.clone()),
+            ..Config::default()
+        };
+        assert!(!repair_pinned(&dir, &config).unwrap());
+        assert_eq!(std::fs::read(&chosen).unwrap(), two.as_bytes());
+        assert!(!repair_pinned(&dir, &Config::default()).unwrap());
     }
 
     #[test]
