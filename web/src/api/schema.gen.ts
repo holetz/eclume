@@ -1952,6 +1952,8 @@ export interface components {
             version: string;
             /** @description Versão deste contrato que o servidor implementa (`info.version`). */
             contract_version: string;
+            /** @description Desde a 2.12.0: o SHA do git de que a imagem do servidor foi construída (o deploy o grava). Ausente fora de uma imagem de produção. */
+            commit?: string;
         };
         LoginRequest: {
             /** Format: email */
