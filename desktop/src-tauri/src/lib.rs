@@ -55,7 +55,8 @@ pub(crate) fn reconcile_autostart(app: &AppHandle) {
     }
 }
 
-/// Atualiza tudo que mostra o estado: a bandeja e a janela.
+/// Atualiza tudo que mostra o estado: a bandeja e a janela. Seguro de qualquer thread: a bandeja
+/// só é tocada na thread principal (`tray::refresh` despacha para ela).
 pub(crate) fn refresh_ui(app: &AppHandle) {
     tray::refresh(app);
     let _ = app.emit(STATUS_EVENT, ());
