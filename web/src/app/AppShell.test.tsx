@@ -189,13 +189,13 @@ describe('AppShell', () => {
       const onLogout = renderShell()
       const header = screen.getByRole('banner')
       await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
-      const dialog = screen.getByRole('dialog', { name: 'Sair durante o envio?' })
+      const dialog = await screen.findByRole('dialog', { name: 'Sair durante o envio?' })
       expect(dialog).toHaveTextContent('O envio em andamento será interrompido.')
       await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
       expect(onLogout).not.toHaveBeenCalled()
 
       await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
-      const again = screen.getByRole('dialog', { name: 'Sair durante o envio?' })
+      const again = await screen.findByRole('dialog', { name: 'Sair durante o envio?' })
       await userEvent.click(within(again).getByRole('button', { name: 'Sair' }))
       expect(onLogout).toHaveBeenCalled()
     } finally {
