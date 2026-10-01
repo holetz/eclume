@@ -171,7 +171,7 @@ impl Client {
                 Ok(response) => log::warn!(
                     "{} {} respondeu {}; nova tentativa em {delay:?}",
                     request.method,
-                    request.url,
+                    crate::transport::redact(&request.url),
                     response.status
                 ),
                 Err(err) => log::warn!("{err:#}; nova tentativa em {delay:?}"),
