@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119
 maintainer: holetz
 ---
 
@@ -102,7 +102,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `queries.ts` de outra feature continua permitido enquanto não fechar ciclo. Sem barril: quem
   usa importa do arquivo que define.
 
-- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/parear`, `/gravacoes/:id`, `/pessoas`,
+- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/perguntas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
@@ -224,14 +224,25 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   - **Nenhuma tela do painel mostra conteúdo de usuário**: nem título de gravação, nem nome de
     arquivo, nem link para `/gravacoes`. Usuários mostra nome, e-mail, cadastro, contagem de
     gravações e estado; as falhas da Saúde mostram etapa e código.
+  - **Gerar link de senha** (Usuários, só nas contas ativas): o diálogo pede confirmar quem pede,
+    `POST /admin/users/{id}/password-reset` e, na resposta, mostra o link uma única vez com o
+    `CopyValue` e a orientação de entregá-lo por fora; fechar o diálogo descarta o link.
 
   As regras do server estão em [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar`, `/cadastro`, `/parear` e `/admin/entrar`. Criar conta (`SignupPage`) lê
+- **Rotas públicas:** `/entrar`, `/cadastro`, `/redefinir-senha`, `/parear` e `/admin/entrar`. Criar conta (`SignupPage`) lê
   de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
   12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
   `notice_version` aceita; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
   uma conta com este e-mail."; cadastro fechado (`open: false` ou `signup_closed`) mostra o aviso
   no lugar do formulário.
+- **Senha esquecida:** a entrada diz "Esqueceu a senha? Peça um link a quem administra o
+  servidor." (o servidor não envia e-mail). `ResetPasswordPage` (`/redefinir-senha#<segredo>`, fora
+  do `RequireSession`) lê o segredo do fragmento ao montar, antes de qualquer redirecionamento, e o
+  manda no corpo de `POST /auth/password-reset/check` (mostra o e-mail da conta) e de
+  `POST /auth/password-reset` (senha nova duas vezes, 12+). Sem segredo ou com
+  `invalid_reset_link`, mostra "Este link venceu ou já foi usado. Peça outro a quem administra o
+  servidor." no lugar do formulário. Redefinida, relê a sessão e leva a `/entrar` com o aviso
+  "Senha redefinida. Entre com a nova." por `state`, como a conta excluída.
 - **Aceite do aviso em vigor:** com `notice_required: true` em `/me`, o `RequireSession` mostra o
   `NoticePage` (na `.auth`) no lugar do shell, até `POST /me/notice` com a versão lida de
   `GET /auth/signup`.
