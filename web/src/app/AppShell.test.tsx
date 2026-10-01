@@ -9,6 +9,13 @@ import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
 import { createQueryClient } from './queryClient'
 
+// A fila real, com o "enviando" controlado pelo teste (converter e subir de verdade fica no ImportDialog.test).
+const importState = vi.hoisted(() => ({ sending: false }))
+vi.mock('../features/import/useImportQueue', async (original) => {
+  const actual = await original<typeof import('../features/import/useImportQueue')>()
+  return { ...actual, useImportQueue: () => ({ ...actual.useImportQueue(), sending: importState.sending }) }
+})
+
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
@@ -151,6 +158,26 @@ describe('AppShell', () => {
     expect(within(header).getByText('mariana@exemplo.org')).toBeInTheDocument()
     await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
     expect(onLogout).toHaveBeenCalled()
+  })
+
+  it('com envio em andamento, Sair pede confirmação antes de encerrar a sessão', async () => {
+    importState.sending = true
+    try {
+      const onLogout = renderShell()
+      const header = screen.getByRole('banner')
+      await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
+      const dialog = screen.getByRole('dialog', { name: 'Sair durante o envio?' })
+      expect(dialog).toHaveTextContent('O envio em andamento será interrompido.')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+      expect(onLogout).not.toHaveBeenCalled()
+
+      await userEvent.click(within(header).getByRole('button', { name: 'Sair' }))
+      const again = screen.getByRole('dialog', { name: 'Sair durante o envio?' })
+      await userEvent.click(within(again).getByRole('button', { name: 'Sair' }))
+      expect(onLogout).toHaveBeenCalled()
+    } finally {
+      importState.sending = false
+    }
   })
 
   it('na gravação, a Biblioteca fica marcada como no frame', () => {
