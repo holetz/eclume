@@ -4,7 +4,7 @@ As gravações esperam numa fila pelo processador de transcrição do servidor. 
 
 ## Quem vê minhas gravações?
 
-Só você. Cada conta tem o próprio espaço, e não há compartilhamento entre contas. Quem administra o servidor cuida da configuração e da saúde do serviço, e o painel de administração não mostra títulos, transcrições nem resumos.
+Dentro do eclume, só você: cada conta tem o próprio espaço, e não há compartilhamento entre contas. Quem administra o servidor cuida da configuração e da saúde do serviço, e o painel de administração não mostra títulos, transcrições nem resumos. Fora do servidor, o texto da transcrição pode ir para o agente de IA que faz os resumos, os campos e o chat, se quem administra escolheu um serviço externo. Veja para onde vai cada dado neste servidor em **Minhas configurações › Conta › Privacidade e dados**.
 
 ## Posso excluir uma gravação?
 
