@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#100
 maintainer: holetz
 ---
 
@@ -112,9 +112,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   devolve o diálogo com "Continuar editando" e "Descartar". Usam o guarda a edição do resumo e a
   seleção de Campos personalizados e Tipos de agenda; o `ImportProvider` fica só com o
   `beforeunload`, porque vive no shell e não desmonta na navegação interna.
-- **Retentar a transcrição.** Numa gravação `failed`, o dono vê "Tentar de novo"
-  (`RetryTranscription`, `POST .../retranscribe`), com a falha passageira (`error.retryable`) dita
-  como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
+- **Retentar a transcrição.** Toda gravação `failed` mostra "Tentar de novo"
+  (`RetryTranscription`, `POST .../retranscribe`), sem comparar com `recording.owner` (obsoleto: a
+  conta só vê o que é dela; um 403/404 aparece pelo `errorMessage`), com a falha passageira
+  (`error.retryable`) dita como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
   `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a Biblioteca
   fica marcada em `/gravacoes/`); o item comum tem `group`, e `navGroups()` devolve as duas seções.

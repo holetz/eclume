@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100
 maintainer: holetz
 ---
 
@@ -230,8 +230,13 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   repetido devolve a mesma gravação.
 - **Chaves:** áudio em `users/{dono}/recordings/{gravação}/audio`; artefatos do worker em
   `recordings/{gravação}/…`, como o contrato de jobs fixa. `recordings.audio_key` guarda a chave
-  inteira e é sempre a fonte: as gravações de antes da conta por usuário seguem em
-  `orgs/{org}/users/{dono}/…`, sem mover o objeto.
+  inteira e é sempre a fonte. As gravações de antes da conta por usuário estavam em
+  `orgs/{org}/users/{dono}/…`; `eclume-server storage relocate-legacy [--dry-run]` as move uma
+  vez (idempotente): copia para a chave nova (pula a cópia se o destino já tem o mesmo tamanho),
+  troca `audio_key` e põe a antiga na fila de exclusão na mesma transação, pulando a gravação com
+  job `queued`/`running` (o `transcribe` na fila carrega a chave antiga).
+- **Campos obsoletos** `owner`/`created_by` (contrato 2.11.0): sem join com `users`; o nome é o do
+  usuário da transação (`serialize.requester_name`), o único que a RLS deixa ver.
 - `GET /recordings/{id}/audio` redireciona (302) para `/media/recordings/{id}/audio?expires=&sig=`,
   servido pela API com `Range` a partir do MinIO — fora de `/api/v1`, opaco para o cliente.
 
