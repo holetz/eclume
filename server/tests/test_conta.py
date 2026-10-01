@@ -200,3 +200,38 @@ def test_link_de_redefinicao_e_de_uso_unico_e_encerra_as_sessoes(
             await engine.dispose()
 
     assert run(check()) is None
+
+
+def test_admin_gera_o_link_de_redefinicao_so_para_conta_ativa(
+    admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    account = make_user()
+    path = f"/api/v1/admin/users/{account.user_id}/password-reset"
+    assert as_user(account).post(path).status_code == 401
+
+    created = admin.post(path)
+    assert created.status_code == 201, created.text
+    url, secret = created.json()["url"].split("#", 1)
+    assert url.endswith("/redefinir-senha")
+    assert admin.post("/api/v1/admin/users/00000000-0000-0000-0000-000000000000/password-reset").status_code == 404
+
+    async def admin_of(conn: object) -> object:
+        return (
+            await conn.execute(text("SELECT admin_id FROM password_resets WHERE user_id = :u"), {"u": account.user_id})
+        ).scalar()
+
+    assert run(services.sql(admin_of)) is not None
+
+    # Desativar vence o link pendente, e a conta desativada não recebe outro.
+    assert admin.patch(f"/api/v1/admin/users/{account.user_id}", json={"active": False}).status_code == 200
+    assert admin.post(path).status_code == 409
+    assert admin.patch(f"/api/v1/admin/users/{account.user_id}", json={"active": True}).status_code == 200
+
+    async def info() -> object:
+        engine = create_async_engine(services.settings.database_url)
+        try:
+            return await password_reset_info(engine, secret)
+        finally:
+            await engine.dispose()
+
+    assert run(info()) is None
