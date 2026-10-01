@@ -130,6 +130,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Uso e cotas da conta
+         * @description Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta pelo
+         *     admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
+         *     agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+         */
+        get: operations["getMyUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/password": {
         parameters: {
             query?: never;
@@ -426,6 +448,10 @@ export interface paths {
          *     com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
          *     existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
          *     fixado pelo servidor e as URLs das primeiras partes.
+         *
+         *     Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
+         *     armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
+         *     `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
          *
          *     Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
          *     por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
@@ -727,7 +753,8 @@ export interface paths {
          *     agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
          *     leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
          *     pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
-         *     `transcript_missing`.
+         *     `transcript_missing`. Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h
+         *     (estourada, 403 `quota_exceeded`).
          */
         post: operations["sendSummaryChat"];
         delete?: never;
@@ -1064,6 +1091,10 @@ export interface paths {
          * @description Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
          *     resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
          *     `provider_id` e sem provider padrão habilitado na plataforma, também 422.
+         *
+         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+         *     `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+         *     `rate_limited`).
          */
         post: operations["createSummary"];
         delete?: never;
@@ -1174,6 +1205,8 @@ export interface paths {
          * Pré-visualizar um tipo de agenda numa gravação
          * @description Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
          *     o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+         *     `quota_exceeded`).
          */
         post: operations["previewAgendaType"];
         delete?: never;
@@ -1247,7 +1280,8 @@ export interface paths {
         /**
          * Testar a regra de um campo
          * @description Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
-         *     mais recentes) com o provider de `fields`, sem gravar nada.
+         *     mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
+         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
          */
         post: operations["previewField"];
         delete?: never;
@@ -1321,7 +1355,8 @@ export interface paths {
          *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
          *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
          *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
-         *     pelos resumos (sessão e credencial de aparelho leem as duas).
+         *     pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
+         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1886,12 +1921,16 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Excluir um usuário e todos os dados dele
+         * @description Desde a 2.15.0. Exclui a conta como a exclusão pela própria pessoa (`POST /me/delete`), sem a senha: gravações, transcrições, resumos e tudo o mais saem do banco, os objetos saem do armazenamento pela fila de exclusão, a transcrição em curso é cancelada e o e-mail fica livre para um cadastro novo.
+         */
+        delete: operations["deleteUser"];
         options?: never;
         head?: never;
         /**
-         * Desativar ou reativar um usuário
-         * @description Desativar encerra as sessões e revoga os PATs do usuário.
+         * Desativar ou reativar um usuário, ou sobrepor as cotas dele
+         * @description Desativar encerra as sessões e revoga os PATs do usuário. Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -1954,12 +1993,20 @@ export interface components {
              *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
              *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
              *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-             *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`.
-             *     Códigos novos entram de forma aditiva.
+             *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
+             *     desde a 2.15.0, `quota_exceeded` (cota da conta estourada). Códigos novos entram de
+             *     forma aditiva.
              */
             code: string;
-            /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0). */
+            /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com `quota_exceeded`, o limite da cota (desde a 2.15.0). */
             limit?: number;
+            /**
+             * @description Com `quota_exceeded`, a cota estourada (desde a 2.15.0).
+             * @enum {string}
+             */
+            quota?: "storage_bytes" | "file_bytes" | "open_uploads" | "agent_requests_24h";
+            /** @description Com `quota_exceeded`, o uso a que o pedido levaria (bytes, uploads abertos ou pedidos em 24 h; em `file_bytes`, o tamanho do arquivo) (desde a 2.15.0). */
+            used?: number;
             /**
              * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
              *     alternativos, as alternativas (basta um deles).
@@ -2039,7 +2086,7 @@ export interface components {
             /** Format: date-time */
             notice_accepted_at: string | null;
         };
-        /** @description Conta de usuário vista pelo admin (o `User` mais a contagem de gravações). */
+        /** @description Conta de usuário vista pelo admin (o `User` mais a contagem de gravações e, desde a 2.15.0, o uso e a sobreposição das cotas). */
         AdminUser: {
             /** Format: uuid */
             id: string;
@@ -2055,10 +2102,24 @@ export interface components {
             /** Format: date-time */
             notice_accepted_at: string | null;
             recording_count: number;
+            /** @description Só os campos que esta conta sobrepõe ao padrão da plataforma (`null` num campo é sem limite); `null` quando a conta segue o padrão inteiro. */
+            quotas: components["schemas"]["QuotasOverride"] | null;
+            usage: components["schemas"]["UsageNow"];
         };
+        /** @description Cotas parciais (desde a 2.15.0): só os campos presentes valem; `null` num campo é sem limite. */
+        QuotasOverride: {
+            storage_bytes?: number | null;
+            file_bytes?: number | null;
+            open_uploads?: number | null;
+            gpu_minutes_24h?: number | null;
+            agent_requests_24h?: number | null;
+        };
+        /** @description Ao menos um campo; desde a 2.15.0, `active` é opcional e entra `quotas`. */
         UserPatch: {
             /** @description `false` desativa a conta, encerra as sessões e revoga os PATs. */
-            active: boolean;
+            active?: boolean;
+            /** @description Troca a sobreposição inteira das cotas da conta pelos campos enviados (`null` num campo é sem limite); `quotas: null` volta a conta ao padrão da plataforma. */
+            quotas?: components["schemas"]["QuotasOverride"] | null;
         };
         AdminUserPage: {
             items: components["schemas"]["AdminUser"][];
@@ -2080,6 +2141,31 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        /** @description Cotas de uma conta (desde a 2.15.0); `null` é sem limite. Minutos de áudio transcritos e pedidos ao agente contam numa janela móvel de 24 h. */
+        Quotas: {
+            /** @description Armazenamento total (áudio das gravações mais uploads abertos), em bytes. */
+            storage_bytes: number | null;
+            /** @description Tamanho máximo de um arquivo, em bytes. */
+            file_bytes: number | null;
+            /** @description Uploads abertos ao mesmo tempo. */
+            open_uploads: number | null;
+            /** @description Minutos de áudio enviados à transcrição em 24 h. Passado o limite nada é recusado: a gravação espera na fila até a janela abrir. */
+            gpu_minutes_24h: number | null;
+            /** @description Pedidos da pessoa ao agente (resumos, chats, pré-visualizações) em 24 h. */
+            agent_requests_24h: number | null;
+        };
+        /** @description Uso corrente de uma conta (desde a 2.15.0). */
+        UsageNow: {
+            storage_bytes: number;
+            open_uploads: number;
+            gpu_minutes_24h: number;
+            agent_requests_24h: number;
+        };
+        /** @description Uso e cota efetiva da conta (desde a 2.15.0). */
+        Usage: {
+            usage: components["schemas"]["UsageNow"];
+            quotas: components["schemas"]["Quotas"];
         };
         Me: {
             user: components["schemas"]["User"];
@@ -3448,6 +3534,8 @@ export interface components {
             diarization: components["schemas"]["DiarizationSettings"];
             voice_identification: components["schemas"]["VoiceIdentificationSettings"];
             preprocessing: components["schemas"]["PreprocessingSettings"];
+            /** @description Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta. */
+            quotas: components["schemas"]["Quotas"];
             /** Format: date-time */
             updated_at: string;
             /** @description Conta de admin que mudou por último. */
@@ -3509,6 +3597,8 @@ export interface components {
                     enabled?: boolean;
                 };
             };
+            /** @description Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite. */
+            quotas?: components["schemas"]["QuotasOverride"];
         };
         AgentProvider: {
             /** Format: uuid */
@@ -3675,7 +3765,12 @@ export interface components {
                 queued: number;
                 running: number;
             }[];
-            /** @description Jobs de transcrição da plataforma ainda não concluídos, com o progresso. */
+            /** @description Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os que aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de 24 h. Só números. */
+            held_jobs?: {
+                account_turn: number;
+                gpu_minutes: number;
+            };
+            /** @description Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos, com o progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`). */
             running_jobs?: {
                 /** Format: uuid */
                 job_id: string;
@@ -3841,7 +3936,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). */
+        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). Desde a 2.15.0, cota da conta estourada (`code: quota_exceeded`, com `quota`, `limit` e `used`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -4112,6 +4207,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMyUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uso e cotas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Usage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -5622,6 +5738,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getSummary: {
@@ -7250,6 +7367,32 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conta excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     updateUser: {
