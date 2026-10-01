@@ -206,6 +206,21 @@ pub const INTERVALO_DOS_TITULOS_MS: i64 = 60 * 1_000;
 /// De quanto em quanto tempo o `movel.json` é lido, na rede do eclume.
 pub const INTERVALO_DA_ATUALIZACAO_MS: i64 = 24 * 60 * 60 * 1_000;
 
+/// Regrava um `ca.pem` com certificados a mais só com o primeiro: a primeira conexão pode ter sido
+/// interceptada, então a credencial é apagada e a tela Entrar diz por quê. Falha fica no log.
+fn aparar_ca(dirs: &Dirs, conexao: &mut Conexao) {
+    match eclume_sync::pin::trim_saved(&dirs.ca()) {
+        Ok(0) => {}
+        Ok(_) => {
+            log::warn!("{}", eclume_sync::pin::CA_TRIMMED);
+            if let Err(err) = conexao.perdeu_credencial_por(eclume_sync::pin::CA_TRIMMED) {
+                log::warn!("falha ao apagar a credencial: {err:#}");
+            }
+        }
+        Err(err) => log::warn!("falha ao conferir a CA fixada: {err:#}"),
+    }
+}
+
 impl Core {
     /// Abre o núcleo: config, fila e a recuperação do que uma queda deixou para trás.
     pub fn abrir(dirs: Dirs, versao: &str, transportes: Arc<dyn Transportes>) -> Result<Self> {
@@ -214,8 +229,12 @@ impl Core {
         let config = Config::carregar(&dirs.config())?;
         let fila = Arc::new(Mutex::new(Queue::open(&dirs.fila())?));
         Sessao::recuperar(&fila)?;
+        let mut conexao = Conexao::new(dirs.clone(), transportes);
+        if config.servidor.is_some() && dirs.ca().exists() {
+            aparar_ca(&dirs, &mut conexao);
+        }
         Ok(Self {
-            conexao: Conexao::new(dirs.clone(), transportes),
+            conexao,
             dirs,
             versao: versao.to_string(),
             config,

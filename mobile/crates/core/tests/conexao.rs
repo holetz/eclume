@@ -206,6 +206,26 @@ fn token_fica_em_memoria_ate_sair_ou_ser_recusado() {
 }
 
 #[test]
+fn raiz_servida_com_dois_certificados_grava_so_o_primeiro() {
+    let outra = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    let (dirs, _guard) = dirs_temp("ca-a-mais");
+    let roteiro = Roteiro::default();
+    roteiro.responde(
+        "GET",
+        "/downloads/eclume-root.crt",
+        comum::texto(200, &format!("{CA_PEM}{outra}")),
+    );
+    servidor_ok(&roteiro);
+    let mut config = Config::default();
+    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro)));
+    conexao.conectar_endereco(URL).unwrap();
+    conexao.confiar_ca(&mut config).unwrap();
+    let ca = std::fs::read_to_string(dirs.ca()).unwrap();
+    assert_eq!(ca.matches("BEGIN CERTIFICATE").count(), 1, "{ca}");
+    assert_eq!(ca, CA_PEM);
+}
+
+#[test]
 fn ca_trocada_no_servidor_e_recusada_ao_confiar() {
     let (dirs, _guard) = dirs_temp("ca-trocada");
     let roteiro = Roteiro::default();
