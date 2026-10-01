@@ -24,5 +24,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/styles/contrast.test.ts"]
+  "exclude": ["src/styles/contrast.test.ts", "src/lib/vocabulario.test.ts"]
 }
