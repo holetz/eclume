@@ -284,6 +284,13 @@ echo "GPU: $([[ "$busy" == 1 ]] && echo "ocupada (o deploy espera até ${ESPERA_
 for p in "${problemas[@]}"; do echo "  aviso: $p" >&2; done
 echo "Daemon: contexto $CONTEXT · SSH: $SSH · dados: $DATA_DIR · URL: $PUBLIC_URL" >&2
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%)" >&2
+# Idade do último `ok` de cada etapa noturna (estado/<etapa>.json, o mesmo contrato do vigia.sh).
+host "for e in backup fora ensaio; do
+  f='$DATA_DIR/estado/'\$e.json
+  if [ ! -f \$f ]; then echo \"  \$e: sem estado\"
+  elif grep -Eq '\"ok\"[[:space:]]*:[[:space:]]*true' \$f; then echo \"  \$e: ok há \$(( (\$(date +%s) - \$(stat -c %Y \$f)) / 3600 )) h\"
+  else echo \"  \$e: falhou (\$(stat -c %y \$f | cut -c1-16))\"; fi
+done" >&2 || echo "  estado das etapas noturnas: host sem resposta" >&2
 echo "Construir: ${BUILD[*]:-nada}" >&2
 echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-agents worker-gpu web caddy → publish-ca → mdns" >&2
 for image in "${IMAGES[@]}"; do
@@ -328,11 +335,29 @@ if [[ -n "$env_diverge" ]]; then
   echo "Env do host guardado em $DATA_DIR/secrets/env.prod.$stamp (--substituir-env)." >&2
 fi
 host "umask 077; cat > '$DATA_DIR/secrets/env.prod'" < "$ENV_FILE"
-host "cat > '$DATA_DIR/bin/backup.sh' && chmod 755 '$DATA_DIR/bin/backup.sh'" < "$TREE/deploy/backup.sh"
-host "cat > '$DATA_DIR/bin/restaurar-backup.sh' && chmod 755 '$DATA_DIR/bin/restaurar-backup.sh'" < "$TREE/deploy/restaurar-backup.sh"
-# Cron do usuário (sem linger, um timer systemd de usuário não rodaria fora de sessão).
-host "(crontab -l 2>/dev/null | grep -v '# eclume-backup$' || true
+for script in backup.sh restaurar-backup.sh staging.sh; do
+  host "cat > '$DATA_DIR/bin/$script' && chmod 755 '$DATA_DIR/bin/$script'" < "$TREE/deploy/$script"
+done
+# Repositório restic local (backup.sh): senha gerada no host na primeira vez. A cópia da senha e o
+# destino fora do host (secrets/restic-fora.env) são da dona: docs/project/deploy-producao.md.
+restic_image="$(sed -n 's/^RESTIC_IMAGE="${RESTIC_IMAGE:-\(.*\)}"$/\1/p' "$TREE/deploy/backup.sh")"
+host "set -e
+  install -d -m 700 '$DATA_DIR/estado' '$DATA_DIR/backups/restic' '$DATA_DIR/backups/.restic-cache'
+  if [ ! -s '$DATA_DIR/secrets/restic-password' ]; then
+    (umask 077; openssl rand -base64 32 > '$DATA_DIR/secrets/restic-password')
+    echo 'Aviso: senha nova do backup em $DATA_DIR/secrets/restic-password; guarde uma cópia fora do host.' >&2
+  fi
+  if [ ! -f '$DATA_DIR/backups/restic/config' ]; then
+    docker run --rm -v '$DATA_DIR/backups/restic:/repo' -v '$DATA_DIR/secrets/restic-password:/run/restic-password:ro' \
+      '$restic_image' init --repo /repo --password-file /run/restic-password >/dev/null
+    echo 'Repositório restic local inicializado em $DATA_DIR/backups/restic.' >&2
+  fi
+  [ -s '$DATA_DIR/secrets/restic-fora.env' ] || echo 'Aviso: sem $DATA_DIR/secrets/restic-fora.env: o backup não sai do host (decisão da dona).' >&2"
+# Cron do usuário (sem linger, um timer systemd de usuário não rodaria fora de sessão): backup às
+# 03:30 e, depois dele, o ensaio de restauração do repositório fora do host no eclume-staging.
+host "(crontab -l 2>/dev/null | grep -v '# eclume-backup$' | grep -v '# eclume-ensaio$' || true
   echo '30 3 * * * ECLUME_DATA_DIR=$DATA_DIR $DATA_DIR/bin/backup.sh >> $DATA_DIR/backups/backup.log 2>&1 # eclume-backup'
+  echo '30 4 * * * ECLUME_DATA_DIR=$DATA_DIR $DATA_DIR/bin/staging.sh ensaio >> $DATA_DIR/backups/ensaio.log 2>&1 # eclume-ensaio'
 ) | crontab -"
 # Verificador da produção (alertas) a cada 5 min; estado por condição em estado/vigia/.
 host "install -d -m 700 '$DATA_DIR/estado' '$DATA_DIR/estado/vigia'
