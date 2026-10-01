@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
+import { problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
 
@@ -131,5 +132,23 @@ describe('player e marcadores', () => {
     expect(screen.queryByRole('group', { name: 'Marcadores' })).not.toBeInTheDocument()
     expect(document.querySelector('.player-tick')).toBeNull()
     expect(http.requests('GET /api/v1/recordings/:id/markers')).toHaveLength(0)
+  })
+})
+
+describe('exportar', () => {
+  it('um 401 no export encerra a sessão como qualquer outra chamada', async () => {
+    const user = userEvent.setup()
+    let signedIn = true
+    mockTranscriptApi({
+      'GET /api/v1/me': () => (signedIn ? fixtures.me() : problem('unauthorized', 401)),
+      'GET /api/v1/recordings/:id/export': () => {
+        signedIn = false
+        return problem('unauthorized', 401)
+      },
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await user.click(await screen.findByRole('button', { name: 'Exportar' }))
+    await user.click(screen.getByRole('menuitem', { name: /Transcrição e resumo/ }))
+    expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
   })
 })

@@ -1,6 +1,7 @@
-// Exportar a gravação por fetch (e não por link): o erro vem como problem e vira alerta na tela, em
-// vez de o navegador baixar um JSON.
-import { ApiError, type Problem } from '../../api/problem'
+// Exportar a gravação pelo cliente da API (e não por link): o erro vem como problem e vira alerta na
+// tela, em vez de o navegador baixar um JSON, e um 401 encerra a sessão como qualquer outra chamada.
+import { api } from '../../api/client'
+import { unwrap } from '../../api/problem'
 import type { operations } from '../../api/schema.gen'
 
 export type ExportFormat = operations['exportRecording']['parameters']['query']['format']
@@ -15,13 +16,12 @@ function dispositionName(header: string | null): string | null {
 }
 
 export async function downloadExport(recordingId: string, format: ExportFormat): Promise<void> {
-  const url = new URL(`/api/v1/recordings/${recordingId}/export?format=${format}`, window.location.origin)
-  const response = await fetch(url, { credentials: 'same-origin' })
-  if (!response.ok) {
-    const problem = (await response.json().catch(() => null)) as Problem | null
-    throw new ApiError(response.status, problem)
-  }
-  const blob = await response.blob()
+  const call = api.GET('/api/v1/recordings/{recording_id}/export', {
+    params: { path: { recording_id: recordingId }, query: { format } },
+    parseAs: 'blob',
+  })
+  const blob = await unwrap(call)
+  const { response } = await call
   const href = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = href
