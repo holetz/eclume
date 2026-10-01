@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate de qualidade do eclume, a partir da estação: envia o `git archive` do commit para o host GPU
-# e roda lá deploy/gate-host.sh, que prova os sete pilares de deploy/pilares.sh e publica o status
+# e roda lá deploy/gate-host.sh, que prova os pilares de deploy/pilares.sh e publica o status
 # `eclume/gate` no commit. Deploy e releases recusam um SHA sem esse status em `success`.
 # Contrato: docs/standards/code/monorepo.md; runbook: docs/project/host-setup.md.
 #

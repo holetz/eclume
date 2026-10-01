@@ -73,7 +73,7 @@ def test_decidir_pela_linha_de_comando(monkeypatch: pytest.MonkeyPatch, capsys: 
 
 
 def todos(codigo: int = 0) -> dict[str, int]:
-    """Os sete pilares com o mesmo código de saída."""
+    """Todos os pilares com o mesmo código de saída."""
     return dict.fromkeys(gate.PILARES, codigo)
 
 
