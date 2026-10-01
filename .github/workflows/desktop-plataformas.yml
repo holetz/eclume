@@ -3,8 +3,10 @@
 # disparado à mão
 # (`gh workflow run desktop-plataformas.yml`). Não roda em PR nem em push: com o repositório
 # privado, o minuto de Windows custa 2×, e o macOS (10×) fica fora até o repositório ficar
-# público. O job Linux do `ci.yml` segue sendo a prova de cada PR; os instaladores saem do
-# `deploy/release-desktop.sh` ou do `desktop-release.yml`.
+# público. O job Linux do `ci.yml` segue sendo a prova de cada PR, e o código só-Windows já
+# compila (clippy -D warnings, compilação cruzada) a cada gate do host (pilar `windows` de
+# deploy/pilares.sh); aqui fica só a prova de execução num Windows de verdade. Os instaladores saem
+# do `deploy/release-desktop.sh` ou do `desktop-release.yml`.
 name: desktop-plataformas
 
 on:
