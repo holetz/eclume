@@ -75,6 +75,16 @@ describe('Gravando', () => {
     await waitFor(() => expect(screen.queryByText('Silenciado pelo sistema')).not.toBeInTheDocument())
   })
 
+  it('sem credencial no meio da gravação, segue gravando e pede para entrar de novo', async () => {
+    const servidor = { url: 'https://192.168.15.199:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
+    const ponte = abrir(estadoBase({ sessao: sessao(), conexao: { fase: 'sem_credencial', servidor } }))
+    expect(await screen.findByText('Entre de novo para sincronizar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marcador' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Parar' }))
+    expect(ponte.parar).toHaveBeenCalled()
+  })
+
   it('avisa da bateria baixa', async () => {
     abrir(
       estadoBase({

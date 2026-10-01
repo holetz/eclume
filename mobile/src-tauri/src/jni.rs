@@ -1,7 +1,8 @@
 //! A ponte Kotlin → Rust do plugin Android (`EclumeCore`): o caminho que não depende do WebView
 //! estar vivo. A notificação (Pausar, Marcador, Parar) chega por `acao`, e o `SyncWorker` do
 //! WorkManager, sem Activity, abre o núcleo por `syncPendentes`. O serviço avisa o silêncio
-//! imposto pelo sistema por `acao("silenciado" | "audivel")`. Cada função devolve JSON.
+//! imposto pelo sistema por `acao("silenciado" | "audivel")`. Cada função devolve JSON, e cada
+//! resposta passa por `crate::responder`: erro e pânico viram `{"erro": …}`, sem abortar o processo.
 
 use eclume_mobile_core::{self as core, trancar};
 use jni::objects::{JClass, JString};
@@ -17,10 +18,6 @@ fn devolver(env: &mut JNIEnv<'_>, valor: &serde_json::Value) -> jstring {
     env.new_string(valor.to_string())
         .map(|s| s.into_raw())
         .unwrap_or(std::ptr::null_mut())
-}
-
-fn erro(err: &anyhow::Error) -> serde_json::Value {
-    json!({ "erro": format!("{err:#}") })
 }
 
 fn nucleo() -> anyhow::Result<&'static std::sync::Mutex<core::Core>> {
@@ -59,7 +56,7 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_ac
     nome: JString<'l>,
 ) -> jstring {
     let nome = texto(&mut env, &nome);
-    let resposta = executar(&nome).unwrap_or_else(|err| erro(&err));
+    let resposta = crate::responder(|| executar(&nome));
     devolver(&mut env, &resposta)
 }
 
@@ -69,7 +66,7 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_es
     mut env: JNIEnv<'l>,
     _classe: JClass<'l>,
 ) -> jstring {
-    let resposta = estado_json().unwrap_or_else(|err| erro(&err));
+    let resposta = crate::responder(estado_json);
     devolver(&mut env, &resposta)
 }
 
@@ -84,12 +81,15 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sy
     base: JString<'l>,
 ) -> jstring {
     let base = texto(&mut env, &base);
-    let resposta = core::iniciar(crate::dirs_de(std::path::Path::new(&base)), crate::VERSAO)
-        .and_then(core::ciclo_do_worker)
-        .map(|relatorio| match relatorio {
-            Some(r) => json!({ "na_rede": true, "sincronizadas": r.synced, "falhas": r.failed }),
-            None => json!({ "na_rede": false }),
-        })
-        .unwrap_or_else(|err| erro(&err));
+    let resposta = crate::responder(|| {
+        core::iniciar(crate::dirs_de(std::path::Path::new(&base)), crate::VERSAO)
+            .and_then(core::ciclo_do_worker)
+            .map(|relatorio| match relatorio {
+                Some(r) => {
+                    json!({ "na_rede": true, "sincronizadas": r.synced, "falhas": r.failed })
+                }
+                None => json!({ "na_rede": false }),
+            })
+    });
     devolver(&mut env, &resposta)
 }
