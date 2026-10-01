@@ -322,8 +322,18 @@ struct SourceTest {
     running: Arc<AtomicBool>,
 }
 
+/// A gravação que está parando (join, desmontagem do driver e `fsync`, fora do lock).
+struct Stopping {
+    id: String,
+    started_at: i64,
+    kind: Kind,
+}
+
 struct Inner {
     active: Option<ActiveRecording>,
+    /// A gravação tirada de `active` e ainda fechando: o estado visível segue "Gravando",
+    /// iniciar ou parar de novo é [`Busy`] e a varredura de órfãs a conta como viva.
+    stopping: Option<Stopping>,
     /// Quem iniciou `active`.
     origin: Option<Origin>,
     /// Há um início em curso (dispositivos abrindo), fora do lock.
@@ -354,6 +364,15 @@ struct Inner {
 }
 
 impl Inner {
+    /// Id, início e tipo da gravação em curso, também enquanto ela para.
+    fn current(&self) -> Option<(&str, i64, Kind)> {
+        match (&self.active, &self.stopping) {
+            (Some(active), _) => Some((active.id(), active.started_at(), active.kind())),
+            (None, Some(stopping)) => Some((&stopping.id, stopping.started_at, stopping.kind)),
+            (None, None) => None,
+        }
+    }
+
     fn recording(&self) -> Recording {
         match self.origin {
             None => Recording::Idle,
@@ -412,6 +431,17 @@ fn non_empty(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+/// Um lock envenenado por pânico segue utilizável: o envenenamento vai para o log.
+fn recover_poison<'a, T>(
+    lock: std::sync::LockResult<MutexGuard<'a, T>>,
+    what: &str,
+) -> MutexGuard<'a, T> {
+    lock.unwrap_or_else(|poisoned| {
+        log::error!("{what} envenenado por um pânico; seguindo com o último valor");
+        poisoned.into_inner()
+    })
 }
 
 impl AppState {
@@ -473,6 +503,7 @@ impl AppState {
             pat,
             inner: Mutex::new(Inner {
                 active: None,
+                stopping: None,
                 origin: None,
                 starting: false,
                 syncing: false,
@@ -497,16 +528,15 @@ impl AppState {
         self.config_path.parent().unwrap_or(Path::new("."))
     }
 
+    /// O estado do app. Envenenado por um pânico, segue acessível (com o aviso no log): `Inner` é
+    /// dado simples, sem invariante entre campos que um pânico deixe perigoso.
     fn inner(&self) -> Result<MutexGuard<'_, Inner>> {
-        self.inner
-            .lock()
-            .map_err(|_| anyhow!("estado do app envenenado por um pânico"))
+        Ok(recover_poison(self.inner.lock(), "estado do app"))
     }
 
+    /// A fila. Envenenada por um pânico, segue acessível: as escritas do SQLite são transacionais.
     fn lock_queue(&self) -> Result<MutexGuard<'_, Queue>> {
-        self.queue
-            .lock()
-            .map_err(|_| anyhow!("fila envenenada por um pânico"))
+        Ok(recover_poison(self.queue.lock(), "fila"))
     }
 
     /// A fila, para o laço de sync (`eclume_recorder::sync_pending`).
@@ -521,7 +551,7 @@ impl AppState {
 
     pub fn status(&self) -> Result<AppStatus> {
         let inner = self.inner()?;
-        Ok(if inner.active.is_some() {
+        Ok(if inner.current().is_some() {
             AppStatus::Recording
         } else if inner.syncing {
             AppStatus::Syncing
@@ -533,17 +563,18 @@ impl AppState {
     pub fn view(&self) -> Result<StatusView> {
         let status = self.status()?;
         let inner = self.inner()?;
-        let origin = inner.active.as_ref().and(inner.origin);
+        let current = inner.current();
+        let origin = current.and(inner.origin);
         let queue = self.lock_queue()?;
-        let markers = match &inner.active {
-            Some(active) => queue.markers(active.id())?,
+        let markers = match current {
+            Some((id, ..)) => queue.markers(id)?,
             None => Vec::new(),
         };
         Ok(StatusView {
             status,
-            recording_id: inner.active.as_ref().map(|a| a.id().to_string()),
-            recording_started_at: inner.active.as_ref().map(ActiveRecording::started_at),
-            recording_kind: inner.active.as_ref().map(ActiveRecording::kind),
+            recording_id: current.map(|(id, ..)| id.to_string()),
+            recording_started_at: current.map(|(_, started_at, _)| started_at),
+            recording_kind: current.map(|(.., kind)| kind),
             note_silence_s: inner.config.note_silence_s,
             theme: inner.config.theme.clone(),
             recording_auto: origin.is_some_and(|o| o.auto),
@@ -650,7 +681,7 @@ impl AppState {
     ) -> Result<()> {
         {
             let mut inner = self.inner()?;
-            if inner.active.is_some() || inner.starting {
+            if inner.active.is_some() || inner.stopping.is_some() || inner.starting {
                 return Err(Busy.into());
             }
             inner.starting = true;
@@ -680,15 +711,32 @@ impl AppState {
         Ok(())
     }
 
-    /// Para a gravação em andamento e a entrega à fila.
+    /// Para a gravação em andamento e a entrega à fila, em três tempos: sob o estado, tira
+    /// `active` e marca `stopping`; sem lock nenhum, fecha (join da thread, desmontagem do driver,
+    /// `fsync`, `rename`); com a fila, entrega. A janela e a bandeja seguem respondendo enquanto
+    /// isso; parar de novo no meio é [`Busy`].
     pub fn stop_recording(&self) -> Result<QueuedRecording> {
+        let active = {
+            let mut inner = self.inner()?;
+            let Some(active) = inner.active.take() else {
+                if inner.stopping.is_some() {
+                    return Err(Busy.into());
+                }
+                bail!("nenhuma gravação em andamento");
+            };
+            inner.stopping = Some(Stopping {
+                id: active.id().to_string(),
+                started_at: active.started_at(),
+                kind: active.kind(),
+            });
+            active
+        };
+        let result = active
+            .close()
+            .and_then(|closed| closed.deliver(&*self.lock_queue()?));
         let mut inner = self.inner()?;
-        let active = inner
-            .active
-            .take()
-            .ok_or_else(|| anyhow!("nenhuma gravação em andamento"))?;
+        inner.stopping = None;
         inner.origin = None;
-        let result = active.stop(&*self.lock_queue()?);
         if let Err(err) = &result {
             inner.notice = Some(format!("falha ao fechar a gravação: {err:#}"));
         }
@@ -697,7 +745,7 @@ impl AppState {
 
     /// Inicia (manual) ou para, conforme o estado.
     pub fn toggle_recording(&self, open: impl FnOnce() -> Result<OpenedSources>) -> Result<()> {
-        if self.inner()?.active.is_some() {
+        if self.inner()?.current().is_some() {
             self.stop_recording().map(|_| ())
         } else {
             self.start_recording(open)
@@ -748,7 +796,7 @@ impl AppState {
     /// gravação começa no meio dela (ordem estado → fila).
     pub fn sweep_orphans(&self) -> Result<usize> {
         let inner = self.inner()?;
-        let live: Vec<&str> = inner.active.iter().map(ActiveRecording::id).collect();
+        let live: Vec<&str> = inner.current().map(|(id, ..)| id).into_iter().collect();
         let recovered = session::recover_orphans(&*self.lock_queue()?, &live)?;
         Ok(recovered.len())
     }
@@ -1340,6 +1388,84 @@ mod tests {
             ))],
             missing: vec!["áudio do sistema: teste".into()],
         })
+    }
+
+    /// Uma fonte cujo descarte leva 2 s, como um driver lento ao soltar o dispositivo.
+    struct SlowDrop(SineSource);
+
+    impl eclume_recorder::AudioSource for SlowDrop {
+        fn sample_rate(&self) -> u32 {
+            self.0.sample_rate()
+        }
+
+        fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+            self.0.read(timeout)
+        }
+    }
+
+    impl Drop for SlowDrop {
+        fn drop(&mut self) {
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+
+    #[test]
+    fn estado_para_fora_do_lock() {
+        let (state, dir) = state("parada-lenta");
+        let state = Arc::new(state);
+        state
+            .start_recording(|| {
+                Ok(OpenedSources {
+                    sources: vec![Box::new(SlowDrop(SineSource::new(
+                        48_000,
+                        440.0,
+                        0.3,
+                        Duration::from_secs(30),
+                    )))],
+                    missing: Vec::new(),
+                })
+            })
+            .unwrap();
+        let stopping = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || state.stop_recording())
+        };
+        std::thread::sleep(Duration::from_millis(300));
+
+        let asked = std::time::Instant::now();
+        assert_eq!(state.status().unwrap(), AppStatus::Recording);
+        assert!(state.view().unwrap().recording_id.is_some());
+        assert!(asked.elapsed() < Duration::from_millis(100));
+        // Parar de novo, ou iniciar, no meio da parada é "ocupado".
+        assert!(state.stop_recording().unwrap_err().is::<Busy>());
+        assert!(state
+            .start_recording(|| sine_sources(1))
+            .unwrap_err()
+            .is::<Busy>());
+
+        let recording = stopping.join().unwrap().unwrap();
+        assert_eq!(recording.status, Status::Pending);
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn estado_segue_acessivel_depois_de_um_panico() {
+        let (state, dir) = state("envenenado");
+        let state = Arc::new(state);
+        {
+            let state = Arc::clone(&state);
+            let _ = std::thread::spawn(move || {
+                let _inner = state.inner.lock().unwrap();
+                let _queue = state.queue.lock().unwrap();
+                panic!("pânico com os locks presos");
+            })
+            .join();
+        }
+        assert!(state.inner.is_poisoned());
+        assert_eq!(state.status().unwrap(), AppStatus::Idle);
+        assert!(state.view().is_ok());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn settings_input(state: &AppState) -> SettingsInput {
