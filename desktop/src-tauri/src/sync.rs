@@ -4,6 +4,8 @@
 //! Depois, no máximo a cada minuto, lê as gravações da conta que mudaram (`?since=`) e avisa o fim
 //! do processamento de cada uma (resumo pronto, resumo que falhou, pronta sem resumo, transcrição
 //! que falhou), guarda o título que o servidor deu às enviadas daqui e a espera na fila delas.
+//! Com a CA fixada, a cada 6 h aprende a próxima raiz anunciada pelo descritor (rotação), e uma
+//! falha de envio ou de leitura confere se a CA mudou — trocando pela próxima quando é a servida.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -28,6 +30,11 @@ const OUTCOMES_EVERY_MS: i64 = 60 * 1000;
 const NOTIFIED_FILE: &str = "resumos-avisados.json";
 
 static LAST_OUTCOMES_CHECK: AtomicI64 = AtomicI64::new(0);
+/// Intervalo entre duas leituras da próxima CA no descritor e a nova tentativa depois de uma falha.
+const NEXT_CA_EVERY_MS: i64 = 6 * 60 * 60 * 1000;
+const NEXT_CA_RETRY_MS: i64 = 10 * 60 * 1000;
+
+static LAST_NEXT_CA_CHECK: AtomicI64 = AtomicI64::new(0);
 
 /// Sem credencial, as gravações esperam o próximo login.
 fn sign_in_to_send(pending: u32) -> String {
@@ -130,8 +137,9 @@ fn run_once(app: &AppHandle) -> Result<()> {
     apply_retention(&*lock(state.queue())?, retention_days, now_ms())?;
     if let Err(err) = check_outcomes(app, &state) {
         log::info!("desfechos: {err:#}");
+        check_pinned_ca(&state)?;
     }
-    Ok(())
+    learn_next_ca(&state)
 }
 
 /// Lê as gravações da conta que mudaram desde a marca d'água: avisa cada desfecho novo (se o
@@ -234,8 +242,9 @@ fn save_mark(path: &Path, mark: &Watermark) -> Result<()> {
     Ok(())
 }
 
-/// Depois de uma falha, confere se a CA fixada ainda é a do servidor; se mudou, o sync para e a
-/// janela volta à primeira execução ("O certificado do servidor mudou").
+/// Depois de uma falha, confere se a CA fixada ainda é a do servidor. Se a servida é a próxima
+/// anunciada, ela vira a fixada e o sync segue; se mudou para outra, o sync para e a janela volta
+/// à primeira execução ("O certificado do servidor mudou").
 fn check_pinned_ca(state: &AppState) -> Result<()> {
     let Some((web_url, pinned)) = state.pinned_ca()? else {
         return Ok(());
@@ -248,6 +257,36 @@ fn check_pinned_ca(state: &AppState) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Aprende a próxima CA anunciada pelo descritor, na conexão fixada na atual ([`learn_next`]), no
+/// máximo a cada [`NEXT_CA_EVERY_MS`]; depois de uma falha, tenta de novo em [`NEXT_CA_RETRY_MS`].
+///
+/// [`learn_next`]: crate::account::learn_next
+fn learn_next_ca(state: &AppState) -> Result<()> {
+    let now = now_ms();
+    if now - LAST_NEXT_CA_CHECK.load(Ordering::Relaxed) < NEXT_CA_EVERY_MS {
+        return Ok(());
+    }
+    let Some((web_url, pinned)) = state.pinned_ca()? else {
+        return Ok(());
+    };
+    if state.pinned_ca_changed()? {
+        return Ok(());
+    }
+    match crate::account::learn_next(&crate::account::RealNet, &web_url, &pinned) {
+        Ok(learned) => {
+            if learned {
+                log::info!("próxima CA do servidor guardada");
+            }
+            LAST_NEXT_CA_CHECK.store(now, Ordering::Relaxed);
+        }
+        Err(err) => {
+            log::info!("não deu para ler a próxima CA do servidor: {err:#}");
+            LAST_NEXT_CA_CHECK.store(now - NEXT_CA_EVERY_MS + NEXT_CA_RETRY_MS, Ordering::Relaxed);
+        }
+    }
+    Ok(())
 }
 
 /// O erro da falha mais recente, para a janela.
