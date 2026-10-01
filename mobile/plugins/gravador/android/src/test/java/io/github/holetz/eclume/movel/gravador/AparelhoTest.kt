@@ -22,6 +22,13 @@ class AparelhoTest {
     }
 
     @Test
+    fun isencaoDaOtimizacaoDeBateria() {
+        assertEquals("concedida", Dispositivo.isencao(concedida = true, jaPediu = true))
+        assertEquals("pedir", Dispositivo.isencao(concedida = false, jaPediu = false))
+        assertEquals("recusada", Dispositivo.isencao(concedida = false, jaPediu = true))
+    }
+
+    @Test
     fun txtDoAnuncioViraTexto() {
         val txt = Descoberta.txtEmTexto(
             mapOf(

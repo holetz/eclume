@@ -1,3 +1,3 @@
 [default]
-description = "O que a janela do app móvel pode pedir ao plugin gravador: as permissões de microfone e notificação e o estado do aparelho (os recortes de borda a borda)."
-permissions = ["allow-check-permissions", "allow-request-permissions", "allow-estado-do-dispositivo"]
+description = "O que a janela do app móvel pode pedir ao plugin gravador: as permissões de microfone e notificação, o estado do aparelho (recortes de borda a borda, notificações e isenção de bateria), abrir as configurações do app e pedir a isenção da otimização de bateria."
+permissions = ["allow-check-permissions", "allow-request-permissions", "allow-estado-do-dispositivo", "allow-abrir-configuracoes-do-app", "allow-pedir-isencao-de-bateria"]

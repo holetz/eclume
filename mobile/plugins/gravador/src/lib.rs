@@ -31,6 +31,20 @@ pub struct EstadoDoDispositivo {
     pub modelo: String,
     pub inset_topo: f64,
     pub inset_base: f64,
+    /// As notificações do app estão liberadas.
+    #[serde(default = "verdadeiro")]
+    pub notificacoes: bool,
+    /// A isenção da otimização de bateria: `concedida`, `pedir` ou `recusada`.
+    #[serde(default = "concedida")]
+    pub isencao_de_bateria: String,
+}
+
+fn verdadeiro() -> bool {
+    true
+}
+
+fn concedida() -> String {
+    "concedida".into()
 }
 
 /// Um anúncio `_eclume._tcp` achado pelo `NsdManager`, com o TXT cru.
@@ -89,6 +103,8 @@ impl<R: Runtime> Gravador<R> {
             modelo: "computador".into(),
             inset_topo: 0.0,
             inset_base: 0.0,
+            notificacoes: true,
+            isencao_de_bateria: concedida(),
         })
     }
 
