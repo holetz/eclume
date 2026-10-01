@@ -2365,6 +2365,10 @@ export interface components {
             size_bytes: number;
             content_type: string;
             content_hash: string;
+            /**
+             * @deprecated
+             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             */
             owner: components["schemas"]["UserRef"];
             tags: string[];
             collection_ids: string[];
@@ -2479,6 +2483,10 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * @deprecated
+             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             */
             owner: components["schemas"]["UserRef"];
             speakers: components["schemas"]["Speaker"][];
             tags?: string[];
@@ -2528,6 +2536,10 @@ export interface components {
                 start_ms: number;
                 end_ms: number;
             } | null;
+            /**
+             * @deprecated
+             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             */
             created_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             created_at: string;
@@ -3156,7 +3168,8 @@ export interface components {
             chat_message_id: string | null;
             /**
              * Format: uuid
-             * @description Id do usuário que pediu a geração, editou ou pediu o ajuste.
+             * @deprecated
+             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -3256,7 +3269,8 @@ export interface components {
             } | null;
             /**
              * Format: uuid
-             * @description Id do usuário que fez o pedido.
+             * @deprecated
+             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -3639,7 +3653,7 @@ export interface components {
          */
         Transcript: {
             /**
-             * @description Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva.
+             * @description Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca `owner` como obsoleto.
              * @example 1.1
              */
             schema_version: string;
@@ -3680,6 +3694,10 @@ export interface components {
              * @description Última mudança de qualquer campo; é o que `GET /api/v1/transcripts?since=` compara.
              */
             updated_at: string;
+            /**
+             * @deprecated
+             * @description Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada); sai na versão 2 do schema.
+             */
             owner: components["schemas"]["UserRef"];
             engine?: components["schemas"]["TranscriptEngine"];
             /** @description Locutores da transcrição. Sem diarização, há um locutor só. */

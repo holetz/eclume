@@ -318,3 +318,24 @@ def test_json_v1_gera_o_frontmatter_do_lumea_sem_perda(transcript: dict[str, Any
         assert match["speaker"] in declared
         assert match["timestamp"] == _hms(segment["start_ms"])
         assert match["text"] == segment["text"]
+
+
+# Campos obsoletos na v1: seguem obrigatórios e preenchidos até a `/api/v2` (contrato-v1.md).
+DEPRECATED_V1 = (
+    ("Recording", "owner"),
+    ("TranscriptSummary", "owner"),
+    ("VoiceSample", "created_by"),
+    ("Summary", "created_by"),
+    ("SummaryChatMessage", "created_by"),
+)
+
+
+def test_obsoletos_seguem_obrigatorios_e_marcados(
+    source_spec: dict[str, Any], transcript_schema: dict[str, Any]
+) -> None:
+    schemas = source_spec["components"]["schemas"]
+    for schema, field in DEPRECATED_V1:
+        assert field in schemas[schema]["required"], f"{schema}.{field} saiu de required: só a v2 remove"
+        assert schemas[schema]["properties"][field].get("deprecated") is True, f"{schema}.{field} perdeu a marca"
+    assert "owner" in transcript_schema["required"]
+    assert transcript_schema["properties"]["owner"].get("deprecated") is True

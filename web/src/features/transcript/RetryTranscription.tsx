@@ -2,17 +2,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Schemas } from '../../api/client'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
-import { useMe } from '../../app/session'
 import { recordingKey } from './queries'
 
 type Recording = Schemas['Recording']
 
 /**
- * Retentar a transcrição que falhou (retranscrever, uma revisão acima). Só o dono escreve na
- * gravação; a falha passageira (worker perdido, job sumido, falta de VRAM) é dita como tal.
+ * Retentar a transcrição que falhou (retranscrever, uma revisão acima). Toda gravação que a conta
+ * vê é dela (o `owner` do contrato é obsoleto); a falha passageira (worker perdido, job sumido,
+ * falta de VRAM) é dita como tal, e um 403/404 da rota aparece pelo `errorMessage`.
  */
 export function RetryTranscription({ recording }: { recording: Recording }) {
-  const me = useMe()
   const queryClient = useQueryClient()
   const retry = useMutation({
     mutationFn: () =>
@@ -27,7 +26,7 @@ export function RetryTranscription({ recording }: { recording: Recording }) {
     },
   })
 
-  if (recording.status !== 'failed' || me.data?.user.id !== recording.owner.id) return null
+  if (recording.status !== 'failed') return null
   const cancelled = recording.job?.error?.code === 'cancelled'
   const retryable = recording.job?.error?.retryable === true
   return (

@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
-use eclume_recorder::{now_ms, sync_pending, Queue, QueuedRecording, SyncReport, Uploader};
+use eclume_recorder::{
+    now_ms, sync_pending, Queue, QueuedRecording, SyncInterrupted, SyncReport, Uploader,
+};
 use eclume_sync::protocol::{api_error, RetryPolicy};
 use eclume_sync::transport::{HttpRequest, HttpResponse, Transport};
 use eclume_sync::{Client, HttpUploader};
@@ -30,6 +32,9 @@ pub struct Medidor {
     total: AtomicU64,
     inicio: Mutex<Instant>,
     credencial_recusada: AtomicBool,
+    /// A rede do eclume caiu (ou o sistema parou o trabalho de sync): o [`Contador`] não deixa
+    /// sair mais nenhuma requisição do sync até a próxima passada preparada na rede.
+    interrompido: AtomicBool,
 }
 
 impl Default for Medidor {
@@ -41,6 +46,7 @@ impl Default for Medidor {
             total: AtomicU64::new(0),
             inicio: Mutex::new(Instant::now()),
             credencial_recusada: AtomicBool::new(false),
+            interrompido: AtomicBool::new(false),
         }
     }
 }
@@ -65,6 +71,21 @@ impl Medidor {
 
     fn enviou(&self, bytes: u64) {
         self.enviados.fetch_add(bytes, Ordering::AcqRel);
+    }
+
+    /// Interrompe o sync em curso: a próxima requisição dele devolve [`SyncInterrupted`] sem
+    /// tocar a rede.
+    pub fn interromper(&self) {
+        self.interrompido.store(true, Ordering::Release);
+    }
+
+    /// Libera o sync de novo; o núcleo chama ao preparar uma passada na rede do eclume.
+    pub fn retomar(&self) {
+        self.interrompido.store(false, Ordering::Release);
+    }
+
+    pub fn interrompido(&self) -> bool {
+        self.interrompido.load(Ordering::Acquire)
     }
 
     /// O servidor respondeu 401 a uma chamada autenticada durante o sync.
@@ -94,8 +115,9 @@ impl Medidor {
     }
 }
 
-/// Um transporte que conta os bytes das partes enviadas (`PUT` com sucesso) e nota o 401 na
-/// origem da API.
+/// Um transporte que conta os bytes das partes enviadas (`PUT` com sucesso), nota o 401 na
+/// origem da API e, com o medidor interrompido, devolve [`SyncInterrupted`] sem enviar: nenhuma
+/// requisição do sync sai depois que o app sabe que a rede do eclume caiu.
 pub struct Contador {
     inner: Arc<dyn Transport>,
     medidor: Arc<Medidor>,
@@ -114,6 +136,9 @@ impl Contador {
 
 impl Transport for Contador {
     fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
+        if self.medidor.interrompido() {
+            return Err(SyncInterrupted.into());
+        }
         let parte = (request.method == "PUT").then_some(request.body.len() as u64);
         let da_api = request.url.starts_with(&self.origem);
         let resposta = self.inner.send(request)?;
