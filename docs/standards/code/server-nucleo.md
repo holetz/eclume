@@ -7,7 +7,7 @@ tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#119
 maintainer: holetz
 ---
 
@@ -213,7 +213,8 @@ nas duas.
   PAT não é barrado (ver [Cadastro e aviso](#cadastro-e-aviso)).
 - **Limite de tentativas** (`ratelimit.py`): janela fixa de 1 minuto no Redis
   (`INCR` + `EXPIRE` em `eclume:rl:<rota>:<ip>`), 10 tentativas por IP em `/auth/login`,
-  `/auth/signup`, `/admin/auth/login`, `/devices/login` e `/devices/pair`, e a troca de código tem
+  `/auth/signup`, `/admin/auth/login`, `/devices/login`, `/devices/pair` e as duas rotas da
+  redefinição de senha (`auth_password_reset`, uma chave para conferir e redefinir), e a troca de código tem
   um teto global (ver [server-mcp-e-dispositivos](server-mcp-e-dispositivos.md)). Estourado,
   **429** `rate_limited` com `Retry-After` (segundos até a janela reabrir). O IP é o do uvicorn
   com `--proxy-headers`, que confia no `X-Forwarded-For` do Caddy.
@@ -226,6 +227,18 @@ nas duas.
   A falha soma nos dois contadores; o sucesso zera o par e grava o IP como conhecido. Contar só
   falhas, e poupar o IP conhecido, impede que as tentativas de um IP qualquer tranquem a dona da
   conta, sem abrir força bruta distribuída sem teto.
+- **Link de redefinição de senha** (`password_resets`, migration 027; só o papel de conexão a lê,
+  como `sessions`): o admin gera (ver [server-admin.md](server-admin.md)) um segredo de 32 bytes
+  (`security.new_session_token`) guardado só como SHA-256, válido por 24 h (`RESET_TTL`), que vai no
+  fragmento de `/redefinir-senha#<segredo>` e nunca na query nem no caminho: não chega ao proxy,
+  ao log de acesso nem ao `Referer`. Gerar outro e desativar a conta vencem os pendentes
+  (`accounts.expire_password_resets`). `accounts.password_reset_info` confere sem consumir;
+  `accounts.reset_password` calcula o hash da senha nova antes (senha curta não toca o link) e,
+  numa transação, consome o link com um `UPDATE … WHERE token_hash AND used_at IS NULL AND
+  expires_at > now() AND conta ativa RETURNING` atômico, troca a senha e apaga **todas** as
+  sessões da conta, sem abrir outra; aparelhos e PATs seguem valendo (`revoke_tokens=False`, como
+  a troca sem a opção). Link inexistente, vencido, usado ou de conta inativa dá a mesma **401**
+  `invalid_reset_link`.
 - **Sessão de admin:** `POST /admin/auth/login` abre `eclume_admin_session` (HttpOnly, Secure,
   SameSite=Strict, `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`) e `eclume_admin_csrf`
   legível (`Path=/`), guardados em `admin_sessions`. `auth.require_admin` é a dependência de toda
