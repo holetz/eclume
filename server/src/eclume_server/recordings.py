@@ -252,6 +252,12 @@ async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[s
     ]
 
 
+async def account_language(conn: AsyncConnection, user_id: UUID) -> str | None:
+    """O idioma de transcrição preferido da conta; nulo é o padrão do servidor."""
+    query = select(t.users.c.transcription_language).where(t.users.c.id == user_id)
+    return (await conn.execute(query)).scalar()
+
+
 async def insert_job(
     conn: AsyncConnection,
     recording: Row,
