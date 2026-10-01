@@ -205,23 +205,41 @@ impl Write for Tee {
     }
 }
 
-/// Fecha, a cada segundo, a gravação que terminou sozinha: fontes que caíram ou a nota que parou
-/// no silêncio (a nota sem voz é descartada).
+/// Fecha, a cada segundo, a gravação que terminou sozinha: fontes que caíram, falha ao gravar
+/// (com o aviso "A gravação parou") ou a nota que parou no silêncio (a nota sem voz é
+/// descartada). A cada minuto, varre as gravações órfãs (`AppState::sweep_orphans`).
 fn spawn_reaper(app: AppHandle) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(1));
-        match app.state::<AppState>().reap_finished() {
-            Ok(Some(reaped)) => {
-                match reaped {
-                    Reaped::NoteSaved(recording) => notify::note_saved(recording.duration_ms),
-                    Reaped::NoteDiscarded => notify::note_discarded(),
-                    Reaped::SourcesEnded(_) => {}
+    std::thread::spawn(move || {
+        let mut ticks: u64 = 0;
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            ticks += 1;
+            match app.state::<AppState>().reap_finished() {
+                Ok(Some(reaped)) => {
+                    match reaped {
+                        Reaped::NoteSaved(recording) => notify::note_saved(recording.duration_ms),
+                        Reaped::NoteDiscarded => notify::note_discarded(),
+                        Reaped::Stopped { recording, reason } => {
+                            notify::recording_stopped(recording.duration_ms, reason);
+                        }
+                    }
+                    sync::nudge(&app);
+                    refresh_ui(&app);
                 }
-                sync::nudge(&app);
-                refresh_ui(&app);
+                Ok(None) => {}
+                Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
             }
-            Ok(None) => {}
-            Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
+            // A cada minuto, fecha a gravação cujo `.part` ficou preso ao parar.
+            if ticks.is_multiple_of(60) {
+                match app.state::<AppState>().sweep_orphans() {
+                    Ok(0) => {}
+                    Ok(_) => {
+                        sync::nudge(&app);
+                        refresh_ui(&app);
+                    }
+                    Err(err) => log::error!("falha na varredura de gravações órfãs: {err:#}"),
+                }
+            }
         }
     });
 }
@@ -246,6 +264,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             init_logging(&app.path().app_log_dir()?);
+            notify::init(app.handle());
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
