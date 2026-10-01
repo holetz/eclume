@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import delete, func, insert, select, update
 
 from eclume_server.auth import ADMIN_COOKIE_PATH, ADMIN_CSRF_COOKIE, ADMIN_SESSION_COOKIE, Admin
@@ -18,31 +18,44 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
 from eclume_server.pagination import iso
 from eclume_server.problems import unauthorized
-from eclume_server.ratelimit import attempts, count_login
+from eclume_server.ratelimit import attempts, check_login, client_ip, login_failed, login_succeeded
 from eclume_server.routes.auth import LoginRequest
-from eclume_server.security import hash_password, needs_rehash, new_session_token, sha256_hex, verify_password
+from eclume_server.security import (
+    hash_password_async,
+    needs_rehash,
+    new_session_token,
+    sha256_hex,
+    verify_password_async,
+)
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
 @router.post("/auth/login", status_code=204)
-async def admin_login(body: LoginRequest, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]) -> Response:
+async def admin_login(
+    body: LoginRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]
+) -> Response:
     """Abre a sessão de admin: `eclume_admin_session` (HttpOnly, só no painel) e `eclume_admin_csrf`."""
-    await count_login(ctx, "admin", body.email)
+    ip = client_ip(request)
+    await check_login(ctx, "admin", body.email, ip)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
         query = select(t.admins).where(func.lower(t.admins.c.email) == body.email.lower())
         admin = (await conn.execute(query)).mappings().first()
-        if (
-            not verify_password(admin["password_hash"] if admin else None, body.password)
-            or not admin
-            or not admin["active"]
-        ):
-            raise unauthorized("E-mail ou senha incorretos.")
-        values: dict[str, Any] = {"last_login_at": now}
-        if needs_rehash(admin["password_hash"]):
-            values["password_hash"] = hash_password(body.password)
+    # O argon2 roda numa thread e fora da transação.
+    if (
+        not await verify_password_async(admin["password_hash"] if admin else None, body.password)
+        or not admin
+        or not admin["active"]
+    ):
+        await login_failed(ctx, "admin", body.email, ip)
+        raise unauthorized("E-mail ou senha incorretos.")
+    await login_succeeded(ctx, "admin", body.email, ip)
+    values: dict[str, Any] = {"last_login_at": now}
+    if needs_rehash(admin["password_hash"]):
+        values["password_hash"] = await hash_password_async(body.password)
+    async with system_tx(ctx.engine) as conn:
         await conn.execute(update(t.admins).where(t.admins.c.id == admin["id"]).values(**values))
         token, csrf = new_session_token(), new_session_token()
         ttl = timedelta(hours=ctx.settings.admin_session_ttl_hours)

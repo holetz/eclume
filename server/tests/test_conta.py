@@ -78,3 +78,29 @@ def test_excluir_a_conta_apaga_tudo_e_so_dela(
     cache = redis.Redis.from_url(services.settings.redis_url)
     assert cache.exists(f"eclume:cancel:{recording['id']}:1")
     assert not cache.exists(f"eclume:cancel:{kept['id']}:1")
+
+
+def test_trocar_a_senha_com_revoke_tokens_revoga_aparelhos_e_pats(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    account = make_user()
+    api = as_user(account)
+    kept = api.pat("recordings:read", name="mantido")
+    body = {"current_password": PASSWORD, "new_password": NEW_PASSWORD}
+    assert api.post("/api/v1/me/password", json=body).status_code == 204
+    # Sem `revoke_tokens`, os tokens seguem valendo, como antes.
+    assert kept.get("/api/v1/me").status_code == 200
+
+    revoked = api.pat("recordings:read", name="revogado")
+    device = api.post("/api/v1/devices/pairing-codes").json()
+    paired = api.client.post(
+        "/api/v1/devices/pair", json={"code": device["code"], "device_name": "Celular", "platform": "android"}
+    )
+    assert paired.status_code == 201, paired.text
+    again = {"current_password": NEW_PASSWORD, "new_password": PASSWORD, "revoke_tokens": True}
+    assert api.post("/api/v1/me/password", json=again).status_code == 204
+    assert revoked.get("/api/v1/me").status_code == 401
+    assert kept.get("/api/v1/me").status_code == 401
+    device_api = type(api)(api.client, token=paired.json()["secret"])
+    assert device_api.get("/api/v1/me").status_code == 401
+    assert api.get("/api/v1/me").status_code == 200

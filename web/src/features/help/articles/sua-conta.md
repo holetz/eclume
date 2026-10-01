@@ -31,7 +31,10 @@ respeite quem pedir para não ser gravado.
 
 Em **Minhas configurações › Conta** (a engrenagem no alto), informe a senha atual e a nova duas
 vezes. A nova precisa de ao menos 12 caracteres. Ao trocar, as outras sessões abertas desta conta
-(outros navegadores) são encerradas; os tokens de acesso continuam valendo e se revogam em
+(outros navegadores) são encerradas. Com **Encerrar também aparelhos e tokens** marcada (o
+padrão), os aplicativos desktop e celular ligados à conta e os tokens de acesso deixam de valer, e
+cada aparelho pede login de novo: é o que convém quando você suspeita que a senha vazou.
+Desmarcada, aparelhos e tokens continuam valendo e se revogam um a um em
 [Tokens de acesso](/tokens).
 
 ## Excluir a conta

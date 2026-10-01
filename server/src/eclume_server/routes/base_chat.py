@@ -40,7 +40,9 @@ class BaseChatRequest(BaseModel):
 async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> dict[str, Any]:
     """Guarda a pergunta e enfileira o `base_chat` no worker CPU."""
     history = [turn.model_dump() for turn in body.history]
-    return await create_chat(ctx.queue.pool, principal.user_id, body.message, history)
+    # Sessão e credencial de aparelho leem transcrições; um PAT, só com `transcripts:read`.
+    transcripts = principal.method != "pat" or "transcripts:read" in principal.scopes
+    return await create_chat(ctx.queue.pool, principal.user_id, body.message, history, transcripts=transcripts)
 
 
 @router.get("/base-chat/{chat_id}")

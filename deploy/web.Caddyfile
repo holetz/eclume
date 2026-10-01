@@ -7,6 +7,14 @@
 :80 {
 	root * /srv
 	encode zstd gzip
+	# A CSP viaja com a imagem (produção, e2e e quem usar outro proxy). O áudio vem de /media na
+	# mesma origem e o ffmpeg.wasm dos assets do Vite: `'self'` basta; o wasm pede
+	# `'wasm-unsafe-eval'` e o worker do ffmpeg, `blob:`. Contrato em docs/standards/code/frontend-web.md.
+	header {
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
 	# Os assets do Vite têm hash no nome: cache longo, só para o arquivo que existe. Sem `try_files`,
 	# o asset ausente (chunk de um deploy anterior) é 404 sem cache, e o `import()` falha rápido e
 	# com motivo, em vez de guardar o index.html por um ano naquela URL.

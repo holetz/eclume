@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useId, useState } from 'react'
 import Markdown from 'react-markdown'
+import { SAFE_MARKDOWN } from '../../app/markdown'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
@@ -169,7 +170,7 @@ export function AgendaPreviewResult({
       <div className={styles.previewBlock}>
         <span className="kicker">Resumo</span>
         <div className="doc">
-          <Markdown>{item.summary_md}</Markdown>
+          <Markdown components={SAFE_MARKDOWN}>{item.summary_md}</Markdown>
         </div>
       </div>
     </section>

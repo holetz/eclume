@@ -95,8 +95,9 @@ class Conformance:
         response.read()
         operation = bundle()["paths"][template][method.lower()]
         declared = operation["responses"].get(str(response.status_code))
-        if declared is None and response.status_code == 422:
-            # 422: requisição fora do contrato, em qualquer operação (como no mock).
+        if declared is None and response.status_code in {413, 422, 500}:
+            # 422: requisição fora do contrato, em qualquer operação (como no mock); 413 (corpo acima
+            # do teto) e 500 (`internal_error`) também valem em qualquer operação.
             self._body(where, response, _pointer("components", "schemas", "Problem"))
             return
         if declared is None:

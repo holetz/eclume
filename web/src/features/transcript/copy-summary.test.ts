@@ -34,7 +34,7 @@ describe('cópia do resumo para o Teams', () => {
   it('mantém listas, ênfase e links formatados', async () => {
     const { html } = await summaryClipboard('Título', MARKDOWN)
     expect(html).toContain('<li>Três <strong>turmas</strong> de 12 gestores</li>')
-    expect(html).toContain('<a href="https://exemplo.com/plano">o plano</a>')
+    expect(html).toContain('<a href="https://exemplo.com/plano" target="_blank" rel="noopener noreferrer">o plano</a>')
     expect(html).toContain('<em>ênfase</em>')
   })
 

@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Tentativas por minuto e por IP nas rotas que conferem credencial (login, cadastro, login de
     # admin, `/devices/*`); a mais recebe 429 `rate_limited`.
     credential_attempts_per_minute: int = 10
+    # Falhas de login por par (conta, IP) em 15 min; além delas, 429 até a janela vencer. O sucesso zera.
+    login_failures_per_pair: int = 10
+    # Falhas de login da conta em 1 h, somando os IPs; além delas, só entra IP com login certo em 30 dias.
+    login_failures_per_account: int = 100
     # Cadastro aberto (`POST /auth/signup`); `false` o fecha sem deploy de código.
     signup_open: bool = True
 

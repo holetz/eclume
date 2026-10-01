@@ -34,8 +34,28 @@ describe('conta', () => {
     expect(await http.requests('POST /api/v1/me/password')[0].json()).toEqual({
       current_password: 'senha-de-teste',
       new_password: NEW,
+      revoke_tokens: true,
     })
+    expect(within(form).getByRole('status')).toHaveTextContent('os aparelhos ligados e os tokens')
     expect(within(form).getByLabelText('Senha atual')).toHaveValue('')
+  })
+
+  it('troca a senha mantendo aparelhos e tokens quando a caixa é desmarcada', async () => {
+    const http = mockFetch({
+      'GET /api/v1/me': () => fixtures.me(),
+      'POST /api/v1/me/password': () => empty(),
+    })
+    renderApp('/config/conta')
+    const form = await screen.findByRole('form', { name: 'Trocar a senha' })
+    const revoke = within(form).getByRole('checkbox', { name: 'Encerrar também aparelhos e tokens' })
+    expect(revoke).toBeChecked()
+    await userEvent.click(revoke)
+    await userEvent.type(within(form).getByLabelText('Senha atual'), 'senha-de-teste')
+    await userEvent.type(within(form).getByLabelText('Nova senha'), NEW)
+    await userEvent.type(within(form).getByLabelText('Repita a nova senha'), NEW)
+    await userEvent.click(within(form).getByRole('button', { name: 'Trocar a senha' }))
+    expect(await within(form).findByRole('status')).toHaveTextContent('As outras sessões abertas')
+    expect(await http.requests('POST /api/v1/me/password')[0].json()).toMatchObject({ revoke_tokens: false })
   })
 
   it('mostra a senha atual errada no campo', async () => {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from fastapi import status
@@ -11,6 +12,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
+
+logger = logging.getLogger(__name__)
 
 PROBLEM_JSON = "application/problem+json"
 _TYPE_BASE = "https://eclume.dev/problems/"
@@ -29,6 +32,9 @@ _TITLES = {
     "notice_required": "Aviso não aceito",
     "invalid_pairing_code": "Código de pareamento inválido",
     "method_not_allowed": "Método não permitido",
+    "payload_too_large": "Corpo grande demais",
+    "upload_completing": "Upload sendo concluído",
+    "internal_error": "Erro interno",
 }
 
 
@@ -128,6 +134,18 @@ def rate_limited(detail: str, retry_after: int | None = None) -> ApiProblemError
     return ApiProblemError(429, "rate_limited", detail, headers=headers)
 
 
+def payload_too_large(limit: int) -> ApiProblemError:
+    """413 — o corpo passou do teto da rota."""
+    return ApiProblemError(
+        413, "payload_too_large", f"O corpo passou do limite de {limit} bytes desta rota.", extra={"limit": limit}
+    )
+
+
+def internal_error() -> ApiProblemError:
+    """500 — falha inesperada do servidor; o detalhe fica só no log."""
+    return ApiProblemError(500, "internal_error", "Erro inesperado no servidor; tente de novo.")
+
+
 def _field(loc: tuple[Any, ...]) -> str:
     parts = list(loc[1:] if loc and loc[0] in {"body", "query", "path", "header", "cookie"} else loc)
     field = ""
@@ -159,8 +177,14 @@ async def _http_handler(_: Request, exc: Exception) -> JSONResponse:
     return ApiProblemError(exc.status_code, code, str(exc.detail) if exc.detail else None).response()
 
 
+async def _internal_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error("erro não tratado em %s %s", request.method, request.url.path, exc_info=exc)
+    return internal_error().response()
+
+
 def install_handlers(app: FastAPI) -> None:
-    """Faz todo erro da API sair como problem+json."""
+    """Faz todo erro da API sair como problem+json, inclusive o 500 inesperado."""
     app.add_exception_handler(ApiProblemError, _problem_handler)
     app.add_exception_handler(RequestValidationError, _validation_handler)
     app.add_exception_handler(StarletteHTTPException, _http_handler)
+    app.add_exception_handler(Exception, _internal_handler)

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
 import string
+from weakref import WeakKeyDictionary
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -32,6 +34,30 @@ def verify_password(password_hash: str | None, password: str) -> bool:
         return _hasher.verify(password_hash or _DUMMY_HASH, password) and password_hash is not None
     except (VerificationError, InvalidHashError):
         return False
+
+
+# Cada hash argon2 usa 64 MiB: o pool padrão de 40 threads abriria espaço para 2,5 GiB por rajada.
+PASSWORD_THREADS = 4
+_limiters: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = WeakKeyDictionary()
+
+
+def _password_limiter() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    if loop not in _limiters:
+        _limiters[loop] = asyncio.Semaphore(PASSWORD_THREADS)
+    return _limiters[loop]
+
+
+async def hash_password_async(password: str) -> str:
+    """`hash_password` numa thread, até `PASSWORD_THREADS` ao mesmo tempo: o event loop segue livre."""
+    async with _password_limiter():
+        return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password_hash: str | None, password: str) -> bool:
+    """`verify_password` numa thread, até `PASSWORD_THREADS` ao mesmo tempo."""
+    async with _password_limiter():
+        return await asyncio.to_thread(verify_password, password_hash, password)
 
 
 def needs_rehash(password_hash: str) -> bool:

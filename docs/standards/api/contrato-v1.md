@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99
 maintainer: holetz
 ---
 
@@ -60,15 +60,25 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
   conta tem até 2 perguntas em aberto (429 `rate_limited`). A resposta traz `sources`, só as
-  gravações que o agente consultou. É aditivo: nenhuma rota existente mudou.
+  gravações que o agente consultou. É aditivo: nenhuma rota existente mudou. Desde a 2.14.0, o
+  escopo vale para as **ferramentas** do agente, não para a rota: um PAT sem `transcripts:read`
+  pergunta normalmente, mas o agente só busca e lê resumos (sem `search_transcripts` nem
+  `read_transcript`); sessão e credencial de aparelho leem as duas fontes. Exigir
+  `transcripts:read` na rota seria escopo a mais numa rota existente.
 - **Rotas públicas** (sem credencial): `GET /health` (estático, sinal de vida), `GET /health/ready`
   (prontidão desde a 2.13.0: 200 ou 503 com só o nome e `ok`/`down` de Postgres, Redis e
   armazenamento), `GET /server` (descritor: nome, endereço,
   endereço MCP, impressão digital da CA raiz e versões), login e cadastro, login de admin,
   `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
-  de admin e `/devices/*`) têm limite de tentativas por IP (os logins também por conta):
-  estourado, **429** `rate_limited` com `Retry-After`. Código de pareamento inválido, vencido
-  ou usado é **401** `invalid_pairing_code`.
+  de admin e `/devices/*`) têm limite de tentativas por IP e rota: estourado, **429**
+  `rate_limited` com `Retry-After`. Desde a 2.14.0, os logins por senha (navegador, aparelho e
+  admin, este com contadores próprios) contam também as **falhas** da conta: por par (conta, IP),
+  10 em 15 min, e um teto da conta, 100 em 1 h, que não barra IP que entrou nela com sucesso nos
+  últimos 30 dias; o sucesso zera o par. Assim as tentativas de um IP qualquer não trancam a dona
+  da conta. Código de pareamento inválido, vencido ou usado é **401** `invalid_pairing_code`.
+- **Troca de senha** (`POST /me/password`): desde a 2.14.0, `revoke_tokens` opcional; `true`
+  revoga, além das outras sessões, as credenciais de aparelho e os PATs da conta. Ausente vale
+  `false`, o comportamento anterior (os tokens continuam). O web manda `true` por padrão.
 - **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
   impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0). Um PAT vazado não cria outro PAT e não lê nem apaga dado
   biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
@@ -77,7 +87,14 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   passageira (worker perdido, job sumido ou parado, falta de VRAM), que retranscrever ou
   `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
 - **Erros** em `application/problem+json` (RFC 9457) com o campo estável `code`; o cliente decide
-  por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível".
+  por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível". Desde a
+  2.14.0, qualquer operação pode responder **500** `internal_error` (o detalhe e o traceback ficam
+  só no log, com o `X-Request-ID`).
+- **Teto do corpo** (2.14.0): **413** `payload_too_large` em qualquer operação com corpo, com
+  `limit` (bytes), recusado pelo `Content-Length` antes de ler ou contado enquanto chega quando o
+  cabeçalho falta. Tetos: 64 KiB nas rotas públicas de credencial (`/auth/*`, `/admin/auth/*`,
+  `/devices/*`), os bytes da parte no `PUT` de parte e 1 MiB no resto da API e no `/mcp`. O Caddy
+  de borda recusa acima de 9 MiB (sem problem+json, porque só dispara acima do maior teto do app).
 - **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
   `next_cursor: null` na última página. Listagem incremental por `?since=` compara
   `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Desde a 2.8.0, um
@@ -100,7 +117,10 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
 - **Upload** resumível em partes (multipart S3 orquestrado pela API): `POST /uploads` com o
   `sha256` do arquivo → partes por `PUT` em URLs opacas que expiram → `POST /uploads/{id}/complete`.
   Mesmo hash de uma gravação do usuário responde 200 `deduplicated` sem transferir nada. Retomar é
-  `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`. O navegador sobe o áudio já convertido
+  `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`. Desde a 2.14.0, um `complete` com outro
+  do mesmo upload em andamento responde **409** `upload_completing` com `Retry-After`: é
+  passageiro, o cliente tenta de novo (o desktop no próximo ciclo; o web, ao reenviar, cai na
+  deduplicação por hash). O navegador sobe o áudio já convertido
   ([formato-audio-upload.md](../code/formato-audio-upload.md)): `audio/ogg; codecs=opus` e o
   `sha256` em hex minúsculo que a biblioteca de conversão devolve.
 - **Origem do áudio** (`source`): `desktop` e `mobile` são os apps que gravam, `upload` é o import

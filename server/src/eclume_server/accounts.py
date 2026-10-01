@@ -10,12 +10,13 @@ from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from eclume_server.db import tables as t
-from eclume_server.security import hash_password, needs_rehash, verify_password
+from eclume_server.db.session import system_tx
+from eclume_server.security import hash_password_async, needs_rehash, verify_password_async
 
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from sqlalchemy.ext.asyncio import AsyncConnection
+    from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 MIN_PASSWORD = 12
 # Aviso que toda conta aceita (substitui o consentimento de voz por pessoa). Texto novo, versão nova:
@@ -42,13 +43,22 @@ def notice() -> dict[str, str]:
     return {"version": NOTICE_VERSION, "text": NOTICE_TEXT}
 
 
-def _check(email: str, password: str) -> None:
+def _check_email(email: str) -> None:
     if not _EMAIL_RE.match(email):
         msg = f"e-mail inválido: {email}"
         raise AccountError(msg)
+
+
+def _check_password(password: str) -> None:
     if len(password) < MIN_PASSWORD:
         msg = f"a senha precisa de ao menos {MIN_PASSWORD} caracteres"
         raise AccountError(msg)
+
+
+async def new_password_hash(password: str) -> str:
+    """Hash de uma senha nova, conferido o tamanho mínimo; calcule-o antes de abrir a transação."""
+    _check_password(password)
+    return await hash_password_async(password)
 
 
 async def email_taken(conn: AsyncConnection, email: str) -> bool:
@@ -58,14 +68,15 @@ async def email_taken(conn: AsyncConnection, email: str) -> bool:
 
 
 async def create_user(
-    conn: AsyncConnection, *, email: str, name: str, password: str, notice_version: str | None = None
+    conn: AsyncConnection, *, email: str, name: str, password_hash: str, notice_version: str | None = None
 ) -> UUID:
     """Cria uma conta de usuário ativa, com os tipos de agenda padrão; e-mail único na instância.
 
-    Com `notice_version`, a conta nasce com o aceite do aviso (o cadastro). Roda com o papel de
-    conexão: a conta ainda não existe para a RLS.
+    `password_hash` vem de `new_password_hash`, calculado fora da transação. Com `notice_version`, a
+    conta nasce com o aceite do aviso (o cadastro). Roda com o papel de conexão: a conta ainda não
+    existe para a RLS.
     """
-    _check(email, password)
+    _check_email(email)
     msg = f"e-mail já cadastrado: {email}"
     if await email_taken(conn, email):
         raise EmailTakenError(msg)
@@ -75,7 +86,7 @@ async def create_user(
             user_id = (
                 await conn.execute(
                     insert(t.users)
-                    .values(email=email, name=name, password_hash=hash_password(password), **accepted)
+                    .values(email=email, name=name, password_hash=password_hash, **accepted)
                     .returning(t.users.c.id)
                 )
             ).scalar_one()
@@ -87,82 +98,95 @@ async def create_user(
     return user_id
 
 
-async def password_login(conn: AsyncConnection, email: str, password: str) -> UUID | None:
+async def password_login(engine: AsyncEngine, email: str, password: str) -> UUID | None:
     """Confere e-mail e senha de uma conta ativa e registra o login; `None` quando não confere.
 
-    E-mail inexistente gasta o mesmo tempo de argon2 que uma senha errada.
+    O argon2 roda fora do event loop e fora de transação. E-mail inexistente gasta o mesmo tempo de
+    argon2 que uma senha errada.
     """
-    query = select(t.users).where(func.lower(t.users.c.email) == email.lower())
-    user = (await conn.execute(query)).mappings().first()
-    if not verify_password(user["password_hash"] if user else None, password) or not user or not user["active"]:
+    async with system_tx(engine) as conn:
+        query = select(t.users).where(func.lower(t.users.c.email) == email.lower())
+        user = (await conn.execute(query)).mappings().first()
+    if not await verify_password_async(user["password_hash"] if user else None, password) or not user:
+        return None
+    if not user["active"]:
         return None
     values: dict[str, Any] = {"last_login_at": datetime.now(UTC)}
     if needs_rehash(user["password_hash"]):
-        values["password_hash"] = hash_password(password)
-    await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
+        values["password_hash"] = await hash_password_async(password)
+    async with system_tx(engine) as conn:
+        await conn.execute(update(t.users).where(t.users.c.id == user["id"]).values(**values))
     return user["id"]
 
 
+async def confirm_password(engine: AsyncEngine, user_id: UUID, password: str, message: str = "senha incorreta") -> None:
+    """Confere a senha da conta fora de transação; errada é `WrongPasswordError(message)`."""
+    async with system_tx(engine) as conn:
+        stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
+    if not await verify_password_async(stored, password):
+        raise WrongPasswordError(message)
+
+
 async def change_password(
-    conn: AsyncConnection, user_id: UUID, current: str, new: str, *, keep_session: UUID | None
+    engine: AsyncEngine,
+    user_id: UUID,
+    new: str,
+    *,
+    keep_session: UUID | None,
+    revoke_tokens: bool = False,
 ) -> None:
-    """Troca a senha da conta e encerra as outras sessões dela; senha atual errada é `AccountError`.
+    """Troca a senha da conta e encerra as outras sessões dela; confira antes a atual com `confirm_password`.
 
-    Os PATs continuam valendo: são credenciais à parte, revogáveis em Tokens.
+    Com `revoke_tokens`, revoga também os tokens da conta (credenciais de aparelho e PATs): quem troca
+    a senha por suspeita de vazamento encerra todo acesso.
     """
-    stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
-    if not verify_password(stored, current):
-        msg = "senha atual incorreta"
-        raise WrongPasswordError(msg)
-    if len(new) < MIN_PASSWORD:
-        msg = f"a senha precisa de ao menos {MIN_PASSWORD} caracteres"
-        raise AccountError(msg)
-    await conn.execute(update(t.users).where(t.users.c.id == user_id).values(password_hash=hash_password(new)))
-    others = delete(t.sessions).where(t.sessions.c.user_id == user_id)
-    if keep_session is not None:
-        others = others.where(t.sessions.c.id != keep_session)
-    await conn.execute(others)
+    password_hash = await new_password_hash(new)
+    async with system_tx(engine) as conn:
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(password_hash=password_hash))
+        others = delete(t.sessions).where(t.sessions.c.user_id == user_id)
+        if keep_session is not None:
+            others = others.where(t.sessions.c.id != keep_session)
+        await conn.execute(others)
+        if revoke_tokens:
+            await conn.execute(
+                update(t.api_tokens)
+                .where(t.api_tokens.c.user_id == user_id, t.api_tokens.c.revoked_at.is_(None))
+                .values(revoked_at=datetime.now(UTC))
+            )
 
 
-async def delete_user(conn: AsyncConnection, user_id: UUID, password: str) -> None:
-    """Apaga a conta e tudo o que é dela (as FKs levam em cascata); senha errada é `AccountError`.
+async def delete_user(conn: AsyncConnection, user_id: UUID) -> None:
+    """Apaga a conta e tudo o que é dela (as FKs levam em cascata); confira antes a senha com `confirm_password`.
 
     Os gatilhos das gravações e dos uploads em andamento põem os objetos na fila de exclusão do
     bucket na mesma transação.
     """
-    stored = (await conn.execute(select(t.users.c.password_hash).where(t.users.c.id == user_id))).scalar()
-    if not verify_password(stored, password):
-        msg = "senha incorreta"
-        raise WrongPasswordError(msg)
     await conn.execute(delete(t.users).where(t.users.c.id == user_id))
 
 
 async def create_admin(conn: AsyncConnection, *, email: str, name: str, password: str) -> UUID:
     """Cria uma conta de admin; o mesmo e-mail pode ter conta de usuário, que é outra conta."""
-    _check(email, password)
+    _check_email(email)
+    password_hash = await new_password_hash(password)
     taken = await conn.execute(select(t.admins.c.id).where(func.lower(t.admins.c.email) == email.lower()))
     if taken.first() is not None:
         msg = f"admin já cadastrado: {email}"
         raise AccountError(msg)
     return (
         await conn.execute(
-            insert(t.admins)
-            .values(email=email, name=name, password_hash=hash_password(password))
-            .returning(t.admins.c.id)
+            insert(t.admins).values(email=email, name=name, password_hash=password_hash).returning(t.admins.c.id)
         )
     ).scalar_one()
 
 
 async def set_admin_password(conn: AsyncConnection, *, email: str, password: str) -> UUID:
     """Troca a senha do admin e encerra as sessões dele."""
-    if len(password) < MIN_PASSWORD:
-        msg = f"a senha precisa de ao menos {MIN_PASSWORD} caracteres"
-        raise AccountError(msg)
+    password_hash = await new_password_hash(password)
     admin_id = (
         await conn.execute(
             update(t.admins)
             .where(func.lower(t.admins.c.email) == email.lower())
-            .values(password_hash=hash_password(password))
+            .values(password_hash=password_hash)
             .returning(t.admins.c.id)
         )
     ).scalar()

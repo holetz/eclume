@@ -14,7 +14,7 @@ from eclume_server_testing.api import audio_bytes, put_parts, upload_file
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -380,3 +380,42 @@ def test_uploads_vencidos_sao_descartados_pelo_worker(
     assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "expired"
     pending = services.s3().list_multipart_uploads(Bucket=services.settings.s3_bucket).get("Uploads", [])
     assert s3_upload_id not in {u["UploadId"] for u in pending}
+
+
+def test_parte_sem_content_length_acima_do_esperado_e_413(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    api = as_user(make_user())
+    data = audio_bytes(1700)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    part = upload["parts"][0]
+
+    def chunks() -> Iterator[bytes]:
+        yield data
+        yield b"sobra"
+
+    put = api.client.put(part["url"], content=chunks(), headers=part["headers"])
+    assert (put.status_code, put.json()["code"]) == (413, "payload_too_large")
+    assert put_parts(api, upload, data)
+
+
+def test_complete_com_outro_em_andamento_e_409_upload_completing_e_a_trava_vencida_e_retomada(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    data = audio_bytes(1800)
+    upload = api.post("/api/v1/uploads", json=_body(data)).json()
+    sent = put_parts(api, upload, data)
+    key = f"eclume:upload:completing:{upload['id']}"
+    conn = redis.Redis.from_url(services.settings.redis_url)
+    conn.set(key, "outro-processo", ex=120)
+    busy = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": sent})
+    assert (busy.status_code, busy.json()["code"]) == (409, "upload_completing")
+    assert int(busy.headers["Retry-After"]) > 0
+    assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "in_progress"
+
+    # A trava do processo morto venceu: o próximo `complete` conclui e não deixa trava.
+    conn.delete(key)
+    done = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": sent})
+    assert done.status_code == 201, done.text
+    assert conn.exists(key) == 0

@@ -133,12 +133,17 @@ def _public_checks(api: Api) -> None:
     status, headers, _ = api.raw("GET", "/api/v1/health")
     if status != 200:  # noqa: PLR2004
         _fail(f"health → {status}")
+    _security_headers("/api/v1/health", headers)
     for path in ("/", "/entrar"):
         status, headers, body = api.raw("GET", path)
         if status != 200 or b'id="root"' not in body:  # noqa: PLR2004
             _fail(f"{path} não devolveu o index.html do SPA ({status})")
         if "immutable" in headers.get("Cache-Control", ""):
             _fail(f"{path} saiu com cache longo: {headers.get('Cache-Control')}")
+        _security_headers(path, headers)
+        csp = headers.get("Content-Security-Policy") or ""
+        if "default-src 'self'" not in csp or "'wasm-unsafe-eval'" not in csp:
+            _fail(f"{path} sem a CSP do web: {csp!r}")
     # Chunk de um deploy anterior: 404 sem cache longo, nunca o index.html guardado por um ano.
     status, headers, _ = api.raw("GET", "/assets/nao-existe-smoke.js")
     if status != 404 or "immutable" in headers.get("Cache-Control", ""):  # noqa: PLR2004
@@ -149,9 +154,29 @@ def _public_checks(api: Api) -> None:
     signup = api.json("GET", "/api/v1/auth/signup")
     if not signup["open"] or not signup["notice"]["version"]:
         _fail(f"cadastro fechado ou sem o aviso: {signup}")
+    _body_limits(api)
     _step(
-        f"health, SPA, asset ausente 404, /downloads/latest.json e cadastro aberto (aviso v{signup['notice']['version']}) ok"
+        f"health, SPA, cabeçalhos de segurança, asset ausente 404, /downloads/latest.json, tetos de corpo e "
+        f"cadastro aberto (aviso v{signup['notice']['version']}) ok"
     )
+
+
+def _security_headers(path: str, headers: Any) -> None:  # noqa: ANN401 — `email.message.Message`
+    expected = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
+    wrong = {name: headers.get(name) for name, value in expected.items() if headers.get(name) != value}
+    if wrong or "frame-ancestors 'none'" not in (headers.get("Content-Security-Policy") or ""):
+        _fail(f"{path} sem os cabeçalhos de segurança: {wrong} CSP={headers.get('Content-Security-Policy')!r}")
+
+
+def _body_limits(api: Api) -> None:
+    """413 do server (problem+json) acima do teto da rota de credencial e do Caddy acima de 9 MiB."""
+    json_type = {"Content-Type": "application/json"}
+    status, headers, body = api.raw("POST", "/api/v1/auth/login", b" " * (65 * 1024), json_type)
+    if status != 413 or b"payload_too_large" not in body:  # noqa: PLR2004
+        _fail(f"login com 65 KiB → {status} {headers.get('Content-Type')}: {body[:200]!r}")
+    status, _, _ = api.raw("POST", "/api/v1/recordings", b" " * (10 * 1024 * 1024), json_type)
+    if status != 413:  # noqa: PLR2004
+        _fail(f"corpo de 10 MiB na API → {status}, esperado 413 do Caddy de borda")
 
 
 def choose_provider(items: list[dict[str, Any]], wanted: str | None = None) -> dict[str, Any]:
