@@ -253,6 +253,39 @@ describe('documento do resumo', () => {
     await waitFor(() => expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(1))
     expect(await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()).toEqual({})
   })
+
+  it('sem agente de resumo, diz o motivo e tenta de novo como ação secundária, sem 422 cru', async () => {
+    const user = userEvent.setup()
+    const recording = fixtures.recordingTranscribed()
+    recording.pipeline = recording.pipeline.map((step) =>
+      step.step === 'summary' ? { ...step, state: 'skipped', reason: 'no_provider' } : step,
+    )
+    mockTranscriptApi({
+      'GET /api/v1/recordings/:id': () => recording,
+      'GET /api/v1/recordings/:id/summary': () => ({ current: null, generated: null, pending: null, version_count: 0 }),
+      'POST /api/v1/transcripts/:id/summaries': () =>
+        json(
+          {
+            type: 'about:blank',
+            title: 'validation_failed',
+            status: 422,
+            code: 'validation_failed',
+            errors: [{ field: 'provider_id', message: 'nenhum provider de resumo configurado' }],
+          },
+          422,
+        ),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    const reason = 'Sem resumo: nenhum agente configurado; fale com quem administra.'
+    expect(await within(section).findByText(reason)).toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'Gerar resumo' })).not.toBeInTheDocument()
+    const retry = within(section).getByRole('button', { name: 'Tentar de novo' })
+    expect(retry).toHaveClass('btn-secondary')
+    await user.click(retry)
+    expect(await within(section).findByRole('alert')).toHaveTextContent(reason)
+    expect(within(section).queryByText(/provider_id/)).not.toBeInTheDocument()
+  })
 })
 
 describe('edição do resumo', () => {
