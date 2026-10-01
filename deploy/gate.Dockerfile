@@ -1,10 +1,11 @@
-# Executor do gate de qualidade do eclume (deploy/gate-host.sh): a imagem eclume-gate:24.04, sobre a
+# Executor do gate de qualidade do eclume (deploy/gate-host.sh): a imagem eclume-gate:<versão do Rust>, sobre a
 # de compilação cruzada do release do desktop (desktop/build-windows.Dockerfile: Rust estável,
 # clippy, rustfmt, cargo-xwin, LLVM 18, ninja e as libs do Tauri), mais o que os outros pilares de
 # deploy/pilares.sh pedem: Node 22, uv, ffmpeg, Python 3, o Google Chrome (canal `chrome` do web) e
 # as dependências de sistema do Chromium do Playwright (o navegador em si o pilar baixa sem root).
 # Contrato: docs/standards/code/monorepo.md.
-FROM eclume-desktop-build-windows:24.04
+ARG RUST
+FROM eclume-desktop-build-windows:${RUST}
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg python3 xz-utils wget gnupg \
@@ -24,4 +25,4 @@ RUN curl -fsSLo /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome
  && npx --yes playwright@1 install-deps chromium \
  && rm -rf /tmp/chrome.deb /var/lib/apt/lists/* /root/.npm
 # Núcleo do app móvel para o Android (o NDK chega do host, só leitura).
-RUN rustup target add aarch64-linux-android && chmod -R a+rwX /opt/cargo /opt/rustup
+RUN rustup target add aarch64-linux-android armv7-linux-androideabi && chmod -R a+rwX /opt/cargo /opt/rustup

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Gate de qualidade do eclume, a parte que roda no host GPU a partir da árvore extraída do
 # `git archive` do commit (deploy/gate.sh a envia e chama este script). Roda os sete pilares de
-# deploy/pilares.sh, cada um num contêiner da imagem eclume-gate:24.04 (CPU, memória e prioridade
+# deploy/pilares.sh, cada um num contêiner da imagem eclume-gate:<Rust> (CPU, memória e prioridade
 # limitadas, uid 1000, sem socket do Docker nem token do gh), contra os serviços de teste e o mock
 # do projeto compose eclume-gate, e publica o resultado no commit como status `eclume/gate`.
 # Contrato: docs/standards/code/monorepo.md.
@@ -25,7 +25,9 @@ MEMORIA="${ECLUME_GATE_MEMORY:-4g}"
 CACHE_GB="${ECLUME_GATE_CACHE_GB:-25}"
 NDK="${ECLUME_GATE_NDK:-$HOME/android-sdk/ndk/28.2.13676358}"
 PROJETO=eclume-gate
-IMG=eclume-gate:24.04
+# As imagens levam na tag a versão do Rust de desktop/rust-toolchain.toml.
+RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml)"
+IMG="eclume-gate:$RUST"
 SHA=""
 PILARES_PEDIDOS=""
 
@@ -106,11 +108,11 @@ fi
 
 # --- imagens: as de base do release, se faltarem, e a do gate (camadas em cache) ------------------
 export BUILDKIT_PROGRESS=plain
-docker image inspect eclume-desktop-build:24.04 >/dev/null 2>&1 \
-  || docker build -q -t eclume-desktop-build:24.04 - < desktop/build.Dockerfile
-docker image inspect eclume-desktop-build-windows:24.04 >/dev/null 2>&1 \
-  || docker build -q -t eclume-desktop-build-windows:24.04 - < desktop/build-windows.Dockerfile
-docker build -q -t "$IMG" - < deploy/gate.Dockerfile
+docker image inspect "eclume-desktop-build:$RUST" >/dev/null 2>&1 \
+  || docker build -q -t "eclume-desktop-build:$RUST" -f desktop/build.Dockerfile desktop
+docker image inspect "eclume-desktop-build-windows:$RUST" >/dev/null 2>&1 \
+  || docker build -q --build-arg "RUST=$RUST" -t "eclume-desktop-build-windows:$RUST" - < desktop/build-windows.Dockerfile
+docker build -q --build-arg "RUST=$RUST" -t "$IMG" - < deploy/gate.Dockerfile
 
 # --- serviços: Postgres, Redis, MinIO e o mock, na rede do projeto --------------------------------
 compose up -d --wait
