@@ -126,3 +126,26 @@ def test_rede_de_cada_servico_declarada() -> None:
 def test_rede_conteiner_python_sem_capabilities(service: str) -> None:
     assert SERVICES[service]["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in SERVICES[service]["security_opt"]
+
+
+# Serviços de longa duração com teto; o mdns (rede do host, só anúncio) e o Postgres (protegido
+# pelo `oom_score_adj`) ficam de fora.
+LIMITED = ("caddy", "web", "server", "worker-cpu", "worker-agents", "worker-gpu", "redis", "minio")
+
+
+@pytest.mark.parametrize("service", LIMITED)
+def test_limite_de_memoria_por_env(service: str) -> None:
+    var = "ECLUME_MEM_" + service.upper().replace("-", "_")
+    assert re.fullmatch(rf"\$\{{{var}:-\d+[mg]\}}", str(SERVICES[service]["mem_limit"]))
+
+
+def test_limite_postgres_protegido_do_oom() -> None:
+    assert SERVICES["postgres"]["oom_score_adj"] < 0
+    assert SERVICES["postgres"]["shm_size"] == "256m"
+
+
+def test_limite_build_do_desktop() -> None:
+    script = Path(__file__).with_name("release-desktop.sh").read_text(encoding="utf-8")
+    runs = re.findall(r"--cpus 2[^\n]*", script)
+    assert runs
+    assert all('--memory "$MEMORIA"' in run for run in runs)

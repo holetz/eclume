@@ -68,6 +68,7 @@ services:
   caddy:
     <<: *restart
     networks: [borda]
+    mem_limit: ${ECLUME_MEM_CADDY:-256m}
     image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     depends_on:
       server: {condition: service_healthy}
@@ -85,6 +86,7 @@ services:
   web:
     <<: *restart
     networks: [borda]
+    mem_limit: ${ECLUME_MEM_WEB:-128m}
     image: eclume-web:prod
     build:
       context: ..
@@ -95,6 +97,7 @@ services:
   server:
     <<: [*restart, *server-image, *hardened]
     networks: [borda, dados]
+    mem_limit: ${ECLUME_MEM_SERVER:-1g}
     environment: *server-env
     depends_on:
       postgres: {condition: service_healthy}
@@ -115,6 +118,7 @@ services:
   worker-cpu:
     <<: [*restart, *server-image, *hardened]
     networks: [dados, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_CPU:-1g}
     command: ["arq", "eclume_server.worker.WorkerSettings"]
     environment:
       <<: *server-env
@@ -131,6 +135,7 @@ services:
   worker-agents:
     <<: [*restart, *server-image, *hardened]
     networks: [dados, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_AGENTS:-2g}
     command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
     environment:
       <<: *server-env
@@ -147,6 +152,7 @@ services:
   worker-gpu:
     <<: [*restart, *hardened]
     networks: [fila-gpu, saida]
+    mem_limit: ${ECLUME_MEM_WORKER_GPU:-8g}
     image: eclume-worker-gpu:prod
     # Só a tag: label ou ENV com o SHA mudariam o ID da imagem a cada deploy e recriariam o
     # container (com dreno) mesmo sem mudança no worker.
@@ -203,6 +209,9 @@ services:
   postgres:
     <<: *restart
     networks: [dados]
+    # O OOM do host escolhe outro antes do banco; o shm padrão (64 MB) não basta ao paralelismo.
+    oom_score_adj: -800
+    shm_size: 256m
     image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       # Superusuário: dono do schema, usado só pelo one-shot `migrate` (e pelo backup). A aplicação
@@ -221,6 +230,7 @@ services:
   redis:
     <<: *restart
     networks: [dados, fila-gpu]
+    mem_limit: ${ECLUME_MEM_REDIS:-512m}
     image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     configs:
@@ -240,6 +250,7 @@ services:
   minio:
     <<: *restart
     networks: [dados, fila-gpu]
+    mem_limit: ${ECLUME_MEM_MINIO:-1g}
     # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do
     # mesmo servidor, fixado.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
@@ -383,6 +394,10 @@ configs:
           reverse_proxy web:80
         }
       }
+
+# Limites de memória (`mem_limit`) por env, `ECLUME_MEM_<SERVIÇO>`: os padrões são provisórios e
+# folgados (host de 16 GB) até a medição de 24 h (pico × 1,5, docs/project/deploy-producao.md).
+# Os workers não ganham `oom_score_adj`: com teto próprio, o OOM fica dentro do cgroup deles.
 
 # Redes por papel: `borda` (Caddy, web, server); `dados`, interna (Postgres, Redis, MinIO, server,
 # workers CPU e os one-shots); `fila-gpu`, interna (Redis, MinIO e worker GPU); `saida` (workers que
