@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { Navigate, type RouteObject } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { NotFoundPage } from './NotFoundPage'
@@ -40,39 +40,43 @@ function page(Page: ComponentType) {
   )
 }
 
-export function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/entrar" element={<LoginPage />} />
-      <Route path="/cadastro" element={page(SignupPage)} />
-      {/* Quem lê o QR com a câmera comum cai aqui, sem sessão. */}
-      <Route path="/parear" element={page(PairPage)} />
-      {/* O painel admin fica fora da sessão do usuário: conta, login e guarda próprios. */}
-      <Route path="/admin/entrar" element={page(AdminSignInPage)} />
-      <Route path="/admin/*" element={page(AdminRoutes)} />
-      <Route element={<RequireSession />}>
-        <Route index element={<LibraryPage />} />
-        <Route path="/gravacoes/:id" element={page(RecordingPage)} />
-        {/* Importar é o modal da biblioteca; a rota antiga abre o modal. */}
-        <Route path="/importar" element={<Navigate to="/?importar=1" replace />} />
-        <Route path="/pessoas" element={page(PeoplePage)} />
-        <Route path="/pessoas/:id" element={page(PersonPage)} />
-        <Route path="/busca" element={page(SearchPage)} />
-        <Route path="/perguntas" element={page(ChatPage)} />
-        <Route path="/colecoes" element={page(CollectionsPage)} />
-        <Route path="/tags" element={page(TagsPage)} />
-        <Route path="/config/campos" element={page(FieldsPage)} />
-        <Route path="/config/agendas" element={page(AgendaTypesPage)} />
-        <Route path="/config/mcp" element={page(McpPage)} />
-        <Route path="/config/conta" element={page(AccountPage)} />
-        <Route path="/config/ambiente" element={page(EnvironmentPage)} />
-        <Route path="/tokens" element={page(TokensPage)} />
-        <Route path="/app-desktop" element={page(DesktopPage)} />
-        <Route path="/app-movel" element={page(MobilePage)} />
-        <Route path="/ajuda" element={page(HelpCenterPage)} />
-        <Route path="/ajuda/:slug" element={page(ArticlePage)} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
-  )
-}
+// A mesma árvore serve o `createBrowserRouter` do app e o `createMemoryRouter` dos testes.
+export const routes: RouteObject[] = [
+  { path: '/entrar', element: <LoginPage /> },
+  { path: '/cadastro', element: page(SignupPage) },
+  // Quem lê o QR com a câmera comum cai aqui, sem sessão.
+  { path: '/parear', element: page(PairPage) },
+  // O painel admin fica fora da sessão do usuário: conta, login e guarda próprios.
+  { path: '/admin/entrar', element: page(AdminSignInPage) },
+  { path: '/admin/*', element: page(AdminRoutes) },
+  {
+    element: <RequireSession />,
+    children: [
+      {
+        children: [
+          { index: true, element: <LibraryPage /> },
+          { path: '/gravacoes/:id', element: page(RecordingPage) },
+          // Importar é o modal da biblioteca; a rota antiga abre o modal.
+          { path: '/importar', element: <Navigate to="/?importar=1" replace /> },
+          { path: '/pessoas', element: page(PeoplePage) },
+          { path: '/pessoas/:id', element: page(PersonPage) },
+          { path: '/busca', element: page(SearchPage) },
+          { path: '/perguntas', element: page(ChatPage) },
+          { path: '/colecoes', element: page(CollectionsPage) },
+          { path: '/tags', element: page(TagsPage) },
+          { path: '/config/campos', element: page(FieldsPage) },
+          { path: '/config/agendas', element: page(AgendaTypesPage) },
+          { path: '/config/mcp', element: page(McpPage) },
+          { path: '/config/conta', element: page(AccountPage) },
+          { path: '/config/ambiente', element: page(EnvironmentPage) },
+          { path: '/tokens', element: page(TokensPage) },
+          { path: '/app-desktop', element: page(DesktopPage) },
+          { path: '/app-movel', element: page(MobilePage) },
+          { path: '/ajuda', element: page(HelpCenterPage) },
+          { path: '/ajuda/:slug', element: page(ArticlePage) },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
+    ],
+  },
+]
