@@ -18,8 +18,11 @@
 //!
 //! Esquema v4: `title` e `agenda_type_id` são o título e o tipo de agenda escolhidos ao parar (no
 //! celular, a folha "Gravação salva"), e `details_pending` segura o sync enquanto essa folha está
-//! aberta, por no máximo [`DETAILS_WAIT_MS`]. Uma fila v1, v2 ou v3 ganha as colunas e a tabela na
-//! abertura, sem perder linhas.
+//! aberta, por no máximo [`DETAILS_WAIT_MS`].
+//!
+//! Esquema v5: `server_title` é o título que o servidor dá à gravação depois de processada, lido
+//! da listagem por `?since=`; a fila mostra o título local, senão ele. Uma fila v1 a v4 ganha as
+//! colunas e a tabela na abertura, sem perder linhas.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,7 +32,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRe
 use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
 use serde::Serialize;
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 /// Quanto uma gravação com `details_pending` espera o título e o tipo antes de subir sem eles.
 pub const DETAILS_WAIT_MS: i64 = 10 * 60 * 1_000;
@@ -63,7 +66,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     content_type       TEXT,
     title              TEXT,
     agenda_type_id     TEXT,
-    details_pending    INTEGER NOT NULL DEFAULT 0
+    details_pending    INTEGER NOT NULL DEFAULT 0,
+    server_title       TEXT
 );
 CREATE INDEX IF NOT EXISTS recordings_status ON recordings (status, started_at);
 CREATE TABLE IF NOT EXISTS markers (
@@ -76,8 +80,8 @@ CREATE TABLE IF NOT EXISTS markers (
 CREATE INDEX IF NOT EXISTS markers_recording ON markers (recording_id, at_ms);
 ";
 
-/// Colunas que a v2, a v3 e a v4 acrescentaram, com o tipo, para migrar uma fila anterior.
-const ADDED_COLUMNS: [(&str, &str); 14] = [
+/// Colunas que a v2 a v5 acrescentaram, com o tipo, para migrar uma fila anterior.
+const ADDED_COLUMNS: [(&str, &str); 15] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
     ("next_attempt_at", "INTEGER"),
@@ -92,6 +96,7 @@ const ADDED_COLUMNS: [(&str, &str); 14] = [
     ("title", "TEXT"),
     ("agenda_type_id", "TEXT"),
     ("details_pending", "INTEGER NOT NULL DEFAULT 0"),
+    ("server_title", "TEXT"),
 ];
 
 /// Um enum guardado como texto na fila, lido, escrito e serializado no vocabulário do contrato.
@@ -297,6 +302,8 @@ pub struct QueuedRecording {
     pub agenda_type_id: Option<String>,
     /// A pessoa ainda pode dar título e tipo: o sync espera.
     pub details_pending: bool,
+    /// O título que o servidor deu à gravação depois de processada.
+    pub server_title: Option<String>,
 }
 
 impl QueuedRecording {
@@ -330,6 +337,7 @@ impl QueuedRecording {
                 title: row.get("title")?,
                 agenda_type_id: row.get("agenda_type_id")?,
                 details_pending: row.get::<_, i64>("details_pending")? != 0,
+                server_title: row.get("server_title")?,
             },
             status,
         ))
@@ -568,6 +576,15 @@ impl Queue {
             bail!("gravação {id} não está na fila");
         }
         Ok(())
+    }
+
+    /// Guarda o título que o servidor deu à gravação `remote_id`; `true` se mudou alguma linha.
+    pub fn set_server_title(&self, remote_id: &str, title: &str) -> Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE recordings SET server_title = ?2 WHERE remote_id = ?1 AND server_title IS NOT ?2",
+            params![remote_id, title],
+        )?;
+        Ok(changed > 0)
     }
 
     /// Registra o app da reunião que originou a gravação.
@@ -855,7 +872,7 @@ fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     Ok(())
 }
 
-/// Acrescenta as colunas da v2, da v3 e da v4 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
+/// Acrescenta as colunas da v2 a v5 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
 /// mexe numa tabela que já existe; a tabela `markers` nasce no `SCHEMA`).
 fn migrate(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
@@ -1280,14 +1297,18 @@ mod tests {
         let rec = queue.claim_next().unwrap().unwrap();
         assert_eq!(rec.id, "velha");
         assert!(rec.upload_id.is_none());
+        assert!(rec.server_title.is_none());
         queue.set_upload_state("velha", Some("up"), None).unwrap();
+        queue.mark_synced("velha", "srv-velha").unwrap();
+        assert!(queue.set_server_title("srv-velha", "Alinhamento").unwrap());
+        assert!(!queue.set_server_title("srv-velha", "Alinhamento").unwrap());
+        assert!(!queue.set_server_title("srv-outra", "Alinhamento").unwrap());
         drop(queue);
         // Reabrir uma fila já migrada não mexe em nada.
         let queue = Queue::open(&db).unwrap();
-        assert_eq!(
-            queue.get("velha").unwrap().unwrap().upload_id.as_deref(),
-            Some("up")
-        );
+        let velha = queue.get("velha").unwrap().unwrap();
+        assert_eq!(velha.upload_id.as_deref(), Some("up"));
+        assert_eq!(velha.server_title.as_deref(), Some("Alinhamento"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
