@@ -17,6 +17,7 @@ export function useSummaryState(recordingId: string, enabled = true) {
     enabled,
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}/summary', { params: { path: { recording_id: recordingId } } })),
+    refetchOnWindowFocus: true,
     refetchInterval: pollWhile((data: SummaryState | undefined) => !!data?.pending, POLL_MS),
   })
 }

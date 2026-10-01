@@ -38,6 +38,7 @@ export function useChat(recordingId: string, enabled = true) {
           params: { path: { recording_id: recordingId }, query: { limit: 200 } },
         }),
       ),
+    refetchOnWindowFocus: true,
   })
 }
 

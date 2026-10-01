@@ -57,6 +57,8 @@ export function useLibraryRange(range: Range, filters: LibraryFilters, enabled =
       }
       return { items, truncated: true }
     },
+    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    refetchOnWindowFocus: true,
     refetchInterval: pollWhile<RangeResult>((data) => anyBusy(data?.items), POLL_MS),
   })
 }
@@ -90,6 +92,8 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
+    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    refetchOnWindowFocus: true,
     refetchInterval: pollWhile<{ pages: { items: Recording[] }[] }>(
       (data) => data?.pages.some((page) => anyBusy(page.items)) ?? false,
       POLL_MS,

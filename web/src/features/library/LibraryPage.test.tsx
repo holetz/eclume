@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { focusManager } from '@tanstack/react-query'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
@@ -8,6 +9,7 @@ import { renderApp } from '../../test/render'
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  focusManager.setFocused(undefined)
 })
 
 const WEEK = '/?visao=semana&data=2026-09-21'
@@ -195,6 +197,22 @@ describe('biblioteca na semana', () => {
     // A pergunta "tem alguma?" vai sem período e sem filtro.
     const any = http.requests('GET /api/v1/recordings').map((r) => new URL(r.url).searchParams)
     expect(any.some((query) => query.get('limit') === '1' && !query.has('from'))).toBe(true)
+  })
+})
+
+describe('releitura no foco', () => {
+  it('voltar para a aba relê as gravações do período', async () => {
+    saturdayMorning()
+    const http = mockLibrary()
+    renderApp(WEEK)
+    await screen.findByText('21–27 de setembro de 2026')
+    const ranged = () => http.requests('GET /api/v1/recordings').filter((r) => new URL(r.url).searchParams.has('from'))
+    await waitFor(() => expect(ranged()).toHaveLength(1))
+
+    act(() => focusManager.setFocused(false))
+    vi.setSystemTime(new Date(2026, 8, 26, 11, 13))
+    act(() => focusManager.setFocused(true))
+    await waitFor(() => expect(ranged()).toHaveLength(2))
   })
 })
 

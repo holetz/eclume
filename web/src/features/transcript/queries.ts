@@ -21,6 +21,7 @@ export function useRecording(id: string) {
     queryKey: recordingKey(id),
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}', { params: { path: { recording_id: id } } })),
+    refetchOnWindowFocus: true,
     refetchInterval: pollWhile(
       (data: Schemas['Recording'] | undefined) => !!data && recordingState(data).state === 'busy',
       POLL_MS,
