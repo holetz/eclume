@@ -32,6 +32,13 @@ describe('tokens de acesso', () => {
     expect(within(rows[1]).queryByText(/Aparelho/)).not.toBeInTheDocument()
   })
 
+  it('leva à referência da API servida pelo próprio servidor', async () => {
+    mockTokensApi()
+    renderApp('/tokens')
+    const link = await screen.findByRole('link', { name: 'Referência da API' })
+    expect(link).toHaveAttribute('href', '/referencia-api.html')
+  })
+
   it('põe os revogados no fim e marca os expirados', async () => {
     const page = fixtures.tokenPage()
     page.items[0].revoked_at = '2026-09-20T10:00:00Z'

@@ -52,8 +52,10 @@ function helpArticle() {
 
 const components: Components = {
   a({ href = '', children }) {
-    // Rotas do app viram navegação do SPA; arquivos em /downloads/ e endereços externos, links comuns.
-    if (href.startsWith('/') && !href.startsWith('/downloads/')) return <Link to={href}>{children}</Link>
+    // Rotas do app viram navegação do SPA; arquivos servidos ao lado do app (/downloads/, páginas
+    // .html como a referência da API) e endereços externos, links comuns.
+    const file = href.startsWith('/downloads/') || /\.html(?:[?#]|$)/.test(href)
+    if (href.startsWith('/') && !file) return <Link to={href}>{children}</Link>
     if (href.startsWith('/')) return <a href={href}>{children}</a>
     return (
       <a href={href} target="_blank" rel="noreferrer">

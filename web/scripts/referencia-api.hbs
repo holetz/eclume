@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>{{title}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  {{!-- Referência da API do eclume (docs/standards/api/contrato-v1.md). Modelo próprio, sem o
+  <link> do Google Fonts do modelo padrão: fontes do sistema e as cores do DS. O
+  scripts/referencia-api.mjs troca o script do Redoc vindo da CDN pela cópia local e falha se
+  sobrar recurso de outra origem. --}}
+  <style>
+    body { margin: 0; padding: 0; background: #f7f5f2; color: #262420; }
+  </style>
+  {{{redocHead}}}
+</head>
+<body>
+  {{{redocHTML}}}
+</body>
+</html>

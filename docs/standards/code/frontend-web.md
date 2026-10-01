@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127
 maintainer: holetz
 ---
 
@@ -77,7 +77,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `base-uri 'none'` e `object-src 'none'`, com `X-Content-Type-Options: nosniff` e
   `Referrer-Policy: no-referrer`. O app respeita: nenhum script ou estilo inline no `index.html`,
   nenhum recurso de outra origem (fontes e ícones vêm dos assets), o áudio de `/media` na mesma
-  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. O Caddy
+  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. A única
+  exceção é a referência da API (`/referencia-api.html` e `/referencia-api/*`, HTML do Redoc gerado
+  no build): o mesmo `script-src 'self'`, mas `style-src 'self' 'unsafe-inline'`, porque o Redoc
+  injeta o CSS em `<style>`; norma em [contrato-v1.md](../api/contrato-v1.md). O Caddy
   de borda repete `nosniff`, `Referrer-Policy` e `frame-ancestors 'none'` (sem sobrescrever a CSP
   do web) para `/api`, `/media`, `/mcp` e `/downloads`.
 
