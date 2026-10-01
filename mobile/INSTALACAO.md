@@ -48,6 +48,11 @@ pareamento.
 
 ## Desinstalar ou trocar de aparelho
 
+- **Antes de desinstalar** (inclusive para trocar um APK de teste pelo de release, que não instala
+  por cima por ter outra assinatura), conecte o celular ao Wi‑Fi do servidor e confira **"Tudo
+  sincronizado"** em "Neste celular", no Início: desinstalar apaga as gravações que ainda não
+  subiram.
+
 - **Sair e esquecer o servidor** (em Configurações) apaga o acesso deste celular; as gravações que
   ainda aguardam o sync ficam e sobem no próximo servidor pareado.
 - O acesso de um aparelho não se revoga sozinho: desvincule-o na web, em Minhas configurações →
