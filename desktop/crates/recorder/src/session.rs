@@ -1,8 +1,10 @@
 //! Uma sessão de gravação: fontes → mixer → Ogg/Opus em disco → fila.
 //!
 //! O arquivo nasce como `<id>.ogg.part` e só vira `<id>.ogg` ao parar. A linha da fila nasce em
-//! `recording` e passa a `pending` no mesmo momento. Se o processo morrer no meio,
-//! [`recover`] acerta arquivo e linha na abertura seguinte.
+//! `recording` e passa a `pending` no mesmo momento. Parar sempre fecha: uma falha ou pânico da
+//! thread de gravação vira `pending` com `interrupted = 1`. Se o processo morrer no meio, ou o
+//! `.part` seguir preso, [`recover_orphans`] acerta arquivo e linha depois (na abertura, por
+//! [`recover`], ou na varredura do app aberto).
 //!
 //! Uma sessão pausada continua lendo as fontes e descarta as amostras: o dispositivo segue aberto
 //! (reabri-lo em segundo plano esbarraria nas restrições do celular), e o tempo de áudio
@@ -30,6 +32,10 @@ use crate::AudioSource;
 /// Quanto cada leitura de fonte espera, no máximo, por amostras.
 const READ_TIMEOUT: Duration = Duration::from_millis(10);
 const PART_SUFFIX: &str = ".part";
+/// Tentativas de renomear o `.part` ao parar, com espera dobrando a partir de [`RENAME_WAIT`]
+/// (~3 s no total): no Windows, antivírus e indexador seguram o arquivo por instantes.
+const RENAME_ATTEMPTS: u32 = 5;
+const RENAME_WAIT: Duration = Duration::from_millis(200);
 
 /// Onde e como gravar.
 #[derive(Clone, Debug)]
@@ -84,20 +90,23 @@ impl StartOptions {
 pub enum StopReason {
     /// Pedido de parada (botão, atalho, bandeja, fim da reunião).
     Requested,
-    /// Todas as fontes acabaram, ou houve erro.
+    /// Todas as fontes acabaram.
     SourcesEnded,
     /// Nota: houve voz e depois o silêncio configurado.
     Silence,
     /// Nota: nenhuma voz nos primeiros segundos.
     NoSpeech,
+    /// A gravação falhou (erro de E/S ou pânico da thread de gravação).
+    Failed,
 }
 
 impl StopReason {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::Requested,
         Self::SourcesEnded,
         Self::Silence,
         Self::NoSpeech,
+        Self::Failed,
     ];
 }
 
@@ -318,25 +327,32 @@ impl ActiveRecording {
     }
 
     /// Para a gravação, fecha o arquivo e o entrega à fila como `pending` (com `details_pending`
-    /// quando a config pede título e tipo ao parar).
+    /// quando a config pede título e tipo ao parar). Sempre fecha: um erro ou pânico da thread de
+    /// gravação vai para o log e a linha sai com `interrupted = 1`, a duração do que foi gravado e
+    /// o Ogg legível até a última página escrita. Só falha quando a fila falha ou o `.part` segue
+    /// preso depois das retentativas; aí a linha fica `recording` para [`recover_orphans`].
     pub fn stop(self, queue: &Queue) -> Result<QueuedRecording> {
         self.stop.store(true, Ordering::Release);
-        let samples = self
-            .worker
-            .join()
-            .map_err(|_| anyhow!("a thread de gravação entrou em pânico"))??;
+        let interrupted = match self.worker.join() {
+            Ok(Ok(_)) => false,
+            Ok(Err(err)) => {
+                log::error!("a gravação {} falhou: {err:#}", self.id);
+                true
+            }
+            Err(_) => {
+                log::error!("a thread da gravação {} entrou em pânico", self.id);
+                self.progress.finish(StopReason::Failed);
+                true
+            }
+        };
 
-        std::fs::rename(&self.part_path, &self.final_path)
-            .with_context(|| format!("falha ao renomear {}", self.part_path.display()))?;
-        let bytes = std::fs::metadata(&self.final_path)?.len();
-        let duration_ms = i64::try_from(samples * 1_000 / u64::from(TARGET_RATE))?;
-        queue.finish(
-            &self.id,
-            &self.final_path,
-            now_ms(),
-            duration_ms,
-            i64::try_from(bytes)?,
-        )?;
+        rename_retrying(&self.part_path, &self.final_path)?;
+        let bytes = i64::try_from(std::fs::metadata(&self.final_path)?.len())?;
+        let duration_ms = self.progress.position_ms();
+        queue.finish(&self.id, &self.final_path, now_ms(), duration_ms, bytes)?;
+        if interrupted {
+            queue.mark_interrupted(&self.id)?;
+        }
         if self.ask_details {
             queue.set_details_pending(&self.id)?;
         }
@@ -360,7 +376,9 @@ fn record_loop(
     progress: &Progress,
 ) -> Result<u64> {
     let result = record_until_done(sources, writer, detector, stop, progress);
-    progress.finish(if stop.load(Ordering::Acquire) {
+    progress.finish(if result.is_err() {
+        StopReason::Failed
+    } else if stop.load(Ordering::Acquire) {
         StopReason::Requested
     } else {
         StopReason::SourcesEnded
@@ -425,11 +443,21 @@ fn record_until_done(
     Ok(samples)
 }
 
-/// Acerta o que um encerramento inesperado deixou para trás: cada gravação ainda em `recording`
-/// tem o `.part` renomeado para `.ogg` (o Ogg é legível até a última página escrita) e vira
-/// `pending` com `interrupted = 1`. Também devolve à fila os uploads que ficaram pela metade.
+/// Abertura do app: acerta o que um encerramento inesperado deixou para trás
+/// ([`recover_orphans`], sem sessão viva) e devolve à fila os uploads que ficaram pela metade.
 pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
-    let recovered = queue.recover_interrupted(|orphan| {
+    let recovered = recover_orphans(queue, &[])?;
+    queue.release_stale_syncing()?;
+    queue.release_details_pending()?;
+    Ok(recovered)
+}
+
+/// Cada gravação em `recording` cujo id não está em `live` (as sessões vivas do processo) tem o
+/// `.part` renomeado para `.ogg` (o Ogg é legível até a última página escrita) e vira `pending`
+/// com `interrupted = 1`. Uma linha por vez: um `.part` ainda preso fica como está, no log, para
+/// a próxima varredura.
+pub fn recover_orphans(queue: &Queue, live: &[&str]) -> Result<Vec<QueuedRecording>> {
+    let recovered = queue.recover_interrupted(live, |orphan| {
         let final_path = strip_part(&orphan.path);
         if orphan.path.exists() {
             std::fs::rename(&orphan.path, &final_path)
@@ -438,15 +466,33 @@ pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
         let bytes = std::fs::metadata(&final_path).map_or(0, |m| m.len());
         Ok((final_path, i64::try_from(bytes)?))
     })?;
-    queue.release_stale_syncing()?;
-    queue.release_details_pending()?;
     for rec in &recovered {
-        log::warn!(
-            "gravação {} recuperada após encerramento inesperado",
-            rec.id
-        );
+        log::warn!("gravação {} recuperada (interrompida)", rec.id);
     }
     Ok(recovered)
+}
+
+/// Renomeia o `.part`, tentando de novo enquanto o SO o recusa (ver [`RENAME_ATTEMPTS`]).
+fn rename_retrying(from: &Path, to: &Path) -> Result<()> {
+    let mut wait = RENAME_WAIT;
+    let mut attempt = 1;
+    loop {
+        match std::fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(err) if attempt < RENAME_ATTEMPTS => {
+                log::warn!(
+                    "renomear {} falhou ({err}); tentando de novo",
+                    from.display()
+                );
+                std::thread::sleep(wait);
+                wait *= 2;
+                attempt += 1;
+            }
+            Err(err) => {
+                return Err(err).with_context(|| format!("falha ao renomear {}", from.display()))
+            }
+        }
+    }
 }
 
 /// A raiz da média dos quadrados, de 0 a 1 para amostras em [-1, 1].
@@ -640,6 +686,114 @@ mod tests {
         assert_eq!(recovered[0].bytes, Some(12));
         assert!(dir.join("orfa.ogg").exists());
         assert!(!part.exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn session_recupera_as_outras_quando_um_destino_esta_bloqueado() {
+        let dir = temp_dir("recuperacao-bloqueada");
+        let queue = Queue::open_in_memory().unwrap();
+        for id in ["presa", "livre"] {
+            let part = dir.join(format!("{id}.ogg.part"));
+            std::fs::write(&part, b"OggS").unwrap();
+            queue.begin(id, &part, 1).unwrap();
+        }
+        // `rename(arquivo, diretório)` falha: simula o `.part` preso.
+        std::fs::create_dir(dir.join("presa.ogg")).unwrap();
+
+        let recovered = recover(&queue).unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].id, "livre");
+        let presa = queue.get("presa").unwrap().unwrap();
+        assert_eq!(presa.status, Status::Recording);
+        assert!(dir.join("presa.ogg.part").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn session_recupera_orfas_sem_tocar_a_gravacao_viva() {
+        let dir = temp_dir("recuperacao-viva");
+        let queue = Queue::open_in_memory().unwrap();
+        for id in ["viva", "orfa"] {
+            let part = dir.join(format!("{id}.ogg.part"));
+            std::fs::write(&part, b"OggS").unwrap();
+            queue.begin(id, &part, 1).unwrap();
+        }
+
+        let recovered = recover_orphans(&queue, &["viva"]).unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].id, "orfa");
+        let viva = queue.get("viva").unwrap().unwrap();
+        assert_eq!(viva.status, Status::Recording);
+        assert!(dir.join("viva.ogg.part").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Uma fonte que entra em pânico depois de algumas leituras.
+    struct Panicking(SineSource, u32);
+
+    impl AudioSource for Panicking {
+        fn sample_rate(&self) -> u32 {
+            self.0.sample_rate()
+        }
+
+        fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
+            assert!(self.1 > 0, "fonte quebrada");
+            self.1 -= 1;
+            self.0.read(timeout)
+        }
+    }
+
+    #[test]
+    fn session_fecha_interrompida_quando_a_fonte_entra_em_panico() {
+        let dir = temp_dir("panico");
+        let queue = Queue::open_in_memory().unwrap();
+        let sine = SineSource::new(16_000, 440.0, 0.3, Duration::from_secs(30));
+        let sources: Vec<Box<dyn AudioSource>> = vec![Box::new(Panicking(sine, 20))];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            sources,
+            StartOptions::MEETING,
+        )
+        .unwrap();
+        while !active.is_finished() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(active.progress().stop_reason(), None);
+
+        let rec = active.stop(&queue).unwrap();
+        assert_eq!(rec.status, Status::Pending);
+        assert!(rec.interrupted);
+        assert!(rec.path.exists());
+        assert!(rec.duration_ms.is_some());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn session_parada_com_part_preso_deixa_a_linha_para_a_varredura() {
+        let dir = temp_dir("parada-presa");
+        let queue = Queue::open_in_memory().unwrap();
+        let sources: Vec<Box<dyn AudioSource>> = vec![Box::new(SineSource::new(
+            16_000,
+            440.0,
+            0.3,
+            Duration::from_secs(30),
+        ))];
+        let active = start(
+            &RecorderConfig::new(&dir),
+            &queue,
+            sources,
+            StartOptions::MEETING,
+        )
+        .unwrap();
+        let id = active.id().to_string();
+        std::fs::create_dir(dir.join(format!("{id}.ogg"))).unwrap();
+
+        assert!(active.stop(&queue).is_err());
+        let row = queue.get(&id).unwrap().unwrap();
+        assert_eq!(row.status, Status::Recording);
+        assert!(dir.join(format!("{id}.ogg.part")).exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
