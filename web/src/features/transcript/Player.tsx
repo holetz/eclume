@@ -9,7 +9,7 @@ import styles from './RecordingPage.module.css'
  * tick por marcador, a duração e a velocidade.
  */
 export function Player({ markers }: { markers: Marker[] }) {
-  const { currentMs, durationMs, playing, rate, seek, toggle, cycleRate } = usePlayback()
+  const { currentMs, durationMs, playing, rate, seek, toggle, cycleRate, error, retry } = usePlayback()
   const current = currentMarkerId(markers, currentMs)
   const percent = (ms: number) => (durationMs > 0 ? Math.min(100, (ms / durationMs) * 100) : 0)
 
@@ -20,6 +20,7 @@ export function Player({ markers }: { markers: Marker[] }) {
         className="btn btn-primary btn-icon"
         aria-label={playing ? 'Pausar' : 'Tocar'}
         onClick={toggle}
+        disabled={error !== null}
       >
         {playing ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
       </button>
@@ -58,6 +59,19 @@ export function Player({ markers }: { markers: Marker[] }) {
       >
         {rateLabel(rate)}
       </button>
+      {error === 'network' && (
+        <p className="alert alert-error" role="alert">
+          <span>O áudio não carregou.</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={retry}>
+            Tentar de novo
+          </button>
+        </p>
+      )}
+      {error === 'format' && (
+        <p className="alert alert-warning" role="alert">
+          Este navegador não toca o áudio do eclume (Ogg Opus). Abra a gravação no Chrome, no Edge ou no Firefox.
+        </p>
+      )}
     </div>
   )
 }

@@ -1,9 +1,12 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { CircleHelp, LogOut, Settings } from 'lucide-react'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
+import { ConnectionBanner } from './ConnectionBanner'
+import { useImportContext } from '../features/import/importContext'
 import { ImportProvider } from '../features/import/ImportProvider'
+import { ConfirmDialog } from './ConfirmDialog'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
 import { MenuButton, type MenuEntry } from './MenuButton'
@@ -62,13 +65,15 @@ function FeaturedLink({ item }: { item: FeaturedItem }) {
 /**
  * A conta no cabeçalho: nome e e-mail, e os botões de ajuda, de configurações e de sair. Ajuda e
  * configurações abrem menus com os itens da seção `header` do nav; escolher um item navega sem mexer
- * na barra lateral.
+ * na barra lateral. Sair com um arquivo convertendo ou subindo pede confirmação, porque o envio para.
  */
 function Account({ user, onLogout, loggingOut }: AppShellProps) {
   const help = useHelp()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { header } = navGroups()
+  const { sending } = useImportContext()
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const itemsOf = (group: string): MenuEntry[] =>
     (header.find((entry) => entry.group === group)?.items ?? []).map((item) => ({
       key: item.to,
@@ -104,12 +109,25 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
           className="btn btn-secondary btn-icon"
           aria-label={loggingOut ? 'Saindo…' : 'Sair'}
           title="Sair"
-          onClick={onLogout}
+          onClick={() => (sending ? setConfirmLogout(true) : onLogout())}
           disabled={loggingOut}
         >
           <LogOut size={16} aria-hidden="true" />
         </button>
       </div>
+      {confirmLogout && (
+        <ConfirmDialog
+          title="Sair durante o envio?"
+          confirmLabel="Sair"
+          onCancel={() => setConfirmLogout(false)}
+          onConfirm={() => {
+            setConfirmLogout(false)
+            onLogout()
+          }}
+        >
+          <p>O envio em andamento será interrompido.</p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
@@ -120,20 +138,21 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
 
   return (
     <HelpProvider>
-      <ShellFrame
-        brand={<Brand to="/" />}
-        account={<Account user={user} onLogout={onLogout} loggingOut={loggingOut} />}
-        sidebar={
-          <nav aria-label="Principal" className={styles.nav}>
-            {featured && <FeaturedLink item={featured} />}
-            <NavGroups groups={main} />
-          </nav>
-        }
-      >
-        <ImportProvider>
+      <ImportProvider>
+        <ShellFrame
+          brand={<Brand to="/" />}
+          account={<Account user={user} onLogout={onLogout} loggingOut={loggingOut} />}
+          sidebar={
+            <nav aria-label="Principal" className={styles.nav}>
+              {featured && <FeaturedLink item={featured} />}
+              <NavGroups groups={main} />
+            </nav>
+          }
+        >
+          <ConnectionBanner />
           <Outlet />
-        </ImportProvider>
-      </ShellFrame>
+        </ShellFrame>
+      </ImportProvider>
     </HelpProvider>
   )
 }

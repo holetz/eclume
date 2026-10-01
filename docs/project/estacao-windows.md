@@ -1,10 +1,10 @@
 ---
 type: project
 title: Estação de desenvolvimento e teste no Windows
-description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, instalar e entrar no app sem PAT, depuração e captura da janela pelo CDP do WebView2 (cdp.mjs), a prova da nota por voz, log do app e build cruzado de binários Windows no host com cargo xwin.
+description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, instalar e entrar no app sem PAT, depuração e captura da janela pelo CDP do WebView2 (cdp.mjs), a prova da nota de voz, log do app e build cruzado de binários Windows no host com cargo xwin.
 resource: desktop/**, deploy/**
 tags: [windows, estacao, desktop, runbook, cross-build]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#28, holetz/eclume#34, holetz/eclume#40
@@ -112,7 +112,7 @@ sistema numa gravação de teste, toque um WAV com
 `(New-Object System.Media.SoundPlayer x.wav).PlaySync()`. A detecção ignora qualquer
 executável cujo **nome** contenha "eclume": rode o simulador de reunião com outro nome.
 
-## 5. Prova da nota por voz
+## 5. Prova da nota de voz
 
 `powershell -NoProfile -File desktop/scripts/prova-windows.ps1` faz a prova de ponta a ponta nesta
 estação: baixa e instala o NSIS de `/downloads`, abre o app com a porta 9229, captura a primeira

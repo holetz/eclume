@@ -4,10 +4,10 @@ title: Painel admin no server — conta de admin, configuração, segredos, usu�
 description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings com o pré-processamento, o idioma automático e a regra identificação ⇒ separação; merge por campo, validação e entrega ao worker pelas options do transcribe), os tipos de agenda padrão, segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar e desativar, a saúde com as filas, o worker GPU, as etapas do pipeline e as sondas dos serviços, e o CLI de contas de admin.
 resource: server/src/eclume_server/settings_admin.py, server/src/eclume_server/health.py, server/src/eclume_server/accounts.py, server/src/eclume_server/cli.py, server/src/eclume_server/routes/admin*.py, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, worker-gpu/src/eclume_worker/health.py, worker-gpu/src/eclume_worker/secrets.py
 tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33
+source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95
 maintainer: holetz
 ---
 
@@ -160,6 +160,9 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
 - Só a sessão de admin. Vale para a gravação de qualquer usuário — por isso roda com o papel de
   conexão —, mas só para o job **mais recente** da gravação e em estado `failed`: job inexistente
   é 404; job antigo ou ainda em aberto é 409.
+- A rota **trava a linha da gravação** (`recordings.lock_recording`, `SELECT … FOR UPDATE` num
+  comando próprio) antes de ler o estado, como a retranscrição do dono: dois pedidos simultâneos
+  criam uma revisão só, e o segundo recebe 409 em problem+json, nunca 500.
 - Cria o job da revisão seguinte com a configuração atual da plataforma
   (`recordings.start_next_revision`, o mesmo caminho da retranscrição do dono), põe a gravação em
   `queued`, enfileira o `transcribe` com o token do HF cifrado e responde 202 com

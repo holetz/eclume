@@ -4,10 +4,10 @@ title: Central de ajuda do web
 description: A ajuda do web do eclume mora no próprio build — artigos Markdown com cabeçalho em web/src/features/help/articles, seis tópicos, chaves de página que ligam cada tela aos artigos dela, busca local sem acento, gaveta por página e dicas em linha — escrita em pt-BR para o produto por usuário, com termos do produto antigo recusados por teste e a regra de revisar os artigos de uma tela quando ela muda.
 resource: web/src/features/help/**, web/src/app/help.ts, web/src/app/HelpDrawer.tsx, web/src/app/HelpHint.tsx
 tags: [code, web, ajuda, documentacao, acessibilidade]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#38
+source: holetz/eclume#38, holetz/eclume#125
 maintainer: holetz
 ---
 
@@ -22,6 +22,11 @@ artigos são dela. A estrutura do app está em [frontend-web.md](frontend-web.md
 
 - Um arquivo por artigo em `web/src/features/help/articles/<slug>.md`; o slug é o nome do
   arquivo e o endereço é `/ajuda/<slug>`.
+- **Slug citado por outro cliente não se renomeia sozinho.** O app desktop abre
+  `primeira-gravacao`, `permissoes-de-microfone` e `pasta-sincronizada` pelo menu de ajuda e pelas
+  Configurações; renomear ou apagar um deles muda também `desktop/ui/js` (o teste `ui_assets` do
+  desktop falha sem o artigo). O artigo `permissoes-de-microfone` cobre só os sistemas que o release
+  distribui (Windows, Linux e Android).
 - As perguntas frequentes ficam em `web/src/features/help/perguntas.md`, uma por `##`.
 - `catalog.ts` lê tudo por `import.meta.glob('./articles/*.md', { query: '?raw', eager: true })`.
   Só a central (`/ajuda`, `/ajuda/:slug`) e o corpo da gaveta importam o catálogo, e os dois são

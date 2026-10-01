@@ -80,6 +80,45 @@ class Services:
             await engine.dispose()
 
 
+async def while_recording_locked(
+    services: Services,
+    recording_id: str,
+    request: Callable[[], Any],
+    then: str,
+    **params: str,
+) -> Any:  # noqa: ANN401
+    """Dois pedidos simultâneos: o segundo (`request`) chega com a gravação travada pelo primeiro.
+
+    Segura a linha da gravação, dispara `request` numa thread, espera ele ficar à espera desse lock,
+    roda `then` (o que o primeiro faria), confirma e devolve a resposta de `request`.
+    """
+    engine = create_async_engine(services.settings.database_url)
+    watcher = engine.execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as holder, watcher.connect() as watch:
+            await holder.execute(text("SELECT 1 FROM recordings WHERE id = :id FOR UPDATE"), {"id": recording_id})
+            pid = (await holder.execute(text("SELECT pg_backend_pid()"))).scalar()
+            pending = asyncio.ensure_future(asyncio.to_thread(request))
+            blocked = text(
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+                "AND CAST(:pid AS int) = ANY(pg_blocking_pids(pid))"
+            )
+            for _ in range(200):
+                if (await watch.execute(blocked, {"pid": pid})).scalar():
+                    break
+                await asyncio.sleep(0.05)
+            else:
+                await holder.rollback()
+                await pending
+                msg = "o segundo pedido não esperou o lock da gravação"
+                raise AssertionError(msg)
+            await holder.execute(text(then), params)
+            await holder.commit()
+            return await pending
+    finally:
+        await engine.dispose()
+
+
 async def _admin(statement: str) -> None:
     admin = create_async_engine(DATABASE_URL, isolation_level="AUTOCOMMIT")
     try:

@@ -294,6 +294,23 @@ def test_progresso_do_worker_aparece_no_job(
     assert api.get("/api/v1/recordings", params={"status": "queued"}).json()["items"] == []
 
 
+def test_progresso_de_outra_revisao_nao_aparece(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(100))
+    client = redis.Redis.from_url(services.settings.redis_url)
+    key = f"eclume:progress:{recording['id']}"
+    # O job em aberto é a revisão 1; o hash que sobrou é de outra revisão.
+    client.hset(key, mapping={"revision": "2", "stage": "diarize", "pct": "40", "updated_at": "2026-09-18T14:09:35Z"})
+    body = api.get(f"/api/v1/recordings/{recording['id']}").json()
+    assert body["status"] == "queued"
+    assert body["job"]["state"] == "queued"
+    assert (body["job"]["stage"], body["job"]["progress"]) == (None, 0.0)
+    client.hset(key, mapping={"revision": "1"})
+    assert api.get(f"/api/v1/recordings/{recording['id']}").json()["job"]["progress"] == 0.4
+
+
 def test_retranscrever_so_sem_job_em_andamento(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
@@ -320,6 +337,44 @@ def test_retranscrever_so_sem_job_em_andamento(
     assert again.json()["job"]["state"] == "queued"
     assert again.json()["language"] == "en"
     assert redis.Redis.from_url(services.settings.redis_url).zscore("eclume:gpu", f"transcribe:{recording['id']}:2")
+
+
+_SECOND_REVISION = (
+    "INSERT INTO transcription_jobs (owner_id, recording_id, revision, state, options) "
+    "SELECT owner_id, id, 2, 'queued', '{}' FROM recordings WHERE id = :id"
+)
+
+
+def test_retranscrever_em_corrida_responde_409(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    recording = upload_file(api, audio_bytes(102))
+    rid = recording["id"]
+
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from eclume_server_testing.harness import run, while_recording_locked  # noqa: PLC0415
+
+    async def failed(conn):  # noqa: ANN001, ANN202
+        await conn.execute(
+            text(
+                "UPDATE transcription_jobs SET state = 'failed', error_code = 'engine_error' WHERE recording_id = :id"
+            ),
+            {"id": rid},
+        )
+
+    run(services.sql(failed))
+    # O primeiro pedido segura a gravação e cria a revisão 2; o segundo, à espera do lock, vê o job novo.
+    second = run(
+        while_recording_locked(
+            services, rid, lambda: api.post(f"/api/v1/recordings/{rid}/retranscribe"), _SECOND_REVISION, id=rid
+        )
+    )
+    assert second.status_code == 409, second.text
+    assert second.headers["content-type"].startswith("application/problem+json")
+    assert api.get(f"/api/v1/recordings/{rid}").json()["job"]["state"] == "queued"
+    run(services.sql(failed))
 
 
 def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):

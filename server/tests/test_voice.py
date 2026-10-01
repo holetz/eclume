@@ -335,9 +335,12 @@ def test_desligar_purga_os_embeddings_da_plataforma_inteira(
     assert ek.speakers(tid)["S2"]["suggestions"]
     other_tid = other.transcript()
     rid, other_rid = _recording_of(services, tid), _recording_of(services, other_tid)
-    embeddings_key = f"recordings/{rid}/speaker_embeddings.json"
+    embeddings_key = f"recordings/{rid}/r1/speaker_embeddings.json"
     assert _embeddings(services, tid) == 3
     assert _objects(services, embeddings_key) == [embeddings_key]
+    # Uma chave antiga, sem revisão, de antes dos artefatos por revisão.
+    legacy_key = f"recordings/{other_rid}/speaker_embeddings.json"
+    services.s3().put_object(Bucket=services.settings.s3_bucket, Key=legacy_key, Body=b"{}")
 
     ek.voice_on(enabled=False)
     # Desligar vale para todas as contas: os embeddings por gravação e as sugestões pendentes saem.
@@ -348,8 +351,9 @@ def test_desligar_purga_os_embeddings_da_plataforma_inteira(
 
     run_cpu(services.settings)
     assert _objects(services, embeddings_key) == []
-    assert _objects(services, f"recordings/{rid}/transcript.raw.json")  # só os embeddings saem
-    assert _objects(services, f"recordings/{other_rid}/speaker_embeddings.json") == []
+    assert _objects(services, f"recordings/{rid}/r1/transcript.raw.json")  # só os embeddings saem
+    assert _objects(services, legacy_key) == []
+    assert [key for key in _objects(services, "recordings/") if key.endswith("/speaker_embeddings.json")] == []
 
 
 def test_ingestao_com_a_voz_desligada_no_meio_nao_guarda_embeddings(ek: Conta, services: Services):
@@ -364,7 +368,8 @@ def test_ingestao_com_a_voz_desligada_no_meio_nao_guarda_embeddings(ek: Conta, s
     run_cpu(services.settings)
     tid = ek.owner.get(f"/api/v1/recordings/{recording['id']}").json()["transcript_id"]
     assert _embeddings(services, tid) == 0
-    assert _objects(services, f"recordings/{recording['id']}/speaker_embeddings.json") == []
+    assert _objects(services, f"recordings/{recording['id']}/r1/transcript.raw.json")
+    assert _objects(services, f"recordings/{recording['id']}/r1/speaker_embeddings.json") == []
 
 
 def test_excluir_a_gravacao_apaga_audio_transcricao_embeddings_amostras_e_resumos(ek: Conta, services: Services):

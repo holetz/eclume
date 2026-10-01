@@ -142,7 +142,9 @@ describe('painel de filtros', () => {
     expect(expand).toHaveAttribute('aria-expanded', 'false')
     expect(expand.closest('.with-filters')).toHaveAttribute('data-collapsed', 'true')
     expect(localStorage.getItem(STORAGE_KEYS.filtersCollapsed)).toBe('1')
-    expect(localStorage.getItem(STORAGE_KEYS.lastLibrary)).toBe('visao=semana&data=2026-09-21&tag=programa-liderancas')
+    expect(localStorage.getItem(`${STORAGE_KEYS.lastLibrary}:${fixtures.me().user.id}`)).toBe(
+      'visao=semana&data=2026-09-21&tag=programa-liderancas',
+    )
     unmount()
 
     renderApp('/')

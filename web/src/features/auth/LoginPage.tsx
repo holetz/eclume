@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
-import { ME_KEY, safeReturnPath, useMe } from '../../app/session'
+import { refreshSession, safeReturnPath, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { AuthLayout } from './AuthLayout'
 
@@ -30,7 +30,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await unwrap(api.POST('/api/v1/auth/login', { body: { email: email.trim(), password } }))
-      await queryClient.invalidateQueries({ queryKey: ME_KEY })
+      await refreshSession(queryClient)
       navigate(volta, { replace: true })
     } catch (caught) {
       setError(

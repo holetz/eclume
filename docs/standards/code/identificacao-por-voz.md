@@ -4,10 +4,10 @@ title: Identificação de pessoas pela voz
 description: Como o eclume sugere e atribui quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão abaixo do limiar da conta e atribuição automática acima dele (antes do resumo), retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
 resource: server/src/eclume_server/voice.py, server/src/eclume_server/db/migrations/019_atribuicao_automatica_de_locutores.sql, web/src/features/people/AutoAssignCard.tsx, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
-timestamp: 2026-09-30
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34
+source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95
 maintainer: holetz
 ---
 
@@ -132,16 +132,17 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 - **Purga ao desligar.** A transição `enabled: true → false` apaga, na mesma transação do
   `PATCH /admin/settings` (papel de conexão), os `speaker_embeddings` e as sugestões pendentes de
   **toda a plataforma** (`voice.purge_embeddings`) e, depois do commit, enfileira
-  `purge_embedding_objects` no worker CPU, que apaga o `recordings/{id}/speaker_embeddings.json`
-  de todas as gravações (lotes de 1000; nada, se a voz tiver sido religada nesse meio-tempo). O job
+  `purge_embedding_objects` no worker CPU, que lista `recordings/` e apaga todo
+  `speaker_embeddings.json` — o de cada revisão (`recordings/{id}/r{revision}/`) e o das chaves
+  antigas, sem revisão — (lotes de 1000; nada, se a voz tiver sido religada nesse meio-tempo). O job
   aceita e ignora o antigo argumento `org_id`, que um job da versão anterior pode trazer. As
   amostras (locutores confirmados) ficam: esquecê-las é pela pessoa. Religar não traz os vetores
   antigos: só uma retranscrição os recria.
 - **Vale na ingestão.** Um job enfileirado com `embeddings: true` antes do desligamento chega ao
   `ingest_transcript` depois dele: a ingestão relê a plataforma, não grava o vetor e apaga o
-  `speaker_embeddings.json` que o worker produziu.
+  `speaker_embeddings.json` da revisão que chegou (a chave que o job traz).
 - **Excluir a gravação** apaga áudio, `recordings/{id}/` inteiro (transcrição bruta e
-  embeddings), transcrição, locutores, segmentos, embeddings, amostras, sugestões, jobs e resumos
+  embeddings de toda revisão), transcrição, locutores, segmentos, embeddings, amostras, sugestões, jobs e resumos
   (cascata no banco e `Storage.delete_recording` no bucket). Uma gravação excluída durante a
   transcrição tem os artefatos que o worker gravou depois apagados pelo `ingest_transcript`.
   Prova em `test_voice.py`.

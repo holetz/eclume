@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
-import { ME_KEY, useMe } from '../../app/session'
+import { refreshSession, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
 import { AuthLayout } from './AuthLayout'
 import { MIN_PASSWORD, useSignupInfo } from './signup'
@@ -42,7 +42,7 @@ export function SignupPage() {
         }),
       )
       // A resposta abre a sessão, como o login.
-      await queryClient.invalidateQueries({ queryKey: ME_KEY })
+      await refreshSession(queryClient)
       navigate('/', { replace: true })
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : null

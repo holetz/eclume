@@ -20,7 +20,9 @@ export function RequireAdmin() {
   useEffect(() => onAdminUnauthorized(() => queryClient.setQueryData(ADMIN_ME_KEY, null)), [queryClient])
 
   if (me.isPending) return <PageStatus>Carregando…</PageStatus>
-  if (me.isError) {
+  // Um refetch que falha com a sessão já carregada não derruba o shell: o React Query mantém o
+  // dado, e a falha vira a faixa de conexão. A tela de erro só aparece sem sessão nenhuma em cache.
+  if (me.isError && !me.data) {
     return (
       <PageStatus>
         <p>{errorMessage(me.error)}</p>

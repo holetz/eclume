@@ -52,7 +52,7 @@ def test_pct_geral_por_etapa(stage: str, pct: float, esperado: int):
 
 def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     redis = FakeRedis()
-    reporter = ProgressReporter(redis, "rec-1", clock=relogio)
+    reporter = ProgressReporter(redis, "rec-1", 1, clock=relogio)
 
     async def roda() -> None:
         await reporter.report("download")
@@ -65,6 +65,7 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     key = progress_key("rec-1")
     assert key == "eclume:progress:rec-1"
     assert redis.hashes[key] == {
+        "revision": 1,
         "stage": "upload",
         "pct": 100,
         "started_at": "2026-09-24T12:00:00Z",
@@ -72,6 +73,19 @@ def test_reporter_grava_hash_com_ttl_e_nunca_recua():
     }
     assert redis.ttl[key] == PROGRESS_TTL_SECONDS
     assert redis.writes == 3
+
+
+def test_reporter_grava_a_revisao():
+    redis = FakeRedis()
+    reporter = ProgressReporter(redis, "rec-1", 4, clock=relogio)
+
+    async def roda() -> None:
+        await reporter.report("download")
+        await reporter.report("asr", 50)
+
+    asyncio.run(roda())
+    assert redis.hashes[progress_key("rec-1")]["revision"] == 4
+    assert redis.writes == 2
 
 
 def test_config_do_ambiente():
@@ -121,7 +135,7 @@ def test_store_baixa_e_grava_json(tmp_path: Path):
     assert dest.read_bytes() == b"OggS"
     assert sha256_file(dest) == "sha256:" + hashlib.sha256(b"OggS").hexdigest()
 
-    store.put_json(transcript_key("r1"), {"texto": "olá"})
-    assert json.loads(s3.objects["b", "recordings/r1/transcript.raw.json"]) == {"texto": "olá"}
-    assert s3.content_types["recordings/r1/transcript.raw.json"] == "application/json"
-    assert embeddings_key("r1") == "recordings/r1/speaker_embeddings.json"
+    store.put_json(transcript_key("g1", 2), {"texto": "olá"})
+    assert json.loads(s3.objects["b", "recordings/g1/r2/transcript.raw.json"]) == {"texto": "olá"}
+    assert s3.content_types["recordings/g1/r2/transcript.raw.json"] == "application/json"
+    assert embeddings_key("g1", 2) == "recordings/g1/r2/speaker_embeddings.json"
