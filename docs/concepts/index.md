@@ -12,6 +12,10 @@ de voz), modelos mentais e aprendizados que informam o trabalho sem serem contra
   `external/` quando a home for instalada; aqui fica o entendimento genérico.
 - vs. [vision/](../vision/index.md) — visão é **direção** futura; aqui é entendimento presente.
 
+## Assuntos
+
+* [arquitetura/](arquitetura/index.md) — como o eclume é montado: componentes, filas, o caminho de uma gravação, fronteiras de confiança e o que pode sair do servidor
+
 ## Fixed doc
 
 * [Glossário](../glossary.md) — a busca A–Z de termos do repositório. **Resolva aqui primeiro
