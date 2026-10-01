@@ -9,8 +9,33 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use ureq::tls::{Certificate, PemItem, RootCerts, TlsConfig};
+
+/// A URL sem query string nem fragmento (esquema, host e caminho), para mensagens de erro e log:
+/// a query de uma URL pré-assinada carrega a assinatura.
+pub fn redact(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(mut parsed) => {
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            let _ = parsed.set_password(None);
+            parsed.to_string()
+        }
+        Err(_) => url.split(['?', '#']).next().unwrap_or_default().to_string(),
+    }
+}
+
+/// Tira de um texto de erro a URL completa e a query dela.
+fn scrub(text: &str, url: &str) -> String {
+    let mut text = text.replace(url, &redact(url));
+    if let Some(query) = url.split_once('?').map(|(_, query)| query) {
+        if !query.is_empty() {
+            text = text.replace(query, "…");
+        }
+    }
+    text
+}
 
 /// Uma requisição, com o corpo já em memória.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -206,13 +231,20 @@ impl Transport for UreqTransport {
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
-        let http_request = builder
-            .body(request.body)
-            .with_context(|| format!("requisição inválida para {}", request.url))?;
-        let mut response = self
-            .agent
-            .run(http_request)
-            .with_context(|| format!("{} {} falhou", request.method, request.url))?;
+        let shown = redact(&request.url);
+        let http_request = builder.body(request.body).map_err(|err| {
+            anyhow!(
+                "requisição inválida para {shown}: {}",
+                scrub(&err.to_string(), &request.url)
+            )
+        })?;
+        let mut response = self.agent.run(http_request).map_err(|err| {
+            anyhow!(
+                "{} {shown} falhou: {}",
+                request.method,
+                scrub(&err.to_string(), &request.url)
+            )
+        })?;
         let status = response.status().as_u16();
         let headers = response
             .headers()
@@ -229,7 +261,12 @@ impl Transport for UreqTransport {
             .with_config()
             .limit(self.max_response)
             .read_to_vec()
-            .with_context(|| format!("falha ao ler a resposta de {}", request.url))?;
+            .map_err(|err| {
+                anyhow!(
+                    "falha ao ler a resposta de {shown}: {}",
+                    scrub(&err.to_string(), &request.url)
+                )
+            })?;
         Ok(HttpResponse {
             status,
             headers,
@@ -251,6 +288,29 @@ mod tests {
         let path = dir.join(name);
         std::fs::write(&path, content).unwrap();
         path
+    }
+
+    #[test]
+    fn redact_tira_a_query_da_url_pre_assinada() {
+        let url = "https://s3.local/bucket/obj?X-Amz-Signature=abc123&X-Amz-Credential=k";
+        assert_eq!(redact(url), "https://s3.local/bucket/obj");
+        assert_eq!(redact("sem esquema?x=1"), "sem esquema");
+        let transport = UreqTransport::with_trust(
+            &TrustMode::PlatformPlus(None),
+            "teste",
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        // Porta fechada: a conexão é recusada na hora.
+        let err = transport
+            .send(HttpRequest::new(
+                "PUT",
+                "http://127.0.0.1:9/bucket/obj?X-Amz-Signature=abc123",
+            ))
+            .unwrap_err();
+        let text = format!("{err:#}");
+        assert!(!text.contains('?') && !text.contains("abc123"), "{text}");
+        assert!(text.contains("PUT http://127.0.0.1:9/bucket/obj"), "{text}");
     }
 
     #[test]

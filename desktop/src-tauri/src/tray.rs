@@ -186,15 +186,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 /// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre). Pede
 /// por `refresh`, que despacha para a thread principal.
 fn spawn_note_clock(app: AppHandle) {
+    let mut backoff = crate::supervise::Backoff::default();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
-        let in_note = app
-            .state::<AppState>()
-            .view()
-            .is_ok_and(|view| view.recording_kind == Some(Kind::Note));
-        if in_note {
-            refresh(&app);
-        }
+        crate::supervise::pass(&mut backoff, "relógio da nota", || {
+            let in_note = app
+                .state::<AppState>()
+                .view()
+                .is_ok_and(|view| view.recording_kind == Some(Kind::Note));
+            if in_note {
+                refresh(&app);
+            }
+        });
     });
 }
 
@@ -225,13 +228,18 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         }
         MENU_SHOW => crate::show_window(app),
         MENU_QUIT => {
-            let state = app.state::<AppState>();
-            if state.status().is_ok_and(|s| s == AppStatus::Recording) {
-                if let Err(err) = state.stop_recording() {
-                    log::error!("falha ao fechar a gravação ao sair: {err:#}");
+            // Fechar a gravação pode levar segundos (join, driver, `fsync`): fora da thread da UI,
+            // e o app sai ao fim.
+            let app = app.clone();
+            std::thread::spawn(move || {
+                let state = app.state::<AppState>();
+                if state.status().is_ok_and(|s| s == AppStatus::Recording) {
+                    if let Err(err) = state.stop_recording() {
+                        log::error!("falha ao fechar a gravação ao sair: {err:#}");
+                    }
                 }
-            }
-            app.exit(0);
+                app.exit(0);
+            });
         }
         _ => {}
     }
