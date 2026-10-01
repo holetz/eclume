@@ -77,11 +77,11 @@ def todos(codigo: int = 0) -> dict[str, int]:
     return dict.fromkeys(gate.PILARES, codigo)
 
 
-def test_descricao_success_so_com_os_sete_pilares_verdes() -> None:
-    """`success` exige os sete pilares com saída 0."""
+def test_descricao_success_so_com_todos_os_pilares_verdes() -> None:
+    """`success` exige todos os pilares com saída 0."""
     estado, texto = gate.descricao(todos(), 125, LOG)
     assert estado == "success"
-    assert texto == f"7 pilares verdes · 2min05s · log {LOG}"
+    assert texto == f"{len(gate.PILARES)} pilares verdes · 2min05s · log {LOG}"
 
 
 def test_descricao_failure_nomeia_os_pilares_que_falharam_na_ordem() -> None:
@@ -114,7 +114,7 @@ def test_descricao_pela_linha_de_comando(monkeypatch: pytest.MonkeyPatch, capsys
     entrada = "\n".join(f"{p} 0" for p in gate.PILARES) + "\n"
     codigo, saida = rodar(["descricao", "--duracao", "61", "--log", LOG], entrada, monkeypatch, capsys)
     assert codigo == 0
-    assert saida.splitlines() == ["success", f"7 pilares verdes · 1min01s · log {LOG}"]
+    assert saida.splitlines() == ["success", f"{len(gate.PILARES)} pilares verdes · 1min01s · log {LOG}"]
 
 
 def test_resultado_invalido_e_recusado() -> None:
@@ -160,13 +160,14 @@ def comandos(job: dict[str, object]) -> str:
 
 
 def test_cada_job_da_ci_chama_o_seu_pilar() -> None:
-    """Cada job de pilar do `ci.yml` chama `deploy/pilares.sh <job>`; o `windows` é só do gate."""
+    """Cada job de pilar do `ci.yml` chama `deploy/pilares.sh <job>`; `windows` e `auditoria` são só do gate."""
     jobs = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["jobs"]
     pilares_da_ci = set(jobs) - {"mudancas"}
-    assert pilares_da_ci == set(gate.PILARES) - {"windows"}
+    assert pilares_da_ci == set(gate.PILARES) - set(gate.SO_NO_GATE)
     for nome in pilares_da_ci:
         assert f"bash deploy/pilares.sh {nome}" in comandos(jobs[nome]), nome
-    assert "pilares.sh windows" not in (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+    for pilar in gate.SO_NO_GATE:
+        assert f"pilares.sh {pilar}" not in (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
 
 
 def test_pilares_sh_lista_os_mesmos_pilares_do_gate() -> None:

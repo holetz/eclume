@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22"
+  },
   "description": "Frontend web do eclume: biblioteca de transcrições, import e painel de administração.",
   "scripts": {
     "dev": "vite",

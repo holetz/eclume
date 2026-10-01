@@ -36,7 +36,7 @@ permissions:
 
 jobs:
   plano:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       statuses: read
@@ -46,8 +46,8 @@ jobs:
       publicar: ${{ steps.plano.outputs.publicar }}
       matriz: ${{ steps.plano.outputs.matriz }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
       - id: plano
@@ -61,7 +61,7 @@ jobs:
           import json, os
           alvos = [{"plataforma": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb"}]
           if os.environ["WINDOWS"] == "true":
-              alvos.append({"plataforma": "windows", "os": "windows-latest", "bundles": "nsis,msi"})
+              alvos.append({"plataforma": "windows", "os": "windows-2025", "bundles": "nsis,msi"})
           print(json.dumps({"include": alvos}))
           EOF
           )
@@ -90,7 +90,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dependências de sistema do Tauri 2 e da captura de áudio
         if: matrix.plataforma == 'linux'
         run: |
@@ -99,14 +99,20 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev libssl-dev build-essential file \
             libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+          node-version-file: .nvmrc
+      # O Rust de desktop/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
+      - name: Rust de desktop/rust-toolchain.toml
+        working-directory: desktop
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: desktop
           key: release
+      # A CLI do Tauri de desktop/package-lock.json, instalada sem scripts e sem os secrets no passo.
+      - name: CLI do Tauri
+        run: npm --prefix desktop ci --ignore-scripts --no-audit --no-fund
       - name: Build e bundle
         working-directory: desktop/src-tauri
         env:
@@ -119,7 +125,7 @@ jobs:
           # linuxdeploy sem FUSE e sem o strip que falha em binários com .relr.dyn.
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: npx --yes @tauri-apps/cli@2 build --ci --bundles "${{ matrix.bundles }}"
+        run: npx --no-install tauri build --ci --bundles "${{ matrix.bundles }}"
       - name: Juntar os artefatos
         run: |
           bundle=desktop/target/release/bundle
@@ -131,7 +137,7 @@ jobs:
           done
           ls -la saida
           test -n "$(ls saida)"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-${{ matrix.plataforma }}
           path: saida/
@@ -139,15 +145,15 @@ jobs:
 
   release:
     needs: [plano, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: desktop-*
           path: dist
@@ -163,7 +169,7 @@ jobs:
             --base-url "$BASE_URL" --notas "${NOTAS:-eclume desktop $VERSAO}"
           cat dist/latest.json
           ls -la dist
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-${{ needs.plano.outputs.versao }}
           path: dist/

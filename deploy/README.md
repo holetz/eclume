@@ -37,7 +37,7 @@ O gate que libera deploy e releases (status `eclume/gate` no commit), com a norm
 - `pilares.sh`: os comandos de prova de cada pilar (`--lista`), a fonte única da CI e do gate.
 - `gate.sh`: na estação, envia o `git archive` do commit para o host e roda o gate
   (`--pilares`, `--fundo`, `--estado`, `--plan`); `gate-host.sh` é a parte do host e
-  `gate.Dockerfile` a imagem `eclume-gate:24.04` dos pilares.
+  `gate.Dockerfile` a imagem `eclume-gate:<versão do Rust>` dos pilares.
 - `gate.py` (testes em `test_gate.py`): a decisão sobre o status, a descrição e os alvos do hook de
   pre-push (`.githooks/pre-push`).
 
