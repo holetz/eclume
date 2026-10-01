@@ -198,6 +198,12 @@ Implementados pela `holetz/eclume#13`; o detalhe está em
   servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
   pode ser sobreposto por `ECLUME_WEB_URL`.
 - Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
+- A bandeja (menu, ícone, título e dica) só é tocada na thread principal. Os setters do Tauri
+  (`set_text`, `set_menu`, `set_icon`, `set_title`, `set_tooltip`) despacham para ela e bloqueiam
+  até a resposta: uma thread de fundo que os chamasse segurando um lock que a thread principal
+  também usa travaria o app (#83). Código de fundo pede a atualização por `tray::refresh` ou
+  `refresh_ui`, que roda na hora na thread principal e, de outra thread, só enfileira; quem roda lê
+  o estado do momento.
 - O log (`info`, ou o filtro de `RUST_LOG`) vai para o stderr e para `eclume.log` no diretório de
   logs do app (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` no Windows,
   `~/.local/share/io.github.holetz.eclume/logs` no Linux, `~/Library/Logs/io.github.holetz.eclume`
