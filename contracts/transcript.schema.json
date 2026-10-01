@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva.",
+      "description": "Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca `owner` como obsoleto.",
       "type": "string",
       "pattern": "^1\\.[0-9]+$",
       "examples": ["1.1"]
@@ -82,6 +82,8 @@
       "format": "date-time"
     },
     "owner": {
+      "description": "Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada); sai na versão 2 do schema.",
+      "deprecated": true,
       "$ref": "#/$defs/UserRef"
     },
     "engine": {

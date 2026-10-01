@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from eclume_server.storage import Storage
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 _SPEAKER_ID = re.compile(r"^S[0-9]+$")
 log = logging.getLogger(__name__)
 

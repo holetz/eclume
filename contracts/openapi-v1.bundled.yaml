@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.10.0
+  version: 2.11.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -5401,6 +5401,9 @@ components:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         owner:
+          description: 'Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai
+            na `/api/v2`.'
+          deprecated: true
           $ref: '#/components/schemas/UserRef'
         tags:
           type: array
@@ -5667,6 +5670,9 @@ components:
           type: string
           format: date-time
         owner:
+          description: 'Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai
+            na `/api/v2`.'
+          deprecated: true
           $ref: '#/components/schemas/UserRef'
         speakers:
           type: array
@@ -5787,6 +5793,9 @@ components:
                 minimum: 0
           - type: 'null'
         created_by:
+          description: 'Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai
+            na `/api/v2`.'
+          deprecated: true
           oneOf:
           - $ref: '#/components/schemas/UserRef'
           - type: 'null'
@@ -7355,7 +7364,9 @@ components:
           - 'null'
           format: uuid
         created_by:
-          description: Id do usuário que pediu a geração, editou ou pediu o ajuste.
+          description: 'Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada);
+            sai na `/api/v2`.'
+          deprecated: true
           type:
           - string
           - 'null'
@@ -7566,7 +7577,9 @@ components:
                 type: string
           - type: 'null'
         created_by:
-          description: Id do usuário que fez o pedido.
+          description: 'Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada);
+            sai na `/api/v2`.'
+          deprecated: true
           type:
           - string
           - 'null'
@@ -8562,7 +8575,8 @@ components:
       - segments
       properties:
         schema_version:
-          description: Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva.
+          description: Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca
+            `owner` como obsoleto.
           type: string
           pattern: ^1\.[0-9]+$
           examples:
@@ -8618,6 +8632,9 @@ components:
           type: string
           format: date-time
         owner:
+          description: 'Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada);
+            sai na versão 2 do schema.'
+          deprecated: true
           $ref: '#/components/schemas/UserRef'
         engine:
           $ref: '#/components/schemas/TranscriptEngine'
@@ -10479,7 +10496,7 @@ components:
     TranscriptThreeSpeakers:
       summary: Reunião com 3 locutores, um ligado a pessoa (com `include=words`)
       value:
-        schema_version: '1.1'
+        schema_version: '1.2'
         id: 01928f3a-1c00-7a00-8000-000000000501
         recording_id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
