@@ -1,6 +1,7 @@
 import { Copy } from 'lucide-react'
 import { useId, useState } from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
+import { safeMarkdown } from '../../app/markdown'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -15,9 +16,9 @@ import { motivo } from '../../lib/vocabulario.js'
 type Recording = Schemas['Recording']
 
 // O `# Ata ...` do resumo vira h2: a página já tem o título da gravação como h1.
-const MARKDOWN: Components = {
+const MARKDOWN = safeMarkdown({
   h1: ({ children }) => <h2 className={styles.docTitle}>{children}</h2>,
-}
+})
 
 interface ChangeTypeDialogProps {
   recording: Recording

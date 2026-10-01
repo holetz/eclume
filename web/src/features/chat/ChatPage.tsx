@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { Link } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
+import { SAFE_MARKDOWN } from '../../app/markdown'
 import { PageHead } from '../../app/PageHead'
 import {
   baseChatKey,
@@ -60,7 +61,7 @@ function Answer({ chatId, onRetry }: { chatId: string; onRetry: () => void }) {
       ) : (
         <>
           <div className={styles.answer}>
-            <ReactMarkdown>{chat.answer ?? ''}</ReactMarkdown>
+            <ReactMarkdown components={SAFE_MARKDOWN}>{chat.answer ?? ''}</ReactMarkdown>
           </div>
           {chat.sources.length > 0 && (
             <ul className={styles.sources} aria-label="Fontes">

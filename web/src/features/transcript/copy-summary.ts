@@ -2,11 +2,12 @@
 // com os títulos em negrito, porque o Teams não guarda o estilo de título ao colar; o texto puro é o
 // Markdown sem as hashtags dos títulos, para quem não aceita HTML.
 import { createElement, Fragment, type ReactNode } from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
+import { safeMarkdown } from '../../app/markdown'
 
 const boldTitle = ({ children }: { children?: ReactNode }) => createElement('p', null, createElement('strong', null, children))
 
-const TITLES: Components = { h1: boldTitle, h2: boldTitle, h3: boldTitle, h4: boldTitle, h5: boldTitle, h6: boldTitle }
+const TITLES = safeMarkdown({ h1: boldTitle, h2: boldTitle, h3: boldTitle, h4: boldTitle, h5: boldTitle, h6: boldTitle })
 
 /** O Markdown sem o prefixo `#` das linhas de título; o que está em bloco de código fica como está. */
 function withoutTitleMarks(markdown: string): string {
