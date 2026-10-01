@@ -7,7 +7,7 @@ docs/standards/code/identificacao-por-voz.md.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Response
@@ -27,14 +27,19 @@ from eclume_server.transcripts import bump_revision, editable_transcript
 from eclume_server.voice import (
     MAX_AUTO_THRESHOLD,
     MIN_AUTO_THRESHOLD,
-    AutoPrefs,
     SpeakerKey,
     auto_prefs,
     forget,
     forget_sample,
+    keeps_samples,
     platform_voice,
+    purge_account,
     reject,
+    voice_counts,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -153,31 +158,56 @@ class VoiceAssignmentPatch(BaseModel):
 
     enabled: bool | None = None
     threshold: float | None = Field(default=None, ge=MIN_AUTO_THRESHOLD, le=MAX_AUTO_THRESHOLD)
+    keep_samples: bool | None = None
 
 
-def _assignment_json(prefs: AutoPrefs, platform: dict[str, Any]) -> dict[str, Any]:
+async def _assignment_json(conn: AsyncConnection, user_id: UUID) -> dict[str, Any]:
     """Schema `VoiceAssignment`; `platform_enabled` diz se a plataforma deixa a voz valer."""
-    return {"enabled": prefs.enabled, "threshold": round(prefs.threshold, 4), "platform_enabled": platform["enabled"]}
+    prefs = await auto_prefs(conn, user_id)
+    samples, people = await voice_counts(conn, user_id)
+    return {
+        "enabled": prefs.enabled,
+        "threshold": round(prefs.threshold, 4),
+        "platform_enabled": (await platform_voice(conn))["enabled"],
+        "keep_samples": await keeps_samples(conn, user_id),
+        "sample_count": samples,
+        "voiceprint_people": people,
+    }
 
 
 @router.get("/me/voice-assignment")
 async def get_voice_assignment(principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Preferência da conta: ligar o locutor à pessoa sozinho, e a pontuação mínima para isso."""
+    """Preferência da conta: ligar o locutor à pessoa sozinho, a pontuação mínima e guardar amostras."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        return _assignment_json(await auto_prefs(conn, principal.user_id), await platform_voice(conn))
+        return await _assignment_json(conn, principal.user_id)
 
 
 @router.patch("/me/voice-assignment")
 async def patch_voice_assignment(body: VoiceAssignmentPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Muda a preferência; vale para as próximas transcrições, sem mexer nos vínculos que já existem."""
+    """Muda a preferência; vale para as próximas transcrições, sem mexer nos vínculos que já existem.
+
+    `keep_samples: false` apaga na hora as amostras, os vetores e as sugestões pendentes da conta
+    (LGPD: a escolha do titular); os `speaker_embeddings.json` da conta saem no worker CPU.
+    """
     values = body.model_dump(exclude_unset=True)
     if any(value is None for value in values.values()):
         raise invalid_field("body", "os campos não aceitam null")
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
-    columns = {"enabled": "voice_auto_assign", "threshold": "voice_auto_threshold"}
-    async with user_tx(ctx.engine, principal.user_id) as conn:
+    columns = {
+        "enabled": "voice_auto_assign",
+        "threshold": "voice_auto_threshold",
+        "keep_samples": "voice_keep_samples",
+    }
+    user_id = principal.user_id
+    async with user_tx(ctx.engine, user_id) as conn:
+        turned_off = values.get("keep_samples") is False and await keeps_samples(conn, user_id)
         await conn.execute(
-            update(t.users).where(t.users.c.id == principal.user_id).values({columns[k]: v for k, v in values.items()})
+            update(t.users).where(t.users.c.id == user_id).values({columns[k]: v for k, v in values.items()})
         )
-        return _assignment_json(await auto_prefs(conn, principal.user_id), await platform_voice(conn))
+        if turned_off:
+            await purge_account(conn, user_id)
+        result = await _assignment_json(conn, user_id)
+    if turned_off:
+        await ctx.queue.enqueue_purge_embedding_objects(user_id)
+    return result

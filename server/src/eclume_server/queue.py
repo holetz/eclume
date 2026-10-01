@@ -173,9 +173,10 @@ class Queue:
         for recording_id, revision in jobs:
             await self.pool.set(cancel_key(recording_id, revision), "1", ex=CANCEL_TTL_S)
 
-    async def enqueue_purge_embedding_objects(self) -> None:
-        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma no worker CPU."""
-        await self.pool.enqueue_job("purge_embedding_objects", _queue_name=DEFAULT_QUEUE)
+    async def enqueue_purge_embedding_objects(self, owner_id: UUID | None = None) -> None:
+        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma, ou só da conta, no worker CPU."""
+        args = (str(owner_id),) if owner_id is not None else ()
+        await self.pool.enqueue_job("purge_embedding_objects", *args, _queue_name=DEFAULT_QUEUE)
 
     async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
         """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""

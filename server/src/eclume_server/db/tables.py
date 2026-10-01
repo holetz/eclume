@@ -50,6 +50,8 @@ users = Table(
     _ts("notice_accepted_at"),
     Column("voice_auto_assign", Boolean, server_default=FetchedValue()),
     Column("voice_auto_threshold", Float, server_default=FetchedValue()),
+    # 028_conta_sem_amostras_de_voz
+    Column("voice_keep_samples", Boolean, server_default=FetchedValue()),
     # 023_cadastro_de_tags
     Column("tag_mode", Text, server_default=FetchedValue()),
     Column("tag_new_limit", Integer, server_default=FetchedValue()),
