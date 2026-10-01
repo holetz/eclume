@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Mobile recorder" description="Phone screen skeleton: network strip, record block, recording controls with markers, name-and-tag sheet. iOS or Android frame." -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div style="min-height:100vh;display:grid;place-items:center;padding:32px;background:var(--color-surface)">
+<div class="phone" data-os="{{ os }}" data-theme="{{ theme }}"><div class="phone-screen">
+<div class="phone-status"><span>10:42</span><span>{{ statusRight }}</span></div>
+<sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+<div class="m-body">
+<div class="m-top"><span class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</span><button type="button" class="btn btn-ghost btn-icon" aria-label="Settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"></path></svg></button></div>
+<div class="m-net"><span class="status-line" data-status="{{ netStatus }}">{{ netText }}</span><span class="text-muted" style="font-size:13px">{{ netEnd }}</span></div>
+<div class="m-section"><button type="button" class="m-rec" aria-pressed="false" onClick="{{ start }}"><span><span class="m-rec-label">Record</span><span class="m-rec-sub">Keeps recording with the screen locked</span></span></button></div>
+<div class="m-section m-fill"><span class="kicker">On this phone</span>
+<ul class="m-rows"><sc-for list="{{ items }}" as="it" hint-placeholder-count="3"><li class="m-row"><span class="m-row-title">{{ it.title }}</span><span class="m-row-sub">{{ it.sub }}</span><span class="m-row-end"><span class="{{ it.badgeClass }}">{{ it.badge }}</span></span></li></sc-for></ul>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ active }}" hint-placeholder-val="{{ false }}">
+<div class="m-body" style="padding-bottom:0">
+<div class="m-top"><span class="status-line" data-status="{{ recStatus }}">{{ recText }}</span><span class="text-muted" style="font-size:13px">Free space: about 9 h</span></div>
+<div class="m-section" style="gap:20px;padding-top:24px"><span class="m-timer">{{ clock }}</span>{{ meterEl }}</div>
+<div class="m-section m-fill"><div style="display:flex;justify-content:space-between"><span class="kicker">Markers</span><span class="text-muted" style="font-size:12px">{{ markerCount }}</span></div>
+<ul class="markers"><sc-for list="{{ markers }}" as="m" hint-placeholder-count="0"><li><span class="timecode">{{ m.tc }}</span><span>{{ m.note }}</span></li></sc-for></ul></div>
+<div class="m-cells"><button type="button" class="m-cell" aria-pressed="{{ paused }}" onClick="{{ togglePause }}">{{ pauseLabel }}</button><button type="button" class="m-cell" onClick="{{ addMarker }}">Marker</button><button type="button" class="m-cell m-cell-stop" onClick="{{ stop }}">Stop</button></div>
+<div style="height:28px;flex:none;background:var(--color-text)"></div>
+</div>
+</sc-if>
+<sc-if value="{{ saved }}" hint-placeholder-val="{{ false }}">
+<div class="sheet-backdrop"><div class="sheet"><span class="sheet-grip"></span>
+<div style="display:grid;gap:4px"><h2 class="m-title" style="font-size:24px">Recording saved</h2><span class="text-muted" style="font-size:14px">{{ savedMeta }}</span></div>
+<div class="field"><label>Title (optional)</label><input class="input" placeholder="Sat 26 Sep, 10:42"></div>
+<div class="field"><label>Agenda type (optional)</label><div class="m-chips"><button type="button" class="m-chip" aria-pressed="true">Team meeting</button><button type="button" class="m-chip" aria-pressed="false">Client call</button><button type="button" class="m-chip" aria-pressed="false">Interview</button></div></div>
+<span class="text-muted" style="font-size:13px">The server fills the other fields when it transcribes.</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-primary" style="justify-content:flex-start" onClick="{{ done }}">Save</button><button type="button" class="btn btn-secondary" style="justify-content:flex-start" onClick="{{ done }}">Skip</button></div>
+</div></div>
+</sc-if>
+</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;os&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ios&quot;,&quot;android&quot;],&quot;default&quot;:&quot;ios&quot;,&quot;tsType&quot;:&quot;'ios' | 'android'&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;network&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;on&quot;,&quot;away&quot;],&quot;default&quot;:&quot;on&quot;,&quot;tsType&quot;:&quot;'on' | 'away'&quot;}}">
+class Component extends DCLogic {
+  state = { mode: 'idle', secs: 0, markers: [], saved: null, queue: [] };
+  componentDidMount() { this.t = setInterval(() => { if (this.state.mode === 'recording') this.setState(s => ({ secs: s.secs + 1 })); }, 1000); }
+  componentWillUnmount() { clearInterval(this.t); }
+  fmt(n) { const p = x => String(x).padStart(2, '0'); return p(Math.floor(n / 3600)) + ':' + p(Math.floor(n / 60) % 60) + ':' + p(n % 60); }
+  renderVals() {
+    const { mode, secs, markers, saved, queue } = this.state;
+    const away = this.props.network === 'away';
+    const base = [
+      { title: 'Weekly sync', sub: 'Today 09:00 · 54 min · 3 markers' },
+      { title: 'Client call, Tanaka', sub: 'Yesterday 16:40 · 22 min' }
+    ].map(i => ({ ...i, badge: away ? 'Waiting' : 'Synced', badgeClass: away ? 'badge' : 'badge badge-success' }));
+    const items = queue.map(q => ({ ...q, badge: away ? 'Waiting' : 'Syncing', badgeClass: away ? 'badge' : 'badge badge-progress' })).concat(base);
+    const bars = [];
+    for (let k = 0; k < 44; k++) {
+      const v = mode === 'recording' ? Math.round(18 + 70 * Math.abs(Math.sin(k * 0.7 + secs) * Math.cos(k * 0.23 + secs / 3))) : 12;
+      bars.push(React.createElement('i', { key: k, style: { '--h': v + '%' } }));
+    }
+    return {
+      os: this.props.os ?? 'ios',
+      theme: this.props.dark ? 'dark' : 'light',
+      statusRight: away ? '5G 64%' : '82%',
+      idle: mode === 'idle' || mode === 'saved',
+      active: mode === 'recording' || mode === 'paused',
+      saved: mode === 'saved',
+      netStatus: away ? 'away' : 'synced',
+      netText: away ? 'Away from eclume network' : 'On eclume network',
+      netEnd: away ? (items.length + ' waiting') : 'All synced',
+      items,
+      recStatus: mode === 'paused' ? 'paused' : 'recording',
+      recText: mode === 'paused' ? 'Paused' : 'Recording',
+      clock: this.fmt(secs),
+      meterEl: React.createElement('div', { className: 'meter meter-lg', style: mode === 'paused' ? { color: 'var(--color-divider)' } : null }, bars),
+      markers,
+      markerCount: String(markers.length),
+      paused: mode === 'paused' ? 'true' : 'false',
+      pauseLabel: mode === 'paused' ? 'Resume' : 'Pause',
+      savedMeta: saved ? saved.meta : '',
+      start: () => this.setState({ mode: 'recording', secs: 0, markers: [] }),
+      togglePause: () => this.setState(s => ({ mode: s.mode === 'paused' ? 'recording' : 'paused' })),
+      addMarker: () => this.setState(s => ({ markers: s.markers.concat({ tc: this.fmt(s.secs), note: 'Marker' }) })),
+      stop: () => this.setState(s => ({ mode: 'saved', saved: { meta: this.fmt(s.secs) + ' · ' + s.markers.length + ' markers · on this phone' } })),
+      done: () => this.setState(s => ({ mode: 'idle', queue: [{ title: 'Untitled', sub: 'Today 10:42 · ' + this.fmt(s.secs) + ' · ' + s.markers.length + ' markers' }].concat(s.queue) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

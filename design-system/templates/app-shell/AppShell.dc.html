@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="App shell" description="User web app: grouped sidebar (Recordings, Organize, My settings), page head and an optional right-hand filter panel" -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</a>
+<nav class="nav-group" aria-label="Recordings"><span class="nav-group-title">Recordings</span><a class="nav-link" href="#" aria-current="page">Library</a><a class="nav-link" href="#">Search</a></nav><nav class="nav-group" aria-label="Organize"><span class="nav-group-title">Organize</span><a class="nav-link" href="#">People</a><a class="nav-link" href="#">Fields and rules</a><a class="nav-link" href="#">Agenda types</a></nav><nav class="nav-group" aria-label="My settings"><span class="nav-group-title">My settings</span><a class="nav-link" href="#">MCP connection</a><a class="nav-link" href="#">Access tokens</a><a class="nav-link" href="#">Desktop app</a></nav>
+<div class="sidebar-footer"><div><strong>Jane Doe</strong><br><span class="text-muted">jane.doe@example.com</span></div><button type="button" class="btn btn-secondary">Sign out</button></div>
+</aside>
+<div class="with-filters" data-collapsed="{{ collapsed }}">
+<main class="main" style="max-width:none">
+<div class="page-head"><div><span class="kicker">Section</span><h1>Page title</h1></div><button type="button" class="btn btn-primary">Primary action</button></div>
+<p class="text-muted">Page content.</p>
+</main>
+<sc-if value="{{ showFilters }}" hint-placeholder-val="{{ true }}">
+<aside class="filters"><div class="filters-head"><h5 style="margin:0">Filters</h5><button type="button" class="btn btn-ghost btn-icon" aria-label="Collapse filters" style="width:28px;height:28px" onClick="{{ toggle }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"></rect><path d="M15 3v18"></path></svg></button></div>
+<div class="filter-group"><h6>Group</h6><label class="check"><input type="checkbox" defaultChecked="{{ true }}"><span class="box"></span><span>Option</span></label><label class="check"><input type="checkbox"><span class="box"></span><span>Option</span></label></div>
+</aside>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;showFilters&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { collapsed: false };
+  componentDidMount() { this.applyTheme(); }
+  componentDidUpdate() { this.applyTheme(); }
+  applyTheme() {
+    const r = document.documentElement;
+    if ((this.props.theme ?? 'light') === 'dark') r.setAttribute('data-theme', 'dark'); else r.removeAttribute('data-theme');
+  }
+  renderVals() {
+    const showFilters = this.props.showFilters ?? true;
+    return {
+      showFilters,
+      collapsed: showFilters ? (this.state.collapsed ? '' : undefined) : '',
+      toggle: () => this.setState(s => ({ collapsed: !s.collapsed })),
+    };
+  }
+}
+</script>
+</body>
+</html>

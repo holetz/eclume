@@ -1,0 +1,25 @@
+<!-- @dsCard group="Components" name="Import dialog" subtitle="Drop zone and a per-file date read from metadata, editable before sending" viewport="880x700" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Import</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:960px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-8) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-3)}.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-6);align-items:start}.dialog-backdrop{position:static;padding:0;background:none;display:block}</style>
+</head>
+<body>
+<main class="demo">
+<div class="dialog-backdrop"><div class="dialog dialog-lg" role="dialog" aria-labelledby="imp-t">
+<div class="dialog-head"><div><span class="kicker">Library</span><span class="dialog-title" id="imp-t">Import files</span></div><button type="button" class="btn btn-ghost btn-icon" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<label class="dropzone"><strong>Drop audio or video here</strong><span class="text-muted">or <a href="#">choose files</a> · MP3, M4A, WAV, MP4, MKV up to 4 GB</span></label>
+<table class="table"><thead><tr><th>File</th><th>Recorded on</th><th>Duration</th></tr></thead><tbody>
+<tr><td><strong>kickoff-guion.m4a</strong></td><td><input class="input mono" style="max-width:190px" value="2026-09-19 14:02"><div class="date-source">From file metadata</div></td><td class="tabular">47:12</td></tr>
+<tr><td><strong>meeting-03.mkv</strong></td><td><input class="input mono" style="max-width:190px;border-color:var(--color-warning)" value="2026-09-23 13:00"><div class="date-source" style="color:var(--color-warning)">No date in the file · using the file date, check it</div></td><td class="tabular">52:40</td></tr>
+</tbody></table>
+<div class="dialog-actions"><button type="button" class="btn btn-secondary">Cancel</button><button type="button" class="btn btn-primary">Send 2 files</button></div>
+</div></div>
+<p class="note">Each row shows where its date came from. A missing date gets the warning tone and the fallback it used, so importing a batch never blocks on one file.</p>
+</main>
+</body>
+</html>
