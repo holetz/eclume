@@ -4,7 +4,7 @@ title: Agent communication
 description: The language a repo declares for the prose its agents author — one BCP-47 tag on the root harness line, governing artifact and conversation alike — and the conduct contract that holds in every repo whether or not a language is declared
 resource: docs/**
 tags: [agents, language, communication, harness]
-timestamp: 2026-09-24
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: quenching skeleton
@@ -113,7 +113,7 @@ drawn explicitly:
 | --- | --- | --- |
 | What one command promises, refuses and routes elsewhere | that command's own body and `description` | never restates it |
 | The mechanics of actually asking — how a question is posed, accumulated and applied | the spec tooling that drives the asking | cites it |
-| How commands, hooks and agent definitions are classified, authored, budgeted and swept | `docs/standards/automation/` | cites it |
+| How commands, hooks and agent definitions are classified, authored, budgeted and swept | the quenching plugin (this repository has no `automation` subject of its own) | cites it |
 
 What is left — and what this doc owns — is only what holds in **every** task, command or not. That
 is the band none of the three above occupies, and keeping to it is the single failure mode this

@@ -422,17 +422,38 @@ impl Queue {
         Ok(())
     }
 
-    /// Recupera as gravações que ficaram em `recording` (o processo morreu no meio): passam a
-    /// `pending` com `interrupted = 1`. Devolve as recuperadas, para o chamador acertar os
-    /// arquivos (`fix_file`) antes de gravar caminho e tamanho finais.
+    /// Marca uma gravação fechada como interrompida (a thread de gravação falhou no meio).
+    pub fn mark_interrupted(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE recordings SET interrupted = 1 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    /// Recupera as gravações que ficaram em `recording` sem sessão viva (`live`): o processo
+    /// morreu no meio, ou o `.part` ficou preso ao parar. Passam a `pending` com
+    /// `interrupted = 1`. O chamador acerta os arquivos (`fix_file`) antes de gravar caminho e
+    /// tamanho finais; uma linha cujo `fix_file` falha fica em `recording`, no log, e as outras
+    /// seguem. Devolve as recuperadas.
     pub fn recover_interrupted(
         &self,
+        live: &[&str],
         mut fix_file: impl FnMut(&QueuedRecording) -> Result<(PathBuf, i64)>,
     ) -> Result<Vec<QueuedRecording>> {
         let orphans = self.by_status(Status::Recording)?;
         let mut recovered = Vec::with_capacity(orphans.len());
         for orphan in orphans {
-            let (path, bytes) = fix_file(&orphan)?;
+            if live.contains(&orphan.id.as_str()) {
+                continue;
+            }
+            let (path, bytes) = match fix_file(&orphan) {
+                Ok(fixed) => fixed,
+                Err(err) => {
+                    log::warn!("gravação {} segue em andamento: {err:#}", orphan.id);
+                    continue;
+                }
+            };
             self.conn.execute(
                 "UPDATE recordings SET path = ?2, bytes = ?3, ended_at = COALESCE(ended_at, ?4),
                  status = 'pending', interrupted = 1 WHERE id = ?1",
@@ -924,7 +945,7 @@ mod tests {
             .begin("crash", Path::new("/tmp/crash.ogg.part"), 5)
             .unwrap();
         let recovered = queue
-            .recover_interrupted(|rec| {
+            .recover_interrupted(&[], |rec| {
                 assert_eq!(rec.status, Status::Recording);
                 Ok((rec.path.with_extension(""), 1_234))
             })

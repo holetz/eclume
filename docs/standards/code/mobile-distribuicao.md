@@ -7,7 +7,7 @@ tags: [code, mobile, android, release, apk, ci]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#89
+source: holetz/eclume#41, holetz/eclume#89, holetz/eclume#90
 maintainer: holetz
 ---
 
@@ -15,7 +15,7 @@ maintainer: holetz
 
 O app móvel ([mobile-app.md](mobile-app.md)) sai como um **APK assinado**, baixado do próprio
 servidor eclume. Não há loja: publicar na Google Play ou na App Store é decisão e conta da dona do
-produto. iOS tem spec própria.
+produto. O iOS está fora do escopo, sem spec aberta.
 
 ## Versão e tag
 
@@ -29,8 +29,10 @@ Roda por tag `mobile-v*` ou à mão (`workflow_dispatch` com `publicar` e `notas
 
 1. confere que a tag bate com a versão do `tauri.conf.json` e, quando vai publicar, que o commit tem
    o status `eclume/gate` = `success` do gate do host ([monorepo.md](monorepo.md)), sem dispensa;
-2. num `ubuntu-24.04`, que já traz o SDK e o NDK (`ANDROID_NDK_LATEST_HOME`), instala o Java 21,
-   o Node 22 e os alvos Rust `aarch64-linux-android` e `armv7-linux-androideabi`;
+2. num `ubuntu-24.04`, que já traz o SDK, instala o Java 21, o Node do `.nvmrc`, o Rust de
+   `mobile/rust-toolchain.toml` (com os alvos `aarch64-linux-android` e `armv7-linux-androideabi`)
+   e o NDK `28.2.13676358` de `mobile/scripts/android-sdk.sh` pelo `sdkmanager`, e roda o `npm ci`
+   antes de a keystore existir no runner;
 3. decodifica a keystore de `ANDROID_KEYSTORE_B64` num arquivo temporário e grava
    `gen/android/keystore.properties` (`storeFile`, `password`, `keyAlias`; fora do git), que o
    `app/build.gradle.kts` lê para o `signingConfig` de release;

@@ -2,12 +2,12 @@
 type: standard
 title: Layout do monorepo e comandos por pilar
 description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI, o gate do host e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, .githooks/pre-push
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
 tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89
+source: holetz/eclume#2, holetz/eclume#41, holetz/eclume#89, holetz/eclume#90, holetz/eclume#125
 maintainer: holetz
 ---
 
@@ -21,7 +21,7 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
 | `engines/` | interface de engine de ASR (`eclume_engines`), compartilhada | uv (membro do workspace) |
 | `server/` | API (`eclume_server`) | uv (membro do workspace) |
 | `worker-gpu/` | worker de ASR (`eclume_worker`) | uv (membro do workspace) |
-| `web/` | frontend React + Vite + TS | npm, Node 22 |
+| `web/` | frontend React + Vite + TS | npm, Node do `.nvmrc` (22) |
 | `desktop/` | app Tauri 2 (`desktop/src-tauri`) | cargo (workspace em `desktop/Cargo.toml`) |
 | `mobile/` | app móvel Tauri 2 (Android; `mobile/src-tauri`) | npm em `mobile/` e cargo (workspace em `mobile/Cargo.toml`) |
 | `contracts/` | OpenAPI v1 e JSON Schema da transcrição | — |
@@ -150,8 +150,8 @@ O APK de depuração x86_64 (o do emulador) sai em
 
 O job `mobile` da CI roda a UI (lint, vitest e build), o workspace cargo no Linux (fmt, check,
 clippy e testes; o plugin compila no Linux pelo lado sem Android) e um `cargo check` do
-`eclume-mobile-core` para `aarch64-linux-android` com o NDK que o runner já traz
-(`ANDROID_NDK_LATEST_HOME`), sem o gradle: prova a compilação cruzada do libopus (cmake e ninja) e
+`eclume-mobile-core` para `aarch64-linux-android` com o NDK fixado (`28.2.13676358`, instalado pelo
+`sdkmanager` e passado em `ECLUME_ANDROID_NDK`), sem o gradle: prova a compilação cruzada do libopus (cmake e ninja) e
 do SQLite. O compilador e o linker do NDK entram por `CC_aarch64_linux_android`,
 `AR_aarch64_linux_android` e `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`; no host, o
 `android-env.sh` os exporta pelo nome, com o `bin` do NDK no fim do `PATH`. Não há
@@ -171,44 +171,96 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 `deploy/docker-compose.test.yml` sobe os mesmos três serviços para a suíte do server, com dados em
 `tmpfs` e portas próprias (`55532`, `56479`, `59100`); rode-o sempre com `-p eclume-test`.
 
+## Toolchains, fixações e atualização
+
+Cada toolchain tem uma fonte, e tudo o que roda o pilar a lê:
+
+- **Rust**: `desktop/rust-toolchain.toml` e `mobile/rust-toolchain.toml`, com a mesma versão exata
+  (`channel`), `clippy` e `rustfmt` (e os alvos Android no mobile). O `rustup` lê o arquivo da pasta
+  de onde o cargo roda: o `deploy/pilares.sh` entra em `desktop/` ou `mobile/`, a CI roda
+  `rustup toolchain install` ali, e a imagem de build (`desktop/build.Dockerfile`) instala o Rust do
+  arquivo e leva a versão na tag (`eclume-desktop-build:<versão>`, idem `-windows` e `eclume-gate`).
+- **Node**: o major em `.nvmrc` (`node-version-file` nos workflows, `engines.node` nos
+  `package.json`, `node:<major>` por digest nas imagens).
+- **Python**: `.python-version`.
+- **CLI do Tauri**: versão exata em `desktop/package.json` e `mobile/package.json`, com lockfile;
+  nenhum script, workflow ou Dockerfile roda `npx --yes`.
+- **Actions** por SHA de commit com o comentário da versão (`uses: actions/checkout@<sha> # v7.0.1`)
+  e `runs-on` com a imagem nomeada (`ubuntu-24.04`, `windows-2025`), nunca `*-latest`; o Rust dos
+  workflows vem do `rustup` do runner, sem action de terceiros.
+- **Imagens externas** (Dockerfiles e composes de produção, dev, teste, e2e, GPU e mock) por
+  `tag@sha256:`: uma imagem nova só chega ao host por mudança de digest no repositório.
+- **NDK** `28.2.13676358`, o de `mobile/scripts/android-sdk.sh`: a CI o instala pelo `sdkmanager` e
+  o passa ao pilar `mobile` em `ECLUME_ANDROID_NDK` (o gate monta o do host).
+
+`deploy/fixacoes.py` (com `deploy/test_fixacoes.py`) falha se qualquer dessas fixações regredir e
+se um diretório com manifesto ficar sem entrada no `.github/dependabot.yml`.
+
+**Atualização.** O Dependabot abre PRs semanais, agrupados por ecossistema e com espera
+(`cooldown`) de 7 dias depois da publicação, para uv, npm (`web`, `mobile`, `desktop`,
+`desktop/ui-tests`), cargo (`desktop`, `mobile`), gradle, github-actions, docker, docker-compose e
+rust-toolchain; os alertas e as atualizações de segurança estão ligados no repositório. Um PR do
+Dependabot só entra com `eclume/gate` = `success` no SHA dele (`bash deploy/gate.sh <ref>`). Major
+(Python, Node, Postgres, Tauri) se decide no próprio PR.
+
+**Auditoria.** O pilar `auditoria` do gate roda `pip-audit` sobre o `uv export --locked`,
+`npm audit --omit=dev --audit-level=high` em `web`, `mobile` e `desktop` e
+`cargo deny --locked check advisories` em `desktop` e `mobile`, com as ferramentas de versão fixada
+na imagem do gate. Exceção só com motivo e prazo: `deploy/auditoria-excecoes.txt` (Python; vencida,
+deixa de valer), o `[advisories] ignore` de `desktop/deny.toml` e `mobile/deny.toml` (Rust) e
+`overrides` no `package.json` (npm).
+
 ## CI e gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` e `deploy/gate.sh`
 
 Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
-(`--lista` enumera os sete: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile` e
-`windows`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
+(`--lista` enumera os nove: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
+`docs`, `windows` e `auditoria`), com `--locked` no uv e no cargo, `gen:api -- --check` no web e
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
 mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
 serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam o mesmo script;
-`deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows` entrar na CI.
+`deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows` ou
+`auditoria` entrarem na CI.
 
-**CI (aviso, não requisito de publicação).** Jobs `ubuntu-latest` independentes, em `pull_request`,
+**CI (aviso, não requisito de publicação).** Jobs `ubuntu-24.04` independentes, em `pull_request`,
 em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
-`web-browser`, `desktop` e `mobile`, cada um com o seu setup (actions, apt, serviços de
+`web-browser`, `desktop`, `mobile` e `docs`, cada um com o seu setup (actions, apt, serviços de
 `deploy/docker-compose.test.yml` no `python`, mock no `contracts` e no `web-browser`, dependências do
 Chromium no `desktop`) e uma chamada a `bash deploy/pilares.sh <job>`. O `web-browser` usa o Google
 Chrome do runner (`E2E_CHANNEL=chrome`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
 a suíte do server nunca pular; o `desktop` imprime `df -h` e `free -m` antes do cargo.
 Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
-de documentação (`docs/`, `.design/`, `.impeccable/`, `.claude/`, os `.md` da raiz) não dispara o
-workflow, e o job `mudancas` (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo
-de que ele depende, foi tocado: o `python` e o `web` também rodam com `contracts/`, o `desktop` com
-`web/src/styles/eclume.css`, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
+em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`
+(`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo de que ele depende, foi tocado:
+mudança só de documentação (`docs/`, qualquer `.md`) liga só o `docs`; o `python` e o `web` também
+rodam com `contracts/`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
 `deploy/test_gate.py` e os workflows de release. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
 disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
 último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,
 acrescente o caminho ao filtro do job que a consome.
 
+**Documentação (pilar `docs`).** `cq knowledge validate` (a conformidade do bundle OKF, com o
+`cq` do repositório público `holetz/quenching` fixado por SHA — o da tag 6.3.0 —, por `ARG
+QUENCHING_SHA` no `deploy/gate.Dockerfile` e por checkout no job `docs`; `deploy/test_docs_check.py`
+confere que as duas referências são a mesma) e `deploy/docs_check.py`, que varre `docs/**/*.md`, os
+`.md` da raiz e os `README.md`/`INSTALACAO.md` dos pilares: link relativo (ou absoluto a partir da
+raiz) para arquivo que existe e, com `#`, para um título que existe (slug do GitHub); caminho em
+crase que começa por uma pasta de topo existe (`:linha` ignorado; curinga, `<`, `{`, `$`, comando e
+`node_modules` ficam de fora); e o glossário em ordem alfabética sem caixa nem acento. Um caminho
+citado que não existe de propósito (gerado em execução, de outro repositório, exemplo hipotético)
+entra em `EXCECOES`, no próprio script, com o motivo; a exceção que deixa de ser necessária também
+falha. Links para fora não são seguidos.
+
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
-commit para o host GPU e roda lá `deploy/gate-host.sh`: os sete pilares, cada um num contêiner da
-imagem `eclume-gate:24.04` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os nove pilares, cada um num contêiner da
+imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
 `eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
 execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
-commit: `pending` enquanto roda, `success` só com os sete pilares verdes numa execução completa,
+commit: `pending` enquanto roda, `success` só com os nove pilares verdes numa execução completa,
 `failure` nomeando os pilares que falharam e `error` quando o gate não consegue provar; o log fica em
 `~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
-uma parte e nunca publica. O pilar `windows` (`cargo xwin clippy` do desktop para
-`x86_64-pc-windows-msvc`, `-D warnings`) é só do gate.
+uma parte e nunca publica. Os pilares `windows` (`cargo xwin clippy` do desktop para
+`x86_64-pc-windows-msvc`, `-D warnings`) e `auditoria` são só do gate.
 Nenhum caminho que publica aceita um SHA sem `eclume/gate` = `success`: `deploy/deploy.sh`,
 `deploy/release-desktop.sh --publicar`, `desktop-release.yml` e `mobile-release.yml`. A saída de
 emergência é `--sem-gate "<motivo>"`, por invocação, no `deploy.sh` e no `release-desktop.sh`:

@@ -130,3 +130,42 @@ fn index_carrega_so_arquivos_que_existem() {
         }
     }
 }
+
+/// Os slugs que a UI pede ao `open_help` (`{ article: "<slug>" }`; `null` é a central).
+fn slugs_de_ajuda(texto: &str) -> Vec<String> {
+    let mut slugs = Vec::new();
+    for (inicio, _) in texto.match_indices("\"open_help\"") {
+        let resto = &texto[inicio..];
+        let args = &resto[..resto.find('}').unwrap_or(resto.len())];
+        if let Some(pos) = args.find("article:") {
+            let valor = args[pos + "article:".len()..].trim_start();
+            if let Some(sem_aspas) = valor.strip_prefix('"') {
+                slugs.push(sem_aspas[..sem_aspas.find('"').unwrap()].to_string());
+            }
+        }
+    }
+    slugs
+}
+
+#[test]
+fn artigos_de_ajuda_pedidos_pela_ui_existem_no_web() {
+    let artigos =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/features/help/articles");
+    if !artigos.exists() {
+        return; // build fora do monorepo
+    }
+    let mut pedidos = Vec::new();
+    for arquivo in text_files(&ui_dir().join("js")) {
+        pedidos.extend(slugs_de_ajuda(&read(&arquivo)));
+    }
+    assert!(
+        pedidos.len() >= 3,
+        "esperava os artigos do menu de ajuda: {pedidos:?}"
+    );
+    for slug in pedidos {
+        assert!(
+            artigos.join(format!("{slug}.md")).exists(),
+            "a UI do desktop abre o artigo {slug}, que não existe em web/src/features/help/articles"
+        );
+    }
+}

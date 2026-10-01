@@ -1,0 +1,3 @@
+# Contexto mínimo da imagem de build: só o arquivo que fixa o Rust.
+*
+!rust-toolchain.toml

@@ -4,7 +4,7 @@ title: App móvel
 description: O app móvel do eclume (Tauri 2, Android) é um microfone portátil — UI React sobre o DS, comandos Tauri e o evento estado sobre o eclume-mobile-core (os crates de gravação e sync do desktop), e o plugin nativo Kotlin pela ponte JNI (serviço em primeiro plano do tipo microfone, notificação, NsdManager, Wi-Fi não medido, WorkManager, instalador); a conexão pelos três caminhos com a CA fixada, a rede do eclume, a sessão com tempo de áudio e marcadores, o sync, as telas e a prova no emulador.
 resource: mobile/**
 tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
-timestamp: 2026-09-29
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#41
@@ -16,8 +16,9 @@ maintainer: holetz
 O celular é um **microfone portátil**: grava em Ogg/Opus mono 16 kHz com a tela bloqueada, marca
 instantes com nota opcional, guarda as gravações longe do servidor e sincroniza sozinho no Wi‑Fi
 da rede do servidor, com o mesmo upload retomável do desktop. **Não lê transcrição nem resumo**:
-isso é da web. Android primeiro; iOS tem spec própria (o núcleo, a UI com `data-os` e a interface
-do plugin ficam prontos para o lado Swift). O layout e os comandos do pilar estão em
+isso é da web. Só Android: o iOS está fora do escopo, sem spec aberta (o plugin recusa o iOS em
+`mobile/plugins/gravador/src/lib.rs`; o núcleo, a UI com `data-os` e a interface do plugin não
+fecham a porta para um lado Swift). O layout e os comandos do pilar estão em
 [monorepo.md](monorepo.md#móvel--npm-e-workspace-cargo-em-mobile); a distribuição, em
 [mobile-distribuicao.md](mobile-distribuicao.md).
 

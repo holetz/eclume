@@ -1,10 +1,10 @@
 ---
 type: standard
 title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota por voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
+description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v4, com natureza, origem da data, fonte, marcadores, título e tipo de agenda escolhidos ao parar) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57
@@ -69,7 +69,7 @@ mais longa das outras, o caso de uma rajada atrasada. A fonte que volta a entreg
 depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amostra nova apagava o
 áudio do sistema depois da primeira pausa (holetz/eclume#28).
 
-## Nota por voz e parada por silêncio
+## Nota de voz e parada por silêncio
 
 - `AppState::start_note()` abre **só o microfone**, pelo mesmo `capture.rs` e com o dispositivo
   escolhido: uma nota é fala de quem grava, e o áudio do sistema traria música e notificações. A
@@ -156,13 +156,28 @@ depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amo
 ```
 recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)
     │                   ▲                        │
-    └─crash: recover────┘ (interrupted = 1)      └──▶ failed ──retry_due / retry_failed──▶ pending
+    ├─crash / .part preso: recover_orphans ──┘   └──▶ failed ──retry_due / retry_failed──▶ pending
+    │    (abertura ou varredura a cada minuto; interrupted = 1)
+    └─falha ou pânico da gravação: parar fecha mesmo assim (interrupted = 1)
 ```
 
-- **Recuperação:** ao abrir, o app chama `session::recover`: cada linha ainda em `recording` tem o
-  `.part` renomeado (o Ogg é legível até a última página escrita) e vira `pending` com
-  `interrupted = 1`; o que ficou em `syncing` volta a `pending`, e todo `details_pending` cai (a
-  folha que segurava o sync já não existe).
+- **Parada que sempre fecha:** `ActiveRecording::stop` guarda o erro ou pânico da thread de
+  gravação no log em vez de abortar; o motivo vira `StopReason::Failed` (pânico sem motivo também).
+  O `.part` é renomeado com até 5 tentativas (200 ms dobrando, ~3 s: antivírus e indexador do
+  Windows seguram o arquivo por instantes) e a linha vira `pending` com a duração de
+  `Progress::position_ms` e, quando a gravação falhou, `interrupted = 1` (`Queue::mark_interrupted`).
+  `stop` só devolve erro quando a fila falha ou o `.part` segue preso; aí a linha fica em
+  `recording` para a varredura.
+- **Recuperação:** `session::recover_orphans(fila, vivas)` acerta cada linha em `recording` cujo
+  id não está em `vivas`: renomeia o `.part` (o Ogg é legível até a última página escrita) e a
+  passa a `pending` com `interrupted = 1`, uma linha por vez: um `rename` recusado deixa aquela
+  linha como está, no log, e segue. Ao abrir, o app chama `session::recover` (órfãs sem vivas,
+  mais o que ficou em `syncing` de volta a `pending` e todo `details_pending` caído: a folha que
+  segurava o sync já não existe); a abertura nunca falha por um `.part` preso. Com o app aberto,
+  o reaper chama `AppState::sweep_orphans` a cada minuto, com o id da gravação ativa lido e mantido
+  sob o lock de estado (ordem estado → fila), e nenhuma gravação começa no meio da varredura.
+  **Regra:** a varredura só toca linha `recording` cujo id não pertence a nenhuma sessão viva do
+  processo; uma sessão em parada também conta como viva.
 - `claim_next` reserva só `pending`, e pula a que tem `details_pending` até `DETAILS_WAIT_MS`
   (10 min) depois do fim: a folha esquecida aberta não segura o sync para sempre. `mark_failed` agenda `next_attempt_at` por
   `retry_backoff_ms` (30 s dobrando a cada tentativa, até 1 h); `retry_due(agora, max)` devolve à
@@ -198,6 +213,15 @@ Implementados pela `holetz/eclume#13`; o detalhe está em
   servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
   pode ser sobreposto por `ECLUME_WEB_URL`.
 - Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
+- Quando a gravação para sozinha porque as fontes caíram ou porque a gravação falhou, o reaper
+  (a cada segundo) fecha a linha e sai uma notificação do SO: "A gravação parou" com "<tempo>
+  salvos · as fontes de áudio caíram" ou "<tempo> salvos · falha ao gravar"; a janela mostra o
+  mesmo aviso.
+- `config.json` é gravado por um temporário vizinho (`.config.json.tmp`) com `sync_all` e
+  renomeação; falhando, o temporário é apagado. A abertura só o grava quando a versão aberta muda
+  `last_version`. Um arquivo ilegível é renomeado para `config.json.ilegivel-<ms>` antes de o
+  padrão valer, e a janela avisa "A configuração estava ilegível e voltou ao padrão; a cópia está
+  em …".
 - A bandeja (menu, ícone, título e dica) só é tocada na thread principal. Os setters do Tauri
   (`set_text`, `set_menu`, `set_icon`, `set_title`, `set_tooltip`) despacham para ela e bloqueiam
   até a resposta: uma thread de fundo que os chamasse segurando um lock que a thread principal

@@ -4,7 +4,7 @@ title: Worker GPU na GTX 1660 SUPER
 description: Como o worker GPU do eclume (WhisperX large-v3-turbo, alinhamento wav2vec2 pt, diarização pyannote community-1) roda no host 192.168.15.199 — compute type, benchmark medido, imagem, pré-processamento com o modelo do RNNoise, cache de modelos, token do Hugging Face e operação.
 resource: worker-gpu/**, engines/src/eclume_engines/**, deploy/docker-compose.gpu-test.yml
 tags: [worker-gpu, whisperx, gpu, benchmark, runbook]
-timestamp: 2026-09-27
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#8, holetz/eclume#12, holetz/eclume#26, holetz/eclume#33
@@ -165,7 +165,7 @@ Pré-processamento e que chega em `options.preprocess`. A ordem e as regras est�
     https://huggingface.co/pyannote/speaker-diarization-community-1/resolve/main/config.yaml   # 200
   ```
 
-- **Token da plataforma:** o admin grava o token em Administração → Segredos, e ele chega a
+- **Token da plataforma:** o admin grava o token em Administração → Locutores, e ele chega a
   cada job cifrado nas `options` (`hf_token_encrypted`), com precedência sobre `HF_TOKEN` e o
   arquivo. Para abri-lo, o worker precisa de `ECLUME_ENCRYPTION_KEY` (ou `ECLUME_SECRET_KEY`)
   **igual à do server**; sem ela, o job avisa `hf_token_undecryptable` e usa o token do ambiente.

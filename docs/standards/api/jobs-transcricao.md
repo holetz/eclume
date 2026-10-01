@@ -4,7 +4,7 @@ title: Contrato de jobs de transcrição (server ↔ worker GPU)
 description: As duas filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a detecção de job morto pelo server e o ASR residente entre jobs.
 resource: server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
 source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33
@@ -130,7 +130,8 @@ hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)
 `ingest_transcript` persiste a transcrição no Postgres, indexa para FTS e guarda os embeddings
 (coluna pgvector, dimensão pelo modelo). Na mesma transação, restaura os vínculos
 locutor↔pessoa de uma retranscrição e compara os locutores com as impressões de voz das pessoas
-com consentimento, gravando as sugestões acima do limiar
+do diretório da conta (com a identificação por voz ligada na plataforma), gravando as sugestões
+acima do limiar
 ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
 da gravação para `transcribed`.
 

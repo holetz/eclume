@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate de qualidade do eclume, a partir da estação: envia o `git archive` do commit para o host GPU
-# e roda lá deploy/gate-host.sh, que prova os sete pilares de deploy/pilares.sh e publica o status
+# e roda lá deploy/gate-host.sh, que prova os pilares de deploy/pilares.sh e publica o status
 # `eclume/gate` no commit. Deploy e releases recusam um SHA sem esse status em `success`.
 # Contrato: docs/standards/code/monorepo.md; runbook: docs/project/host-setup.md.
 #
@@ -85,7 +85,8 @@ fi
 # shellcheck disable=SC2016 # o $HOME é o do host
 DIR="$(host 'echo "$HOME"')/eclume-gate/src-$SHA-$(date +%s)"
 echo "Enviando o código de $SHA para $SSH:$DIR…" >&2
-git archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
+# Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
+git -c core.autocrlf=false archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
 
 args=(--sha "$SHA")
 [[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")

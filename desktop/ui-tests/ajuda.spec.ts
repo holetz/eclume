@@ -33,7 +33,7 @@ test('os itens abrem a ajuda do servidor e a pasta de logs', async ({ abrir }) =
   }
   const feitas = (await chamadas(page)).filter((c) => c.comando === 'open_help' || c.comando === 'open_log_dir')
   expect(feitas).toEqual([
-    { comando: 'open_help', args: { article: 'primeiros-passos' } },
+    { comando: 'open_help', args: { article: 'primeira-gravacao' } },
     { comando: 'open_help', args: { article: 'permissoes-de-microfone' } },
     { comando: 'open_help', args: { article: 'pasta-sincronizada' } },
     { comando: 'open_help', args: { article: null } },

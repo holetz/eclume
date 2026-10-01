@@ -3,9 +3,9 @@ titulo: Instale o app desktop
 topico: comecar
 paginas: [app-desktop]
 relacionados: [primeira-gravacao, notas-de-voz, marcadores]
-termos: [instalar, instalador, Windows, macOS, Linux, baixar, download, primeira execução, entrar]
+termos: [instalar, instalador, Windows, Linux, baixar, download, primeira execução, entrar]
 ordem: 3
-atualizado: 2026-09-27
+atualizado: 2026-10-01
 ---
 O app desktop grava reuniões e notas de voz no computador e envia tudo para este servidor.
 
@@ -24,7 +24,6 @@ Os instaladores do eclume não são assinados por uma loja de aplicativos, entã
 primeira vez:
 
 - **Windows:** na tela do SmartScreen, use **Mais informações** e depois **Executar assim mesmo**.
-- **macOS:** abra o app pelo menu de contexto, em **Abrir**, e confirme.
 - **Linux:** instale o `.deb` pelo gerenciador de pacotes, ou marque o AppImage como executável.
 
 O aviso não volta nas próximas vezes.

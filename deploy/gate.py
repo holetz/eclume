@@ -22,7 +22,9 @@ import sys
 from typing import Any
 
 CONTEXTO = "eclume/gate"
-PILARES = ("python", "contracts", "web", "web-browser", "desktop", "mobile", "windows")
+PILARES = ("python", "contracts", "web", "web-browser", "desktop", "mobile", "docs", "windows", "auditoria")
+# Pilares que só o gate roda: a CI não tem o xwin nem a rede da auditoria a cada PR.
+SO_NO_GATE = ("windows", "auditoria")
 LIMITE_DESCRICAO = 140
 ALVO = "refs/heads/main"
 SHA_NULO = "0" * 40
