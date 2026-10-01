@@ -135,7 +135,7 @@ def test_store_baixa_e_grava_json(tmp_path: Path):
     assert dest.read_bytes() == b"OggS"
     assert sha256_file(dest) == "sha256:" + hashlib.sha256(b"OggS").hexdigest()
 
-    store.put_json(transcript_key("r1"), {"texto": "olá"})
-    assert json.loads(s3.objects["b", "recordings/r1/transcript.raw.json"]) == {"texto": "olá"}
-    assert s3.content_types["recordings/r1/transcript.raw.json"] == "application/json"
-    assert embeddings_key("r1") == "recordings/r1/speaker_embeddings.json"
+    store.put_json(transcript_key("g1", 2), {"texto": "olá"})
+    assert json.loads(s3.objects["b", "recordings/g1/r2/transcript.raw.json"]) == {"texto": "olá"}
+    assert s3.content_types["recordings/g1/r2/transcript.raw.json"] == "application/json"
+    assert embeddings_key("g1", 2) == "recordings/g1/r2/speaker_embeddings.json"

@@ -14,14 +14,14 @@ if TYPE_CHECKING:
 _CHUNK = 1024 * 1024
 
 
-def transcript_key(recording_id: str) -> str:
-    """Chave do `transcript.raw.json` no bucket."""
-    return f"recordings/{recording_id}/transcript.raw.json"
+def transcript_key(recording_id: str, revision: int) -> str:
+    """Chave do `transcript.raw.json` da revisão no bucket."""
+    return f"recordings/{recording_id}/r{revision}/transcript.raw.json"
 
 
-def embeddings_key(recording_id: str) -> str:
-    """Chave do `speaker_embeddings.json` no bucket."""
-    return f"recordings/{recording_id}/speaker_embeddings.json"
+def embeddings_key(recording_id: str, revision: int) -> str:
+    """Chave do `speaker_embeddings.json` da revisão no bucket."""
+    return f"recordings/{recording_id}/r{revision}/speaker_embeddings.json"
 
 
 def sha256_file(path: Path) -> str:

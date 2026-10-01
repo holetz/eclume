@@ -166,8 +166,8 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     ctx = contexto(tmp_path, factory=factory)
     out = rodar(ctx, {"language": "pt-BR", "min_speakers": 2, "diarize": True, "embeddings": True})
 
-    t_key = f"recordings/{RECORDING}/transcript.raw.json"
-    e_key = f"recordings/{RECORDING}/speaker_embeddings.json"
+    t_key = f"recordings/{RECORDING}/r3/transcript.raw.json"
+    e_key = f"recordings/{RECORDING}/r3/speaker_embeddings.json"
     assert out["status"] == "done"
     transcript = ctx["store"].saved[t_key]
     Draft202012Validator(SCHEMA, format_checker=FormatChecker()).validate(transcript)
@@ -191,7 +191,7 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
 
     [(name, args, kwargs)] = ctx["redis"].jobs
     assert name == "ingest_transcript"
-    assert kwargs == {"_queue_name": "eclume:default"}
+    assert kwargs == {"_job_id": f"ingest_transcript:{RECORDING}:3", "_queue_name": "eclume:default"}
     assert args[:3] == (RECORDING, t_key, e_key)
     info = args[3]
     assert info["engine"] == "whisperx-local"
@@ -221,8 +221,28 @@ def test_falha_no_download(tmp_path: Path):
     assert name == "transcription_failed"
     assert args[:2] == (RECORDING, "audio_download_failed")
     assert "NoSuchKey" in args[2]
-    assert kwargs == {"_queue_name": "eclume:default"}
+    assert kwargs == {"_job_id": f"transcription_failed:{RECORDING}:3", "_queue_name": "eclume:default"}
     assert ctx["store"].saved == {}
+
+
+@pytest.mark.parametrize("falha", [None, "download", "engine"])
+def test_jobs_de_retorno_levam_a_revisao(tmp_path: Path, falha: str | None):
+    store = FakeStore(fail_download=falha == "download")
+    factory = Factory(error=EngineError("out_of_memory", "VRAM") if falha == "engine" else None)
+    ctx = contexto(tmp_path, store=store, factory=factory) | {"job_id": f"transcribe:{RECORDING}:7"}
+    rodar(ctx)
+    [(name, args, kwargs)] = ctx["redis"].jobs
+    esperado = "ingest_transcript" if falha is None else "transcription_failed"
+    assert name == esperado
+    assert kwargs["_job_id"] == f"{esperado}:{RECORDING}:7"
+    assert len(args) == 4  # os posicionais do contrato não mudam
+    assert ctx["redis"].hashes[f"eclume:progress:{RECORDING}"]["revision"] == 7
+    if falha is None:
+        assert args[1:3] == (
+            f"recordings/{RECORDING}/r7/transcript.raw.json",
+            f"recordings/{RECORDING}/r7/speaker_embeddings.json",
+        )
+        assert set(ctx["store"].saved) == set(args[1:3])
 
 
 def test_falha_da_engine_leva_o_codigo(tmp_path: Path):
@@ -395,7 +415,7 @@ def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
     [engine] = factory.created
     [(_, options, _)] = engine.calls
     assert options.language is None
-    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/r3/transcript.raw.json"]
     assert transcript["language"] == "en"
 
 
@@ -407,7 +427,7 @@ def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: 
     options = {"preprocess": {"denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6}}}
     rodar(ctx, options)
     assert pre.calls == [(options["preprocess"], "/opt/cb.rnnn")]
-    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/r3/transcript.raw.json"]
     # Os tempos voltam ao áudio original: a fala de 0 s no tratado é 2 s no original.
     assert [(s["start_ms"], s["end_ms"]) for s in transcript["segments"]] == [(2000, 4000), (4000, 6000)]
     assert transcript["segments"][0]["words"][0]["start_ms"] == 2000
@@ -427,10 +447,10 @@ def test_canais_separados_rodam_o_asr_por_canal(tmp_path: Path, pre: FakePreproc
     rodar(ctx, {"diarize": True, "embeddings": True, "min_speakers": 2})
     [engine] = factory.created
     assert [(opts.min_speakers, opts.max_speakers) for _, opts, _ in engine.calls] == [(1, 1), (1, 1)]
-    transcript = ctx["store"].saved[f"recordings/{RECORDING}/transcript.raw.json"]
+    transcript = ctx["store"].saved[f"recordings/{RECORDING}/r3/transcript.raw.json"]
     # Um locutor por canal, falas mescladas pelo início.
     assert [s["speaker_id"] for s in transcript["segments"]] == ["S1", "S2", "S1", "S2"]
-    embeddings = ctx["store"].saved[f"recordings/{RECORDING}/speaker_embeddings.json"]
+    embeddings = ctx["store"].saved[f"recordings/{RECORDING}/r3/speaker_embeddings.json"]
     assert sorted(embeddings["speaker_embeddings"]) == ["S1", "S2"]
 
 

@@ -57,6 +57,7 @@ class ProgressReporter:
     ) -> None:
         """`redis` é o cliente assíncrono do arq."""
         self.redis = redis
+        self.recording_id = recording_id
         self.key = progress_key(recording_id)
         self.revision = revision
         self.clock = clock
