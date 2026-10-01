@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101
 maintainer: holetz
 ---
 
@@ -77,6 +77,14 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   regravado só com o primeiro, e a credencial é apagada com o motivo `pin::CA_TRIMMED`
   (`Conexao::perdeu_credencial_por`), que manda entrar de novo, trocar a senha e desvincular a
   entrada antiga na web. Com um certificado só, nada muda.
+- **Próxima raiz** (holetz/eclume#101). A sonda que confirma a CA fixada guarda a próxima que o
+  descritor anuncia (`ca_next_sha256`): baixa `/downloads/eclume-root-proxima.crt` pela mesma
+  conexão fixada, confere e grava um certificado só em `ca.proxima.pem` (`pin::learn_next`); sem
+  anúncio, apaga a guardada, e fixar outro servidor ou sair também. Quando a sonda dá `CaMudou` e
+  há próxima guardada, o núcleo lê o descritor fixando a próxima (fora da trava) e, se ele a
+  confirma, troca `ca.proxima.pem` por `ca.pem` (`rename`) e grava a impressão nova na config
+  (`Conexao::promover_proxima`): a sonda vale como ok e o aparelho segue pareado. Sem próxima, ou
+  com outra raiz, segue `ca_mismatch`.
 - A fase `sem_credencial` leva um `motivo` opcional (fora do JSON quando vazio), que a tela Entrar
   mostra num `.alert.alert-warning` acima do formulário; ele some depois de entrar.
 - Os comandos que falam com o servidor para conectar (`conectar_*`, `confiar_ca`, `entrar`,
