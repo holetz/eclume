@@ -152,17 +152,17 @@
         ]
       },
       "warning": {
-        "canonical": "#936419",
+        "canonical": "#875C17",
         "displayName": "Warning",
         "tonalRamp": [
-          "#2C1E08",
-          "#4A320C",
-          "#674612",
-          "#845A16",
-          "#9E7430",
-          "#B3925E",
-          "#C9B28C",
-          "#F4F0E8"
+          "#281C07",
+          "#442E0C",
+          "#5E4010",
+          "#7A5315",
+          "#936C2E",
+          "#AB8D5D",
+          "#C3AE8B",
+          "#F3EFE8"
         ]
       },
       "danger": {
@@ -205,6 +205,20 @@
           "rgb(38 36 32 / 0.32)",
           "rgb(38 36 32 / 0.32)",
           "rgb(38 36 32 / 0.32)"
+        ]
+      },
+      "control-border": {
+        "canonical": "#7C746A",
+        "displayName": "Control Border",
+        "tonalRamp": [
+          "#252320",
+          "#3E3A35",
+          "#57514A",
+          "#70685F",
+          "#898279",
+          "#A39E97",
+          "#BEBAB4",
+          "#F2F1F0"
         ]
       },
       "dark-background": {
@@ -303,6 +317,76 @@
           "#F4AD9D",
           "#F8C4B9",
           "#FEF3F1"
+        ]
+      },
+      "dark-success": {
+        "canonical": "#A9B98A",
+        "displayName": "Dark Success",
+        "tonalRamp": [
+          "#333829",
+          "#545C45",
+          "#768261",
+          "#98A67C",
+          "#B2C096",
+          "#C3CEAD",
+          "#D4DCC4",
+          "#F6F8F3"
+        ]
+      },
+      "dark-warning": {
+        "canonical": "#D9AE6A",
+        "displayName": "Dark Warning",
+        "tonalRamp": [
+          "#413420",
+          "#6C5735",
+          "#987A4A",
+          "#C39D5F",
+          "#DDB679",
+          "#E4C697",
+          "#ECD6B4",
+          "#FBF7F0"
+        ]
+      },
+      "dark-accent-ink": {
+        "canonical": "#D6C8B5",
+        "displayName": "Dark Accent Ink",
+        "tonalRamp": [
+          "#403C36",
+          "#6B645A",
+          "#968C7F",
+          "#C1B4A3",
+          "#DACEBC",
+          "#E2D8CB",
+          "#EAE4DA",
+          "#FBFAF8"
+        ]
+      },
+      "dark-highlight": {
+        "canonical": "#3A2F24",
+        "displayName": "Dark Highlight",
+        "tonalRamp": [
+          "#110E0B",
+          "#1D1812",
+          "#292119",
+          "#342A20",
+          "#4E443A",
+          "#756D66",
+          "#9C9792",
+          "#EBEAE9"
+        ]
+      },
+      "dark-divider": {
+        "canonical": "rgb(236 232 226 / 0.3)",
+        "displayName": "Dark Divider",
+        "tonalRamp": [
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)",
+          "rgb(236 232 226 / 0.3)"
         ]
       },
       "secondary": {
@@ -479,7 +563,7 @@
     ],
     "rules": [],
     "dos": [
-      "**Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS",
+      "**Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS",
       "**Do** usar fios de 2px para estrutura e manter o raio zero.",
       "**Do** reservar a terracota para gravação e falha.",
       "**Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.",

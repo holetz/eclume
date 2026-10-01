@@ -3,14 +3,15 @@
 //   .list-row e .table do DS, .help-drawer fixo à direita, nenhuma requisição externa);
 // - com E2E_SCREENSHOTS=1, salva as telas em claro e escuro, a 1440×900 e a 390×844, em
 //   test-results/screens/app-<tela>[-movel]-<claro|escuro>.png;
-// - com ECLUME_DS_DIR apontando para o eclume-design, salva os quadros equivalentes de
+// - com E2E_SCREENSHOTS=1, salva também, do design-system/ (ou de ECLUME_DS_DIR), os quadros de
 //   examples/organize.html, settings.html, mobile.html e help.html (ds-<quadro>-<claro|escuro>.png).
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 const SCREENS = process.env.E2E_SCREENSHOTS ? 'test-results/screens' : null
-const DS_DIR = process.env.ECLUME_DS_DIR
+// O Design System versionado em design-system/; ECLUME_DS_DIR aponta para outro export, se preciso.
+const DS_DIR = process.env.ECLUME_DS_DIR ?? fileURLToPath(new URL('../../design-system', import.meta.url))
 const DESKTOP = { width: 1440, height: 900 }
 const MOBILE = { width: 390, height: 844 }
 const THEMES = [
@@ -193,10 +194,10 @@ for (const viewport of [DESKTOP, MOBILE]) {
 }
 
 test('quadros de referência do Design System', async ({ page }) => {
-  test.skip(!SCREENS || !DS_DIR, 'só com E2E_SCREENSHOTS=1 e ECLUME_DS_DIR')
+  test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
   await page.setViewportSize({ width: 4700, height: 3200 })
   for (const [file, frames] of Object.entries(DS_FRAMES)) {
-    await page.goto(pathToFileURL(path.join(DS_DIR!, 'examples', `${file}.html`)).href)
+    await page.goto(pathToFileURL(path.join(DS_DIR, 'examples', `${file}.html`)).href)
     for (const frame of frames) {
       for (const { scheme, suffix } of THEMES) {
         await page.evaluate((theme) => document.documentElement.setAttribute('data-theme', theme), scheme)

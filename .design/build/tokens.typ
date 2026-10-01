@@ -9,10 +9,11 @@
 #let token-colors-recording = rgb("#B8432C")
 #let token-colors-neutral = rgb("#9A9288")
 #let token-colors-success = rgb("#56663A")
-#let token-colors-warning = rgb("#936419")
+#let token-colors-warning = rgb("#875C17")
 #let token-colors-danger = rgb("#A33A26")
 #let token-colors-highlight = rgb("#E9E1D4")
 #let token-colors-divider = "rgb(38 36 32 / 0.32)"
+#let token-colors-control-border = rgb("#7C746A")
 #let token-colors-dark-background = rgb("#1E1C19")
 #let token-colors-dark-surface = rgb("#292622")
 #let token-colors-dark-on-surface = rgb("#ECE8E2")
@@ -20,6 +21,11 @@
 #let token-colors-dark-primary = rgb("#B9A48A")
 #let token-colors-dark-recording = rgb("#E0735A")
 #let token-colors-dark-danger = rgb("#F08A73")
+#let token-colors-dark-success = rgb("#A9B98A")
+#let token-colors-dark-warning = rgb("#D9AE6A")
+#let token-colors-dark-accent-ink = rgb("#D6C8B5")
+#let token-colors-dark-highlight = rgb("#3A2F24")
+#let token-colors-dark-divider = "rgb(236 232 226 / 0.3)"
 #let token-colors-secondary = token-colors-highlight
 #let token-colors-on-secondary = rgb("#3A2F24")
 #let token-typography-display-font-family = "Archivo"

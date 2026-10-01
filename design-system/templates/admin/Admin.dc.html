@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Admin panel" description="Separate admin panel: its own sidebar of platform sections and a page head" -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div class="shell">
+<aside class="sidebar">
+<div style="display:flex;align-items:center;gap:10px"><a class="brand" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</a><span class="tag tag-outline">Admin</span></div>
+<nav class="nav-group" aria-label="Platform"><span class="nav-group-title">Platform</span><a class="nav-link" href="#" aria-current="page">Users</a><a class="nav-link" href="#">Audio preprocessing</a><a class="nav-link" href="#">Transcription</a><a class="nav-link" href="#">Speakers</a><a class="nav-link" href="#">Agents</a><a class="nav-link" href="#">Default agenda types</a><a class="nav-link" href="#">Health</a></nav>
+<div class="sidebar-footer"><div><strong>Administrator</strong><br><span class="text-muted">admin@eclume.local</span></div><button type="button" class="btn btn-secondary">Sign out</button></div>
+</aside>
+<main class="main">
+<div class="page-head"><div><span class="kicker">Admin panel</span><h1>Page title</h1></div><button type="button" class="btn btn-primary">Save</button></div>
+<p class="text-muted">Page content.</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() { this.applyTheme(); }
+  componentDidUpdate() { this.applyTheme(); }
+  applyTheme() {
+    const r = document.documentElement;
+    if ((this.props.theme ?? 'light') === 'dark') r.setAttribute('data-theme', 'dark'); else r.removeAttribute('data-theme');
+  }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

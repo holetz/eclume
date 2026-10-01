@@ -14,10 +14,11 @@
 | `colors.recording` | `color` | `#B8432C` | Terracota: só gravação em curso e falha. |
 | `colors.neutral` | `color` | `#9A9288` | Neutro médio da rampa de linho. |
 | `colors.success` | `color` | `#56663A` | Estado concluído. |
-| `colors.warning` | `color` | `#936419` | Atenção. |
+| `colors.warning` | `color` | `#875C17` | Atenção. |
 | `colors.danger` | `color` | `#A33A26` | Erro e ação destrutiva. |
 | `colors.highlight` | `color` | `#E9E1D4` | Realce de busca e seleção suave. |
 | `colors.divider` | `color` | `rgb(38 36 32 / 0.32)` | Fio divisor: tinta a 32% sobre o fundo. |
+| `colors.control-border` | `color` | `#7C746A` | Borda de controle interativo (campo, caixa, botão secundário, trilho do switch): ≥ 3:1 sobre fundo e superfície nos dois temas; o divisor fica para a estrutura. |
 | `colors.dark-background` | `color` | `#1E1C19` | Tema escuro: fundo. |
 | `colors.dark-surface` | `color` | `#292622` | Tema escuro: superfície. |
 | `colors.dark-on-surface` | `color` | `#ECE8E2` | Tema escuro: tinta. |
@@ -25,6 +26,11 @@
 | `colors.dark-primary` | `color` | `#B9A48A` | Tema escuro: nogueira clara. |
 | `colors.dark-recording` | `color` | `#E0735A` | Tema escuro: gravação. |
 | `colors.dark-danger` | `color` | `#F08A73` | Tema escuro: erro. |
+| `colors.dark-success` | `color` | `#A9B98A` | Tema escuro: sucesso. |
+| `colors.dark-warning` | `color` | `#D9AE6A` | Tema escuro: atenção. |
+| `colors.dark-accent-ink` | `color` | `#D6C8B5` | Tema escuro: tinta do acento (links, texto de destaque). |
+| `colors.dark-highlight` | `color` | `#3A2F24` | Tema escuro: realce. |
+| `colors.dark-divider` | `color` | `rgb(236 232 226 / 0.3)` | Tema escuro: divisor de estrutura. |
 | `colors.secondary` | `color` | `#E9E1D4` | Superfície de apoio (tags e realce), linho-nogueira claro. |
 | `colors.on-secondary` | `color` | `#3A2F24` | Tinta sobre a superfície de apoio. |
 | `typography.display` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":42,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.63,"unit":"px"},"lineHeight":1.12}` | h1 de página. |
@@ -48,7 +54,7 @@
 | `spacing.2xl` | `dimension` | `32px` |  |
 | `sizes.control` | `dimension` | `36px` | Altura mínima de campo e botão. |
 | `layout.sidebar` | `dimension` | `240px` | Largura da barra lateral. |
-| `layout.content` | `dimension` | `1040px` | Largura do conteúdo no DS (eclume-design); o web a dispensa e usa a largura toda. |
+| `layout.content` | `dimension` | `1040px` | Largura do conteúdo no DS (design-system/styles.css); o web a dispensa e usa a largura toda. |
 | `layout.content-wide` | `dimension` | `1040px` | Quadro largo das mídias: a largura do conteúdo. |
 | `layout.reading` | `dimension` | `45rem` | Medida de leitura das mídias (relatórios). |
 | `strokes.control` | `dimension` | `1px` | Borda de controle. |

@@ -45,5 +45,8 @@ ENV PATH=/app/.venv/bin:$PATH \
 WORKDIR /home/app
 USER 1000:1000
 EXPOSE 8000
+# Por último: o SHA muda a cada deploy e não pode invalidar as camadas pesadas acima.
+ARG ECLUME_COMMIT=""
+ENV ECLUME_COMMIT=$ECLUME_COMMIT
 # Migrations rodam no one-shot `migrate` do compose, nunca aqui.
 CMD ["uvicorn", "eclume_server.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

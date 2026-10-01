@@ -20,6 +20,16 @@ def migration_files() -> list[Path]:
     return sorted(MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
 
 
+async def pending(engine: AsyncEngine) -> list[str]:
+    """As versões das migrations desta árvore que o banco ainda não aplicou, em ordem; não aplica nada."""
+    async with engine.connect() as conn:
+        if (await conn.execute(text("SELECT to_regclass('schema_migrations')"))).scalar() is None:
+            done: set[str] = set()
+        else:
+            done = set((await conn.execute(text("SELECT version FROM schema_migrations"))).scalars())
+    return [path.stem for path in migration_files() if path.stem not in done]
+
+
 async def migrate(engine: AsyncEngine, until: str | None = None) -> list[str]:
     """Aplica, cada uma na sua transação, as migrations ainda não aplicadas; devolve as aplicadas.
 

@@ -27,7 +27,7 @@ RUN cargo install --locked cargo-deny --version 0.20.2 && rm -rf /opt/cargo/regi
  && chmod -R a+rwX /opt/cargo && cargo deny --version
 # O `cq` do pilar `docs`: o holetz/quenching público na ref fixada (a mesma do job `docs` do ci.yml;
 # deploy/test_docs_check.py confere).
-ARG QUENCHING_SHA=9150af364e40ec7ca9c4f918cb60593e93ae4eea
+ARG QUENCHING_SHA=a5e9b6af2d0649bd3bc1101d897e6ab2937fd0a9
 RUN git init -q /opt/quenching && cd /opt/quenching \
  && git fetch -q --depth 1 https://github.com/holetz/quenching.git "$QUENCHING_SHA" \
  && git checkout -q FETCH_HEAD && rm -rf .git \

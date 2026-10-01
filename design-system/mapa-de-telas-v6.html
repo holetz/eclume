@@ -1,0 +1,471 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mapa de telas eclume</title>
+<style>
+:root {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
+  --bg: #f5f5f3; --surface: #ffffff; --surface-2: #eeeeeb; --border: #d6d6d1; --border-strong: #8f9095;
+  --text: #1b1c1e; --muted: #595c61; --accent: #0b5c6b; --accent-soft: #e0eff1;
+  --existe: #1d6a39; --existe-soft: #e4f2e8;
+  --mudar: #875100; --mudar-soft: #fcf0d9;
+  --novo: #4b3f9e; --novo-soft: #ebe8fa;
+  --remover: #a3262c; --remover-soft: #fbe9ea;
+  --futuro: #595c61; --futuro-soft: #eeeeeb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111315; --surface: #191c1f; --surface-2: #22262a; --border: #33383d; --border-strong: #6c737a;
+    --text: #e7e8e9; --muted: #a4a9af; --accent: #6ac4d2; --accent-soft: #15343a;
+    --existe: #80d49d; --existe-soft: #16301f;
+    --mudar: #f1b95c; --mudar-soft: #3a2b11;
+    --novo: #b3a9f5; --novo-soft: #26223f;
+    --remover: #ff8f8f; --remover-soft: #3a1c1e;
+    --futuro: #a4a9af; --futuro-soft: #22262a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111315; --surface: #191c1f; --surface-2: #22262a; --border: #33383d; --border-strong: #6c737a;
+  --text: #e7e8e9; --muted: #a4a9af; --accent: #6ac4d2; --accent-soft: #15343a;
+  --existe: #80d49d; --existe-soft: #16301f;
+  --mudar: #f1b95c; --mudar-soft: #3a2b11;
+  --novo: #b3a9f5; --novo-soft: #26223f;
+  --remover: #ff8f8f; --remover-soft: #3a1c1e;
+  --futuro: #a4a9af; --futuro-soft: #22262a;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; display: grid; gap: 40px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 1.75rem; font-weight: 680; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 1.2rem; font-weight: 640; text-wrap: balance; }
+h3 { font-size: 0.95rem; font-weight: 620; }
+.muted { color: var(--muted); }
+code, .route { font-family: var(--font-mono); font-size: 0.8rem; }
+.eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+header { display: grid; gap: 12px; }
+header p { max-width: 64ch; }
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter { font: inherit; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.filter[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.filter:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filter .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.dot.existe { background: var(--existe); }
+.dot.mudar { background: var(--mudar); }
+.dot.novo { background: var(--novo); }
+.dot.remover { background: var(--remover); }
+.dot.futuro { background: var(--futuro); }
+
+.pill { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.existe { color: var(--existe); background: var(--existe-soft); }
+.pill.mudar { color: var(--mudar); background: var(--mudar-soft); }
+.pill.novo { color: var(--novo); background: var(--novo-soft); }
+.pill.remover { color: var(--remover); background: var(--remover-soft); }
+.pill.futuro { color: var(--futuro); background: var(--futuro-soft); }
+
+section { display: grid; gap: 16px; }
+.section-head { display: grid; gap: 4px; }
+
+/* Direção */
+details.direction { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+details.direction summary { cursor: pointer; font-weight: 620; }
+.direction ol { margin: 12px 0 0; padding-left: 22px; display: grid; gap: 6px; columns: 2 22rem; column-gap: 32px; }
+.direction li { break-inside: avoid; font-size: 0.9rem; }
+
+/* Jornadas */
+.journeys { display: grid; gap: 12px; }
+.journey { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.journey-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.journey-head .who { font-size: 0.78rem; color: var(--muted); }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.step { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; font-size: 0.84rem; border: 1px solid var(--border); background: var(--surface-2); }
+.step.mudar { border-color: var(--mudar); border-style: dashed; background: var(--mudar-soft); }
+.step.novo { border-color: var(--novo); border-style: dashed; background: var(--novo-soft); }
+.step.sistema { border-style: dotted; background: transparent; color: var(--muted); }
+.arrow { color: var(--border-strong); font-size: 0.9rem; }
+
+/* Inventário */
+.group { display: grid; gap: 10px; }
+.group > h3 { display: flex; gap: 8px; align-items: baseline; }
+.group > h3 .count { font-weight: 400; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr)); gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.card[data-state="novo"] { border-style: dashed; border-color: var(--novo); }
+.card[data-state="mudar"] { border-left: 3px solid var(--mudar); }
+.card[data-state="remover"] { border-style: dashed; border-color: var(--remover); background: transparent; }
+.card[data-state="remover"] .name { text-decoration: line-through; text-decoration-color: var(--remover); }
+.card[data-state="futuro"] { border-style: dotted; background: transparent; }
+.card-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.card .name { font-weight: 620; }
+.card .route { color: var(--muted); overflow-wrap: anywhere; }
+.card .desc { font-size: 0.86rem; color: var(--muted); }
+.card .gap { font-size: 0.82rem; color: var(--text); border-top: 1px solid var(--border); padding-top: 6px; }
+.card .gap b { font-weight: 620; }
+
+body[data-filter] .card { display: none; }
+body[data-filter="existe"] .card[data-state="existe"],
+body[data-filter="mudar"] .card[data-state="mudar"],
+body[data-filter="novo"] .card[data-state="novo"],
+body[data-filter="remover"] .card[data-state="remover"],
+body[data-filter="futuro"] .card[data-state="futuro"] { display: grid; }
+body[data-filter="existe"] .group:not(:has(.card[data-state="existe"])),
+body[data-filter="mudar"] .group:not(:has(.card[data-state="mudar"])),
+body[data-filter="novo"] .group:not(:has(.card[data-state="novo"])),
+body[data-filter="remover"] .group:not(:has(.card[data-state="remover"])),
+body[data-filter="futuro"] .group:not(:has(.card[data-state="futuro"])) { display: none; }
+
+/* Decisões e questões */
+.decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 12px; }
+.decision { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.decision-top { display: flex; gap: 10px; align-items: baseline; }
+.decision .order { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.decision ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.88rem; }
+.decision .q { font-weight: 620; }
+.questions { margin: 0; padding-left: 22px; display: grid; gap: 10px; max-width: 72ch; }
+.questions li { font-size: 0.92rem; }
+.questions .why { display: block; color: var(--muted); font-size: 0.84rem; }
+
+.note { font-size: 0.85rem; color: var(--muted); max-width: 70ch; }
+@media (prefers-reduced-motion: no-preference) { .filter { transition: box-shadow .12s, border-color .12s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Etapa 1 da trilha · mapa → telas de decisão → telas-alvo</span>
+    <h1>Mapa de telas do eclume</h1>
+    <p class="muted">Versão 6, com a direção de produto de 26/09/2026. O eclume passa a ser por usuário, sem organização: cadastro aberto, biblioteca no tempo, processamento automático após a gravação e acesso por IA via MCP. Cada tela mostra se fica como está, muda, é nova ou sai.</p>
+    <div class="bar" role="group" aria-label="Filtrar por estado">
+      <button class="filter" id="f-todas" data-f="todas" aria-pressed="true">Todas <span class="n" data-count="todas"></span></button>
+      <button class="filter" id="f-existe" data-f="existe" aria-pressed="false"><span class="dot existe"></span>Fica <span class="n" data-count="existe"></span></button>
+      <button class="filter" id="f-mudar" data-f="mudar" aria-pressed="false"><span class="dot mudar"></span>Muda <span class="n" data-count="mudar"></span></button>
+      <button class="filter" id="f-novo" data-f="novo" aria-pressed="false"><span class="dot novo"></span>Nova <span class="n" data-count="novo"></span></button>
+      <button class="filter" id="f-remover" data-f="remover" aria-pressed="false"><span class="dot remover"></span>Sai <span class="n" data-count="remover"></span></button>
+      <button class="filter" id="f-futuro" data-f="futuro" aria-pressed="false"><span class="dot futuro"></span>Futuro <span class="n" data-count="futuro"></span></button>
+    </div>
+  </header>
+
+  <details class="direction" open>
+    <summary>Direção definida em 26/09/2026</summary>
+    <ol>
+      <li>Sem organização nem tenant: cada usuário tem seu próprio espaço.</li>
+      <li>Cadastro aberto, sem convite, com uso imediato.</li>
+      <li>Painel de administração separado, com login de admin.</li>
+      <li>O app desktop também importa arquivos.</li>
+      <li>Notas por voz: botão ou comando de voz para começar, parada automática após silêncio.</li>
+      <li>Biblioteca no tempo: calendário mensal, semanal e lista corrida, com filtros à direita que colapsam.</li>
+      <li>Importar é um modal sobre a biblioteca, não uma página.</li>
+      <li>Sem compartilhamento de gravações.</li>
+      <li>Sem transcrição ao vivo.</li>
+      <li>Ao receber o áudio, o servidor aplica pré-processamentos configuráveis e depois transcreve.</li>
+      <li>Depois da transcrição, se ativado, preenche título, tags, coleções e outros campos, cada um com uma regra registrada de como é identificado.</li>
+      <li>Resumos seguem templates escolhidos pelo tipo de agenda, detectado por presets.</li>
+      <li><s>Configurações globais de sigilo.</s> Substituídas pelo item 17.</li>
+      <li>Áudio importado é situado no tempo pelos metadados do arquivo, com confirmação da data pelo usuário.</li>
+      <li>Servidor MCP para a IA consultar e manipular o eclume.</li>
+      <li>O usuário define os próprios campos e as regras de preenchimento.</li>
+      <li>Sigilo sai dos fluxos: no cadastro, o usuário aceita um aviso de que é responsável por pedir consentimento a quem grava.</li>
+      <li>Cliente deixa de existir; coleção convive com tag.</li>
+      <li>O admin define o conjunto inicial de tipos de agenda e templates; cada usuário ajusta os seus.</li>
+      <li>O pré-processamento de áudio é ajustado só pelo admin, no painel.</li>
+      <li>O desktop entra com e-mail e senha, sem colar token.</li>
+      <li>O aceite do cadastro basta: não há consentimento de voz por pessoa.</li>
+      <li>Cadastro sem confirmação de e-mail.</li>
+      <li>A tela da gravação é centrada no resumo; player compacto e transcrição recolhida por padrão.</li>
+      <li>O resumo pode ser editado à mão ou ajustado por chat com o agente do servidor, que lê a transcrição só quando precisa.</li>
+      <li>O desktop encontra o servidor sozinho, sem o usuário digitar endereço.</li>
+    </ol>
+  </details>
+
+  <section>
+    <div class="section-head">
+      <h2>Jornadas</h2>
+      <p class="muted">Passos tracejados são novos ou mudam. Passos pontilhados acontecem no servidor, sem tela própria, e aparecem para o usuário como status.</p>
+    </div>
+    <div class="journeys">
+      <div class="journey">
+        <div class="journey-head"><h3>Criar conta e começar</h3><span class="who">qualquer pessoa</span></div>
+        <div class="flow">
+          <span class="step novo">Cadastro</span><span class="arrow">→</span>
+          <span class="step novo">Aceite do aviso de consentimento</span><span class="arrow">→</span>
+          <span class="step mudar">Biblioteca vazia: importar ou baixar o app</span><span class="arrow">→</span>
+          <span class="step mudar">App desktop <code>/app-desktop</code></span><span class="arrow">→</span>
+          <span class="step novo">Desktop encontra o servidor</span><span class="arrow">→</span>
+          <span class="step mudar">Entrar com e-mail e senha</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Gravar uma reunião</h3><span class="who">desktop</span></div>
+        <div class="flow">
+          <span class="step">Reunião detectada</span><span class="arrow">→</span>
+          <span class="step">Gravando</span><span class="arrow">→</span>
+          <span class="step">Fila de sincronização</span><span class="arrow">→</span>
+          <span class="step sistema">Processamento automático</span><span class="arrow">→</span>
+          <span class="step mudar">Gravação pronta na biblioteca</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Tomar uma nota por voz</h3><span class="who">desktop</span></div>
+        <div class="flow">
+          <span class="step novo">Botão ou atalho "Nova nota"</span>
+          <span class="arrow">ou</span>
+          <span class="step novo">Comando de voz</span><span class="arrow">→</span>
+          <span class="step novo">Gravando nota, com indicador de silêncio</span><span class="arrow">→</span>
+          <span class="step novo">Para sozinha após silêncio</span><span class="arrow">→</span>
+          <span class="step sistema">Processamento automático</span><span class="arrow">→</span>
+          <span class="step mudar">Nota na biblioteca</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Importar um arquivo</h3><span class="who">web ou desktop</span></div>
+        <div class="flow">
+          <span class="step mudar">Biblioteca → modal Importar</span>
+          <span class="arrow">ou</span>
+          <span class="step novo">Importar no desktop</span><span class="arrow">→</span>
+          <span class="step novo">Data lida do arquivo: confirmar ou corrigir</span><span class="arrow">→</span>
+          <span class="step">Envio</span><span class="arrow">→</span>
+          <span class="step sistema">Processamento automático</span><span class="arrow">→</span>
+          <span class="step mudar">Aparece no dia certo do calendário</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Processamento automático</h3><span class="who">servidor, visível como status</span></div>
+        <div class="flow">
+          <span class="step sistema">Áudio recebido</span><span class="arrow">→</span>
+          <span class="step sistema">Pré-processamento do áudio</span><span class="arrow">→</span>
+          <span class="step sistema">Transcrição</span><span class="arrow">→</span>
+          <span class="step sistema">Preenchimento de campos</span><span class="arrow">→</span>
+          <span class="step sistema">Tipo de agenda detectado</span><span class="arrow">→</span>
+          <span class="step sistema">Resumo pelo template do tipo</span><span class="arrow">→</span>
+          <span class="step mudar">Pronto</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Revisar uma gravação</h3><span class="who">usuário na web</span></div>
+        <div class="flow">
+          <span class="step mudar">Biblioteca no tempo</span><span class="arrow">→</span>
+          <span class="step mudar">Gravação: resumo em destaque</span><span class="arrow">→</span>
+          <span class="step novo">Ajustar o resumo à mão ou pelo chat</span><span class="arrow">→</span>
+          <span class="step novo">Conferir campos preenchidos</span><span class="arrow">→</span>
+          <span class="step">Abrir a transcrição só para conferir ou corrigir</span><span class="arrow">→</span>
+          <span class="step novo">Exportar</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Usar pela IA</h3><span class="who">assistente conectado</span></div>
+        <div class="flow">
+          <span class="step">Token de acesso <code>/tokens</code></span><span class="arrow">→</span>
+          <span class="step novo">Conectar via MCP: instruções e escopos</span><span class="arrow">→</span>
+          <span class="step sistema">A IA busca, lê e altera gravações</span>
+        </div>
+      </div>
+      <div class="journey">
+        <div class="journey-head"><h3>Administrar a plataforma</h3><span class="who">admin</span></div>
+        <div class="flow">
+          <span class="step novo">Login de admin</span><span class="arrow">→</span>
+          <span class="step mudar">Usuários</span><span class="arrow">→</span>
+          <span class="step novo">Pré-processamento padrão</span><span class="arrow">→</span>
+          <span class="step">Transcrição e agentes</span><span class="arrow">→</span>
+          <span class="step">Saúde do serviço</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="inventario">
+    <div class="section-head">
+      <h2>Inventário por superfície</h2>
+      <p class="muted">Cada cartão é uma tela ou superfície. Use o filtro acima para ver só o que muda, o que é novo ou o que sai.</p>
+    </div>
+
+    <div class="group">
+      <h3>Web · Acesso <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Entrar</span><span class="pill existe">fica</span></div><span class="route">/entrar</span><p class="desc">E-mail e senha. Ganha o link "Criar conta" no lugar de "Peça um convite".</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Cadastro</span><span class="pill novo">nova</span></div><span class="route">/cadastro</span><p class="desc">Nome, e-mail, senha e o aceite obrigatório do aviso: "Sou responsável por pedir o consentimento das pessoas que gravo". Entra direto na biblioteca.</p></article>
+        <article class="card" data-state="remover"><div class="card-top"><span class="name">Aceitar convite</span><span class="pill remover">sai</span></div><span class="route">/convite/:token</span><p class="desc">Substituída pelo cadastro aberto.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Página não encontrada</span><span class="pill existe">fica</span></div><span class="route">*</span><p class="desc">Mensagem e link de volta à biblioteca.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Web · Biblioteca e gravação <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Biblioteca no tempo</span><span class="pill mudar">muda</span></div><span class="route">/</span><p class="desc">Visões de mês, semana e lista corrida. Painel de filtros à direita que colapsa. Gravações e notas posicionadas no dia e na hora.</p><p class="gap"><b>Hoje:</b> lista simples com filtro Minhas/Compartilhadas/Todas.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Importar (modal)</span><span class="pill mudar">muda</span></div><span class="route">modal sobre /</span><p class="desc">Arrastar arquivo, confirmar a data lida dos metadados, acompanhar o envio.</p><p class="gap"><b>Hoje:</b> página própria <code>/importar</code>, sem data.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Gravação</span><span class="pill mudar">muda</span></div><span class="route">/gravacoes/:id</span><p class="desc">O resumo ocupa o centro. Player compacto e transcrição recolhida por padrão, que abre quando o usuário quer conferir ou corrigir. Ganha campos preenchidos, tipo de agenda, status do processamento, excluir e exportar.</p><p class="gap"><b>Hoje:</b> a transcrição ocupa o centro e o resumo fica num painel lateral.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Campos preenchidos</span><span class="pill novo">nova</span></div><span class="route">painel na gravação</span><p class="desc">Título, tags, coleções e os campos que o usuário criou, com a origem de cada valor (automático ou editado) e como aceitar ou corrigir.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Resumos</span><span class="pill mudar">muda</span></div><span class="route">painel na gravação</span><p class="desc">Template escolhido pelo tipo de agenda detectado, com troca manual e exclusão de resumo.</p><p class="gap"><b>Hoje:</b> escolha manual do template.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Editar resumo</span><span class="pill novo">nova</span></div><span class="route">no centro da gravação</span><p class="desc">Edição direta do texto do resumo, com a versão gerada guardada para comparar ou voltar.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Chat de ajuste do resumo</span><span class="pill novo">nova</span></div><span class="route">na gravação</span><p class="desc">Pedidos como "encurte a seção de decisões" ao agente do servidor. Ele trabalha sobre o resumo e só consulta a transcrição quando o pedido exige, avisando quando fez isso.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Exportar transcrição</span><span class="pill novo">nova</span></div><span class="route">ação na gravação</span><p class="desc">Baixar transcrição e resumo em arquivo. A API já existe.</p></article>
+        <article class="card" data-state="remover"><div class="card-top"><span class="name">Página Importar</span><span class="pill remover">sai</span></div><span class="route">/importar</span><p class="desc">Vira o modal sobre a biblioteca.</p></article>
+        <article class="card" data-state="remover"><div class="card-top"><span class="name">Compartilhar gravação</span><span class="pill remover">sai</span></div><span class="route">filtro "Compartilhadas" e /shares</span><p class="desc">O filtro da biblioteca e a API de compartilhamento deixam de existir.</p></article>
+        <article class="card" data-state="remover"><div class="card-top"><span class="name">Transcrição ao vivo</span><span class="pill remover">sai</span></div><span class="route">—</span><p class="desc">Descartada; sai também da lista de candidatos futuros.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Web · Organizar <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Pessoas</span><span class="pill existe">fica</span></div><span class="route">/pessoas</span><p class="desc">Diretório do usuário, com busca e cadastro em linha.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Pessoa</span><span class="pill mudar">muda</span></div><span class="route">/pessoas/:id</span><p class="desc">Transcrições, falas e amostras de voz.</p><p class="gap"><b>Sai:</b> o registro de consentimento de voz por pessoa; o aceite do cadastro cobre.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Busca</span><span class="pill existe">fica</span></div><span class="route">/busca</span><p class="desc">Texto integral com filtros. Pode ganhar os campos do usuário como filtros.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Coleções</span><span class="pill existe">fica</span></div><span class="route">/colecoes</span><p class="desc">Continuam ao lado das tags: coleção agrupa gravações, tag marca assuntos. Ambas podem ser preenchidas automaticamente.</p></article>
+        <article class="card" data-state="futuro"><div class="card-top"><span class="name">Busca por significado</span><span class="pill futuro">futuro</span></div><span class="route">/busca</span><p class="desc">Achar trechos pelo assunto. Também serve bem ao MCP.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Web · Minhas configurações <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Campos e regras</span><span class="pill novo">nova</span></div><span class="route">/config/campos</span><p class="desc">O usuário cria e define seus campos (título, tags, coleção e os próprios) e, para cada um, escreve como identificar ou formular e se preenche sozinho.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Tipos de agenda</span><span class="pill novo">nova</span></div><span class="route">/config/agendas</span><p class="desc">Presets de detecção (palavras, participantes, horário, app de origem) e o template de resumo de cada tipo.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Templates de resumo</span><span class="pill mudar">muda</span></div><span class="route">/config/templates</span><p class="desc">Os templates do usuário, ligados aos tipos de agenda.</p><p class="gap"><b>Hoje:</b> só no admin, como templates da organização.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Conexão MCP</span><span class="pill novo">nova</span></div><span class="route">/config/mcp</span><p class="desc">Endereço do servidor MCP, token com escopos e passo a passo para conectar um assistente de IA.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Tokens de acesso</span><span class="pill existe">fica</span></div><span class="route">/tokens</span><p class="desc">Criar com escopos e validade, copiar uma vez, revogar.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">App desktop</span><span class="pill mudar">muda</span></div><span class="route">/app-desktop</span><p class="desc">Download por sistema. A configuração vira "entre com seu e-mail e senha", sem passo de token.</p><p class="gap"><b>Gap:</b> links de instalador ainda não publicados.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Painel de administração <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Login de admin</span><span class="pill novo">nova</span></div><span class="route">/admin/entrar</span><p class="desc">Entrada própria do painel, separada da conta de usuário.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Usuários</span><span class="pill mudar">muda</span></div><span class="route">/admin/usuarios</span><p class="desc">Lista de contas cadastradas, desativar e reativar.</p><p class="gap"><b>Sai:</b> convites, papéis de organização e grupos.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Pré-processamento de áudio</span><span class="pill novo">nova</span></div><span class="route">/admin/audio</span><p class="desc">Etapas aplicadas antes da transcrição (redução de ruído, normalização de volume…), com ordem e ativação. Vale para todas as gravações; o usuário não escolhe.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Transcrição</span><span class="pill existe">fica</span></div><span class="route">/admin/transcricao</span><p class="desc">Motor, modelo, idioma e separação de locutores.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Agentes</span><span class="pill mudar">muda</span></div><span class="route">/admin/agentes</span><p class="desc">Provedores de IA para resumo e preenchimento.</p><p class="gap"><b>Ganha:</b> o token do Claude (#29).</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Padrões para novos usuários</span><span class="pill mudar">muda</span></div><span class="route">/admin/padroes</span><p class="desc">Conjunto inicial de templates e tipos de agenda que cada conta recebe e depois ajusta. Os campos são sempre do usuário.</p><p class="gap"><b>Hoje:</b> templates da organização.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Identificação por voz</span><span class="pill mudar">muda</span></div><span class="route">/admin/voz</span><p class="desc">Liga ou desliga a função na plataforma e define o limiar.</p><p class="gap"><b>Sai:</b> adesão da organização, texto de consentimento e auditoria de consentimentos.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Segredos</span><span class="pill existe">fica</span></div><span class="route">/admin/segredos</span><p class="desc">Valores só de escrita, como o token do Hugging Face.</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Saúde</span><span class="pill existe">fica</span></div><span class="route">/admin/saude</span><p class="desc">Worker de GPU, fila e falhas. Passa a mostrar também as novas etapas do processamento.</p></article>
+        <article class="card" data-state="remover"><div class="card-top"><span class="name">Grupos</span><span class="pill remover">sai</span></div><span class="route">/groups</span><p class="desc">Sem organização, grupos perdem o sentido; a API também sai.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Desktop <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Janela principal</span><span class="pill mudar">muda</span></div><span class="route">janela 520×600</span><p class="desc">Status, reunião detectada, fila e configurações.</p><p class="gap"><b>Ganha:</b> "Nova nota" e "Importar arquivo".</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Nota por voz</span><span class="pill novo">nova</span></div><span class="route">botão, atalho, comando de voz</span><p class="desc">Começa por botão ou palavra de ativação, mostra o nível do som e o tempo de silêncio restante, para sozinha.</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Importar arquivo</span><span class="pill novo">nova</span></div><span class="route">janela ou arrastar para o ícone</span><p class="desc">Escolher arquivo, confirmar a data lida do arquivo, entrar na fila.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Primeira execução</span><span class="pill mudar">muda</span></div><span class="route">janela</span><p class="desc">Mostra o servidor já encontrado ("eclume em 192.168.15.199 · Usar este") e pede e-mail e senha, com link para criar conta.</p><p class="gap"><b>Sai:</b> digitar URL e colar token. O endereço manual fica escondido em "Avançado".</p></article>
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Descoberta do servidor</span><span class="pill novo">nova</span></div><span class="route">sem tela; alimenta a primeira execução</span><p class="desc">Três caminhos, do mais automático ao manual: o instalador baixado do próprio servidor já traz o endereço; o servidor se anuncia na rede local (mDNS) e o app o encontra; um código curto mostrado na web liga o app ao servidor.</p><p class="gap"><b>Junto:</b> o certificado próprio do servidor precisa ser aceito sem passo manual de instalar CA.</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Bandeja</span><span class="pill mudar">muda</span></div><span class="route">ícone e menu</span><p class="desc">Ganha "Nova nota" e "Importar arquivo".</p></article>
+        <article class="card" data-state="existe"><div class="card-top"><span class="name">Notificações</span><span class="pill existe">fica</span></div><span class="route">sistema operacional</span><p class="desc">"Reunião detectada, gravar?", "Gravando" e "Reunião encerrada". Pode ganhar "Nota salva".</p></article>
+        <article class="card" data-state="mudar"><div class="card-top"><span class="name">Atualização</span><span class="pill mudar">muda</span></div><span class="route">hoje sem interface</span><p class="desc">Instala sozinha e reinicia.</p><p class="gap"><b>Gap:</b> o usuário não vê que atualizou.</p></article>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Integração <span class="count"></span></h3>
+      <div class="cards">
+        <article class="card" data-state="novo"><div class="card-top"><span class="name">Servidor MCP</span><span class="pill novo">nova</span></div><span class="route">sem tela; configurado em /config/mcp</span><p class="desc">Ferramentas para a IA listar, buscar, ler, resumir e editar gravações e campos do usuário.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Telas de decisão, em ordem</h2>
+      <p class="muted">Etapa 2: cada uma vira uma prancheta no Claude Design com 2 ou 3 variantes feitas com os componentes do Eclume. A ordem segue o que as outras telas herdam.</p>
+    </div>
+    <div class="decisions">
+      <div class="decision">
+        <div class="decision-top"><span class="order">1</span><span class="pill mudar">Biblioteca no tempo</span></div>
+        <p class="q">Como uma gravação aparece no calendário, e qual visão abre por padrão?</p>
+        <ul>
+          <li>A: semana como agenda, blocos com a altura da duração</li>
+          <li>B: mês com pontos por dia, detalhe ao clicar no dia</li>
+          <li>C: lista corrida agrupada por dia como padrão, calendário como alternativa</li>
+        </ul>
+        <p class="note">É a tela inicial e define o cartão de gravação reutilizado em todo o resto.</p>
+      </div>
+      <div class="decision">
+        <div class="decision-top"><span class="order">2</span><span class="pill mudar">Gravação centrada no resumo</span></div>
+        <p class="q">Onde fica o chat de ajuste, e como a transcrição recolhida se mostra?</p>
+        <ul>
+          <li>A: resumo no centro, chat numa coluna à direita, transcrição numa faixa recolhida sob o player</li>
+          <li>B: resumo no centro, chat como barra de pedido fixa embaixo do resumo, transcrição numa gaveta lateral</li>
+          <li>C: abas Resumo e Transcrição, com o chat sempre visível ao lado</li>
+        </ul>
+        <p class="note">Define onde os campos preenchidos ficam, por isso vem antes da decisão sobre eles.</p>
+      </div>
+      <div class="decision">
+        <div class="decision-top"><span class="order">3</span><span class="pill novo">Campos preenchidos</span></div>
+        <p class="q">Como o usuário distingue o que a IA preencheu do que ele confirmou?</p>
+        <ul>
+          <li>A: selo "automático" em cada campo, some ao editar ou aceitar</li>
+          <li>B: faixa "Revise 4 campos sugeridos" com aceitar tudo</li>
+          <li>C: campos sempre editáveis, com histórico de origem ao passar o mouse</li>
+        </ul>
+      </div>
+      <div class="decision">
+        <div class="decision-top"><span class="order">4</span><span class="pill mudar">Modal Importar</span></div>
+        <p class="q">Como pedir a confirmação da data sem travar quem importa vários arquivos?</p>
+        <ul>
+          <li>A: data por arquivo numa tabela, editável antes de enviar</li>
+          <li>B: envia já e pede a confirmação depois, na própria biblioteca</li>
+        </ul>
+      </div>
+      <div class="decision">
+        <div class="decision-top"><span class="order">5</span><span class="pill novo">Nota por voz</span></div>
+        <p class="q">Qual o menor retorno visual para quem grava uma nota sem olhar a tela?</p>
+        <ul>
+          <li>A: só o ícone da bandeja muda e uma notificação ao final</li>
+          <li>B: pequena janela flutuante com nível do som e contagem do silêncio</li>
+        </ul>
+      </div>
+      <div class="decision">
+        <div class="decision-top"><span class="order">6</span><span class="pill novo">Primeira execução do desktop</span></div>
+        <p class="q">O que a pessoa leiga vê quando abre o app pela primeira vez?</p>
+        <ul>
+          <li>A: servidor já preenchido e só os campos de e-mail e senha</li>
+          <li>B: "Procurando o eclume na rede…" e a lista do que encontrou, depois o login</li>
+          <li>C: "Digite o código que aparece na web" (6 caracteres), sem login no app</li>
+        </ul>
+        <p class="note">A é o caminho feliz de quem baixou pelo próprio servidor; B e C são as saídas quando o instalador veio de outro lugar.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Questões em aberto</h2>
+      <p class="muted">Nenhuma no momento. As respostas de 26/09/2026 estão no registro de direção, itens 19 a 26.</p>
+    </div>
+  </section>
+
+  <p class="note">Base do levantamento: rotas em <code>web/src/app/routes.tsx</code>, interface do desktop em <code>desktop/ui</code> e <code>desktop/src-tauri/src</code>, endpoints em <code>server/src/eclume_server/routes</code>, épico <code>holetz/eclume#1</code> e issue #29.</p>
+</div>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var counts = { todas: cards.length, existe: 0, mudar: 0, novo: 0, remover: 0, futuro: 0 };
+  cards.forEach(function (c) { counts[c.dataset.state]++; });
+  document.querySelectorAll('[data-count]').forEach(function (el) { el.textContent = counts[el.dataset.count]; });
+  document.querySelectorAll('.group').forEach(function (g) {
+    var n = g.querySelectorAll('.card').length;
+    var el = g.querySelector('.count'); if (el) el.textContent = n + (n === 1 ? ' item' : ' itens');
+  });
+  var buttons = document.querySelectorAll('.filter');
+  function apply(f) {
+    if (f === 'todas') document.body.removeAttribute('data-filter'); else document.body.setAttribute('data-filter', f);
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.f === f)); });
+  }
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      apply(b.dataset.f);
+      try { localStorage.setItem('eclume-mapa-filtro-v6', b.dataset.f); } catch (e) {}
+    });
+  });
+  try { var saved = localStorage.getItem('eclume-mapa-filtro-v6'); if (saved && counts[saved] !== undefined) apply(saved); } catch (e) {}
+})();
+</script>
+
+</body></html>

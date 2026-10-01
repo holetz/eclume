@@ -44,12 +44,16 @@ x-server-env: &server-env
   ECLUME_SERVER_NAME: ${ECLUME_SERVER_NAME:-eclume}
   ECLUME_CA_FILE: /srv/downloads/eclume-root.crt
 
+# `:prod` é o ponteiro de execução; `:<sha>` (ECLUME_COMMIT, que o deploy define a partir do SHA
+# construído) fica retido para o `--voltar`. Fora do deploy, a tag é `:sem-commit`.
 x-server-image: &server-image
   image: eclume-server:prod
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
-    labels: {org.eclume.image: "server"}
+    args: {ECLUME_COMMIT: "${ECLUME_COMMIT:-}"}
+    tags: ["eclume-server:${ECLUME_COMMIT:-sem-commit}"]
+    labels: {org.eclume.image: "server", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
 services:
   caddy:
@@ -74,7 +78,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
-      labels: {org.eclume.image: "web"}
+      tags: ["eclume-web:${ECLUME_COMMIT:-sem-commit}"]
+      labels: {org.eclume.image: "web", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
   server:
     <<: [*restart, *server-image]
@@ -128,10 +133,16 @@ services:
   worker-gpu:
     <<: *restart
     image: eclume-worker-gpu:prod
+    # Só a tag: label ou ENV com o SHA mudariam o ID da imagem a cada deploy e recriariam o
+    # container (com dreno) mesmo sem mudança no worker.
     build:
       context: ..
       dockerfile: worker-gpu/Dockerfile
+      tags: ["eclume-worker-gpu:${ECLUME_COMMIT:-sem-commit}"]
       labels: {org.eclume.image: "worker-gpu"}
+    # O SIGTERM drena (o arq termina o job em curso, `job_completion_wait`); o deploy espera a GPU
+    # ficar livre até --espera-gpu (30 min) antes de parar, e este prazo o cobre.
+    stop_grace_period: 40m
     environment:
       ECLUME_REDIS_URL: redis://redis:6379/0
       ECLUME_S3_ENDPOINT_URL: http://minio:9000

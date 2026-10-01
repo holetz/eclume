@@ -4,10 +4,10 @@ title: Marca do eclume
 description: A identidade visual do eclume — linho e nogueira do ecossistema Jane, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md.
 resource: .design/**
 tags: [design, brand, tokens]
-timestamp: 2026-09-28
+timestamp: 2026-10-01
 audience: both
 authority: current
-source: eclume-design/styles.css (copiado em web/src/styles/eclume.css) e docs/standards/code/web-design-system.md
+source: design-system/styles.css (gerado nas cópias pelo design-system/sincronizar.py), docs/standards/code/web-design-system.md e holetz/eclume#130, holetz/eclume#122
 maintainer: holetz
 ---
 
@@ -15,8 +15,8 @@ maintainer: holetz
 
 Os títulos de seção ficam em inglês porque o `cq design build` os projeta pelo nome nas seções do
 `DESIGN.md`; o texto é pt-BR. Os valores exatos vivem só em `/.design/tokens.json`, que espelha o
-`styles.css` do repositório `eclume-design`; o web consome a cópia fiel em
-`web/src/styles/eclume.css` ([web-design-system.md](../code/web-design-system.md)).
+`design-system/styles.css`, a fonte versionada do Design System; o web, o desktop e o celular
+consomem as cópias geradas dela ([web-design-system.md](../code/web-design-system.md)).
 
 ## Overview
 
@@ -39,11 +39,16 @@ tinta (`on-surface`) é quase preta e quente, e o texto secundário (`text-muted
   navegação ativo. `accent-ink` é a nogueira escura para kickers.
 - **Terracota (`recording`)** é semântica, não decorativa: gravação em curso e falha. Nunca vira
   um segundo acento de variedade.
-- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção.
+- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção. Como
+  texto, todos passam de 4,5:1 sobre o fundo e a superfície nos dois temas.
+- **Borda de controle (`control-border`) não é fio de estrutura.** Campo, caixa de seleção, botão
+  secundário e o trilho do switch desligado usam o linho 600, com pelo menos 3:1 sobre o fundo e a
+  superfície nos dois temas; o `divider` continua sendo o fio leve da estrutura. Escurecer o divisor
+  engrossaria todas as linhas da página.
 - Os locutores têm seis cores próprias em OKLCH (`--speaker-1` a `--speaker-6` no CSS), de mesma
   luminosidade, que não competem com a nogueira.
 - **Tema escuro** (`data-theme="dark"`): os tokens `dark-*` trocam fundo, superfície, tinta,
-  nogueira clara e terracota clara. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
+  nogueira clara, terracota clara, os estados, a tinta do acento, o realce e o divisor. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
 
 **Regra do acento único.** Um bloco tem no máximo um acento; a terracota só entra quando o estado
 de gravação ou falha estiver presente.
@@ -75,7 +80,7 @@ quadrado de 6px, não com um ponto. Ícones Lucide com ponta e junção retas
 
 ## Components
 
-O vocabulário vem do `eclume-design`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
+O vocabulário vem do `design-system/styles.css`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
 transparente), `.input` em campos, `select` e `textarea`, `.card`, `.badge` e `.tag`, `.nav` e
 `.sidebar`, `.page-head`, `.kicker`, `.hr`. O web acrescenta só o que o DS não tem, em `app.css`.
 
@@ -87,7 +92,7 @@ para lá.
 
 ### Do
 
-- **Do** montar telas com as classes do `eclume-design` e ajustar produto em `app.css` ou no CSS
+- **Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS
   Module da tela.
 - **Do** usar fios de 2px para estrutura e manter o raio zero.
 - **Do** reservar a terracota para gravação e falha.

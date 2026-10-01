@@ -70,7 +70,7 @@ ignore = [
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["engines/tests", "server/tests", "worker-gpu/tests", "contracts/tests", "mobile/scripts", "deploy"]
+testpaths = ["engines/tests", "server/tests", "worker-gpu/tests", "contracts/tests", "mobile/scripts", "deploy", "design-system"]
 addopts = "--import-mode=importlib"
 # Helpers da suíte do server (pacote `eclume_server_testing`), importáveis pelos testes.
 pythonpath = ["server/tests"]

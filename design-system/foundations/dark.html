@@ -1,0 +1,20 @@
+<!-- @dsCard group="Foundations" name="Dark theme" subtitle="data-theme=&quot;dark&quot; on &lt;html&gt;" viewport="720x520" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Dark theme</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:720px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-6) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-4)}</style>
+</head>
+<body>
+<main class="demo">
+<span class="brand" style="font-size:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="0.5" y="8" width="3" height="8"></rect><rect x="5.5" y="3" width="3" height="18"></rect><rect x="10.5" y="0" width="3" height="24"></rect><rect x="15.5" y="5.5" width="3" height="13"></rect><rect x="20.5" y="9" width="3" height="6"></rect></svg>eclume</span>
+<div class="demo-head">Controls</div><div class="row"><button type="button" class="btn btn-primary">Import file</button><button type="button" class="btn btn-secondary">Preview</button><button type="button" class="btn btn-ghost">Details</button><span class="tag tag-accent">Tag</span></div>
+<div class="demo-head">Status</div><div class="row"><span class="badge">Queued</span><span class="badge badge-progress">Transcribing</span><span class="badge badge-success">Transcribed</span><span class="badge badge-danger">Failed</span></div>
+<div class="demo-head">Transcript</div><div class="segment" aria-current="true"><div class="segment-who"><span class="speaker speaker-2">Bruno Lima</span><span class="timecode">00:03:27</span></div><p class="segment-text">Ahead, yes, but the onboarding backlog doubled.</p></div><div class="segment"><div class="segment-who"><span class="speaker speaker-4">Diego Souza</span><span class="timecode">00:03:51</span></div><p class="segment-text">I'll pull the numbers.</p></div>
+<p class="note">Set <code>data-theme="dark"</code> on <code>&lt;html&gt;</code>. The app follows <code>prefers-color-scheme</code> by setting the attribute itself. On dark, the accent lifts to accent-500, the ink rules become paper at 38%, and the speaker hues rise together.</p>
+</main>
+</body>
+</html>

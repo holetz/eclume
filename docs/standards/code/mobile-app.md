@@ -7,7 +7,7 @@ tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130
 maintainer: holetz
 ---
 
@@ -224,8 +224,9 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
 - **Permissões:** microfone negado mostra "Abrir configurações do app"; notificações bloqueadas
   viram a faixa "Notificações bloqueadas" no Início, com o mesmo botão.
 - **UI** (`mobile/ui/src`): React + TS, função do `EstadoApp` (`app/estado.ts`), com a ponte tipada
-  (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia fiel do DS (a camada mobile
-  `.m-*`), conferida contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
+  (`ponte/`) e uma ponte falsa para os testes. O `eclume.css` é a cópia do DS gerada de
+  `design-system/styles.css` pelo `design-system/sincronizar.py` (a camada mobile `.m-*`), conferida
+  pelo `test_sincronizar.py` e contra a do web por `ui/src/styles/copia.test.ts` (tipado pelo
   `tsconfig.node.json`, porque lê o arquivo do disco); ajustes de produto em `app.css`. Nenhum
   `style` fixo nas telas: espaços e tamanhos são classes do `app.css` com `--space-*` e os
   tamanhos do DS, e `style` só leva custom property (o `--h` das barras do medidor); o

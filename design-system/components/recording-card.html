@@ -1,0 +1,21 @@
+<!-- @dsCard group="Components" name="Recording card" subtitle="Library entry with status and speakers" viewport="720x420" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eclume — Recording card</title>
+<link rel="stylesheet" href="../styles.css">
+<style>.demo{max-width:720px;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-8)}.demo-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);margin:var(--space-6) 0 var(--space-3)}.demo-head:first-child{margin-top:0}.row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}.stack{display:grid;gap:var(--space-3)}.note{font-size:12px;color:var(--color-text-muted);max-width:62ch;margin-top:var(--space-4)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;background:var(--color-divider);border:2px solid var(--color-divider)}.grid .rec-card{background:var(--color-bg)}</style>
+</head>
+<body>
+<main class="demo">
+<div class="grid">
+<a class="rec-card" href="#"><div class="rec-card-head"><span class="rec-card-title">Quarterly review — regional team</span><span class="badge badge-success">Transcribed</span></div><div class="rec-card-meta"><span>24 Sep 2026</span><span>1 h 12 min</span><span>4 speakers</span><span class="marker-count">3 markers</span></div><div class="rec-card-people"><span class="speaker speaker-1">Ana</span><span class="speaker speaker-2">Bruno</span><span class="speaker speaker-3">Carla</span><span class="speaker speaker-4">Diego</span></div></a>
+<a class="rec-card" href="#"><div class="rec-card-head"><span class="rec-card-title">1:1 Elisa / Ana</span><span class="badge badge-progress">Transcribing</span></div><div class="rec-card-meta"><span>Today, 10:30</span><span>38 min</span></div><div><progress class="progress" value="41" max="100">41%</progress><div class="progress-row"><span>Aligning words</span><span>41%</span></div></div></a>
+<a class="rec-card" href="#"><div class="rec-card-head"><span class="rec-card-title">Mentoring programme — cohort 3</span><span class="badge">Queued</span></div><div class="rec-card-meta"><span>Today, 09:00</span><span>54 min</span></div></a>
+<a class="rec-card" href="#"><div class="rec-card-head"><span class="rec-card-title">meeting-03.mkv</span><span class="badge badge-danger">Failed</span></div><div class="rec-card-meta"><span>23 Sep 2026</span><span>Unsupported codec</span></div></a>
+</div>
+</main>
+</body>
+</html>
