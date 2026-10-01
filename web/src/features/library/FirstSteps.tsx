@@ -6,7 +6,8 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { dismissFirstSteps, readAgendaTypesSeen, readFirstStepsDismissed } from '../../app/preferences'
 import styles from './FirstSteps.module.css'
-import { useHasAnyPerson, useHasAnyRecording } from './queries'
+import { useHasAnyRecording } from './anyRecording'
+import { useHasAnyPerson } from './queries'
 
 export function FirstSteps({ onImport }: { onImport: () => void }) {
   const [dismissed, setDismissed] = useState(readFirstStepsDismissed)

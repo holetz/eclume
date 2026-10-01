@@ -376,7 +376,7 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `alert-info` "Enviando 1 de 3 arquivos · Abrir" acompanha a fila de importação.
 - **Primeiros passos** (`FirstSteps`): cartão no topo da biblioteca enquanto há passo pendente, com
   três passos derivados, sem contrato novo: (1) traga a primeira gravação (a conta tem gravação,
-  `useHasAnyRecording`), com importar, app desktop e app do celular; (2) confira os tipos de agenda
+  `useHasAnyRecording`, em `library/anyRecording.ts`, módulo próprio para o shell não puxar as consultas da biblioteca ao JS inicial), com importar, app desktop e app do celular; (2) confira os tipos de agenda
   (abrir `/config/agendas` neste navegador grava `eclume-tipos-de-agenda-visto`); (3) ligue um
   locutor a uma pessoa (a conta tem pessoa, `GET /people` com `limit=1`, `useHasAnyPerson`). Cada
   passo feito ganha o check e "(feito)" para leitor de tela; com os três feitos o cartão some

@@ -26,7 +26,8 @@ import {
 import { FilterGroups, LibraryFilters } from './LibraryFilters'
 import styles from './LibraryPage.module.css'
 import type { ImportItem } from '../import/useImportQueue'
-import { useHasAnyRecording, useLibraryList, useLibraryRange } from './queries'
+import { useHasAnyRecording } from './anyRecording'
+import { useLibraryList, useLibraryRange } from './queries'
 import { RecordingList } from './RecordingList'
 
 const VIEWS: { value: LibraryView; label: string }[] = [

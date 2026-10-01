@@ -102,16 +102,6 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
   })
 }
 
-/** Se a conta tem alguma gravação; `enabled` adia a consulta até alguém precisar dela. */
-export function useHasAnyRecording(enabled = true) {
-  return useQuery({
-    queryKey: ['recordings', 'any'],
-    enabled,
-    queryFn: () => unwrap(api.GET('/api/v1/recordings', { params: { query: { limit: 1 } } })),
-    select: (page) => page.items.length > 0,
-  })
-}
-
 export function useHasAnyPerson(enabled: boolean) {
   return useQuery({
     queryKey: [...PEOPLE_KEY, 'any'],
