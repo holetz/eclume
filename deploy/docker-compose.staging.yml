@@ -29,6 +29,8 @@ x-server-image: &server-image
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
+    # O resumo do staging roda pelo `claude -p`, que só entra na imagem com ECLUME_CLAUDE_CLI=1 (#129).
+    args: {ECLUME_CLAUDE_CLI: "1"}
     labels: {org.eclume.image: "server-staging"}
 
 services:
