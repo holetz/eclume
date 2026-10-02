@@ -1236,7 +1236,10 @@ impl AppState {
     /// chaveiro como [`Self::settings`]: o updater roda fora da thread do chaveiro.
     pub fn trust(&self) -> Result<TrustMode> {
         let inner = self.inner()?;
-        Ok(account::trust_for(self.config_dir(), inner.config.ca_path.as_deref()))
+        Ok(account::trust_for(
+            self.config_dir(),
+            inner.config.ca_path.as_deref(),
+        ))
     }
 
     pub fn settings(&self) -> Result<SettingsView> {
