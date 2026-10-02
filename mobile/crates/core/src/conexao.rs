@@ -234,7 +234,10 @@ impl Conexao {
         if let Some(servidor) = config.servidor.as_mut() {
             servidor.ca_sha256 = raiz.sha256.clone();
         }
-        log::info!("CA do servidor trocada pela próxima anunciada ({})", raiz.sha256);
+        log::info!(
+            "CA do servidor trocada pela próxima anunciada ({})",
+            raiz.sha256
+        );
         config.salvar(&self.dirs.config())
     }
 

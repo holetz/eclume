@@ -172,8 +172,7 @@ fn write_atomic(path: &Path, pem: &[u8]) -> Result<()> {
     temp.push(".novo");
     let temp = PathBuf::from(temp);
     std::fs::write(&temp, pem).with_context(|| format!("falha ao gravar {}", temp.display()))?;
-    std::fs::rename(&temp, path)
-        .with_context(|| format!("falha ao substituir {}", path.display()))
+    std::fs::rename(&temp, path).with_context(|| format!("falha ao substituir {}", path.display()))
 }
 
 /// Onde a próxima raiz fica, ao lado da fixada: `servidor-ca.pem` → `servidor-ca.proxima.pem` no
@@ -239,14 +238,12 @@ pub fn promote_next(pinned: &Path) -> Result<()> {
 /// Regrava o arquivo fixado em `path` só com o primeiro certificado (temporário + `rename`) e
 /// devolve quantos descartou; com um certificado só, o arquivo não é tocado e devolve 0.
 pub fn trim_saved(path: &Path) -> Result<usize> {
-    let pem = std::fs::read(path)
-        .with_context(|| format!("falha ao ler {}", path.display()))?;
+    let pem = std::fs::read(path).with_context(|| format!("falha ao ler {}", path.display()))?;
     let total = certificates(&pem).len();
     if total <= 1 {
         return Ok(0);
     }
-    let root = root_from_pem(&pem)
-        .with_context(|| format!("CA inválida em {}", path.display()))?;
+    let root = root_from_pem(&pem).with_context(|| format!("CA inválida em {}", path.display()))?;
     write_atomic(path, &root.pem)?;
     Ok(total - 1)
 }

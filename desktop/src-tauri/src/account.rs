@@ -322,7 +322,10 @@ pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
                 return Ok(true);
             }
             pin::promote_next(pinned)?;
-            log::info!("CA do servidor trocada pela próxima anunciada ({})", next.sha256);
+            log::info!(
+                "CA do servidor trocada pela próxima anunciada ({})",
+                next.sha256
+            );
             Ok(false)
         }
         _ => Ok(true),
@@ -731,20 +734,34 @@ pub(crate) mod tests {
         announced["ca_next_sha256"] = json!(other_sha);
         let net = Arc::new(
             ScriptNet::default()
-                .expect("verificado GET /api/v1/server", body(200, announced.clone()))
-                .expect("verificado GET /downloads/eclume-root-proxima.crt", other_ca())
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, announced.clone()),
+                )
+                .expect(
+                    "verificado GET /downloads/eclume-root-proxima.crt",
+                    other_ca(),
+                )
                 .expect("verificado GET /api/v1/server", body(200, announced))
-                .expect("verificado GET /api/v1/server", body(200, info(Some(CA_SHA256)))),
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(CA_SHA256))),
+                ),
         );
         let shared = Shared(Arc::clone(&net));
         assert!(learn_next(&shared, URL, &pinned).unwrap());
         assert_eq!(pin::saved_next(&pinned).unwrap().sha256, other_sha);
         assert!(!learn_next(&shared, URL, &pinned).unwrap(), "já guardada");
         assert!(!learn_next(&shared, URL, &pinned).unwrap());
-        assert!(pin::saved_next(&pinned).is_none(), "sem anúncio, a próxima sai");
+        assert!(
+            pin::saved_next(&pinned).is_none(),
+            "sem anúncio, a próxima sai"
+        );
         assert!(net.done());
         let trusts = net.trusts.lock().unwrap();
-        assert!(trusts.iter().all(|trust| *trust == TrustMode::Pinned(pinned.clone())));
+        assert!(trusts
+            .iter()
+            .all(|trust| *trust == TrustMode::Pinned(pinned.clone())));
     }
 
     #[test]
@@ -757,13 +774,19 @@ pub(crate) mod tests {
         let net = Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", other_ca())
-                .expect("verificado GET /api/v1/server", body(200, info(Some(&other.sha256))))
+                .expect(
+                    "verificado GET /api/v1/server",
+                    body(200, info(Some(&other.sha256))),
+                )
                 .expect("inseguro GET /downloads/eclume-root.crt", pem()),
         );
         let shared = Shared(Arc::clone(&net));
         assert!(!ca_changed(&shared, URL, &pinned).unwrap());
         let now_pinned = std::fs::read(&pinned).unwrap();
-        assert_eq!(pin::root_from_pem(&now_pinned).unwrap().sha256, other.sha256);
+        assert_eq!(
+            pin::root_from_pem(&now_pinned).unwrap().sha256,
+            other.sha256
+        );
         assert!(pin::saved_next(&pinned).is_none());
         assert_eq!(
             *net.trusts.lock().unwrap(),

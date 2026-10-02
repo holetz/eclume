@@ -747,10 +747,7 @@ fn ca_trocada_pela_proxima_sem_parear_de_novo() {
     {
         let core = trancar(&nucleo).unwrap();
         assert_eq!(core.config().servidor.as_ref().unwrap().ca_sha256, outra);
-        assert_eq!(
-            std::fs::read_to_string(core.dirs().ca()).unwrap(),
-            OUTRA_CA
-        );
+        assert_eq!(std::fs::read_to_string(core.dirs().ca()).unwrap(), OUTRA_CA);
         assert!(!proxima.exists());
         assert_eq!(core.estado().unwrap().rede, EstadoRede::OnNetwork);
     }

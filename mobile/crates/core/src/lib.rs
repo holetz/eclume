@@ -977,7 +977,11 @@ pub struct PlanoDeDownload {
 impl PlanoDaProxima {
     /// O descritor, lido fixando a próxima raiz, a confirma: o servidor virou para ela.
     pub fn confere(&self) -> bool {
-        rede::confere_proxima(Arc::clone(&self.transporte), &self.servidor, &self.raiz.sha256)
+        rede::confere_proxima(
+            Arc::clone(&self.transporte),
+            &self.servidor,
+            &self.raiz.sha256,
+        )
     }
 }
 
