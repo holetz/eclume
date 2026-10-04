@@ -23,5 +23,5 @@ ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
 COPY rust-toolchain.toml /opt/rust-toolchain/rust-toolchain.toml
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none \
  && cd /opt/rust-toolchain && rustup toolchain install \
- && rustup default "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" \
+ && rustup default "$(rustup show active-toolchain | cut -d' ' -f1)" \
  && rustc --version && chmod -R a+rwX /opt/cargo /opt/rustup
