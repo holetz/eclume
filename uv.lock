@@ -885,7 +885,7 @@ wheels = [
 
 [[package]]
 name = "eclume-engines"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "engines" }
 dependencies = [
     { name = "httpx" },
@@ -911,7 +911,7 @@ provides-extras = ["whisperx", "cpu"]
 
 [[package]]
 name = "eclume-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "server" }
 dependencies = [
     { name = "anthropic" },
@@ -954,7 +954,7 @@ requires-dist = [
 
 [[package]]
 name = "eclume-worker"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "worker-gpu" }
 dependencies = [
     { name = "arq" },

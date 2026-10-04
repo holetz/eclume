@@ -9,8 +9,10 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 
 ## [Não lançado]
 
+## [0.2.0] - 2026-10-03
+
 O que entrou em `main` depois da 0.1.0, antes de existir a norma de versionamento (holetz/eclume#89 a
-#130, mesclados em 2026-10-01). A próxima versão do produto recebe estas entradas.
+#130, mesclados entre 2026-10-01 e 2026-10-02).
 
 ### Adicionado
 
@@ -33,6 +35,8 @@ O que entrou em `main` depois da 0.1.0, antes de existir a norma de versionament
 - Primeiros passos e estados vazios que ensinam, do resumo até a regra (holetz/eclume#115).
 - CA própria do servidor com restrição de nome, com rotação anunciada no descritor
   (`ca_next_sha256`) (holetz/eclume#101).
+- Referência da API navegável e offline em `/referencia-api.html`, ligada pela tela de tokens de
+  acesso (holetz/eclume#127).
 
 ### Mudado
 
