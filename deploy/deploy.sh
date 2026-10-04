@@ -467,7 +467,8 @@ fi
 if [[ "$uses_own_ca" -eq 1 && -z "$own_sha" ]]; then
   echo "Gerando a raiz própria em $CA_DIR…" >&2
   host "install -d -m 700 '$CA_DIR'"
-  docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges:true \
+  # Sem MSYS_NO_PATHCONV, o Git Bash do Windows reescreve o caminho do host em `-v` e `--pasta`.
+  MSYS_NO_PATHCONV=1 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges:true \
     --user "$(host 'echo "$(id -u):$(id -g)"')" -v "$CA_DIR:/ca" eclume-server:prod \
     eclume-server ca gerar --pasta /ca --host "$(env_value ECLUME_PUBLIC_HOST)" --nomes "$(env_value ECLUME_CA_NOMES)" >&2
   own_sha="$(own_root_sha)"
