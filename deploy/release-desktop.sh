@@ -24,6 +24,8 @@
 # Variáveis: ECLUME_SERVER_URL, ECLUME_SERVER_CA_SHA256 e ECLUME_DOWNLOADS_URL (padrão: as variáveis
 # do repositório; sem elas, recusa), ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
+# Os caminhos dos `docker run` são do host: o Git Bash do Windows não pode reescrevê-los.
+export MSYS_NO_PATHCONV=1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -143,7 +145,7 @@ if [[ "$PUBLICAR" -eq 1 && "${#problemas[@]}" -gt 0 ]]; then
 fi
 if [[ "$PUBLICAR" -eq 1 && "$gate_ok" -eq 0 ]]; then
   gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \
-    -f description="release $TAG: ${SEM_GATE:0:120}" --silent \
+    -f description="$(dispensa="release $TAG: $SEM_GATE"; echo "${dispensa:0:140}")" --silent \
     || { echo "Não consegui publicar o rastro eclume/gate-dispensa; publicação recusada." >&2; exit 2; }
   echo "Gate dispensado: $SEM_GATE (rastro eclume/gate-dispensa no commit)." >&2
 fi

@@ -385,7 +385,7 @@ fi
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: acima de ${DISK_LIMIT}%, deploy recusado." >&2; exit 3; }
 if [[ "$gate_ok" -eq 0 ]]; then
   gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \
-    -f description="deploy: ${SEM_GATE:0:130}" --silent \
+    -f description="$(dispensa="deploy: $SEM_GATE"; echo "${dispensa:0:140}")" --silent \
     || { echo "Não consegui publicar o rastro eclume/gate-dispensa; deploy recusado." >&2; exit 2; }
   echo "Gate dispensado: $SEM_GATE (rastro eclume/gate-dispensa no commit)." >&2
 fi

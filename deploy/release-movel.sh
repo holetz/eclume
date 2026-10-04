@@ -19,6 +19,8 @@
 #   --sem-fumaca  pula a fumaça no emulador (só no ensaio; --publicar sempre a roda).
 # Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_SSH (quando o contexto não é ssh://).
 set -euo pipefail
+# Os caminhos dos `docker run` são do host: o Git Bash do Windows não pode reescrevê-los.
+export MSYS_NO_PATHCONV=1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -132,7 +134,7 @@ fi
 host "test -s '$KEYSTORE' && test -s '$SENHA'" || { echo "Falta a keystore de release em $SECRETS no host." >&2; exit 2; }
 if [[ "$PUBLICAR" -eq 1 && "$gate_ok" -eq 0 ]]; then
   gh api "repos/$REPO/statuses/$SHA" -f state=failure -f context=eclume/gate-dispensa \
-    -f description="release $TAG: ${SEM_GATE:0:120}" --silent \
+    -f description="$(dispensa="release $TAG: $SEM_GATE"; echo "${dispensa:0:140}")" --silent \
     || { echo "Não consegui publicar o rastro eclume/gate-dispensa; publicação recusada." >&2; exit 2; }
   echo "Gate dispensado: $SEM_GATE (rastro eclume/gate-dispensa no commit)." >&2
 fi
