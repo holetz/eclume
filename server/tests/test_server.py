@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 
 def test_pacote_importa_e_enxerga_a_interface_de_engine():
-    assert eclume_server.__version__ == "0.1.0"
-    assert eclume_engines.__version__ == "0.1.0"
+    # As três partes Python são a linha "produto" e andam juntas (deploy/versao.py).
+    assert eclume_server.__version__ == eclume_engines.__version__
 
 
 def test_migrations_aplicadas_forcam_rls_e_sao_idempotentes(services: Services):

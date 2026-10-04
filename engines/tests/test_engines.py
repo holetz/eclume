@@ -1,3 +1,4 @@
+import re
 import sys
 
 import pytest
@@ -8,7 +9,7 @@ from eclume_engines.base import EngineError, is_oom
 
 
 def test_pacote_importa_com_versao():
-    assert eclume_engines.__version__ == "0.1.0"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", eclume_engines.__version__)
 
 
 def test_importar_o_pacote_nao_carrega_dependencia_pesada():
