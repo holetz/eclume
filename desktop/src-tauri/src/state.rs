@@ -258,6 +258,8 @@ pub struct SettingsView {
     pub autostart: bool,
     /// Quantas gravações recentes o painel do topo mostra; `0` o esconde.
     pub recent_count: u8,
+    /// Quantas gravações recentes o menu da bandeja mostra; `0` esconde a seção.
+    pub tray_recent_count: u8,
     /// A pasta sincronizada está ligada.
     pub mirror_enabled: bool,
     /// A raiz da pasta sincronizada; `None` até a pessoa escolher.
@@ -311,6 +313,9 @@ pub struct SettingsInput {
     /// Gravações recentes no topo (0 a 10); ausente mantém o de hoje.
     #[serde(default)]
     pub recent_count: Option<u8>,
+    /// Gravações recentes no menu da bandeja (0 a 10); ausente mantém o de hoje.
+    #[serde(default)]
+    pub tray_recent_count: Option<u8>,
     /// Liga ou desliga a pasta sincronizada; ausente mantém o de hoje.
     #[serde(default)]
     pub mirror_enabled: Option<bool>,
@@ -1032,6 +1037,11 @@ impl AppState {
         Ok(self.inner()?.config.recent_count)
     }
 
+    /// Quantas gravações recentes o menu da bandeja mostra; `0` esconde a seção.
+    pub fn tray_recent_count(&self) -> Result<u8> {
+        Ok(self.inner()?.config.tray_recent_count)
+    }
+
     /// Se o app deve iniciar com o computador.
     pub fn autostart(&self) -> Result<bool> {
         Ok(self.inner()?.config.autostart)
@@ -1281,6 +1291,7 @@ impl AppState {
             notify_summary: config.notify_summary,
             autostart: config.autostart,
             recent_count: config.recent_count,
+            tray_recent_count: config.tray_recent_count,
             mirror_enabled: config.mirror.enabled,
             mirror_dir: config.mirror.dir.clone(),
             mirror_transcripts: config.mirror.transcripts,
@@ -1333,6 +1344,9 @@ impl AppState {
         }
         if let Some(count) = input.recent_count {
             next.recent_count = count;
+        }
+        if let Some(count) = input.tray_recent_count {
+            next.tray_recent_count = count;
         }
         if let Some(enabled) = input.mirror_enabled {
             next.mirror.enabled = enabled;
@@ -1752,6 +1766,7 @@ mod tests {
             notify_summary: None,
             autostart: None,
             recent_count: None,
+            tray_recent_count: None,
             mirror_enabled: None,
             mirror_dir: None,
             mirror_transcripts: None,
@@ -2140,6 +2155,28 @@ mod tests {
         clear.clear_pat = true;
         state.save_settings(clear).unwrap();
         assert!(state.uploader_config().unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn configuracoes_gravam_as_recentes_da_janela_e_da_bandeja_apartadas() {
+        let (state, dir) = state("recentes-bandeja");
+        let view = state.settings().unwrap();
+        assert_eq!((view.recent_count, view.tray_recent_count), (5, 1));
+
+        let mut input = settings_input(&state);
+        input.web_url = "https://eclume.exemplo:8443".into();
+        input.tray_recent_count = Some(3);
+        state.save_settings(input).unwrap();
+        assert_eq!(state.tray_recent_count().unwrap(), 3);
+        assert_eq!(state.recent_count().unwrap(), 5);
+        let saved = Config::load(&dir.join("config.json"));
+        assert_eq!((saved.recent_count, saved.tray_recent_count), (5, 3));
+
+        let mut bad = settings_input(&state);
+        bad.tray_recent_count = Some(11);
+        assert!(state.save_settings(bad).is_err());
+        assert_eq!(state.tray_recent_count().unwrap(), 3);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
