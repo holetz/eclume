@@ -117,6 +117,8 @@ fn run_once(app: &AppHandle) -> Result<()> {
                         drop(syncing);
                         let report = report?;
                         log::info!("sync: {report:?}");
+                        // O painel de recentes troca a linha local pela do servidor.
+                        crate::recent::nudge(app);
                         (report.failed > 0)
                             .then(|| last_failure(state.queue()))
                             .transpose()?
@@ -227,7 +229,7 @@ fn wait_candidates(synced: &[QueuedRecording], mark: &Watermark, now: i64) -> Ve
 }
 
 /// A página da gravação no eclume web.
-fn recording_url(web_url: &str, remote_id: &str) -> String {
+pub(crate) fn recording_url(web_url: &str, remote_id: &str) -> String {
     format!("{}/gravacoes/{remote_id}", web_url.trim_end_matches('/'))
 }
 
