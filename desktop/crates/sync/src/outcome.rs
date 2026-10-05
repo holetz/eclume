@@ -188,6 +188,7 @@ mod tests {
             job: Some(JobInfo {
                 state: state.into(),
                 finished_at: Some(at.into()),
+                ..JobInfo::default()
             }),
             ..recording(id, "failed", None)
         }

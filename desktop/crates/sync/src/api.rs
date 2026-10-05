@@ -244,12 +244,40 @@ pub struct PipelineStepInfo {
     pub reason: Option<String>,
 }
 
-/// O job de transcrição de uma gravação: só o estado e o fim importam para o desfecho.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+/// O job de transcrição de uma gravação: o estado e o fim decidem o desfecho; a etapa, o
+/// progresso e o erro alimentam o painel de gravações recentes da janela.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct JobInfo {
     pub state: String,
     #[serde(default)]
     pub finished_at: Option<String>,
+    /// A etapa em curso (`preprocessing`, `asr`…), `None` fora de execução.
+    #[serde(default)]
+    pub stage: Option<String>,
+    /// O progresso do job em milésimos (0–1000): o contrato manda um número de 0 a 1, e o
+    /// inteiro mantém o `Eq` dos tipos da listagem.
+    #[serde(default, deserialize_with = "permille")]
+    pub progress: Option<u16>,
+    #[serde(default)]
+    pub error: Option<JobError>,
+}
+
+/// O erro de um job que falhou.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct JobError {
+    #[serde(default)]
+    pub code: String,
+    /// A falha é passageira (o servidor tenta de novo); ausente em servidores anteriores à 1.4.0.
+    #[serde(default)]
+    pub retryable: bool,
+}
+
+/// `progress` de 0 a 1 em milésimos, limitado à faixa; `null` ou ausente é `None`.
+fn permille<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<u16>, D::Error> {
+    let value: Option<f64> = Option::deserialize(deserializer)?;
+    Ok(value
+        .filter(|v| v.is_finite())
+        .map(|v| (v.clamp(0.0, 1.0) * 1000.0).round() as u16))
 }
 
 /// O que o espelho local lê de uma gravação da biblioteca (`GET /api/v1/recordings`).
@@ -418,6 +446,35 @@ mod tests {
             pipeline: vec![],
             job: None,
         }
+    }
+
+    #[test]
+    fn o_job_da_listagem_le_etapa_progresso_e_erro_e_aceita_servidor_antigo() {
+        let completo: JobInfo = serde_json::from_value(serde_json::json!({
+            "state": "running", "finished_at": null, "stage": "asr", "progress": 0.426,
+            "error": null, "attempts": 1
+        }))
+        .unwrap();
+        assert_eq!(completo.stage.as_deref(), Some("asr"));
+        assert_eq!(completo.progress, Some(426));
+        assert_eq!(completo.error, None);
+
+        let falhou: JobInfo = serde_json::from_value(serde_json::json!({
+            "state": "failed", "progress": 7,
+            "error": {"code": "gpu_oom", "message": "sem VRAM", "retryable": true}
+        }))
+        .unwrap();
+        assert_eq!(falhou.progress, Some(1000));
+        assert_eq!(
+            falhou.error,
+            Some(JobError {
+                code: "gpu_oom".into(),
+                retryable: true
+            })
+        );
+
+        let antigo: JobInfo = serde_json::from_value(serde_json::json!({"state": "queued"})).unwrap();
+        assert_eq!((antigo.stage, antigo.progress, antigo.error), (None, None, None));
     }
 
     #[test]
