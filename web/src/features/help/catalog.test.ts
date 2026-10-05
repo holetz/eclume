@@ -32,7 +32,7 @@ const FORBIDDEN: RegExp[] = [
 const APP_ROUTES = [
   /^\/$/,
   /^\/busca$/,
-  /^\/perguntas$/,
+  /^\/agente(\/conversas)?$/,
   /^\/pessoas$/,
   /^\/colecoes$/,
   /^\/tags$/,
@@ -52,8 +52,8 @@ describe('artigos da central de ajuda', () => {
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
   })
 
-  it('cobrem a central inteira: 42 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
-    expect(ARTICLES).toHaveLength(42)
+  it('cobrem a central inteira: 43 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+    expect(ARTICLES).toHaveLength(43)
     for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
     for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
       expect(articlesForPage(key).length, `chave ${key}`).toBeGreaterThanOrEqual(1)
