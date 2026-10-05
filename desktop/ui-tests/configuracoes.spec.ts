@@ -54,13 +54,33 @@ test('Geral: o aviso do fim do processamento vem ligado e desliga na hora', asyn
   expect((await ultimaEntrada(page)).notify_summary).toBe(false)
 })
 
-test('Geral: gravações recentes no topo vem com 5 e salva na hora', async ({ abrir }) => {
+test('Geral: gravações recentes na janela vem com 5 e salva na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('label[for="recentes-quantidade"]')).toHaveText('Gravações recentes na janela')
   await expect(page.locator('#recentes-quantidade')).toHaveValue('5')
   await expect(page.locator('#recentes-quantidade option')).toHaveText(['Ocultar', '3', '5', '10'])
   await page.locator('#recentes-quantidade').selectOption('10')
   await expect.poll(async () => (await ultimaEntrada(page)).recent_count).toBe(10)
+})
+
+test('Geral: gravações recentes no menu da bandeja vem com 1, apartada da janela, e salva na hora', async ({
+  abrir,
+}) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('label[for="recentes-bandeja-quantidade"]')).toHaveText(
+    'Gravações recentes no menu da bandeja',
+  )
+  await expect(page.locator('#recentes-bandeja-quantidade')).toHaveValue('1')
+  await expect(page.locator('#recentes-bandeja-quantidade option')).toHaveText(['Ocultar', '1', '3', '5'])
+  await page.locator('#recentes-bandeja-quantidade').selectOption('3')
+  await expect.poll(async () => (await ultimaEntrada(page)).tray_recent_count).toBe(3)
+  // A da janela segue como estava: a entrada não a manda, e ausente mantém a de hoje.
+  expect((await ultimaEntrada(page)).recent_count).toBeUndefined()
+  await expect(page.locator('#recentes-quantidade')).toHaveValue('5')
+  await page.locator('#recentes-bandeja-quantidade').selectOption('0')
+  await expect.poll(async () => (await ultimaEntrada(page)).tray_recent_count).toBe(0)
 })
 
 test('Geral: iniciar com o computador vem ligado e desliga na hora', async ({ abrir }) => {

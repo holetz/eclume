@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) e mantém as últimas gravações da conta no painel Recentes da janela (fase, progresso, "precisa de você" e Copiar resumo) — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, o painel de recentes, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) e mantém as últimas gravações da conta no painel Recentes da janela (fase, progresso, "precisa de você" e Copiar resumo) e na seção Recentes do menu da bandeja, cada uma com a sua contagem — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, o painel de recentes, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/recent.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141, holetz/eclume#144
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141, holetz/eclume#144, holetz/eclume#147
 maintainer: holetz
 ---
 
@@ -191,9 +191,12 @@ Rust (`recent.rs`) e entregues pelo comando `recent` como `RecentView { count, i
 fetched_at, error }`; a janela só aplica os rótulos do vocabulário
 ([desktop-interface.md](desktop-interface.md)).
 
-- **Quantas.** `Config.recent_count`, de 0 a 10, **5 por padrão** (também numa config de versão
-  anterior); `0` esconde o painel e para a leitura. Muda em Configurações → Geral → "Gravações
-  recentes no topo" (Ocultar, 3, 5 ou 10).
+- **Quantas.** Duas contagens apartadas (holetz/eclume#147): `Config.recent_count` para a janela,
+  de 0 a 10, **5 por padrão**, e `Config.tray_recent_count` para o menu da bandeja, de 0 a 10,
+  **1 por padrão** (as duas também numa config de versão anterior); `0` esconde o painel ou a
+  seção. Mudam em Configurações → Geral → "Gravações recentes na janela" (Ocultar, 3, 5 ou 10) e
+  "Gravações recentes no menu da bandeja" (Ocultar, 1, 3 ou 5). A leitura pede a **maior** das
+  duas (`recent::fetch_count`) e cada uma corta a mesma lista no seu N; com as duas em 0, não lê.
 - **De onde.** Primeiro as linhas da fila local que ainda não estão no servidor (gravando,
   aguardando envio, enviando, falhou o envio), depois a página `GET /recordings?limit=N&sort=
   created_desc` (`Client::recent`, **uma página só**, sem paginar). Uma enviada daqui cujo id está
@@ -234,6 +237,17 @@ fetched_at, error }`; a janela só aplica os rótulos do vocabulário
   linha e nada é copiado. A janela nunca usa `navigator.clipboard`.
 - **Abrir no web** (`open_recording`): `<web_url>/gravacoes/<id>` pelo `opener`, a mesma URL do
   aviso (`sync::recording_url`). Nenhum comando do painel escreve no servidor.
+- **A seção Recentes da bandeja** (`recent::tray_section`) sai da mesma fila local e do mesmo
+  retrato da thread `eclume-recentes`, sem leitura própria da API, cortada em
+  `tray_recent_count`. Cada linha vira um `TrayEntry`: o rótulo "Título · Estado" e as ações. O
+  estado é o rótulo do vocabulário da janela reescrito em Rust (`recent::state_label`: "Resumo
+  pronto", "Transcrevendo", o andamento da etapa, "Aguardando locutores"…), porque o menu nativo
+  não passa pela janela; com alerta, "Precisa de você (<estado>)". O título tem no máximo 40
+  caracteres, com reticências; sem título, a data curta "dd/mm hh:mm" no fuso local; o `&` vira
+  `&&` (mnemônico do menu). As ações: **Copiar resumo** com `summary_ready`, **Abrir no web** com
+  id remoto e **Tentar agora** com `upload_failed`. O cabeçalho conta os alertas ("Recentes · 1
+  precisa de você"). O progresso e a espera ficam fora da seção de propósito: o menu só é
+  reconstruído quando ela muda ([desktop-gravacao.md](desktop-gravacao.md) §App e bandeja).
 
 ## Conta e credencial
 

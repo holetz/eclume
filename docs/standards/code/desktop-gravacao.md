@@ -4,10 +4,10 @@ title: Gravação no app desktop
 description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v6, com natureza, origem da data, fonte, marcadores, título, tipo de agenda e idioma escolhidos ao parar e o título do servidor) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#118, holetz/eclume#121
+source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#118, holetz/eclume#121, holetz/eclume#147
 maintainer: holetz
 ---
 
@@ -238,6 +238,25 @@ Implementados pela `holetz/eclume#13`; o detalhe está em
   eclume", "Abrir a biblioteca na web" e "Sair" (que fecha a gravação em curso antes), com os
   atalhos como acelerador. A pergunta de reunião entra como dois itens. A UI da janela está em
   [desktop-interface.md](desktop-interface.md).
+- **Recentes no menu** (holetz/eclume#147): entre "Importar arquivo…" e "Abrir o eclume", para
+  não mover "Iniciar gravação", a seção Recentes com as `tray_recent_count` últimas gravações (1
+  por padrão; 0 a esconde): o cabeçalho desabilitado ("Recentes", ou "Recentes · N precisam de
+  você"), "Nenhuma gravação recente" quando vazia, e uma linha "Título · Estado" por gravação
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Painel de gravações recentes). A
+  linha com ação é um **submenu** com "Copiar resumo", "Abrir no web" e "Tentar agora", conforme
+  a fase; sem ação, um item que abre a janela. Os ids levam o que a ação usa (`recent-copy:<id
+  remoto>`, `recent-open:<id remoto>`, `recent-retry:<id local>`, `recent-show:<chave>`). Copiar
+  lê a API numa thread e avisa por notificação ("Resumo copiado" ou a falha), o único retorno que
+  a bandeja tem; Tentar agora chama `sync_now` numa thread.
+- **O menu só é reconstruído quando muda.** O `tray::apply` monta a seção a cada atualização e
+  só chama `set_menu` quando a pergunta, a gravação, os atalhos ou a seção Recentes mudaram; o
+  progresso não entra na seção, então o avanço da transcrição não reconstrói o menu.
+- **Limites do menu nativo.** Linux (libappindicator, pelo DBusMenu): o clique no ícone só abre o
+  menu; item não tem ícone nem dica; o texto é puro, sem negrito nem cor; cada `set_menu`
+  reexporta o menu inteiro e fecha o menu aberto, por isso nada que muda a cada leitura entra
+  nele; submenu funciona. Windows (menu popup Win32): o menu é montado ao abrir, então trocá-lo é
+  barato; submenu funciona; não há rótulo ao lado do ícone. Nos dois, `&` é mnemônico (o título
+  o escapa como `&&`; o `_` o muda escapa no GTK) e o estado vai sempre em texto.
 - O endereço do eclume web vem de `config.json` no diretório de config do app (`web_url`: o
   servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
   pode ser sobreposto por `ECLUME_WEB_URL`.

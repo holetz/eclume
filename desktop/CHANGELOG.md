@@ -8,6 +8,19 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.5.1] - 2026-10-05
+
+### Adicionado
+
+- As gravações recentes também no menu do ícone ao lado do relógio, com o estado de cada uma e
+  um submenu para copiar o resumo, abrir no web ou tentar o envio de novo (holetz/eclume#147).
+- Quantas gravações o menu do ícone mostra, em Configurações → Geral, à parte da janela: uma por
+  padrão.
+
+### Alterado
+
+- Em Configurações → Geral, a opção da janela passa a se chamar "Gravações recentes na janela".
+
 ## [0.5.0] - 2026-10-05
 
 ### Adicionado

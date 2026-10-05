@@ -41,6 +41,13 @@ fn default_recent_count() -> u8 {
     DEFAULT_RECENT_COUNT
 }
 
+/// Quantas gravações recentes o menu da bandeja mostra por padrão.
+pub const DEFAULT_TRAY_RECENT_COUNT: u8 = 1;
+
+fn default_tray_recent_count() -> u8 {
+    DEFAULT_TRAY_RECENT_COUNT
+}
+
 /// Os idiomas de transcrição que a aba Áudio oferece, além de `auto` (detectar) e do padrão da
 /// conta (`null`).
 pub const LANGUAGES: [&str; 4] = ["auto", "pt", "es", "en"];
@@ -147,6 +154,10 @@ pub struct Config {
     /// Cinco por padrão, também numa config de versão anterior.
     #[serde(default = "default_recent_count")]
     pub recent_count: u8,
+    /// Quantas gravações recentes a seção Recentes do menu da bandeja mostra (0 a 10, `0`
+    /// esconde), apartada da janela. Uma por padrão, também numa config de versão anterior.
+    #[serde(default = "default_tray_recent_count")]
+    pub tray_recent_count: u8,
     /// A pasta local que espelha os resumos e as transcrições da biblioteca.
     #[serde(default)]
     pub mirror: MirrorConfig,
@@ -282,6 +293,7 @@ impl Default for Config {
             notify_summary: true,
             autostart: true,
             recent_count: DEFAULT_RECENT_COUNT,
+            tray_recent_count: DEFAULT_TRAY_RECENT_COUNT,
             mirror: MirrorConfig::default(),
             mic: None,
             system_source: default_system_source(),
@@ -422,7 +434,10 @@ impl Config {
             bail!("tema: use system, light ou dark");
         }
         if self.recent_count > MAX_RECENT_COUNT {
-            bail!("gravações recentes no topo: no máximo {MAX_RECENT_COUNT}");
+            bail!("gravações recentes na janela: no máximo {MAX_RECENT_COUNT}");
+        }
+        if self.tray_recent_count > MAX_RECENT_COUNT {
+            bail!("gravações recentes no menu da bandeja: no máximo {MAX_RECENT_COUNT}");
         }
         if let Some(language) = &self.language {
             if !LANGUAGES.contains(&language.as_str()) {
@@ -492,6 +507,28 @@ mod tests {
         let lida: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
         assert_eq!(lida.recent_count, 10);
         config.recent_count = 11;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn gravacoes_recentes_na_bandeja_tem_padrao_1_e_vao_de_0_a_10() {
+        let antiga: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(antiga.tray_recent_count, 1);
+        assert_eq!(antiga.recent_count, 5);
+        assert_eq!(
+            Config::default().tray_recent_count,
+            DEFAULT_TRAY_RECENT_COUNT
+        );
+        let mut config = Config {
+            tray_recent_count: 0,
+            ..Config::default()
+        };
+        config.validate().unwrap();
+        config.tray_recent_count = 10;
+        config.validate().unwrap();
+        let lida: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!((lida.tray_recent_count, lida.recent_count), (10, 5));
+        config.tray_recent_count = 11;
         assert!(config.validate().is_err());
     }
 

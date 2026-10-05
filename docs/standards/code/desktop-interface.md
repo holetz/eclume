@@ -7,7 +7,7 @@ tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114, holetz/eclume#120, holetz/eclume#141
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114, holetz/eclume#120, holetz/eclume#141, holetz/eclume#147
 maintainer: holetz
 ---
 
@@ -93,8 +93,13 @@ Na ordem do `index.html`:
 - O topo da principal, logo abaixo da linha da marca e antes da linha de status, tem o painel
   **Recentes** (`#recentes`, montado por `recentes.js`): as últimas N gravações da conta que o
   comando `recent` entrega ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Painel de
-  gravações recentes). N vem de Configurações → Geral → "Gravações recentes no topo" (Ocultar, 3,
-  5 ou 10; 5 por padrão); Ocultar esconde o painel.
+  gravações recentes). N vem de Configurações → Geral → "Gravações recentes na janela" (Ocultar,
+  3, 5 ou 10; 5 por padrão); Ocultar esconde o painel.
+- **Duas linhas em Geral, uma por lugar.** Logo abaixo, "Gravações recentes no menu da bandeja"
+  (`#recentes-bandeja-quantidade`: Ocultar, 1, 3 ou 5; 1 por padrão) salva `tray_recent_count`
+  na hora, apartada da janela; os rótulos dizem "na janela" e "no menu da bandeja" para a
+  diferença ficar clara. O menu em si é nativo, montado no Rust
+  ([desktop-gravacao.md](desktop-gravacao.md) §App e bandeja).
 - **Compacto para 520 × 600.** Cabeçalho de uma linha (o kicker "Recentes" e, quando há,
   "N precisam de você" em `.badge-warning`) e uma linha por gravação numa grade de três colunas:
   o título com reticências (sem título, a data curta "dd/mm hh:mm"), o `.badge` do estado e a
