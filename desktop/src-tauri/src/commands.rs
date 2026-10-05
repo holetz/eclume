@@ -182,6 +182,8 @@ pub fn save_settings(
         }
         // Pasta sincronizada ligada ou trocada: um ciclo já.
         crate::mirror_sync::nudge(&app, false);
+        // Gravações recentes no topo mudou: o painel lê de novo.
+        crate::recent::nudge(&app);
     }
     crate::refresh_ui(&app);
     to_js(result.and_then(|_| state.settings()))
@@ -320,6 +322,30 @@ pub fn dismiss_update_notice(app: AppHandle, state: State<'_, AppState>) -> Comm
 #[tauri::command]
 pub fn sync_now(app: AppHandle) -> CommandResult<()> {
     to_js(crate::sync::sync_now(&app))
+}
+
+/// O painel de gravações recentes do topo da principal.
+#[tauri::command]
+pub fn recent(app: AppHandle) -> CommandResult<crate::recent::RecentView> {
+    to_js(crate::recent::view(&app))
+}
+
+/// Pede uma leitura das recentes já (a principal acabou de abrir).
+#[tauri::command]
+pub fn recent_refresh(app: AppHandle) {
+    crate::recent::nudge(&app);
+}
+
+/// "Copiar resumo": o Markdown do resumo atual na área de transferência.
+#[tauri::command(async)]
+pub fn copy_summary(app: AppHandle, recording_id: String) -> CommandResult<()> {
+    to_js(crate::recent::copy_summary(&app, &recording_id))
+}
+
+/// "Abrir no web": a página da gravação.
+#[tauri::command]
+pub fn open_recording(app: AppHandle, recording_id: String) -> CommandResult<()> {
+    to_js(crate::recent::open_recording(&app, &recording_id))
 }
 
 /// Os servidores da primeira execução: o do instalador e, por até 3 s, os anunciados na rede.
