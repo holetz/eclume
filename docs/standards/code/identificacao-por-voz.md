@@ -4,10 +4,10 @@ title: Identificação de pessoas pela voz
 description: Como o eclume sugere e atribui quem é cada locutor pela voz — impressão de voz como conjunto de amostras de locutores confirmados, comparação por centroide normalizado no ingest com limiar calibrado, só entre pessoas do dono, sugestão abaixo do limiar da conta e atribuição automática acima dele (antes do resumo), retranscrição que preserva vínculos, e o regime LGPD (liga-desliga da plataforma com purga dos embeddings ao desligar, a conta que deixa de guardar amostras com a purga da conta, o aceite do aviso no cadastro no lugar do consentimento por pessoa, e esquecer a voz de uma pessoa).
 resource: server/src/eclume_server/voice.py, server/src/eclume_server/db/migrations/019_atribuicao_automatica_de_locutores.sql, web/src/features/people/AutoAssignCard.tsx, server/src/eclume_server/routes/voice.py, server/src/eclume_server/people.py, server/src/eclume_server/db/migrations/005_identificacao_por_voz.sql, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, web/src/features/people/VoiceSection.tsx, web/src/features/admin/SpeakersPage.tsx, web/src/features/transcript/SpeakersPanel.tsx, server/src/eclume_server/db/migrations/028_conta_sem_amostras_de_voz.sql, web/src/features/account/AccountPage.tsx
 tags: [code, server, web, voz, lgpd, pgvector]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95, holetz/eclume#97, holetz/eclume#116
+source: holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#95, holetz/eclume#97, holetz/eclume#116, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -80,6 +80,12 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   pessoa também zera.
 - **Retranscrição** restaura o vínculo automático como estava (com o `auto_score`, sem amostra);
   depois da restauração, os locutores que sobraram passam de novo pela atribuição.
+- **Marcação obrigatória depois da voz** (holetz/eclume#144): com `users.require_speaker_naming`
+  ligada, o que a atribuição automática (e a restauração da retranscrição) não ligou para a cadeia
+  na etapa `speakers` até o dono ligar cada locutor com pelo menos 10 s de fala a uma pessoa. O
+  vínculo automático conta como nomeado; ligar a última pessoa pelo `PATCH` do locutor solta a
+  gravação. Vale também com a voz desligada na plataforma. Regras em
+  [processamento-automatico.md](processamento-automatico.md#marcação-dos-locutores).
 - **Web:** cartão "Atribuição automática" em Pessoas (interruptor e pontuação mínima; só aparece com
   a voz ligada na plataforma) e, no painel de locutores, o selo com **Confirmar** e **Desligar pessoa**.
 

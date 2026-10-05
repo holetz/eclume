@@ -145,8 +145,10 @@ async def ingest_transcript(
         await ctx["storage"].delete_artifacts(recording_id)
     elif outcome.persisted:
         await _keep_only_revision(ctx["storage"], recording_id, outcome.revision)
-        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição.
-        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
+        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição e nenhum
+        # locutor espera ser nomeado (a rota que o nomeia enfileira o tipo).
+        if not outcome.waiting:
+            await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
     # A GPU ficou livre para esta conta: o próximo job retido dela entra na fila.
     await next_for_recording(ctx["engine"], ctx["redis"], recording_id)

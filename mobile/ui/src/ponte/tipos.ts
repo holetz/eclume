@@ -102,8 +102,9 @@ export interface GravacaoLocal {
 
 export interface Etapa {
   step: string
-  state: 'pending' | 'active' | 'done' | 'failed' | 'skipped'
-  /** Código do motivo de uma etapa pulada (texto em `MOTIVOS` do vocabulário). */
+  /** `waiting` é só da etapa `speakers`: a gravação espera o dono nomear os locutores (contrato 2.22.0). */
+  state: 'pending' | 'active' | 'done' | 'failed' | 'skipped' | 'waiting'
+  /** Código do motivo de uma etapa pulada ou em espera (texto em `MOTIVOS` do vocabulário). */
   reason?: string | null
   /** O erro de uma etapa que falhou. */
   error?: { code: string; message: string } | null

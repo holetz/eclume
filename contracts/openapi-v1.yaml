@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.21.0
+  version: 2.22.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -22,6 +22,10 @@ info:
       minutos de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403
       `quota_exceeded` com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a
       gravação espera na fila até a janela abrir.
+    - **Marcação obrigatória dos locutores** (desde a 2.22.0): com `GET`/`PATCH
+      /me/speaker-naming` ligada, a etapa `speakers` fica `waiting` quando algum locutor está sem
+      pessoa, e a cadeia (tipo, campos, coleções, resumo) espera; `Recording.awaiting` e o filtro
+      `awaiting=speakers` mostram essas gravações.
     - **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue` diz por que
       espera (fila do processador, vez da própria conta ou janela de minutos), a posição, uma
       previsão rotulada como estimativa e se o processador está no ar.
@@ -502,6 +506,70 @@ paths:
               examples:
                 conta:
                   $ref: "#/components/examples/TranscriptionPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/speaker-naming:
+    get:
+      tags: [recordings]
+      operationId: getSpeakerNaming
+      summary: Ler se a conta exige nomear os locutores
+      description: >-
+        Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo menos
+        10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão
+        ou PAT com `recordings:read`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakerNamingPreference"
+              examples:
+                ligada:
+                  $ref: "#/components/examples/SpeakerNamingPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [recordings]
+      operationId: updateSpeakerNaming
+      summary: Ligar ou desligar a marcação obrigatória dos locutores
+      description: >-
+        Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação
+        parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia
+        segue. Só sessão.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerNamingPatch"
+            examples:
+              ligar:
+                $ref: "#/components/examples/SpeakerNamingPatchRequest"
+      responses:
+        "200":
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakerNamingPreference"
+              examples:
+                ligada:
+                  $ref: "#/components/examples/SpeakerNamingPreference"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1265,6 +1333,16 @@ paths:
             type: array
             items:
               type: string
+        - name: awaiting
+          in: query
+          description: >-
+            Desde a 2.22.0. `speakers`: só as gravações cuja revisão atual está parada à espera de
+            nomear os locutores (`Recording.awaiting`).
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [speakers]
       responses:
         "200":
           description: Gravações, na ordem de `sort`.
@@ -1452,6 +1530,38 @@ paths:
               examples:
                 cancelled:
                   $ref: "#/components/examples/RecordingCancelled"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/continue:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [recordings]
+      operationId: continueRecordingWithoutNames
+      summary: Seguir sem nomear os locutores
+      description: |
+        Desde a 2.22.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
+        `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
+        espera, 409.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: A gravação, com a etapa `speakers` solta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2049,7 +2159,9 @@ paths:
       description: |
         `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
         voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
-        o nome da pessoa. Sobe a `revision`.
+        o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
+        uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
+        segue sozinha.
       security:
         - sessionCookie: []
         - pat: ["transcripts:write"]
@@ -2127,7 +2239,10 @@ paths:
       tags: [transcripts]
       operationId: mergeSpeakers
       summary: Mesclar locutores
-      description: Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`.
+      description: >-
+        Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem.
+        Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação
+        parada à espera dos nomes, como `updateSpeaker`.
       security:
         - sessionCookie: []
         - pat: ["transcripts:write"]
@@ -4903,6 +5018,28 @@ components:
           type: integer
           minimum: 0
 
+    SpeakerNamingPreference:
+      description: >-
+        Desde a 2.22.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas
+        gravações esperam por isso.
+      type: object
+      required: [required, waiting_count]
+      properties:
+        required:
+          type: boolean
+        waiting_count:
+          description: Gravações cuja revisão atual está com a etapa `speakers` em `waiting`.
+          type: integer
+          minimum: 0
+
+    SpeakerNamingPatch:
+      type: object
+      additionalProperties: false
+      required: [required]
+      properties:
+        required:
+          type: boolean
+
     TranscriptionPreference:
       description: >-
         Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale
@@ -5562,7 +5699,7 @@ components:
 
     Recording:
       type: object
-      required: [id, title, status, kind, source, recorded_at, recorded_at_source, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, collections_origin, metadata, capture, agenda_type, job, pipeline, transcript_id, marker_count, created_at, updated_at]
+      required: [id, title, status, kind, source, recorded_at, recorded_at_source, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, collections_origin, metadata, capture, agenda_type, job, pipeline, awaiting, transcript_id, marker_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -5645,14 +5782,21 @@ components:
             - type: "null"
         pipeline:
           description: |
-            As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+            As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
             `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
-            sai `active`.
+            sai `active`. A etapa `speakers` entrou na 2.22.0 (eram seis).
           type: array
-          minItems: 6
-          maxItems: 6
+          minItems: 7
+          maxItems: 7
           items:
             $ref: "#/components/schemas/PipelineStep"
+        awaiting:
+          description: |
+            Desde a 2.22.0. O que a gravação espera do dono para seguir: `speakers` quando a etapa
+            `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
+            nas outras.
+          type: [string, "null"]
+          enum: [speakers, null]
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type: [string, "null"]
@@ -5674,11 +5818,16 @@ components:
       properties:
         step:
           type: string
-          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos.
-          enum: [received, preprocessing, transcription, agenda_type, fields, summary]
+          description: >-
+            Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a 2.22.0)
+            fica entre a transcrição e o tipo de agenda.
+          enum: [received, preprocessing, transcription, speakers, agenda_type, fields, summary]
         state:
           type: string
-          enum: [pending, active, done, failed, skipped]
+          description: >-
+            `waiting` (desde a 2.22.0) é só da etapa `speakers`: parada à espera de o dono nomear
+            os locutores, com `reason` `unnamed_speakers`.
+          enum: [pending, active, done, failed, skipped, waiting]
         started_at:
           type: [string, "null"]
           format: date-time
@@ -5703,7 +5852,9 @@ components:
           description: |
             Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
             `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
-            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
+            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.22.0,
+            na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
+            `naming_not_required` (soltas sem os nomes).
           type: [string, "null"]
 
     RecordingPatch:
@@ -8129,6 +8280,12 @@ components:
     VoiceAssignment:
       summary: Atribuição automática ligada, limiar 0,80
       externalValue: ./fixtures/voice-assignment.json
+    SpeakerNamingPreference:
+      summary: Marcação ligada, nenhuma gravação esperando
+      externalValue: ./fixtures/speaker-naming-preference.json
+    SpeakerNamingPatchRequest:
+      summary: Exigir a marcação dos locutores
+      externalValue: ./fixtures/speaker-naming-patch-request.json
     TranscriptionPreference:
       summary: Conta em inglês, servidor em português
       externalValue: ./fixtures/transcription-preference.json

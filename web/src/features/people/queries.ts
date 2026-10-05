@@ -108,3 +108,28 @@ export function useUpdateVoiceAssignment() {
     onSuccess: (updated) => queryClient.setQueryData(VOICE_ASSIGNMENT_KEY, updated),
   })
 }
+
+export type SpeakerNaming = Schemas['SpeakerNamingPreference']
+
+/** Chave da marcação obrigatória dos locutores; a gravação a invalida ao seguir sem nomear. */
+export const SPEAKER_NAMING_KEY = ['me', 'speaker-naming'] as const
+
+/** Se a conta exige nomear os locutores antes da cadeia por agente e quantas gravações esperam. */
+export function useSpeakerNaming() {
+  return useQuery({
+    queryKey: SPEAKER_NAMING_KEY,
+    queryFn: () => unwrap(api.GET('/api/v1/me/speaker-naming')),
+  })
+}
+
+/** Liga ou desliga a marcação; desligar solta as gravações paradas, então a biblioteca é relida. */
+export function useUpdateSpeakerNaming() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['SpeakerNamingPatch']) => unwrap(api.PATCH('/api/v1/me/speaker-naming', { body })),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(SPEAKER_NAMING_KEY, updated)
+      void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+    },
+  })
+}

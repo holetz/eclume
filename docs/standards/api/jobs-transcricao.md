@@ -4,10 +4,10 @@ title: Contrato de jobs de transcrição (server ↔ worker GPU)
 description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg, e a espera na fila (`Job.queue`) com o último visto do processador e a estimativa pelo histórico.
 resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/queue_status.py, server/src/eclume_server/dispatch.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117, holetz/eclume#121
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117, holetz/eclume#121, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -221,7 +221,10 @@ locutor↔pessoa de uma retranscrição e compara os locutores com as impressõe
 do diretório da conta (com a identificação por voz ligada na plataforma), gravando as sugestões
 acima do limiar
 ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
-da gravação para `transcribed`.
+da gravação para `transcribed` e grava a etapa `speakers`: com a conta exigindo a marcação dos
+locutores e algum locutor sem pessoa, `waiting`, e o `ingest_transcript` não enfileira
+`detect_agenda_type` (`Ingested.waiting`); sem isso, `done` e a cadeia segue
+([processamento-automatico.md](/docs/standards/code/processamento-automatico.md#marcação-dos-locutores)).
 
 - **Embedding não finito.** A ingestão também descarta o vetor com NaN ou infinito (worker antigo,
   arquivo já no bucket): o pgvector o recusaria e desfaria a ingestão inteira.

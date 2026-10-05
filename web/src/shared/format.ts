@@ -18,7 +18,7 @@ const STEP_BUSY: Partial<Record<string, string>> = Object.fromEntries(
 const AFTER_TRANSCRIPTION: readonly Step[] = ['fields', 'agenda_type', 'summary']
 
 interface RecordingState {
-  state: 'failed' | 'busy' | 'ready'
+  state: 'failed' | 'busy' | 'waiting' | 'ready'
   label: string
   tone: Tone
   /** Pronta, mas a etapa do resumo falhou. */
@@ -42,7 +42,8 @@ function busyLabel(status: Recording['status'], steps: Schemas['PipelineStep'][]
 /**
  * O estado da gravação como a biblioteca o mostra, lido de `status` e do `pipeline`: cancelada (a
  * gravação `failed` com uma etapa pulada por `cancelled`), falhou (a gravação ou a etapa que a torna
- * legível), em andamento (com a etapa corrente em palavra) ou pronta.
+ * legível), aguardando locutores (a etapa `speakers` em `waiting`, à espera do dono), em andamento
+ * (com a etapa corrente em palavra) ou pronta.
  */
 export function recordingState(recording: Pick<Recording, 'status' | 'pipeline'>): RecordingState {
   const steps = recording.pipeline ?? []
@@ -54,6 +55,10 @@ export function recordingState(recording: Pick<Recording, 'status' | 'pipeline'>
   if (recording.status === 'failed' || failed('transcription') || failed('preprocessing')) {
     const { rotulo, tom } = ESTADOS_SERVIDOR.falhou
     return { state: 'failed', label: rotulo, tone: tom, noSummary: false }
+  }
+  if (steps.some((item) => item.step === 'speakers' && item.state === 'waiting')) {
+    const { rotulo, tom } = ESTADOS_SERVIDOR.aguardando_locutores
+    return { state: 'waiting', label: rotulo, tone: tom, noSummary: false }
   }
   const label = busyLabel(recording.status, steps)
   if (label) return { state: 'busy', label, tone: ESTADOS_SERVIDOR.em_andamento.tom, noSummary: false }

@@ -24,6 +24,16 @@ describe('formatos', () => {
 })
 
 describe('estado da gravação', () => {
+  it('aguardando locutores quando a etapa speakers espera o dono, antes do tipo e do resumo pendentes', () => {
+    const recording = withSteps('transcribed', { speakers: 'waiting', agenda_type: 'pending', fields: 'pending', summary: 'pending' })
+    expect(recordingState(recording)).toEqual({
+      state: 'waiting',
+      label: 'Aguardando locutores',
+      tone: 'warning',
+      noSummary: false,
+    })
+  })
+
   it('pronta quando o pipeline terminou, com o aviso de resumo que falhou', () => {
     expect(recordingState(fixtures.recordingTranscribed())).toEqual({
       state: 'ready',

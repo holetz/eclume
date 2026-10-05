@@ -7,7 +7,7 @@ tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -155,9 +155,11 @@ decisão do usuário, então `auto` nunca é padrão.
 - **O desfecho** (`eclume_sync::outcome::outcome_of`, espelhado em `web/src/app/processingWatch.ts`
   com os mesmos casos de teste): etapa `summary` `done` é **resumo pronto**, `failed` é **resumo
   falhou**, `skipped` é **pronta sem resumo** (com o motivo) — menos `cancelled`,
-  `summary_deleted` e `before_pipeline`, que não avisam —, e gravação `failed` com job `failed` é
-  **transcrição falhou** (job `cancelled` não avisa). O instante é o `finished_at` da etapa ou do
-  job.
+  `summary_deleted` e `before_pipeline`, que não avisam —, gravação `failed` com job `failed` é
+  **transcrição falhou** (job `cancelled` não avisa) e, desde a 2.22.0, etapa `speakers` em
+  `waiting` é **precisa de você** ("Nomeie os locutores para seguir com o resumo", só "Abrir"). O
+  instante é o `finished_at` da etapa ou do job; nomear um locutor sem zerar a falta não move o da
+  espera, então o aviso não se repete.
 - **A marca d'água** (`Watermark`, em `resumos-avisados.json` no diretório de dados): o próximo
   `since` (maior `updated_at` menos 60 s), a marca (desfechos até ela não avisam; avança para o
   maior instante visto menos 60 s) e os avisados acima dela (id → instante, guardados por 7 dias).

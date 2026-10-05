@@ -22,33 +22,37 @@ export const ESTADOS_APARELHO = {
 
 /**
  * A gravação no servidor. "Em andamento" cede o rótulo à etapa corrente (`ETAPAS[...].andamento`);
- * "Cancelada" é a gravação `failed` cujo job terminou `cancelled`.
- * @type {Record<'na_fila' | 'em_andamento' | 'pronta' | 'falhou' | 'cancelada', { rotulo: string, tom: Tom }>}
+ * "Cancelada" é a gravação `failed` cujo job terminou `cancelled`; "Aguardando locutores" é a etapa
+ * `speakers` em `waiting`, à espera de o dono nomear os locutores (`Recording.awaiting`).
+ * @type {Record<'na_fila' | 'em_andamento' | 'aguardando_locutores' | 'pronta' | 'falhou' | 'cancelada', { rotulo: string, tom: Tom }>}
  */
 export const ESTADOS_SERVIDOR = {
   na_fila: { rotulo: 'Na fila', tom: 'progress' },
   em_andamento: { rotulo: 'Em andamento', tom: 'progress' },
+  aguardando_locutores: { rotulo: 'Aguardando locutores', tom: 'warning' },
   pronta: { rotulo: 'Pronta', tom: 'success' },
   falhou: { rotulo: 'Falhou', tom: 'danger' },
   cancelada: { rotulo: 'Cancelada', tom: 'neutral' },
 }
 
 /**
- * As seis etapas, na ordem do servidor (`STEPS` em pipeline.py): o nome e o rótulo enquanto anda.
- * @type {Array<{ etapa: 'received' | 'preprocessing' | 'transcription' | 'agenda_type' | 'fields' | 'summary', nome: string, andamento: string }>}
+ * As sete etapas, na ordem do servidor (`STEPS` em pipeline.py): o nome e o rótulo enquanto anda.
+ * @type {Array<{ etapa: 'received' | 'preprocessing' | 'transcription' | 'speakers' | 'agenda_type' | 'fields' | 'summary', nome: string, andamento: string }>}
  */
 export const ETAPAS = [
   { etapa: 'received', nome: 'Áudio recebido', andamento: 'Enviando' },
   { etapa: 'preprocessing', nome: 'Pré-processamento', andamento: 'Pré-processando' },
   { etapa: 'transcription', nome: 'Transcrição', andamento: 'Transcrevendo' },
+  { etapa: 'speakers', nome: 'Locutores', andamento: 'Conferindo locutores' },
   { etapa: 'agenda_type', nome: 'Tipo de agenda', andamento: 'Detectando o tipo' },
   { etapa: 'fields', nome: 'Campos', andamento: 'Preenchendo campos' },
   { etapa: 'summary', nome: 'Resumo', andamento: 'Resumindo' },
 ]
 
 /**
- * O estado de uma etapa em palavra, para ser lido sem a cor da barra.
- * @type {Record<'pending' | 'active' | 'done' | 'skipped' | 'failed', string>}
+ * O estado de uma etapa em palavra, para ser lido sem a cor da barra. `waiting` é só da etapa
+ * `speakers`: parada à espera de o dono nomear os locutores.
+ * @type {Record<'pending' | 'active' | 'done' | 'skipped' | 'failed' | 'waiting', string>}
  */
 export const ESTADOS_ETAPA = {
   pending: 'esperando',
@@ -56,10 +60,11 @@ export const ESTADOS_ETAPA = {
   done: 'concluída',
   skipped: 'pulada',
   failed: 'falhou',
+  waiting: 'aguardando você',
 }
 
 /**
- * O texto de cada código de motivo (`reason`) que o servidor grava numa etapa pulada. Código novo no
+ * O texto de cada código de motivo (`reason`) que o servidor grava numa etapa pulada ou em espera. Código novo no
  * servidor exige texto aqui (um teste confere); código desconhecido aparece cru na tela.
  * @type {Record<string, string>}
  */
@@ -73,6 +78,9 @@ export const MOTIVOS = {
   worker_without_preprocess: 'o processador desta gravação não faz pré-processamento',
   summary_deleted: 'o resumo foi excluído',
   cancelled: 'a transcrição foi cancelada',
+  unnamed_speakers: 'há locutores sem pessoa; nomeie todos para seguir com o tipo, os campos e o resumo',
+  continued_by_user: 'você seguiu sem nomear todos os locutores',
+  naming_not_required: 'a conta deixou de exigir os nomes dos locutores',
 }
 
 /**

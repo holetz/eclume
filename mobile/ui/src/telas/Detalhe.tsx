@@ -14,14 +14,14 @@ function rotuloDaEtapa(etapa: (typeof ETAPAS)[number], estado: Etapa | undefined
   return `${etapa.nome} · ${ESTADOS_ETAPA[estado.state] ?? estado.state}`
 }
 
-/** Por que a etapa foi pulada ou falhou; `null` nas outras. */
+/** Por que a etapa foi pulada, falhou ou espera você (os locutores sem pessoa); `null` nas outras. */
 function motivoDaEtapa(estado: Etapa | undefined): string | null {
   if (estado?.state === 'failed') return estado.error?.message ?? null
-  if (estado?.state === 'skipped') return estado.reason ? motivo(estado.reason) : null
+  if (estado?.state === 'skipped' || estado?.state === 'waiting') return estado.reason ? motivo(estado.reason) : null
   return null
 }
 
-/** As seis etapas na ordem do servidor, cada uma com o estado em palavra, e o motivo das puladas ou com falha. */
+/** As sete etapas na ordem do servidor, cada uma com o estado em palavra, e o motivo das puladas ou com falha. */
 function EtapasNoServidor({ etapas }: { etapas: Etapa[] | null }) {
   const linhas = ETAPAS.map((etapa) => {
     const estado = etapas?.find((e) => e.step === etapa.etapa)

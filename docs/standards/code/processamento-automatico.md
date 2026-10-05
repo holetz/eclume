@@ -1,20 +1,21 @@
 ---
 type: standard
 title: Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
-description: Como o server processa uma gravação depois do upload — as seis etapas do pipeline por revisão e os estados delas, os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, o cadastro de tags (fixas por padrão ou autogerenciadas com limites), os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
-resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/resume.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py, server/src/eclume_server/tags.py, server/src/eclume_server/routes/tags.py, server/src/eclume_server/db/migrations/023_cadastro_de_tags.sql
+description: Como o server processa uma gravação depois do upload — as sete etapas do pipeline por revisão e os estados delas, a marcação obrigatória dos locutores (a etapa speakers em espera), os campos do usuário com regras e a origem dos valores, os tipos de agenda (padrão de título, regra do assunto, tags padrão, instruções de resumo), o tipo de reserva de cada conta e os tipos padrão do admin, o cadastro de tags (fixas por padrão ou autogerenciadas com limites), os jobs detect_agenda_type e fill_fields (com as coleções automáticas) com os prompts e o JSON de saída, o resumo automático pelo tipo e as pré-visualizações.
+resource: server/src/eclume_server/db/migrations/021_tipo_de_agenda_padrao.sql, server/src/eclume_server/pipeline.py, server/src/eclume_server/speaker_naming.py, server/src/eclume_server/routes/speaker_naming.py, server/src/eclume_server/db/migrations/030_marcacao_dos_locutores.sql, server/src/eclume_server/resume.py, server/src/eclume_server/fields.py, server/src/eclume_server/agenda_types.py, server/src/eclume_server/previews.py, server/src/eclume_server/agents/extraction.py, server/src/eclume_server/summaries.py, server/src/eclume_server/worker.py, server/src/eclume_server/routes/fields.py, server/src/eclume_server/routes/agenda_types.py, server/src/eclume_server/routes/admin_agenda_types.py, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/010_campos_e_valores.sql, server/src/eclume_server/db/migrations/012_etapas_do_pipeline.sql, server/src/eclume_server/db/migrations/013_revisao_do_processamento.sql, server/src/eclume_server/db/migrations/022_colecoes_automaticas.sql, server/src/eclume_server/routes/collections.py, server/src/eclume_server/tags.py, server/src/eclume_server/routes/tags.py, server/src/eclume_server/db/migrations/023_cadastro_de_tags.sql
 tags: [code, server, pipeline, campos, tipos-de-agenda, resumos, agentes]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#96, holetz/eclume#114
+source: holetz/eclume#33, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#96, holetz/eclume#114, holetz/eclume#144
 maintainer: holetz
 ---
 
 # Processamento automático — pipeline, campos, tipos de agenda e resumo pelo tipo
 
 Depois do upload, cada gravação passa por uma cadeia de etapas sem ninguém pedir: o áudio é
-recebido, pré-processado e transcrito pelo worker GPU; o tipo de agenda é detectado, os campos são
+recebido, pré-processado e transcrito pelo worker GPU; os locutores são conferidos (e, se a conta
+exige, a gravação espera o dono nomeá-los); o tipo de agenda é detectado, os campos são
 preenchidos e o resumo é gerado pelo worker CPU. As rotas seguem o [contrato v1](../api/contrato-v1.md),
 a persistência e o isolamento seguem o [núcleo do server](server-nucleo.md), os providers e o job
 `summarize` seguem os [agentes](server-agentes.md), e o pré-processamento segue o
@@ -30,17 +31,19 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
 | `received` | `recordings.insert_job`, ao criar o job (upload, retranscrição, retentativa); `failed` com hash divergente |
 | `preprocessing` | a ingestão, pelo `engine_info.preprocess` do worker GPU; o cancelamento no download ou no pré-processamento (`skipped`, `cancelled`) |
 | `transcription` | a ingestão (`done`), a falha e o reaper (`failed`, com o erro do job), o cancelamento (`skipped`, `cancelled`) |
+| `speakers` | a ingestão (`done` ou `waiting`), a retomada ao nomear ou mesclar (`done`), `continue` e o desligar da preferência (`skipped`) — ver [Marcação dos locutores](#marcação-dos-locutores) |
 | `agenda_type` | o job `detect_agenda_type` |
 | `fields` | o job `fill_fields` |
 | `summary` | o resumo automático: `active` ao abrir, `done`/`failed` quando o `summarize` termina |
 
-- **Estados:** `pending`, `active`, `done`, `failed` e `skipped` (os do componente `.pipeline` do
-  Design System). Pulada ou falha, a etapa diz por quê: `detail.reason` ou
+- **Estados:** `pending`, `active`, `done`, `failed`, `skipped` e `waiting` (os do componente
+  `.pipeline` do Design System); `waiting` é só da etapa `speakers`. Pulada ou falha, a etapa diz por quê: `detail.reason` ou
   `error_code`/`error_message`. Os códigos de motivo hoje: `no_provider` (sem agente para a etapa),
   `no_auto_fields`, `no_types`, `set_by_user`, `no_agenda_type`, `before_pipeline` (gravação
   anterior ao pipeline, migration 012), `worker_without_preprocess` (o worker GPU não faz
-  pré-processamento), `summary_deleted` (o resumo da etapa foi excluído) e `cancelled` (a
-  transcrição cancelada pelo dono nesta etapa).
+  pré-processamento), `summary_deleted` (o resumo da etapa foi excluído), `cancelled` (a
+  transcrição cancelada pelo dono nesta etapa) e, na etapa `speakers`, `unnamed_speakers` (em
+  `waiting`), `continued_by_user` e `naming_not_required`.
 - **Código de motivo novo exige texto.** Todo código ganha texto em `MOTIVOS` do vocabulário
   compartilhado (`web/src/lib/vocabulario.js`, copiado no desktop e no celular, ver
   [frontend-web.md](frontend-web.md)): `vocabulario.test.ts` lê os `"reason": ...`, `skip = ...` e
@@ -48,13 +51,44 @@ transcrição (`transcription_jobs.revision`): retranscrever abre uma revisão n
   desconhecido aparece cru.
 - `pipeline.set_step` faz upsert por `(recording_id, revision, step)`: `active` marca o início, um
   estado final marca o fim e mantém o início; `duration_ms` é coluna gerada.
-- **`Recording.pipeline`** são as seis etapas da maior revisão, em ordem; sem linha, `pending`.
+- **`Recording.pipeline`** são as sete etapas da maior revisão, em ordem; sem linha, `pending`.
   Enquanto o worker GPU reporta progresso, o pré-processamento (etapa `preprocess`) ou a
   transcrição (as demais) sai `active`.
 - **A cadeia nunca para numa falha de agente:** campos, tipo e resumo gravam a própria etapa e
-  enfileiram o próximo. Só param quando a gravação foi apagada ou a revisão não é mais a atual.
+  enfileiram o próximo. Só param quando a gravação foi apagada ou a revisão não é mais a atual; a
+  única parada de propósito é a espera pelos nomes dos locutores, antes do tipo.
 - A migration `012` preencheu o histórico: `received` e `transcription` dos jobs; pré-processamento,
   campos e tipo `skipped` com `before_pipeline`; resumo `done` quando havia resumo automático.
+
+## Marcação dos locutores
+
+A conta pode exigir que todo locutor tenha pessoa antes da cadeia por agente (holetz/eclume#144):
+gravações com vozes novas ficam paradas até o dono dizer quem é quem.
+
+- **Preferência da conta:** `users.require_speaker_naming` (migration 030, padrão `false`), em
+  `GET /me/speaker-naming` (sessão ou PAT `recordings:read`; traz `required` e `waiting_count`) e
+  `PATCH` (só sessão). Ligar vale para as próximas ingestões.
+- **A trava mora na ingestão** (`speaker_naming.gate`), na mesma transação, depois da restauração
+  dos vínculos e da atribuição pela voz: com a preferência ligada e algum locutor sem `person_id`
+  com pelo menos 10 s de fala (`MIN_REQUIRED_TALK_MS`, o piso da comparação por voz), a etapa
+  `speakers` fica `waiting` com `detail = {"reason": "unnamed_speakers", "unnamed": N}`, e o
+  `ingest_transcript` não enfileira `detect_agenda_type`. Sem trava, a etapa fica `done`. Vínculo
+  automático pela voz conta como nomeado; rótulo sem pessoa, não.
+- **`waiting` marca início e fim** como um estado final (`STOPPED` em `pipeline.py`), mas não entra
+  em `FINISHED`. Ao sair da espera, o fim é regravado e o início mantido: o `duration_ms` mede a
+  espera. Nomear um locutor sem zerar a falta só atualiza `detail.unnamed`, sem mexer no instante
+  (os avisos de desfecho comparam o `finished_at`).
+- **A saída é do servidor.** O `PATCH` do locutor com `person_id` e a mesclagem chamam
+  `release_if_named`: sem ninguém faltando na revisão atual, a etapa fica `done` e a rota enfileira
+  `detect_agenda_type` depois do commit (`Queue.enqueue_step`, o mesmo `_job_id`). `POST
+  /recordings/{id}/continue` (`recordings:write`) solta com `skipped`/`continued_by_user`; fora da
+  espera, 409 `conflict`. Desligar a preferência solta toda gravação parada da conta
+  (`skipped`/`naming_not_required`) na mesma transação e enfileira cada uma.
+- **A retomada não relança** a revisão com `speakers` em `waiting`; perdido o enfileiramento depois
+  da saída, o cron relança, porque a etapa já terminou.
+- **API:** `Recording.awaiting` (`"speakers"` ou `null`) e `GET /recordings?awaiting=speakers`
+  (etapa `speakers` em `waiting` na maior revisão de job). O MCP repete os dois.
+- A migration 030 gravou `speakers` `done` em toda revisão já transcrita.
 
 ## Campos e a origem dos valores
 
@@ -144,8 +178,8 @@ enfileiramento) volta sozinha. O cron `resume_pipelines` (`resume.py`, a cada 5 
 worker de `eclume:default`) relê o banco e relança pelo `_job_id` determinístico, que o arq
 deduplica; não há outbox:
 
-- **A cadeia**, só na revisão atual com o job de transcrição `succeeded` há mais de 5 min: tipo de
-  agenda sem linha → `detect_agenda_type`; tipo final e campos sem linha → `fill_fields`; campos
+- **A cadeia**, só na revisão atual com o job de transcrição `succeeded` há mais de 5 min e a etapa
+  `speakers` fora de `waiting`: tipo de agenda sem linha → `detect_agenda_type`; tipo final e campos sem linha → `fill_fields`; campos
   finais e resumo sem linha → o resumo automático (`start_auto_summary` e `summarize`), sem refazer
   os campos.
 - **Os resumos** `queued`/`running` há mais de 5 min: sumido do arq → reenfileirado; concluído no

@@ -18,6 +18,7 @@ from eclume_server.pipeline import FAILED_STEP, gpu_started, record_gpu_steps, s
 from eclume_server.problems import not_found
 from eclume_server.queue import AUTO_LANGUAGE, DEFAULT_LANGUAGE
 from eclume_server.serialize import Row, requester_name, user_ref
+from eclume_server.speaker_naming import gate as gate_speakers
 from eclume_server.voice import (
     capture_links,
     keeps_samples,
@@ -167,6 +168,8 @@ class Ingested:
     persisted: bool = False
     gone: bool = False
     revision: int | None = None
+    # A etapa `speakers` parou a cadeia: a conta exige nomear os locutores e falta alguém.
+    waiting: bool = False
 
 
 @dataclass(frozen=True)
@@ -307,6 +310,8 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         )
     )
     await record_gpu_steps(conn, job, engine_info, now)
+    # Depois dos vínculos restaurados e da atribuição pela voz: falta alguém, a cadeia para aqui.
+    waiting = await gate_speakers(conn, {"id": recording_id, "owner_id": owner}, job["revision"], transcript_id)
     await conn.execute(
         update(t.recordings)
         .where(t.recordings.c.id == recording_id)
@@ -321,6 +326,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         f"transcrição {transcript_id} gravada (revisão do job {job['revision']})",
         persisted=True,
         revision=job["revision"],
+        waiting=waiting,
     )
 
 

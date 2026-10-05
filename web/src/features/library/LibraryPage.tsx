@@ -9,6 +9,7 @@ import { readLibraryOpening } from '../../app/preferences'
 import { useMe } from '../../app/session'
 import { readLastLibrary, readStored, STORAGE_KEYS, writeLastLibrary, writeStored } from '../../app/storage'
 import { useImportContext } from '../import/importContext'
+import { useSpeakerNaming } from '../people/queries'
 import { addDays, addMonths, dayKey, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
 import { CalendarMonth } from './CalendarMonth'
 import { CalendarWeek } from './CalendarWeek'
@@ -157,6 +158,15 @@ export function LibraryPage() {
           </p>
         )}
         <ImportBand items={importQueue.items} onOpen={() => setImporting(true)} />
+        {!filters.needs.includes('locutores') && (
+          <NeedsYouBand
+            onShow={() => {
+              const next = writeFilters(params, { ...filters, needs: ['locutores'] })
+              next.set('visao', 'lista')
+              setParams(next)
+            }}
+          />
+        )}
         <FirstSteps onImport={() => setImporting(true)} />
 
         <div className={`toolbar ${styles.toolbar}`}>
@@ -306,6 +316,29 @@ function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void
         Enviando {current + 1} de {active.length} {active.length === 1 ? 'arquivo' : 'arquivos'} ·{' '}
         <button type="button" className={styles.linkButton} onClick={onOpen}>
           Abrir
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/**
+ * "Precisam de você": quantas gravações esperam você nomear os locutores (a conta exige), com o
+ * atalho que liga o filtro na lista.
+ */
+function NeedsYouBand({ onShow }: { onShow: () => void }) {
+  const naming = useSpeakerNaming()
+  const count = naming.data?.waiting_count ?? 0
+  if (count === 0) return null
+  return (
+    <div className={`alert alert-warning ${styles.band}`} role="status" aria-label="Precisam de você">
+      <span>
+        {count === 1
+          ? '1 gravação aguarda você nomear os locutores para seguir com o tipo, os campos e o resumo'
+          : `${count} gravações aguardam você nomear os locutores para seguir com o tipo, os campos e o resumo`}{' '}
+        ·{' '}
+        <button type="button" className={styles.linkButton} onClick={onShow}>
+          Ver
         </button>
       </span>
     </div>
