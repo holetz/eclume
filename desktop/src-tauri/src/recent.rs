@@ -431,11 +431,17 @@ pub fn nudge(app: &AppHandle) {
     }
 }
 
-/// Lê a página das recentes. Sem credencial ou com o painel escondido, não lê nada; a falha
-/// fica em `error` e o último retrato segue valendo.
+/// Quantas a leitura pede: a maior das duas contagens, porque a janela e a bandeja cortam a mesma
+/// lista, cada uma no seu N.
+pub fn fetch_count(window: u8, tray: u8) -> u8 {
+    window.max(tray)
+}
+
+/// Lê a página das recentes. Sem credencial ou com a janela e a bandeja escondendo as recentes,
+/// não lê nada; a falha fica em `error` e o último retrato segue valendo.
 fn fetch(app: &AppHandle) -> Result<()> {
     let state = app.state::<AppState>();
-    let count = state.recent_count()?;
+    let count = fetch_count(state.recent_count()?, state.tray_recent_count()?);
     let Some(config) = state.uploader_config()? else {
         return Ok(());
     };
@@ -481,6 +487,174 @@ pub fn view(app: &AppHandle) -> Result<RecentView> {
         fetched_at: snapshot.fetched_at,
         error: snapshot.error.clone(),
     })
+}
+
+/// Uma ação do submenu de uma gravação na bandeja.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrayAction {
+    /// "Copiar resumo", pelo id remoto.
+    CopySummary(String),
+    /// "Abrir no web", pelo id remoto.
+    OpenWeb(String),
+    /// "Tentar agora" (`sync_now`), pelo id local, que só torna o item único no menu.
+    Retry(String),
+}
+
+/// Uma gravação no menu da bandeja: o rótulo pronto e as ações que valem para ela.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrayEntry {
+    pub key: String,
+    /// "Título · Estado", com o `&` já escapado para o menu nativo.
+    pub label: String,
+    pub actions: Vec<TrayAction>,
+}
+
+/// A seção Recentes do menu da bandeja. O progresso e a espera ficam de fora, de propósito: o
+/// menu só é reconstruído quando isto muda.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TraySection {
+    /// "Recentes", ou "Recentes · 1 precisa de você".
+    pub header: String,
+    pub entries: Vec<TrayEntry>,
+}
+
+/// O máximo de caracteres do título no menu, antes das reticências.
+const TRAY_TITLE_MAX: usize = 40;
+
+/// O andamento de uma etapa do pipeline, como o `ETAPAS` de `vocabulario.js`.
+fn stage_progress(stage: &str) -> &'static str {
+    match stage {
+        "received" => "Enviando",
+        "preprocessing" => "Pré-processando",
+        "transcription" => "Transcrevendo",
+        "speakers" => "Conferindo locutores",
+        "agenda_type" => "Detectando o tipo",
+        "fields" => "Preenchendo campos",
+        "summary" => "Resumindo",
+        _ => "Em andamento",
+    }
+}
+
+/// O estado de uma linha em texto, com os rótulos que `recentes.js` tira do vocabulário: o menu
+/// nativo não passa pela janela.
+pub fn state_label(item: &RecentItem) -> &'static str {
+    match item.phase {
+        Phase::Recording => "Gravando",
+        Phase::Pending => "Aguardando envio",
+        Phase::Uploading => "Enviando",
+        Phase::UploadFailed => "Falhou o envio",
+        Phase::Uploaded => "Enviada",
+        Phase::Queued => "Na fila",
+        Phase::Transcribing => "Transcrevendo",
+        Phase::Processing => item.stage.as_deref().map_or("Em andamento", stage_progress),
+        Phase::SummaryReady => "Resumo pronto",
+        Phase::Transcribed => "Pronta",
+        Phase::NoSummary => "Pronta sem resumo",
+        Phase::SummaryFailed => "O resumo falhou",
+        Phase::TranscriptionFailed => "A transcrição falhou",
+        Phase::Cancelled => "Cancelada",
+        Phase::Unknown
+            if item.stage.as_deref() == Some("speakers")
+                && item.detail.as_deref() == Some("waiting") =>
+        {
+            "Aguardando locutores"
+        }
+        Phase::Unknown => NEEDS_YOU,
+    }
+}
+
+const NEEDS_YOU: &str = "Precisa de você";
+
+/// "05/10 14:02" a partir de um `AAAA-MM-DDTHH:MM:SS` local.
+fn short_date(local: &str) -> Option<String> {
+    let day = local.get(8..10)?;
+    let month = local.get(5..7)?;
+    let time = local.get(11..16)?;
+    Some(format!("{day}/{month} {time}"))
+}
+
+/// O título curto da linha: o título com reticências passado do limite; sem título, a data curta
+/// no fuso deste computador, como o painel; sem data, "Gravação". O `&` vira `&&`, porque o menu
+/// nativo o lê como mnemônico no GTK e no Windows.
+pub fn tray_title(item: &RecentItem) -> String {
+    let title = item.title.trim();
+    let text = if title.is_empty() {
+        item.started_at
+            .and_then(eclume_sync::api::rfc3339_from_ms)
+            .or_else(|| item.created_at.clone())
+            .and_then(|at| eclume_sync::api::local_start(&at))
+            .and_then(|local| short_date(&local))
+            .unwrap_or_else(|| "Gravação".to_string())
+    } else if title.chars().count() > TRAY_TITLE_MAX {
+        let cut: String = title.chars().take(TRAY_TITLE_MAX - 1).collect();
+        format!("{}…", cut.trim_end())
+    } else {
+        title.to_string()
+    };
+    text.replace('&', "&&")
+}
+
+fn tray_entry(item: &RecentItem) -> TrayEntry {
+    let state = state_label(item);
+    let label = if item.attention.is_some() && state != NEEDS_YOU {
+        format!("{} · {NEEDS_YOU} ({state})", tray_title(item))
+    } else {
+        format!("{} · {state}", tray_title(item))
+    };
+    let mut actions = Vec::new();
+    if let Some(remote) = &item.remote_id {
+        if item.phase == Phase::SummaryReady {
+            actions.push(TrayAction::CopySummary(remote.clone()));
+        }
+        actions.push(TrayAction::OpenWeb(remote.clone()));
+    }
+    if item.attention == Some(Attention::UploadFailed) {
+        if let Some(local) = &item.local_id {
+            actions.push(TrayAction::Retry(local.clone()));
+        }
+    }
+    TrayEntry {
+        key: item.key.clone(),
+        label,
+        actions,
+    }
+}
+
+/// A seção da bandeja a partir das linhas já cortadas no N da bandeja.
+pub fn tray_section_of(items: &[RecentItem]) -> TraySection {
+    let header = match items.iter().filter(|item| item.attention.is_some()).count() {
+        0 => "Recentes".to_string(),
+        1 => "Recentes · 1 precisa de você".to_string(),
+        n => format!("Recentes · {n} precisam de você"),
+    };
+    TraySection {
+        header,
+        entries: items.iter().map(tray_entry).collect(),
+    }
+}
+
+/// A seção Recentes do menu da bandeja, da mesma fila local e do mesmo retrato do painel, sem
+/// leitura própria da API; `None` com `tray_recent_count` em 0. Antes da primeira leitura (ou
+/// antes de a thread subir), só a fila local.
+pub fn tray_section(app: &AppHandle) -> Result<Option<TraySection>> {
+    let state = app.state::<AppState>();
+    let count = state.tray_recent_count()?;
+    if count == 0 {
+        return Ok(None);
+    }
+    let local = state.recordings(u32::from(count))?;
+    let waits = BTreeMap::new();
+    let items = match app.try_state::<RecentHandle>() {
+        Some(handle) => {
+            let snapshot = handle
+                .snapshot
+                .lock()
+                .map_err(|_| anyhow!("painel de recentes envenenado por um pânico"))?;
+            build(&local, snapshot.items.as_deref(), &waits, count)
+        }
+        None => build(&local, None, &waits, count),
+    };
+    Ok(Some(tray_section_of(&items)))
 }
 
 /// "Copiar resumo": põe o Markdown do resumo atual na área de transferência, o mesmo que o
@@ -770,6 +944,174 @@ mod tests {
         assert_eq!(sem_servidor[2].key, "r1");
 
         assert!(build(&fila, Some(pagina.as_slice()), &esperas, 0).is_empty());
+    }
+
+    #[test]
+    fn a_leitura_pede_a_maior_das_duas_contagens() {
+        assert_eq!(fetch_count(5, 1), 5);
+        assert_eq!(fetch_count(0, 3), 3);
+        assert_eq!(fetch_count(0, 0), 0);
+        // A janela e a bandeja cortam a mesma lista, cada uma no seu N.
+        let pagina: Vec<_> = (1..=5)
+            .map(|n| remota(&format!("r{n}"), "transcribed"))
+            .collect();
+        let janela = build(&[], Some(pagina.as_slice()), &BTreeMap::new(), 5);
+        let bandeja = build(&[], Some(pagina.as_slice()), &BTreeMap::new(), 1);
+        assert_eq!(janela.len(), 5);
+        assert_eq!(bandeja, janela[..1]);
+    }
+
+    fn linha(item: RecentItem) -> TrayEntry {
+        tray_section_of(&[item]).entries.remove(0)
+    }
+
+    #[test]
+    fn bandeja_rotula_cada_fase_e_da_as_acoes_que_valem() {
+        let pronta = build(
+            &[],
+            Some(
+                &[com_etapas(
+                    remota("r1", "transcribed"),
+                    vec![step("summary", "done", None)],
+                )][..],
+            ),
+            &BTreeMap::new(),
+            1,
+        );
+        assert_eq!(
+            linha(pronta[0].clone()),
+            TrayEntry {
+                key: "r1".into(),
+                label: "Reunião r1 · Resumo pronto".into(),
+                actions: vec![
+                    TrayAction::CopySummary("r1".into()),
+                    TrayAction::OpenWeb("r1".into())
+                ],
+            }
+        );
+
+        let falhou = build(
+            &[local("l1", Status::Failed, 10, None)],
+            None,
+            &BTreeMap::new(),
+            1,
+        );
+        let mut falhou = falhou[0].clone();
+        falhou.title = "Daily".into();
+        assert_eq!(
+            linha(falhou),
+            TrayEntry {
+                key: "local:l1".into(),
+                label: "Daily · Precisa de você (Falhou o envio)".into(),
+                actions: vec![TrayAction::Retry("l1".into())],
+            }
+        );
+
+        let mut gravando = build(
+            &[local("l2", Status::Recording, 10, None)],
+            None,
+            &BTreeMap::new(),
+            1,
+        )[0]
+        .clone();
+        gravando.title = "Reunião".into();
+        let gravando = linha(gravando);
+        assert_eq!(gravando.label, "Reunião · Gravando");
+        assert!(gravando.actions.is_empty());
+
+        let locutores = com_etapas(
+            remota("r2", "transcribed"),
+            vec![step("speakers", "waiting", Some("unnamed_speakers"))],
+        );
+        let locutores = build(&[], Some(&[locutores][..]), &BTreeMap::new(), 1);
+        assert_eq!(
+            linha(locutores[0].clone()).label,
+            "Reunião r2 · Precisa de você (Aguardando locutores)"
+        );
+        let novo = build(
+            &[],
+            Some(&[remota("r3", "estado_novo")][..]),
+            &BTreeMap::new(),
+            1,
+        );
+        assert_eq!(linha(novo[0].clone()).label, "Reunião r3 · Precisa de você");
+
+        let resumindo = com_etapas(
+            com_job(remota("r4", "transcribed"), job("succeeded")),
+            vec![step("summary", "active", None)],
+        );
+        let resumindo = build(&[], Some(&[resumindo][..]), &BTreeMap::new(), 1);
+        assert_eq!(linha(resumindo[0].clone()).label, "Reunião r4 · Resumindo");
+        assert_eq!(
+            linha(resumindo[0].clone()).actions,
+            [TrayAction::OpenWeb("r4".into())]
+        );
+    }
+
+    #[test]
+    fn bandeja_conta_os_alertas_no_cabecalho_e_ignora_o_progresso() {
+        let fila = vec![
+            local("a", Status::Failed, 3, None),
+            local("b", Status::Failed, 2, None),
+            local("c", Status::Pending, 1, None),
+        ];
+        let linhas = build(&fila, None, &BTreeMap::new(), 3);
+        assert_eq!(
+            tray_section_of(&linhas).header,
+            "Recentes · 2 precisam de você"
+        );
+        assert_eq!(
+            tray_section_of(&linhas[1..]).header,
+            "Recentes · 1 precisa de você"
+        );
+        assert_eq!(tray_section_of(&linhas[2..]).header, "Recentes");
+        assert!(tray_section_of(&[]).entries.is_empty());
+
+        // O progresso anda sem mudar a seção: o menu não é reconstruído por ele.
+        let andando = |progress| {
+            com_job(
+                remota("r", "processing"),
+                JobInfo {
+                    stage: Some("asr".into()),
+                    progress: Some(progress),
+                    ..job("running")
+                },
+            )
+        };
+        let antes = build(&[], Some(&[andando(100)][..]), &BTreeMap::new(), 1);
+        let depois = build(&[], Some(&[andando(900)][..]), &BTreeMap::new(), 1);
+        assert_ne!(antes, depois);
+        assert_eq!(tray_section_of(&antes), tray_section_of(&depois));
+    }
+
+    #[test]
+    fn titulo_da_bandeja_e_curto_escapa_o_e_comercial_e_cai_na_data() {
+        let mut item = build(
+            &[],
+            Some(&[remota("r", "transcribed")][..]),
+            &BTreeMap::new(),
+            1,
+        )[0]
+        .clone();
+        item.title = "P&D · revisão".into();
+        assert_eq!(tray_title(&item), "P&&D · revisão");
+        item.title = "a".repeat(60);
+        let curto = tray_title(&item);
+        assert_eq!(curto.chars().count(), TRAY_TITLE_MAX);
+        assert!(curto.ends_with('…'));
+        item.title = "  ".into();
+        // Sem título, a data curta no fuso local, como o painel ("dd/mm hh:mm").
+        let data = tray_title(&item);
+        assert_eq!(data.len(), "05/10 12:00".len());
+        assert_eq!(&data[2..3], "/");
+        item.created_at = None;
+        item.started_at = None;
+        assert_eq!(tray_title(&item), "Gravação");
+        assert_eq!(
+            short_date("2026-10-05T14:02:09").as_deref(),
+            Some("05/10 14:02")
+        );
+        assert_eq!(short_date("curto"), None);
     }
 
     #[test]
