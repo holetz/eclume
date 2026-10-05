@@ -7,7 +7,7 @@ tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117, holetz/eclume#121, holetz/eclume#142
+source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#33, holetz/eclume#95, holetz/eclume#96, holetz/eclume#97, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#126, holetz/eclume#98, holetz/eclume#117, holetz/eclume#121, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -27,7 +27,8 @@ Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
   crons (reaper, retomada, uploads vencidos);
 - `eclume:agents`, consumida pelo worker de agentes (`AgentWorkerSettings`, serviço
   `worker-agents`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, padrão 4): `detect_agenda_type`,
-  `fill_fields`, `summarize`, `summary_chat`, `base_chat`, `agent_turn` (o Agente) e `run_preview`. A ingestão não divide
+  `fill_fields`, `summarize`, `summary_chat`, `base_chat`, `agent_turn` (o Agente), `agent_action` (a ação
+  confirmada do Agente, alvo a alvo, reagendada em 30 s com os resumos em aberto no teto) e `run_preview`. A ingestão não divide
   vaga com chamada a agente. Na transição, o worker de `eclume:default` mantém as funções de agente
   registradas por uma versão, para drenar o que já estava na fila dele.
 

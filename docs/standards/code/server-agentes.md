@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Agentes — providers por finalidade, tipos de agenda, resumos, chat de ajuste e o Agente
-description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat) e o Agente (conversas guardadas sob RLS, anexos com texto extraído, arquivos gerados para baixar e um registro de ferramentas extensível, no job agent_turn); a matriz do que cada provider exige e a CLI claude opcional na imagem.
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py, server/src/eclume_server/privacy.py, server/src/eclume_server/routes/privacy.py, server/src/eclume_server/agent_sessions.py, server/src/eclume_server/agent_files.py, server/src/eclume_server/routes/agent.py, server/src/eclume_server/db/migrations/030_agente_conversas.sql
-tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude, agente, arquivos]
+description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat) e o Agente (conversas guardadas sob RLS, anexos com texto extraído, arquivos gerados para baixar e um registro de ferramentas extensível, no job agent_turn), as habilidades do usuário e as ações no ambiente que o agente propõe e a pessoa confirma (job agent_action, pelas mesmas operações do MCP); a matriz do que cada provider exige e a CLI claude opcional na imagem.
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py, server/src/eclume_server/privacy.py, server/src/eclume_server/routes/privacy.py, server/src/eclume_server/agent_sessions.py, server/src/eclume_server/agent_files.py, server/src/eclume_server/routes/agent.py, server/src/eclume_server/db/migrations/030_agente_conversas.sql, server/src/eclume_server/agent_skills.py, server/src/eclume_server/agent_actions.py, server/src/eclume_server/operations.py, server/src/eclume_server/routes/agent_skills.py, server/src/eclume_server/db/migrations/032_agente_habilidades_e_acoes.sql
+tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude, agente, arquivos, habilidades, acoes]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98, holetz/eclume#116, holetz/eclume#142
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98, holetz/eclume#116, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -282,22 +282,70 @@ de ferramentas.
   `produce` prepara um arquivo e `action` age no ambiente, sempre com `confirm`. O
   `default_registry()` tem as quatro ferramentas da base (as de `agents/base_chat.py`, sem
   transcrição para PAT sem `transcripts:read`), `read_file` (o texto de um anexo da conversa a
-  partir de `offset`, cortado no orçamento, com o próximo `offset` quando continua) e `write_file`
-  (`name`, `format` em `md|txt|csv|docx`, `content` até 200 mil caracteres; até 3 por resposta).
-  `reply` é reservada ao laço; nome repetido ou `action` sem `confirm` é recusado no registro.
+  partir de `offset`, cortado no orçamento, com o próximo `offset` quando continua), `write_file`
+  (`name`, `format` em `md|txt|csv|docx`, `content` até 200 mil caracteres; até 3 por resposta),
+  `use_skill` e as quatro ações (abaixo). Cada ferramenta tem uma `description` curta, que
+  `GET /agent/tools` devolve como catálogo. `reply` é reservada ao laço; nome repetido ou `action`
+  sem `confirm` é recusado no registro.
 - **O laço** (`agents/agent.py`, `run_agent`): o `system` começa por `AGENT_SYSTEM_PREFIX` e lista
   só as ferramentas disponíveis; uma ação JSON por chamada, correção uma vez
   (`provider_bad_output` na segunda), até 8 chamadas (`chat_tool_limit`); `reply` traz a resposta e
-  as fontes, verificadas contra o que as ferramentas devolveram. Uma ferramenta com `confirm` não
-  roda: o agente recebe que a ação espera confirmação e ela fica em `pending_actions`.
-  `AgentContext.instructions` entra no fim do `system` como "Instruções da pessoa" (até 8 mil
-  caracteres). Anexos, resumos e falas são dado, não instrução, delimitados em `<ferramenta>`.
-- **Encaixe para habilidades e ações:** as instruções reutilizáveis do usuário entram por
-  `instructions`; uma ação no ambiente é um `AgentTool` de natureza `action` com `confirm`, que a
-  spec das ações liga a um pedido de confirmação ao usuário em vez do aviso ao agente. Nenhuma
-  ferramenta de escrita está registrada.
+  as fontes, verificadas contra o que as ferramentas devolveram. Uma ferramenta com `confirm` nunca
+  roda no laço: com `plan`, ela vira proposta (`RunState.proposals`, até 3 por resposta); sem
+  `plan`, o agente recebe que a ação espera confirmação e ela fica em `pending_actions`. As
+  instruções da habilidade escolhida e `AgentContext.instructions` entram no fim do `system` como
+  "Instruções da pessoa" (até 8 mil caracteres). Anexos, resumos e falas são dado, não instrução,
+  delimitados em `<ferramenta>`; só as instruções de uma habilidade, escritas pela própria pessoa,
+  são para seguir.
+- **Habilidades** (holetz/eclume#145; `agent_skills.py`, `routes/agent_skills.py`, migração 032):
+  `agent_skills` sob a RLS do dono, com `name` no padrão `^[a-z0-9][a-z0-9-]{1,39}$` e único por
+  conta (409 `skill_exists`), `description` (até 300), `instructions` em Markdown (até 8 mil),
+  `allowed_tools` (nomes do catálogo; nulo libera todas) e `enabled`; até 50 por conta. Rotas
+  `GET/POST /agent/skills`, `GET/PATCH/DELETE /agent/skills/{id}` e `GET /agent/tools`, com
+  `summaries:read` como as demais do Agente. A pergunta escolhe uma habilidade por `skill` no corpo
+  ou por `/nome` no começo do texto (o prefixo sai do texto guardado; inexistente ou desligada,
+  422); `agent_messages.skill_id` e `skill_name` guardam a escolha. Com habilidade escolhida, as
+  instruções dela entram no `system` e `allowed_tools` restringe o registro (o `parse_action`
+  recusa a ferramenta fora da lista, não só o texto). Sem ela, o `system` lista as habilidades
+  ligadas (nome e descrição, até 20) e `use_skill` carrega as instruções de uma e passa a aplicar a
+  restrição dela.
+- **Ações no ambiente** (holetz/eclume#145; `agent_actions.py`, `operations.py`): quatro
+  ferramentas `action` com `confirm` e `plan` — `regenerate_summaries` (`summaries:write`, até 20
+  alvos), `tag_recordings` (`add`/`remove`), `collect_recordings` (`add`/`remove` de coleções
+  existentes, por id ou nome) e `set_agenda_type` (um tipo existente), as três com
+  `recordings:write` e até 50 alvos. Os alvos vêm em `targets`: `recording_ids` ou um filtro não
+  vazio (`agenda_type`, `from`, `to` em AAAA-MM-DD, inclusive, `collection`, `tag`), resolvido sob a
+  RLS pelo `Library` da biblioteca (para resumos, só as transcritas). Acima do limite, sem alvo ou
+  com um nome que não existe, o agente recebe o motivo e não há proposta. A ferramenta só aparece
+  ao agente se a credencial tem o escopo: a sessão tem os dois; um PAT, os de escrita que tiver
+  (passados ao job `agent_turn`).
+- **Decisão: reaproveitar as operações do MCP, não o `/mcp` por HTTP.** As escritas vivem em
+  `operations.py` (`regenerate_summary`, `edit_tags`, `edit_collections`, `change_agenda_type`),
+  chamadas pelo MCP (`request_summary`), pela API (`PATCH /recordings/{id}`, a troca do tipo) e
+  pelo job `agent_action`, sempre dentro de `user_tx` do dono. Chamar o `/mcp` exigiria guardar um
+  PAT para o agente e um laço HTTP dentro do próprio servidor, sem ganho de regra.
+- **Proposta, confirmação e auditoria:** `agent_actions` guarda cada proposta (`proposed`) com a
+  ferramenta, os parâmetros normalizados, o resumo do cartão e os alvos congelados
+  (`[{recording_id, title}]`), ligada à resposta; `AgentMessage.actions` as devolve. `POST
+  /agent/actions/{id}/confirm` (202) passa a `queued` numa atualização condicional e enfileira
+  `agent_action` (`_job_id=agent_action:{id}`); confirmar de novo devolve o estado sem reenfileirar;
+  a proposta com mais de 24 h vira `expired` (409 `action_expired`), a descartada é 409
+  `action_cancelled`; PAT sem o escopo da ferramenta, 403. `POST .../cancel` só de `proposed`
+  (409 `action_not_proposed`). A linha é o registro de auditoria (`confirmed_via`, `token_id`,
+  `decided_at`, `finished_at`, `results` por alvo), com `session_id` e `message_id` em `SET NULL`:
+  sobrevive à conversa. `GET /agent/actions` lista, paginada.
+- **Execução e idempotência (job `agent_action`):** percorre os alvos ainda sem resultado; cada
+  alvo é uma transação que faz a operação e grava o resultado dele (`done`, `skipped` com o
+  motivo, `failed` com o código), então uma nova execução pula o que já foi feito. Tag já aplicada,
+  coleção já incluída ou o mesmo tipo é `skipped`; gravação excluída ou sem transcrição também.
+  Cada resumo regenerado conta na cota de 24 h do agente (estourada, o resto vira `failed`
+  `quota_exceeded`) e respeita os 3 resumos em aberto: no 429, o job se reagenda em 30 s
+  (`agent_action:{id}:{n}`, até 120 vezes) e continua de onde parou. Os resumos abertos são
+  enfileirados depois do commit de cada alvo.
 - **O job `agent_turn`** (`agent_sessions.py`, fila `eclume:agents`, sem nova tentativa, teto de 5
-  minutos): enfileirado depois do commit da pergunta, com o `transcripts` da credencial; lê o
+  minutos): enfileirado depois do commit da pergunta, com o `transcripts` e os escopos de escrita
+  da credencial; lê a habilidade da pergunta e as ligadas, as propostas vão para `agent_actions` na
+  mesma transação da resposta; lê o
   histórico da conversa (as últimas 10 mensagens prontas) e os anexos enviados, roda o laço, monta
   os arquivos (`render_output`; o .docx pelo subconjunto de Markdown da exportação), grava-os no
   bucket e a resposta na mesma transação. Uma resposta em aberto há mais de 15 minutos vira

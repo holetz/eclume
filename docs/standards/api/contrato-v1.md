@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#142
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -74,6 +74,16 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   /agent/files/{file_id}/content` (o arquivo como anexo). Todas com `summaries:read`, como o chat
   sobre a base; o escopo `transcripts:read` vale para as ferramentas. Outra conta é 404. Aditivo:
   `/base-chat` segue igual e passa a `deprecated`.
+- **Habilidades e ações do Agente (2.24.0, `agent`):** `GET /agent/tools` (o catálogo de
+  ferramentas, com a natureza `read`, `produce` ou `action`), `GET`/`POST /agent/skills` e
+  `GET`/`PATCH`/`DELETE /agent/skills/{skill_id}` (as habilidades: nome `/nome` único na conta, 409
+  `skill_exists`; até 50; `allowed_tools` nulo libera todas), todas com `summaries:read`.
+  `AgentMessageCreate.skill` (ou `/nome` no começo da mensagem) escolhe a habilidade (422 se
+  inexistente ou desligada) e `AgentMessage` ganha `skill` e `actions` (as propostas da resposta).
+  `GET /agent/actions` (a auditoria, por cursor), `GET /agent/actions/{action_id}`, `POST
+  .../confirm` (202, idempotente; exige `summaries:write` para `regenerate_summaries` ou
+  `recordings:write` para as demais; 409 `action_expired` ou `action_cancelled`) e `POST
+  .../cancel` (só de `proposed`; 409 `action_not_proposed`). Aditivo: nada muda para quem não usa.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a

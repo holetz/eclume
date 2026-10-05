@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#142
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -103,7 +103,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   usa importa do arquivo que define.
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
-  `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
+  `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/agente/habilidades`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
   `/?importar=1` (o modal) e `/perguntas`, o nome antigo do Agente, para `/agente`. Os parâmetros também são pt-BR:
@@ -175,6 +175,16 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   arquivos gerados e os anexos são links `download` para `GET /agent/files/{id}/content` (mesma
   origem, sessão por cookie). `ConversationsPage` (`/agente/conversas`) lista todas por página, com
   Renomear (diálogo) e Excluir (confirmação).
+- **Habilidades e ações do Agente** (holetz/eclume#145, `features/agent/skills.ts`,
+  `SkillsPage.tsx`, `ActionCard.tsx`): `SkillsPage` (`/agente/habilidades`) lista as habilidades,
+  cria e edita num diálogo (nome normalizado sem barra e em minúsculas, descrição, instruções e, com
+  "Limitar as ferramentas", as permitidas do catálogo `GET /agent/tools`), liga, desliga e exclui
+  com confirmação. No compositor do Agente, o seletor "Habilidade" lista as ligadas e manda
+  `skill`; uma mensagem que começa com `/` vai como está, porque o servidor lê o prefixo. A pergunta
+  mostra o chip `/nome`. Cada proposta da resposta (`AgentMessage.actions`) vira um `ActionCard`
+  (`section` "Ação proposta"): o resumo, o estado, os 10 primeiros alvos com link (e "e mais N") e
+  Confirmar/Descartar enquanto `proposed`; confirmada, consulta `GET /agent/actions/{id}` a cada 2 s
+  até terminar e mostra o resultado por alvo.
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
   `header`), `enabled` e, opcionais, `matches` (prefixos que também acendem o item: a Biblioteca
   fica marcada em `/gravacoes/`) e `excludes` (prefixos sob a rota do item que são de outro e não
@@ -183,11 +193,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
   `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
   DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
-  `/agente` e numa conversa (`/agente/:sessionId`), mas não em `/agente/conversas` (`excludes`), onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
+  `/agente` e numa conversa (`/agente/:sessionId`), mas não em `/agente/conversas` nem em `/agente/habilidades` (`excludes`), onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
   gravação (a mesma pergunta `GET /recordings` com `limit=1` da biblioteca, chave
   `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
-  acessível. A principal, abaixo dele, tem o grupo **Agente** (Conversas, em `/agente/conversas`;
-  Habilidades entra nele depois), Gravações (Biblioteca, Busca; importar é o modal da
+  acessível. A principal, abaixo dele, tem o grupo **Agente** (Conversas, em `/agente/conversas`, e
+  Habilidades, em `/agente/habilidades`), Gravações (Biblioteca, Busca; importar é o modal da
   biblioteca), Organizar, com os dados da conta (Pessoas, Coleções, Tags), e Regras, com o que age
   sozinho depois de cada gravação (Processamento automático, Tipos de agenda, Campos
   personalizados); as rotas não mudam com o grupo. A `header` vai para os menus do cabeçalho:

@@ -4,7 +4,7 @@ title: Glossário
 description: A busca A–Z única de termos, siglas e vocabulário de domínio do eclume — uma entrada por termo, com link para o doc completo quando ele existe.
 resource: docs/**
 tags: [glossary, vocabulary, terminology]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
 source: claude-quenching skeleton
@@ -27,6 +27,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 
 ## Terms
 
+- [ação do Agente](standards/code/server-agentes.md#agente) — Mudança em lote que o Agente propõe (regenerar resumos, aplicar ou remover tags, incluir ou tirar de coleções, trocar o tipo de agenda) e que só executa depois que a pessoa confirma no cartão; cada uma fica em `agent_actions`, que é também o registro de auditoria.
 - [agente](standards/code/server-agentes.md) — Modelo de linguagem que o server chama por um provider para preencher campos, detectar o tipo de agenda, resumir e conversar (chat de ajuste e a tela Agente).
 - [Agente (tela)](standards/code/server-agentes.md#agente) — A tela de conversa do web (`/agente`, antes Perguntas e `/perguntas`), item em destaque da navegação, que responde sobre as gravações e os arquivos anexados, devolve arquivos para baixar e guarda as conversas por usuário.
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
@@ -69,6 +70,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [gate de qualidade](standards/code/monorepo.md) — Prova dos nove pilares no host GPU (`bash deploy/gate.sh`) que publica o status `eclume/gate` no commit; deploy e releases recusam um SHA sem ele em `success`.
 - [gaveta de ajuda](standards/code/frontend-web.md) — O painel lateral `.help-drawer` do web, aberto com `?` ou pelo botão Ajuda do cabeçalho da página, com os links de ajuda daquela página e os atalhos de teclado.
 - [grupo de escopo](standards/code/server-mcp-e-dispositivos.md#grupos-da-tela-conexão-mcp) — Conjunto de escopos que a tela Conexão MCP oferece como uma escolha só: Buscar e ler gravações, Ler e editar resumos, Editar campos e tags e Excluir gravações.
+- [habilidade](standards/code/server-agentes.md#agente) — Instruções reutilizáveis da pessoa para o Agente (nome `/nome`, descrição, instruções em Markdown e, opcionalmente, as ferramentas permitidas), cadastradas em Habilidades (`/agente/habilidades`) e invocadas por `/nome`, pelo seletor ou pelo próprio Agente com `use_skill`.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
 - [importação no desktop](standards/code/desktop-importacao.md) — Um arquivo de áudio ou vídeo trazido para o app desktop pelo diálogo ou arrastado para a janela, com a data lida do arquivo e confirmada, convertido para Ogg/Opus (ou copiado como está) e enviado com `source: upload`.

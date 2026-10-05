@@ -2,7 +2,7 @@
 titulo: Converse com o Agente
 topico: resumos
 paginas: [agente, busca]
-relacionados: [buscar-nas-gravacoes, ajustar-pelo-chat, conectar-assistente-mcp]
+relacionados: [buscar-nas-gravacoes, habilidades-e-acoes-do-agente, ajustar-pelo-chat, conectar-assistente-mcp]
 termos: [agente, perguntar, perguntas, conversa, anexo, anexar, arquivo, baixar, pdf, docx, csv, histórico, IA]
 ordem: 5
 atualizado: 2026-10-05
