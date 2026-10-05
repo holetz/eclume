@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#142
 maintainer: holetz
 ---
 
@@ -65,7 +65,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 ## Markdown gerado e CSP
 
 - **Markdown gerado por LLM nunca carrega imagem.** O resumo (`SummaryDoc`), a cópia para colar
-  (`copy-summary.ts`), o chat da base (`ChatPage`) e a pré-visualização do tipo de agenda
+  (`copy-summary.ts`), as respostas do Agente (`AgentPage`) e a pré-visualização do tipo de agenda
   (`AgendaTypePreview`) passam ao `react-markdown` os `components` de `src/app/markdown.tsx`
   (`SAFE_MARKDOWN`, ou `safeMarkdown(próprios)` quando a tela troca outros elementos, que nunca
   sobrepõem `img` nem `a`): `![alt](url)` vira um link de texto (`alt`, ou a URL sem ele) e todo
@@ -103,10 +103,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   usa importa do arquivo que define.
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
-  `/pessoas/:id`, `/busca`, `/perguntas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
+  `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
-  `/?importar=1` (o modal). Os parâmetros também são pt-BR:
+  `/?importar=1` (o modal) e `/perguntas`, o nome antigo do Agente, para `/agente`. Os parâmetros também são pt-BR:
   - biblioteca (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (qualquer dia do período),
     `tipo=reuniao|nota`, `situacao=pronta|processando|falhou`, `tag`, `pessoa`, `colecao`,
     `campo=<field_id>:<valor>` (todos repetíveis) e `importar=1`;
@@ -163,18 +163,31 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   mão perdidas, pessoas dos locutores de volta, campos, tipo e resumo refeitos); o 409 vira "Já há
   uma transcrição em andamento.". Tudo isso fica em rotas e no modal sob demanda: o motor de upload
   do bundle inicial só ganhou o campo `language`.
+- **Agente** (`src/features/agent/`, holetz/eclume#142): `agent.ts` tem os hooks sobre
+  `/agent/sessions`; `AgentPage` (`/agente/:sessionId?`, uma rota só, para a primeira pergunta
+  abrir a conversa sem remontar a tela) mostra as conversas recentes ao lado (até 20, com Nova
+  conversa e Todas as conversas), a conversa e o compositor com **Anexar** (`.txt,.md,.csv,.pdf,.docx`,
+  até 5 por pergunta e 10 MB cada, conferidos antes do envio) e os anexos da próxima pergunta, que
+  saem com o ×. Sem conversa na rota, a primeira pergunta ou o primeiro anexo cria a conversa,
+  semeia o cache dela vazia e troca a rota (`replace`). Cada resposta consulta a própria mensagem a
+  cada 2 s até `done` ou `failed`; a conversa tem `staleTime` de 1 min, porque as mutações da tela
+  já atualizam o cache e reler a conversa no meio de uma pergunta apagaria a pergunta enviada. Os
+  arquivos gerados e os anexos são links `download` para `GET /agent/files/{id}/content` (mesma
+  origem, sessão por cookie). `ConversationsPage` (`/agente/conversas`) lista todas por página, com
+  Renomear (diálogo) e Excluir (confirmação).
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
-  `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a Biblioteca
-  fica marcada em `/gravacoes/`); o item comum tem `group`, e `navGroups()` devolve as duas seções.
-  **Perguntar** (`/perguntas`, o chat sobre a base) é o único item **destacado** (`featured`, com
+  `header`), `enabled` e, opcionais, `matches` (prefixos que também acendem o item: a Biblioteca
+  fica marcada em `/gravacoes/`) e `excludes` (prefixos sob a rota do item que são de outro e não
+  o acendem); o item comum tem `group`, e `navGroups()` devolve as duas seções.
+  **Agente** (`/agente`, holetz/eclume#142; antes Perguntar, em `/perguntas`) é o único item **destacado** (`featured`, com
   `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
   `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
   DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
-  `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
+  `/agente` e numa conversa (`/agente/:sessionId`), mas não em `/agente/conversas` (`excludes`), onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
   gravação (a mesma pergunta `GET /recordings` com `limit=1` da biblioteca, chave
   `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
-  acessível; o título da tela segue
-  "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
+  acessível. A principal, abaixo dele, tem o grupo **Agente** (Conversas, em `/agente/conversas`;
+  Habilidades entra nele depois), Gravações (Biblioteca, Busca; importar é o modal da
   biblioteca), Organizar, com os dados da conta (Pessoas, Coleções, Tags), e Regras, com o que age
   sozinho depois de cada gravação (Processamento automático, Tipos de agenda, Campos
   personalizados); as rotas não mudam com o grupo. A `header` vai para os menus do cabeçalho:
