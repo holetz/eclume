@@ -1673,6 +1673,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** O catálogo de ferramentas do Agente */
+        get: operations["listAgentTools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** As habilidades da conta */
+        get: operations["listAgentSkills"];
+        put?: never;
+        /** Cadastrar uma habilidade */
+        post: operations["createAgentSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        /** Uma habilidade */
+        get: operations["getAgentSkill"];
+        put?: never;
+        post?: never;
+        /** Excluir a habilidade */
+        delete: operations["deleteAgentSkill"];
+        options?: never;
+        head?: never;
+        /** Editar a habilidade */
+        patch: operations["updateAgentSkill"];
+        trace?: never;
+    };
+    "/api/v1/agent/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** O registro das ações do Agente */
+        get: operations["listAgentActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        /** Uma ação do Agente */
+        get: operations["getAgentAction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar a proposta */
+        post: operations["confirmAgentAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Descartar a proposta */
+        post: operations["cancelAgentAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/people": {
         parameters: {
             query?: never;
@@ -3761,6 +3891,10 @@ export interface components {
             } | null;
             /** @description Os anexos da pergunta ou os arquivos gerados pela resposta. */
             files: components["schemas"]["AgentFile"][];
+            /** @description Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora). */
+            skill: string | null;
+            /** @description Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta. */
+            actions: components["schemas"]["AgentAction"][];
             /** Format: date-time */
             created_at: string;
         };
@@ -3768,6 +3902,98 @@ export interface components {
             message: string;
             /** @description Ids de anexos desta conversa ainda não enviados (até 5). */
             attachments?: string[];
+            /** @description Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem vale o mesmo. */
+            skill?: string;
+        };
+        AgentTool: {
+            name: string;
+            /** @enum {string} */
+            kind: "read" | "produce" | "action";
+            description: string;
+        };
+        AgentSkill: {
+            /** Format: uuid */
+            id: string;
+            /** @description O `/nome` da conversa. */
+            name: string;
+            /** @description O que a habilidade faz; o agente a lê para escolher. */
+            description: string;
+            /** @description As instruções em Markdown. */
+            instructions: string;
+            /** @description As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas. */
+            allowed_tools: string[] | null;
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AgentSkillCreate: {
+            name: string;
+            description: string;
+            instructions: string;
+            allowed_tools?: string[] | null;
+            enabled?: boolean;
+        };
+        AgentSkillPatch: {
+            name?: string;
+            description?: string;
+            instructions?: string;
+            allowed_tools?: string[] | null;
+            enabled?: boolean;
+        };
+        AgentActionTarget: {
+            /** Format: uuid */
+            recording_id: string;
+            title: string;
+            /** @description O resultado neste alvo; nulo enquanto não executado. */
+            result: {
+                /** @enum {string} */
+                status: "done" | "skipped" | "failed";
+                detail?: string;
+                code?: string;
+                /** Format: uuid */
+                summary_id?: string | null;
+            } | null;
+        };
+        /** @description Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria. */
+        AgentAction: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Nulo depois que a conversa é excluída.
+             */
+            session_id: string | null;
+            /** Format: uuid */
+            message_id: string | null;
+            /** @enum {string} */
+            tool: "regenerate_summaries" | "tag_recordings" | "collect_recordings" | "set_agenda_type";
+            /** @description Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos). */
+            params: Record<string, never>;
+            /** @description O que será feito, em uma frase. */
+            summary: string;
+            targets: components["schemas"]["AgentActionTarget"][];
+            /** @enum {string} */
+            status: "proposed" | "queued" | "running" | "done" | "failed" | "cancelled" | "expired";
+            counts: {
+                done: number;
+                skipped: number;
+                failed: number;
+                pending: number;
+            };
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /** @enum {string|null} */
+            confirmed_via: "session" | "pat" | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
         };
         AgentTurn: {
             question: components["schemas"]["AgentMessage"];
@@ -4586,6 +4812,8 @@ export interface components {
         AgentSessionId: string;
         AgentMessageId: string;
         AgentFileId: string;
+        AgentSkillId: string;
+        AgentActionId: string;
         BaseChatId: string;
         PersonId: string;
         CollectionId: string;
@@ -7368,6 +7596,283 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O catálogo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentTool"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAgentSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description As habilidades. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentSkill"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSkillCreate"];
+            };
+        };
+        responses: {
+            /** @description A habilidade cadastrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A habilidade. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSkillPatch"];
+            };
+        };
+        responses: {
+            /** @description A habilidade editada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listAgentActions: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma página de ações. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentAction"][];
+                        next_cursor: components["schemas"]["NextCursor"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAgentAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ação. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    confirmAgentAction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ação na fila (ou o estado atual, se já confirmada). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelAgentAction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A proposta descartada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listPeople: {

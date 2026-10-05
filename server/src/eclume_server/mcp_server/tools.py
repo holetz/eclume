@@ -23,20 +23,13 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.fields import builtin_fields, field_json, get_field, recording_values, set_value, validate_value
 from eclume_server.markers import list_markers, marker_json
+from eclume_server.operations import regenerate_summary
 from eclume_server.pagination import decode_position, encode_position
 from eclume_server.problems import ApiProblemError
-from eclume_server.quotas import charge_agent, check_open_summaries
+from eclume_server.quotas import charge_agent
 from eclume_server.recordings import Library, delete_recording_of, get_visible, list_library, render
 from eclume_server.search import SearchFilters, search
-from eclume_server.summaries import (
-    create_summary,
-    edit_current,
-    recording_transcript,
-    summary_agenda_type,
-    summary_json,
-    summary_provider,
-    summary_state,
-)
+from eclume_server.summaries import edit_current, recording_transcript, summary_json, summary_state
 from eclume_server.summary_chat import open_request
 from eclume_server.transcripts import load_speakers, load_transcript, speaker_json, transcript_text_window
 
@@ -365,24 +358,15 @@ def _write_tools(server: MCPServer) -> None:
                 transcript = await recording_transcript(conn, rid)
                 if instruction and instruction.strip():
                     _, reply = await open_request(conn, transcript, instruction.strip(), principal.user_id)
+                    await charge_agent(conn, app.queue.pool, principal.user_id)
                 else:
-                    agenda_type = await summary_agenda_type(conn, transcript, None)
-                    provider = await summary_provider(conn, None)
-                    await check_open_summaries(conn, principal.user_id)
-                    row = await create_summary(
-                        conn,
-                        transcript=transcript,
-                        agenda_type=agenda_type,
-                        provider=provider,
-                        trigger="manual",
-                        created_by=principal.user_id,
-                    )
-                await charge_agent(conn, app.queue.pool, principal.user_id)
+                    # A mesma operação que o Agente usa para regenerar resumos em lote.
+                    summary_id = await regenerate_summary(conn, app.queue.pool, principal.user_id, rid)
         if instruction and instruction.strip():
             await app.queue.enqueue_summary_chat(reply["id"])
             return {"recording_id": recording_id, "mode": "chat", "pending_id": str(reply["id"])}
-        await app.queue.enqueue_summarize(row["id"])
-        return {"recording_id": recording_id, "mode": "generate", "pending_id": str(row["id"])}
+        await app.queue.enqueue_summarize(summary_id)
+        return {"recording_id": recording_id, "mode": "generate", "pending_id": str(summary_id)}
 
     @server.tool(
         annotations=IDEMPOTENT,

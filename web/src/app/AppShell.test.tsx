@@ -55,6 +55,7 @@ describe('navegação', () => {
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
     expect(labels(main)).toEqual([
       'Conversas',
+      'Habilidades',
       'Biblioteca',
       'Busca',
       'Pessoas',
@@ -120,6 +121,14 @@ describe('navegação', () => {
     expect(isItemActive(sessions, '/agente/01928f3a')).toBe(false)
   })
 
+  it('Habilidades fica no grupo Agente e não acende o destacado', () => {
+    const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
+    const skills = NAV_ITEMS.find((item) => item.label === 'Habilidades')!
+    expect(skills.group).toBe('Agente')
+    expect(isItemActive(skills, '/agente/habilidades')).toBe(true)
+    expect(isItemActive(agent, '/agente/habilidades')).toBe(false)
+  })
+
 })
 
 describe('AppShell', () => {
@@ -155,6 +164,7 @@ describe('AppShell', () => {
     expect(first.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(firstGroup).queryByRole('link', { name: 'Agente' })).not.toBeInTheDocument()
     expect(within(firstGroup).getByRole('link', { name: 'Conversas' })).toHaveAttribute('href', '/agente/conversas')
+    expect(within(firstGroup).getByRole('link', { name: 'Habilidades' })).toHaveAttribute('href', '/agente/habilidades')
     expect(within(nav).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
   })
 

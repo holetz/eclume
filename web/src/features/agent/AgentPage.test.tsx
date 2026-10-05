@@ -32,6 +32,7 @@ function mockAgent(extra: Parameters<typeof mockFetch>[0] = {}) {
     'GET /api/v1/agent/sessions/:id/messages/:mid': () => fixtures.agentMessageDone(),
     'POST /api/v1/agent/sessions/:id/files': () => fixtures.agentFileInput(),
     'DELETE /api/v1/agent/sessions/:id/files/:fid': () => empty(),
+    'GET /api/v1/agent/skills': () => ({ items: [] }),
     ...extra,
   })
 }
@@ -186,5 +187,93 @@ describe('Agente', () => {
     mockAgent({ 'GET /api/v1/agent/sessions/:id': () => problem('not_found', 404) })
     renderApp(`/agente/${SESSION}`)
     expect(await screen.findByText(/Esta conversa não existe mais/)).toBeInTheDocument()
+  })
+
+  it('escolhe a habilidade no seletor e mostra o nome dela na pergunta', async () => {
+    const skill = {
+      id: '01928f3a-1c00-7a00-8000-000000000b01',
+      name: 'ata',
+      description: 'Escreve a ata.',
+      instructions: 'Decisões e prazos.',
+      allowed_tools: null,
+      enabled: true,
+      created_at: '2026-10-05T13:00:00Z',
+      updated_at: '2026-10-05T13:00:00Z',
+    }
+    const turn = fixtures.agentTurn()
+    const http = mockAgent({
+      'GET /api/v1/agent/skills': () => ({ items: [skill, { ...skill, id: 'off', name: 'rascunho', enabled: false }] }),
+      'POST /api/v1/agent/sessions/:id/messages': () => ({ ...turn, question: { ...turn.question, skill: 'ata' } }),
+    })
+    renderApp(`/agente/${SESSION}`)
+    const picker = await screen.findByRole('combobox', { name: 'Habilidade' })
+    expect(within(picker).queryByRole('option', { name: '/rascunho' })).not.toBeInTheDocument()
+    await userEvent.selectOptions(picker, '/ata')
+    await ask('Faça a ata do kickoff')
+    await waitFor(() => expect(http.requests('POST /api/v1/agent/sessions/:id/messages')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/agent/sessions/:id/messages')[0].json()).toEqual({
+      message: 'Faça a ata do kickoff',
+      attachments: [],
+      skill: 'ata',
+    })
+    const log = screen.getByRole('log', { name: 'Conversa' })
+    expect(await within(log).findByText('/ata')).toBeInTheDocument()
+  })
+
+  it('com /nome digitado, o texto vai como está e o seletor não manda habilidade', async () => {
+    const http = mockAgent()
+    renderApp(`/agente/${SESSION}`)
+    await ask('/ata do kickoff')
+    await waitFor(() => expect(http.requests('POST /api/v1/agent/sessions/:id/messages')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/agent/sessions/:id/messages')[0].json()).toEqual({
+      message: '/ata do kickoff',
+      attachments: [],
+    })
+  })
+
+  it('mostra o cartão da ação proposta e confirma', async () => {
+    const proposed = fixtures.agentActionProposed()
+    const answer = { ...fixtures.agentMessageDone(), actions: [proposed] }
+    const done = {
+      ...proposed,
+      status: 'done',
+      counts: { done: 2, skipped: 0, failed: 0, pending: 0 },
+      targets: proposed.targets.map((target) => ({ ...target, result: { status: 'done' } })),
+    }
+    const http = mockAgent({
+      'GET /api/v1/agent/sessions/:id': () => ({ ...emptyDetail(), messages: [answer] }),
+      'POST /api/v1/agent/actions/:id/confirm': () => ({ ...proposed, status: 'queued' }),
+      'GET /api/v1/agent/actions/:id': () => done,
+    })
+    renderApp(`/agente/${SESSION}`)
+    const card = await screen.findByRole('region', { name: 'Ação proposta' })
+    expect(card).toHaveTextContent('Nas tags de 2 gravações: aplicar "auditoria".')
+    expect(card).toHaveTextContent('Aguardando a sua confirmação')
+    const targets = within(card).getByRole('list', { name: 'Gravações afetadas' })
+    expect(within(targets).getByRole('link', { name: 'Kickoff Aurora' })).toHaveAttribute(
+      'href',
+      `/gravacoes/${proposed.targets[0].recording_id}`,
+    )
+    expect(http.requests('POST /api/v1/agent/actions/:id/confirm')).toHaveLength(0)
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Confirmar' }))
+    await waitFor(() => expect(http.requests('POST /api/v1/agent/actions/:id/confirm')).toHaveLength(1))
+    await advance(AGENT_POLL_MS)
+    expect(await within(card).findByText(/Concluída · 2 feita\(s\)/)).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
+  })
+
+  it('descarta a proposta sem executar', async () => {
+    const proposed = fixtures.agentActionProposed()
+    const answer = { ...fixtures.agentMessageDone(), actions: [proposed] }
+    const http = mockAgent({
+      'GET /api/v1/agent/sessions/:id': () => ({ ...emptyDetail(), messages: [answer] }),
+      'POST /api/v1/agent/actions/:id/cancel': () => ({ ...proposed, status: 'cancelled' }),
+    })
+    renderApp(`/agente/${SESSION}`)
+    const card = await screen.findByRole('region', { name: 'Ação proposta' })
+    await userEvent.click(within(card).getByRole('button', { name: 'Descartar' }))
+    expect(await within(card).findByText('Descartada')).toBeInTheDocument()
+    expect(http.requests('POST /api/v1/agent/actions/:id/confirm')).toHaveLength(0)
   })
 })

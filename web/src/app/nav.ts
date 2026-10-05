@@ -6,7 +6,7 @@
 // antes dos grupos, como ação primária com ícone. A barra lateral separa os dados da conta (Organizar)
 // das regras que agem sozinhas depois de cada gravação (Regras); a engrenagem agrupa os itens por
 // natureza (`part`), com um rótulo por parte. O grupo Agente reúne o que é do Agente além da conversa
-// (Conversas; Habilidades entra nele depois), logo abaixo do item destacado.
+// (Conversas e Habilidades), logo abaixo do item destacado.
 import { MessageSquareText, type LucideIcon } from 'lucide-react'
 
 type NavGroup = 'Agente' | 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
@@ -54,9 +54,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     enabled: true,
     featured: true,
     icon: MessageSquareText,
-    excludes: ['/agente/conversas'],
+    excludes: ['/agente/conversas', '/agente/habilidades'],
   },
   { to: '/agente/conversas', label: 'Conversas', group: 'Agente', section: 'main', enabled: true },
+  { to: '/agente/habilidades', label: 'Habilidades', group: 'Agente', section: 'main', enabled: true },
   { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },

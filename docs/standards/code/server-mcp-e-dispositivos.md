@@ -2,12 +2,12 @@
 type: standard
 title: Servidor MCP e ligação de dispositivos
 description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas, o descritor público /server com a impressão digital da CA raiz e da próxima, e a raiz própria com restrição de nome e a rotação anunciada.
-resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/ca.py, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql
+resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/ca.py, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql, server/src/eclume_server/operations.py
 tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#101, holetz/eclume#102, holetz/eclume#144
+source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#101, holetz/eclume#102, holetz/eclume#144, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -73,6 +73,12 @@ handlers das rotas; o que vivia só no handler desce para o módulo de domínio.
   `as_tool_error()`.
 - **Listagem.** `tools/list` mostra todas as ferramentas a qualquer token (é estática no
   `MCPServer`); a recusa nomeia o escopo, e o assistente explica ao usuário o que falta.
+- **Operações compartilhadas** (holetz/eclume#145). As escritas que o Agente também faz vivem em
+  `operations.py` (`regenerate_summary`, `edit_tags`, `edit_collections`, `change_agenda_type`):
+  `request_summary` sem instrução chama `regenerate_summary`, o `PATCH /recordings/{id}` chama
+  `change_agenda_type`, e o job `agent_action` chama as quatro, sempre sob a RLS do dono e com os
+  mesmos escopos. O Agente não chama o `/mcp` por HTTP
+  ([agentes](server-agentes.md#agente)).
 
 ## Grupos da tela "Conexão MCP"
 
