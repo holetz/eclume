@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { useCancelTranscription } from './queries'
 import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
+import { AwaitingSpeakers } from './AwaitingSpeakers'
 import styles from './RecordingPage.module.css'
 import { stageLabel } from '../../shared/format'
 import { fraseDaEspera } from '../../lib/vocabulario.js'
@@ -72,8 +73,9 @@ function TranscriptionProgress({ recording }: { recording: Recording }) {
 }
 
 /**
- * O `ol.pipeline` com as seis etapas, cada uma com o estado em palavra; embaixo, o motivo de cada
- * etapa pulada ou que falhou em texto visível, o progresso da transcrição ou a falha com o retentar.
+ * O `ol.pipeline` com as sete etapas, cada uma com o estado em palavra; embaixo, o motivo de cada
+ * etapa pulada, em espera ou que falhou em texto visível, o aviso da espera pelos locutores, o
+ * progresso da transcrição ou a falha com o retentar.
  */
 export function Pipeline({ recording }: { recording: Recording }) {
   const notes = recording.pipeline
@@ -102,6 +104,7 @@ export function Pipeline({ recording }: { recording: Recording }) {
           ))}
         </ul>
       )}
+      <AwaitingSpeakers recording={recording} />
       <TranscriptionProgress recording={recording} />
       {recording.status === 'failed' && (
         <p className="alert alert-error" role="alert">
