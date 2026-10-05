@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from eclume_server.db import tables as t
 from eclume_server.pipeline import current_revision, get_step, set_step
@@ -97,8 +97,14 @@ async def release_if_named(conn: AsyncConnection, recording_id: UUID) -> int | N
     ).scalar()
     unnamed = await unnamed_count(conn, transcript_id) if transcript_id is not None else 0
     if unnamed:
-        # Ainda falta alguém: a contagem do motivo acompanha.
-        await set_step(conn, recording, revision, STEP, WAITING, detail={"reason": UNNAMED, "unnamed": unnamed})
+        # Ainda falta alguém: só a contagem do motivo acompanha. O instante da espera fica, para os
+        # avisos de desfecho (que comparam o `finished_at`) não repetirem a cada pessoa ligada.
+        ps = t.pipeline_steps.c
+        await conn.execute(
+            update(t.pipeline_steps)
+            .where(ps.recording_id == recording_id, ps.revision == revision, ps.step == STEP)
+            .values(detail={"reason": UNNAMED, "unnamed": unnamed})
+        )
         return None
     await set_step(conn, recording, revision, STEP, "done")
     return revision

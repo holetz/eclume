@@ -5,7 +5,14 @@ import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { useCollections } from '../collections/queries'
-import { useVoiceAssignment, type VoiceAssignment } from '../people/queries'
+import {
+  useSpeakerNaming,
+  useUpdateSpeakerNaming,
+  useVoiceAssignment,
+  type SpeakerNaming,
+  type VoiceAssignment,
+} from '../people/queries'
+import { Switch } from '../../shared/Switch'
 import { useTagAssignment, type TagAssignment } from '../tags/queries'
 import styles from './Automation.module.css'
 import { useAgendaTypes, useFields } from '../organize/queries'
@@ -22,6 +29,8 @@ interface Step {
   to?: string
   linkLabel?: string
   state: ReactNode
+  /** A chave que se muda aqui mesmo, quando nenhuma outra tela é dona dela. */
+  control?: ReactNode
 }
 
 /** O estado de uma etapa vindo de uma consulta: carregando, erro ou o texto calculado. */
@@ -38,6 +47,12 @@ function voiceState(voice: VoiceAssignment): string {
   return `Voz: liga sozinho a partir de ${percent.format(voice.threshold)}`
 }
 
+function namingState(naming: SpeakerNaming): string {
+  if (!naming.required) return 'Não exigida: a gravação segue com "Locutor N"'
+  if (naming.waiting_count === 0) return 'Exigida'
+  return `Exigida · ${plural(naming.waiting_count, 'gravação esperando você', 'gravações esperando você')}`
+}
+
 function tagState(tags: TagAssignment): string {
   if (!tags.auto_fill) return 'Tags: desligadas'
   if (tags.mode === 'fixed') return `Tags: só as cadastradas (${tags.catalog_count})`
@@ -47,11 +62,14 @@ function tagState(tags: TagAssignment): string {
 /**
  * Processamento automático (pasta própria: lê pessoas, tags, coleções e organize sem criar ciclo
  * entre elas): a visão geral, na ordem do pipeline, do que o eclume faz sozinho depois
- * de cada gravação. Só lê o que as telas de cada etapa configuram e leva até elas; nada se edita aqui.
+ * de cada gravação. Lê o que as telas de cada etapa configuram e leva até elas; só a marcação
+ * obrigatória dos locutores, que não tem outra tela, se liga aqui mesmo.
  */
 export function AutomationPage() {
   useHelpTopic('automacao')
   const voice = useVoiceAssignment()
+  const naming = useSpeakerNaming()
+  const updateNaming = useUpdateSpeakerNaming()
   const agendaTypes = useAgendaTypes()
   const fields = useFields()
   const tags = useTagAssignment()
@@ -69,6 +87,23 @@ export function AutomationPage() {
       to: '/pessoas',
       linkLabel: 'Configurar em Pessoas',
       state: stateOf(voice, voiceState),
+    },
+    {
+      title: 'Marcação dos locutores',
+      what: 'Exigida, a gravação com algum locutor sem pessoa espera você nomeá-lo antes do tipo, dos campos, das coleções e do resumo.',
+      state: updateNaming.isError ? (
+        <span role="alert">{errorMessage(updateNaming.error)}</span>
+      ) : (
+        stateOf(naming, namingState)
+      ),
+      control: naming.data && (
+        <Switch
+          label="Exigir a marcação dos locutores"
+          checked={naming.data.required}
+          disabled={updateNaming.isPending}
+          onChange={(required) => updateNaming.mutate({ required })}
+        />
+      ),
     },
     {
       title: 'Tipo de agenda',
@@ -132,6 +167,7 @@ export function AutomationPage() {
             <span className="list-row-sub">
               {step.what} <strong>{step.state}</strong>
             </span>
+            {step.control && <span className="list-row-actions">{step.control}</span>}
             {step.to && (
               <span className="list-row-actions">
                 <Link to={step.to} aria-label={step.linkLabel}>

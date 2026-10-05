@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
@@ -26,6 +27,7 @@ function mockAutomation(overrides: Record<string, Parameters<typeof mockFetch>[0
     'GET /api/v1/fields': () => fixtures.fieldPage(),
     'GET /api/v1/me/tag-assignment': () => TAGS,
     'GET /api/v1/collections': () => fixtures.collectionPage(),
+    'GET /api/v1/me/speaker-naming': () => ({ required: false, waiting_count: 0 }),
     ...overrides,
   })
 }
@@ -41,11 +43,12 @@ describe('Processamento automático', () => {
     expect(rows().map((row) => row.querySelector('.list-row-title')?.textContent)).toEqual([
       '1. Pré-processamento e transcrição',
       '2. Locutores pela voz',
-      '3. Tipo de agenda',
-      '4. Campos personalizados',
-      '5. Tags',
-      '6. Coleções com regra',
-      '7. Resumo',
+      '3. Marcação dos locutores',
+      '4. Tipo de agenda',
+      '5. Campos personalizados',
+      '6. Tags',
+      '7. Coleções com regra',
+      '8. Resumo',
     ])
     expect(await screen.findByText('3 tipos de agenda')).toBeInTheDocument()
     // Título e Tags são campos de sistema: contam só os do usuário.
@@ -80,7 +83,27 @@ describe('Processamento automático', () => {
     renderApp('/config/automacao')
     expect(await screen.findByText('Tags: o agente pode criar tags')).toBeInTheDocument()
     expect(screen.getByText('Voz: só sugere, não liga sozinho')).toBeInTheDocument()
-    expect(await within(rows()[5]).findByRole('alert')).toBeInTheDocument()
+    expect(await within(rows()[6]).findByRole('alert')).toBeInTheDocument()
     expect(screen.getByText('3 tipos de agenda')).toBeInTheDocument()
+  })
+
+  it('liga a marcação obrigatória dos locutores aqui mesmo e mostra quantas gravações esperam', async () => {
+    const http = mockAutomation({
+      'PATCH /api/v1/me/speaker-naming': () => ({ required: true, waiting_count: 0 }),
+    })
+    renderApp('/config/automacao')
+    expect(await screen.findByText('Não exigida: a gravação segue com "Locutor N"')).toBeInTheDocument()
+    const toggle = screen.getByRole('switch', { name: 'Exigir a marcação dos locutores' })
+    expect(toggle).not.toBeChecked()
+    await userEvent.click(toggle)
+    expect(await screen.findByText('Exigida')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Exigir a marcação dos locutores' })).toBeChecked()
+    expect(await http.requests('PATCH /api/v1/me/speaker-naming')[0].json()).toEqual({ required: true })
+  })
+
+  it('com a marcação exigida, conta as gravações que esperam você', async () => {
+    mockAutomation({ 'GET /api/v1/me/speaker-naming': () => ({ required: true, waiting_count: 2 }) })
+    renderApp('/config/automacao')
+    expect(await screen.findByText('Exigida · 2 gravações esperando você')).toBeInTheDocument()
   })
 })
