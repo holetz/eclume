@@ -1,10 +1,11 @@
-// A janela principal (frame "Main window" do DS): linha de status, gravar, nova nota e importar,
-// o medidor da nota, os marcadores e a política do app durante a gravação automática, a pergunta
-// de reunião detectada, a fila de envio e a conta.
+// A janela principal (frame "Main window" do DS): o painel Recentes no topo, linha de status,
+// gravar, nova nota e importar, o medidor da nota, os marcadores e a política do app durante a
+// gravação automática, a pergunta de reunião detectada, a fila de envio e a conta.
 import { el, trocar, $ } from "../dom.js";
 import { versao } from "../tauri.js";
 import { rotuloDoServidor } from "./primeira-execucao.js";
 import { ESTADOS_APARELHO, fraseDaEspera } from "../vocabulario.js";
+import { montarRecentes } from "../recentes.js";
 
 const MIN = 60_000;
 const DIA = 24 * 60 * MIN;
@@ -124,6 +125,7 @@ export function montar(secao, app) {
   const textoMarcador = $("#nota-marcador-texto", secao);
   const politica = $("#politica", secao);
   let configuracoes = null;
+  const recentes = montarRecentes($("#recentes", secao), app);
 
   // "Atualizado para X" (frame "After an update"): no topo da janela até a pessoa fechar.
   const atualizado = el(
@@ -362,6 +364,8 @@ export function montar(secao, app) {
       $("#conta-versao", secao).textContent = `v${numero}`;
       desenharAtalhos();
       if (app.estado) this.atualizar(app.estado, app.fila);
+      // O painel lê o servidor já, sem esperar a próxima volta do laço.
+      app.invoke("recent_refresh").catch((falha) => console.error(falha));
     },
 
     atualizar(estado, gravacoes) {
@@ -381,6 +385,7 @@ export function montar(secao, app) {
       desenharAtualizacao(estado);
       desenharConta(estado);
       desenharFila(gravacoes, estado.queue_waits, agora);
+      recentes.desenhar(app.recentes);
     },
   };
 }

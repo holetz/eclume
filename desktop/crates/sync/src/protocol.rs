@@ -320,6 +320,21 @@ impl Client {
         )
     }
 
+    /// As `limit` gravações mais recentes da conta, numa página só (`GET /api/v1/recordings`
+    /// com `sort=created_desc`): o painel de gravações recentes da janela, com o `job` e o
+    /// `pipeline` de cada uma. `limit` vai de 1 a 200, como o contrato aceita.
+    pub fn recent(&self, limit: u32) -> Result<Vec<api::LibraryRecording>> {
+        let mut url = Url::parse(&self.endpoint("/recordings")).context("endereço da API inválido")?;
+        url.query_pairs_mut()
+            .append_pair("limit", &limit.clamp(1, 200).to_string())
+            .append_pair("sort", "created_desc");
+        let page: api::LibraryPage = self.call_json(
+            "falha ao listar as gravações recentes",
+            HttpRequest::new("GET", url.to_string()),
+        )?;
+        Ok(page.items)
+    }
+
     /// O resumo atual de uma gravação para o espelho: `Ok(None)` quando ainda não há (404, 409
     /// sem transcrição, ou nenhuma versão concluída).
     pub fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>> {
@@ -952,6 +967,31 @@ mod tests {
         assert!(script.seen().iter().all(|request| request
             .headers
             .contains(&("Authorization".into(), format!("Bearer {PAT}")))));
+    }
+
+    #[test]
+    fn recentes_leem_uma_pagina_so_na_ordem_de_envio() {
+        let script = Script::default().expect(
+            "GET /api/v1/recordings?limit=5&sort=created_desc",
+            json(
+                200,
+                serde_json::json!({
+                    "items": [{
+                        "id": "r1", "title": "Reunião", "status": "processing",
+                        "job": {"state": "running", "stage": "asr", "progress": 0.5},
+                        "pipeline": [{"step": "transcription", "state": "active"}]
+                    }],
+                    "next_cursor": "p2"
+                }),
+            ),
+        );
+        let (client, script, _) = make_client(script);
+        let recentes = client.recent(5).unwrap();
+        assert_eq!(recentes.len(), 1);
+        let job = recentes[0].job.as_ref().unwrap();
+        assert_eq!((job.stage.as_deref(), job.progress), (Some("asr"), Some(500)));
+        // O cursor da próxima página é ignorado: o painel quer só as N primeiras.
+        assert_eq!(script.seen().len(), 1);
     }
 
     #[test]

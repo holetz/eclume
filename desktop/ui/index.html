@@ -50,6 +50,14 @@
           <div class="menu-sep"></div>
           <span class="menu-item" aria-disabled="true" id="ajuda-versao"></span>
         </div>
+        <div class="recentes" id="recentes" aria-label="Gravações recentes" hidden>
+          <div class="row row-between">
+            <span class="kicker">Recentes</span>
+            <span class="badge badge-warning" id="recentes-alerta" role="status" hidden></span>
+          </div>
+          <ul class="recentes-lista" id="recentes-lista"></ul>
+          <span class="text-muted small" id="recentes-vazio" hidden>Nenhuma gravação ainda.</span>
+        </div>
         <span class="status-line" id="linha-status" role="status">Carregando…</span>
         <div class="row row-meter" id="nota" hidden>
           <div class="meter" id="medidor" aria-hidden="true"></div>
@@ -285,6 +293,18 @@
                   <label class="seg-opt"><input type="radio" name="tema" value="light" />Claro</label>
                   <label class="seg-opt"><input type="radio" name="tema" value="dark" />Escuro</label>
                 </span>
+              </span>
+            </div>
+            <div class="list-row">
+              <label class="list-row-title" for="recentes-quantidade">Gravações recentes no topo</label>
+              <span class="list-row-sub">Estado, alertas e Copiar resumo na janela principal</span>
+              <span class="list-row-actions">
+                <select class="input" id="recentes-quantidade">
+                  <option value="0">Ocultar</option>
+                  <option value="3">3</option>
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                </select>
               </span>
             </div>
           </div>
