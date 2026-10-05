@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.20.0
+  version: 2.21.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -86,7 +86,13 @@ tags:
   - name: summaries
     description: Resumos gerados por agente com as instruções de um tipo de agenda.
   - name: base-chat
-    description: Perguntas em linguagem natural sobre o conjunto das gravações do usuário.
+    description: >-
+      Perguntas em linguagem natural sobre o conjunto das gravações do usuário. Obsoleto desde a
+      2.21.0: o Agente (`agent`) faz o mesmo com conversas guardadas e arquivos.
+  - name: agent
+    description: >-
+      O Agente: conversas guardadas por usuário, anexos de entrada (texto extraído) e arquivos que
+      o agente gera para baixar.
   - name: admin
     description: >-
       Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
@@ -2813,6 +2819,7 @@ paths:
       tags: [base-chat]
       operationId: askBaseChat
       summary: Perguntar sobre a base de gravações
+      deprecated: true
       description: |
         Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
         `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
@@ -2861,6 +2868,7 @@ paths:
       tags: [base-chat]
       operationId: getBaseChat
       summary: Uma pergunta e a resposta
+      deprecated: true
       description: |
         Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
         que o agente de fato consultou e em que a resposta se apoia.
@@ -2879,6 +2887,345 @@ paths:
                   $ref: "#/components/examples/BaseChatDone"
                 falha:
                   $ref: "#/components/examples/BaseChatFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/sessions:
+    get:
+      tags: [agent]
+      operationId: listAgentSessions
+      summary: As conversas do Agente
+      description: Da última atividade (`updated_at`) para trás, paginadas por cursor.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Uma página de conversas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentSession"
+                  next_cursor:
+                    $ref: "#/components/schemas/NextCursor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [agent]
+      operationId: createAgentSession
+      summary: Abrir uma conversa
+      description: Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSessionCreate"
+      responses:
+        "201":
+          description: A conversa criada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSession"
+              examples:
+                nova:
+                  $ref: "#/components/examples/AgentSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    get:
+      tags: [agent]
+      operationId: getAgentSession
+      summary: Uma conversa com as mensagens e os arquivos
+      description: |
+        As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
+        pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
+        mais de 15 minutos vira `failed` com `agent_expired`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A conversa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSessionDetail"
+              examples:
+                conversa:
+                  $ref: "#/components/examples/AgentSessionDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [agent]
+      operationId: renameAgentSession
+      summary: Renomear a conversa
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSessionUpdate"
+      responses:
+        "200":
+          description: A conversa renomeada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentSession
+      summary: Excluir a conversa
+      description: Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/sessions/{session_id}/files:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    post:
+      tags: [agent]
+      operationId: attachAgentFile
+      summary: Anexar um arquivo à conversa
+      description: |
+        Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
+        conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
+        texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
+        citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+      responses:
+        "201":
+          description: O anexo, ainda sem pergunta (`message_id` nulo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentFile"
+              examples:
+                anexo:
+                  $ref: "#/components/examples/AgentFileInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /api/v1/agent/sessions/{session_id}/files/{file_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+      - $ref: "#/components/parameters/AgentFileId"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentFile
+      summary: Tirar um anexo ainda não enviado
+      description: O anexo que já foi com uma pergunta fica no histórico (409).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Tirado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/agent/sessions/{session_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    post:
+      tags: [agent]
+      operationId: askAgent
+      summary: Perguntar ao Agente
+      description: |
+        Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
+        consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
+        guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
+        sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
+        arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
+        (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMessageCreate"
+      responses:
+        "202":
+          description: A pergunta gravada e a resposta na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTurn"
+              examples:
+                fila:
+                  $ref: "#/components/examples/AgentTurn"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/agent/sessions/{session_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+      - $ref: "#/components/parameters/AgentMessageId"
+    get:
+      tags: [agent]
+      operationId: getAgentMessage
+      summary: Uma mensagem da conversa
+      description: A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A mensagem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessage"
+              examples:
+                pronta:
+                  $ref: "#/components/examples/AgentMessageDone"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/files/{file_id}/content:
+    parameters:
+      - $ref: "#/components/parameters/AgentFileId"
+    get:
+      tags: [agent]
+      operationId: downloadAgentFile
+      summary: Baixar um anexo ou um arquivo gerado
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: O arquivo, como anexo.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ["attachment; filename=\"prazos.csv\"; filename*=UTF-8''prazos.csv"]
+          content:
+            text/plain:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+            text/csv:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                contentMediaType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4249,6 +4596,27 @@ components:
       schema:
         type: string
         format: uuid
+    AgentSessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentMessageId:
+      name: message_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentFileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     BaseChatId:
       name: chat_id
       in: path
@@ -4344,6 +4712,14 @@ components:
       description: >-
         O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento,
         resumo mudado desde a versão aberta, chat com pedido em aberto).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: >-
+        O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a
+        2.21.0), ou o conteúdo não bate com a extensão.
       content:
         application/problem+json:
           schema:
@@ -7068,6 +7444,179 @@ components:
                   type: string
             - type: "null"
 
+    AgentSession:
+      type: object
+      required: [id, title, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          description: Vazio até a primeira pergunta, que dá o título.
+          type: string
+          maxLength: 120
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          description: A última atividade (pergunta ou resposta).
+          type: string
+          format: date-time
+
+    AgentSessionCreate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 120
+
+    AgentSessionUpdate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+
+    AgentSessionDetail:
+      description: Uma `AgentSession` com as mensagens e os anexos ainda não enviados.
+      type: object
+      required: [id, title, created_at, updated_at, messages, pending_files]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 120
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentMessage"
+        pending_files:
+          description: Os anexos ainda não enviados com uma pergunta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentFile"
+
+    AgentFile:
+      type: object
+      required: [id, session_id, message_id, direction, name, media_type, size_bytes, text_chars, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        message_id:
+          description: A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+          type: [string, "null"]
+          format: uuid
+        direction:
+          description: "`input` é anexo da pessoa; `output`, arquivo gerado pelo agente."
+          type: string
+          enum: [input, output]
+        name:
+          type: string
+        media_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+        text_chars:
+          description: Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado.
+          type: [integer, "null"]
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+
+    AgentMessage:
+      type: object
+      required: [id, session_id, role, content, status, sources, queries, model, error, files, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          description: A pergunta, ou a resposta em Markdown (vazia até `done`).
+          type: string
+        status:
+          description: A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+          type: string
+          enum: [queued, running, done, failed]
+        sources:
+          description: As gravações consultadas em que a resposta se apoia.
+          type: array
+          items:
+            $ref: "#/components/schemas/BaseChatSource"
+        queries:
+          description: Quantas ferramentas o agente chamou.
+          type: integer
+          minimum: 0
+        model:
+          type: [string, "null"]
+        error:
+          description: >-
+            Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a
+            resposta passou de 15 minutos em aberto.
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        files:
+          description: Os anexos da pergunta ou os arquivos gerados pela resposta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentFile"
+        created_at:
+          type: string
+          format: date-time
+
+    AgentMessageCreate:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        attachments:
+          description: Ids de anexos desta conversa ainda não enviados (até 5).
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: uuid
+
+    AgentTurn:
+      type: object
+      required: [question, answer]
+      properties:
+        question:
+          $ref: "#/components/schemas/AgentMessage"
+        answer:
+          $ref: "#/components/schemas/AgentMessage"
+
     AgentProviderKind:
       type: string
       enum: [ollama, openai-compatible, anthropic, claude-cli]
@@ -8283,6 +8832,21 @@ components:
     AgendaTypePreviewRequest:
       summary: Pré-visualizar o tipo Mentoria numa gravação
       externalValue: ./fixtures/agenda-type-preview-request.json
+    AgentSession:
+      summary: Conversa nova, ainda sem título
+      externalValue: ./fixtures/agent-session.json
+    AgentSessionDetail:
+      summary: Conversa com um anexo, a pergunta e a resposta com um arquivo gerado
+      externalValue: ./fixtures/agent-session-detail.json
+    AgentFileInput:
+      summary: Anexo em PDF ainda não enviado
+      externalValue: ./fixtures/agent-file-input.json
+    AgentTurn:
+      summary: Pergunta gravada e resposta na fila
+      externalValue: ./fixtures/agent-turn.json
+    AgentMessageDone:
+      summary: Resposta com a fonte e a tabela gerada
+      externalValue: ./fixtures/agent-message-done.json
     BaseChatRequest:
       summary: Uma pergunta com duas mensagens de histórico
       externalValue: ./fixtures/base-chat-request.json
