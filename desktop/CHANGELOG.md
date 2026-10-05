@@ -8,10 +8,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.5.0] - 2026-10-05
+
 ### Adicionado
 
-- Painel das gravações recentes, com a etapa de cada uma e o "Precisa de você" quando a gravação
-  espera os nomes dos locutores (holetz/eclume#141, holetz/eclume#144).
+- Painel das gravações recentes no topo, com a etapa e o progresso de cada uma, o "Precisa de
+  você" quando a gravação pede ação (inclusive quando espera os nomes dos locutores) e o botão
+  para copiar o resumo (holetz/eclume#141, holetz/eclume#144).
+- Quantas gravações o painel mostra, em Configurações → Geral.
+- Aviso quando uma gravação fica aguardando a marcação dos locutores.
 
 ## [0.4.1] - 2026-10-01
 
