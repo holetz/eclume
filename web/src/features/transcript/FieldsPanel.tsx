@@ -7,7 +7,6 @@ import { COLLECTIONS_KEY, useCollections } from '../collections/queries'
 import { parseTags, sortFields, useFieldMutations, useRecordingFields, type FieldValue } from './fields'
 import { recordingKey } from './queries'
 import styles from './RecordingPage.module.css'
-import { speakerColorIndex, speakerName, type Transcript } from './segments'
 
 type Recording = Schemas['Recording']
 
@@ -301,16 +300,15 @@ function CollectionsProp({ recording }: { recording: Recording }) {
 
 interface FieldsPanelProps {
   recording: Recording
-  transcript: Transcript | undefined
   onChangeType: () => void
-  onFixSpeakers: () => void
 }
 
 /**
  * O painel de campos (componente "Filled fields", variante A): o valor de cada campo com o selo de
- * origem, Aceitar e Editar; o tipo de agenda com Trocar; coleções; locutores; e os dados antigos.
+ * origem, Aceitar e Editar; o tipo de agenda com Trocar; coleções; e os dados antigos. Os locutores
+ * ficam no bloco deles, acima da transcrição.
  */
-export function FieldsPanel({ recording, transcript, onChangeType, onFixSpeakers }: FieldsPanelProps) {
+export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
   const fields = useRecordingFields(recording.id)
   const { acceptAll } = useFieldMutations(recording.id)
   const titleId = useId()
@@ -363,23 +361,6 @@ export function FieldsPanel({ recording, transcript, onChangeType, onFixSpeakers
           )}
         </Prop>
         <CollectionsProp recording={recording} />
-        {transcript && (
-          <Prop label="Locutores">
-            <span className={styles.speakers}>
-              {transcript.speakers.map((speaker) => (
-                <span
-                  key={speaker.id}
-                  className={`speaker speaker-${speakerColorIndex(transcript.speakers, speaker.id)}`}
-                >
-                  {speakerName(speaker)}
-                </span>
-              ))}
-              <button type="button" className={`btn btn-ghost btn-sm ${styles.fixSpeakers}`} onClick={onFixSpeakers}>
-                Corrigir locutores
-              </button>
-            </span>
-          </Prop>
-        )}
         {metadata.length > 0 && (
           <Prop label="Dados anteriores">
             <span className={styles.legacy}>

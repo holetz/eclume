@@ -35,3 +35,12 @@ export async function openTranscript() {
   )
   await userEvent.click(summary)
 }
+
+/** Abre o bloco Locutores da página da gravação e devolve a região dele. */
+export async function openSpeakers() {
+  const summary = await screen.findByText(
+    (_, element) => element?.tagName === 'SUMMARY' && Boolean(element.textContent?.startsWith('Locutores')),
+  )
+  await userEvent.click(summary)
+  return screen.findByRole('region', { name: 'Locutores' })
+}

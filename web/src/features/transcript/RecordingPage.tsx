@@ -15,6 +15,7 @@ import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
 import { parseStart } from './segments'
 import { useSummaryState } from './summary'
+import { SpeakersDisclosure } from './SpeakersDisclosure'
 import { ChangeTypeDialog, SummaryDoc } from './SummaryDoc'
 import { TranscriptDisclosure } from './TranscriptDisclosure'
 
@@ -36,6 +37,7 @@ export function RecordingPage() {
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
   // Com `?t=` (vindo da busca), a transcrição já abre na fala.
   const [transcriptOpen, setTranscriptOpen] = useState(startMs !== null)
+  const [speakersOpen, setSpeakersOpen] = useState(false)
   const [changingType, setChangingType] = useState(false)
   const summary = useSummaryState(id, Boolean(recording.data?.transcript_id))
   const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
@@ -95,34 +97,24 @@ export function RecordingPage() {
               {errorMessage(transcript.error)}
             </p>
           ) : (
-            <TranscriptDisclosure
-              transcript={transcript.data}
-              markers={markers.data ?? []}
-              recordingId={data.id}
-              anchorMs={startMs}
-              open={transcriptOpen}
-              onOpenChange={setTranscriptOpen}
-            />
+            <>
+              <SpeakersDisclosure transcript={transcript.data} open={speakersOpen} onOpenChange={setSpeakersOpen} />
+              <TranscriptDisclosure
+                transcript={transcript.data}
+                markers={markers.data ?? []}
+                recordingId={data.id}
+                anchorMs={startMs}
+                open={transcriptOpen}
+                onOpenChange={setTranscriptOpen}
+              />
+            </>
           )}
         </PlaybackProvider>
 
         {data.transcript_id !== null && (
           <div className={styles.docGrid}>
             <SummaryDoc recording={data} onChangeType={() => setChangingType(true)} />
-            <FieldsPanel
-              recording={data}
-              transcript={transcript.data}
-              onChangeType={() => setChangingType(true)}
-              onFixSpeakers={() => {
-                // Abre a transcrição; depois do render, leva o foco ao bloco Locutores.
-                setTranscriptOpen(true)
-                window.setTimeout(() => {
-                  const block = document.getElementById('locutores')
-                  block?.scrollIntoView({ block: 'start' })
-                  block?.focus()
-                })
-              }}
-            />
+            <FieldsPanel recording={data} onChangeType={() => setChangingType(true)} />
           </div>
         )}
         {changingType && <ChangeTypeDialog recording={data} onClose={() => setChangingType(false)} />}

@@ -133,8 +133,10 @@ describe('transcrição recolhida', () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const details = await waitFor(() => {
-      const found = document.querySelector('details.disclosure')
-      expect(found).not.toBeNull()
+      const found = [...document.querySelectorAll('details.disclosure')].find((element) =>
+        element.querySelector('summary')?.textContent?.startsWith('Transcrição'),
+      )
+      expect(found).toBeDefined()
       return found as HTMLDetailsElement
     })
     expect(details.open).toBe(false)
@@ -144,7 +146,9 @@ describe('transcrição recolhida', () => {
     expect(screen.queryByRole('list', { name: 'Falas' })).not.toBeInTheDocument()
     await openTranscript()
     expect(details.open).toBe(true)
-    expect(screen.getByRole('region', { name: 'Locutores' })).toBeInTheDocument()
+    // Os locutores ficam no bloco deles: a transcrição aberta só traz as falas.
+    expect(screen.getByRole('list', { name: 'Falas' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Locutores' })).not.toBeInTheDocument()
   })
 
   it('abre sozinha com ?t=, posiciona o áudio sem tocar e destaca a fala', async () => {

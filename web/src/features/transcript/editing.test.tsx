@@ -5,7 +5,7 @@ import { CSRF_HEADER } from '../../api/client'
 import { fixtures } from '../../test/fixtures'
 import { problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
-import { mockTranscriptApi, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
+import { mockTranscriptApi, openSpeakers, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
 
 beforeAll(() => preloadRoute('/gravacoes/x'))
 
@@ -17,7 +17,7 @@ afterEach(() => {
 async function openPage() {
   renderApp(`/gravacoes/${RECORDING_ID}`)
   await openTranscript()
-  return screen.findByRole('region', { name: 'Locutores' })
+  return openSpeakers()
 }
 
 describe('edição da transcrição', () => {

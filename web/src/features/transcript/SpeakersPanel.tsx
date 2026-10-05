@@ -19,7 +19,9 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
 
   return (
     <section id="locutores" tabIndex={-1} className={styles.panel} aria-labelledby={titleId}>
-      <h6 id={titleId}>Locutores</h6>
+      <h6 id={titleId} className="visually-hidden">
+        Locutores
+      </h6>
       <ul className={styles.list}>
         {speakers.map((speaker) => (
           <SpeakerItem

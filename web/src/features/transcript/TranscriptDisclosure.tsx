@@ -5,7 +5,6 @@ import { usePlayback, usePlaybackSelect } from './playback'
 import { scrollWithin } from './scroll'
 import { SegmentMarker, SegmentRow } from './SegmentRow'
 import { findSegmentAt, speakerColorIndex, speakerName, type Transcript } from './segments'
-import { SpeakersPanel } from './SpeakersPanel'
 import styles from './TranscriptView.module.css'
 import { markersLabel } from '../../shared/format'
 
@@ -117,7 +116,8 @@ interface TranscriptDisclosureProps {
 
 /**
  * A transcrição recolhida (`details.disclosure`): o resumo diz locutores, falas e marcadores; aberta,
- * traz o bloco Locutores e as falas com os marcadores. As falas só renderizam com ela aberta.
+ * traz as falas com os marcadores, numa área com rolagem própria. Os locutores ficam no bloco deles
+ * (`SpeakersDisclosure`). As falas só renderizam com ela aberta.
  */
 export function TranscriptDisclosure({
   transcript,
@@ -151,7 +151,6 @@ export function TranscriptDisclosure({
       </summary>
       {open && (
         <div className={styles.view}>
-          <SpeakersPanel transcript={transcript} />
           <Segments transcript={transcript} markers={markers} recordingId={recordingId} anchorMs={anchorMs} />
         </div>
       )}
