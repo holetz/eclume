@@ -18,7 +18,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.dispatch import next_for
 from eclume_server.fields import mark_edited
-from eclume_server.operations import change_agenda_type
+from eclume_server.operations import change_agenda_type, check_collections
 from eclume_server.pagination import Cursor, Limit
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import (
@@ -34,7 +34,6 @@ from eclume_server.recordings import (
     render,
     start_next_revision,
 )
-from eclume_server.routes.collections import check_collections
 from eclume_server.routes.uploads import LANGUAGE, Kind
 from eclume_server.security import sign, signature_matches
 from eclume_server.speaker_naming import CONTINUED, release

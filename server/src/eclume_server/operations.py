@@ -21,7 +21,6 @@ from eclume_server.pipeline import current_revision
 from eclume_server.problems import invalid_field
 from eclume_server.quotas import charge_agent, check_open_summaries
 from eclume_server.recordings import get_visible
-from eclume_server.routes.collections import check_collections
 from eclume_server.summaries import (
     create_summary,
     recording_transcript,
@@ -82,6 +81,16 @@ async def edit_tags(
     await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=now))
     await _touch(conn, recording_id, now)
     return True
+
+
+async def check_collections(conn: AsyncConnection, collection_ids: list[UUID]) -> None:
+    """422 se algum id não for coleção do usuário da transação."""
+    wanted = set(collection_ids)
+    if not wanted:
+        return
+    found = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
+    if wanted - found:
+        raise invalid_field("collection_ids", "coleção inexistente")
 
 
 async def edit_collections(conn: AsyncConnection, recording_id: UUID, *, add: list[UUID], remove: list[UUID]) -> bool:

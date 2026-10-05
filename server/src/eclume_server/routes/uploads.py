@@ -29,6 +29,7 @@ from eclume_server.db.session import system_tx, user_tx
 from eclume_server.dispatch import next_for
 from eclume_server.fields import mark_edited
 from eclume_server.markers import MAX_BATCH, MarkerInput, upsert_markers
+from eclume_server.operations import check_collections
 from eclume_server.pagination import iso
 from eclume_server.problems import (
     ApiProblemError,
@@ -42,7 +43,6 @@ from eclume_server.problems import (
 )
 from eclume_server.quotas import check_upload
 from eclume_server.recordings import get_visible, insert_job, render
-from eclume_server.routes.collections import check_collections
 from eclume_server.security import sign, signature_matches
 from eclume_server.serialize import Row
 from eclume_server.storage import MultipartGoneError, audio_key

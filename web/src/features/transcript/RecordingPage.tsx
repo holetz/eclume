@@ -46,9 +46,12 @@ export function RecordingPage() {
   // link do aviso "Aguardando locutores" (`#locutores`) o reabre se a pessoa o tiver recolhido.
   const awaitingSpeakers =
     recording.data?.pipeline.some((step) => step.step === 'speakers' && step.state === 'waiting') ?? false
-  useEffect(() => {
+  // Ajuste durante o render (não num efeito): ao entrar na espera, o bloco abre uma vez.
+  const [wasAwaiting, setWasAwaiting] = useState(false)
+  if (awaitingSpeakers !== wasAwaiting) {
+    setWasAwaiting(awaitingSpeakers)
     if (awaitingSpeakers) setSpeakersOpen(true)
-  }, [awaitingSpeakers])
+  }
   useEffect(() => {
     const onHash = () => {
       if (window.location.hash === '#locutores') setSpeakersOpen(true)
