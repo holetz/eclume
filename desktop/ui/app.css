@@ -223,3 +223,62 @@
   color: var(--color-text-muted);
   font-size: 12px;
 }
+
+/* O painel "Recentes" do topo da principal: uma linha compacta por gravação (título, estado,
+   ação), com o progresso e o motivo do alerta numa segunda linha só quando há. */
+.recentes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.recentes-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recentes-lista .recente {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+.recentes-lista .recente:first-child {
+  border-top: 0;
+}
+
+.recente-titulo {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recente-progresso {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recente-detalhe {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* O motivo de um alerta (ou o erro de uma ação) em texto, nunca só pela cor do selo. */
+.recente-alerta .recente-motivo,
+.recente-detalhe.recente-motivo {
+  color: var(--color-warning);
+}
+
+.recente-copiar svg {
+  margin-right: 4px;
+}

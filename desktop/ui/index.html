@@ -50,6 +50,14 @@
           <div class="menu-sep"></div>
           <span class="menu-item" aria-disabled="true" id="ajuda-versao"></span>
         </div>
+        <div class="recentes" id="recentes" aria-label="Gravações recentes" hidden>
+          <div class="row row-between">
+            <span class="kicker">Recentes</span>
+            <span class="badge badge-warning" id="recentes-alerta" role="status" hidden></span>
+          </div>
+          <ul class="recentes-lista" id="recentes-lista"></ul>
+          <span class="text-muted small" id="recentes-vazio" hidden>Nenhuma gravação ainda.</span>
+        </div>
         <span class="status-line" id="linha-status" role="status">Carregando…</span>
         <div class="row row-meter" id="nota" hidden>
           <div class="meter" id="medidor" aria-hidden="true"></div>

@@ -17,9 +17,10 @@ let atual = null;
 const app = {
   invoke,
   listen,
-  /** O último retrato do estado (`status`) e a fila (`recordings`). */
+  /** O último retrato do estado (`status`), a fila (`recordings`) e o painel Recentes (`recent`). */
   estado: null,
   fila: [],
+  recentes: null,
   ir,
   voltar: () => ir("principal"),
   importarArquivo,
@@ -50,9 +51,18 @@ function ir(nome, params) {
 
 async function atualizar() {
   try {
-    const [estado, fila] = await Promise.all([invoke("status"), invoke("recordings", { limit: 50 })]);
+    // Uma falha do painel não impede o resto da janela de desenhar.
+    const [estado, fila, recentes] = await Promise.all([
+      invoke("status"),
+      invoke("recordings", { limit: 50 }),
+      invoke("recent").catch((falha) => {
+        console.error(falha);
+        return app.recentes;
+      }),
+    ]);
     app.estado = estado;
     app.fila = fila;
+    app.recentes = recentes;
     if (estado.theme && estado.theme !== preferenciaDeTema) definirTema(estado.theme);
     // Sem credencial (ou com a CA do servidor trocada), a janela fica na primeira execução.
     if (estado.connection === "first_run" && atual !== "primeira-execucao") ir("primeira-execucao");
