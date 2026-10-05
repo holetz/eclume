@@ -5,7 +5,7 @@ paginas: [gravacao]
 relacionados: [ligar-locutor-a-pessoa, tentar-de-novo, exportar]
 termos: [corrigir, editar fala, erro de transcrição, renomear locutor, juntar locutores, retranscrever]
 ordem: 4
-atualizado: 2026-09-27
+atualizado: 2026-10-05
 ---
 A transcrição automática erra nomes próprios, siglas e trechos com ruído. Você corrige tudo na
 página da gravação.
@@ -16,6 +16,8 @@ Abra a transcrição, escolha a fala e edite o texto. A correção vale para a b
 exportações. O tempo da fala não muda.
 
 ## Renomear e juntar locutores
+
+Abra o bloco **Locutores**, logo acima da transcrição; recolhido, ele já mostra quem fala.
 
 - **Renomear:** dê um nome ao locutor quando ele não for alguém que você cadastra como pessoa.
 - **Juntar:** quando a transcrição separou a mesma pessoa em dois locutores (S2 e S4, por exemplo),

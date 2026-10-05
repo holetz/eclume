@@ -17,16 +17,25 @@
   color: var(--color-text-muted);
 }
 
-/* Fala fora da tela não é pintada, mas fica no DOM: o Ctrl+F acha, o leitor de tela lê e o `?t=`
+/* As falas rolam numa área própria, mais baixa que a janela: acompanhar o áudio rola só ela, e a
+   página (com o player) fica parada. No fim da lista, a roda do mouse não passa a rolar a página. */
+.scroller {
+  max-height: min(28rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--color-divider);
+}
+
+/* Fala fora da área não é pintada, mas fica no DOM: o Ctrl+F acha, o leitor de tela lê e o `?t=`
    rola até ela. A altura intrínseca (lembrada depois da primeira pintura) evita a barra pular. */
 .item {
-  scroll-margin: 7rem 0 var(--space-6);
+  scroll-margin: var(--space-4) 0;
   content-visibility: auto;
   contain-intrinsic-size: auto 5.5rem;
 }
 
 .segment {
-  scroll-margin: 7rem 0 var(--space-6);
+  scroll-margin: var(--space-4) 0;
 }
 
 /* O tempo da fala é um botão que toca dali, no visual do .timecode. */

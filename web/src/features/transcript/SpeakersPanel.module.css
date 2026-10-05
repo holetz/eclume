@@ -1,31 +1,51 @@
+/* O bloco Locutores, recolhido fora da transcrição (frame "Recording"). O player fixo cobre o topo
+   da janela: a margem deixa o bloco à vista quando algo rola até ele. */
+.disclosure {
+  border-bottom: 1px solid var(--color-divider);
+  scroll-margin-top: 4rem;
+}
+
+/* Recolhido: os locutores em linha, na horizontal, cada um na cor dele. */
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
 .panel {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-3) 0 var(--space-4);
-  border-bottom: 1px solid var(--color-divider);
 }
 
 .panel:focus {
   outline: none;
 }
 
-.panel h6 {
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
+/* Aberto: um card por locutor, em grade que ocupa a largura com quantos couberem. */
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: var(--space-3);
+  align-items: start;
 }
 
 .item {
   --speaker-color: var(--color-text-muted);
   display: grid;
   gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-surface);
 }
 
 .item[data-speaker='1'] { --speaker-color: var(--speaker-1); }
@@ -112,7 +132,7 @@
 .suggestions {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 calc(0.625rem + var(--space-2));
+  padding: 0;
   display: grid;
   gap: var(--space-1);
 }

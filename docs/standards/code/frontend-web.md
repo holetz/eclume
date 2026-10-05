@@ -7,7 +7,7 @@ tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143
 maintainer: holetz
 ---
 
@@ -451,7 +451,9 @@ desce; abaixo de 56rem, os campos também):
   `waiting`, o `Pipeline` mostra um `alert-warning` (`role="status"`) que leva a `#locutores` e
   oferece **Seguir sem nomear** (`ConfirmDialog`, `POST /recordings/{id}/continue`). Ligar ou
   mesclar locutor no painel muda a transcrição em cache; o aviso percebe a troca dos vínculos e relê
-  a gravação, que o servidor já soltou se o último ganhou pessoa.
+  a gravação, que o servidor já soltou se o último ganhou pessoa. O aviso fica no `Pipeline`, não no
+  `children` do `SpeakersDisclosure`: parada à espera, a `RecordingPage` abre o bloco Locutores
+  sozinha, e um `hashchange` para `#locutores` o reabre se a pessoa o recolheu.
 - **A linha da espera** (holetz/eclume#117): com a gravação `queued`, o `Pipeline` mostra em
   `role="status"` a frase de `fraseDaEspera(job.queue)` do vocabulário compartilhado — posição e
   início estimado ("3ª na fila · começa em cerca de 12 min (estimativa)"), as gravações da própria
@@ -474,29 +476,46 @@ desce; abaixo de 56rem, os campos também):
   e no `seek`), lida por `usePlaybackTime()` (o player) ou por `usePlaybackSelect(seletor)`, que só
   renderiza quando o valor primitivo selecionado muda (a fala ativa). O contexto leva duração,
   tocando, velocidade, erro e comandos, e só muda quando um deles muda: a `.marker-bar` e quem só
-  comanda não renderizam por tick.
+  comanda não renderizam por tick. **O player fica fixo** (`position: sticky` abaixo de
+  `--shell-header`, sobre `--color-bg`, sem a `.marker-bar`): pausar está a um clique em qualquer
+  ponto da página, inclusive lendo o resumo (holetz/eclume#143).
+- **Locutores** (`SpeakersDisclosure`, `details.disclosure` próprio, fechado, entre a `.marker-bar`
+  e a transcrição): recolhido, o resumo mostra cada locutor em linha, na horizontal, no `.speaker`
+  da cor dele; aberto, o `SpeakersPanel` (região "Locutores", `id="locutores"`) traz um card por
+  locutor numa grade (`repeat(auto-fill, minmax(15rem, 1fr))`, fundo `--color-surface`) com
+  renomear, ligar pessoa, sugestões por voz e, abaixo da grade, juntar. O aberto é estado da
+  `RecordingPage`, e o `children` do componente é o lugar de um aviso sobre os locutores, antes dos
+  cards. Os locutores não aparecem dentro da transcrição nem no painel de campos.
 - **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
-  locutores, falas e marcadores; aberta, tem o bloco Locutores (renomear, ligar pessoa, sugestões,
-  juntar), "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
+  locutores, falas e marcadores; aberta, tem "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
   primeira fala que começa no marcador (`placeMarkers`), editar a nota (até 500) e excluir o
   marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
-  sem tocar e rola **uma vez** até a fala do instante, independente do seguir.
+  sem tocar e, **uma vez**, traz a lista à janela (`scrollIntoView` com `block: 'nearest'` no
+  contêiner, nunca na fala) e centra nela a fala do instante, independente do seguir.
+  - **Área de rolagem própria** (holetz/eclume#143): a lista de falas (`role="list"` "Falas") é o
+    contêiner que rola, mais baixo que a janela (`max-height: min(28rem, 55vh)`, `overflow-y:
+    auto`, `overscroll-behavior: contain`). O `?t=` e o acompanhar rolam só ela, pelo `scrollTop`
+    de `scrollTopFor` (`scroll.ts`: `nearest` com folga de 16 px, ou `center`) aplicado com
+    `scrollTo`; `scrollIntoView` numa fala é proibido, porque rola todos os ancestrais, a janela
+    inclusive, e tirava o player da tela. A lista não precisa de `tabIndex`: os botões das falas
+    a tornam alcançável pelo teclado.
   - **Transcrição longa.** Cada fala é um `SegmentRow` memoizado com props estáveis (nome e cor do
     locutor e marcadores por índice saem de mapas em `useMemo` por transcrição; `active` e
     `editing` booleanos; `seek` e `setEditingId` como callbacks), e a fala ativa vem de
     `usePlaybackSelect` com o `findSegmentAt` (busca binária): um tick sem troca renderiza zero
     falas e uma troca renderiza duas. O item da fala tem `content-visibility: auto` com
     `contain-intrinsic-size: auto 5.5rem` no CSS Module: fora da tela não é pintado, mas fica no
-    DOM. A virtualização foi descartada: o Ctrl+F do navegador e o leitor de tela precisam das
-    falas no DOM, a âncora do `?t=` usa `scrollIntoView` na fala e a lista rola a janela, não um
-    contêiner próprio.
-  - **"Acompanhar o áudio" só com a lista à vista**: um `IntersectionObserver` com a faixa central
-    da janela (`rootMargin: -40% 0px -40% 0px`) diz se a lista está sendo lida; fora dela (lendo o
-    resumo logo abaixo, usando o chat), a troca de fala não rola a página. O padrão continua ligado.
+    DOM, também dentro da área de rolagem. A virtualização foi descartada: o Ctrl+F do navegador e
+    o leitor de tela precisam das falas no DOM.
+  - **"Acompanhar o áudio"** (ligado por padrão) rola a lista por dentro a cada troca de fala, com
+    `smooth`, esteja ela na janela ou não: a página nunca se mexe, e quem volta à lista a acha na
+    fala certa. Desligado, nada rola.
   - **A medida é contrato**: `TranscriptDisclosure.test.tsx` conta renders sobre 3.000 falas (0 por
     tick sem troca, 2 na troca, a `.marker-bar` nenhum), e `TranscriptDisclosure.browser.test.tsx`
     (`npm run test:browser`, no host) mede o commit por `React.Profiler`: mediana de 20
-    ticks abaixo de 8 ms sem troca e de 16 ms com troca.
+    ticks abaixo de 8 ms sem troca e de 16 ms com troca. `TranscriptDisclosure.test.tsx` também
+    prova que o `?t=` e o acompanhar chamam `scrollTo` na lista e nunca `scrollIntoView` numa fala,
+    e o E2E prova, com 3.000 falas e o áudio avançando, o `scrollY` parado e o pausar na janela.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
@@ -529,8 +548,8 @@ desce; abaixo de 56rem, os campos também):
   primeiro, depois os campos do usuário, com o selo de origem (Automático tracejado, Editado
   sólido, aceito sem selo), Aceitar, Aceitar tudo e Editar pelo tipo (texto até 300, lista por
   vírgula, escolha com "Nenhum"); o tipo de agenda com Trocar; as coleções (com "Nova coleção…");
-  os locutores com "Corrigir locutores", que abre a transcrição e foca o bloco; e, quando há, os
-  "Dados anteriores" do `metadata` antigo, só leitura. Cada campo tem **Editar a regra**, que leva
+  e, quando há, os "Dados anteriores" do `metadata` antigo, só leitura (os locutores ficam no bloco
+  deles, acima da transcrição). Cada campo tem **Editar a regra**, que leva
   ao dono da regra: o campo personalizado a `/config/campos?campo=`, o título ao tipo da gravação
   (`/config/agendas?tipo=`) e as tags a `/tags`.
 - **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma

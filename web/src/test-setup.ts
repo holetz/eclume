@@ -9,6 +9,7 @@ configure({ asyncUtilTimeout: 5000 })
 // O jsdom não implementa rolagem nem reprodução de mídia.
 if (typeof window !== 'undefined') {
   Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo
   HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
   HTMLMediaElement.prototype.pause = vi.fn()
 }

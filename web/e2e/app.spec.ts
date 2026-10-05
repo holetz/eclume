@@ -266,8 +266,16 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
     .click()
   await expect(page.getByRole('slider', { name: 'Posição no áudio' })).toHaveAttribute('aria-valuetext', '00:02:11')
 
+  // Os locutores ficam num bloco recolhido próprio, em linha; aberto, um card por locutor.
+  const speakersSummary = page.locator('details.disclosure > summary', { hasText: /^Locutores/ })
+  await expect(speakersSummary.locator('.speaker')).toHaveText(['Mariana Couto', 'Locutor 2', 'Locutor 3'])
+  await expect(page.getByRole('region', { name: 'Campos' }).getByRole('group', { name: 'Locutores' })).toHaveCount(0)
+  await speakersSummary.click()
+  await expect(page.getByRole('region', { name: 'Locutores' }).locator('ul').first().locator(':scope > li')).toHaveCount(3)
+  await speakersSummary.click()
+
   // A transcrição recolhida abre com o marcador antes da fala.
-  await page.locator('details.disclosure > summary').click()
+  await page.locator('details.disclosure > summary', { hasText: /^Transcrição/ }).click()
   const falas = page.getByRole('list', { name: 'Falas' })
   await expect(falas.getByRole('listitem')).toHaveCount(12)
   await expect(falas.getByRole('group', { name: 'Marcador em 00:00:42' })).toContainText('Decisão sobre as turmas')
@@ -328,7 +336,7 @@ test('rascunho do resumo protegido: sair pede confirmação e recarregar reencon
   await expect(editor.getByRole('textbox')).toHaveValue('# Rascunho que não se perde')
 })
 
-test('transcrição longa: o ?t= leva à fala, a página não se mexe lendo o resumo e a fala distante está no DOM', async ({
+test('transcrição longa: o ?t= leva à fala dentro da área própria, o áudio rola só ela e o pausar fica à vista', async ({
   page,
 }) => {
   const COUNT = 3000
@@ -357,21 +365,47 @@ test('transcrição longa: o ?t= leva à fala, a página não se mexe lendo o re
   // A fala distante não é pintada, mas está no DOM (o Ctrl+F do navegador a acha).
   await expect(falas.getByText('Fala número 2990 da reunião longa.')).toHaveCount(1)
 
-  // Lendo o resumo, os ticks do áudio não rolam a página: o resumo fica onde está na janela (o
-  // scrollY pode andar alguns pixels pela ancoragem de rolagem do navegador, quando falas acima ganham
-  // a altura real no lugar da intrínseca).
-  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
-  await summary.evaluate((el) => el.scrollIntoView({ block: 'start' }))
-  const top = () => summary.evaluate((el) => Math.round(el.getBoundingClientRect().top))
-  const before = await top()
-  for (const index of [1501, 1502, 1503]) {
+  // A lista é uma área com rolagem própria, mais baixa que a janela.
+  const box = await falas.evaluate((el) => ({
+    overflow: getComputedStyle(el).overflowY,
+    height: el.clientHeight,
+    content: el.scrollHeight,
+  }))
+  expect(box.overflow).toBe('auto')
+  expect(box.height).toBeLessThan(page.viewportSize()!.height)
+  expect(box.content).toBeGreaterThan(box.height)
+
+  // Com a transcrição à vista e o áudio avançando, a lista rola por dentro, a página não se mexe e o
+  // pausar continua na janela.
+  const play = page.getByRole('group', { name: 'Player' }).getByRole('button', { name: /^(Tocar|Pausar)$/ })
+  const pageY = () => page.evaluate(() => Math.round(window.scrollY))
+  const listTop = () => falas.evaluate((el) => el.scrollTop)
+  const beforeY = await pageY()
+  const beforeList = await listTop()
+  for (const index of [1520, 1540, 1560]) {
     await page.getByLabel('Áudio da gravação').evaluate((audio: HTMLAudioElement, ms) => {
       Object.defineProperty(audio, 'currentTime', { configurable: true, get: () => ms / 1000, set: () => {} })
       audio.dispatchEvent(new Event('timeupdate'))
     }, index * STEP_MS + 100)
     await expect(falas.getByRole('listitem').nth(index).locator('.segment')).toHaveAttribute('aria-current', 'true')
+    await expect(falas.getByText(`Fala número ${index} da reunião longa.`)).toBeInViewport()
   }
+  await expect.poll(listTop).toBeGreaterThan(beforeList)
+  expect(Math.abs((await pageY()) - beforeY)).toBeLessThanOrEqual(1)
+  await expect(play).toBeInViewport()
+
+  // Lendo o resumo, mais abaixo, o player continua fixo no topo: pausar está a um clique.
+  const summary = page.getByRole('region', { name: 'Resumo', exact: true })
+  await summary.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  const top = () => summary.evaluate((el) => Math.round(el.getBoundingClientRect().top))
+  const before = await top()
+  await page.getByLabel('Áudio da gravação').evaluate((audio: HTMLAudioElement, ms) => {
+    Object.defineProperty(audio, 'currentTime', { configurable: true, get: () => ms / 1000, set: () => {} })
+    audio.dispatchEvent(new Event('timeupdate'))
+  }, 1600 * STEP_MS + 100)
+  await expect(falas.getByRole('listitem').nth(1600).locator('.segment')).toHaveAttribute('aria-current', 'true')
   expect(Math.abs((await top()) - before)).toBeLessThanOrEqual(1)
+  await expect(play).toBeInViewport()
 })
 
 test('busca com ficha de campo, gravação no segundo, pessoas, coleções e token contra o mock', async ({ page }) => {
@@ -407,7 +441,8 @@ test('busca com ficha de campo, gravação no segundo, pessoas, coleções e tok
   const falas = page.getByRole('list', { name: 'Falas' })
   await expect(falas.getByRole('listitem').nth(9).locator('.segment')).toHaveAttribute('aria-current', 'true')
 
-  // Ligar o locutor 3 pelo combobox: o mock devolve o locutor ligado a Rafael Lima.
+  // Ligar o locutor 3 pelo combobox, no bloco Locutores: o mock devolve o locutor ligado a Rafael Lima.
+  await page.locator('details.disclosure > summary', { hasText: /^Locutores/ }).click()
   const speakers = page.getByRole('region', { name: 'Locutores' })
   await speakers.getByRole('button', { name: 'Ligar Locutor 3 a uma pessoa' }).click()
   await speakers.getByRole('combobox', { name: 'Pessoa para Locutor 3' }).fill('Rafael')
@@ -454,7 +489,7 @@ test('identificação por voz contra o mock', async ({ page }) => {
   // Gravação: a sugestão por voz do exemplo, com aceitar e recusar; recusar tira a sugestão.
   await page.goto('/?visao=semana&data=2026-09-21')
   await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
-  await page.locator('details.disclosure > summary').click()
+  await page.locator('details.disclosure > summary', { hasText: /^Locutores/ }).click()
   const speakers = page.getByRole('region', { name: 'Locutores' })
   const suggestions = speakers.getByRole('list', { name: 'Sugestões por voz para Locutor 2' })
   await expect(suggestions).toContainText('Parece ser Rafael Lima — 82%')

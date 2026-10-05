@@ -1,35 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { placeMarkers, type Marker } from './markers'
 import { usePlayback, usePlaybackSelect } from './playback'
+import { scrollWithin } from './scroll'
 import { SegmentMarker, SegmentRow } from './SegmentRow'
 import { findSegmentAt, speakerColorIndex, speakerName, type Transcript } from './segments'
-import { SpeakersPanel } from './SpeakersPanel'
 import styles from './TranscriptView.module.css'
 import { markersLabel } from '../../shared/format'
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
 const NO_MARKERS: Marker[] = []
-
-/**
- * Se o elemento cruza a faixa central da janela (40% a 60% da altura); sem `IntersectionObserver`,
- * conta como visível. A faixa, e não a janela inteira, porque o resumo vem logo abaixo da lista: quem
- * lê o resumo ainda vê as últimas falas na borda, e isso não é estar acompanhando a transcrição.
- */
-function useInView(ref: RefObject<HTMLElement | null>): boolean {
-  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
-  useEffect(() => {
-    const element = ref.current
-    if (!element || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
-      rootMargin: '-40% 0px -40% 0px',
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-  return inView
-}
 
 function Segments({
   transcript,
@@ -66,22 +47,27 @@ function Segments({
     return byIndex
   }, [segments, markers])
 
-  const visible = useInView(listRef)
   const anchored = useRef(false)
 
-  // Aberta pela URL com `?t=` (busca, fonte do chat, marcador): uma rolagem só até a fala do instante.
+  // Aberta pela URL com `?t=` (busca, fonte do chat, marcador): uma vez, traz a lista à janela e
+  // centra nela a fala do instante.
   useEffect(() => {
-    if (anchored.current || anchorMs === null) return
+    const list = listRef.current
+    if (anchored.current || anchorMs === null || !list) return
     anchored.current = true
     const index = findSegmentAt(segments, anchorMs)
-    if (index >= 0) listRef.current?.children[index]?.scrollIntoView({ block: 'center' })
+    if (index < 0) return
+    list.scrollIntoView({ block: 'nearest' })
+    scrollWithin(list, list.children[index], 'center')
   }, [anchorMs, segments])
 
-  // Acompanhar o áudio só rola com a lista à vista: lendo o resumo ou usando o chat, a página fica.
+  // Acompanhar o áudio rola só a lista, que é o contêiner com rolagem própria: `scrollIntoView` na
+  // fala rolaria também a página e tiraria o player da tela.
   useEffect(() => {
-    if (!follow || !visible || active < 0) return
-    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [active, follow, visible])
+    const list = listRef.current
+    if (!follow || active < 0 || !list?.children[active]) return
+    scrollWithin(list, list.children[active], 'nearest', 'smooth')
+  }, [active, follow])
 
   return (
     <>
@@ -93,7 +79,7 @@ function Segments({
       {segments.length === 0 ? (
         <p className="text-muted">A transcrição não tem falas.</p>
       ) : (
-        <div ref={listRef} role="list" aria-label="Falas">
+        <div ref={listRef} role="list" aria-label="Falas" className={styles.scroller}>
           {segments.map((segment, index) => (
             <SegmentRow
               key={segment.id}
@@ -130,7 +116,8 @@ interface TranscriptDisclosureProps {
 
 /**
  * A transcrição recolhida (`details.disclosure`): o resumo diz locutores, falas e marcadores; aberta,
- * traz o bloco Locutores e as falas com os marcadores. As falas só renderizam com ela aberta.
+ * traz as falas com os marcadores, numa área com rolagem própria. Os locutores ficam no bloco deles
+ * (`SpeakersDisclosure`). As falas só renderizam com ela aberta.
  */
 export function TranscriptDisclosure({
   transcript,
@@ -164,7 +151,6 @@ export function TranscriptDisclosure({
       </summary>
       {open && (
         <div className={styles.view}>
-          <SpeakersPanel transcript={transcript} />
           <Segments transcript={transcript} markers={markers} recordingId={recordingId} anchorMs={anchorMs} />
         </div>
       )}

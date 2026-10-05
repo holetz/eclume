@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../test/fixtures'
-import { mockTranscriptApi, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
+import { mockTranscriptApi, openSpeakers, openTranscript, RECORDING_ID } from '../../test/transcriptApi'
 import { preloadRoute, renderApp } from '../../test/render'
 
 beforeAll(() => preloadRoute('/gravacoes/x'))
@@ -14,7 +14,7 @@ const RAFAEL = { id: '01928f3a-1c00-7a00-8000-000000000302', name: 'Rafael Lima'
 async function openPanel() {
   renderApp(`/gravacoes/${RECORDING_ID}`)
   await openTranscript()
-  return screen.findByRole('region', { name: 'Locutores' })
+  return openSpeakers()
 }
 
 function linkedTo(person: { id: string; name: string } | null, label = 'Locutor 3') {

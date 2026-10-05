@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
@@ -15,6 +15,7 @@ import { RecordingHeader } from './RecordingHeader'
 import styles from './RecordingPage.module.css'
 import { parseStart } from './segments'
 import { useSummaryState } from './summary'
+import { SpeakersDisclosure } from './SpeakersDisclosure'
 import { ChangeTypeDialog, SummaryDoc } from './SummaryDoc'
 import { TranscriptDisclosure } from './TranscriptDisclosure'
 
@@ -36,10 +37,25 @@ export function RecordingPage() {
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
   // Com `?t=` (vindo da busca), a transcrição já abre na fala.
   const [transcriptOpen, setTranscriptOpen] = useState(startMs !== null)
+  const [speakersOpen, setSpeakersOpen] = useState(false)
   const [changingType, setChangingType] = useState(false)
   const summary = useSummaryState(id, Boolean(recording.data?.transcript_id))
   const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
   useRefreshOnPipeline(recording.data)
+  // Parada à espera dos nomes (etapa `speakers` em `waiting`), o bloco Locutores abre sozinho, e o
+  // link do aviso "Aguardando locutores" (`#locutores`) o reabre se a pessoa o tiver recolhido.
+  const awaitingSpeakers =
+    recording.data?.pipeline.some((step) => step.step === 'speakers' && step.state === 'waiting') ?? false
+  useEffect(() => {
+    if (awaitingSpeakers) setSpeakersOpen(true)
+  }, [awaitingSpeakers])
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash === '#locutores') setSpeakersOpen(true)
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
   usePageTitle(recording.data?.title ?? 'Gravação')
 
   const back = (
@@ -75,7 +91,10 @@ export function RecordingPage() {
         <PlaybackProvider recordingId={data.id} durationMs={data.duration_ms} startMs={startMs}>
           {data.transcript_id !== null && (
             <>
-              <Player markers={markers.data ?? []} />
+              {/* Fixo abaixo do cabeçalho: pausar fica a um clique em qualquer ponto da página. */}
+              <div className={styles.playerDock}>
+                <Player markers={markers.data ?? []} />
+              </div>
               <MarkerBar markers={markers.data ?? []} />
             </>
           )}
@@ -92,34 +111,24 @@ export function RecordingPage() {
               {errorMessage(transcript.error)}
             </p>
           ) : (
-            <TranscriptDisclosure
-              transcript={transcript.data}
-              markers={markers.data ?? []}
-              recordingId={data.id}
-              anchorMs={startMs}
-              open={transcriptOpen}
-              onOpenChange={setTranscriptOpen}
-            />
+            <>
+              <SpeakersDisclosure transcript={transcript.data} open={speakersOpen} onOpenChange={setSpeakersOpen} />
+              <TranscriptDisclosure
+                transcript={transcript.data}
+                markers={markers.data ?? []}
+                recordingId={data.id}
+                anchorMs={startMs}
+                open={transcriptOpen}
+                onOpenChange={setTranscriptOpen}
+              />
+            </>
           )}
         </PlaybackProvider>
 
         {data.transcript_id !== null && (
           <div className={styles.docGrid}>
             <SummaryDoc recording={data} onChangeType={() => setChangingType(true)} />
-            <FieldsPanel
-              recording={data}
-              transcript={transcript.data}
-              onChangeType={() => setChangingType(true)}
-              onFixSpeakers={() => {
-                // Abre a transcrição; depois do render, leva o foco ao bloco Locutores.
-                setTranscriptOpen(true)
-                window.setTimeout(() => {
-                  const block = document.getElementById('locutores')
-                  block?.scrollIntoView({ block: 'start' })
-                  block?.focus()
-                })
-              }}
-            />
+            <FieldsPanel recording={data} onChangeType={() => setChangingType(true)} />
           </div>
         )}
         {changingType && <ChangeTypeDialog recording={data} onClose={() => setChangingType(false)} />}

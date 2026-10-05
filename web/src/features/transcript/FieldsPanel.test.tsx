@@ -22,7 +22,7 @@ async function panel() {
 const prop = (section: HTMLElement, name: string) => within(section).getByRole('group', { name })
 
 describe('painel de campos', () => {
-  it('mostra cada valor com o selo de origem, o tipo, as coleções, os locutores e os dados antigos', async () => {
+  it('mostra cada valor com o selo de origem, o tipo, as coleções e os dados antigos, sem os locutores', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await panel()
@@ -34,7 +34,6 @@ describe('painel de campos', () => {
       'Projeto',
       'Tipo de agenda',
       'Coleções',
-      'Locutores',
       'Dados anteriores',
     ])
 
@@ -61,8 +60,6 @@ describe('painel de campos', () => {
     const type = prop(section, 'Tipo de agenda')
     expect(type).toHaveTextContent('Reunião de equipeAutomático')
     expect(within(prop(section, 'Coleções')).getByText('Metalúrgica Serra Azul')).toHaveClass('tag-neutral')
-    const speakers = prop(section, 'Locutores')
-    expect(within(speakers).getByText('Mariana Couto')).toHaveClass('speaker', 'speaker-1')
     const legacy = prop(section, 'Dados anteriores')
     expect(legacy).toHaveTextContent('Cliente: Metalúrgica Serra Azul')
     expect(legacy).toHaveTextContent('Da organização antiga; crie um campo em Campos personalizados para usar de novo.')
@@ -165,15 +162,5 @@ describe('painel de campos', () => {
     expect(await http.requests('PATCH /api/v1/recordings/:id')[0].json()).toEqual({
       collection_ids: ['01928f3a-1c00-7a00-8000-000000000801', created.id],
     })
-  })
-
-  it('"Corrigir locutores" abre a transcrição e leva o foco ao bloco Locutores', async () => {
-    mockTranscriptApi()
-    renderApp(`/gravacoes/${RECORDING}`)
-    const section = await panel()
-    expect(screen.queryByRole('region', { name: 'Locutores' })).not.toBeInTheDocument()
-    await userEvent.click(within(prop(section, 'Locutores')).getByRole('button', { name: 'Corrigir locutores' }))
-    const block = await screen.findByRole('region', { name: 'Locutores' })
-    await waitFor(() => expect(block).toHaveFocus())
   })
 })
