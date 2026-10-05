@@ -25,7 +25,9 @@ import {
   type AgentFile,
   type AgentMessage,
 } from './agent'
+import { ActionCard } from './ActionCard'
 import styles from './AgentPage.module.css'
+import { useSkills } from './skills'
 
 const EXAMPLES = [
   'Quais decisões foram tomadas esta semana?',
@@ -111,6 +113,9 @@ function Answer({ message, onRetry }: { message: AgentMessage; onRetry: () => vo
             <ReactMarkdown components={SAFE_MARKDOWN}>{current.content}</ReactMarkdown>
           </div>
           <Files files={current.files} label="Arquivos gerados" />
+          {current.actions.map((action) => (
+            <ActionCard key={action.id} action={action} />
+          ))}
           {current.sources.length > 0 && (
             <ul className={styles.sources} aria-label="Fontes">
               {current.sources.map((source) => (
@@ -169,6 +174,9 @@ export function AgentPage() {
   const ask = useAskAgent()
   const attach = useAttachFile()
   const remove = useRemoveFile()
+  const skills = useSkills()
+  const enabledSkills = (skills.data?.items ?? []).filter((skill) => skill.enabled)
+  const [skill, setSkill] = useState('')
   const [text, setText] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
@@ -198,7 +206,9 @@ export function AgentPage() {
     if (!question || busy) return
     try {
       const id = await ensureSession()
-      await ask.mutateAsync({ sessionId: id, message: question, attachments })
+      // `/nome` digitado vale mais que o seletor: o servidor lê o prefixo.
+      const chosen = question.startsWith('/') ? undefined : skill || undefined
+      await ask.mutateAsync({ sessionId: id, message: question, attachments, skill: chosen })
       setText('')
     } catch {
       // O erro aparece no alerta do compositor.
@@ -275,7 +285,7 @@ export function AgentPage() {
                 message.role === 'user' ? (
                   <div key={message.id} className="msg msg-user">
                     <span className="msg-who">Você</span>
-                    {message.content}
+                    {message.skill && <span className="chip">/{message.skill}</span>} {message.content}
                     <Files files={message.files} label="Anexos" />
                   </div>
                 ) : (
@@ -315,6 +325,21 @@ export function AgentPage() {
               )}
               <div className="composer-row">
                 <span>Ctrl+Enter envia</span>
+                {enabledSkills.length > 0 && (
+                  <select
+                    className={`input ${styles.skillPicker}`}
+                    aria-label="Habilidade"
+                    value={skill}
+                    onChange={(event) => setSkill(event.target.value)}
+                  >
+                    <option value="">Sem habilidade</option>
+                    {enabledSkills.map((item) => (
+                      <option key={item.id} value={item.name}>
+                        /{item.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   ref={fileRef}
                   type="file"
@@ -336,7 +361,10 @@ export function AgentPage() {
                   Enviar
                 </button>
               </div>
-              <p className={`text-muted ${styles.hint}`}>Anexos: .txt, .md, .csv, .pdf ou .docx, até 10 MB cada.</p>
+              <p className={`text-muted ${styles.hint}`}>
+                Anexos: .txt, .md, .csv, .pdf ou .docx, até 10 MB cada. Comece com /nome para usar uma{' '}
+                <Link to="/agente/habilidades">habilidade</Link>.
+              </p>
             </form>
           </>
         )}

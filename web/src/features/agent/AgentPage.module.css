@@ -190,3 +190,29 @@
   gap: var(--space-2);
   padding-inline-start: var(--space-4);
 }
+
+/* O cartão de confirmação de uma ação proposta pelo Agente. */
+.action {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.actionSummary {
+  margin: 0;
+  font-weight: 600;
+}
+
+.actionTargets {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+}
+
+.actionButtons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.skillPicker {
+  max-width: 16rem;
+}

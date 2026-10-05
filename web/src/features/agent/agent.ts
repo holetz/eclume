@@ -1,6 +1,8 @@
 // O Agente: conversas guardadas no servidor (/agent/sessions), anexos e arquivos gerados. A pergunta
 // devolve 202 com a pergunta gravada e a resposta na fila, e a tela consulta a resposta até `done`
-// ou `failed`. O histórico é o da conversa no servidor: o cliente não reenvia nada.
+// ou `failed`. O histórico é o da conversa no servidor: o cliente não reenvia nada. A pergunta pode
+// escolher uma habilidade, e a resposta pode trazer propostas de ação, que a pessoa confirma ou descarta
+// no cartão e a tela consulta até terminar (holetz/eclume#145).
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -10,6 +12,7 @@ export type AgentSession = Schemas['AgentSession']
 export type AgentSessionDetail = Schemas['AgentSessionDetail']
 export type AgentMessage = Schemas['AgentMessage']
 export type AgentFile = Schemas['AgentFile']
+export type AgentAction = Schemas['AgentAction']
 
 export const AGENT_POLL_MS = 2000
 export const MAX_QUESTION = 4000
@@ -24,9 +27,14 @@ export const AGENT_KEY = ['agent'] as const
 export const sessionsKey = [...AGENT_KEY, 'sessions'] as const
 export const sessionKey = (id: string) => [...AGENT_KEY, 'session', id] as const
 export const messageKey = (sessionId: string, id: string) => [...AGENT_KEY, 'message', sessionId, id] as const
+export const actionKey = (id: string) => [...AGENT_KEY, 'action', id] as const
 
 export const isActive = (message: Pick<AgentMessage, 'status'> | undefined) =>
   message?.status === 'queued' || message?.status === 'running'
+
+/** A ação confirmada ainda executando. */
+export const isRunning = (action: Pick<AgentAction, 'status'> | undefined) =>
+  action?.status === 'queued' || action?.status === 'running'
 
 /** O endereço do conteúdo do arquivo: a mesma origem, com a sessão por cookie. */
 export const fileUrl = (file: Pick<AgentFile, 'id'>) => `/api/v1/agent/files/${file.id}/content`
@@ -178,11 +186,21 @@ export function useRemoveFile() {
 export function useAskAgent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ sessionId, message, attachments }: { sessionId: string; message: string; attachments: string[] }) =>
+    mutationFn: ({
+      sessionId,
+      message,
+      attachments,
+      skill,
+    }: {
+      sessionId: string
+      message: string
+      attachments: string[]
+      skill?: string
+    }) =>
       unwrap(
         api.POST('/api/v1/agent/sessions/{session_id}/messages', {
           params: { path: { session_id: sessionId } },
-          body: { message, attachments },
+          body: { message, attachments, ...(skill ? { skill } : {}) },
         }),
       ),
     onSuccess: (turn, { sessionId }) => {
@@ -201,3 +219,31 @@ export function useAskAgent() {
     },
   })
 }
+
+/** Uma proposta de ação: consulta enquanto a execução confirmada está na fila ou rodando. */
+export function useAgentAction(action: AgentAction) {
+  return useQuery({
+    queryKey: actionKey(action.id),
+    queryFn: () => unwrap(api.GET('/api/v1/agent/actions/{action_id}', { params: { path: { action_id: action.id } } })),
+    initialData: action,
+    staleTime: isRunning(action) ? 0 : Infinity,
+    retry: false,
+    refetchInterval: pollWhile((data: AgentAction | undefined) => isRunning(data), AGENT_POLL_MS),
+  })
+}
+
+export function useDecideAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: 'confirm' | 'cancel' }) =>
+      decision === 'confirm'
+        ? unwrap(api.POST('/api/v1/agent/actions/{action_id}/confirm', { params: { path: { action_id: id } } }))
+        : unwrap(api.POST('/api/v1/agent/actions/{action_id}/cancel', { params: { path: { action_id: id } } })),
+    onSuccess: (action) => {
+      queryClient.setQueryData<AgentAction>(actionKey(action.id), action)
+      // Confirmada, a consulta recomeça até a execução terminar.
+      if (isRunning(action)) void queryClient.invalidateQueries({ queryKey: actionKey(action.id) })
+    },
+  })
+}
+
