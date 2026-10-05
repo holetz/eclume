@@ -32,6 +32,15 @@ fn default_true() -> bool {
     true
 }
 
+/// Quantas gravações recentes o painel do topo da janela mostra por padrão.
+pub const DEFAULT_RECENT_COUNT: u8 = 5;
+/// O máximo do painel de gravações recentes; `0` o esconde.
+pub const MAX_RECENT_COUNT: u8 = 10;
+
+fn default_recent_count() -> u8 {
+    DEFAULT_RECENT_COUNT
+}
+
 /// Os idiomas de transcrição que a aba Áudio oferece, além de `auto` (detectar) e do padrão da
 /// conta (`null`).
 pub const LANGUAGES: [&str; 4] = ["auto", "pt", "es", "en"];
@@ -134,6 +143,10 @@ pub struct Config {
     /// abertura e a cada salvar. Ligado por padrão, também numa config de versão anterior.
     #[serde(default = "default_true")]
     pub autostart: bool,
+    /// Quantas gravações recentes o painel do topo da janela mostra (0 a 10, `0` esconde).
+    /// Cinco por padrão, também numa config de versão anterior.
+    #[serde(default = "default_recent_count")]
+    pub recent_count: u8,
     /// A pasta local que espelha os resumos e as transcrições da biblioteca.
     #[serde(default)]
     pub mirror: MirrorConfig,
@@ -268,6 +281,7 @@ impl Default for Config {
             theme: default_theme(),
             notify_summary: true,
             autostart: true,
+            recent_count: DEFAULT_RECENT_COUNT,
             mirror: MirrorConfig::default(),
             mic: None,
             system_source: default_system_source(),
@@ -407,6 +421,9 @@ impl Config {
         if !THEMES.contains(&self.theme.as_str()) {
             bail!("tema: use system, light ou dark");
         }
+        if self.recent_count > MAX_RECENT_COUNT {
+            bail!("gravações recentes no topo: no máximo {MAX_RECENT_COUNT}");
+        }
         if let Some(language) = &self.language {
             if !LANGUAGES.contains(&language.as_str()) {
                 bail!("idioma da transcrição: use pt, es, en ou auto, ou o padrão da conta");
@@ -458,6 +475,24 @@ mod tests {
         let json = serde_json::to_string(&desligada).unwrap();
         let lida: Config = serde_json::from_str(&json).unwrap();
         assert!(!lida.autostart);
+    }
+
+    #[test]
+    fn gravacoes_recentes_no_topo_tem_padrao_5_e_vao_de_0_a_10() {
+        let antiga: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(antiga.recent_count, 5);
+        assert_eq!(Config::default().recent_count, DEFAULT_RECENT_COUNT);
+        let mut config = Config {
+            recent_count: 0,
+            ..Config::default()
+        };
+        config.validate().unwrap();
+        config.recent_count = 10;
+        config.validate().unwrap();
+        let lida: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(lida.recent_count, 10);
+        config.recent_count = 11;
+        assert!(config.validate().is_err());
     }
 
     #[test]
