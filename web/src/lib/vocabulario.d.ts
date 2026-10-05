@@ -3,9 +3,9 @@
 export type Tom = 'neutral' | 'progress' | 'success' | 'danger' | 'warning'
 
 export type EstadoAparelho = 'recording' | 'pending' | 'uploading' | 'uploaded' | 'interrupted' | 'failed'
-export type EstadoServidor = 'na_fila' | 'em_andamento' | 'pronta' | 'falhou' | 'cancelada'
-export type Etapa = 'received' | 'preprocessing' | 'transcription' | 'agenda_type' | 'fields' | 'summary'
-export type EstadoEtapa = 'pending' | 'active' | 'done' | 'skipped' | 'failed'
+export type EstadoServidor = 'na_fila' | 'em_andamento' | 'aguardando_locutores' | 'pronta' | 'falhou' | 'cancelada'
+export type Etapa = 'received' | 'preprocessing' | 'transcription' | 'speakers' | 'agenda_type' | 'fields' | 'summary'
+export type EstadoEtapa = 'pending' | 'active' | 'done' | 'skipped' | 'failed' | 'waiting'
 
 export const ESTADOS_APARELHO: Record<EstadoAparelho, { rotulo: string; tom: Tom }>
 export const ESTADOS_SERVIDOR: Record<EstadoServidor, { rotulo: string; tom: Tom }>
