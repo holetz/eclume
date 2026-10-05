@@ -1,5 +1,6 @@
 //! O desfecho do processamento de uma gravação, lido da listagem por `?since=` (contrato 2.17.0):
-//! resumo pronto, resumo que falhou, pronta sem resumo ou transcrição que falhou. A regra é a
+//! resumo pronto, resumo que falhou, pronta sem resumo, transcrição que falhou ou, desde a 2.21.0,
+//! a gravação parada à espera de o dono nomear os locutores (etapa `speakers` em `waiting`). A regra é a
 //! mesma do web (`web/src/app/processingWatch.ts`), com os mesmos casos de teste; a marca d'água
 //! garante que cada desfecho seja avisado uma vez, e nenhum anterior a ela.
 
@@ -18,7 +19,7 @@ const KEEP_DAYS: i64 = 7;
 /// Motivos de etapa pulada que são ação da própria pessoa (ou anteriores ao pipeline): sem aviso.
 const SILENT_REASONS: [&str; 3] = ["cancelled", "summary_deleted", "before_pipeline"];
 
-/// Os quatro desfechos avisáveis.
+/// Os desfechos avisáveis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
@@ -27,6 +28,9 @@ pub enum Outcome {
     /// Pronta sem resumo: a etapa foi pulada (o motivo em [`Ended::reason`]).
     NoSummary,
     TranscriptionFailed,
+    /// Parada à espera dos nomes dos locutores (a conta exige a marcação); o motivo em
+    /// [`Ended::reason`].
+    AwaitingSpeakers,
 }
 
 /// Um desfecho de uma gravação, com o instante em que aconteceu.
@@ -37,7 +41,7 @@ pub struct Ended {
     pub outcome: Outcome,
     /// O motivo da etapa pulada, no vocabulário de `PipelineStep.reason`.
     pub reason: Option<String>,
-    /// `finished_at` da etapa `summary` ou do job.
+    /// `finished_at` da etapa `summary`, da etapa `speakers` em espera ou do job.
     pub at: String,
 }
 
@@ -56,6 +60,15 @@ pub fn outcome_of(recording: &LibraryRecording) -> Option<Ended> {
                 .finished_at
                 .as_ref()
                 .map(|at| ended(Outcome::TranscriptionFailed, None, at));
+        }
+    }
+    if let Some(speakers) = recording
+        .pipeline
+        .iter()
+        .find(|step| step.step == "speakers" && step.state == "waiting")
+    {
+        if let Some(at) = &speakers.finished_at {
+            return Some(ended(Outcome::AwaitingSpeakers, speakers.reason.as_ref(), at));
         }
     }
     let step = recording.summary_step()?;
@@ -241,6 +254,33 @@ mod tests {
             None
         );
         assert_eq!(outcome(&recording("i", "processing", None)), None);
+    }
+
+    #[test]
+    fn a_gravacao_parada_a_espera_dos_locutores_avisa() {
+        let waiting = LibraryRecording {
+            pipeline: vec![PipelineStepInfo {
+                step: "speakers".into(),
+                state: "waiting".into(),
+                finished_at: Some(T.into()),
+                reason: Some("unnamed_speakers".into()),
+            }],
+            ..recording("j", "transcribed", None)
+        };
+        let ended = outcome_of(&waiting).map(|e| (e.outcome, e.reason));
+        let expected = Some((Outcome::AwaitingSpeakers, Some("unnamed_speakers".into())));
+        assert_eq!(ended, expected);
+        // Solta, a etapa concluída não é mais desfecho da espera.
+        let released = LibraryRecording {
+            pipeline: vec![PipelineStepInfo {
+                step: "speakers".into(),
+                state: "done".into(),
+                finished_at: Some(T.into()),
+                reason: None,
+            }],
+            ..recording("j", "transcribed", None)
+        };
+        assert_eq!(outcome_of(&released), None);
     }
 
     #[test]
