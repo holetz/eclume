@@ -41,6 +41,8 @@ _REPLY_USAGE = (
     '{"action": "reply", "message": "a resposta em Markdown", "sources": ["id", …]} — responde; '
     "`sources` são os ids das gravações em que a resposta se apoia (os arquivos preparados vão juntos)."
 )
+# O começo fixo do `system`: identifica a chamada do Agente (os testes roteiam por ele).
+AGENT_SYSTEM_PREFIX = "Você é o Agente do eclume"
 LIMIT_NOTE = "Você já fez todas as consultas permitidas: responda agora com a ação reply."
 
 
@@ -96,7 +98,7 @@ def agent_system(registry: ToolRegistry, caps: Capabilities, instructions: str =
     files = " Leia os arquivos anexados (read_file) quando a pergunta tratar deles." if caps.files else ""
     lines = [tool.usage for tool in registry.available(caps)] + [_REPLY_USAGE]
     text = (
-        "Você é o Agente do eclume: responde e trabalha sobre as gravações transcritas de quem pergunta "
+        f"{AGENT_SYSTEM_PREFIX}: responde e trabalha sobre as gravações transcritas de quem pergunta "
         f"e sobre os arquivos que essa pessoa anexou, em português do Brasil. {sources}{files} Quando a "
         "pessoa pedir um documento, uma tabela ou uma lista para baixar, prepare-o com write_file e "
         "comente na resposta. Use só o que as consultas devolveram; se elas não sustentam a resposta, diga "
@@ -221,4 +223,12 @@ async def run_agent(
         calls.append(record)
 
 
-__all__ = ["AgentContext", "AgentResult", "AttachedFile", "agent_system", "parse_action", "run_agent"]
+__all__ = [
+    "AGENT_SYSTEM_PREFIX",
+    "AgentContext",
+    "AgentResult",
+    "AttachedFile",
+    "agent_system",
+    "parse_action",
+    "run_agent",
+]

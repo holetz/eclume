@@ -116,7 +116,8 @@ def test_parse_recusa_ferramenta_indisponivel_ou_invalida():
     assert parse_action(_json(action="read_file", file_id=str(ATA)), registry, caps) is None
     assert parse_action(_json(action="search_transcripts", query="x"), registry, caps) is None
     assert parse_action(_json(action="write_file", name="a", format="xlsx", content="x"), registry, caps) is None
-    assert parse_action(_json(action="read_file", file_id=str(ATA), offset=-1), registry, Capabilities(files=True)) is None
+    negative = _json(action="read_file", file_id=str(ATA), offset=-1)
+    assert parse_action(negative, registry, Capabilities(files=True)) is None
     assert parse_action(_json(action="reply", message="ok"), registry, caps) == {"action": "reply", "message": "ok"}
 
 
@@ -174,7 +175,7 @@ def test_ferramentas_da_base_seguem_com_fontes_verificadas():
 def test_acao_com_confirmacao_nao_roda():
     ran: list[dict[str, Any]] = []
 
-    async def run(_env: Any, action: dict[str, Any], _budget: int, _state: Any) -> tuple[str, dict[str, Any]]:  # noqa: ANN401
+    async def run(_env: Any, action: dict[str, Any], _budget: int, _state: Any) -> tuple[str, dict[str, Any]]:  # noqa: ANN401, E501
         ran.append(action)
         return "", {}
 

@@ -5,8 +5,8 @@ O laço (`agents/agent.py`) não conhece ferramenta nenhuma: ele pede ao `ToolRe
 Natureza (`kind`): `read` consulta (a base, os anexos), `produce` prepara um arquivo para a resposta
 e `action` age no ambiente — esta, com `confirm`, só roda depois da confirmação de quem pergunta,
 que a spec das ações no ambiente liga (holetz/eclume#142 deixa o encaixe); até lá o laço avisa ao
-agente que a ação espera confirmação. Para acrescentar uma ferramenta, registre um `AgentTool` em `default_registry()`
-(ou num registro próprio). Contrato em docs/standards/code/server-agentes.md §Agente.
+agente que a ação espera confirmação. Para acrescentar uma ferramenta, registre um `AgentTool` em
+`default_registry()` (ou num registro próprio). Contrato em docs/standards/code/server-agentes.md §Agente.
 """
 
 from __future__ import annotations
@@ -174,7 +174,9 @@ def clip_chars(text: str, budget: int) -> str:
     return text[: max(budget, 0) * 3]
 
 
-async def _read_file(env: AgentEnv, action: dict[str, Any], budget: int, _state: RunState) -> tuple[str, dict[str, Any]]:
+async def _read_file(
+    env: AgentEnv, action: dict[str, Any], budget: int, _state: RunState
+) -> tuple[str, dict[str, Any]]:
     file_id = _file_id(action["file_id"])
     assert file_id is not None  # noqa: S101 — validado
     offset = _offset(action.get("offset")) or 0
@@ -205,7 +207,9 @@ def _valid_write_file(action: dict[str, Any]) -> bool:
     )
 
 
-async def _write_file(_env: AgentEnv, action: dict[str, Any], _budget: int, state: RunState) -> tuple[str, dict[str, Any]]:
+async def _write_file(
+    _env: AgentEnv, action: dict[str, Any], _budget: int, state: RunState
+) -> tuple[str, dict[str, Any]]:
     name, fmt, content = action["name"].strip(), action["format"], action["content"]
     record = {"tool": "write_file", "name": name, "format": fmt}
     attributes = f" nome={json.dumps(name, ensure_ascii=False)}"

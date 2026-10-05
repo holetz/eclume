@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from arq.connections import ArqRedis
     from sqlalchemy.ext.asyncio import AsyncEngine
 
+    from eclume_server.agents.base import Provider
+
 TTL_S = 3600
 # Pedidos em aberto (na fila ou rodando) por conta: cada um ocupa o agente por vários minutos.
 MAX_OPEN = 2
@@ -250,16 +252,21 @@ class ChatError(Exception):
         self.message = message
 
 
-async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) -> dict[str, Any]:
+async def chat_provider(ctx: dict[str, Any]) -> Provider:
+    """O provider marcado para `chat` (o chat da base e o Agente); sem ele, `ChatError`."""
     async with system_tx(ctx["engine"]) as conn:
         public = await provider_for(conn, "chat")
         if public is None:
             raise ChatError(NO_PROVIDER, "Nenhum provider habilitado para o chat.")
         row, platform_key = await load_provider(conn, public["id"])
     try:
-        provider = provider_factory(ctx)(provider_config(ctx["settings"], row, platform_key))
+        return provider_factory(ctx)(provider_config(ctx["settings"], row, platform_key))
     except SecretDecryptError as exc:
         raise ChatError(PROVIDER_NOT_CONFIGURED, "A chave de API do provider não abre.") from exc
+
+
+async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) -> dict[str, Any]:
+    provider = await chat_provider(ctx)
     history = [(item["role"], item["content"]) for item in request.get("history", [])]
     context = BaseChatContext(
         history=history, question=request["message"], transcripts=request.get("transcripts", True)
@@ -300,4 +307,4 @@ async def run_base_chat_job(ctx: dict[str, Any], chat_id: str) -> str:
     return f"falhou: {error['code']}"
 
 
-__all__ = ["BaseTools", "create_chat", "get_chat", "run_base_chat_job"]
+__all__ = ["BaseTools", "ChatError", "chat_provider", "create_chat", "get_chat", "run_base_chat_job"]
