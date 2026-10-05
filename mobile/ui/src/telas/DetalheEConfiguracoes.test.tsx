@@ -40,18 +40,19 @@ describe('Detalhe da gravação', () => {
     expect(screen.getByText('Enviada')).toHaveClass('badge-success')
     expect(document.querySelector('audio')).toHaveAttribute('src', 'asset://localhost//data/eclume/gravacoes/g1.ogg')
     expect(screen.getByText('Início da pauta')).toBeInTheDocument()
-    // As seis etapas na ordem do servidor, com o estado em palavra e o motivo visível sob a barra.
+    // As sete etapas na ordem do servidor, com o estado em palavra e o motivo visível sob a barra.
     const etapas = within(screen.getByRole('list', { name: 'Etapas no servidor' })).getAllByRole('listitem')
     expect(etapas.map((etapa) => etapa.textContent)).toEqual([
       'Áudio recebido',
       'Pré-processamento',
       'Transcrição',
+      'Locutores',
       'Tipo de agenda · pulada',
       'Preenchendo campos',
       'Resumo · esperando',
     ])
-    expect(etapas[4]).toHaveAttribute('data-state', 'active')
-    expect(etapas[5]).not.toHaveAttribute('data-state')
+    expect(etapas[5]).toHaveAttribute('data-state', 'active')
+    expect(etapas[6]).not.toHaveAttribute('data-state')
     expect(within(screen.getByRole('list', { name: 'Motivos das etapas' })).getByRole('listitem')).toHaveTextContent(
       'Tipo de agenda · pulada: o tipo foi escolhido por você',
     )
@@ -61,6 +62,32 @@ describe('Detalhe da gravação', () => {
     expect(screen.getByText('O servidor mantém a cópia dele.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Abrir na web' }))
     expect(ponte.abrirNaWeb).toHaveBeenCalledWith('g1')
+  })
+
+  it('parada à espera dos nomes dos locutores, diz que aguarda você e por quê', async () => {
+    abrir('/gravacao/g1', (p) => {
+      p.detalhe = {
+        gravacao: gravacaoLocal(),
+        caminho: null,
+        marcadores: [],
+        etapas: [
+          { step: 'received', state: 'done' },
+          { step: 'preprocessing', state: 'done' },
+          { step: 'transcription', state: 'done' },
+          { step: 'speakers', state: 'waiting', reason: 'unnamed_speakers' },
+          { step: 'agenda_type', state: 'pending' },
+          { step: 'fields', state: 'pending' },
+          { step: 'summary', state: 'pending' },
+        ],
+        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
+      }
+    })
+    const etapas = within(await screen.findByRole('list', { name: 'Etapas no servidor' })).getAllByRole('listitem')
+    expect(etapas[3]).toHaveTextContent('Locutores · aguardando você')
+    expect(etapas[3]).toHaveAttribute('data-state', 'waiting')
+    expect(within(screen.getByRole('list', { name: 'Motivos das etapas' })).getByRole('listitem')).toHaveTextContent(
+      'Locutores · aguardando você: há locutores sem pessoa; nomeie todos para seguir com o tipo, os campos e o resumo',
+    )
   })
 
   it('sem título dado ao parar, mostra o que o servidor deu', async () => {
