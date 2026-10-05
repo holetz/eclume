@@ -4,10 +4,10 @@ title: App móvel
 description: O app móvel do eclume (Tauri 2, Android) é um microfone portátil — UI React sobre o DS, comandos Tauri e o evento estado sobre o eclume-mobile-core (os crates de gravação e sync do desktop), e o plugin nativo Kotlin pela ponte JNI (serviço em primeiro plano do tipo microfone, notificação, NsdManager, Wi-Fi não medido, WorkManager, instalador); a conexão pelos três caminhos com a CA fixada, a rede do eclume, a sessão com tempo de áudio e marcadores, o sync, as telas e a prova no emulador.
 resource: mobile/**
 tags: [code, mobile, android, tauri, gravacao, sync, mdns, tls]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
+source: holetz/eclume#41, holetz/eclume#122, holetz/eclume#130, holetz/eclume#114, holetz/eclume#123, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -279,9 +279,11 @@ O plugin `tauri-plugin-eclume-gravador` (`mobile/plugins/gravador`; nome em temp
   cópia byte a byte de `web/src/lib/vocabulario.js`, conferida por `vocabulario.test.ts` (pula sem
   o web ao lado). Os selos da lista e do detalhe são os estados no aparelho, com o mesmo nome do
   desktop (Gravando, Aguardando envio, Enviando, Enviada, Interrompida, Falhou o envio em perigo).
-  O detalhe mostra as seis etapas na ordem do servidor (tipo de agenda antes de campos), cada uma
+  O detalhe mostra as sete etapas na ordem do servidor (tipo de agenda antes de campos), cada uma
   com o estado em palavra quando não concluída, e a lista "Motivos das etapas" sob a barra com o
-  `reason` (texto de `MOTIVOS`) de uma etapa pulada ou o `error.message` de uma que falhou. A
+  `reason` (texto de `MOTIVOS`) de uma etapa pulada ou em espera, ou o `error.message` de uma que
+  falhou. A etapa Locutores em `waiting` (a conta exige nomear os locutores, holetz/eclume#144)
+  aparece "Locutores · aguardando você" com o motivo; nomear é no web. A
   `Etapa` do núcleo (`sync.rs`) traz `reason` e `error` com `#[serde(default)]`, da mesma leitura de
   `GET /recordings/{id}`.
 - **A espera na fila** (holetz/eclume#117): a mesma leitura traz `job.queue`; `buscar_etapas`

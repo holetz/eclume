@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -324,8 +324,9 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Vocabulário de estados compartilhado** (`src/lib/vocabulario.js`, módulo ES puro com
   `vocabulario.d.ts`): os nomes em pt-BR dos estados no aparelho, dos estados da gravação no
   servidor ("Na fila" só para a espera pela transcrição; "Cancelada" para a gravação `failed` com
-  etapa pulada por `cancelled`), das seis etapas na ordem de `STEPS` e o texto de cada código de
-  motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
+  etapa pulada por `cancelled`; "Aguardando locutores", em tom de aviso, para a etapa `speakers` em
+  `waiting`), das sete etapas na ordem de `STEPS` (o estado `waiting` é "aguardando você") e o
+  texto de cada código de motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
   teste em cada cliente, e `vocabulario.test.ts` falha quando o servidor grava um código de motivo
   sem texto. Tela nenhuma escreve esses rótulos à mão.
 - **Motivo em texto visível, nunca só no `title`.** Uma etapa pulada ou que falhou, uma linha que
@@ -363,7 +364,8 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   gravações deste período"); a Lista usa `sort=recorded_desc` e `limit=50`. As duas releem a cada
   3 s enquanto alguma gravação está em andamento.
 - **Painel de filtros** à direita (`.with-filters` e `.filters`, recolhível até 48px): Tipo,
-  Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
+  Precisam de você ("Aguardando locutores", `precisa=locutores` na URL, que vira
+  `awaiting=speakers`), Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
   pessoa, com os valores de `GET /people/facets`; `empresa`, `area` e `tag-pessoa` na URL, que
   viram `person_company`, `person_department` e `person_tag`, e valem para uma mesma pessoa),
   Coleções (com "Gerenciar coleções") e um grupo por campo próprio do usuário (escolha como `.check`, texto e lista como "Qualquer valor",
@@ -372,6 +374,9 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `transcribed`, Processando = `uploading`/`queued`/`processing`, Falhou = `failed`). Um grupo com
   tudo marcado não manda o parâmetro, e o último marcado não sai. Abaixo de 56rem, o painel é um
   `Dialog` aberto por "Filtros (N)".
+- **Aviso "Precisam de você"** (holetz/eclume#144): com `GET /me/speaker-naming` dizendo
+  `waiting_count > 0`, uma faixa `alert-warning` acima da barra conta as gravações que aguardam
+  você nomear os locutores; "Ver" liga o filtro na lista. Some com o filtro já ligado.
 - **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
   recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
   `importar` (`eclume-biblioteca-ultima:<user_id>`, por conta, porque guarda ids de pessoa, tag,
@@ -434,11 +439,16 @@ desce; abaixo de 56rem, os campos também):
   (`parseAs: 'blob'`, nome do `Content-Disposition`) e mostra o `Problem` num alerta; um 401 no
   export encerra a sessão como qualquer outra chamada; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
   volta com "Gravação excluída.".
-- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as seis etapas no
+- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as sete etapas no
   `ol.pipeline`, cada uma com o estado em palavra quando não está concluída ("Resumo · pulada"), a
-  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada ou que falhou, o progresso do worker com a
+  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada, em espera ou que falhou, o progresso do worker com a
   transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
-  `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+  `pollWhile` (3 s de início) enquanto está em andamento ou aguardando locutores, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+- **Aguardando locutores** (`AwaitingSpeakers.tsx`, holetz/eclume#144): com a etapa `speakers` em
+  `waiting`, o `Pipeline` mostra um `alert-warning` (`role="status"`) que leva a `#locutores` e
+  oferece **Seguir sem nomear** (`ConfirmDialog`, `POST /recordings/{id}/continue`). Ligar ou
+  mesclar locutor no painel muda a transcrição em cache; o aviso percebe a troca dos vínculos e relê
+  a gravação, que o servidor já soltou se o último ganhou pessoa.
 - **A linha da espera** (holetz/eclume#117): com a gravação `queued`, o `Pipeline` mostra em
   `role="status"` a frase de `fraseDaEspera(job.queue)` do vocabulário compartilhado — posição e
   início estimado ("3ª na fila · começa em cerca de 12 min (estimativa)"), as gravações da própria
@@ -604,7 +614,9 @@ desce; abaixo de 56rem, os campos também):
   [processamento-automatico.md](processamento-automatico.md), do que acontece sozinho depois de
   cada gravação, numa `<ol class="list">` de `.list-row`: pré-processamento e transcrição (da
   plataforma, sem link), locutores pela voz (`/me/voice-assignment`, "Voz: liga sozinho a partir
-  de 75%"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
+  de 75%"), marcação dos locutores (`/me/speaker-naming`, a única linha com a chave na própria
+  tela: o `Switch` "Exigir a marcação dos locutores", e o estado "Não exigida", "Exigida" ou
+  "Exigida · N gravações esperando você"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
   com `auto_fill`), tags (`/me/tag-assignment`, "Tags: só as cadastradas (N)"), coleções com
   regra (`/collections` com `auto_assign`) e resumo (tipos com `summary_instructions`). Cada etapa
   mostra o estado e um link "Configurar" (rotulado pela tela de destino); a página só lê, e as
@@ -639,7 +651,8 @@ desce; abaixo de 56rem, os campos também):
   regra do desfecho e a marca d'água do desktop
   ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), com
   os mesmos casos de teste: resumo pronto, resumo que falhou, pronta sem resumo (motivo pelo
-  `motivo()` do vocabulário) e transcrição que falhou; cancelar e `summary_deleted` não avisam. A
+  `motivo()` do vocabulário), transcrição que falhou e, desde a 2.21.0, "Precisa de você" (etapa
+  `speakers` em `waiting`, instante = `finished_at` da espera); cancelar e `summary_deleted` não avisam. A
   marca vive na memória da aba e começa na montagem: atualizar ou reabrir o navegador não dispara
   aviso antigo. Com a aba oculta, cada desfecho soma no título ("(2) Biblioteca · eclume",
   `setTitleCount`), zerado no `visibilitychange` de volta. Erro de rede ou sessão só espera a

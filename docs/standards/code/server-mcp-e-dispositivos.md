@@ -4,10 +4,10 @@ title: Servidor MCP e ligação de dispositivos
 description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas e o descritor público /server com a impressão digital da CA raiz.
 resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql
 tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
-timestamp: 2026-09-28
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#35, holetz/eclume#57
+source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -57,8 +57,8 @@ handlers das rotas; o que vivia só no handler desce para o módulo de domínio.
 
 | Ferramenta | O que faz | Escopos | Anotação |
 |---|---|---|---|
-| `search_recordings(query?, started_from?, started_to?, tags?, agenda_type?, status?, limit=20, cursor?)` | sem `query`, a biblioteca por `recorded_at` desc com os filtros; com `query`, a busca full-text com o trecho (no máximo uma tag) | `recordings:read` (+ `transcripts:read` com `query`) | readOnly |
-| `get_recording(recording_id)` | início, tipo, tags, campos com a origem, pessoas (locutores), marcadores e o status por etapa | `recordings:read` | readOnly |
+| `search_recordings(query?, started_from?, started_to?, tags?, agenda_type?, status?, awaiting?, limit=20, cursor?)` | sem `query`, a biblioteca por `recorded_at` desc com os filtros (`awaiting="speakers"`: só as paradas à espera dos nomes dos locutores); com `query`, a busca full-text com o trecho (no máximo uma tag). Cada gravação traz `awaiting`, como `Recording.awaiting` | `recordings:read` (+ `transcripts:read` com `query`) | readOnly |
+| `get_recording(recording_id)` | início, tipo, tags, campos com a origem, pessoas (locutores), marcadores, o status por etapa (com `speakers` em `waiting`) e `awaiting` | `recordings:read` | readOnly |
 | `list_fields_and_tags()` | campos (tipo e opções), tags em uso e tipos de agenda, para editar com valores válidos | `recordings:read` | readOnly |
 | `get_transcript(recording_id, start_ms?, end_ms?)` | `[mm:ss] Locutor: fala`, até 60 000 caracteres, com `next_start_ms` quando sobra | `transcripts:read` | readOnly |
 | `get_summary(recording_id)` | a versão atual (Markdown, id, número, origem) e a geração em aberto | `summaries:read` | readOnly |

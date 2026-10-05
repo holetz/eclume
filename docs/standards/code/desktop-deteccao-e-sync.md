@@ -4,10 +4,10 @@ title: Detecção de reuniões e sync no app desktop
 description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#144
 maintainer: holetz
 ---
 
@@ -155,9 +155,11 @@ decisão do usuário, então `auto` nunca é padrão.
 - **O desfecho** (`eclume_sync::outcome::outcome_of`, espelhado em `web/src/app/processingWatch.ts`
   com os mesmos casos de teste): etapa `summary` `done` é **resumo pronto**, `failed` é **resumo
   falhou**, `skipped` é **pronta sem resumo** (com o motivo) — menos `cancelled`,
-  `summary_deleted` e `before_pipeline`, que não avisam —, e gravação `failed` com job `failed` é
-  **transcrição falhou** (job `cancelled` não avisa). O instante é o `finished_at` da etapa ou do
-  job.
+  `summary_deleted` e `before_pipeline`, que não avisam —, gravação `failed` com job `failed` é
+  **transcrição falhou** (job `cancelled` não avisa) e, desde a 2.21.0, etapa `speakers` em
+  `waiting` é **precisa de você** ("Nomeie os locutores para seguir com o resumo", só "Abrir"). O
+  instante é o `finished_at` da etapa ou do job; nomear um locutor sem zerar a falta não move o da
+  espera, então o aviso não se repete.
 - **A marca d'água** (`Watermark`, em `resumos-avisados.json` no diretório de dados): o próximo
   `since` (maior `updated_at` menos 60 s), a marca (desfechos até ela não avisam; avança para o
   maior instante visto menos 60 s) e os avisados acima dela (id → instante, guardados por 7 dias).
