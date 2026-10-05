@@ -74,7 +74,7 @@ def test_colecoes_e_tipo_de_agenda(owner: Account, as_user: Callable[[Account], 
     agenda = agenda_types(services, owner.user_id)[0]
     summary_id = _as(services, owner.user_id, lambda conn: change_agenda_type(conn, rid, agenda["id"]))
     assert summary_id is not None
-    assert api.get(f"/api/v1/recordings/{rid}").json()["agenda_type_id"] == str(agenda["id"])
+    assert api.get(f"/api/v1/recordings/{rid}").json()["agenda_type"]["id"] == str(agenda["id"])
 
 
 def test_gravacao_de_outra_conta_e_404(

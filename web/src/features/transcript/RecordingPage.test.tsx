@@ -11,7 +11,7 @@ beforeAll(() => preloadRoute('/gravacoes/x'))
 afterEach(() => vi.unstubAllGlobals())
 
 describe('cabeçalho, pipeline, exportar e excluir', () => {
-  it('mostra a data, a hora e a duração no kicker, o título e as seis etapas', async () => {
+  it('mostra a data, a hora e a duração no kicker, o título e as sete etapas', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
@@ -24,6 +24,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
       'Áudio recebido',
       'Pré-processamento',
       'Transcrição',
+      'Locutores',
       'Tipo de agenda',
       'Campos',
       'Resumo',

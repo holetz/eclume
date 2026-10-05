@@ -115,7 +115,8 @@ describe('Agente', () => {
     const next = await screen.findByRole('list', { name: 'Anexos da próxima pergunta' })
     expect(within(next).getByRole('link', { name: 'ata-kickoff.pdf' })).toBeInTheDocument()
     const form = http.requests('POST /api/v1/agent/sessions/:id/files')[0]
-    expect((await form.formData()).get('file')).toBeInstanceOf(File)
+    // O FormData relido pelo mock vem de outro realm (o File do Node, não o do jsdom): confere o conteúdo.
+    expect((await form.formData()).get('file')).toMatchObject({ size: 8, type: 'application/pdf' })
 
     await ask('Resuma a ata')
     await waitFor(() => expect(http.requests('POST /api/v1/agent/sessions/:id/messages')).toHaveLength(1))
@@ -152,9 +153,10 @@ describe('Agente', () => {
         problem('unsupported_media_type', 415, { detail: 'Tipo não aceito. Anexe .txt, .md, .csv, .pdf, .docx.' }),
     })
     renderApp(`/agente/${SESSION}`)
+    // O `accept` do campo filtraria um .png antes do envio: a recusa aqui é a do servidor.
     await userEvent.upload(
       await screen.findByLabelText('Arquivos para anexar'),
-      new File(['x'], 'foto.png', { type: 'image/png' }),
+      new File(['x'], 'foto.pdf', { type: 'application/pdf' }),
     )
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
