@@ -28,6 +28,7 @@ from arq.connections import RedisSettings
 from arq.worker import Worker, func
 from redis.asyncio import Redis
 
+from eclume_server.agents.agent import AGENT_SYSTEM_PREFIX
 from eclume_server.agents.base import Completion, ProviderConfig, ProviderError, with_context
 from eclume_server.agents.base_chat import BASE_CHAT_SUMMARIES_SYSTEM, BASE_CHAT_SYSTEM
 from eclume_server.agents.chat import CHAT_SYSTEM
@@ -195,12 +196,14 @@ def run_gpu(
 
 
 def purpose_of(system: str, prompt: str) -> str:
-    """A finalidade da chamada: `fields`, `agenda_detection`, `chat` ou `summaries`.
+    """A finalidade da chamada: `fields`, `agenda_detection`, `chat`, `base_chat`, `agent` ou `summaries`.
 
     Os campos e o resumo compartilham o `system`; as regras dos campos vão no prompt.
     """
     if FIELDS_SYSTEM in prompt:
         return "fields"
+    if system.startswith(AGENT_SYSTEM_PREFIX):
+        return "agent"
     return {
         DETECT_SYSTEM: "agenda_detection",
         CHAT_SYSTEM: "chat",
@@ -255,7 +258,7 @@ class _FakeAgent:
             text = "{}"
         elif purpose == "agenda_detection":
             text = '{"tipo": "T1", "confianca": 0.9, "motivo": "o primeiro tipo"}'
-        elif purpose == "base_chat":
+        elif purpose in {"base_chat", "agent"}:
             text = '{"action": "reply", "message": "Pronto.", "sources": []}'
         elif purpose == "chat":
             text = '{"action": "reply", "message": "Pronto.", "summary_md": null}'

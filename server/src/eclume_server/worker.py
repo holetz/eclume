@@ -26,6 +26,7 @@ from sqlalchemy import delete, select, update
 from eclume_engines.fila import desserializar
 from eclume_engines.registro import configurar_logs, contexto_do_job
 from eclume_server.agenda_types import ensure_type, run_detect
+from eclume_server.agent_sessions import run_agent_turn_job
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
@@ -323,6 +324,13 @@ async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
     return result
 
 
+async def agent_turn(ctx: dict[str, Any], message_id: str, transcripts: bool = True) -> str:  # noqa: FBT001, FBT002
+    """Responde uma pergunta do Agente (docs/standards/code/server-agentes.md §Agente)."""
+    result = await run_agent_turn_job(ctx, message_id, transcripts)
+    log.info("agent_turn %s: %s", message_id, result)
+    return result
+
+
 async def base_chat(ctx: dict[str, Any], chat_id: str) -> str:
     """Responde uma pergunta do chat sobre a base (docs/standards/code/server-agentes.md)."""
     result = await run_base_chat_job(ctx, chat_id)
@@ -431,6 +439,8 @@ def _agent_functions() -> list[Any]:
         func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
         # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
         func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
+        # Sem nova tentativa: a resposta termina `failed` e a pessoa pergunta de novo.
+        func(agent_turn, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
     ]
 
 

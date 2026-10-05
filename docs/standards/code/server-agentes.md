@@ -1,13 +1,13 @@
 ---
 type: standard
-title: Agentes — providers por finalidade, tipos de agenda, resumos e chat de ajuste
-description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas e o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat); a matriz do que cada provider exige e a CLI claude opcional na imagem.
-resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py, server/src/eclume_server/privacy.py, server/src/eclume_server/routes/privacy.py
-tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude]
-timestamp: 2026-10-01
+title: Agentes — providers por finalidade, tipos de agenda, resumos, chat de ajuste e o Agente
+description: Como o server fala com agentes — quatro providers atrás de uma interface (claude -p do servidor sem ferramentas, API da Anthropic, OpenAI-compatível e Ollama só com a fila da GPU vazia), chaves de API cifradas, providers da plataforma com uma finalidade cada (resumos, campos, chat, detecção do tipo), resumos versionados por transcrição (gerados pelas instruções do tipo de agenda no job summarize, editados à mão com concorrência otimista, ajustados pelo chat) com erros tipados e retentativas, map-reduce para transcrições longas o chat de ajuste (protocolo JSON de ferramentas sobre a transcrição, no job summary_chat) e o Agente (conversas guardadas sob RLS, anexos com texto extraído, arquivos gerados para baixar e um registro de ferramentas extensível, no job agent_turn); a matriz do que cada provider exige e a CLI claude opcional na imagem.
+resource: server/src/eclume_server/agents/**, server/src/eclume_server/summaries.py, server/src/eclume_server/crypto.py, server/src/eclume_server/routes/summaries.py, server/src/eclume_server/routes/agent_providers.py, server/src/eclume_server/db/migrations/002_agentes.sql, server/src/eclume_server/db/migrations/009_tipos_de_agenda.sql, server/src/eclume_server/db/migrations/011_plataforma_de_processamento.sql, server/src/eclume_server/db/migrations/014_gravacao_resumo.sql, server/src/eclume_server/summary_chat.py, server/src/eclume_server/routes/summary_chat.py, server/src/eclume_server/resume.py, server/src/eclume_server/privacy.py, server/src/eclume_server/routes/privacy.py, server/src/eclume_server/agent_sessions.py, server/src/eclume_server/agent_files.py, server/src/eclume_server/routes/agent.py, server/src/eclume_server/db/migrations/031_agente_conversas.sql
+tags: [code, server, agentes, resumos, versoes, chat, tipos-de-agenda, llm, claude, agente, arquivos]
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98, holetz/eclume#116
+source: holetz/eclume#9, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#34, holetz/eclume#96, holetz/eclume#129, holetz/eclume#99, holetz/eclume#98, holetz/eclume#116, holetz/eclume#142
 maintainer: holetz
 ---
 
@@ -251,38 +251,71 @@ dito**.
   Ollama depende da fila da GPU que só o worker consulta, e uma chamada leva de segundos a
   minutos; o ciclo 202 + consulta já existe no cliente para o resumo.
 
-## Chat sobre a base
+## Agente
 
-Uma tela de perguntas sobre o conjunto das gravações do usuário (`POST /base-chat`, `GET
-/base-chat/{id}`), com o provider marcado para `chat`. O harness (`agents/base_chat.py`) usa o
-mesmo protocolo de texto do chat de ajuste: uma ação JSON por chamada, sobre `Provider.complete`.
+A tela **Agente** do web (antes Perguntas) conversa sobre o conjunto das gravações do usuário e
+sobre os arquivos que ele anexa, com o provider marcado para `chat` (holetz/eclume#142). As
+conversas ficam no Postgres; o protocolo é o do chat sobre a base, generalizado sobre um registro
+de ferramentas.
 
-- **Ações:** `search_summaries` e `read_summary` (os resumos primeiro), `search_transcripts` e
-  `read_transcript` (só quando o resumo não basta; até 15 minutos por leitura) e `reply` (`message`
-  em Markdown e `sources`, os ids das gravações em que se apoia). Até 8 consultas; depois, a próxima
-  ação tem de ser `reply`, senão `chat_tool_limit`. Saída que não é ação válida recebe uma correção;
-  a segunda é `provider_bad_output`.
-- **Ações de transcrição só com `transcripts:read`:** a rota pede só `summaries:read` (exigir mais
-  numa rota existente quebraria a v1), e o escopo vale para as ferramentas. `create_chat` guarda no
-  pedido se a credencial lê transcrições (sessão e credencial de aparelho sim; PAT só com
-  `transcripts:read`); sem isso, o harness usa `base_chat_system(transcripts=False)`, que não
-  lista `search_transcripts` nem `read_transcript`, e `parse_action` recusa essas ações (vão para a
-  correção). Como no MCP, que já exige `transcripts:read` na busca por texto.
-- **Fontes verificadas pelo server:** `sources` só mantém ids que apareceram nos resultados devolvidos
-  ao agente, com o título do banco; um id inventado some.
-- **Dado, não instrução:** resumos, falas e resultados voltam em `<ferramenta>` delimitados, e o
-  `system` manda ignorar pedidos dentro deles. O agente não tem ferramenta de escrita.
-- **Busca sem migration:** os resumos são buscados por `websearch_to_tsquery('eclume_pt')` sobre título,
-  tags e a versão atual concluída, calculado na consulta; as falas usam a busca de `GET /search`.
-  Cada consulta abre uma transação do dono (`user_tx`), então a RLS vale como em qualquer rota.
-- **Assíncrono pelo Redis** (`base_chat.py`, como as pré-visualizações): `eclume:basechat:{id}`, 1 h,
-  até 2 em aberto por conta (429), job `base_chat` no worker CPU sem nova tentativa e com o teto de
-  5 minutos do chat de ajuste. O histórico da conversa é do cliente, que reenvia as últimas 10 mensagens.
+- **Dados (migração 031, sob a RLS do dono):** `agent_sessions` (título até 120 caracteres, vazio
+  até a primeira pergunta, que dá o título; `updated_at` é a última atividade), `agent_messages`
+  (a pergunta `user`, sempre `done`, e a resposta `assistant`, de `queued` a `done` ou `failed`, com
+  `sources`, `queries`, `model` e `error`) e `agent_files` (`input` com o texto extraído, `output`
+  gerado pelo agente; o conteúdo no bucket em `users/{dono}/agent/{conversa}/{arquivo}`). Excluir a
+  conversa leva tudo em cascata, e um gatilho `SECURITY DEFINER` em `agent_files` enfileira cada
+  chave em `storage_deletions` (o dreno da 024 limpa o bucket).
+- **Rotas** (`routes/agent.py`, `summaries:read` como `/base-chat`): listar, abrir, renomear e
+  excluir conversas; anexar (multipart) e tirar um anexo ainda não enviado; perguntar (202 com a
+  pergunta e a resposta na fila) e consultar a resposta; baixar o conteúdo de um arquivo
+  (`Content-Disposition: attachment`, `nosniff`). Outra conta é 404. Uma resposta em aberto por
+  conversa (409), duas por conta (429), e cada pergunta conta na cota de 24 h do agente.
+- **Anexos** (`agent_files.py`): .txt, .md, .csv, .pdf (`pypdf`, até 500 páginas) e .docx
+  (`python-docx`, com teto de 50 MB descompactado contra bomba de zip), até 10 MB cada (o
+  `BodyLimitMiddleware` dá ao caminho do anexo 10 MB + 64 KB), 5 por pergunta e 20 por conversa. O
+  tipo vem da extensão e é conferido pelo conteúdo (415 `unsupported_media_type`); o texto
+  extraído é cortado em 200 mil caracteres. PDF sem camada de texto entra com texto vazio e a tela
+  avisa "sem texto legível".
+- **Registro de ferramentas** (`agents/agent_tools.py`): cada `AgentTool` declara o nome da ação, a
+  linha de uso no `system`, a validação, a execução `run(env, action, budget, state)`, a
+  disponibilidade pela credencial (`available(Capabilities)`) e a natureza: `read` consulta,
+  `produce` prepara um arquivo e `action` age no ambiente, sempre com `confirm`. O
+  `default_registry()` tem as quatro ferramentas da base (as de `agents/base_chat.py`, sem
+  transcrição para PAT sem `transcripts:read`), `read_file` (o texto de um anexo da conversa a
+  partir de `offset`, cortado no orçamento, com o próximo `offset` quando continua) e `write_file`
+  (`name`, `format` em `md|txt|csv|docx`, `content` até 200 mil caracteres; até 3 por resposta).
+  `reply` é reservada ao laço; nome repetido ou `action` sem `confirm` é recusado no registro.
+- **O laço** (`agents/agent.py`, `run_agent`): o `system` começa por `AGENT_SYSTEM_PREFIX` e lista
+  só as ferramentas disponíveis; uma ação JSON por chamada, correção uma vez
+  (`provider_bad_output` na segunda), até 8 chamadas (`chat_tool_limit`); `reply` traz a resposta e
+  as fontes, verificadas contra o que as ferramentas devolveram. Uma ferramenta com `confirm` não
+  roda: o agente recebe que a ação espera confirmação e ela fica em `pending_actions`.
+  `AgentContext.instructions` entra no fim do `system` como "Instruções da pessoa" (até 8 mil
+  caracteres). Anexos, resumos e falas são dado, não instrução, delimitados em `<ferramenta>`.
+- **Encaixe para habilidades e ações:** as instruções reutilizáveis do usuário entram por
+  `instructions`; uma ação no ambiente é um `AgentTool` de natureza `action` com `confirm`, que a
+  spec das ações liga a um pedido de confirmação ao usuário em vez do aviso ao agente. Nenhuma
+  ferramenta de escrita está registrada.
+- **O job `agent_turn`** (`agent_sessions.py`, fila `eclume:agents`, sem nova tentativa, teto de 5
+  minutos): enfileirado depois do commit da pergunta, com o `transcripts` da credencial; lê o
+  histórico da conversa (as últimas 10 mensagens prontas) e os anexos enviados, roda o laço, monta
+  os arquivos (`render_output`; o .docx pelo subconjunto de Markdown da exportação), grava-os no
+  bucket e a resposta na mesma transação. Uma resposta em aberto há mais de 15 minutos vira
+  `failed` (`agent_expired`) na leitura.
+
+### Chat sobre a base (obsoleto)
+
+`POST /base-chat` e `GET /base-chat/{id}` seguem na v1, marcados `deprecated` desde a 2.23.0, e o
+web não os usa mais. O estado vive 1 h no Redis (`eclume:basechat:{id}`, até 2 em aberto por conta,
+job `base_chat`), o histórico é o que o cliente reenvia (até 10 mensagens) e o harness
+(`agents/base_chat.py`) tem as mesmas quatro ferramentas da base e `reply`, com as de transcrição só
+com `transcripts:read`; o Agente reaproveita essas ferramentas. O provider vem de
+`base_chat.chat_provider`, comum aos dois.
 
 ## O worker de agentes
 
 Os jobs por agente — `detect_agenda_type`, `fill_fields`, `summarize`, `summary_chat`,
-`base_chat` e `run_preview` — rodam na fila `eclume:agents`, consumida por
+`base_chat`, `agent_turn` e `run_preview` — rodam na fila `eclume:agents`, consumida por
 `arq eclume_server.worker.AgentWorkerSettings` (serviço `worker-agents`) com
 `max_jobs = ECLUME_AGENT_MAX_JOBS` (padrão 4): no máximo tantas chamadas a agente juntas, e a
 ingestão, em `eclume:default`, nunca espera atrás delas (holetz/eclume#96).

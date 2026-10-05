@@ -14,6 +14,9 @@ CREDENTIAL_LIMIT = 64 * 1024
 DEFAULT_LIMIT = 1024 * 1024
 _CREDENTIAL_PREFIXES = ("/api/v1/auth/", "/api/v1/admin/auth/", "/api/v1/devices/")
 _PART_PATH = re.compile(r"/api/v1/uploads/[^/]+/parts/[^/]+")
+# O anexo do Agente: o teto do arquivo (`agent_files.MAX_INPUT_BYTES`) mais o envelope do multipart.
+_AGENT_FILE_PATH = re.compile(r"/api/v1/agent/sessions/[^/]+/files")
+AGENT_FILE_LIMIT = 10 * 1024 * 1024 + 64 * 1024
 
 
 class _BodyTooLargeError(Exception):
@@ -39,6 +42,8 @@ class BodyLimitMiddleware:
             return CREDENTIAL_LIMIT
         if _PART_PATH.fullmatch(path):
             return max(self.part_size, DEFAULT_LIMIT)
+        if _AGENT_FILE_PATH.fullmatch(path):
+            return AGENT_FILE_LIMIT
         return DEFAULT_LIMIT
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

@@ -4,10 +4,10 @@ title: Central de ajuda do web
 description: A ajuda do web do eclume mora no próprio build — artigos Markdown com cabeçalho em web/src/features/help/articles, seis tópicos, chaves de página que ligam cada tela aos artigos dela, busca local sem acento, gaveta por página e dicas em linha — escrita em pt-BR para o produto por usuário, com termos do produto antigo recusados por teste e a regra de revisar os artigos de uma tela quando ela muda.
 resource: web/src/features/help/**, web/src/app/help.ts, web/src/app/HelpDrawer.tsx, web/src/app/HelpHint.tsx
 tags: [code, web, ajuda, documentacao, acessibilidade]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#38, holetz/eclume#125
+source: holetz/eclume#38, holetz/eclume#125, holetz/eclume#142
 maintainer: holetz
 ---
 
@@ -52,7 +52,8 @@ atualizado: 2026-09-27
   `transcricao` (Transcrição e locutores), `resumos` (Resumos e chat), `organizar` (Campos, regras
   e tipos de agenda) e `conectar` (Assistentes, tokens e aparelhos). `ordem` ordena dentro do
   tópico.
-- `paginas` são **chaves de página** (`pages.ts`): `biblioteca`, `gravacao`, `busca`, `pessoas`,
+- `paginas` são **chaves de página** (`pages.ts`): `biblioteca`, `gravacao`, `busca`, `agente` (antes
+  `perguntas`), `pessoas`,
   `pessoa`, `colecoes`, `campos`, `agendas`, `mcp`, `tokens`, `app-desktop`, `app-movel` e
   `ajuda`. Chave nova entra em `HELP_PAGES`, com o rótulo do "Nesta página · <rótulo>".
 - `termos` são sinônimos que a busca pesa, mas que o texto não precisa repetir.

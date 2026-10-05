@@ -1504,6 +1504,7 @@ export interface paths {
          *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
          *     pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
          *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+         * @deprecated
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1525,8 +1526,145 @@ export interface paths {
          * Uma pergunta e a resposta
          * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
          *     que o agente de fato consultou e em que a resposta se apoia.
+         * @deprecated
          */
         get: operations["getBaseChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** As conversas do Agente */
+        get: operations["listAgentSessions"];
+        put?: never;
+        /** Abrir uma conversa */
+        post: operations["createAgentSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        /** Uma conversa com as mensagens e os arquivos */
+        get: operations["getAgentSession"];
+        put?: never;
+        post?: never;
+        /** Excluir a conversa */
+        delete: operations["deleteAgentSession"];
+        options?: never;
+        head?: never;
+        /** Renomear a conversa */
+        patch: operations["renameAgentSession"];
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Anexar um arquivo à conversa */
+        post: operations["attachAgentFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Tirar um anexo ainda não enviado */
+        delete: operations["deleteAgentFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Perguntar ao Agente */
+        post: operations["askAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                message_id: components["parameters"]["AgentMessageId"];
+            };
+            cookie?: never;
+        };
+        /** Uma mensagem da conversa */
+        get: operations["getAgentMessage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        /** Baixar um anexo ou um arquivo gerado */
+        get: operations["downloadAgentFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3542,6 +3680,99 @@ export interface components {
                 message: string;
             } | null;
         };
+        AgentSession: {
+            /** Format: uuid */
+            id: string;
+            /** @description Vazio até a primeira pergunta, que dá o título. */
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description A última atividade (pergunta ou resposta).
+             */
+            updated_at: string;
+        };
+        AgentSessionCreate: {
+            title?: string;
+        };
+        AgentSessionUpdate: {
+            title: string;
+        };
+        /** @description Uma `AgentSession` com as mensagens e os anexos ainda não enviados. */
+        AgentSessionDetail: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            messages: components["schemas"]["AgentMessage"][];
+            /** @description Os anexos ainda não enviados com uma pergunta. */
+            pending_files: components["schemas"]["AgentFile"][];
+        };
+        AgentFile: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            session_id: string;
+            /**
+             * Format: uuid
+             * @description A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+             */
+            message_id: string | null;
+            /**
+             * @description `input` é anexo da pessoa; `output`, arquivo gerado pelo agente.
+             * @enum {string}
+             */
+            direction: "input" | "output";
+            name: string;
+            media_type: string;
+            size_bytes: number;
+            /** @description Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado. */
+            text_chars: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AgentMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** @enum {string} */
+            role: "user" | "assistant";
+            /** @description A pergunta, ou a resposta em Markdown (vazia até `done`). */
+            content: string;
+            /**
+             * @description A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description As gravações consultadas em que a resposta se apoia. */
+            sources: components["schemas"]["BaseChatSource"][];
+            /** @description Quantas ferramentas o agente chamou. */
+            queries: number;
+            model: string | null;
+            /** @description Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a resposta passou de 15 minutos em aberto. */
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /** @description Os anexos da pergunta ou os arquivos gerados pela resposta. */
+            files: components["schemas"]["AgentFile"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        AgentMessageCreate: {
+            message: string;
+            /** @description Ids de anexos desta conversa ainda não enviados (até 5). */
+            attachments?: string[];
+        };
+        AgentTurn: {
+            question: components["schemas"]["AgentMessage"];
+            answer: components["schemas"]["AgentMessage"];
+        };
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
         /**
@@ -4284,6 +4515,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a 2.23.0), ou o conteúdo não bate com a extensão. */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o teto em bytes. */
         PayloadTooLarge: {
             headers: {
@@ -4343,6 +4583,9 @@ export interface components {
         AgendaTypeId: string;
         FieldId: string;
         PreviewId: string;
+        AgentSessionId: string;
+        AgentMessageId: string;
+        AgentFileId: string;
         BaseChatId: string;
         PersonId: string;
         CollectionId: string;
@@ -6821,6 +7064,305 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseChat"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentSessions: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma página de conversas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentSession"][];
+                        next_cursor: components["schemas"]["NextCursor"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AgentSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description A conversa criada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAgentSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A conversa. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renameAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSessionUpdate"];
+            };
+        };
+        responses: {
+            /** @description A conversa renomeada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    attachAgentFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description O anexo, ainda sem pergunta (`message_id` nulo). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteAgentFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tirado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    askAgent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentMessageCreate"];
+            };
+        };
+        responses: {
+            /** @description A pergunta gravada e a resposta na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTurn"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAgentMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                message_id: components["parameters"]["AgentMessageId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A mensagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMessage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadAgentFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O arquivo, como anexo. */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/markdown": string;
+                    "text/csv": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

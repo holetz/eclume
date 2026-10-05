@@ -7,7 +7,7 @@ tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127, holetz/eclume#128, holetz/eclume#144
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127, holetz/eclume#128, holetz/eclume#144, holetz/eclume#142
 maintainer: holetz
 ---
 
@@ -62,6 +62,18 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   dispositivo escolher o tipo ao parar). A credencial de dispositivo tem `recordings:read`,
   `recordings:write`, `summaries:read` (2.6.0) e `transcripts:read` (2.8.0, a pasta sincronizada do
   desktop). Sessão tem todas as permissões do usuário.
+- **Agente (2.23.0, `agent`):** `GET`/`POST /agent/sessions` (as conversas, por cursor, da
+  última atividade para trás; criar, com título opcional), `GET`/`PATCH`/`DELETE
+  /agent/sessions/{session_id}` (a conversa com as mensagens e os anexos não enviados; renomear;
+  excluir), `POST /agent/sessions/{session_id}/files` (multipart, 201; .txt, .md, .csv, .pdf e .docx
+  até 10 MB, 415 `unsupported_media_type` fora disso, 409 `too_many_files` acima de 20 por
+  conversa), `DELETE .../files/{file_id}` (só anexo não enviado; o enviado é 409), `POST
+  .../messages` (202 com `question` e `answer`; 409 com outra resposta em aberto na conversa, 429
+  com duas na conta, cota de 24 h do agente), `GET .../messages/{message_id}` (consulta até `done`
+  ou `failed`, com `agent_expired` depois de 15 minutos em aberto) e `GET
+  /agent/files/{file_id}/content` (o arquivo como anexo). Todas com `summaries:read`, como o chat
+  sobre a base; o escopo `transcripts:read` vale para as ferramentas. Outra conta é 404. Aditivo:
+  `/base-chat` segue igual e passa a `deprecated`.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
@@ -237,6 +249,7 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   holetz/eclume#100): `Recording.owner`, `TranscriptSummary.owner`, `Transcript.owner`,
   `VoiceSample.created_by`, `Summary.created_by` e `SummaryChatMessage.created_by` — resquícios do
   modelo com organização; com cada conta isolada, valem sempre o próprio usuário.
+  Também sai o chat sobre a base (`/base-chat`, obsoleto desde a 2.23.0), que o Agente substitui.
 - **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
   removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
   e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes
