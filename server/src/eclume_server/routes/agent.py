@@ -4,6 +4,9 @@ Tudo sob a RLS do dono: a conversa, a mensagem ou o arquivo de outra conta é 40
 `summaries:read`, como `/base-chat`; ler transcrições continua sendo das ferramentas (sessão e
 credencial de aparelho sim, PAT só com `transcripts:read`). Contrato em
 docs/standards/code/server-agentes.md §Agente.
+
+As ações propostas pelo agente (holetz/eclume#145) se confirmam ou descartam aqui; confirmar exige
+o escopo de escrita da ferramenta (`summaries:write` ou `recordings:write`) e é idempotente.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from fastapi import APIRouter, Depends, File, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from eclume_server.agent_actions import cancel_action, confirm_action, enqueue_action, list_actions, read_action
 from eclume_server.agent_files import MAX_INPUT_BYTES, MAX_INPUTS_PER_MESSAGE
 from eclume_server.agent_sessions import (
     MAX_MESSAGE,
@@ -62,6 +66,18 @@ class AgentMessageCreate(BaseModel):
 
     message: str = Field(min_length=1, max_length=MAX_MESSAGE)
     attachments: list[UUID] = Field(default_factory=list, max_length=MAX_INPUTS_PER_MESSAGE)
+    # O nome da habilidade escolhida no seletor; `/nome` no começo da mensagem vale o mesmo.
+    skill: str | None = Field(default=None, max_length=41)
+
+
+WRITE_SCOPES = ("summaries:write", "recordings:write")
+
+
+def _write_scopes(principal: Principal) -> frozenset[str]:
+    # A sessão propõe todas as ações; um PAT, só as dos escopos de escrita dele.
+    if principal.method != "pat":
+        return frozenset(WRITE_SCOPES)
+    return frozenset(scope for scope in WRITE_SCOPES if scope in principal.scopes)
 
 
 def _transcripts(principal: Principal) -> bool:
@@ -135,8 +151,10 @@ async def post_message(session_id: UUID, body: AgentMessageCreate, principal: Re
         quota = await agent_limit(conn, principal.user_id)
     await take_agent_request(ctx.queue.pool, principal.user_id, quota)
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        turn = await send_message(conn, principal.user_id, session_id, body.message, body.attachments)
-    await enqueue_turn(ctx.queue.pool, turn.answer_id, transcripts=_transcripts(principal))
+        turn = await send_message(conn, principal.user_id, session_id, body.message, body.attachments, body.skill)
+    await enqueue_turn(
+        ctx.queue.pool, turn.answer_id, transcripts=_transcripts(principal), scopes=_write_scopes(principal)
+    )
     return {"question": turn.question, "answer": turn.answer}
 
 
@@ -168,3 +186,34 @@ async def download_file(file_id: UUID, principal: Reader, ctx: Ctx) -> Streaming
         "X-Content-Type-Options": "nosniff",
     }
     return StreamingResponse(obj.chunks, media_type=row["media_type"], headers=headers)
+
+
+@router.get("/agent/actions")
+async def get_actions(principal: Reader, ctx: Ctx, limit: Limit = 50, cursor: Cursor = None) -> dict[str, Any]:
+    """O registro das ações propostas pelo Agente, da mais recente para trás."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await list_actions(conn, cursor, limit)
+
+
+@router.get("/agent/actions/{action_id}")
+async def get_action(action_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """Uma ação, com o resultado por alvo (a consulta até `done` ou `failed`)."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await read_action(conn, action_id)
+
+
+@router.post("/agent/actions/{action_id}/confirm", status_code=202)
+async def post_confirm(action_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """Confirma a proposta e enfileira a execução; confirmar de novo devolve o estado sem repetir."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        action, enqueue = await confirm_action(conn, principal, action_id)
+    if enqueue:
+        await enqueue_action(ctx.queue.pool, action_id)
+    return action
+
+
+@router.post("/agent/actions/{action_id}/cancel")
+async def post_cancel(action_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
+    """Descarta a proposta ainda não confirmada."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        return await cancel_action(conn, action_id)

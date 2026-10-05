@@ -3,7 +3,9 @@
 Tudo vive sob a RLS do dono (`user_tx`): outra conta não enxerga nada, e a rota responde 404. A
 pergunta grava a mensagem `user`, liga os anexos a ela, cria a resposta `assistant` em `queued` e,
 depois do commit, enfileira `agent_turn` no worker de agentes, que roda o laço de
-`agents/agent.py` e grava a resposta, as fontes e os arquivos gerados (no bucket, sob o dono). A
+`agents/agent.py` e grava a resposta, as fontes, os arquivos gerados (no bucket, sob o dono) e as
+propostas de ação (`agent_actions.py`, que a pessoa confirma depois). A pergunta pode escolher uma
+habilidade (`skill` ou `/nome` no começo do texto), guardada na mensagem (holetz/eclume#145). A
 conta tem até `MAX_OPEN` respostas em aberto e a conversa, uma. Uma resposta em aberto há mais de
 `STALE_AFTER` vira `failed` (`agent_expired`) na leitura. Contrato em
 docs/standards/code/server-agentes.md §Agente.
@@ -20,6 +22,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, func, insert, select, tuple_, update
 
+from eclume_server.agent_actions import Planner, actions_by_message, save_proposals
 from eclume_server.agent_files import (
     MAX_INPUT_BYTES,
     MAX_INPUTS_PER_MESSAGE,
@@ -30,9 +33,10 @@ from eclume_server.agent_files import (
     file_key,
     render_output,
 )
+from eclume_server.agent_skills import as_skill, enabled_skill, skill_briefs, split_prefix
 from eclume_server.agents import ProviderError
 from eclume_server.agents.agent import AgentContext, AttachedFile, run_agent
-from eclume_server.agents.agent_tools import InputFile
+from eclume_server.agents.agent_tools import InputFile, ProposedAction, Skill, skill_name
 from eclume_server.base_chat import BaseTools, ChatError, chat_provider
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
@@ -98,8 +102,10 @@ def file_json(row: Row) -> dict[str, Any]:
     }
 
 
-def message_json(row: Row, files: list[dict[str, Any]]) -> dict[str, Any]:
-    """Schema `AgentMessage`, com os arquivos ligados a ela."""
+def message_json(
+    row: Row, files: list[dict[str, Any]], actions: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Schema `AgentMessage`, com os arquivos e as propostas de ação ligados a ela."""
     return {
         "id": str(row["id"]),
         "session_id": str(row["session_id"]),
@@ -111,6 +117,8 @@ def message_json(row: Row, files: list[dict[str, Any]]) -> dict[str, Any]:
         "model": row["model"],
         "error": row["error"],
         "files": files,
+        "skill": row.get("skill_name"),
+        "actions": actions or [],
         "created_at": iso(row["created_at"]),
     }
 
@@ -213,8 +221,11 @@ async def session_detail(conn: AsyncConnection, session_id: UUID) -> dict[str, A
     by_message, pending = await _files_by_message(conn, session_id)
     stmt = select(t.agent_messages).where(M.session_id == session_id).order_by(M.created_at, M.id)
     rows = (await conn.execute(stmt)).mappings().all()
+    actions = await actions_by_message(conn, [row["id"] for row in rows if row["role"] == "assistant"])
     return session_json(session) | {
-        "messages": [message_json(row, by_message.get(row["id"], [])) for row in rows],
+        "messages": [
+            message_json(row, by_message.get(row["id"], []), actions.get(row["id"])) for row in rows
+        ],
         "pending_files": pending,
     }
 
@@ -234,7 +245,8 @@ async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID
         .mappings()
         .all()
     )
-    return message_json(row, [file_json(item) for item in files])
+    actions = await actions_by_message(conn, [message_id])
+    return message_json(row, [file_json(item) for item in files], actions.get(message_id))
 
 
 # --- anexos --------------------------------------------------------------------------------------
@@ -335,13 +347,26 @@ async def send_message(
     session_id: UUID,
     message: str,
     attachments: list[UUID],
+    skill: str | None = None,
 ) -> Turn:
     """Grava a pergunta com os anexos e a resposta `queued`; quem chama enfileira depois do commit.
 
     409 com outra resposta em aberto na conversa, 429 com `MAX_OPEN` na conta, 422 em anexo que não é
-    desta conversa ou já foi enviado.
+    desta conversa ou já foi enviado, e em habilidade (`skill` ou `/nome` no começo) inexistente ou
+    desligada.
     """
     session = await _session(conn, session_id, lock=True)
+    prefixed, rest = split_prefix(message)
+    chosen = skill_name(skill) or prefixed
+    skill_row = None
+    if chosen is not None:
+        skill_row = await enabled_skill(conn, chosen)
+        if skill_row is None:
+            raise invalid_field("skill", f"habilidade /{chosen} inexistente ou desligada")
+        if prefixed is not None:
+            message = rest
+        if not message.strip():
+            raise invalid_field("message", "escreva o pedido depois do nome da habilidade")
     await expire_stale(conn)
     open_rows = (
         await conn.execute(select(M.session_id).where(and_(M.role == "assistant", M.status.in_(OPEN))))
@@ -373,7 +398,15 @@ async def send_message(
         (
             await conn.execute(
                 insert(t.agent_messages)
-                .values(session_id=session_id, owner_id=owner_id, role="user", content=text, status="done")
+                .values(
+                    session_id=session_id,
+                    owner_id=owner_id,
+                    role="user",
+                    content=text,
+                    status="done",
+                    skill_id=skill_row["id"] if skill_row else None,
+                    skill_name=skill_row["name"] if skill_row else None,
+                )
                 .returning(t.agent_messages)
             )
         )
@@ -409,10 +442,20 @@ async def send_message(
     )
 
 
-async def enqueue_turn(redis: ArqRedis, message_id: UUID, *, transcripts: bool) -> None:
-    """Enfileira `agent_turn` (depois do commit, para o job enxergar as linhas)."""
+async def enqueue_turn(
+    redis: ArqRedis, message_id: UUID, *, transcripts: bool, scopes: frozenset[str] = frozenset()
+) -> None:
+    """Enfileira `agent_turn` (depois do commit, para o job enxergar as linhas).
+
+    `scopes` são os de escrita da credencial: decidem quais ações o agente pode propor.
+    """
     await redis.enqueue_job(
-        "agent_turn", str(message_id), transcripts, _job_id=f"agent:{message_id}", _queue_name=AGENT_QUEUE
+        "agent_turn",
+        str(message_id),
+        transcripts,
+        sorted(scopes),
+        _job_id=f"agent:{message_id}",
+        _queue_name=AGENT_QUEUE,
     )
 
 
@@ -446,12 +489,24 @@ class SessionEnv:
             row = (await conn.execute(stmt)).first()
         return InputFile(file_id, row.name, row.text_content or "") if row else None
 
+    async def skill(self, name: str) -> Skill | None:
+        """A habilidade ligada do dono com esse nome."""
+        async with user_tx(self.engine, self.owner_id) as conn:
+            row = await enabled_skill(conn, name)
+        return as_skill(row) if row else None
 
-async def _context(conn: AsyncConnection, session_id: UUID, answer: Row, *, transcripts: bool) -> AgentContext:
+    async def plan_action(self, tool: str, params: dict[str, Any], limit: int) -> ProposedAction | str:
+        """A proposta da ação, com os alvos resolvidos sob a RLS do dono."""
+        return await Planner(self.engine, self.owner_id).plan(tool, params, limit)
+
+
+async def _context(
+    conn: AsyncConnection, session_id: UUID, answer: Row, *, transcripts: bool, scopes: frozenset[str]
+) -> AgentContext:
     rows = (
         (
             await conn.execute(
-                select(M.role, M.content)
+                select(M.role, M.content, M.skill_id)
                 .where(and_(M.session_id == session_id, M.status == "done", M.created_at < answer["created_at"]))
                 .order_by(M.created_at.desc(), M.id.desc())
                 .limit(HISTORY + 1)
@@ -469,20 +524,34 @@ async def _context(conn: AsyncConnection, session_id: UUID, answer: Row, *, tran
             .order_by(F.created_at)
         )
     ).all()
+    skill = None
+    question_skill = rows[0].skill_id
+    if question_skill is not None:
+        found = (
+            (await conn.execute(select(t.agent_skills).where(t.agent_skills.c.id == question_skill)))
+            .mappings()
+            .first()
+        )
+        skill = as_skill(found) if found else None
     return AgentContext(
         history=turns[:-1][-HISTORY:],
         question=turns[-1][1],
         files=[AttachedFile(row.id, row.name, row.chars) for row in files],
         transcripts=transcripts,
+        scopes=scopes,
+        skill=skill,
+        skills=await skill_briefs(conn),
     )
 
 
-async def _answer(ctx: dict[str, Any], owner_id: UUID, answer: Row, *, transcripts: bool) -> None:
+async def _answer(
+    ctx: dict[str, Any], owner_id: UUID, answer: Row, *, transcripts: bool, scopes: frozenset[str]
+) -> None:
     engine: AsyncEngine = ctx["engine"]
     storage: Storage = ctx["storage"]
     session_id = answer["session_id"]
     async with user_tx(engine, owner_id) as conn:
-        context = await _context(conn, session_id, answer, transcripts=transcripts)
+        context = await _context(conn, session_id, answer, transcripts=transcripts, scopes=scopes)
     provider = await chat_provider(ctx)
     result = await run_agent(provider, context, SessionEnv(engine, owner_id, session_id))
     rendered = [await asyncio.to_thread(render_output, item.name, item.format, item.content) for item in result.files]
@@ -504,6 +573,7 @@ async def _answer(ctx: dict[str, Any], owner_id: UUID, answer: Row, *, transcrip
                 )
             )
             await storage.put_object(key, item.data, item.media_type)
+        await save_proposals(conn, owner_id, session_id, answer["id"], result.proposals)
         await conn.execute(
             update(t.agent_messages)
             .where(M.id == answer["id"])
@@ -522,6 +592,7 @@ async def run_agent_turn_job(
     ctx: dict[str, Any],
     message_id: str,
     transcripts: bool = True,  # noqa: FBT001, FBT002 — argumento posicional do job
+    scopes: list[str] | None = None,
 ) -> str:
     """O job `agent_turn`: responde a pergunta e grava a resposta (ou o erro) na conversa."""
     engine: AsyncEngine = ctx["engine"]
@@ -547,7 +618,7 @@ async def run_agent_turn_job(
         return "resposta fora da fila"
     try:
         async with asyncio.timeout(CHAT_TIMEOUT_S):
-            await _answer(ctx, owner_id, answer, transcripts=transcripts)
+            await _answer(ctx, owner_id, answer, transcripts=transcripts, scopes=frozenset(scopes or []))
     except (ChatError, ProviderError) as exc:
         error = {"code": exc.code, "message": exc.message}
     except TimeoutError:
