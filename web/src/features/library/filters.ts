@@ -7,8 +7,13 @@ type Status = Schemas['RecordingStatus']
 export type LibraryView = 'semana' | 'mes' | 'lista'
 export type KindParam = 'reuniao' | 'nota'
 export type StatusParam = 'pronta' | 'processando' | 'falhou'
+/** O que a gravação espera de você para seguir (`Recording.awaiting`), na URL em pt-BR. */
+export type NeedsParam = 'locutores'
 
 export const KINDS: Record<KindParam, Kind> = { reuniao: 'meeting', nota: 'note' }
+
+/** "Precisam de você" → `awaiting` do contrato. */
+export const NEEDS: Record<NeedsParam, 'speakers'> = { locutores: 'speakers' }
 
 /**
  * Situação da tela → estados do contrato. "Processando" junta envio, fila e transcrição; uma
@@ -32,6 +37,8 @@ export interface LibraryFilters {
   personCompany: string[]
   personDepartment: string[]
   personTag: string[]
+  /** Precisam de você: a gravação parada à espera dos nomes dos locutores. */
+  needs: NeedsParam[]
 }
 
 const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
@@ -44,6 +51,7 @@ const FILTER_PARAMS: Record<keyof LibraryFilters, string> = {
   personCompany: 'empresa',
   personDepartment: 'area',
   personTag: 'tag-pessoa',
+  needs: 'precisa',
 }
 
 const VIEWS: readonly LibraryView[] = ['semana', 'mes', 'lista']
@@ -64,6 +72,7 @@ export function readFilters(params: URLSearchParams): LibraryFilters {
     personCompany: all('personCompany'),
     personDepartment: all('personDepartment'),
     personTag: all('personTag'),
+    needs: only(params.getAll('precisa'), Object.keys(NEEDS) as NeedsParam[]),
   }
 }
 
@@ -92,6 +101,7 @@ export const NO_FILTERS: LibraryFilters = {
   personCompany: [],
   personDepartment: [],
   personTag: [],
+  needs: [],
 }
 
 /** Quantos filtros estão ligados (um por valor escolhido). */
@@ -116,6 +126,7 @@ export function filtersToQuery(filters: LibraryFilters): RecordingsQuery {
   if (filters.personCompany.length) query.person_company = filters.personCompany
   if (filters.personDepartment.length) query.person_department = filters.personDepartment
   if (filters.personTag.length) query.person_tag = filters.personTag
+  if (filters.needs.length) query.awaiting = filters.needs.map((need) => NEEDS[need])
   return query
 }
 

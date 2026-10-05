@@ -65,6 +65,15 @@
           "reason": null
         },
         {
+          "step": "speakers",
+          "state": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "duration_ms": null,
+          "error": null,
+          "reason": null
+        },
+        {
           "step": "agenda_type",
           "state": "pending",
           "started_at": null,
@@ -92,6 +101,7 @@
           "reason": null
         }
       ],
+      "awaiting": null,
       "transcript_id": null,
       "marker_count": 0,
       "created_at": "2026-09-19T13:41:07Z",
@@ -173,6 +183,15 @@
           "reason": null
         },
         {
+          "step": "speakers",
+          "state": "done",
+          "started_at": "2026-09-18T15:01:30Z",
+          "finished_at": "2026-09-18T15:01:30Z",
+          "duration_ms": 0,
+          "error": null,
+          "reason": null
+        },
+        {
           "step": "agenda_type",
           "state": "done",
           "started_at": "2026-09-18T15:01:40Z",
@@ -200,6 +219,7 @@
           "reason": null
         }
       ],
+      "awaiting": null,
       "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
       "marker_count": 2,
       "created_at": "2026-09-18T14:09:31Z",

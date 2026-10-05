@@ -8,6 +8,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Adicionado
+
+- Painel das gravações recentes, com a etapa de cada uma e o "Precisa de você" quando a gravação
+  espera os nomes dos locutores (holetz/eclume#141, holetz/eclume#144).
+
 ## [0.4.1] - 2026-10-01
 
 ### Adicionado

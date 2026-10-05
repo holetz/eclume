@@ -4,7 +4,7 @@ title: Glossário
 description: A busca A–Z única de termos, siglas e vocabulário de domínio do eclume — uma entrada por termo, com link para o doc completo quando ele existe.
 resource: docs/**
 tags: [glossary, vocabulary, terminology]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
 source: claude-quenching skeleton
@@ -27,7 +27,10 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 
 ## Terms
 
-- [agente](standards/code/server-agentes.md) — Modelo de linguagem que o server chama por um provider para preencher campos, detectar o tipo de agenda, resumir e conversar (chat de ajuste e Perguntar).
+- [ação do Agente](standards/code/server-agentes.md#agente) — Mudança em lote que o Agente propõe (regenerar resumos, aplicar ou remover tags, incluir ou tirar de coleções, trocar o tipo de agenda) e que só executa depois que a pessoa confirma no cartão; cada uma fica em `agent_actions`, que é também o registro de auditoria.
+- [agente](standards/code/server-agentes.md) — Modelo de linguagem que o server chama por um provider para preencher campos, detectar o tipo de agenda, resumir e conversar (chat de ajuste e a tela Agente).
+- [Agente (tela)](standards/code/server-agentes.md#agente) — A tela de conversa do web (`/agente`, antes Perguntas e `/perguntas`), item em destaque da navegação, que responde sobre as gravações e os arquivos anexados, devolve arquivos para baixar e guarda as conversas por usuário.
+- [aguardando locutores](standards/code/processamento-automatico.md#marcação-dos-locutores) — Estado da gravação cuja etapa `speakers` ficou `waiting` porque a conta exige a marcação dos locutores e há voz sem pessoa; a cadeia por agente só segue quando a pessoa nomeia os locutores ou escolhe "Seguir sem nomear" (no desktop, "Precisa de você").
 - [Anarlog](project/referencias.md) — App de notas de reunião (Tauri 2, MIT) de onde o desktop do eclume reaproveita crates Rust de detecção e captura de áudio.
 - [App móvel](standards/code/mobile-app.md) — O app Android do eclume (Tauri 2, pilar `mobile/`): um microfone portátil que grava com a tela bloqueada, marca instantes e sincroniza no Wi‑Fi do servidor, sem ler transcrições.
 - [artigo de ajuda](standards/code/web-central-de-ajuda.md#o-cabeçalho) — Arquivo Markdown em `web/src/features/help/articles/<slug>.md`, com cabeçalho (título, tópico, chaves de página, relacionados, termos, ordem, data), servido em `/ajuda/<slug>`.
@@ -47,6 +50,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [conta de admin](standards/code/server-admin.md) — Conta da tabela `admins`, separada das contas de usuário, com login e sessão próprios (`/admin/auth/login`) que só alcançam `/admin/*`; criada pelo CLI `eclume-server admin create`.
 - [contrato de jobs](standards/api/jobs-transcricao.md) — Acordo entre o server e o worker GPU: filas arq `eclume:gpu`/`eclume:default`/`eclume:agents`, job `transcribe`, artefatos no bucket e `ingest_transcript`/`transcription_failed`.
 - [contrato v1](standards/api/contrato-v1.md) — OpenAPI e JSON Schema da transcrição em `contracts/`, fonte da verdade entre o eclume e os clientes; só evolui de forma aditiva, com a linha 2.x sob `/api/v1` (do fim da organização, 2.0.0, até o fim do redesign) como exceção única; a próxima quebra vai para `/api/v2`.
+- [conversa do Agente](standards/code/server-agentes.md#agente) — Sessão guardada no Postgres sob a RLS do dono (`agent_sessions`), com as perguntas, as respostas e os arquivos de entrada e saída, que a pessoa retoma, renomeia ou exclui em Conversas (`/agente/conversas`).
 - [credencial de dispositivo](standards/code/server-mcp-e-dispositivos.md#credencial-de-dispositivo) — Token `eclp_` de `kind: device` (com a plataforma do aparelho, `recordings:read` e `recordings:write`, sem validade) que o desktop ou o celular recebe ao entrar por e-mail e senha ou por código de pareamento; revogá-lo desliga o aparelho.
 - [descoberta (mDNS)](standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns) — Anúncio `_eclume._tcp` na LAN pelo serviço `mdns` (`eclume-server announce`), com a URL pública e a impressão digital da CA no TXT, para os apps acharem o servidor sem digitar o endereço.
 - [descritor do servidor](standards/code/server-mcp-e-dispositivos.md#descritor-do-servidor) — `GET /api/v1/server`, público: nome, endereço, endereço MCP, impressão digital da CA raiz e versões; a fonte do mDNS, do QR, do pareamento e do instalador com endereço embutido.
@@ -67,6 +71,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [gate de qualidade](standards/code/monorepo.md) — Prova dos nove pilares no host GPU (`bash deploy/gate.sh`) que publica o status `eclume/gate` no commit; deploy e releases recusam um SHA sem ele em `success`.
 - [gaveta de ajuda](standards/code/frontend-web.md) — O painel lateral `.help-drawer` do web, aberto com `?` ou pelo botão Ajuda do cabeçalho da página, com os links de ajuda daquela página e os atalhos de teclado.
 - [grupo de escopo](standards/code/server-mcp-e-dispositivos.md#grupos-da-tela-conexão-mcp) — Conjunto de escopos que a tela Conexão MCP oferece como uma escolha só: Buscar e ler gravações, Ler e editar resumos, Editar campos e tags e Excluir gravações.
+- [habilidade](standards/code/server-agentes.md#agente) — Instruções reutilizáveis da pessoa para o Agente (nome `/nome`, descrição, instruções em Markdown e, opcionalmente, as ferramentas permitidas), cadastradas em Habilidades (`/agente/habilidades`) e invocadas por `/nome`, pelo seletor ou pelo próprio Agente com `use_skill`.
 - [heartbeat do worker GPU](standards/api/jobs-transcricao.md) — Hash `eclume:gpu:health` que o worker GPU regrava a cada 15 s (TTL 45 s) com a GPU, o modelo residente e se há job; a Saúde do painel admin lê dele.
 - [host GPU](project/host-setup.md) — O servidor `192.168.15.199` (GTX 1660 Super, 6 GB) onde rodam os containers do eclume e do lumea, acessado por `docker --context gpu-host`.
 - [importação no desktop](standards/code/desktop-importacao.md) — Um arquivo de áudio ou vídeo trazido para o app desktop pelo diálogo ou arrastado para a janela, com a data lida do arquivo e confirmada, convertido para Ogg/Opus (ou copiado como está) e enviado com `source: upload`.
@@ -75,6 +80,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [início da gravação](standards/code/formato-audio-upload.md#o-início-da-gravação-lido-antes-da-conversão) — O `recorded_at` de uma gravação importada, lido dos metadados do arquivo antes da conversão e confirmado pela pessoa no modal Importar.
 - [locutor](standards/code/server-nucleo.md#pessoas-coleções-e-edição-da-transcrição) — Voz distinta que a diarização separa numa transcrição ("Locutor 1"), ligada a uma pessoa do diretório à mão ou pela identificação por voz.
 - **lumea** — Plataforma de desenvolvimento humano e organizacional da EK, que importa transcrições do eclume por PAT.
+- [marcação dos locutores](standards/code/processamento-automatico.md#marcação-dos-locutores) — Preferência da conta (`require_speaker_naming`, em `/me/speaker-naming`) que faz a ingestão parar na etapa `speakers` até todo locutor com fala relevante ter pessoa; ver aguardando locutores.
 - [marcador](standards/code/server-nucleo.md#gravação-data-natureza-e-marcadores) — Instante de uma gravação (`at_ms`), com nota opcional e o dispositivo que marcou, enviado pelos apps de forma idempotente por `client_id`.
 - [Mediabunny](standards/code/formato-audio-upload.md) — Biblioteca TypeScript de demux, conversão e mux sobre WebCodecs, a via principal da conversão de mídia no navegador.
 - [mock server](../contracts/README.md) — Prism servindo o bundle do contrato v1 com as fixtures (`deploy/docker-compose.mock.yml`, `127.0.0.1:4010`), contra o qual o lumea, o desktop e o web desenvolvem sem o backend.
@@ -86,11 +92,11 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [padrão de título](standards/code/processamento-automatico.md) — Modelo do título que um tipo de agenda aplica à gravação, com os marcadores `{assunto}`, `{data}`, `{tipo}` e `{<chave do campo>}`.
 - [painel de administração](standards/code/frontend-web.md) — App à parte dentro do web (`/admin/entrar`, `/admin/*`), com login, sessão e moldura próprios, onde a conta de admin configura a plataforma sem ver conteúdo de usuário.
 - [painel de filtros](standards/code/frontend-web.md#biblioteca-no-tempo) — O `.filters` recolhível à direita da biblioteca (tipo, situação, tags, pessoas, coleções e campos do usuário), cujos filtros vão na URL e na consulta.
+- [painel Recentes](standards/code/desktop-interface.md#painel-recentes) — O topo da janela principal do desktop com as últimas N gravações da conta (Ocultar, 3, 5 ou 10; 5 por padrão), a etapa e o progresso de cada uma, o alerta "Precisa de você" e o Copiar resumo.
 - [parada por silêncio](standards/code/desktop-gravacao.md#nota-de-voz-e-parada-por-silêncio) — O fim automático da nota de voz depois de 2, 4 ou 8 s sem fala, decidido pelo detector de energia do app desktop; sem voz nos primeiros 10 s, a nota é descartada.
 - [participante](standards/code/frontend-web.md#pessoas-busca-e-coleções) — Pessoa do diretório ligada a um locutor da gravação; o filtro Participantes da biblioteca casa empresa, área e tag de pessoa de um mesmo participante.
 - [pasta sincronizada](standards/code/desktop-pasta-sincronizada.md) — Pasta do computador que o app desktop mantém como espelho da biblioteca: o resumo atual de cada gravação em Markdown e a transcrição em JSONL, uma subpasta por coleção e um `AGENTS.md` na raiz, para servir de vault do Obsidian e de pasta de trabalho de agente.
 - [PAT](standards/code/server-nucleo.md#autenticação) — Personal Access Token (na tela, token de acesso): token pessoal `eclp_` com escopos, guardado como hash, usado pelo lumea e pelos assistentes (MCP) para acessar a API; o desktop e o celular usam a credencial de dispositivo.
-- [Perguntar](standards/code/server-agentes.md#chat-sobre-a-base) — A tela de perguntas sobre todas as gravações do usuário (`/perguntas`, o chat sobre a base), item em destaque da navegação do web, que responde citando as gravações em que se apoia.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `mobile/`, `contracts/`, `deploy/`.
 - [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.

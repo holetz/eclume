@@ -581,6 +581,8 @@ mark,.hl{background:var(--color-highlight);color:inherit;padding:0 2px}
 .pipeline li[data-state='failed']{color:var(--color-danger);font-weight:600}
 .pipeline li[data-state='failed']::before{background:currentColor}
 .pipeline li[data-state='skipped']{text-decoration:line-through}
+.pipeline li[data-state='waiting']{color:var(--color-warning);font-weight:600}
+.pipeline li[data-state='waiting']::before{border-style:dashed}
 
 
 /* — markers: moments flagged while recording (phone, desktop), shown on the recording and in the transcript — */

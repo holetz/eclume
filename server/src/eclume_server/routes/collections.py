@@ -83,16 +83,6 @@ def collection_json(row: Row) -> dict[str, Any]:
     }
 
 
-async def check_collections(conn: AsyncConnection, collection_ids: list[UUID]) -> None:
-    """422 se algum id não for coleção do usuário da transação."""
-    wanted = set(collection_ids)
-    if not wanted:
-        return
-    found = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
-    if wanted - found:
-        raise invalid_field("collection_ids", "coleção inexistente")
-
-
 async def _get(conn: AsyncConnection, collection_id: UUID) -> Row:
     row = (await conn.execute(_select().where(t.collections.c.id == collection_id))).mappings().first()
     if row is None:

@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -65,7 +65,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 ## Markdown gerado e CSP
 
 - **Markdown gerado por LLM nunca carrega imagem.** O resumo (`SummaryDoc`), a cópia para colar
-  (`copy-summary.ts`), o chat da base (`ChatPage`) e a pré-visualização do tipo de agenda
+  (`copy-summary.ts`), as respostas do Agente (`AgentPage`) e a pré-visualização do tipo de agenda
   (`AgendaTypePreview`) passam ao `react-markdown` os `components` de `src/app/markdown.tsx`
   (`SAFE_MARKDOWN`, ou `safeMarkdown(próprios)` quando a tela troca outros elementos, que nunca
   sobrepõem `img` nem `a`): `![alt](url)` vira um link de texto (`alt`, ou a URL sem ele) e todo
@@ -106,10 +106,10 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   usa importa do arquivo que define.
 
 - **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
-  `/pessoas/:id`, `/busca`, `/perguntas`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
+  `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/agente/habilidades`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
   nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
-  `/?importar=1` (o modal). Os parâmetros também são pt-BR:
+  `/?importar=1` (o modal) e `/perguntas`, o nome antigo do Agente, para `/agente`. Os parâmetros também são pt-BR:
   - biblioteca (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (qualquer dia do período),
     `tipo=reuniao|nota`, `situacao=pronta|processando|falhou`, `tag`, `pessoa`, `colecao`,
     `campo=<field_id>:<valor>` (todos repetíveis) e `importar=1`;
@@ -124,8 +124,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Orçamento do JS inicial** (`npm run budget`, depois do build, no pilar `web`):
   `scripts/bundle-budget.mjs` soma o `<script type="module">` e os `modulepreload` do
   `dist/index.html` (bruto e gzip nível 9) e falha acima de `bundle-budget.json`
-  (`inicial_gzip_kb`). Medido em 2026-10-01: 26 arquivos, 450 KB (150 KB gzip), teto de 155 KB
-  gzip. Mudar o teto é editar o JSON no mesmo commit da mudança, com o motivo.
+  (`inicial_gzip_kb`). Medido em 2026-10-05: 29 arquivos, 466 KB (155,9 KB gzip), teto de 158 KB
+  gzip; subiu de 155 KB na integração das specs holetz/eclume#141 a #145 (a faixa "Precisam de
+  você" da biblioteca, a etapa Locutores no aviso de processamento e o grupo Agente no menu, todos
+  no shell ou na biblioteca, que carregam de saída). Mudar o teto é editar o JSON no mesmo commit da
+  mudança, com o motivo.
 - **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
   `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
   `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
@@ -166,18 +169,41 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   mão perdidas, pessoas dos locutores de volta, campos, tipo e resumo refeitos); o 409 vira "Já há
   uma transcrição em andamento.". Tudo isso fica em rotas e no modal sob demanda: o motor de upload
   do bundle inicial só ganhou o campo `language`.
+- **Agente** (`src/features/agent/`, holetz/eclume#142): `agent.ts` tem os hooks sobre
+  `/agent/sessions`; `AgentPage` (`/agente/:sessionId?`, uma rota só, para a primeira pergunta
+  abrir a conversa sem remontar a tela) mostra as conversas recentes ao lado (até 20, com Nova
+  conversa e Todas as conversas), a conversa e o compositor com **Anexar** (`.txt,.md,.csv,.pdf,.docx`,
+  até 5 por pergunta e 10 MB cada, conferidos antes do envio) e os anexos da próxima pergunta, que
+  saem com o ×. Sem conversa na rota, a primeira pergunta ou o primeiro anexo cria a conversa,
+  semeia o cache dela vazia e troca a rota (`replace`). Cada resposta consulta a própria mensagem a
+  cada 2 s até `done` ou `failed`; a conversa tem `staleTime` de 1 min, porque as mutações da tela
+  já atualizam o cache e reler a conversa no meio de uma pergunta apagaria a pergunta enviada. Os
+  arquivos gerados e os anexos são links `download` para `GET /agent/files/{id}/content` (mesma
+  origem, sessão por cookie). `ConversationsPage` (`/agente/conversas`) lista todas por página, com
+  Renomear (diálogo) e Excluir (confirmação).
+- **Habilidades e ações do Agente** (holetz/eclume#145, `features/agent/skills.ts`,
+  `SkillsPage.tsx`, `ActionCard.tsx`): `SkillsPage` (`/agente/habilidades`) lista as habilidades,
+  cria e edita num diálogo (nome normalizado sem barra e em minúsculas, descrição, instruções e, com
+  "Limitar as ferramentas", as permitidas do catálogo `GET /agent/tools`), liga, desliga e exclui
+  com confirmação. No compositor do Agente, o seletor "Habilidade" lista as ligadas e manda
+  `skill`; uma mensagem que começa com `/` vai como está, porque o servidor lê o prefixo. A pergunta
+  mostra o chip `/nome`. Cada proposta da resposta (`AgentMessage.actions`) vira um `ActionCard`
+  (`section` "Ação proposta"): o resumo, o estado, os 10 primeiros alvos com link (e "e mais N") e
+  Confirmar/Descartar enquanto `proposed`; confirmada, consulta `GET /agent/actions/{id}` a cada 2 s
+  até terminar e mostra o resultado por alvo.
 - **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
-  `header`), `enabled` e, opcional, `matches` (prefixos que também acendem o item: a Biblioteca
-  fica marcada em `/gravacoes/`); o item comum tem `group`, e `navGroups()` devolve as duas seções.
-  **Perguntar** (`/perguntas`, o chat sobre a base) é o único item **destacado** (`featured`, com
+  `header`), `enabled` e, opcionais, `matches` (prefixos que também acendem o item: a Biblioteca
+  fica marcada em `/gravacoes/`) e `excludes` (prefixos sob a rota do item que são de outro e não
+  o acendem); o item comum tem `group`, e `navGroups()` devolve as duas seções.
+  **Agente** (`/agente`, holetz/eclume#142; antes Perguntar, em `/perguntas`) é o único item **destacado** (`featured`, com
   `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
   `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
   DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
-  `/perguntas`, onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
+  `/agente` e numa conversa (`/agente/:sessionId`), mas não em `/agente/conversas` nem em `/agente/habilidades` (`excludes`), onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
   gravação (a mesma pergunta `GET /recordings` com `limit=1` da biblioteca, chave
   `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
-  acessível; o título da tela segue
-  "Perguntas". A principal, abaixo dele, tem Gravações (Biblioteca, Busca; importar é o modal da
+  acessível. A principal, abaixo dele, tem o grupo **Agente** (Conversas, em `/agente/conversas`, e
+  Habilidades, em `/agente/habilidades`), Gravações (Biblioteca, Busca; importar é o modal da
   biblioteca), Organizar, com os dados da conta (Pessoas, Coleções, Tags), e Regras, com o que age
   sozinho depois de cada gravação (Processamento automático, Tipos de agenda, Campos
   personalizados); as rotas não mudam com o grupo. A `header` vai para os menus do cabeçalho:
@@ -327,8 +353,9 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Vocabulário de estados compartilhado** (`src/lib/vocabulario.js`, módulo ES puro com
   `vocabulario.d.ts`): os nomes em pt-BR dos estados no aparelho, dos estados da gravação no
   servidor ("Na fila" só para a espera pela transcrição; "Cancelada" para a gravação `failed` com
-  etapa pulada por `cancelled`), das seis etapas na ordem de `STEPS` e o texto de cada código de
-  motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
+  etapa pulada por `cancelled`; "Aguardando locutores", em tom de aviso, para a etapa `speakers` em
+  `waiting`), das sete etapas na ordem de `STEPS` (o estado `waiting` é "aguardando você") e o
+  texto de cada código de motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
   teste em cada cliente, e `vocabulario.test.ts` falha quando o servidor grava um código de motivo
   sem texto. Tela nenhuma escreve esses rótulos à mão.
 - **Motivo em texto visível, nunca só no `title`.** Uma etapa pulada ou que falhou, uma linha que
@@ -366,7 +393,8 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   gravações deste período"); a Lista usa `sort=recorded_desc` e `limit=50`. As duas releem a cada
   3 s enquanto alguma gravação está em andamento.
 - **Painel de filtros** à direita (`.with-filters` e `.filters`, recolhível até 48px): Tipo,
-  Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
+  Precisam de você ("Aguardando locutores", `precisa=locutores` na URL, que vira
+  `awaiting=speakers`), Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
   pessoa, com os valores de `GET /people/facets`; `empresa`, `area` e `tag-pessoa` na URL, que
   viram `person_company`, `person_department` e `person_tag`, e valem para uma mesma pessoa),
   Coleções (com "Gerenciar coleções") e um grupo por campo próprio do usuário (escolha como `.check`, texto e lista como "Qualquer valor",
@@ -375,6 +403,9 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
   `transcribed`, Processando = `uploading`/`queued`/`processing`, Falhou = `failed`). Um grupo com
   tudo marcado não manda o parâmetro, e o último marcado não sai. Abaixo de 56rem, o painel é um
   `Dialog` aberto por "Filtros (N)".
+- **Aviso "Precisam de você"** (holetz/eclume#144): com `GET /me/speaker-naming` dizendo
+  `waiting_count > 0`, uma faixa `alert-warning` acima da barra conta as gravações que aguardam
+  você nomear os locutores; "Ver" liga o filtro na lista. Some com o filtro já ligado.
 - **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
   recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
   `importar` (`eclume-biblioteca-ultima:<user_id>`, por conta, porque guarda ids de pessoa, tag,
@@ -437,11 +468,18 @@ desce; abaixo de 56rem, os campos também):
   (`parseAs: 'blob'`, nome do `Content-Disposition`) e mostra o `Problem` num alerta; um 401 no
   export encerra a sessão como qualquer outra chamada; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
   volta com "Gravação excluída.".
-- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as seis etapas no
+- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as sete etapas no
   `ol.pipeline`, cada uma com o estado em palavra quando não está concluída ("Resumo · pulada"), a
-  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada ou que falhou, o progresso do worker com a
+  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada, em espera ou que falhou, o progresso do worker com a
   transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
-  `pollWhile` (3 s de início) enquanto está em andamento, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+  `pollWhile` (3 s de início) enquanto está em andamento ou aguardando locutores, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
+- **Aguardando locutores** (`AwaitingSpeakers.tsx`, holetz/eclume#144): com a etapa `speakers` em
+  `waiting`, o `Pipeline` mostra um `alert-warning` (`role="status"`) que leva a `#locutores` e
+  oferece **Seguir sem nomear** (`ConfirmDialog`, `POST /recordings/{id}/continue`). Ligar ou
+  mesclar locutor no painel muda a transcrição em cache; o aviso percebe a troca dos vínculos e relê
+  a gravação, que o servidor já soltou se o último ganhou pessoa. O aviso fica no `Pipeline`, não no
+  `children` do `SpeakersDisclosure`: parada à espera, a `RecordingPage` abre o bloco Locutores
+  sozinha, e um `hashchange` para `#locutores` o reabre se a pessoa o recolheu.
 - **A linha da espera** (holetz/eclume#117): com a gravação `queued`, o `Pipeline` mostra em
   `role="status"` a frase de `fraseDaEspera(job.queue)` do vocabulário compartilhado — posição e
   início estimado ("3ª na fila · começa em cerca de 12 min (estimativa)"), as gravações da própria
@@ -464,29 +502,46 @@ desce; abaixo de 56rem, os campos também):
   e no `seek`), lida por `usePlaybackTime()` (o player) ou por `usePlaybackSelect(seletor)`, que só
   renderiza quando o valor primitivo selecionado muda (a fala ativa). O contexto leva duração,
   tocando, velocidade, erro e comandos, e só muda quando um deles muda: a `.marker-bar` e quem só
-  comanda não renderizam por tick.
+  comanda não renderizam por tick. **O player fica fixo** (`position: sticky` abaixo de
+  `--shell-header`, sobre `--color-bg`, sem a `.marker-bar`): pausar está a um clique em qualquer
+  ponto da página, inclusive lendo o resumo (holetz/eclume#143).
+- **Locutores** (`SpeakersDisclosure`, `details.disclosure` próprio, fechado, entre a `.marker-bar`
+  e a transcrição): recolhido, o resumo mostra cada locutor em linha, na horizontal, no `.speaker`
+  da cor dele; aberto, o `SpeakersPanel` (região "Locutores", `id="locutores"`) traz um card por
+  locutor numa grade (`repeat(auto-fill, minmax(15rem, 1fr))`, fundo `--color-surface`) com
+  renomear, ligar pessoa, sugestões por voz e, abaixo da grade, juntar. O aberto é estado da
+  `RecordingPage`, e o `children` do componente é o lugar de um aviso sobre os locutores, antes dos
+  cards. Os locutores não aparecem dentro da transcrição nem no painel de campos.
 - **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
-  locutores, falas e marcadores; aberta, tem o bloco Locutores (renomear, ligar pessoa, sugestões,
-  juntar), "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
+  locutores, falas e marcadores; aberta, tem "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
   primeira fala que começa no marcador (`placeMarkers`), editar a nota (até 500) e excluir o
   marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
-  sem tocar e rola **uma vez** até a fala do instante, independente do seguir.
+  sem tocar e, **uma vez**, traz a lista à janela (`scrollIntoView` com `block: 'nearest'` no
+  contêiner, nunca na fala) e centra nela a fala do instante, independente do seguir.
+  - **Área de rolagem própria** (holetz/eclume#143): a lista de falas (`role="list"` "Falas") é o
+    contêiner que rola, mais baixo que a janela (`max-height: min(28rem, 55vh)`, `overflow-y:
+    auto`, `overscroll-behavior: contain`). O `?t=` e o acompanhar rolam só ela, pelo `scrollTop`
+    de `scrollTopFor` (`scroll.ts`: `nearest` com folga de 16 px, ou `center`) aplicado com
+    `scrollTo`; `scrollIntoView` numa fala é proibido, porque rola todos os ancestrais, a janela
+    inclusive, e tirava o player da tela. A lista não precisa de `tabIndex`: os botões das falas
+    a tornam alcançável pelo teclado.
   - **Transcrição longa.** Cada fala é um `SegmentRow` memoizado com props estáveis (nome e cor do
     locutor e marcadores por índice saem de mapas em `useMemo` por transcrição; `active` e
     `editing` booleanos; `seek` e `setEditingId` como callbacks), e a fala ativa vem de
     `usePlaybackSelect` com o `findSegmentAt` (busca binária): um tick sem troca renderiza zero
     falas e uma troca renderiza duas. O item da fala tem `content-visibility: auto` com
     `contain-intrinsic-size: auto 5.5rem` no CSS Module: fora da tela não é pintado, mas fica no
-    DOM. A virtualização foi descartada: o Ctrl+F do navegador e o leitor de tela precisam das
-    falas no DOM, a âncora do `?t=` usa `scrollIntoView` na fala e a lista rola a janela, não um
-    contêiner próprio.
-  - **"Acompanhar o áudio" só com a lista à vista**: um `IntersectionObserver` com a faixa central
-    da janela (`rootMargin: -40% 0px -40% 0px`) diz se a lista está sendo lida; fora dela (lendo o
-    resumo logo abaixo, usando o chat), a troca de fala não rola a página. O padrão continua ligado.
+    DOM, também dentro da área de rolagem. A virtualização foi descartada: o Ctrl+F do navegador e
+    o leitor de tela precisam das falas no DOM.
+  - **"Acompanhar o áudio"** (ligado por padrão) rola a lista por dentro a cada troca de fala, com
+    `smooth`, esteja ela na janela ou não: a página nunca se mexe, e quem volta à lista a acha na
+    fala certa. Desligado, nada rola.
   - **A medida é contrato**: `TranscriptDisclosure.test.tsx` conta renders sobre 3.000 falas (0 por
     tick sem troca, 2 na troca, a `.marker-bar` nenhum), e `TranscriptDisclosure.browser.test.tsx`
     (`npm run test:browser`, no host) mede o commit por `React.Profiler`: mediana de 20
-    ticks abaixo de 8 ms sem troca e de 16 ms com troca.
+    ticks abaixo de 8 ms sem troca e de 16 ms com troca. `TranscriptDisclosure.test.tsx` também
+    prova que o `?t=` e o acompanhar chamam `scrollTo` na lista e nunca `scrollIntoView` numa fala,
+    e o E2E prova, com 3.000 falas e o áudio avançando, o `scrollY` parado e o pausar na janela.
 - **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
   referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
   origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
@@ -519,8 +574,8 @@ desce; abaixo de 56rem, os campos também):
   primeiro, depois os campos do usuário, com o selo de origem (Automático tracejado, Editado
   sólido, aceito sem selo), Aceitar, Aceitar tudo e Editar pelo tipo (texto até 300, lista por
   vírgula, escolha com "Nenhum"); o tipo de agenda com Trocar; as coleções (com "Nova coleção…");
-  os locutores com "Corrigir locutores", que abre a transcrição e foca o bloco; e, quando há, os
-  "Dados anteriores" do `metadata` antigo, só leitura. Cada campo tem **Editar a regra**, que leva
+  e, quando há, os "Dados anteriores" do `metadata` antigo, só leitura (os locutores ficam no bloco
+  deles, acima da transcrição). Cada campo tem **Editar a regra**, que leva
   ao dono da regra: o campo personalizado a `/config/campos?campo=`, o título ao tipo da gravação
   (`/config/agendas?tipo=`) e as tags a `/tags`.
 - **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma
@@ -607,7 +662,9 @@ desce; abaixo de 56rem, os campos também):
   [processamento-automatico.md](processamento-automatico.md), do que acontece sozinho depois de
   cada gravação, numa `<ol class="list">` de `.list-row`: pré-processamento e transcrição (da
   plataforma, sem link), locutores pela voz (`/me/voice-assignment`, "Voz: liga sozinho a partir
-  de 75%"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
+  de 75%"), marcação dos locutores (`/me/speaker-naming`, a única linha com a chave na própria
+  tela: o `Switch` "Exigir a marcação dos locutores", e o estado "Não exigida", "Exigida" ou
+  "Exigida · N gravações esperando você"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
   com `auto_fill`), tags (`/me/tag-assignment`, "Tags: só as cadastradas (N)"), coleções com
   regra (`/collections` com `auto_assign`) e resumo (tipos com `summary_instructions`). Cada etapa
   mostra o estado e um link "Configurar" (rotulado pela tela de destino); a página só lê, e as
@@ -642,7 +699,8 @@ desce; abaixo de 56rem, os campos também):
   regra do desfecho e a marca d'água do desktop
   ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), com
   os mesmos casos de teste: resumo pronto, resumo que falhou, pronta sem resumo (motivo pelo
-  `motivo()` do vocabulário) e transcrição que falhou; cancelar e `summary_deleted` não avisam. A
+  `motivo()` do vocabulário), transcrição que falhou e, desde a 2.22.0, "Precisa de você" (etapa
+  `speakers` em `waiting`, instante = `finished_at` da espera); cancelar e `summary_deleted` não avisam. A
   marca vive na memória da aba e começa na montagem: atualizar ou reabrir o navegador não dispara
   aviso antigo. Com a aba oculta, cada desfecho soma no título ("(2) Biblioteca · eclume",
   `setTitleCount`), zerado no `visibilitychange` de volta. Erro de rede ou sessão só espera a

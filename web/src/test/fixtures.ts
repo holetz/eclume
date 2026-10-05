@@ -19,9 +19,12 @@ import passwordResetLink from '../../../contracts/fixtures/password-reset-link.j
 import personPage from '../../../contracts/fixtures/person-page.json'
 import previewAgendaType from '../../../contracts/fixtures/preview-agenda-type.json'
 import previewFieldRule from '../../../contracts/fixtures/preview-field-rule.json'
-import baseChatDone from '../../../contracts/fixtures/base-chat-done.json'
-import baseChatFailed from '../../../contracts/fixtures/base-chat-failed.json'
-import baseChatQueued from '../../../contracts/fixtures/base-chat-queued.json'
+import agentActionProposed from '../../../contracts/fixtures/agent-action-proposed.json'
+import agentFileInput from '../../../contracts/fixtures/agent-file-input.json'
+import agentMessageDone from '../../../contracts/fixtures/agent-message-done.json'
+import agentSession from '../../../contracts/fixtures/agent-session.json'
+import agentSessionDetail from '../../../contracts/fixtures/agent-session-detail.json'
+import agentTurn from '../../../contracts/fixtures/agent-turn.json'
 import person from '../../../contracts/fixtures/person.json'
 import privacyInfo from '../../../contracts/fixtures/privacy-info.json'
 import recordingFieldValues from '../../../contracts/fixtures/recording-field-values.json'
@@ -84,9 +87,12 @@ export const fixtures = {
   summaryChatPage: fresh<Schemas['SummaryChatPage']>(summaryChatPage),
   summaryChatExchangeQueued: fresh<Schemas['SummaryChatExchange']>(summaryChatExchangeQueued),
   agendaTypePage: fresh<Schemas['AgendaTypePage']>(agendaTypePage),
-  baseChatQueued: fresh<Schemas['BaseChat']>(baseChatQueued),
-  baseChatDone: fresh<Schemas['BaseChat']>(baseChatDone),
-  baseChatFailed: fresh<Schemas['BaseChat']>(baseChatFailed),
+  agentSession: fresh<Schemas['AgentSession']>(agentSession),
+  agentSessionDetail: fresh<Schemas['AgentSessionDetail']>(agentSessionDetail),
+  agentFileInput: fresh<Schemas['AgentFile']>(agentFileInput),
+  agentTurn: fresh<Schemas['AgentTurn']>(agentTurn),
+  agentMessageDone: fresh<Schemas['AgentMessage']>(agentMessageDone),
+  agentActionProposed: fresh<Schemas['AgentAction']>(agentActionProposed),
   previewFieldRule: fresh<Schemas['Preview']>(previewFieldRule),
   previewAgendaType: fresh<Schemas['Preview']>(previewAgendaType),
   tokenPage: fresh<Schemas['TokenPage']>(tokenPage),

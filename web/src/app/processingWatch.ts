@@ -1,6 +1,7 @@
 // O observador de desfechos: com a sessão aberta, lê a cada 30 s as gravações que mudaram
 // (`GET /recordings?since=`, contrato 2.17.0) e avisa o fim do processamento de cada uma — resumo
-// pronto, resumo que falhou, pronta sem resumo ou transcrição que falhou. A regra e a marca d'água
+// pronto, resumo que falhou, pronta sem resumo, transcrição que falhou ou, desde a 2.22.0, a gravação
+// parada à espera dos nomes dos locutores. A regra e a marca d'água
 // são as do desktop (desktop/crates/sync/src/outcome.rs), com os mesmos casos de teste. Com a aba em
 // segundo plano, o desfecho soma no título da aba; com o aviso do navegador ligado em Ambiente,
 // vira uma notificação do sistema que abre a gravação.
@@ -14,7 +15,7 @@ import { setTitleCount } from './usePageTitle'
 
 type Recording = Schemas['Recording']
 
-export type Outcome = 'summary_ready' | 'summary_failed' | 'no_summary' | 'transcription_failed'
+export type Outcome = 'summary_ready' | 'summary_failed' | 'no_summary' | 'transcription_failed' | 'awaiting_speakers'
 
 export interface Ended {
   recordingId: string
@@ -22,7 +23,7 @@ export interface Ended {
   outcome: Outcome
   /** O motivo da etapa pulada, no vocabulário de `PipelineStep.reason`. */
   reason: string | null
-  /** `finished_at` da etapa `summary` ou do job. */
+  /** `finished_at` da etapa `summary`, da etapa `speakers` em espera ou do job. */
   at: string
 }
 
@@ -46,6 +47,11 @@ export function outcomeOf(recording: Recording): Ended | null {
   const job = recording.job
   if (job && recording.status === 'failed' && job.state === 'failed') {
     return job.finished_at ? ended('transcription_failed', job.finished_at) : null
+  }
+  // Parada à espera dos nomes: a conta exige nomear os locutores e falta alguém.
+  const speakers = recording.pipeline?.find((item) => item.step === 'speakers')
+  if (speakers?.state === 'waiting' && speakers.finished_at) {
+    return ended('awaiting_speakers', speakers.finished_at, speakers.reason ?? null)
   }
   const step = recording.pipeline?.find((item) => item.step === 'summary')
   if (!step?.finished_at) return null
@@ -115,6 +121,8 @@ export function outcomeText({ outcome, title, reason }: Ended): { title: string;
       return { title: 'Pronta sem resumo', body: `${name} · ${reason ? motivo(reason) : 'sem motivo informado'}` }
     case 'transcription_failed':
       return { title: 'A transcrição falhou', body: `${name} · abra para ver o motivo` }
+    case 'awaiting_speakers':
+      return { title: 'Precisa de você', body: `${name} · nomeie os locutores para seguir com o resumo` }
   }
 }
 

@@ -256,6 +256,8 @@ pub struct SettingsView {
     pub notify_summary: bool,
     /// Iniciar com o computador.
     pub autostart: bool,
+    /// Quantas gravações recentes o painel do topo mostra; `0` o esconde.
+    pub recent_count: u8,
     /// A pasta sincronizada está ligada.
     pub mirror_enabled: bool,
     /// A raiz da pasta sincronizada; `None` até a pessoa escolher.
@@ -306,6 +308,9 @@ pub struct SettingsInput {
     /// Iniciar com o computador; ausente mantém o de hoje.
     #[serde(default)]
     pub autostart: Option<bool>,
+    /// Gravações recentes no topo (0 a 10); ausente mantém o de hoje.
+    #[serde(default)]
+    pub recent_count: Option<u8>,
     /// Liga ou desliga a pasta sincronizada; ausente mantém o de hoje.
     #[serde(default)]
     pub mirror_enabled: Option<bool>,
@@ -1022,6 +1027,11 @@ impl AppState {
         Ok(self.inner()?.config.notify_summary)
     }
 
+    /// Quantas gravações recentes o painel do topo mostra; `0` o esconde.
+    pub fn recent_count(&self) -> Result<u8> {
+        Ok(self.inner()?.config.recent_count)
+    }
+
     /// Se o app deve iniciar com o computador.
     pub fn autostart(&self) -> Result<bool> {
         Ok(self.inner()?.config.autostart)
@@ -1270,6 +1280,7 @@ impl AppState {
             theme: config.theme.clone(),
             notify_summary: config.notify_summary,
             autostart: config.autostart,
+            recent_count: config.recent_count,
             mirror_enabled: config.mirror.enabled,
             mirror_dir: config.mirror.dir.clone(),
             mirror_transcripts: config.mirror.transcripts,
@@ -1319,6 +1330,9 @@ impl AppState {
         }
         if let Some(autostart) = input.autostart {
             next.autostart = autostart;
+        }
+        if let Some(count) = input.recent_count {
+            next.recent_count = count;
         }
         if let Some(enabled) = input.mirror_enabled {
             next.mirror.enabled = enabled;
@@ -1737,6 +1751,7 @@ mod tests {
             theme: None,
             notify_summary: None,
             autostart: None,
+            recent_count: None,
             mirror_enabled: None,
             mirror_dir: None,
             mirror_transcripts: None,

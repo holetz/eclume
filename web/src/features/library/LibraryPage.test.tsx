@@ -14,9 +14,13 @@ afterEach(() => {
 
 const WEEK = '/?visao=semana&data=2026-09-21'
 
-function mockLibrary(recordings: (request: Request) => unknown = () => fixtures.recordingWeekPage()) {
+function mockLibrary(
+  recordings: (request: Request) => unknown = () => fixtures.recordingWeekPage(),
+  waiting = 0,
+) {
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
+    'GET /api/v1/me/speaker-naming': () => ({ required: waiting > 0, waiting_count: waiting }),
     'GET /api/v1/recordings': recordings,
     'GET /api/v1/tags': () => fixtures.tagList(),
     'GET /api/v1/collections': () => fixtures.collectionPage(),
@@ -380,6 +384,26 @@ describe('biblioteca no mês e na lista', () => {
     expect(query.get('sort')).toBe('recorded_desc')
     expect(query.get('limit')).toBe('50')
     expect(query.has('from')).toBe(false)
+  })
+
+  it('avisa quantas gravações precisam de você e Ver liga o filtro na lista', async () => {
+    const http = mockLibrary(() => fixtures.recordingWeekPage(), 2)
+    renderApp(WEEK)
+    const band = await screen.findByRole('status', { name: 'Precisam de você' })
+    expect(band).toHaveTextContent('2 gravações aguardam você nomear os locutores')
+    await userEvent.click(within(band).getByRole('button', { name: 'Ver' }))
+    await waitFor(() =>
+      expect(libraryQueries(http).some((query) => query.getAll('awaiting').includes('speakers'))).toBe(true),
+    )
+    expect(screen.queryByRole('status', { name: 'Precisam de você' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Aguardando locutores' })).toBeChecked()
+  })
+
+  it('sem gravação esperando, nada de aviso', async () => {
+    mockLibrary()
+    renderApp(WEEK)
+    await screen.findByRole('button', { name: 'Próxima semana' })
+    expect(screen.queryByRole('status', { name: 'Precisam de você' })).not.toBeInTheDocument()
   })
 
   it('em tela estreita, sem visão na URL, abre na lista', async () => {

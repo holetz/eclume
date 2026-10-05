@@ -9,6 +9,30 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 
 ## [Não lançado]
 
+### Adicionado
+
+- Marcação obrigatória dos locutores: com a preferência da conta ligada, a cadeia por agente espera
+  todo locutor ter nome, com a etapa `speakers` e o aviso "Aguardando locutores" (contrato 2.22.0,
+  holetz/eclume#144).
+- Agente no lugar de Perguntas: conversas guardadas, arquivos de entrada e de saída e o histórico
+  das sessões (contrato 2.23.0, holetz/eclume#142).
+- Habilidades do usuário no Agente e ações no ambiente que o agente propõe e a pessoa confirma
+  (contrato 2.24.0, holetz/eclume#145).
+
+### Alterado
+
+- Tela da gravação com a transcrição numa área de rolagem própria e os locutores num bloco
+  recolhível (holetz/eclume#143).
+
+### Obsoleto
+
+- O chat sobre a base (`/base-chat`), que o Agente substitui (contrato 2.23.0, holetz/eclume#142).
+
+### Para quem hospeda
+
+- **Migrations**, nenhuma destrutiva: `030_marcacao_dos_locutores` (troca os `CHECK` das etapas),
+  `031_agente_conversas` e `032_agente_habilidades_e_acoes`.
+
 ## [0.2.0] - 2026-10-03
 
 O que entrou em `main` depois da 0.1.0, antes de existir a norma de versionamento (holetz/eclume#89 a

@@ -4,7 +4,7 @@ title: Visão do produto
 description: A visão do produto eclume — o registro confirmado (plataforma, usuários, propósito, posicionamento, contexto de uso, compromissos de marca e princípios), projetado no PRODUCT.md para quem desenha, e a direção (estado-alvo, pilares que já são realidade ou ainda direção, e não-objetivos com o motivo).
 resource: PRODUCT.md
 tags: [product, design]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: background
 source: entrevista de produto confirmada em /quenching:design:align (2026-09-28) e decisão de produto de 2026-09-26
@@ -84,8 +84,8 @@ Cada pilar é **realidade**, com a norma que o governa, ou **direção**, sem no
 - **Processamento automático** — realidade: pré-processamento, transcrição, tipo de agenda, campos
   e resumo ([processamento-automatico.md](../standards/code/processamento-automatico.md),
   [jobs-transcricao.md](../standards/api/jobs-transcricao.md)).
-- **Gravação centrada no resumo** — realidade: resumo editável à mão ou pelo chat, e Perguntar
-  sobre a base ([server-agentes.md](../standards/code/server-agentes.md),
+- **Gravação centrada no resumo** — realidade: resumo editável à mão ou pelo chat, e o Agente
+  sobre a base, com conversas guardadas e arquivos de entrada e saída ([server-agentes.md](../standards/code/server-agentes.md),
   [frontend-web.md](../standards/code/frontend-web.md)).
 - **Biblioteca no tempo** — realidade: semana, mês, lista e filtros, busca, pessoas, coleções e
   tags ([frontend-web.md](../standards/code/frontend-web.md), [server-nucleo.md](../standards/code/server-nucleo.md),

@@ -13,7 +13,9 @@ from eclume_server.routes import (
     admin_secrets,
     admin_settings,
     agenda_types,
+    agent,
     agent_providers,
+    agent_skills,
     auth,
     base_chat,
     collections,
@@ -27,6 +29,7 @@ from eclume_server.routes import (
     recordings,
     search,
     server_info,
+    speaker_naming,
     summaries,
     summary_chat,
     tags,
@@ -67,6 +70,8 @@ def include_routes(app: FastAPI) -> None:
         summaries,
         summary_chat,
         base_chat,
+        agent,
+        agent_skills,
         agenda_types,
         fields,
         previews,
@@ -76,6 +81,7 @@ def include_routes(app: FastAPI) -> None:
         search,
         voice,
         transcription,
+        speaker_naming,
     ):
         app.include_router(module.router, prefix=PREFIX)
     # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.

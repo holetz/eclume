@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.21.0
+  version: 2.24.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -22,6 +22,12 @@ info:
       minutos de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403
       `quota_exceeded` com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a
       gravação espera na fila até a janela abrir.
+    - **Marcação obrigatória dos locutores** (desde a 2.22.0): com `GET`/`PATCH
+      /me/speaker-naming` ligada, a etapa `speakers` fica `waiting` quando algum locutor está sem
+      pessoa, e a cadeia (tipo, campos, coleções, resumo) espera; `Recording.awaiting` e o filtro
+      `awaiting=speakers` mostram essas gravações.
+    - **Agente** (desde a 2.23.0): conversas guardadas em `/agent/sessions`, com anexos de
+      entrada e arquivos gerados para baixar; o chat sobre a base (`/base-chat`) fica obsoleto.
     - **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue` diz por que
       espera (fila do processador, vez da própria conta ou janela de minutos), a posição, uma
       previsão rotulada como estimativa e se o processador está no ar.
@@ -86,7 +92,14 @@ tags:
   - name: summaries
     description: Resumos gerados por agente com as instruções de um tipo de agenda.
   - name: base-chat
-    description: Perguntas em linguagem natural sobre o conjunto das gravações do usuário.
+    description: >-
+      Perguntas em linguagem natural sobre o conjunto das gravações do usuário. Obsoleto desde a
+      2.23.0: o Agente (`agent`) faz o mesmo com conversas guardadas e arquivos.
+  - name: agent
+    description: >-
+      O Agente: conversas guardadas por usuário, anexos de entrada (texto extraído) e arquivos que
+      o agente gera para baixar. Desde a 2.24.0, as habilidades da pessoa (instruções reutilizáveis)
+      e as ações no ambiente, que o agente só propõe e a pessoa confirma.
   - name: admin
     description: >-
       Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
@@ -502,6 +515,70 @@ paths:
               examples:
                 conta:
                   $ref: "#/components/examples/TranscriptionPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/speaker-naming:
+    get:
+      tags: [recordings]
+      operationId: getSpeakerNaming
+      summary: Ler se a conta exige nomear os locutores
+      description: >-
+        Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo menos
+        10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão
+        ou PAT com `recordings:read`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakerNamingPreference"
+              examples:
+                ligada:
+                  $ref: "#/components/examples/SpeakerNamingPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [recordings]
+      operationId: updateSpeakerNaming
+      summary: Ligar ou desligar a marcação obrigatória dos locutores
+      description: >-
+        Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação
+        parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia
+        segue. Só sessão.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerNamingPatch"
+            examples:
+              ligar:
+                $ref: "#/components/examples/SpeakerNamingPatchRequest"
+      responses:
+        "200":
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakerNamingPreference"
+              examples:
+                ligada:
+                  $ref: "#/components/examples/SpeakerNamingPreference"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1265,6 +1342,16 @@ paths:
             type: array
             items:
               type: string
+        - name: awaiting
+          in: query
+          description: >-
+            Desde a 2.22.0. `speakers`: só as gravações cuja revisão atual está parada à espera de
+            nomear os locutores (`Recording.awaiting`).
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [speakers]
       responses:
         "200":
           description: Gravações, na ordem de `sort`.
@@ -1452,6 +1539,38 @@ paths:
               examples:
                 cancelled:
                   $ref: "#/components/examples/RecordingCancelled"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/recordings/{recording_id}/continue:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+    post:
+      tags: [recordings]
+      operationId: continueRecordingWithoutNames
+      summary: Seguir sem nomear os locutores
+      description: |
+        Desde a 2.22.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
+        `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
+        espera, 409.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: A gravação, com a etapa `speakers` solta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recording"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2049,7 +2168,9 @@ paths:
       description: |
         `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
         voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
-        o nome da pessoa. Sobe a `revision`.
+        o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
+        uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
+        segue sozinha.
       security:
         - sessionCookie: []
         - pat: ["transcripts:write"]
@@ -2127,7 +2248,10 @@ paths:
       tags: [transcripts]
       operationId: mergeSpeakers
       summary: Mesclar locutores
-      description: Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`.
+      description: >-
+        Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem.
+        Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação
+        parada à espera dos nomes, como `updateSpeaker`.
       security:
         - sessionCookie: []
         - pat: ["transcripts:write"]
@@ -2813,6 +2937,7 @@ paths:
       tags: [base-chat]
       operationId: askBaseChat
       summary: Perguntar sobre a base de gravações
+      deprecated: true
       description: |
         Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
         `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
@@ -2861,6 +2986,7 @@ paths:
       tags: [base-chat]
       operationId: getBaseChat
       summary: Uma pergunta e a resposta
+      deprecated: true
       description: |
         Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
         que o agente de fato consultou e em que a resposta se apoia.
@@ -2885,6 +3011,642 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/sessions:
+    get:
+      tags: [agent]
+      operationId: listAgentSessions
+      summary: As conversas do Agente
+      description: Da última atividade (`updated_at`) para trás, paginadas por cursor.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Uma página de conversas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentSession"
+                  next_cursor:
+                    $ref: "#/components/schemas/NextCursor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [agent]
+      operationId: createAgentSession
+      summary: Abrir uma conversa
+      description: Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSessionCreate"
+      responses:
+        "201":
+          description: A conversa criada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSession"
+              examples:
+                nova:
+                  $ref: "#/components/examples/AgentSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    get:
+      tags: [agent]
+      operationId: getAgentSession
+      summary: Uma conversa com as mensagens e os arquivos
+      description: |
+        As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
+        pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
+        mais de 15 minutos vira `failed` com `agent_expired`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A conversa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSessionDetail"
+              examples:
+                conversa:
+                  $ref: "#/components/examples/AgentSessionDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [agent]
+      operationId: renameAgentSession
+      summary: Renomear a conversa
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSessionUpdate"
+      responses:
+        "200":
+          description: A conversa renomeada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentSession
+      summary: Excluir a conversa
+      description: Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/sessions/{session_id}/files:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    post:
+      tags: [agent]
+      operationId: attachAgentFile
+      summary: Anexar um arquivo à conversa
+      description: |
+        Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
+        conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
+        texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
+        citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+      responses:
+        "201":
+          description: O anexo, ainda sem pergunta (`message_id` nulo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentFile"
+              examples:
+                anexo:
+                  $ref: "#/components/examples/AgentFileInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /api/v1/agent/sessions/{session_id}/files/{file_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+      - $ref: "#/components/parameters/AgentFileId"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentFile
+      summary: Tirar um anexo ainda não enviado
+      description: O anexo que já foi com uma pergunta fica no histórico (409).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Tirado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/agent/sessions/{session_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+    post:
+      tags: [agent]
+      operationId: askAgent
+      summary: Perguntar ao Agente
+      description: |
+        Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
+        consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
+        guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
+        sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
+        arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
+        (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+        Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
+        inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
+        propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMessageCreate"
+      responses:
+        "202":
+          description: A pergunta gravada e a resposta na fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTurn"
+              examples:
+                fila:
+                  $ref: "#/components/examples/AgentTurn"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/agent/sessions/{session_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSessionId"
+      - $ref: "#/components/parameters/AgentMessageId"
+    get:
+      tags: [agent]
+      operationId: getAgentMessage
+      summary: Uma mensagem da conversa
+      description: A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A mensagem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessage"
+              examples:
+                pronta:
+                  $ref: "#/components/examples/AgentMessageDone"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/files/{file_id}/content:
+    parameters:
+      - $ref: "#/components/parameters/AgentFileId"
+    get:
+      tags: [agent]
+      operationId: downloadAgentFile
+      summary: Baixar um anexo ou um arquivo gerado
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: O arquivo, como anexo.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                examples: ["attachment; filename=\"prazos.csv\"; filename*=UTF-8''prazos.csv"]
+          content:
+            text/plain:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+            text/csv:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                contentMediaType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/tools:
+    get:
+      tags: [agent]
+      operationId: listAgentTools
+      summary: O catálogo de ferramentas do Agente
+      description: |
+        Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
+        `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
+        uma habilidade escolhe as ferramentas permitidas.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: O catálogo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentTool"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/skills:
+    get:
+      tags: [agent]
+      operationId: listAgentSkills
+      summary: As habilidades da conta
+      description: Desde a 2.24.0. Todas (até 50), por nome.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: As habilidades.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [agent]
+      operationId: createAgentSkill
+      summary: Cadastrar uma habilidade
+      description: |
+        Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
+        e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
+        habilidades na conta: 422.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSkillCreate"
+      responses:
+        "201":
+          description: A habilidade cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/agent/skills/{skill_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSkillId"
+    get:
+      tags: [agent]
+      operationId: getAgentSkill
+      summary: Uma habilidade
+      description: Desde a 2.24.0.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A habilidade.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [agent]
+      operationId: updateAgentSkill
+      summary: Editar a habilidade
+      description: Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSkillPatch"
+      responses:
+        "200":
+          description: A habilidade editada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentSkill
+      summary: Excluir a habilidade
+      description: Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/actions:
+    get:
+      tags: [agent]
+      operationId: listAgentActions
+      summary: O registro das ações do Agente
+      description: |
+        Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
+        alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Uma página de ações.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentAction"
+                  next_cursor:
+                    $ref: "#/components/schemas/NextCursor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/actions/{action_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    get:
+      tags: [agent]
+      operationId: getAgentAction
+      summary: Uma ação do Agente
+      description: Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A ação.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+              examples:
+                proposta:
+                  $ref: "#/components/examples/AgentActionProposed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/actions/{action_id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    post:
+      tags: [agent]
+      operationId: confirmAgentAction
+      summary: Confirmar a proposta
+      description: |
+        Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
+        operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
+        executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
+        o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
+        `recordings:write` para as demais (PAT sem ele: 403).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read", "summaries:write"]
+        - pat: ["summaries:read", "recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: A ação na fila (ou o estado atual, se já confirmada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/agent/actions/{action_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    post:
+      tags: [agent]
+      operationId: cancelAgentAction
+      summary: Descartar a proposta
+      description: Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: A proposta descartada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/people:
     get:
@@ -4249,6 +5011,41 @@ components:
       schema:
         type: string
         format: uuid
+    AgentSessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentMessageId:
+      name: message_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentFileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentSkillId:
+      name: skill_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentActionId:
+      name: action_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     BaseChatId:
       name: chat_id
       in: path
@@ -4344,6 +5141,14 @@ components:
       description: >-
         O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento,
         resumo mudado desde a versão aberta, chat com pedido em aberto).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: >-
+        O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a
+        2.23.0), ou o conteúdo não bate com a extensão.
       content:
         application/problem+json:
           schema:
@@ -4902,6 +5707,28 @@ components:
           description: Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra).
           type: integer
           minimum: 0
+
+    SpeakerNamingPreference:
+      description: >-
+        Desde a 2.22.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas
+        gravações esperam por isso.
+      type: object
+      required: [required, waiting_count]
+      properties:
+        required:
+          type: boolean
+        waiting_count:
+          description: Gravações cuja revisão atual está com a etapa `speakers` em `waiting`.
+          type: integer
+          minimum: 0
+
+    SpeakerNamingPatch:
+      type: object
+      additionalProperties: false
+      required: [required]
+      properties:
+        required:
+          type: boolean
 
     TranscriptionPreference:
       description: >-
@@ -5562,7 +6389,7 @@ components:
 
     Recording:
       type: object
-      required: [id, title, status, kind, source, recorded_at, recorded_at_source, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, collections_origin, metadata, capture, agenda_type, job, pipeline, transcript_id, marker_count, created_at, updated_at]
+      required: [id, title, status, kind, source, recorded_at, recorded_at_source, duration_ms, language, size_bytes, content_type, content_hash, owner, tags, collection_ids, collections_origin, metadata, capture, agenda_type, job, pipeline, awaiting, transcript_id, marker_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -5645,14 +6472,21 @@ components:
             - type: "null"
         pipeline:
           description: |
-            As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+            As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
             `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
-            sai `active`.
+            sai `active`. A etapa `speakers` entrou na 2.22.0 (eram seis).
           type: array
-          minItems: 6
-          maxItems: 6
+          minItems: 7
+          maxItems: 7
           items:
             $ref: "#/components/schemas/PipelineStep"
+        awaiting:
+          description: |
+            Desde a 2.22.0. O que a gravação espera do dono para seguir: `speakers` quando a etapa
+            `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
+            nas outras.
+          type: [string, "null"]
+          enum: [speakers, null]
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type: [string, "null"]
@@ -5674,11 +6508,16 @@ components:
       properties:
         step:
           type: string
-          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos.
-          enum: [received, preprocessing, transcription, agenda_type, fields, summary]
+          description: >-
+            Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a 2.22.0)
+            fica entre a transcrição e o tipo de agenda.
+          enum: [received, preprocessing, transcription, speakers, agenda_type, fields, summary]
         state:
           type: string
-          enum: [pending, active, done, failed, skipped]
+          description: >-
+            `waiting` (desde a 2.22.0) é só da etapa `speakers`: parada à espera de o dono nomear
+            os locutores, com `reason` `unnamed_speakers`.
+          enum: [pending, active, done, failed, skipped, waiting]
         started_at:
           type: [string, "null"]
           format: date-time
@@ -5703,7 +6542,9 @@ components:
           description: |
             Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
             `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
-            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
+            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.22.0,
+            na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
+            `naming_not_required` (soltas sem os nomes).
           type: [string, "null"]
 
     RecordingPatch:
@@ -7076,6 +7917,396 @@ components:
                   type: string
             - type: "null"
 
+    AgentSession:
+      type: object
+      required: [id, title, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          description: Vazio até a primeira pergunta, que dá o título.
+          type: string
+          maxLength: 120
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          description: A última atividade (pergunta ou resposta).
+          type: string
+          format: date-time
+
+    AgentSessionCreate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 120
+
+    AgentSessionUpdate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+
+    AgentSessionDetail:
+      description: Uma `AgentSession` com as mensagens e os anexos ainda não enviados.
+      type: object
+      required: [id, title, created_at, updated_at, messages, pending_files]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 120
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentMessage"
+        pending_files:
+          description: Os anexos ainda não enviados com uma pergunta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentFile"
+
+    AgentFile:
+      type: object
+      required: [id, session_id, message_id, direction, name, media_type, size_bytes, text_chars, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        message_id:
+          description: A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+          type: [string, "null"]
+          format: uuid
+        direction:
+          description: "`input` é anexo da pessoa; `output`, arquivo gerado pelo agente."
+          type: string
+          enum: [input, output]
+        name:
+          type: string
+        media_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+        text_chars:
+          description: Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado.
+          type: [integer, "null"]
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+
+    AgentMessage:
+      type: object
+      required: [id, session_id, role, content, status, sources, queries, model, error, files, skill, actions, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          description: A pergunta, ou a resposta em Markdown (vazia até `done`).
+          type: string
+        status:
+          description: A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+          type: string
+          enum: [queued, running, done, failed]
+        sources:
+          description: As gravações consultadas em que a resposta se apoia.
+          type: array
+          items:
+            $ref: "#/components/schemas/BaseChatSource"
+        queries:
+          description: Quantas ferramentas o agente chamou.
+          type: integer
+          minimum: 0
+        model:
+          type: [string, "null"]
+        error:
+          description: >-
+            Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a
+            resposta passou de 15 minutos em aberto.
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        files:
+          description: Os anexos da pergunta ou os arquivos gerados pela resposta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentFile"
+        skill:
+          description: Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora).
+          type: [string, "null"]
+        actions:
+          description: Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
+        created_at:
+          type: string
+          format: date-time
+
+    AgentMessageCreate:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        attachments:
+          description: Ids de anexos desta conversa ainda não enviados (até 5).
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: uuid
+        skill:
+          description: >-
+            Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem
+            vale o mesmo.
+          type: string
+          maxLength: 41
+
+    AgentTool:
+      type: object
+      required: [name, kind, description]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [read, produce, action]
+        description:
+          type: string
+
+    AgentSkill:
+      type: object
+      required: [id, name, description, instructions, allowed_tools, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          description: O `/nome` da conversa.
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{1,39}$"
+        description:
+          description: O que a habilidade faz; o agente a lê para escolher.
+          type: string
+          maxLength: 300
+        instructions:
+          description: As instruções em Markdown.
+          type: string
+          maxLength: 8000
+        allowed_tools:
+          description: As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas.
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentSkillCreate:
+      type: object
+      required: [name, description, instructions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 41
+        description:
+          type: string
+          minLength: 1
+          maxLength: 300
+        instructions:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        allowed_tools:
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+
+    AgentSkillPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 41
+        description:
+          type: string
+          minLength: 1
+          maxLength: 300
+        instructions:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        allowed_tools:
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+
+    AgentActionTarget:
+      type: object
+      required: [recording_id, title, result]
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        result:
+          description: O resultado neste alvo; nulo enquanto não executado.
+          oneOf:
+            - type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [done, skipped, failed]
+                detail:
+                  type: string
+                code:
+                  type: string
+                summary_id:
+                  type: [string, "null"]
+                  format: uuid
+            - type: "null"
+
+    AgentAction:
+      description: >-
+        Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na
+        proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria.
+      type: object
+      required:
+        - id
+        - session_id
+        - message_id
+        - tool
+        - params
+        - summary
+        - targets
+        - status
+        - counts
+        - error
+        - confirmed_via
+        - created_at
+        - decided_at
+        - finished_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          description: Nulo depois que a conversa é excluída.
+          type: [string, "null"]
+          format: uuid
+        message_id:
+          type: [string, "null"]
+          format: uuid
+        tool:
+          type: string
+          enum: [regenerate_summaries, tag_recordings, collect_recordings, set_agenda_type]
+        params:
+          description: Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos).
+          type: object
+        summary:
+          description: O que será feito, em uma frase.
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentActionTarget"
+        status:
+          type: string
+          enum: [proposed, queued, running, done, failed, cancelled, expired]
+        counts:
+          type: object
+          required: [done, skipped, failed, pending]
+          properties:
+            done:
+              type: integer
+              minimum: 0
+            skipped:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
+            pending:
+              type: integer
+              minimum: 0
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        confirmed_via:
+          type: [string, "null"]
+          enum: [session, pat, null]
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+
+    AgentTurn:
+      type: object
+      required: [question, answer]
+      properties:
+        question:
+          $ref: "#/components/schemas/AgentMessage"
+        answer:
+          $ref: "#/components/schemas/AgentMessage"
+
     AgentProviderKind:
       type: string
       enum: [ollama, openai-compatible, anthropic, claude-cli]
@@ -8129,6 +9360,12 @@ components:
     VoiceAssignment:
       summary: Atribuição automática ligada, limiar 0,80
       externalValue: ./fixtures/voice-assignment.json
+    SpeakerNamingPreference:
+      summary: Marcação ligada, nenhuma gravação esperando
+      externalValue: ./fixtures/speaker-naming-preference.json
+    SpeakerNamingPatchRequest:
+      summary: Exigir a marcação dos locutores
+      externalValue: ./fixtures/speaker-naming-patch-request.json
     TranscriptionPreference:
       summary: Conta em inglês, servidor em português
       externalValue: ./fixtures/transcription-preference.json
@@ -8291,6 +9528,24 @@ components:
     AgendaTypePreviewRequest:
       summary: Pré-visualizar o tipo Mentoria numa gravação
       externalValue: ./fixtures/agenda-type-preview-request.json
+    AgentSession:
+      summary: Conversa nova, ainda sem título
+      externalValue: ./fixtures/agent-session.json
+    AgentSessionDetail:
+      summary: Conversa com um anexo, a pergunta e a resposta com um arquivo gerado
+      externalValue: ./fixtures/agent-session-detail.json
+    AgentFileInput:
+      summary: Anexo em PDF ainda não enviado
+      externalValue: ./fixtures/agent-file-input.json
+    AgentTurn:
+      summary: Pergunta gravada e resposta na fila
+      externalValue: ./fixtures/agent-turn.json
+    AgentMessageDone:
+      summary: Resposta com a fonte e a tabela gerada
+      externalValue: ./fixtures/agent-message-done.json
+    AgentActionProposed:
+      summary: Proposta de aplicar a tag auditoria em duas gravações
+      externalValue: ./fixtures/agent-action-proposed.json
     BaseChatRequest:
       summary: Uma pergunta com duas mensagens de histórico
       externalValue: ./fixtures/base-chat-request.json

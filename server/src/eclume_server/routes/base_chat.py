@@ -38,7 +38,7 @@ class BaseChatRequest(BaseModel):
     history: list[BaseChatTurn] = Field(default_factory=list, max_length=10)
 
 
-@router.post("/base-chat", status_code=202)
+@router.post("/base-chat", status_code=202, deprecated=True)
 async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> dict[str, Any]:
     """Guarda a pergunta e enfileira o `base_chat` no worker CPU."""
     history = [turn.model_dump() for turn in body.history]
@@ -51,7 +51,7 @@ async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> d
     )
 
 
-@router.get("/base-chat/{chat_id}")
+@router.get("/base-chat/{chat_id}", deprecated=True)
 async def read_base_chat(chat_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
     """O estado da pergunta; o cliente consulta até `done` ou `failed`."""
     chat = await get_chat(ctx.queue.pool, chat_id, principal.user_id)

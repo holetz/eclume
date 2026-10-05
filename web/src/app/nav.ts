@@ -5,10 +5,11 @@
 // login próprios (/admin/entrar). Um item pode ser o destacado (`featured`): a barra lateral o desenha
 // antes dos grupos, como ação primária com ícone. A barra lateral separa os dados da conta (Organizar)
 // das regras que agem sozinhas depois de cada gravação (Regras); a engrenagem agrupa os itens por
-// natureza (`part`), com um rótulo por parte.
+// natureza (`part`), com um rótulo por parte. O grupo Agente reúne o que é do Agente além da conversa
+// (Conversas e Habilidades), logo abaixo do item destacado.
 import { MessageSquareText, type LucideIcon } from 'lucide-react'
 
-type NavGroup = 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
+type NavGroup = 'Agente' | 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
 /** As partes da engrenagem, na ordem em que aparecem. */
 export type NavPart = 'Conta e privacidade' | 'Aparelhos' | 'Integrações' | 'Ambiente'
 type NavSection = 'main' | 'header'
@@ -20,6 +21,8 @@ interface NavEntry {
   enabled: boolean
   /** Prefixos de rota que também acendem o item (a gravação pertence à Biblioteca). */
   matches?: string[]
+  /** Prefixos sob a rota do item que são de outro item e não o acendem (Conversas, sob o Agente). */
+  excludes?: string[]
   /** A parte da engrenagem em que o item mora (só na seção `header`). */
   part?: NavPart
 }
@@ -42,8 +45,19 @@ export interface FeaturedItem extends NavEntry {
 type NavItem = GroupedItem | FeaturedItem
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  // Perguntar é o primeiro da barra lateral, acima dos grupos; a rota segue sendo /perguntas.
-  { to: '/perguntas', label: 'Perguntar', section: 'main', enabled: true, featured: true, icon: MessageSquareText },
+  // O Agente é o primeiro da barra lateral, acima dos grupos; /perguntas, o nome antigo, redireciona
+  // (holetz/eclume#142). As páginas do grupo Agente moram sob /agente/ e não acendem o destacado.
+  {
+    to: '/agente',
+    label: 'Agente',
+    section: 'main',
+    enabled: true,
+    featured: true,
+    icon: MessageSquareText,
+    excludes: ['/agente/conversas', '/agente/habilidades'],
+  },
+  { to: '/agente/conversas', label: 'Conversas', group: 'Agente', section: 'main', enabled: true },
+  { to: '/agente/habilidades', label: 'Habilidades', group: 'Agente', section: 'main', enabled: true },
   { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
@@ -90,8 +104,12 @@ export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSect
   return { main: entries(sections.main), header: entries(sections.header) }
 }
 
-/** Se o item está aceso na rota: a própria rota (a raiz só nela mesma), as filhas e os `matches`. */
+/**
+ * Se o item está aceso na rota: a própria rota (a raiz só nela mesma), as filhas e os `matches`,
+ * menos os `excludes`.
+ */
 export function isItemActive(item: NavItem, pathname: string): boolean {
+  if (item.excludes?.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return false
   if (item.matches?.some((prefix) => pathname.startsWith(prefix))) return true
   if (item.to === '/') return pathname === '/'
   return pathname === item.to || pathname.startsWith(`${item.to}/`)

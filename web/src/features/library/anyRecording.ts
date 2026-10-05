@@ -1,5 +1,5 @@
 // A pergunta "a conta tem alguma gravação?", num módulo próprio: o shell a faz em toda tela (o
-// destaque de Perguntar) sem puxar as consultas da biblioteca para o JS inicial.
+// destaque do Agente) sem puxar as consultas da biblioteca para o JS inicial.
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { unwrap } from '../../api/problem'

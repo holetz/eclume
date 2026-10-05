@@ -37,6 +37,7 @@ describe('filtros na URL', () => {
       personCompany: ['Agro Sul'],
       personDepartment: ['RH'],
       personTag: ['cliente'],
+      needs: [],
     })
     expect(readView(params)).toBe('semana')
     expect(readView(new URLSearchParams('visao=ano'))).toBeNull()
@@ -48,6 +49,14 @@ describe('filtros na URL', () => {
     const next = writeFilters(params, { ...NO_FILTERS, kind: ['reuniao'], field: ['f1:a', 'f1:b'] })
     expect(next.toString()).toBe('visao=mes&data=2026-09-21&importar=1&tipo=reuniao&campo=f1%3Aa&campo=f1%3Ab')
     expect(rememberedSearch(next)).toBe('visao=mes&data=2026-09-21&tipo=reuniao&campo=f1%3Aa&campo=f1%3Ab')
+  })
+
+  it('precisam de você: lê e escreve precisa=locutores e manda awaiting=speakers', () => {
+    const filters = readFilters(new URLSearchParams('precisa=locutores&precisa=outra'))
+    expect(filters.needs).toEqual(['locutores'])
+    expect(activeFilterCount(filters)).toBe(1)
+    expect(writeFilters(new URLSearchParams('visao=lista'), filters).toString()).toBe('visao=lista&precisa=locutores')
+    expect(filtersToQuery(filters)).toEqual({ awaiting: ['speakers'] })
   })
 
   it('traduz para a query de GET /recordings pelo enum do contrato', () => {
@@ -63,6 +72,7 @@ describe('filtros na URL', () => {
         personCompany: ['Agro Sul'],
         personDepartment: [],
         personTag: ['cliente'],
+        needs: [],
       }),
     ).toEqual({
       kind: ['note'],

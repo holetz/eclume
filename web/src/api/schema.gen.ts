@@ -267,6 +267,30 @@ export interface paths {
         patch: operations["updateTranscriptionPreference"];
         trace?: never;
     };
+    "/api/v1/me/speaker-naming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ler se a conta exige nomear os locutores
+         * @description Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo menos 10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão ou PAT com `recordings:read`.
+         */
+        get: operations["getSpeakerNaming"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Ligar ou desligar a marcação obrigatória dos locutores
+         * @description Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia segue. Só sessão.
+         */
+        patch: operations["updateSpeakerNaming"];
+        trace?: never;
+    };
     "/api/v1/me/tag-assignment": {
         parameters: {
             query?: never;
@@ -774,6 +798,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recordings/{recording_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seguir sem nomear os locutores
+         * @description Desde a 2.22.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
+         *     `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
+         *     espera, 409.
+         */
+        post: operations["continueRecordingWithoutNames"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/recordings/{recording_id}/summary": {
         parameters: {
             query?: never;
@@ -1092,7 +1140,9 @@ export interface paths {
          * Renomear o locutor ou ligá-lo a uma pessoa
          * @description `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
          *     voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
-         *     o nome da pessoa. Sobe a `revision`.
+         *     o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
+         *     uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
+         *     segue sozinha.
          */
         patch: operations["updateSpeaker"];
         trace?: never;
@@ -1136,7 +1186,7 @@ export interface paths {
         put?: never;
         /**
          * Mesclar locutores
-         * @description Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`.
+         * @description Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação parada à espera dos nomes, como `updateSpeaker`.
          */
         post: operations["mergeSpeakers"];
         delete?: never;
@@ -1447,6 +1497,7 @@ export interface paths {
         put?: never;
         /**
          * Perguntar sobre a base de gravações
+         * @deprecated
          * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
          *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
          *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
@@ -1473,12 +1524,355 @@ export interface paths {
         };
         /**
          * Uma pergunta e a resposta
+         * @deprecated
          * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
          *     que o agente de fato consultou e em que a resposta se apoia.
          */
         get: operations["getBaseChat"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As conversas do Agente
+         * @description Da última atividade (`updated_at`) para trás, paginadas por cursor.
+         */
+        get: operations["listAgentSessions"];
+        put?: never;
+        /**
+         * Abrir uma conversa
+         * @description Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+         */
+        post: operations["createAgentSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma conversa com as mensagens e os arquivos
+         * @description As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
+         *     pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
+         *     mais de 15 minutos vira `failed` com `agent_expired`.
+         */
+        get: operations["getAgentSession"];
+        put?: never;
+        post?: never;
+        /**
+         * Excluir a conversa
+         * @description Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+         */
+        delete: operations["deleteAgentSession"];
+        options?: never;
+        head?: never;
+        /** Renomear a conversa */
+        patch: operations["renameAgentSession"];
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anexar um arquivo à conversa
+         * @description Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
+         *     conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
+         *     texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
+         *     citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+         */
+        post: operations["attachAgentFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Tirar um anexo ainda não enviado
+         * @description O anexo que já foi com uma pergunta fica no histórico (409).
+         */
+        delete: operations["deleteAgentFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Perguntar ao Agente
+         * @description Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
+         *     consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
+         *     guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
+         *     sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
+         *     arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
+         *     (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+         *     Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
+         *     inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
+         *     propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+         */
+        post: operations["askAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/sessions/{session_id}/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                message_id: components["parameters"]["AgentMessageId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma mensagem da conversa
+         * @description A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+         */
+        get: operations["getAgentMessage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        /** Baixar um anexo ou um arquivo gerado */
+        get: operations["downloadAgentFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O catálogo de ferramentas do Agente
+         * @description Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
+         *     `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
+         *     uma habilidade escolhe as ferramentas permitidas.
+         */
+        get: operations["listAgentTools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As habilidades da conta
+         * @description Desde a 2.24.0. Todas (até 50), por nome.
+         */
+        get: operations["listAgentSkills"];
+        put?: never;
+        /**
+         * Cadastrar uma habilidade
+         * @description Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
+         *     e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
+         *     habilidades na conta: 422.
+         */
+        post: operations["createAgentSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma habilidade
+         * @description Desde a 2.24.0.
+         */
+        get: operations["getAgentSkill"];
+        put?: never;
+        post?: never;
+        /**
+         * Excluir a habilidade
+         * @description Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+         */
+        delete: operations["deleteAgentSkill"];
+        options?: never;
+        head?: never;
+        /**
+         * Editar a habilidade
+         * @description Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+         */
+        patch: operations["updateAgentSkill"];
+        trace?: never;
+    };
+    "/api/v1/agent/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O registro das ações do Agente
+         * @description Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
+         *     alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+         */
+        get: operations["listAgentActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma ação do Agente
+         * @description Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+         */
+        get: operations["getAgentAction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar a proposta
+         * @description Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
+         *     operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
+         *     executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
+         *     o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
+         *     `recordings:write` para as demais (PAT sem ele: 403).
+         */
+        post: operations["confirmAgentAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/actions/{action_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Descartar a proposta
+         * @description Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+         */
+        post: operations["cancelAgentAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2347,6 +2741,15 @@ export interface components {
             /** @description Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra). */
             voiceprint_people: number;
         };
+        /** @description Desde a 2.22.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas gravações esperam por isso. */
+        SpeakerNamingPreference: {
+            required: boolean;
+            /** @description Gravações cuja revisão atual está com a etapa `speakers` em `waiting`. */
+            waiting_count: number;
+        };
+        SpeakerNamingPatch: {
+            required: boolean;
+        };
         /** @description Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale quando a conta não escolhe. */
         TranscriptionPreference: {
             /** @description Idioma (BCP 47), `auto` (detectar) ou `null` (padrão do servidor). */
@@ -2763,11 +3166,18 @@ export interface components {
             } | null;
             job: components["schemas"]["Job"] | null;
             /**
-             * @description As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
+             * @description As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
              *     `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
-             *     sai `active`.
+             *     sai `active`. A etapa `speakers` entrou na 2.22.0 (eram seis).
              */
             pipeline: components["schemas"]["PipelineStep"][];
+            /**
+             * @description Desde a 2.22.0. O que a gravação espera do dono para seguir: `speakers` quando a etapa
+             *     `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
+             *     nas outras.
+             * @enum {string|null}
+             */
+            awaiting: "speakers" | null;
             /**
              * Format: uuid
              * @description Transcrição, depois do primeiro job concluído.
@@ -2782,12 +3192,15 @@ export interface components {
         };
         PipelineStep: {
             /**
-             * @description Na ordem da cadeia; o tipo de agenda vem antes dos campos.
+             * @description Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a 2.22.0) fica entre a transcrição e o tipo de agenda.
              * @enum {string}
              */
-            step: "received" | "preprocessing" | "transcription" | "agenda_type" | "fields" | "summary";
-            /** @enum {string} */
-            state: "pending" | "active" | "done" | "failed" | "skipped";
+            step: "received" | "preprocessing" | "transcription" | "speakers" | "agenda_type" | "fields" | "summary";
+            /**
+             * @description `waiting` (desde a 2.22.0) é só da etapa `speakers`: parada à espera de o dono nomear os locutores, com `reason` `unnamed_speakers`.
+             * @enum {string}
+             */
+            state: "pending" | "active" | "done" | "failed" | "skipped" | "waiting";
             /** Format: date-time */
             started_at: string | null;
             /** Format: date-time */
@@ -2801,7 +3214,9 @@ export interface components {
             /**
              * @description Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
              *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
-             *     transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
+             *     transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.22.0,
+             *     na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
+             *     `naming_not_required` (soltas sem os nomes).
              */
             reason: string | null;
         };
@@ -3470,6 +3885,195 @@ export interface components {
                 code: string;
                 message: string;
             } | null;
+        };
+        AgentSession: {
+            /** Format: uuid */
+            id: string;
+            /** @description Vazio até a primeira pergunta, que dá o título. */
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description A última atividade (pergunta ou resposta).
+             */
+            updated_at: string;
+        };
+        AgentSessionCreate: {
+            title?: string;
+        };
+        AgentSessionUpdate: {
+            title: string;
+        };
+        /** @description Uma `AgentSession` com as mensagens e os anexos ainda não enviados. */
+        AgentSessionDetail: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            messages: components["schemas"]["AgentMessage"][];
+            /** @description Os anexos ainda não enviados com uma pergunta. */
+            pending_files: components["schemas"]["AgentFile"][];
+        };
+        AgentFile: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            session_id: string;
+            /**
+             * Format: uuid
+             * @description A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+             */
+            message_id: string | null;
+            /**
+             * @description `input` é anexo da pessoa; `output`, arquivo gerado pelo agente.
+             * @enum {string}
+             */
+            direction: "input" | "output";
+            name: string;
+            media_type: string;
+            size_bytes: number;
+            /** @description Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado. */
+            text_chars: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AgentMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** @enum {string} */
+            role: "user" | "assistant";
+            /** @description A pergunta, ou a resposta em Markdown (vazia até `done`). */
+            content: string;
+            /**
+             * @description A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description As gravações consultadas em que a resposta se apoia. */
+            sources: components["schemas"]["BaseChatSource"][];
+            /** @description Quantas ferramentas o agente chamou. */
+            queries: number;
+            model: string | null;
+            /** @description Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a resposta passou de 15 minutos em aberto. */
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /** @description Os anexos da pergunta ou os arquivos gerados pela resposta. */
+            files: components["schemas"]["AgentFile"][];
+            /** @description Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora). */
+            skill: string | null;
+            /** @description Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta. */
+            actions: components["schemas"]["AgentAction"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        AgentMessageCreate: {
+            message: string;
+            /** @description Ids de anexos desta conversa ainda não enviados (até 5). */
+            attachments?: string[];
+            /** @description Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem vale o mesmo. */
+            skill?: string;
+        };
+        AgentTool: {
+            name: string;
+            /** @enum {string} */
+            kind: "read" | "produce" | "action";
+            description: string;
+        };
+        AgentSkill: {
+            /** Format: uuid */
+            id: string;
+            /** @description O `/nome` da conversa. */
+            name: string;
+            /** @description O que a habilidade faz; o agente a lê para escolher. */
+            description: string;
+            /** @description As instruções em Markdown. */
+            instructions: string;
+            /** @description As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas. */
+            allowed_tools: string[] | null;
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AgentSkillCreate: {
+            name: string;
+            description: string;
+            instructions: string;
+            allowed_tools?: string[] | null;
+            enabled?: boolean;
+        };
+        AgentSkillPatch: {
+            name?: string;
+            description?: string;
+            instructions?: string;
+            allowed_tools?: string[] | null;
+            enabled?: boolean;
+        };
+        AgentActionTarget: {
+            /** Format: uuid */
+            recording_id: string;
+            title: string;
+            /** @description O resultado neste alvo; nulo enquanto não executado. */
+            result: {
+                /** @enum {string} */
+                status: "done" | "skipped" | "failed";
+                detail?: string;
+                code?: string;
+                /** Format: uuid */
+                summary_id?: string | null;
+            } | null;
+        };
+        /** @description Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria. */
+        AgentAction: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Nulo depois que a conversa é excluída.
+             */
+            session_id: string | null;
+            /** Format: uuid */
+            message_id: string | null;
+            /** @enum {string} */
+            tool: "regenerate_summaries" | "tag_recordings" | "collect_recordings" | "set_agenda_type";
+            /** @description Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos). */
+            params: Record<string, never>;
+            /** @description O que será feito, em uma frase. */
+            summary: string;
+            targets: components["schemas"]["AgentActionTarget"][];
+            /** @enum {string} */
+            status: "proposed" | "queued" | "running" | "done" | "failed" | "cancelled" | "expired";
+            counts: {
+                done: number;
+                skipped: number;
+                failed: number;
+                pending: number;
+            };
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /** @enum {string|null} */
+            confirmed_via: "session" | "pat" | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        AgentTurn: {
+            question: components["schemas"]["AgentMessage"];
+            answer: components["schemas"]["AgentMessage"];
         };
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
@@ -4213,6 +4817,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a 2.23.0), ou o conteúdo não bate com a extensão. */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o teto em bytes. */
         PayloadTooLarge: {
             headers: {
@@ -4272,6 +4885,11 @@ export interface components {
         AgendaTypeId: string;
         FieldId: string;
         PreviewId: string;
+        AgentSessionId: string;
+        AgentMessageId: string;
+        AgentFileId: string;
+        AgentSkillId: string;
+        AgentActionId: string;
         BaseChatId: string;
         PersonId: string;
         CollectionId: string;
@@ -4659,6 +5277,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptionPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getSpeakerNaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferência corrente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeakerNamingPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateSpeakerNaming: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeakerNamingPatch"];
+            };
+        };
+        responses: {
+            /** @description Preferência resultante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeakerNamingPreference"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -5242,6 +5912,8 @@ export interface operations {
                 person_department?: string[];
                 /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`). */
                 person_tag?: string[];
+                /** @description Desde a 2.22.0. `speakers`: só as gravações cuja revisão atual está parada à espera de nomear os locutores (`Recording.awaiting`). */
+                awaiting?: "speakers"[];
             };
             header?: never;
             path?: never;
@@ -5419,6 +6091,35 @@ export interface operations {
         responses: {
             /** @description Transcrição cancelada; a gravação com o job `cancelled`. */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recording"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    continueRecordingWithoutNames: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                recording_id: components["parameters"]["RecordingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A gravação, com a etapa `speakers` solta. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6672,6 +7373,582 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentSessions: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma página de conversas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentSession"][];
+                        next_cursor: components["schemas"]["NextCursor"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AgentSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description A conversa criada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAgentSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A conversa. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renameAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSessionUpdate"];
+            };
+        };
+        responses: {
+            /** @description A conversa renomeada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    attachAgentFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description O anexo, ainda sem pergunta (`message_id` nulo). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteAgentFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tirado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    askAgent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentMessageCreate"];
+            };
+        };
+        responses: {
+            /** @description A pergunta gravada e a resposta na fila. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTurn"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAgentMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["AgentSessionId"];
+                message_id: components["parameters"]["AgentMessageId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A mensagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMessage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadAgentFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: components["parameters"]["AgentFileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O arquivo, como anexo. */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/markdown": string;
+                    "text/csv": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O catálogo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentTool"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAgentSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description As habilidades. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentSkill"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSkillCreate"];
+            };
+        };
+        responses: {
+            /** @description A habilidade cadastrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A habilidade. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Excluída. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAgentSkill: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                skill_id: components["parameters"]["AgentSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSkillPatch"];
+            };
+        };
+        responses: {
+            /** @description A habilidade editada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSkill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listAgentActions: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco devolvido em `next_cursor`. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Itens por página. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma página de ações. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentAction"][];
+                        next_cursor: components["schemas"]["NextCursor"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAgentAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ação. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    confirmAgentAction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ação na fila (ou o estado atual, se já confirmada). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelAgentAction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path: {
+                action_id: components["parameters"]["AgentActionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A proposta descartada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listPeople: {

@@ -5,7 +5,7 @@
 // Tipado pelo tsconfig.node.json (lê arquivos do disco).
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { ETAPAS, MOTIVOS, motivo, nomeDaEtapa } from './vocabulario.js'
+import { ESTADOS_ETAPA, ESTADOS_SERVIDOR, ETAPAS, MOTIVOS, motivo, nomeDaEtapa } from './vocabulario.js'
 
 const SERVER = new URL('../../../server/src/eclume_server/', import.meta.url)
 const MIGRATIONS = new URL('db/migrations/', SERVER)
@@ -44,6 +44,13 @@ describe('vocabulário', () => {
     const pipeline = readFileSync(new URL('pipeline.py', SERVER), 'utf8')
     const steps = pipeline.match(/^STEPS\s*=\s*\(([^)]*)\)/m)?.[1] ?? ''
     expect(ETAPAS.map((item) => item.etapa)).toEqual([...steps.matchAll(/"(\w+)"/g)].map((m) => m[1]))
+  })
+
+  it('nomeia a espera pelos locutores (holetz/eclume#144)', () => {
+    expect(ESTADOS_SERVIDOR.aguardando_locutores).toEqual({ rotulo: 'Aguardando locutores', tom: 'warning' })
+    expect(ESTADOS_ETAPA.waiting).toBe('aguardando você')
+    expect(nomeDaEtapa('speakers')).toBe('Locutores')
+    for (const code of ['unnamed_speakers', 'continued_by_user', 'naming_not_required']) expect(MOTIVOS[code]).toBeTruthy()
   })
 
   it('mostra cru o que ainda não tem texto', () => {

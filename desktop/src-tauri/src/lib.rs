@@ -10,6 +10,7 @@ pub mod config;
 mod import;
 mod mirror_sync;
 mod notify;
+mod recent;
 pub mod shortcuts;
 pub mod state;
 mod supervise;
@@ -352,6 +353,7 @@ pub fn run() {
             spawn_reaper(app.handle().clone());
             sync::spawn(app.handle());
             mirror_sync::spawn(app.handle());
+            recent::spawn(app.handle());
             auto::spawn(app.handle().clone());
             sync::nudge(app.handle());
             updater::spawn(app.handle().clone());
@@ -394,6 +396,10 @@ pub fn run() {
             commands::save_settings,
             commands::answer_meeting,
             commands::sync_now,
+            commands::recent,
+            commands::recent_refresh,
+            commands::copy_summary,
+            commands::open_recording,
             commands::dismiss_update_notice,
             commands::storage_info,
             commands::list_input_devices,

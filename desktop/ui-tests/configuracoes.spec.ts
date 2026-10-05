@@ -54,6 +54,15 @@ test('Geral: o aviso do fim do processamento vem ligado e desliga na hora', asyn
   expect((await ultimaEntrada(page)).notify_summary).toBe(false)
 })
 
+test('Geral: gravações recentes no topo vem com 5 e salva na hora', async ({ abrir }) => {
+  const page = await abrir()
+  await page.locator('#abrir-configuracoes').click()
+  await expect(page.locator('#recentes-quantidade')).toHaveValue('5')
+  await expect(page.locator('#recentes-quantidade option')).toHaveText(['Ocultar', '3', '5', '10'])
+  await page.locator('#recentes-quantidade').selectOption('10')
+  await expect.poll(async () => (await ultimaEntrada(page)).recent_count).toBe(10)
+})
+
 test('Geral: iniciar com o computador vem ligado e desliga na hora', async ({ abrir }) => {
   const page = await abrir()
   await page.locator('#abrir-configuracoes').click()

@@ -59,6 +59,8 @@ users = Table(
     Column("quotas", JSONB),
     # 029_idioma_da_conta
     Column("transcription_language", Text),
+    # 030_marcacao_dos_locutores
+    Column("require_speaker_naming", Boolean, server_default=FetchedValue()),
 )
 
 sessions = Table(
@@ -558,4 +560,84 @@ admin_sessions = Table(
     _uuid("admin_id"),
     _ts("created_at", server_default=FetchedValue()),
     _ts("expires_at"),
+)
+
+# 031_agente_conversas
+agent_sessions = Table(
+    "agent_sessions",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("title", Text, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+agent_messages = Table(
+    "agent_messages",
+    metadata,
+    _pk(),
+    _uuid("session_id"),
+    _uuid("owner_id"),
+    Column("role", Text),
+    Column("content", Text, server_default=FetchedValue()),
+    Column("status", Text, server_default=FetchedValue()),
+    Column("sources", JSONB, server_default=FetchedValue()),
+    Column("queries", Integer, server_default=FetchedValue()),
+    Column("model", Text),
+    Column("error", JSONB),
+    _uuid("skill_id"),
+    Column("skill_name", Text),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
+agent_files = Table(
+    "agent_files",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("session_id"),
+    _uuid("message_id"),
+    Column("direction", Text),
+    Column("name", Text),
+    Column("media_type", Text),
+    Column("size_bytes", BigInteger),
+    Column("storage_key", Text),
+    Column("text_content", Text),
+    _ts("created_at", server_default=FetchedValue()),
+)
+
+agent_skills = Table(
+    "agent_skills",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    Column("name", Text),
+    Column("description", Text),
+    Column("instructions", Text),
+    Column("allowed_tools", ARRAY(Text)),
+    Column("enabled", Boolean, server_default=FetchedValue()),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("updated_at", server_default=FetchedValue()),
+)
+
+agent_actions = Table(
+    "agent_actions",
+    metadata,
+    _pk(),
+    _uuid("owner_id"),
+    _uuid("session_id"),
+    _uuid("message_id"),
+    Column("tool", Text),
+    Column("params", JSONB, server_default=FetchedValue()),
+    Column("summary", Text),
+    Column("targets", JSONB, server_default=FetchedValue()),
+    Column("status", Text, server_default=FetchedValue()),
+    Column("results", JSONB, server_default=FetchedValue()),
+    Column("error", JSONB),
+    Column("confirmed_via", Text),
+    _uuid("token_id"),
+    _ts("created_at", server_default=FetchedValue()),
+    _ts("decided_at"),
+    _ts("finished_at"),
 )

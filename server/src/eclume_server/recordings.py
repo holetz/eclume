@@ -18,6 +18,7 @@ from eclume_server.problems import conflict, not_found
 from eclume_server.queue import progress_of_revision, transcribe_options
 from eclume_server.serialize import Row, requester_name, user_ref
 from eclume_server.settings_admin import HF_TOKEN, secret_encrypted
+from eclume_server.speaker_naming import awaiting_condition, awaiting_of
 from eclume_server.stalled import CANCELLED, is_retryable
 from eclume_server.voice import keeps_samples
 
@@ -31,6 +32,8 @@ if TYPE_CHECKING:
     from eclume_server.context import AppContext
 
 Status = Literal["uploading", "queued", "processing", "transcribed", "failed"]
+# O que a gravação espera do dono para seguir (`Recording.awaiting`): hoje, só os nomes dos locutores.
+Awaiting = Literal["speakers"]
 Sort = Literal["created_desc", "recorded_asc", "recorded_desc"]
 
 _job = (
@@ -115,6 +118,7 @@ def recording_json(
     status = row["status"]
     if status == "queued" and job is not None and job["state"] == "running":
         status = "processing"
+    steps = pipeline_json(pipeline, (progress[0] or "asr") if progress is not None else None)
     return {
         "id": str(row["id"]),
         "title": row["title"],
@@ -136,7 +140,8 @@ def recording_json(
         "capture": row["capture"],
         "agenda_type": agenda_type,
         "job": job,
-        "pipeline": pipeline_json(pipeline, (progress[0] or "asr") if progress is not None else None),
+        "pipeline": steps,
+        "awaiting": awaiting_of(steps),
         "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
         "marker_count": row["marker_count"],
         "created_at": iso(row["created_at"]),
@@ -344,6 +349,8 @@ class Library:
     person_company: list[str] | None = None
     person_department: list[str] | None = None
     person_tag: list[str] | None = None
+    # `?awaiting=speakers`: a revisão atual parada à espera dos nomes dos locutores.
+    awaiting: list[Awaiting] | None = None
 
     def filters(self) -> list[ColumnElement[bool]]:
         """As condições SQL (E entre filtros; OU dentro de cada um)."""
@@ -360,6 +367,8 @@ class Library:
         if self.status:
             # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
             conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
+        if self.awaiting:
+            conditions.append(awaiting_condition())
         return conditions + self._organizing()
 
     def _organizing(self) -> list[ColumnElement[bool]]:

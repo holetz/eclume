@@ -11,7 +11,7 @@ beforeAll(() => preloadRoute('/gravacoes/x'))
 afterEach(() => vi.unstubAllGlobals())
 
 describe('cabeçalho, pipeline, exportar e excluir', () => {
-  it('mostra a data, a hora e a duração no kicker, o título e as seis etapas', async () => {
+  it('mostra a data, a hora e a duração no kicker, o título e as sete etapas', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
@@ -24,6 +24,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
       'Áudio recebido',
       'Pré-processamento',
       'Transcrição',
+      'Locutores',
       'Tipo de agenda',
       'Campos',
       'Resumo',
@@ -133,8 +134,10 @@ describe('transcrição recolhida', () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const details = await waitFor(() => {
-      const found = document.querySelector('details.disclosure')
-      expect(found).not.toBeNull()
+      const found = [...document.querySelectorAll('details.disclosure')].find((element) =>
+        element.querySelector('summary')?.textContent?.startsWith('Transcrição'),
+      )
+      expect(found).toBeDefined()
       return found as HTMLDetailsElement
     })
     expect(details.open).toBe(false)
@@ -144,7 +147,9 @@ describe('transcrição recolhida', () => {
     expect(screen.queryByRole('list', { name: 'Falas' })).not.toBeInTheDocument()
     await openTranscript()
     expect(details.open).toBe(true)
-    expect(screen.getByRole('region', { name: 'Locutores' })).toBeInTheDocument()
+    // Os locutores ficam no bloco deles: a transcrição aberta só traz as falas.
+    expect(screen.getByRole('list', { name: 'Falas' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Locutores' })).not.toBeInTheDocument()
   })
 
   it('abre sozinha com ?t=, posiciona o áudio sem tocar e destaca a fala', async () => {
@@ -156,7 +161,9 @@ describe('transcrição recolhida', () => {
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     expect(audio.currentTime).toBe(80.9)
     expect(audio.play).not.toHaveBeenCalled()
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    // A lista vem à janela e a fala é centrada por dentro dela.
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(falas)
+    expect(vi.mocked(Element.prototype.scrollTo).mock.contexts).toContain(falas)
   })
 
   it('põe o marcador antes da fala, com a nota, o dispositivo, editar e excluir', async () => {
@@ -239,10 +246,12 @@ describe('página da gravação', () => {
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
     audio.currentTime = 100
     fireEvent.timeUpdate(audio)
     expect(segment(items[7])).toHaveAttribute('aria-current', 'true')
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    // Acompanhar rola só a lista de falas: nada chama `scrollIntoView`, que rolaria a página.
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('falha passageira: o dono retenta e a gravação volta para a fila', async () => {

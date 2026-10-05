@@ -414,6 +414,7 @@ export function montar(secao, app) {
     desenharBotoesDeTeste();
     $("#idioma", secao).value = config.language ?? "";
     $("#avisar-resumo", secao).checked = config.notify_summary ?? true;
+    $("#recentes-quantidade", secao).value = String(config.recent_count ?? 5);
     $("#iniciar-com-o-sistema", secao).checked = config.autostart ?? true;
     const tema = config.theme ?? "system";
     for (const opcao of secao.querySelectorAll('input[name="tema"]')) opcao.checked = opcao.value === tema;
@@ -516,6 +517,9 @@ export function montar(secao, app) {
   );
   $("#avisar-resumo", secao).addEventListener("change", (evento) =>
     salvar({ notify_summary: evento.target.checked }),
+  );
+  $("#recentes-quantidade", secao).addEventListener("change", (evento) =>
+    salvar({ recent_count: Number(evento.target.value) }),
   );
   for (const opcao of secao.querySelectorAll('input[name="tema"]')) {
     opcao.addEventListener("change", () => {

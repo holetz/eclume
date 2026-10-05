@@ -30,7 +30,10 @@ vi.mock('./MarkerBar', async (original) => {
   }
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 const COUNT = 3000
 const STEP_MS = 4000
@@ -80,48 +83,37 @@ describe('transcrição longa', () => {
 })
 
 describe('acompanhar o áudio', () => {
-  /** Um `IntersectionObserver` de mentira: o teste diz quando a lista entra ou sai da janela. */
-  function stubObserver() {
-    const observers: { callback: IntersectionObserverCallback; element?: Element }[] = []
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(callback: IntersectionObserverCallback) {
-          observers.push({ callback })
-        }
-        observe(element: Element) {
-          observers.at(-1)!.element = element
-        }
-        disconnect() {}
-      },
-    )
-    return (isIntersecting: boolean) =>
-      act(() => {
-        for (const { callback, element } of observers) {
-          callback([{ isIntersecting, target: element } as IntersectionObserverEntry], {} as IntersectionObserver)
-        }
-      })
-  }
-
-  it('abre pelo ?t= rolando uma vez até a fala do instante, e só segue o áudio com a lista à vista', async () => {
-    const setVisible = stubObserver()
-    const scroll = vi.mocked(Element.prototype.scrollIntoView)
-    scroll.mockClear()
+  it('abre pelo ?t= centrando a fala dentro da lista e segue o áudio rolando só a lista, nunca a página', async () => {
+    const intoView = vi.mocked(Element.prototype.scrollIntoView)
+    const scrollTo = vi.mocked(Element.prototype.scrollTo)
+    intoView.mockClear()
+    scrollTo.mockClear()
     mockTranscriptApi({ 'GET /api/v1/transcripts/:id': () => longTranscript() })
     renderApp(`/gravacoes/${RECORDING}?t=${STEP_MS * 50 + 100}`)
     const list = await screen.findByRole('list', { name: 'Falas' })
-    expect(scroll).toHaveBeenCalledTimes(1)
-    expect(scroll.mock.contexts[0]).toBe(list.children[50])
 
-    // Fora da janela (lendo o resumo), a troca de fala não rola a página.
-    setVisible(false)
-    scroll.mockClear()
+    // O ?t= traz a lista (não a fala) à janela, uma vez, e centra a fala por dentro dela.
+    expect(intoView).toHaveBeenCalledTimes(1)
+    expect(intoView.mock.contexts[0]).toBe(list)
+    expect(scrollTo.mock.contexts).toContain(list)
+
+    // A lista é um contêiner de 400 px; as falas que entram ficam abaixo dele.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return (this === list ? { top: 0, height: 400 } : { top: 1000, height: 80 }) as DOMRect
+    })
+    intoView.mockClear()
+    scrollTo.mockClear()
     tick(STEP_MS * 60 + 100)
-    expect(scroll).not.toHaveBeenCalled()
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo.mock.contexts[0]).toBe(list)
+    expect(scrollTo.mock.calls[0][0]).toMatchObject({ behavior: 'smooth' })
+    expect(intoView).not.toHaveBeenCalled()
 
-    // De volta à vista, segue a fala ativa.
-    setVisible(true)
+    // Sem acompanhar, a troca de fala não rola nada.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Acompanhar o áudio' }))
+    scrollTo.mockClear()
     tick(STEP_MS * 61 + 100)
-    expect(scroll.mock.contexts.at(-1)).toBe(list.children[61])
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(intoView).not.toHaveBeenCalled()
   })
 })

@@ -41,7 +41,10 @@
       "account_ahead": null,
       "estimated_start_at": "2026-09-18T14:21:31Z",
       "resumes_at": null,
-      "processor": { "online": true, "offline_since": null }
+      "processor": {
+        "online": true,
+        "offline_since": null
+      }
     }
   },
   "pipeline": [
@@ -65,6 +68,15 @@
     },
     {
       "step": "transcription",
+      "state": "pending",
+      "started_at": null,
+      "finished_at": null,
+      "duration_ms": null,
+      "error": null,
+      "reason": null
+    },
+    {
+      "step": "speakers",
       "state": "pending",
       "started_at": null,
       "finished_at": null,
@@ -100,6 +112,7 @@
       "reason": null
     }
   ],
+  "awaiting": null,
   "transcript_id": null,
   "marker_count": 0,
   "created_at": "2026-09-18T14:09:31Z",

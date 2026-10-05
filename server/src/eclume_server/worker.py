@@ -26,6 +26,8 @@ from sqlalchemy import delete, select, update
 from eclume_engines.fila import desserializar
 from eclume_engines.registro import configurar_logs, contexto_do_job
 from eclume_server.agenda_types import ensure_type, run_detect
+from eclume_server.agent_actions import run_agent_action_job
+from eclume_server.agent_sessions import run_agent_turn_job
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
@@ -58,6 +60,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
 
 log = logging.getLogger("eclume_server.worker")
+AGENT_ACTION_TIMEOUT_S = 600
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
 # Vagas do worker de `eclume:default` (o padrão do arq, explícito): só ingestão, falhas e varreduras.
@@ -145,8 +148,10 @@ async def ingest_transcript(
         await ctx["storage"].delete_artifacts(recording_id)
     elif outcome.persisted:
         await _keep_only_revision(ctx["storage"], recording_id, outcome.revision)
-        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição.
-        await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
+        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição e nenhum
+        # locutor espera ser nomeado (a rota que o nomeia enfileira o tipo).
+        if not outcome.waiting:
+            await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
     # A GPU ficou livre para esta conta: o próximo job retido dela entra na fila.
     await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
@@ -321,6 +326,25 @@ async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
     return result
 
 
+async def agent_turn(
+    ctx: dict[str, Any],
+    message_id: str,
+    transcripts: bool = True,  # noqa: FBT001, FBT002
+    scopes: list[str] | None = None,
+) -> str:
+    """Responde uma pergunta do Agente (docs/standards/code/server-agentes.md §Agente)."""
+    result = await run_agent_turn_job(ctx, message_id, transcripts, scopes)
+    log.info("agent_turn %s: %s", message_id, result)
+    return result
+
+
+async def agent_action(ctx: dict[str, Any], action_id: str, attempt: int = 0) -> str:
+    """Executa uma ação confirmada do Agente, alvo a alvo (docs/standards/code/server-agentes.md §Agente)."""
+    result = await run_agent_action_job(ctx, action_id, attempt)
+    log.info("agent_action %s: %s", action_id, result)
+    return result
+
+
 async def base_chat(ctx: dict[str, Any], chat_id: str) -> str:
     """Responde uma pergunta do chat sobre a base (docs/standards/code/server-agentes.md)."""
     result = await run_base_chat_job(ctx, chat_id)
@@ -429,6 +453,10 @@ def _agent_functions() -> list[Any]:
         func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
         # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
         func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
+        # Sem nova tentativa: a resposta termina `failed` e a pessoa pergunta de novo.
+        func(agent_turn, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
+        # Até 50 alvos, cada um numa transação curta; o resultado por alvo torna a repetição segura.
+        func(agent_action, timeout=AGENT_ACTION_TIMEOUT_S, max_tries=3),
     ]
 
 

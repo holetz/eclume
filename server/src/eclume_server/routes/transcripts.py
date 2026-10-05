@@ -19,6 +19,7 @@ from eclume_server.exports import slug
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.people import get_person
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
+from eclume_server.speaker_naming import release_if_named
 from eclume_server.transcripts import (
     bump_revision,
     editable_transcript,
@@ -164,7 +165,25 @@ async def update_speaker(
             key = SpeakerKey(transcript_id, speaker_id)
             await on_link(conn, principal, key, values["person_id"])
         await bump_revision(conn, transcript_id)
-        return await speaker_response(conn, transcript_id, speaker_id)
+        released = await _release(conn, transcript_id) if "person_id" in values else None
+        response = await speaker_response(conn, transcript_id, speaker_id)
+    await _resume_chain(ctx, released)
+    return response
+
+
+async def _release(conn: AsyncConnection, transcript_id: UUID) -> tuple[UUID, int] | None:
+    """Solta a gravação parada à espera dos nomes quando o último locutor ganhou pessoa."""
+    recording_id = (
+        await conn.execute(select(t.transcripts.c.recording_id).where(t.transcripts.c.id == transcript_id))
+    ).scalar_one()
+    revision = await release_if_named(conn, recording_id)
+    return (recording_id, revision) if revision is not None else None
+
+
+async def _resume_chain(ctx: AppContext, released: tuple[UUID, int] | None) -> None:
+    """Depois do commit, a cadeia por agente segue pelo tipo de agenda."""
+    if released is not None:
+        await ctx.queue.enqueue_step("detect_agenda_type", *released)
 
 
 async def speaker_response(conn: AsyncConnection, transcript_id: UUID, speaker_id: str) -> dict[str, Any]:
@@ -202,7 +221,11 @@ async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Edi
             )
         await recompute_talk(conn, transcript_id, {body.target_speaker_id})
         await bump_revision(conn, transcript_id)
-        return await load_transcript(conn, transcript_id, words=False)
+        # Mesclar um locutor sem pessoa num nomeado também pode zerar o que faltava.
+        released = await _release(conn, transcript_id)
+        response = await load_transcript(conn, transcript_id, words=False)
+    await _resume_chain(ctx, released)
+    return response
 
 
 @router.patch("/transcripts/{transcript_id}/segments/{segment_id}")

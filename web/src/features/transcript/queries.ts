@@ -23,10 +23,26 @@ export function useRecording(id: string) {
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}', { params: { path: { recording_id: id } } })),
     refetchOnWindowFocus: true,
-    refetchInterval: pollWhile(
-      (data: Schemas['Recording'] | undefined) => !!data && recordingState(data).state === 'busy',
-      POLL_MS,
-    ),
+    // Também relê enquanto a gravação espera os nomes dos locutores: alguém pode nomeá-los por outro
+    // aparelho ou soltar a gravação, e a cadeia segue sozinha no servidor.
+    refetchInterval: pollWhile((data: Schemas['Recording'] | undefined) => {
+      const state = data ? recordingState(data).state : null
+      return state === 'busy' || state === 'waiting'
+    }, POLL_MS),
+  })
+}
+
+/** "Seguir sem nomear": solta a gravação parada à espera dos nomes dos locutores. */
+export function useContinueWithoutNames(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/v1/recordings/{recording_id}/continue', { params: { path: { recording_id: id } } })),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(recordingKey(id), updated)
+      void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+      void queryClient.invalidateQueries({ queryKey: ['me', 'speaker-naming'] })
+    },
   })
 }
 

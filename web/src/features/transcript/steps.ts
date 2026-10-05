@@ -1,4 +1,4 @@
-// As seis etapas do processamento da gravação em palavras, com o motivo de uma etapa pulada ou que
+// As sete etapas do processamento da gravação em palavras, com o motivo de uma etapa pulada ou que
 // falhou. Os nomes vêm do vocabulário compartilhado com o desktop e o celular (lib/vocabulario.js).
 import type { Schemas } from '../../api/client'
 import { ESTADOS_ETAPA, ETAPAS, motivo, nomeDaEtapa } from '../../lib/vocabulario.js'
@@ -17,10 +17,10 @@ export function stepLabel(step: Pick<PipelineStep, 'step' | 'state'>): string {
   return `${nomeDaEtapa(step.step)} · ${state}`
 }
 
-/** Por que a etapa foi pulada ou falhou; `null` nas outras. */
+/** Por que a etapa foi pulada, falhou ou espera o dono; `null` nas outras. */
 export function stepNote(step: Pick<PipelineStep, 'state' | 'reason' | 'error'>): string | null {
   if (step.state === 'failed') return step.error?.message ?? null
-  if (step.state === 'skipped') return step.reason ? motivo(step.reason) : null
+  if (step.state === 'skipped' || step.state === 'waiting') return step.reason ? motivo(step.reason) : null
   return null
 }
 

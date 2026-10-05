@@ -6,7 +6,15 @@ import { useCollections } from '../collections/queries'
 import { usePeopleOptions, usePersonFacets } from '../people/queries'
 import { useTags } from '../tags/queries'
 import { PersonCombobox } from '../people/PersonCombobox'
-import { activeFilterCount, KINDS, STATUS_GROUPS, type KindParam, type LibraryFilters, type StatusParam } from './filters'
+import {
+  activeFilterCount,
+  KINDS,
+  STATUS_GROUPS,
+  type KindParam,
+  type LibraryFilters,
+  type NeedsParam,
+  type StatusParam,
+} from './filters'
 import styles from './LibraryPage.module.css'
 import { useUserFields } from './queries'
 
@@ -162,6 +170,13 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
             />
           )
         })}
+      </Group>
+      <Group title="Precisam de você">
+        <Check
+          label="Aguardando locutores"
+          checked={filters.needs.includes('locutores')}
+          onChange={() => onChange({ ...filters, needs: toggle(filters.needs, 'locutores') as NeedsParam[] })}
+        />
       </Group>
       <Group title="Situação">
         {statuses.map((status) => {

@@ -51,8 +51,8 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
 }
 
 /**
- * O item destacado (Perguntar): a ação primária do DS no topo da barra lateral, com o ícone dele.
- * Enquanto a conta não tem gravação não há o que perguntar: fica no mesmo lugar, como secundário.
+ * O item destacado (Agente): a ação primária do DS no topo da barra lateral, com o ícone dele.
+ * Enquanto a conta não tem gravação há pouco o que perguntar: fica no mesmo lugar, como secundário.
  */
 function FeaturedLink({ item }: { item: FeaturedItem }) {
   const { pathname } = useLocation()

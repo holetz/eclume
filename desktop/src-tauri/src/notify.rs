@@ -249,6 +249,10 @@ pub fn outcome_text(
             "A transcrição falhou".into(),
             format!("{name} · abra para ver o motivo"),
         ),
+        Outcome::AwaitingSpeakers => (
+            "Precisa de você".into(),
+            format!("{name} · nomeie os locutores para seguir com o resumo"),
+        ),
     }
 }
 
@@ -501,6 +505,14 @@ mod tests {
         assert_eq!(
             text(Outcome::TranscriptionFailed, "Kickoff", None),
             "A transcrição falhou · Kickoff · abra para ver o motivo"
+        );
+        assert_eq!(
+            text(
+                Outcome::AwaitingSpeakers,
+                "Kickoff",
+                Some("unnamed_speakers")
+            ),
+            "Precisa de você · Kickoff · nomeie os locutores para seguir com o resumo"
         );
         let (title, body) = grouped_text(5);
         assert_eq!(

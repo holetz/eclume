@@ -34,6 +34,7 @@ _TITLES = {
     "invalid_reset_link": "Link de redefinição inválido",
     "method_not_allowed": "Método não permitido",
     "payload_too_large": "Corpo grande demais",
+    "unsupported_media_type": "Tipo de arquivo não aceito",
     "upload_completing": "Upload sendo concluído",
     "quota_exceeded": "Cota excedida",
     "internal_error": "Erro interno",
@@ -141,6 +142,11 @@ def payload_too_large(limit: int) -> ApiProblemError:
     return ApiProblemError(
         413, "payload_too_large", f"O corpo passou do limite de {limit} bytes desta rota.", extra={"limit": limit}
     )
+
+
+def unsupported_media_type(detail: str) -> ApiProblemError:
+    """415 — o arquivo não é de um tipo que a rota aceita."""
+    return ApiProblemError(415, "unsupported_media_type", detail)
 
 
 def internal_error() -> ApiProblemError:

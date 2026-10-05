@@ -1,8 +1,8 @@
 """Etapas do processamento de uma gravação (`pipeline_steps`), por revisão do job de transcrição.
 
-recebido → pré-processamento → transcrição → tipo de agenda → campos → resumo (a ordem de
-`STEPS`). Cada etapa fica `pending`, `active`, `done`, `failed` ou `skipped`, com o motivo quando
-pulada ou falha. Contrato e decisões em docs/standards/code/processamento-automatico.md.
+recebido → pré-processamento → transcrição → locutores → tipo de agenda → campos → resumo (a ordem
+de `STEPS`). Cada etapa fica `pending`, `active`, `done`, `failed` ou `skipped`, com o motivo quando
+pulada ou falha; a de locutores também fica `waiting`, à espera do dono (`speaker_naming.py`). Contrato e decisões em docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -26,8 +26,11 @@ if TYPE_CHECKING:
 PREPROCESS_FAILED = "preprocess_failed"
 # Etapa do progresso do worker GPU em que a falha aconteceu → etapa do pipeline que ela derruba.
 FAILED_STEP = {"download": "preprocessing", "preprocess": "preprocessing"}
-STEPS = ("received", "preprocessing", "transcription", "agenda_type", "fields", "summary")
+STEPS = ("received", "preprocessing", "transcription", "speakers", "agenda_type", "fields", "summary")
 FINISHED = ("done", "failed", "skipped")
+# A etapa `speakers` parada à espera do dono (holetz/eclume#144): não terminou, mas marca início e fim
+# como um estado final; quando sai da espera, o fim é regravado e o início, mantido.
+STOPPED = (*FINISHED, "waiting")
 # Desfechos da etapa `summary` sem resumo novo que o `?since=` precisa enxergar.
 UNSUMMARIZED = ("failed", "skipped")
 # Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
@@ -64,10 +67,10 @@ async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
     }
     if state == "active":
         values |= {"started_at": started_at or now, "finished_at": None}
-    elif state in FINISHED:
+    elif state in STOPPED:
         values |= {"started_at": started_at or now, "finished_at": finished_at or now}
     update_values = dict(values)
-    if state in FINISHED and started_at is None:
+    if state in STOPPED and started_at is None:
         # Terminar uma etapa que já tinha começado mantém o início dela.
         update_values["started_at"] = func.coalesce(ps.c.started_at, now)
     await conn.execute(
@@ -139,7 +142,7 @@ async def load_pipelines(conn: AsyncConnection, recording_ids: list[UUID]) -> di
 
 
 def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, Any]]:
-    """Schema `PipelineStep[]`: as seis etapas em ordem; sem linha, `pending`.
+    """Schema `PipelineStep[]`: as sete etapas em ordem; sem linha, `pending`.
 
     `running_stage` é a etapa de `Job.stage` enquanto o worker GPU reporta progresso: ela deixa o
     pré-processamento ou a transcrição `active`.

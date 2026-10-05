@@ -4,10 +4,10 @@ title: Contrato de API v1
 description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema, a referência navegável gerada do bundle e servida pelo web em /referencia-api.html — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127, holetz/eclume#128
+source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#41, holetz/eclume#100, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#121, holetz/eclume#101, holetz/eclume#127, holetz/eclume#128, holetz/eclume#144, holetz/eclume#142, holetz/eclume#145
 maintainer: holetz
 ---
 
@@ -62,6 +62,28 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   dispositivo escolher o tipo ao parar). A credencial de dispositivo tem `recordings:read`,
   `recordings:write`, `summaries:read` (2.6.0) e `transcripts:read` (2.8.0, a pasta sincronizada do
   desktop). Sessão tem todas as permissões do usuário.
+- **Agente (2.23.0, `agent`):** `GET`/`POST /agent/sessions` (as conversas, por cursor, da
+  última atividade para trás; criar, com título opcional), `GET`/`PATCH`/`DELETE
+  /agent/sessions/{session_id}` (a conversa com as mensagens e os anexos não enviados; renomear;
+  excluir), `POST /agent/sessions/{session_id}/files` (multipart, 201; .txt, .md, .csv, .pdf e .docx
+  até 10 MB, 415 `unsupported_media_type` fora disso, 409 `too_many_files` acima de 20 por
+  conversa), `DELETE .../files/{file_id}` (só anexo não enviado; o enviado é 409), `POST
+  .../messages` (202 com `question` e `answer`; 409 com outra resposta em aberto na conversa, 429
+  com duas na conta, cota de 24 h do agente), `GET .../messages/{message_id}` (consulta até `done`
+  ou `failed`, com `agent_expired` depois de 15 minutos em aberto) e `GET
+  /agent/files/{file_id}/content` (o arquivo como anexo). Todas com `summaries:read`, como o chat
+  sobre a base; o escopo `transcripts:read` vale para as ferramentas. Outra conta é 404. Aditivo:
+  `/base-chat` segue igual e passa a `deprecated`.
+- **Habilidades e ações do Agente (2.24.0, `agent`):** `GET /agent/tools` (o catálogo de
+  ferramentas, com a natureza `read`, `produce` ou `action`), `GET`/`POST /agent/skills` e
+  `GET`/`PATCH`/`DELETE /agent/skills/{skill_id}` (as habilidades: nome `/nome` único na conta, 409
+  `skill_exists`; até 50; `allowed_tools` nulo libera todas), todas com `summaries:read`.
+  `AgentMessageCreate.skill` (ou `/nome` no começo da mensagem) escolhe a habilidade (422 se
+  inexistente ou desligada) e `AgentMessage` ganha `skill` e `actions` (as propostas da resposta).
+  `GET /agent/actions` (a auditoria, por cursor), `GET /agent/actions/{action_id}`, `POST
+  .../confirm` (202, idempotente; exige `summaries:write` para `regenerate_summaries` ou
+  `recordings:write` para as demais; 409 `action_expired` ou `action_cancelled`) e `POST
+  .../cancel` (só de `proposed`; 409 `action_not_proposed`). Aditivo: nada muda para quem não usa.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
@@ -110,6 +132,14 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `platform_default`; o `PATCH` só com sessão. `language` no upload, no `PATCH` da gravação e no
   retranscrever aceita `auto` (afrouxamento de entrada, aditivo); a ordem de resolução está em
   [jobs-transcricao.md](jobs-transcricao.md).
+- **Marcação obrigatória dos locutores** (desde a 2.22.0): `GET /me/speaker-naming` (sessão ou
+  PAT com `recordings:read`) devolve `required` e `waiting_count`; o `PATCH` só com sessão.
+  `Recording.pipeline` passou de seis a sete etapas (`speakers`, entre a transcrição e o tipo), com
+  o estado novo `waiting` e os motivos `unnamed_speakers`, `continued_by_user` e
+  `naming_not_required`: valor de enum e item novos em resposta, que os clientes já toleram.
+  `Recording.awaiting` (`speakers` ou `null`), o filtro `GET /recordings?awaiting=speakers` e
+  `POST /recordings/{id}/continue` (`recordings:write`; 409 fora da espera) completam. Regras em
+  [processamento-automatico.md](../code/processamento-automatico.md#marcação-dos-locutores).
 - **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha
   passageira (worker perdido, job sumido ou parado, falta de VRAM), que retranscrever ou
   `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
@@ -229,6 +259,7 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   holetz/eclume#100): `Recording.owner`, `TranscriptSummary.owner`, `Transcript.owner`,
   `VoiceSample.created_by`, `Summary.created_by` e `SummaryChatMessage.created_by` — resquícios do
   modelo com organização; com cada conta isolada, valem sempre o próprio usuário.
+  Também sai o chat sobre a base (`/base-chat`, obsoleto desde a 2.23.0), que o Agente substitui.
 - **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
   removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
   e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes

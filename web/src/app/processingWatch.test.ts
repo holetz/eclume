@@ -64,6 +64,30 @@ describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () 
     expect(outcome(recording('i', 'processing'))).toBeNull()
   })
 
+  it('a gravação parada à espera dos nomes dos locutores avisa uma vez', () => {
+    const base = recording('j', 'transcribed')
+    const waiting: Recording = {
+      ...base,
+      pipeline: [
+        {
+          step: 'speakers',
+          state: 'waiting',
+          started_at: T,
+          finished_at: T,
+          duration_ms: 0,
+          error: null,
+          reason: 'unnamed_speakers',
+        },
+      ],
+    }
+    expect(outcome(waiting)).toEqual(['awaiting_speakers', 'unnamed_speakers'])
+    const mark = startWatermark(new Date('2026-10-01T11:59:30Z'))
+    expect(takeOutcomes(mark, [waiting])).toHaveLength(1)
+    expect(takeOutcomes(mark, [waiting])).toEqual([])
+    // Solta (concluída), não é mais desfecho da espera.
+    expect(outcome({ ...waiting, pipeline: [{ ...waiting.pipeline[0], state: 'done', reason: null }] })).toBeNull()
+  })
+
   it("marca d'água avisa uma vez e nada anterior", () => {
     const mark = startWatermark(new Date(T))
     expect(mark.since).toBe('2026-10-01T11:59:00.000Z')
@@ -93,6 +117,9 @@ describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () 
     )
     expect(text({ outcome: 'no_summary', title: ' ', reason: 'motivo_novo' })).toBe('Pronta sem resumo · Gravação · motivo_novo')
     expect(text({ outcome: 'transcription_failed' })).toBe('A transcrição falhou · Kickoff · abra para ver o motivo')
+    expect(text({ outcome: 'awaiting_speakers', reason: 'unnamed_speakers' })).toBe(
+      'Precisa de você · Kickoff · nomeie os locutores para seguir com o resumo',
+    )
   })
 })
 

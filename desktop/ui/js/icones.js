@@ -18,6 +18,8 @@ const FORMAS = {
     '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path>',
   voltar: '<path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path>',
   fechar: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+  copiar:
+    '<rect width="14" height="14" x="8" y="8"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
   microfone:
     '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path>',
 };
