@@ -163,3 +163,10 @@
 .error {
   color: var(--color-danger);
 }
+
+/* A página Conversas: a lista de todas, nas linhas do DS. */
+.sessions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

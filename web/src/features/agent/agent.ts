@@ -16,6 +16,7 @@ export const MAX_QUESTION = 4000
 export const MAX_ATTACHMENTS = 5
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const ACCEPTED_FILES = '.txt,.md,.csv,.pdf,.docx'
+export const UNTITLED = 'Conversa sem título'
 const RECENT = 20
 const PAGE = 25
 

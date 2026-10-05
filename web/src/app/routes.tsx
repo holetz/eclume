@@ -30,6 +30,7 @@ const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage
 const AgentPage = named(() => import('../features/agent/AgentPage'), 'AgentPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
+const ConversationsPage = named(() => import('../features/agent/ConversationsPage'), 'ConversationsPage')
 const EnvironmentPage = named(() => import('../features/environment/EnvironmentPage'), 'EnvironmentPage')
 const AccountPage = named(() => import('../features/account/AccountPage'), 'AccountPage')
 const DesktopPage = named(() => import('../features/desktop/DesktopPage'), 'DesktopPage')
@@ -89,6 +90,7 @@ export const routes: RouteObject[] = [
               { path: '/pessoas/:id', ...page(PersonPage) },
               { path: '/busca', ...page(SearchPage) },
               // O Agente: a conversa (nova ou guardada) e a lista de todas; Perguntas era o nome antigo.
+              { path: '/agente/conversas', ...page(ConversationsPage) },
               { path: '/agente/:sessionId?', ...page(AgentPage) },
               { path: '/perguntas', element: <Navigate to="/agente" replace /> },
               { path: '/colecoes', ...page(CollectionsPage) },

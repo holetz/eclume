@@ -43,9 +43,9 @@ describe('navegação', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
   const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
 
-  it('agrupa em Gravações, Organizar (dados) e Regras, e o resto nos menus do cabeçalho', () => {
+  it('agrupa em Agente, Gravações, Organizar (dados) e Regras, e o resto nos menus do cabeçalho', () => {
     const { main, header: more } = navGroups()
-    expect(titles(main)).toEqual(['Gravações', 'Organizar', 'Regras'])
+    expect(titles(main)).toEqual(['Agente', 'Gravações', 'Organizar', 'Regras'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
     // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem. O destacado não
     // pertence a grupo: a barra lateral o desenha antes deles.
@@ -54,6 +54,7 @@ describe('navegação', () => {
     expect(labels(main)).toEqual(enabled('main'))
     // Importar é o modal da biblioteca; a coleção fica em Organizar.
     expect(labels(main)).toEqual([
+      'Conversas',
       'Biblioteca',
       'Busca',
       'Pessoas',
@@ -67,10 +68,10 @@ describe('navegação', () => {
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
 
-  it('Perguntar é o item destacado, primeiro da lista e fora dos grupos, e segue na rota /perguntas', () => {
-    expect(NAV_ITEMS[0]).toMatchObject({ to: '/perguntas', label: 'Perguntar', featured: true, section: 'main' })
+  it('Agente é o item destacado, primeiro da lista e fora dos grupos, na rota /agente', () => {
+    expect(NAV_ITEMS[0]).toMatchObject({ to: '/agente', label: 'Agente', featured: true, section: 'main' })
     expect(featuredItem()).toBe(NAV_ITEMS[0])
-    expect(labels(navGroups().main)).not.toContain('Perguntar')
+    expect(labels(navGroups().main)).not.toContain('Agente')
     expect(featuredItem(NAV_ITEMS.map((item) => ({ ...item, enabled: !item.featured })))).toBeUndefined()
   })
 
@@ -109,6 +110,16 @@ describe('navegação', () => {
     expect(isItemActive(people, '/pessoasx')).toBe(false)
   })
 
+  it('o Agente acende na conversa, e Conversas só na lista de todas', () => {
+    const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
+    const sessions = NAV_ITEMS.find((item) => item.label === 'Conversas')!
+    expect(isItemActive(agent, '/agente')).toBe(true)
+    expect(isItemActive(agent, '/agente/01928f3a')).toBe(true)
+    expect(isItemActive(agent, '/agente/conversas')).toBe(false)
+    expect(isItemActive(sessions, '/agente/conversas')).toBe(true)
+    expect(isItemActive(sessions, '/agente/01928f3a')).toBe(false)
+  })
+
 })
 
 describe('AppShell', () => {
@@ -123,43 +134,44 @@ describe('AppShell', () => {
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
     // Configurações e ajuda saíram da barra lateral: moram nos menus do cabeçalho.
-    expect(titles).toEqual(['Gravações', 'Organizar', 'Regras'])
+    expect(titles).toEqual(['Agente', 'Gravações', 'Organizar', 'Regras'])
     expect(within(nav).queryByText('Configurações e ajuda')).not.toBeInTheDocument()
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
       expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
     }
   })
 
-  it('Perguntar abre a barra lateral, acima dos grupos, com ícone, e acende na própria rota', () => {
-    renderShell(member, vi.fn(), '/perguntas')
+  it('Agente abre a barra lateral, acima dos grupos, com ícone, e acende na própria rota', () => {
+    renderShell(member, vi.fn(), '/agente')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     const [first] = within(nav).getAllByRole('link')
-    expect(first).toHaveAccessibleName('Perguntar')
-    expect(first).toHaveAttribute('href', '/perguntas')
+    expect(first).toHaveAccessibleName('Agente')
+    expect(first).toHaveAttribute('href', '/agente')
     expect(first).toHaveClass('btn', 'btn-primary')
     expect(first).toHaveAttribute('aria-current', 'page')
     expect(first.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     // Vem antes do primeiro grupo e não aparece dentro de nenhum.
-    const firstGroup = within(nav).getByRole('group', { name: 'Gravações' })
+    const firstGroup = within(nav).getByRole('group', { name: 'Agente' })
     expect(first.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(firstGroup).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: 'Perguntas' })).not.toBeInTheDocument()
+    expect(within(firstGroup).queryByRole('link', { name: 'Agente' })).not.toBeInTheDocument()
+    expect(within(firstGroup).getByRole('link', { name: 'Conversas' })).toHaveAttribute('href', '/agente/conversas')
+    expect(within(nav).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
   })
 
-  it('Perguntar perde o destaque, não o lugar, enquanto a conta não tem gravação', async () => {
+  it('Agente perde o destaque, não o lugar, enquanto a conta não tem gravação', async () => {
     mockFetch({ 'GET /api/v1/recordings': () => ({ items: [], next_cursor: null }) })
     renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     const [first] = within(nav).getAllByRole('link')
-    expect(first).toHaveAccessibleName('Perguntar')
+    expect(first).toHaveAccessibleName('Agente')
     await waitFor(() => expect(first).toHaveClass('btn', 'btn-secondary'))
     expect(first).not.toHaveClass('btn-primary')
   })
 
-  it('Perguntar não acende fora da rota /perguntas', () => {
+  it('Agente não acende fora da rota /agente', () => {
     renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
-    expect(within(nav).getByRole('link', { name: 'Perguntar' })).not.toHaveAttribute('aria-current')
+    expect(within(nav).getByRole('link', { name: 'Agente' })).not.toHaveAttribute('aria-current')
   })
 
   it('não mostra o painel admin', () => {

@@ -14,6 +14,7 @@ import {
   MAX_FILE_BYTES,
   MAX_QUESTION,
   sizeLabel,
+  UNTITLED,
   useAgentMessage,
   useAgentSession,
   useAskAgent,
@@ -31,8 +32,6 @@ const EXAMPLES = [
   'Monte uma tabela com quem ficou de enviar algo e até quando',
   'Compare o documento anexado com o que foi combinado na última reunião',
 ]
-
-export const UNTITLED = 'Conversa sem título'
 
 function queriesNote(message: AgentMessage): string {
   if (message.queries === 0) return 'Respondeu sem consultar nada'
