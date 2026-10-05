@@ -1,7 +1,7 @@
 ---
 titulo: Busque nas suas gravações
 topico: transcricao
-paginas: [busca, biblioteca, perguntas]
+paginas: [busca, biblioteca, agente]
 relacionados: [ligar-locutor-a-pessoa, marcadores, exportar]
 termos: [buscar, busca, pesquisar, filtro, período, tag, pessoa, campo, trecho]
 ordem: 6

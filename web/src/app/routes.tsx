@@ -27,8 +27,8 @@ const AdminRoutes = named(() => import('../features/admin/AdminRoutes'), 'AdminR
 const AdminSignInPage = named(() => import('../features/admin/AdminSignInPage'), 'AdminSignInPage')
 const AutomationPage = named(() => import('../features/automation/AutomationPage'), 'AutomationPage')
 const AgendaTypesPage = named(() => import('../features/organize/AgendaTypesPage'), 'AgendaTypesPage')
+const AgentPage = named(() => import('../features/agent/AgentPage'), 'AgentPage')
 const ArticlePage = named(() => import('../features/help/ArticlePage'), 'ArticlePage')
-const ChatPage = named(() => import('../features/chat/ChatPage'), 'ChatPage')
 const CollectionsPage = named(() => import('../features/collections/CollectionsPage'), 'CollectionsPage')
 const EnvironmentPage = named(() => import('../features/environment/EnvironmentPage'), 'EnvironmentPage')
 const AccountPage = named(() => import('../features/account/AccountPage'), 'AccountPage')
@@ -88,7 +88,9 @@ export const routes: RouteObject[] = [
               { path: '/pessoas', ...page(PeoplePage) },
               { path: '/pessoas/:id', ...page(PersonPage) },
               { path: '/busca', ...page(SearchPage) },
-              { path: '/perguntas', ...page(ChatPage) },
+              // O Agente: a conversa (nova ou guardada) e a lista de todas; Perguntas era o nome antigo.
+              { path: '/agente/:sessionId?', ...page(AgentPage) },
+              { path: '/perguntas', element: <Navigate to="/agente" replace /> },
               { path: '/colecoes', ...page(CollectionsPage) },
               { path: '/tags', ...page(TagsPage) },
               { path: '/config/automacao', ...page(AutomationPage) },

@@ -1,0 +1,165 @@
+/* A tela Agente: as conversas recentes ao lado e a conversa, com anexos, arquivos gerados e fontes. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 820px);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aside {
+    order: 2;
+  }
+}
+
+.aside {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  font-size: 14px;
+}
+
+.recent {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--color-divider);
+}
+
+.recent a {
+  display: block;
+  padding: 6px 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.recent a:hover {
+  color: var(--color-accent-ink);
+}
+
+.recent a[aria-current='page'] {
+  font-weight: 700;
+  color: var(--color-accent-ink);
+}
+
+.all {
+  font-size: 13px;
+}
+
+.page {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+:where(.page) p {
+  margin: 0;
+}
+
+.lead {
+  font-size: 14px;
+}
+
+.hint {
+  font-size: 12px;
+}
+
+.log {
+  min-height: 240px;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.answer :global(p) {
+  margin: 0 0 8px;
+}
+
+.answer :global(ul),
+.answer :global(ol) {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.answer :global(table) {
+  border-collapse: collapse;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.answer :global(th),
+.answer :global(td) {
+  padding: 4px 8px;
+  border: 1px solid var(--color-divider);
+  text-align: left;
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+.warn {
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.working::after {
+  content: '…';
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .working::after {
+    animation: none;
+  }
+}
+
+.error {
+  color: var(--color-danger);
+}
