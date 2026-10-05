@@ -71,7 +71,11 @@ async def gate(conn: AsyncConnection, recording: Row, revision: int, transcript_
 async def _waiting_revision(conn: AsyncConnection, recording_id: UUID) -> tuple[Row, int] | None:
     """`(gravação, revisão)` quando a revisão atual da gravação está parada nos locutores."""
     recording = (
-        (await conn.execute(select(t.recordings.c.id, t.recordings.c.owner_id).where(t.recordings.c.id == recording_id)))
+        (
+            await conn.execute(
+                select(t.recordings.c.id, t.recordings.c.owner_id).where(t.recordings.c.id == recording_id)
+            )
+        )
         .mappings()
         .first()
     )

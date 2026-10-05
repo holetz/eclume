@@ -166,7 +166,8 @@ def test_le_o_anexo_como_dado_e_gera_um_arquivo():
     assert [(item.name, item.format) for item in result.files] == [("resumo-da-ata", "md")]
     assert [call["tool"] for call in result.calls] == ["read_file", "read_file", "write_file"]
     system, prompt = provider.prompts[-1]
-    assert "Arquivos anexados" in prompt and str(ATA) in prompt
+    assert "Arquivos anexados" in prompt
+    assert str(ATA) in prompt
     assert '<ferramenta nome="read_file"' in prompt
     assert "Ata da reunião: o prazo é sexta" in prompt
     assert "arquivo inexistente nesta conversa" in prompt
@@ -175,9 +176,7 @@ def test_le_o_anexo_como_dado_e_gera_um_arquivo():
 
 def test_leitura_longa_do_anexo_continua_pelo_offset():
     env = Env(text="x" * 10)
-    provider = Scripted(
-        [_json(action="read_file", file_id=str(ATA), offset=4), _json(action="reply", message="ok")]
-    )
+    provider = Scripted([_json(action="read_file", file_id=str(ATA), offset=4), _json(action="reply", message="ok")])
     asyncio.run(run_agent(provider, _context(), env))
     assert "(caracteres 4 a 10 de 10)" in provider.prompts[-1][1]
 
@@ -239,7 +238,6 @@ def test_passar_do_limite_de_chamadas_e_chat_tool_limit():
     with pytest.raises(ProviderError) as caught:
         _run(Scripted(calls))
     assert caught.value.code == codes.CHAT_TOOL_LIMIT
-
 
 
 # --- habilidades e ações (holetz/eclume#145) ------------------------------------------------------

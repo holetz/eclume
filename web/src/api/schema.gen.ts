@@ -1497,6 +1497,7 @@ export interface paths {
         put?: never;
         /**
          * Perguntar sobre a base de gravações
+         * @deprecated
          * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
          *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
          *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
@@ -1504,7 +1505,6 @@ export interface paths {
          *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
          *     pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
          *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
-         * @deprecated
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1524,9 +1524,9 @@ export interface paths {
         };
         /**
          * Uma pergunta e a resposta
+         * @deprecated
          * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
          *     que o agente de fato consultou e em que a resposta se apoia.
-         * @deprecated
          */
         get: operations["getBaseChat"];
         put?: never;
@@ -1544,10 +1544,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** As conversas do Agente */
+        /**
+         * As conversas do Agente
+         * @description Da última atividade (`updated_at`) para trás, paginadas por cursor.
+         */
         get: operations["listAgentSessions"];
         put?: never;
-        /** Abrir uma conversa */
+        /**
+         * Abrir uma conversa
+         * @description Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+         */
         post: operations["createAgentSession"];
         delete?: never;
         options?: never;
@@ -1564,11 +1570,19 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma conversa com as mensagens e os arquivos */
+        /**
+         * Uma conversa com as mensagens e os arquivos
+         * @description As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
+         *     pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
+         *     mais de 15 minutos vira `failed` com `agent_expired`.
+         */
         get: operations["getAgentSession"];
         put?: never;
         post?: never;
-        /** Excluir a conversa */
+        /**
+         * Excluir a conversa
+         * @description Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+         */
         delete: operations["deleteAgentSession"];
         options?: never;
         head?: never;
@@ -1587,7 +1601,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anexar um arquivo à conversa */
+        /**
+         * Anexar um arquivo à conversa
+         * @description Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
+         *     conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
+         *     texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
+         *     citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+         */
         post: operations["attachAgentFile"];
         delete?: never;
         options?: never;
@@ -1608,7 +1628,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Tirar um anexo ainda não enviado */
+        /**
+         * Tirar um anexo ainda não enviado
+         * @description O anexo que já foi com uma pergunta fica no histórico (409).
+         */
         delete: operations["deleteAgentFile"];
         options?: never;
         head?: never;
@@ -1626,7 +1649,18 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Perguntar ao Agente */
+        /**
+         * Perguntar ao Agente
+         * @description Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
+         *     consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
+         *     guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
+         *     sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
+         *     arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
+         *     (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+         *     Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
+         *     inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
+         *     propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+         */
         post: operations["askAgent"];
         delete?: never;
         options?: never;
@@ -1644,7 +1678,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma mensagem da conversa */
+        /**
+         * Uma mensagem da conversa
+         * @description A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+         */
         get: operations["getAgentMessage"];
         put?: never;
         post?: never;
@@ -1680,7 +1717,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** O catálogo de ferramentas do Agente */
+        /**
+         * O catálogo de ferramentas do Agente
+         * @description Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
+         *     `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
+         *     uma habilidade escolhe as ferramentas permitidas.
+         */
         get: operations["listAgentTools"];
         put?: never;
         post?: never;
@@ -1697,10 +1739,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** As habilidades da conta */
+        /**
+         * As habilidades da conta
+         * @description Desde a 2.24.0. Todas (até 50), por nome.
+         */
         get: operations["listAgentSkills"];
         put?: never;
-        /** Cadastrar uma habilidade */
+        /**
+         * Cadastrar uma habilidade
+         * @description Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
+         *     e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
+         *     habilidades na conta: 422.
+         */
         post: operations["createAgentSkill"];
         delete?: never;
         options?: never;
@@ -1717,15 +1767,24 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma habilidade */
+        /**
+         * Uma habilidade
+         * @description Desde a 2.24.0.
+         */
         get: operations["getAgentSkill"];
         put?: never;
         post?: never;
-        /** Excluir a habilidade */
+        /**
+         * Excluir a habilidade
+         * @description Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+         */
         delete: operations["deleteAgentSkill"];
         options?: never;
         head?: never;
-        /** Editar a habilidade */
+        /**
+         * Editar a habilidade
+         * @description Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+         */
         patch: operations["updateAgentSkill"];
         trace?: never;
     };
@@ -1736,7 +1795,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** O registro das ações do Agente */
+        /**
+         * O registro das ações do Agente
+         * @description Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
+         *     alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+         */
         get: operations["listAgentActions"];
         put?: never;
         post?: never;
@@ -1755,7 +1818,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma ação do Agente */
+        /**
+         * Uma ação do Agente
+         * @description Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+         */
         get: operations["getAgentAction"];
         put?: never;
         post?: never;
@@ -1776,7 +1842,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirmar a proposta */
+        /**
+         * Confirmar a proposta
+         * @description Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
+         *     operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
+         *     executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
+         *     o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
+         *     `recordings:write` para as demais (PAT sem ele: 403).
+         */
         post: operations["confirmAgentAction"];
         delete?: never;
         options?: never;
@@ -1795,7 +1868,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Descartar a proposta */
+        /**
+         * Descartar a proposta
+         * @description Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+         */
         post: operations["cancelAgentAction"];
         delete?: never;
         options?: never;

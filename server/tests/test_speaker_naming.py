@@ -97,7 +97,9 @@ def test_preferencia_ligada_para_na_espera_dos_locutores(
         "SELECT detail FROM pipeline_steps WHERE recording_id = :r AND step = 'speakers'",
         r=recording["id"],
     )
-    assert detail[0][0]["unnamed"] == len(api.get(f"/api/v1/transcripts/{recording['transcript_id']}").json()["speakers"])
+    assert detail[0][0]["unnamed"] == len(
+        api.get(f"/api/v1/transcripts/{recording['transcript_id']}").json()["speakers"]
+    )
 
 
 def test_locutor_com_pouca_fala_nao_prende_a_gravacao(
@@ -105,7 +107,7 @@ def test_locutor_com_pouca_fala_nao_prende_a_gravacao(
 ):
     api = as_user(make_user())
     recording = transcribed(api, services.settings)
-    # Todo locutor abaixo do piso de 10 s de fala: nenhum conta como faltando nome.
+    # Nenhum locutor chega ao piso de 10 s de fala: ninguém conta como faltando nome.
     _sql(services, "UPDATE speakers SET talk_ms = 9000 WHERE transcript_id = :t", t=recording["transcript_id"])
 
     async def check(conn: Any) -> int:  # noqa: ANN401

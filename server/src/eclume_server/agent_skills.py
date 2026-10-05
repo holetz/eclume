@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +20,8 @@ from eclume_server.pagination import iso
 from eclume_server.problems import conflict, invalid_field, not_found
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from sqlalchemy.ext.asyncio import AsyncConnection
 
     from eclume_server.serialize import Row

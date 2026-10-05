@@ -507,7 +507,11 @@ mod tests {
             "A transcrição falhou · Kickoff · abra para ver o motivo"
         );
         assert_eq!(
-            text(Outcome::AwaitingSpeakers, "Kickoff", Some("unnamed_speakers")),
+            text(
+                Outcome::AwaitingSpeakers,
+                "Kickoff",
+                Some("unnamed_speakers")
+            ),
             "Precisa de você · Kickoff · nomeie os locutores para seguir com o resumo"
         );
         let (title, body) = grouped_text(5);

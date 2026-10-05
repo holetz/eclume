@@ -19,6 +19,7 @@ from eclume_server.exports import slug
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.people import get_person
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
+from eclume_server.speaker_naming import release_if_named
 from eclume_server.transcripts import (
     bump_revision,
     editable_transcript,
@@ -32,7 +33,6 @@ from eclume_server.transcripts import (
     summary_json,
     transcript_select,
 )
-from eclume_server.speaker_naming import release_if_named
 from eclume_server.voice import SpeakerKey, load_suggestions, on_link
 
 router = APIRouter()

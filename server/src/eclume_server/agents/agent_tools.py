@@ -372,19 +372,18 @@ def _date(value: str) -> bool:
     return True
 
 
-def targets_of(action: dict[str, Any]) -> dict[str, Any] | None:
-    """Os alvos normalizados: `recording_ids` ou um filtro não vazio; `None` se inválidos."""
-    targets = action.get("targets")
-    if not isinstance(targets, dict) or not targets:
+def _id_targets(ids: object) -> dict[str, Any] | None:
+    """`recording_ids` não vazio e só de UUIDs, sem repetição; `None` se inválido."""
+    if not isinstance(ids, list) or not ids:
         return None
-    if "recording_ids" in targets:
-        ids = targets["recording_ids"]
-        if set(targets) != {"recording_ids"} or not isinstance(ids, list) or not ids:
-            return None
-        parsed = [_file_id(item) for item in ids]
-        if any(item is None for item in parsed):
-            return None
-        return {"recording_ids": [str(item) for item in dict.fromkeys(parsed)]}
+    parsed = [_file_id(item) for item in ids]
+    if any(item is None for item in parsed):
+        return None
+    return {"recording_ids": [str(item) for item in dict.fromkeys(parsed)]}
+
+
+def _filter_targets(targets: dict[str, Any]) -> dict[str, Any] | None:
+    """Um filtro de `TARGET_FILTERS` com textos não vazios e datas válidas; `None` se inválido ou vazio."""
     if set(targets) - set(TARGET_FILTERS):
         return None
     found: dict[str, str] = {}
@@ -399,6 +398,18 @@ def targets_of(action: dict[str, Any]) -> dict[str, Any] | None:
         found[key] = value.strip()
     # Filtro vazio seria a base inteira: recusado, o agente tem de dizer quais.
     return found or None
+
+
+def targets_of(action: dict[str, Any]) -> dict[str, Any] | None:
+    """Os alvos normalizados: `recording_ids` ou um filtro não vazio; `None` se inválidos."""
+    targets = action.get("targets")
+    if not isinstance(targets, dict) or not targets:
+        return None
+    if "recording_ids" in targets:
+        if set(targets) != {"recording_ids"}:
+            return None
+        return _id_targets(targets["recording_ids"])
+    return _filter_targets(targets)
 
 
 def _labels(value: object) -> list[str] | None:
@@ -455,9 +466,7 @@ async def _plan(env: AgentEnv, action: dict[str, Any], state: RunState) -> tuple
     return base._block(name, "", body), record  # noqa: SLF001
 
 
-async def _never(
-    _env: AgentEnv, _action: dict[str, Any], _budget: int, _state: RunState
-) -> tuple[str, dict[str, Any]]:
+async def _never(_env: AgentEnv, _action: dict[str, Any], _budget: int, _state: RunState) -> tuple[str, dict[str, Any]]:
     raise AssertionError("ação com confirmação não roda no laço")  # pragma: no cover
 
 

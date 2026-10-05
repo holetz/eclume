@@ -473,8 +473,12 @@ mod tests {
             })
         );
 
-        let antigo: JobInfo = serde_json::from_value(serde_json::json!({"state": "queued"})).unwrap();
-        assert_eq!((antigo.stage, antigo.progress, antigo.error), (None, None, None));
+        let antigo: JobInfo =
+            serde_json::from_value(serde_json::json!({"state": "queued"})).unwrap();
+        assert_eq!(
+            (antigo.stage, antigo.progress, antigo.error),
+            (None, None, None)
+        );
     }
 
     #[test]

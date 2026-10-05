@@ -369,9 +369,7 @@ class _Retry(Exception):  # noqa: N818 — sinal interno, não erro
 
 
 async def _record(conn: AsyncConnection, action_id: UUID, rid: str, outcome: dict[str, Any]) -> None:
-    current = (
-        await conn.execute(select(A.results).where(A.id == action_id).with_for_update())
-    ).scalar_one()
+    current = (await conn.execute(select(A.results).where(A.id == action_id).with_for_update())).scalar_one()
     await conn.execute(update(t.agent_actions).where(A.id == action_id).values(results={**current, rid: outcome}))
 
 

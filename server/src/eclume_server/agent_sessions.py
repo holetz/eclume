@@ -102,9 +102,7 @@ def file_json(row: Row) -> dict[str, Any]:
     }
 
 
-def message_json(
-    row: Row, files: list[dict[str, Any]], actions: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+def message_json(row: Row, files: list[dict[str, Any]], actions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Schema `AgentMessage`, com os arquivos e as propostas de ação ligados a ela."""
     return {
         "id": str(row["id"]),
@@ -223,9 +221,7 @@ async def session_detail(conn: AsyncConnection, session_id: UUID) -> dict[str, A
     rows = (await conn.execute(stmt)).mappings().all()
     actions = await actions_by_message(conn, [row["id"] for row in rows if row["role"] == "assistant"])
     return session_json(session) | {
-        "messages": [
-            message_json(row, by_message.get(row["id"], []), actions.get(row["id"])) for row in rows
-        ],
+        "messages": [message_json(row, by_message.get(row["id"], []), actions.get(row["id"])) for row in rows],
         "pending_files": pending,
     }
 
@@ -252,7 +248,7 @@ async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID
 # --- anexos --------------------------------------------------------------------------------------
 
 
-async def add_input_file(  # noqa: PLR0913 — a conversa, o dono, o arquivo e o storage
+async def add_input_file(  # noqa: PLR0913, PLR0917 — a conversa, o dono, o arquivo e o storage
     conn: AsyncConnection,
     storage: Storage,
     owner_id: UUID,
@@ -341,45 +337,31 @@ class Turn:
     answer_id: UUID
 
 
-async def send_message(
-    conn: AsyncConnection,
-    owner_id: UUID,
-    session_id: UUID,
-    message: str,
-    attachments: list[UUID],
-    skill: str | None = None,
-) -> Turn:
-    """Grava a pergunta com os anexos e a resposta `queued`; quem chama enfileira depois do commit.
-
-    409 com outra resposta em aberto na conversa, 429 com `MAX_OPEN` na conta, 422 em anexo que não é
-    desta conversa ou já foi enviado, e em habilidade (`skill` ou `/nome` no começo) inexistente ou
-    desligada.
-    """
-    session = await _session(conn, session_id, lock=True)
+async def _chosen_skill(conn: AsyncConnection, message: str, skill: str | None) -> tuple[Row | None, str]:
+    """A habilidade pedida (`skill` ou `/nome` no começo) e a pergunta sem o prefixo; 422 se não vale."""
     prefixed, rest = split_prefix(message)
     chosen = skill_name(skill) or prefixed
-    skill_row = None
-    if chosen is not None:
-        skill_row = await enabled_skill(conn, chosen)
-        if skill_row is None:
-            raise invalid_field("skill", f"habilidade /{chosen} inexistente ou desligada")
-        if prefixed is not None:
-            message = rest
-        if not message.strip():
-            raise invalid_field("message", "escreva o pedido depois do nome da habilidade")
-    await expire_stale(conn)
-    open_rows = (
-        await conn.execute(select(M.session_id).where(and_(M.role == "assistant", M.status.in_(OPEN))))
-    ).all()
-    if any(row.session_id == session_id for row in open_rows):
-        raise conflict("Esta conversa já tem uma resposta em andamento; espere ela terminar.")
-    if len(open_rows) >= MAX_OPEN:
-        raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+    if chosen is None:
+        return None, message
+    skill_row = await enabled_skill(conn, chosen)
+    if skill_row is None:
+        raise invalid_field("skill", f"habilidade /{chosen} inexistente ou desligada")
+    if prefixed is not None:
+        message = rest
+    if not message.strip():
+        raise invalid_field("message", "escreva o pedido depois do nome da habilidade")
+    return skill_row, message
+
+
+async def _pending_attachments(conn: AsyncConnection, session_id: UUID, attachments: list[UUID]) -> list[UUID]:
+    """Os anexos pedidos, sem repetição; 422 acima do teto ou em anexo que não está pendente nesta conversa."""
     wanted = list(dict.fromkeys(attachments))
     if len(wanted) > MAX_INPUTS_PER_MESSAGE:
         raise invalid_field("attachments", f"até {MAX_INPUTS_PER_MESSAGE} anexos por pergunta")
-    if wanted:
-        found = (
+    if not wanted:
+        return wanted
+    found = (
+        (
             await conn.execute(
                 select(F.id).where(
                     and_(
@@ -390,9 +372,39 @@ async def send_message(
                     )
                 )
             )
-        ).scalars().all()
-        if len(found) != len(wanted):
-            raise invalid_field("attachments", "anexo inexistente, de outra conversa ou já enviado")
+        )
+        .scalars()
+        .all()
+    )
+    if len(found) != len(wanted):
+        raise invalid_field("attachments", "anexo inexistente, de outra conversa ou já enviado")
+    return wanted
+
+
+async def send_message(  # noqa: PLR0913 — a conversa, o dono, a pergunta, os anexos e a habilidade
+    conn: AsyncConnection,
+    owner_id: UUID,
+    session_id: UUID,
+    message: str,
+    attachments: list[UUID],
+    *,
+    skill: str | None = None,
+) -> Turn:
+    """Grava a pergunta com os anexos e a resposta `queued`; quem chama enfileira depois do commit.
+
+    409 com outra resposta em aberto na conversa, 429 com `MAX_OPEN` na conta, 422 em anexo que não é
+    desta conversa ou já foi enviado, e em habilidade (`skill` ou `/nome` no começo) inexistente ou
+    desligada.
+    """
+    session = await _session(conn, session_id, lock=True)
+    skill_row, message = await _chosen_skill(conn, message, skill)
+    await expire_stale(conn)
+    open_rows = (await conn.execute(select(M.session_id).where(and_(M.role == "assistant", M.status.in_(OPEN))))).all()
+    if any(row.session_id == session_id for row in open_rows):
+        raise conflict("Esta conversa já tem uma resposta em andamento; espere ela terminar.")
+    if len(open_rows) >= MAX_OPEN:
+        raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+    wanted = await _pending_attachments(conn, session_id, attachments)
     text = message.strip()
     question = (
         (
@@ -504,16 +516,13 @@ async def _context(
     conn: AsyncConnection, session_id: UUID, answer: Row, *, transcripts: bool, scopes: frozenset[str]
 ) -> AgentContext:
     rows = (
-        (
-            await conn.execute(
-                select(M.role, M.content, M.skill_id)
-                .where(and_(M.session_id == session_id, M.status == "done", M.created_at < answer["created_at"]))
-                .order_by(M.created_at.desc(), M.id.desc())
-                .limit(HISTORY + 1)
-            )
+        await conn.execute(
+            select(M.role, M.content, M.skill_id)
+            .where(and_(M.session_id == session_id, M.status == "done", M.created_at < answer["created_at"]))
+            .order_by(M.created_at.desc(), M.id.desc())
+            .limit(HISTORY + 1)
         )
-        .all()
-    )
+    ).all()
     turns = [(row.role, row.content) for row in reversed(rows)]
     if not turns or turns[-1][0] != "user":
         raise ChatError(INTERNAL_ERROR, "A pergunta desta resposta sumiu.")
@@ -528,9 +537,7 @@ async def _context(
     question_skill = rows[0].skill_id
     if question_skill is not None:
         found = (
-            (await conn.execute(select(t.agent_skills).where(t.agent_skills.c.id == question_skill)))
-            .mappings()
-            .first()
+            (await conn.execute(select(t.agent_skills).where(t.agent_skills.c.id == question_skill))).mappings().first()
         )
         skill = as_skill(found) if found else None
     return AgentContext(
@@ -629,9 +636,7 @@ async def run_agent_turn_job(
     else:
         return "done"
     async with user_tx(engine, owner_id) as conn:
-        await conn.execute(
-            update(t.agent_messages).where(M.id == answer["id"]).values(status="failed", error=error)
-        )
+        await conn.execute(update(t.agent_messages).where(M.id == answer["id"]).values(status="failed", error=error))
     return f"falhou: {error['code']}"
 
 

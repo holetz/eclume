@@ -68,7 +68,11 @@ pub fn outcome_of(recording: &LibraryRecording) -> Option<Ended> {
         .find(|step| step.step == "speakers" && step.state == "waiting")
     {
         if let Some(at) = &speakers.finished_at {
-            return Some(ended(Outcome::AwaitingSpeakers, speakers.reason.as_ref(), at));
+            return Some(ended(
+                Outcome::AwaitingSpeakers,
+                speakers.reason.as_ref(),
+                at,
+            ));
         }
     }
     let step = recording.summary_step()?;

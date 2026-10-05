@@ -324,7 +324,8 @@ impl Client {
     /// com `sort=created_desc`): o painel de gravações recentes da janela, com o `job` e o
     /// `pipeline` de cada uma. `limit` vai de 1 a 200, como o contrato aceita.
     pub fn recent(&self, limit: u32) -> Result<Vec<api::LibraryRecording>> {
-        let mut url = Url::parse(&self.endpoint("/recordings")).context("endereço da API inválido")?;
+        let mut url =
+            Url::parse(&self.endpoint("/recordings")).context("endereço da API inválido")?;
         url.query_pairs_mut()
             .append_pair("limit", &limit.clamp(1, 200).to_string())
             .append_pair("sort", "created_desc");
@@ -989,7 +990,10 @@ mod tests {
         let recentes = client.recent(5).unwrap();
         assert_eq!(recentes.len(), 1);
         let job = recentes[0].job.as_ref().unwrap();
-        assert_eq!((job.stage.as_deref(), job.progress), (Some("asr"), Some(500)));
+        assert_eq!(
+            (job.stage.as_deref(), job.progress),
+            (Some("asr"), Some(500))
+        );
         // O cursor da próxima página é ignorado: o painel quer só as N primeiras.
         assert_eq!(script.seen().len(), 1);
     }

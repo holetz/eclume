@@ -33,7 +33,7 @@ from eclume_server.agents.chat import _FENCE, _last_object
 from eclume_server.agents.prompting import input_budget
 
 if TYPE_CHECKING:
-    from eclume_server.agents.agent_tools import AgentEnv
+    from eclume_server.agents.agent_tools import AgentEnv, AgentTool
     from eclume_server.agents.base import Completion, Provider
 
 MAX_TOOL_CALLS = 8
@@ -204,6 +204,36 @@ def _recording_id(value: object) -> UUID | None:
         return None
 
 
+def _result(
+    action: dict[str, Any], state: RunState, calls: list[dict[str, Any]], completion: Completion
+) -> AgentResult:
+    """A resposta final, com as fontes citadas que apareceram nos resultados."""
+    cited = dict.fromkeys(_recording_id(item) for item in action.get("sources") or [])
+    sources = [(rid, state.seen[rid]) for rid in cited if rid in state.seen][:MAX_SOURCES]
+    return AgentResult(
+        message=action["message"].strip(),
+        sources=sources,
+        files=state.produced,
+        pending_actions=state.pending_actions,
+        proposals=state.proposals,
+        skill=state.skill,
+        calls=calls,
+        completion=completion,
+    )
+
+
+async def _call(
+    tool: AgentTool, env: AgentEnv, action: dict[str, Any], state: RunState, budget: int
+) -> tuple[str, dict[str, Any]]:
+    """Roda a ferramenta; a que pede confirmação vira proposta (com `plan`) ou ação pendente."""
+    if tool.confirm and tool.plan is not None:
+        return await tool.plan(env, action, state)
+    if tool.confirm:
+        state.pending_actions.append(action)
+        return _block(tool.name, "", NEEDS_CONFIRMATION), {"tool": tool.name, "pending_confirmation": True}
+    return await tool.run(env, action, budget, state)
+
+
 async def run_agent(
     provider: Provider,
     context: AgentContext,
@@ -245,34 +275,12 @@ async def run_agent(
             continue
         corrected = False
         if action["action"] == REPLY:
-            cited = dict.fromkeys(_recording_id(item) for item in action.get("sources") or [])
-            sources = [(rid, state.seen[rid]) for rid in cited if rid in state.seen][:MAX_SOURCES]
-            return AgentResult(
-                message=action["message"].strip(),
-                sources=sources,
-                files=state.produced,
-                pending_actions=state.pending_actions,
-                proposals=state.proposals,
-                skill=state.skill,
-                calls=calls,
-                completion=completion,
-            )
+            return _result(action, state, calls, completion)
         if len(calls) >= MAX_TOOL_CALLS:
             raise ProviderError(CHAT_TOOL_LIMIT, f"O agente passou de {MAX_TOOL_CALLS} chamadas de ferramenta.")
         tool = registry.get(action["action"])
         assert tool is not None  # noqa: S101 — `parse_action` só devolve ferramenta registrada
-        if tool.confirm and tool.plan is not None:
-            block, record = await tool.plan(env, action, state)
-            results.append(block)
-            calls.append(record)
-            continue
-        if tool.confirm:
-            state.pending_actions.append(action)
-            results.append(_block(tool.name, "", NEEDS_CONFIRMATION))
-            calls.append({"tool": tool.name, "pending_confirmation": True})
-            continue
-        budget = max(input_budget(provider, system, full), 0)
-        block, record = await tool.run(env, action, budget, state)
+        block, record = await _call(tool, env, action, state, max(input_budget(provider, system, full), 0))
         results.append(block)
         calls.append(record)
 

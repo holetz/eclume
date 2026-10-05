@@ -151,7 +151,7 @@ async def post_message(session_id: UUID, body: AgentMessageCreate, principal: Re
         quota = await agent_limit(conn, principal.user_id)
     await take_agent_request(ctx.queue.pool, principal.user_id, quota)
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        turn = await send_message(conn, principal.user_id, session_id, body.message, body.attachments, body.skill)
+        turn = await send_message(conn, principal.user_id, session_id, body.message, body.attachments, skill=body.skill)
     await enqueue_turn(
         ctx.queue.pool, turn.answer_id, transcripts=_transcripts(principal), scopes=_write_scopes(principal)
     )

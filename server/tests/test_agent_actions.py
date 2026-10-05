@@ -114,7 +114,7 @@ def test_execucao_retomada_pula_os_alvos_ja_feitos(user: Api, services: Services
     # Como se uma execução anterior tivesse feito o primeiro alvo e caído.
     _sql(
         services,
-        "UPDATE agent_actions SET results = jsonb_build_object(CAST(:rid AS text), '{\"status\": \"done\"}'::jsonb)"
+        'UPDATE agent_actions SET results = jsonb_build_object(CAST(:rid AS text), \'{"status": "done"}\'::jsonb)'
         " WHERE id = :id",
         rid=first["id"],
         id=action["id"],

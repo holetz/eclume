@@ -51,9 +51,7 @@ def _attach(api: Api, session_id: str, name: str, data: bytes) -> Any:  # noqa: 
     return api.post(f"{SESSIONS}/{session_id}/files", files={"file": (name, data, "application/octet-stream")})
 
 
-def _ask(
-    api: Api, session_id: str, message: str = "O que foi combinado?", attachments: list[str] | None = None
-) -> Any:  # noqa: ANN401
+def _ask(api: Api, session_id: str, message: str = "O que foi combinado?", attachments: list[str] | None = None) -> Any:  # noqa: ANN401
     return api.post(f"{SESSIONS}/{session_id}/messages", json={"message": message, "attachments": attachments or []})
 
 
@@ -78,7 +76,7 @@ def test_conversa_criada_listada_renomeada_e_excluida(user: Api):
 
 def test_pergunta_com_anexo_gera_arquivo_para_baixar(user: Api, services: Services):
     session = _session(user)
-    attached = _attach(user, session["id"], "ata.md", "# Ata\nPrazo: sexta-feira.".encode())
+    attached = _attach(user, session["id"], "ata.md", b"# Ata\nPrazo: sexta-feira.")
     assert attached.status_code == 201, attached.text
     file = attached.json()
     assert (file["direction"], file["name"], file["message_id"], file["text_chars"]) == ("input", "ata.md", None, 25)
@@ -116,7 +114,7 @@ def test_pergunta_com_anexo_gera_arquivo_para_baixar(user: Api, services: Servic
     assert downloaded.status_code == 200
     assert downloaded.content == b"item,prazo\nata,sexta"
     assert downloaded.headers["content-disposition"].startswith('attachment; filename="prazos.csv"')
-    assert user.get(f"/api/v1/agent/files/{file['id']}/content").content == "# Ata\nPrazo: sexta-feira.".encode()
+    assert user.get(f"/api/v1/agent/files/{file['id']}/content").content == b"# Ata\nPrazo: sexta-feira."
 
     detail = user.get(f"{SESSIONS}/{session['id']}").json()
     assert detail["title"] == "Quais os prazos da ata?"

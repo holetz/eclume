@@ -249,6 +249,7 @@ test('gravação centrada no resumo: pipeline, marcadores, transcrição, ediç�
     'Áudio recebido',
     'Pré-processamento',
     'Transcrição',
+    'Locutores',
     'Tipo de agenda',
     'Campos',
     'Resumo',

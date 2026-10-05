@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 from sqlalchemy import select, update
 
@@ -32,6 +31,8 @@ from eclume_server.summaries import (
 )
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from arq.connections import ArqRedis
     from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -83,9 +84,7 @@ async def edit_tags(
     return True
 
 
-async def edit_collections(
-    conn: AsyncConnection, recording_id: UUID, *, add: list[UUID], remove: list[UUID]
-) -> bool:
+async def edit_collections(conn: AsyncConnection, recording_id: UUID, *, add: list[UUID], remove: list[UUID]) -> bool:
     """Inclui e tira a gravação de coleções existentes; o agente de coleções não as muda mais.
 
     422 se alguma coleção de `add` não é do dono; `False` se nada mudou.

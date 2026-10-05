@@ -670,7 +670,10 @@ mod tests {
                 vec![step("summary", "skipped", Some(motivo))],
             )
         };
-        assert_eq!(alerta(&pulado("no_agenda_type")), Some(Attention::NoSummary));
+        assert_eq!(
+            alerta(&pulado("no_agenda_type")),
+            Some(Attention::NoSummary)
+        );
         assert_eq!(classify(&pulado("no_provider")).phase, Phase::NoSummary);
         assert_eq!(alerta(&pulado("no_provider")), None);
         assert_eq!(alerta(&pulado("cancelled")), None);
@@ -730,7 +733,10 @@ mod tests {
         ];
         let pagina = vec![
             com_job(remota("r1", "queued"), job("queued")),
-            com_etapas(remota("r2", "transcribed"), vec![step("summary", "done", None)]),
+            com_etapas(
+                remota("r2", "transcribed"),
+                vec![step("summary", "done", None)],
+            ),
             remota("r3", "transcribed"),
         ];
         let mut esperas = BTreeMap::new();
