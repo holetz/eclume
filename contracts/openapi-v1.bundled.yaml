@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.20.0
+  version: 2.21.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -17,7 +17,10 @@ info:
     - **Cotas por conta** (desde a 2.15.0): armazenamento, tamanho por arquivo, uploads abertos,\n  minutos\
     \ de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403\n  `quota_exceeded`\
     \ com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a\n  gravação espera na fila até\
-    \ a janela abrir.\n- **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue`\
+    \ a janela abrir.\n- **Marcação obrigatória dos locutores** (desde a 2.21.0): com `GET`/`PATCH\n \
+    \ /me/speaker-naming` ligada, a etapa `speakers` fica `waiting` quando algum locutor está sem\n  pessoa,\
+    \ e a cadeia (tipo, campos, coleções, resumo) espera; `Recording.awaiting` e o filtro\n  `awaiting=speakers`\
+    \ mostram essas gravações.\n- **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue`\
     \ diz por que\n  espera (fila do processador, vez da própria conta ou janela de minutos), a posição,\
     \ uma\n  previsão rotulada como estimativa e se o processador está no ar.\n- Cada usuário tem a própria\
     \ conta, isolada; não há organização. O painel admin usa uma\n  conta e uma sessão próprias (`adminSessionCookie`),\
@@ -517,6 +520,70 @@ paths:
               examples:
                 conta:
                   $ref: '#/components/examples/TranscriptionPreference'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/me/speaker-naming:
+    get:
+      tags:
+      - recordings
+      operationId: getSpeakerNaming
+      summary: Ler se a conta exige nomear os locutores
+      description: Desde a 2.21.0. `required` diz se a cadeia por agente espera todo locutor (com pelo
+        menos 10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão
+        ou PAT com `recordings:read`.
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:read
+      responses:
+        '200':
+          description: Preferência corrente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerNamingPreference'
+              examples:
+                ligada:
+                  $ref: '#/components/examples/SpeakerNamingPreference'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags:
+      - recordings
+      operationId: updateSpeakerNaming
+      summary: Ligar ou desligar a marcação obrigatória dos locutores
+      description: Desde a 2.21.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação
+        parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia segue.
+        Só sessão.
+      security:
+      - sessionCookie: []
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerNamingPatch'
+            examples:
+              ligar:
+                $ref: '#/components/examples/SpeakerNamingPatchRequest'
+      responses:
+        '200':
+          description: Preferência resultante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerNamingPreference'
+              examples:
+                ligada:
+                  $ref: '#/components/examples/SpeakerNamingPreference'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1361,6 +1428,16 @@ paths:
           type: array
           items:
             type: string
+      - name: awaiting
+        in: query
+        description: 'Desde a 2.21.0. `speakers`: só as gravações cuja revisão atual está parada à espera
+          de nomear os locutores (`Recording.awaiting`).'
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - speakers
       responses:
         '200':
           description: Gravações, na ordem de `sort`.
@@ -1561,6 +1638,42 @@ paths:
               examples:
                 cancelled:
                   $ref: '#/components/examples/RecordingCancelled'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/recordings/{recording_id}/continue:
+    parameters:
+    - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags:
+      - recordings
+      operationId: continueRecordingWithoutNames
+      summary: Seguir sem nomear os locutores
+      description: 'Desde a 2.21.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
+
+        `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
+
+        espera, 409.
+
+        '
+      security:
+      - sessionCookie: []
+      - pat:
+        - recordings:write
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: A gravação, com a etapa `speakers` solta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2219,7 +2332,11 @@ paths:
 
         voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
 
-        o nome da pessoa. Sobe a `revision`.
+        o nome da pessoa. Sobe a `revision`. Desde a 2.21.0, ligar a última pessoa que faltava a
+
+        uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
+
+        segue sozinha.
 
         '
       security:
@@ -2304,7 +2421,8 @@ paths:
       operationId: mergeSpeakers
       summary: Mesclar locutores
       description: Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem.
-        Sobe a `revision`.
+        Sobe a `revision`. Desde a 2.21.0, se nenhum locutor ficou sem pessoa, solta a gravação parada
+        à espera dos nomes, como `updateSpeaker`.
       security:
       - sessionCookie: []
       - pat:
@@ -5322,6 +5440,28 @@ components:
           description: Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra).
           type: integer
           minimum: 0
+    SpeakerNamingPreference:
+      description: Desde a 2.21.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas
+        gravações esperam por isso.
+      type: object
+      required:
+      - required
+      - waiting_count
+      properties:
+        required:
+          type: boolean
+        waiting_count:
+          description: Gravações cuja revisão atual está com a etapa `speakers` em `waiting`.
+          type: integer
+          minimum: 0
+    SpeakerNamingPatch:
+      type: object
+      additionalProperties: false
+      required:
+      - required
+      properties:
+        required:
+          type: boolean
     TranscriptionPreference:
       description: Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que
         vale quando a conta não escolhe.
@@ -6178,6 +6318,7 @@ components:
       - agenda_type
       - job
       - pipeline
+      - awaiting
       - transcript_id
       - marker_count
       - created_at
@@ -6284,19 +6425,34 @@ components:
           - $ref: '#/components/schemas/Job'
           - type: 'null'
         pipeline:
-          description: 'As seis etapas do processamento da revisão atual, em ordem; a que ainda não rodou
+          description: 'As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou
             sai
 
             `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
 
-            sai `active`.
+            sai `active`. A etapa `speakers` entrou na 2.21.0 (eram seis).
 
             '
           type: array
-          minItems: 6
-          maxItems: 6
+          minItems: 7
+          maxItems: 7
           items:
             $ref: '#/components/schemas/PipelineStep'
+        awaiting:
+          description: 'Desde a 2.21.0. O que a gravação espera do dono para seguir: `speakers` quando
+            a etapa
+
+            `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
+
+            nas outras.
+
+            '
+          type:
+          - string
+          - 'null'
+          enum:
+          - speakers
+          - null
         transcript_id:
           description: Transcrição, depois do primeiro job concluído.
           type:
@@ -6326,22 +6482,27 @@ components:
       properties:
         step:
           type: string
-          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos.
+          description: Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a
+            2.21.0) fica entre a transcrição e o tipo de agenda.
           enum:
           - received
           - preprocessing
           - transcription
+          - speakers
           - agenda_type
           - fields
           - summary
         state:
           type: string
+          description: '`waiting` (desde a 2.21.0) é só da etapa `speakers`: parada à espera de o dono
+            nomear os locutores, com `reason` `unnamed_speakers`.'
           enum:
           - pending
           - active
           - done
           - failed
           - skipped
+          - waiting
         started_at:
           type:
           - string
@@ -6375,7 +6536,11 @@ components:
 
             `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
 
-            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros.
+            transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.21.0,
+
+            na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
+
+            `naming_not_required` (soltas sem os nomes).
 
             '
           type:
@@ -9780,6 +9945,15 @@ components:
         keep_samples: true
         sample_count: 7
         voiceprint_people: 3
+    SpeakerNamingPreference:
+      summary: Marcação ligada, duas gravações esperando
+      value:
+        required: true
+        waiting_count: 2
+    SpeakerNamingPatchRequest:
+      summary: Exigir a marcação dos locutores
+      value:
+        required: true
     TranscriptionPreference:
       summary: Conta em inglês, servidor em português
       value:
@@ -10153,6 +10327,13 @@ components:
           duration_ms: null
           error: null
           reason: null
+        - step: speakers
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
         - step: agenda_type
           state: pending
           started_at: null
@@ -10174,6 +10355,7 @@ components:
           duration_ms: null
           error: null
           reason: null
+        awaiting: null
         transcript_id: null
         marker_count: 0
         created_at: '2026-09-18T14:09:31Z'
@@ -10240,6 +10422,13 @@ components:
           duration_ms: 158000
           error: null
           reason: cancelled
+        - step: speakers
+          state: pending
+          started_at: null
+          finished_at: null
+          duration_ms: null
+          error: null
+          reason: null
         - step: agenda_type
           state: pending
           started_at: null
@@ -10261,6 +10450,7 @@ components:
           duration_ms: null
           error: null
           reason: null
+        awaiting: null
         transcript_id: null
         marker_count: 0
         created_at: '2026-09-18T14:09:31Z'
@@ -10333,6 +10523,13 @@ components:
           duration_ms: 78000
           error: null
           reason: null
+        - step: speakers
+          state: done
+          started_at: '2026-09-18T15:01:30Z'
+          finished_at: '2026-09-18T15:01:30Z'
+          duration_ms: 0
+          error: null
+          reason: null
         - step: agenda_type
           state: done
           started_at: '2026-09-18T15:01:40Z'
@@ -10354,6 +10551,7 @@ components:
           duration_ms: 26000
           error: null
           reason: null
+        awaiting: null
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
         marker_count: 2
         created_at: '2026-09-18T14:09:31Z'
@@ -10416,6 +10614,13 @@ components:
             duration_ms: null
             error: null
             reason: null
+          - step: speakers
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
           - step: agenda_type
             state: pending
             started_at: null
@@ -10437,6 +10642,7 @@ components:
             duration_ms: null
             error: null
             reason: null
+          awaiting: null
           transcript_id: null
           marker_count: 0
           created_at: '2026-09-19T13:41:07Z'
@@ -10503,6 +10709,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-18T15:01:30Z'
+            finished_at: '2026-09-18T15:01:30Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-18T15:01:40Z'
@@ -10524,6 +10737,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-000000000501
           marker_count: 2
           created_at: '2026-09-18T14:09:31Z'
@@ -10592,6 +10806,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-21T13:00:28Z'
+            finished_at: '2026-09-21T13:00:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-21T13:00:39Z'
@@ -10613,6 +10834,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a1
           marker_count: 2
           created_at: '2026-09-21T12:59:00Z'
@@ -10676,6 +10898,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-21T17:47:28Z'
+            finished_at: '2026-09-21T17:47:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-21T17:47:39Z'
@@ -10697,6 +10926,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a2
           marker_count: 0
           created_at: '2026-09-21T17:46:00Z'
@@ -10760,6 +10990,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-22T15:12:28Z'
+            finished_at: '2026-09-22T15:12:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-22T15:12:39Z'
@@ -10781,6 +11018,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a3
           marker_count: 3
           created_at: '2026-09-22T15:11:00Z'
@@ -10841,6 +11079,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-22T19:33:28Z'
+            finished_at: '2026-09-22T19:33:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: skipped
             started_at: '2026-09-22T19:33:39Z'
@@ -10862,6 +11107,7 @@ components:
             duration_ms: 0
             error: null
             reason: no_agenda_type
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a4
           marker_count: 0
           created_at: '2026-09-22T19:32:00Z'
@@ -10922,6 +11168,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-23T11:21:28Z'
+            finished_at: '2026-09-23T11:21:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: skipped
             started_at: '2026-09-23T11:21:39Z'
@@ -10943,6 +11196,7 @@ components:
             duration_ms: 0
             error: null
             reason: no_agenda_type
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a5
           marker_count: 0
           created_at: '2026-09-23T11:20:00Z'
@@ -11004,6 +11258,13 @@ components:
               code: media_unreadable
               message: O áudio do arquivo não pôde ser lido.
             reason: null
+          - step: speakers
+            state: pending
+            started_at: null
+            finished_at: null
+            duration_ms: null
+            error: null
+            reason: null
           - step: agenda_type
             state: pending
             started_at: null
@@ -11025,6 +11286,7 @@ components:
             duration_ms: null
             error: null
             reason: null
+          awaiting: null
           transcript_id: null
           marker_count: 0
           created_at: '2026-09-23T16:55:00Z'
@@ -11088,6 +11350,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-24T13:14:28Z'
+            finished_at: '2026-09-24T13:14:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-24T13:14:39Z'
@@ -11109,6 +11378,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a7
           marker_count: 0
           created_at: '2026-09-24T13:13:00Z'
@@ -11172,6 +11442,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-24T13:35:28Z'
+            finished_at: '2026-09-24T13:35:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-24T13:35:39Z'
@@ -11193,6 +11470,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a8
           marker_count: 0
           created_at: '2026-09-24T13:34:00Z'
@@ -11256,6 +11534,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-25T14:49:28Z'
+            finished_at: '2026-09-25T14:49:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-25T14:49:39Z'
@@ -11277,6 +11562,7 @@ components:
             duration_ms: 26000
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005a9
           marker_count: 0
           created_at: '2026-09-25T14:48:00Z'
@@ -11340,6 +11626,13 @@ components:
             duration_ms: 78000
             error: null
             reason: null
+          - step: speakers
+            state: done
+            started_at: '2026-09-26T14:11:28Z'
+            finished_at: '2026-09-26T14:11:28Z'
+            duration_ms: 0
+            error: null
+            reason: null
           - step: agenda_type
             state: done
             started_at: '2026-09-26T14:11:39Z'
@@ -11361,6 +11654,7 @@ components:
             duration_ms: null
             error: null
             reason: null
+          awaiting: null
           transcript_id: 01928f3a-1c00-7a00-8000-0000000005aa
           marker_count: 1
           created_at: '2026-09-26T14:10:00Z'
