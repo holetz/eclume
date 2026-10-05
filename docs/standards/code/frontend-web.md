@@ -124,8 +124,11 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Orçamento do JS inicial** (`npm run budget`, depois do build, no pilar `web`):
   `scripts/bundle-budget.mjs` soma o `<script type="module">` e os `modulepreload` do
   `dist/index.html` (bruto e gzip nível 9) e falha acima de `bundle-budget.json`
-  (`inicial_gzip_kb`). Medido em 2026-10-01: 26 arquivos, 450 KB (150 KB gzip), teto de 155 KB
-  gzip. Mudar o teto é editar o JSON no mesmo commit da mudança, com o motivo.
+  (`inicial_gzip_kb`). Medido em 2026-10-05: 29 arquivos, 466 KB (155,9 KB gzip), teto de 158 KB
+  gzip; subiu de 155 KB na integração das specs holetz/eclume#141 a #145 (a faixa "Precisam de
+  você" da biblioteca, a etapa Locutores no aviso de processamento e o grupo Agente no menu, todos
+  no shell ou na biblioteca, que carregam de saída). Mudar o teto é editar o JSON no mesmo commit da
+  mudança, com o motivo.
 - **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
   `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
   `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
