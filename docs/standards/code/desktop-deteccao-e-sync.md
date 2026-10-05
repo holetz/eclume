@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Detecção de reuniões e sync no app desktop
-description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
-resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
+description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) e mantém as últimas gravações da conta no painel Recentes da janela (fase, progresso, "precisa de você" e Copiar resumo) — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, o painel de recentes, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
+resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/recent.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141
 maintainer: holetz
 ---
 
@@ -182,6 +182,55 @@ decisão do usuário, então `auto` nunca é padrão.
   o laço guarda as esperas por id remoto em `StatusView.queue_waits`, e a fila de envio mostra,
   sob a linha, a frase de `fraseDaEspera` do vocabulário (`.fila-espera`).
 
+## Painel de gravações recentes
+
+O topo da principal mostra as últimas N gravações **da conta** (holetz/eclume#141), montadas no
+Rust (`recent.rs`) e entregues pelo comando `recent` como `RecentView { count, items, needs_you,
+fetched_at, error }`; a janela só aplica os rótulos do vocabulário
+([desktop-interface.md](desktop-interface.md)).
+
+- **Quantas.** `Config.recent_count`, de 0 a 10, **5 por padrão** (também numa config de versão
+  anterior); `0` esconde o painel e para a leitura. Muda em Configurações → Geral → "Gravações
+  recentes no topo" (Ocultar, 3, 5 ou 10).
+- **De onde.** Primeiro as linhas da fila local que ainda não estão no servidor (gravando,
+  aguardando envio, enviando, falhou o envio), depois a página `GET /recordings?limit=N&sort=
+  created_desc` (`Client::recent`, **uma página só**, sem paginar). Uma enviada daqui cujo id está
+  na página é uma linha só, a do servidor, com a espera na fila de `StatusView.queue_waits`. Sem
+  leitura ainda, as enviadas aparecem como "Enviada". O total é cortado em N.
+- **Quando.** Uma thread própria, `eclume-recentes`, separada do `?since=` dos desfechos: a cada
+  **5 s** com a janela visível e alguma linha em andamento, a cada **60 s** fora disso, e já
+  quando cutucada (`recent::nudge`) — depois de uma volta de envio do sync, ao salvar as
+  configurações e pelo `recent_refresh` que a principal chama ao abrir. Sem credencial, não lê.
+  Uma falha fica em `error` e o painel segue com o último retrato.
+- **A fase** de cada linha do servidor sai do `status`, do `job` (`state`, `stage`, `progress`,
+  `error.code`/`retryable`, que o `JobInfo` lê com `serde(default)`; o progresso em milésimos) e
+  do `pipeline`, nesta precedência — alerta, depois em andamento, depois pronto:
+
+| Situação | `phase` | Alerta (`attention`) e ação |
+|---|---|---|
+| `status` ou `state` de etapa fora dos enums do contrato 2.20.0 | `unknown` | `needs_you` · Abrir no web |
+| job `cancelled` (ou erro `cancelled`) | `cancelled` | — |
+| gravação ou job `failed` | `transcription_failed` | `transcription_failed` · Abrir no web; nenhum se `retryable` (o servidor tenta de novo) |
+| etapa `summary` `failed` | `summary_failed` | `summary_failed` · Abrir no web |
+| job `queued` / `running` | `queued` / `transcribing` (etapa e progresso) | — |
+| uma etapa `active`, senão `pending` | `processing` (a etapa) | — |
+| etapa `summary` `done` | `summary_ready` | — · **Copiar resumo** |
+| etapa `summary` `skipped` | `no_summary` (o motivo) | `no_summary` · Abrir no web só com `no_agenda_type` |
+| `transcribed` sem etapa de resumo | `transcribed` | — |
+
+  No aparelho: `recording`, `pending`, `uploading`, `uploaded` e `upload_failed`, este com o
+  alerta `upload_failed` (o `last_error` em texto) e a ação **Tentar agora** (`sync_now`).
+- **O desconhecido é intervenção, de propósito.** Um estado novo do servidor — como o
+  "aguardando locutores" — chega como texto e vira "Precisa de você" com o código, o motivo e
+  **Abrir no web**, sem versão nova do app; quando o vocabulário compartilhado ganha o rótulo, a
+  janela passa a mostrá-lo.
+- **Copiar resumo** (`copy_summary`): lê `Client::current_summary` (o mesmo do aviso e da pasta
+  sincronizada) e escreve o `content_md` com o `tauri-plugin-clipboard-manager` — o mesmo Markdown
+  do "Copiar" da notificação. Sem resumo concluído, o erro "O resumo ainda não está pronto" volta à
+  linha e nada é copiado. A janela nunca usa `navigator.clipboard`.
+- **Abrir no web** (`open_recording`): `<web_url>/gravacoes/<id>` pelo `opener`, a mesma URL do
+  aviso (`sync::recording_url`). Nenhum comando do painel escreve no servidor.
+
 ## Conta e credencial
 
 O lado do app do protocolo de [server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md).
@@ -336,7 +385,9 @@ ele e não mudam o desktop.
   PEM com dois certificados no download, na gravação, no `trim_saved` e no modo `Pinned`), o
   parser do TXT do mDNS, a conta no estado sobre uma rede roteirizada (`account::tests`: entrar,
   sair, CA trocada, PAT antigo, a confiança pela origem da CA e o `repair_pinned`), a migração na
-  abertura (`state::tests`), as raízes do updater, PAT com chaveiro falso, retenção e config. A escuta mDNS
+  abertura (`state::tests`), as raízes do updater, PAT com chaveiro falso, retenção e config, e
+  o painel de recentes (`recent::tests`: a fase de cada estado, os alertas, o desconhecido como
+  `needs_you`, a junção da fila com a página sem duplicar, o corte em N e o intervalo). A escuta mDNS
   de verdade fica num teste `#[ignore]`.
 - Integração com o mock do contrato (`tests/mock.rs`), pulada sem `ECLUME_MOCK_URL`. As URLs de
   parte das fixtures apontam para `127.0.0.1:4010`, então o mock roda na mesma máquina dos

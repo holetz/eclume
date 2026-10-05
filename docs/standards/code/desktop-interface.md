@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Interface do app desktop no Design System
-description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X" e os testes Playwright com o Tauri simulado.
+description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X", o painel Recentes no topo da principal e os testes Playwright com o Tauri simulado.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
-timestamp: 2026-10-01
+timestamp: 2026-10-05
 audience: both
 authority: current
-source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114, holetz/eclume#120
+source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125, holetz/eclume#130, holetz/eclume#114, holetz/eclume#120, holetz/eclume#141
 maintainer: holetz
 ---
 
@@ -55,7 +55,7 @@ Na ordem do `index.html`:
 - A janela não carrega nada de fora: nem fonte, nem script, nem imagem.
 - O DOM é montado por `dom.js` (`el(tag, attrs, ...filhos)`, `trocar`, `$`), sem `innerHTML` com
   dado vindo do servidor ou do disco. `$` falha alto quando a marcação mudou.
-- `icones.js` embute os ícones Lucide usados (engrenagem, ajuda, voltar, fechar, microfone) como
+- `icones.js` embute os ícones Lucide usados (engrenagem, ajuda, voltar, fechar, copiar, microfone) como
   SVG, com a licença ISC no cabeçalho; `data-icone="<nome>"` no HTML recebe o SVG na carga.
 
 ## Módulos e vistas
@@ -68,14 +68,15 @@ Na ordem do `index.html`:
   um envio que falhou mostra o `last_error` em texto na própria linha (`.fila-erro`), não só no
   `title`. Mude o texto no web e copie o arquivo; nunca edite a cópia.
 - **`main.js`** registra as vistas, uma `<section data-vista>` cada, e só uma fica visível. Ele
-  aplica o tema, trata as teclas da janela e consulta `status` e `recordings` a cada 1 s (e no
-  evento `status-changed`). Sem credencial (`connection: first_run`), a janela fica na primeira
+  aplica o tema, trata as teclas da janela e consulta `status`, `recordings` e `recent` a cada 1 s
+  (e no evento `status-changed`); uma falha do `recent` mantém o último painel e não impede o
+  resto de desenhar. Sem credencial (`connection: first_run`), a janela fica na primeira
   execução, e as teclas da janela não valem.
 - **`vistas/*.js`** exportam `montar(secao, app)`, que devolve `{ entrar?, sair?, atualizar? }`:
 
 | Vista | Frame do DS | O que mostra |
 |---|---|---|
-| `principal` | Main window, Voice note, Automatic recording, After an update | linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
+| `principal` | Main window, Voice note, Automatic recording, After an update | o painel Recentes no topo, linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
 | `primeira-execucao` | First run | servidores conhecidos, conferência da impressão digital, e-mail e senha, e em "Avançado" o código de pareamento e o endereço |
 | `importar` | Import file | a data lida do arquivo escolhido com a origem e o progresso da conversão; a área de soltar recebe um arquivo arrastado ou abre o seletor de novo |
 | `configuracoes` | Settings · Meetings, Audio, Storage, Server | as seis abas, nesta ordem: Geral (Aparência, Início e Avisos; abre por padrão), Reuniões (detecção e política por app, com a parada automática), Áudio, Armazenamento, Pasta e Servidor; `app.ir("configuracoes", { aba })` abre outra |
@@ -86,6 +87,32 @@ Na ordem do `index.html`:
   `prefers-color-scheme`, como o readme do DS pede, e acompanha a troca do sistema com o app
   aberto; Claro e Escuro vencem o sistema. O DS só tem o escuro sob `data-theme="dark"`, então o
   atributo é sempre gravado.
+
+## Painel Recentes
+
+- O topo da principal, logo abaixo da linha da marca e antes da linha de status, tem o painel
+  **Recentes** (`#recentes`, montado por `recentes.js`): as últimas N gravações da conta que o
+  comando `recent` entrega ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Painel de
+  gravações recentes). N vem de Configurações → Geral → "Gravações recentes no topo" (Ocultar, 3,
+  5 ou 10; 5 por padrão); Ocultar esconde o painel.
+- **Compacto para 520 × 600.** Cabeçalho de uma linha (o kicker "Recentes" e, quando há,
+  "N precisam de você" em `.badge-warning`) e uma linha por gravação numa grade de três colunas:
+  o título com reticências (sem título, a data curta "dd/mm hh:mm"), o `.badge` do estado e a
+  ação `btn-sm`. Uma segunda linha `.recente-detalhe` só aparece quando há o que dizer: o
+  `<progress class="progress">` da transcrição com o % em texto, a frase da espera
+  (`fraseDaEspera`), o motivo (`motivo`) ou o erro de uma ação.
+- **Rótulos do vocabulário.** O Rust entrega a fase; `recentes.js` tira os rótulos de
+  `vocabulario.js`: `ESTADOS_APARELHO` no aparelho, `ESTADOS_SERVIDOR` na fila e pronta, o
+  `andamento` de `ETAPAS` ("Transcrevendo", "Resumindo"), e os textos dos desfechos ("Resumo
+  pronto", "O resumo falhou", "A transcrição falhou", "Pronta sem resumo"). Um estado desconhecido
+  vira "Precisa de você", com a etapa, o código e "resolva no web".
+- **Alertas em texto.** A linha com alerta leva `.recente-alerta`, o motivo em texto na segunda
+  linha e a ação que resolve: **Abrir no web** (`open_recording`) ou **Tentar agora**
+  (`sync_now`). Estado nunca só por cor.
+- **Copiar resumo** (com o ícone copiar) chama `copy_summary`; o retorno ("Copiado" no botão e
+  "Resumo copiado em Markdown." num `role="status"`, ou o erro) fica na linha por 2,5 s, guardado
+  por chave para sobreviver ao redesenho de cada segundo. Ao entrar, a principal chama
+  `recent_refresh` para o painel não esperar a próxima volta da leitura.
 
 ## Atalhos
 
@@ -162,7 +189,13 @@ Na ordem do `index.html`:
   `desktop/ui`, aborta e registra toda requisição de fora e injeta `mock-tauri.js`, que simula
   `window.__TAURI__` com cenários (`window.__mock.cenario(nome)`: ocioso, gravando, nota,
   marcadores, pergunta, fila, vazio, atualizado, atalhoEmUso, pat, primeiraExecucao, semServidor,
-  caMudou) e registra cada comando em `__mock.chamadas`.
+  caMudou, recentes) e registra cada comando em `__mock.chamadas`. O `recent` responde em todo
+  cenário (vazio fora de `recentes`), e o `copy_summary` grava o Markdown em
+  `__mock.estado.areaDeTransferencia`.
+- **`recentes.spec.ts`** confere o painel no topo com as N da configuração, cada fase com o seu
+  rótulo e progresso, o estado desconhecido como "Precisa de você" com Abrir no web, o Copiar
+  resumo pelo Tauri (e o erro sem copiar nada), o Tentar agora, Ocultar e a ausência de rolagem
+  horizontal em 520 × 600 e 380 × 420.
 - **`visual.spec.ts`** passa por cada vista em 520 × 600 e 380 × 420, nos temas claro e escuro, e
   confere a Archivo carregada, nenhuma requisição externa, nenhuma rolagem horizontal, os cantos
   retos das peças do DS e o botão de gravar no `--color-rec`. As capturas ficam em
