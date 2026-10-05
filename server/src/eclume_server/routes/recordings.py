@@ -38,6 +38,7 @@ from eclume_server.recordings import (
 from eclume_server.routes.collections import check_collections
 from eclume_server.routes.uploads import LANGUAGE, Kind
 from eclume_server.security import sign, signature_matches
+from eclume_server.speaker_naming import CONTINUED, release
 from eclume_server.summaries import start_auto_summary
 
 router = APIRouter()
@@ -259,3 +260,16 @@ async def cancel_recording_transcription(recording_id: UUID, principal: Writer, 
     """Cancela a transcrição em curso ou na fila; o worker GPU para no próximo ponto de checagem."""
     row = await cancel_transcription(ctx, principal.user_id, recording_id)
     return (await render(ctx, principal.user_id, [row]))[0]
+
+
+@router.post("/recordings/{recording_id}/continue")
+async def continue_without_names(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
+    """Solta a gravação parada à espera dos nomes dos locutores: a cadeia segue sem eles."""
+    async with user_tx(ctx.engine, principal.user_id) as conn:
+        await get_visible(conn, recording_id)
+        revision = await release(conn, recording_id, CONTINUED)
+        if revision is None:
+            raise conflict("A gravação não está esperando os nomes dos locutores.")
+        refreshed = await get_visible(conn, recording_id)
+    await ctx.queue.enqueue_step("detect_agenda_type", recording_id, revision)
+    return (await render(ctx, principal.user_id, [refreshed]))[0]

@@ -169,6 +169,12 @@ class Queue:
             "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=AGENT_QUEUE
         )
 
+    async def enqueue_step(self, job: str, recording_id: UUID, revision: int) -> None:
+        """Enfileira uma etapa por agente do pipeline (`detect_agenda_type`), pelo `_job_id` da revisão."""
+        await self.pool.enqueue_job(
+            job, str(recording_id), revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=AGENT_QUEUE
+        )
+
     async def request_cancel(self, jobs: list[tuple[UUID, int]]) -> None:
         """Pede ao worker GPU para parar os `transcribe` de `(gravação, revisão)`."""
         for recording_id, revision in jobs:

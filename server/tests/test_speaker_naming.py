@@ -130,3 +130,131 @@ def test_retomada_do_cron_nao_relanca_a_gravacao_parada(
     assert not any(item.startswith(recording["id"]) for item in relaunched)
     run_cpu(services.settings)
     assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] == "pending"
+
+
+def _speakers(api: Api, recording: dict[str, Any]) -> list[dict[str, Any]]:
+    return api.get(f"/api/v1/transcripts/{recording['transcript_id']}").json()["speakers"]
+
+
+def _link(api: Api, recording: dict[str, Any], speaker_id: str, name: str) -> None:
+    person = api.post("/api/v1/people", json={"name": name}).json()
+    response = api.patch(
+        f"/api/v1/transcripts/{recording['transcript_id']}/speakers/{speaker_id}", json={"person_id": person["id"]}
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_preferencia_pela_rota_le_por_pat_e_escreve_so_com_sessao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    session = as_user(make_user())
+    assert session.get("/api/v1/me/speaker-naming").json() == {"required": False, "waiting_count": 0}
+    changed = session.patch("/api/v1/me/speaker-naming", json={"required": True})
+    assert changed.status_code == 200
+    assert changed.json() == {"required": True, "waiting_count": 0}
+    pat = session.pat("recordings:read")
+    assert pat.get("/api/v1/me/speaker-naming").json()["required"] is True
+    assert pat.patch("/api/v1/me/speaker-naming", json={"required": False}).status_code == 403
+    assert session.patch("/api/v1/me/speaker-naming", json={"required": "sim"}).status_code == 422
+    assert session.patch("/api/v1/me/speaker-naming", json={}).status_code == 422
+
+
+def test_nomear_o_ultimo_locutor_retoma_a_cadeia(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    api.patch("/api/v1/me/speaker-naming", json={"required": True})
+    recording = transcribed(api, services.settings)
+    assert api.get("/api/v1/me/speaker-naming").json()["waiting_count"] == 1
+    speakers = _speakers(api, recording)
+    for index, speaker in enumerate(speakers[:-1]):
+        _link(api, recording, speaker["id"], f"Pessoa {index}")
+    # Falta um: segue parada, com a contagem atualizada no detalhe.
+    run_cpu(services.settings)
+    assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "waiting"
+    detail = _sql(
+        services,
+        "SELECT detail FROM pipeline_steps WHERE recording_id = :r AND step = 'speakers'",
+        r=recording["id"],
+    )
+    assert detail[0][0]["unnamed"] == 1
+
+    # Renomear sem ligar pessoa não conta como nomear.
+    last = speakers[-1]["id"]
+    api.patch(f"/api/v1/transcripts/{recording['transcript_id']}/speakers/{last}", json={"label": "Visitante"})
+    assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "waiting"
+
+    _link(api, recording, last, "Última pessoa")
+    after = _recording(api, recording["id"])
+    assert _steps(after)["speakers"]["state"] == "done"
+    assert after["awaiting"] is None
+    run_cpu(services.settings)
+    steps = _steps(_recording(api, recording["id"]))
+    assert steps["agenda_type"]["state"] != "pending"
+    assert steps["fields"]["state"] != "pending"
+    assert steps["summary"]["state"] in {"done", "skipped", "failed"}
+    assert api.get("/api/v1/me/speaker-naming").json()["waiting_count"] == 0
+
+
+def test_mesclar_no_locutor_nomeado_tambem_retoma(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    api.patch("/api/v1/me/speaker-naming", json={"required": True})
+    recording = transcribed(api, services.settings)
+    first, *others = [speaker["id"] for speaker in _speakers(api, recording)]
+    _link(api, recording, first, "Coordenadora")
+    merged = api.post(
+        f"/api/v1/transcripts/{recording['transcript_id']}/speakers/merge",
+        json={"source_speaker_ids": others, "target_speaker_id": first},
+    )
+    assert merged.status_code == 200, merged.text
+    assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "done"
+
+
+def test_seguir_sem_nomear_solta_a_gravacao(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    api.patch("/api/v1/me/speaker-naming", json={"required": True})
+    recording = transcribed(api, services.settings)
+    desktop = api.pat("recordings:write", "recordings:read")
+    released = desktop.post(f"/api/v1/recordings/{recording['id']}/continue")
+    assert released.status_code == 200, released.text
+    step = _steps(released.json())["speakers"]
+    assert (step["state"], step["reason"]) == ("skipped", "continued_by_user")
+    assert released.json()["awaiting"] is None
+    # Fora da espera, soltar de novo é conflito.
+    again = desktop.post(f"/api/v1/recordings/{recording['id']}/continue")
+    assert again.status_code == 409
+    run_cpu(services.settings)
+    assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] != "pending"
+
+
+def test_continue_de_outra_conta_e_404(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    owner = as_user(make_user())
+    owner.patch("/api/v1/me/speaker-naming", json={"required": True})
+    recording = transcribed(owner, services.settings)
+    other = as_user(make_user())
+    assert other.post(f"/api/v1/recordings/{recording['id']}/continue").status_code == 404
+    assert _steps(_recording(owner, recording["id"]))["speakers"]["state"] == "waiting"
+
+
+def test_desligar_a_preferencia_solta_as_paradas(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    api.patch("/api/v1/me/speaker-naming", json={"required": True})
+    first = transcribed(api, services.settings)
+    second = transcribed(api, services.settings)
+    assert api.get("/api/v1/me/speaker-naming").json()["waiting_count"] == 2
+    off = api.patch("/api/v1/me/speaker-naming", json={"required": False}).json()
+    assert off == {"required": False, "waiting_count": 0}
+    for recording in (first, second):
+        step = _steps(_recording(api, recording["id"]))["speakers"]
+        assert (step["state"], step["reason"]) == ("skipped", "naming_not_required")
+    run_cpu(services.settings)
+    for recording in (first, second):
+        assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] != "pending"
