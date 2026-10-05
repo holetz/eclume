@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.21.0
+  version: 2.24.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -92,7 +92,8 @@ tags:
   - name: agent
     description: >-
       O Agente: conversas guardadas por usuário, anexos de entrada (texto extraído) e arquivos que
-      o agente gera para baixar.
+      o agente gera para baixar. Desde a 2.24.0, as habilidades da pessoa (instruções reutilizáveis)
+      e as ações no ambiente, que o agente só propõe e a pessoa confirma.
   - name: admin
     description: >-
       Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
@@ -3127,6 +3128,9 @@ paths:
         sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
         arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
         (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+        Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
+        inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
+        propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
@@ -3232,6 +3236,300 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/tools:
+    get:
+      tags: [agent]
+      operationId: listAgentTools
+      summary: O catálogo de ferramentas do Agente
+      description: |
+        Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
+        `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
+        uma habilidade escolhe as ferramentas permitidas.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: O catálogo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentTool"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/skills:
+    get:
+      tags: [agent]
+      operationId: listAgentSkills
+      summary: As habilidades da conta
+      description: Desde a 2.24.0. Todas (até 50), por nome.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: As habilidades.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [agent]
+      operationId: createAgentSkill
+      summary: Cadastrar uma habilidade
+      description: |
+        Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
+        e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
+        habilidades na conta: 422.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSkillCreate"
+      responses:
+        "201":
+          description: A habilidade cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/agent/skills/{skill_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentSkillId"
+    get:
+      tags: [agent]
+      operationId: getAgentSkill
+      summary: Uma habilidade
+      description: Desde a 2.24.0.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A habilidade.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [agent]
+      operationId: updateAgentSkill
+      summary: Editar a habilidade
+      description: Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentSkillPatch"
+      responses:
+        "200":
+          description: A habilidade editada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSkill"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [agent]
+      operationId: deleteAgentSkill
+      summary: Excluir a habilidade
+      description: Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Excluída.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/actions:
+    get:
+      tags: [agent]
+      operationId: listAgentActions
+      summary: O registro das ações do Agente
+      description: |
+        Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
+        alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Uma página de ações.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentAction"
+                  next_cursor:
+                    $ref: "#/components/schemas/NextCursor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/agent/actions/{action_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    get:
+      tags: [agent]
+      operationId: getAgentAction
+      summary: Uma ação do Agente
+      description: Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      responses:
+        "200":
+          description: A ação.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+              examples:
+                proposta:
+                  $ref: "#/components/examples/AgentActionProposed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agent/actions/{action_id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    post:
+      tags: [agent]
+      operationId: confirmAgentAction
+      summary: Confirmar a proposta
+      description: |
+        Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
+        operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
+        executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
+        o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
+        `recordings:write` para as demais (PAT sem ele: 403).
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read", "summaries:write"]
+        - pat: ["summaries:read", "recordings:write"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: A ação na fila (ou o estado atual, se já confirmada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/agent/actions/{action_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/AgentActionId"
+    post:
+      tags: [agent]
+      operationId: cancelAgentAction
+      summary: Descartar a proposta
+      description: Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+      security:
+        - sessionCookie: []
+        - pat: ["summaries:read"]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: A proposta descartada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/people:
     get:
@@ -4612,6 +4910,20 @@ components:
         format: uuid
     AgentFileId:
       name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentSkillId:
+      name: skill_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentActionId:
+      name: action_id
       in: path
       required: true
       schema:
@@ -7541,7 +7853,7 @@ components:
 
     AgentMessage:
       type: object
-      required: [id, session_id, role, content, status, sources, queries, model, error, files, created_at]
+      required: [id, session_id, role, content, status, sources, queries, model, error, files, skill, actions, created_at]
       properties:
         id:
           type: string
@@ -7588,6 +7900,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentFile"
+        skill:
+          description: Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora).
+          type: [string, "null"]
+        actions:
+          description: Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta.
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
         created_at:
           type: string
           format: date-time
@@ -7607,6 +7927,215 @@ components:
           items:
             type: string
             format: uuid
+        skill:
+          description: >-
+            Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem
+            vale o mesmo.
+          type: string
+          maxLength: 41
+
+    AgentTool:
+      type: object
+      required: [name, kind, description]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [read, produce, action]
+        description:
+          type: string
+
+    AgentSkill:
+      type: object
+      required: [id, name, description, instructions, allowed_tools, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          description: O `/nome` da conversa.
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{1,39}$"
+        description:
+          description: O que a habilidade faz; o agente a lê para escolher.
+          type: string
+          maxLength: 300
+        instructions:
+          description: As instruções em Markdown.
+          type: string
+          maxLength: 8000
+        allowed_tools:
+          description: As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas.
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentSkillCreate:
+      type: object
+      required: [name, description, instructions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 41
+        description:
+          type: string
+          minLength: 1
+          maxLength: 300
+        instructions:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        allowed_tools:
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+
+    AgentSkillPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 41
+        description:
+          type: string
+          minLength: 1
+          maxLength: 300
+        instructions:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        allowed_tools:
+          type: [array, "null"]
+          items:
+            type: string
+        enabled:
+          type: boolean
+
+    AgentActionTarget:
+      type: object
+      required: [recording_id, title, result]
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        result:
+          description: O resultado neste alvo; nulo enquanto não executado.
+          oneOf:
+            - type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [done, skipped, failed]
+                detail:
+                  type: string
+                code:
+                  type: string
+                summary_id:
+                  type: [string, "null"]
+                  format: uuid
+            - type: "null"
+
+    AgentAction:
+      description: >-
+        Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na
+        proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria.
+      type: object
+      required:
+        - id
+        - session_id
+        - message_id
+        - tool
+        - params
+        - summary
+        - targets
+        - status
+        - counts
+        - error
+        - confirmed_via
+        - created_at
+        - decided_at
+        - finished_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          description: Nulo depois que a conversa é excluída.
+          type: [string, "null"]
+          format: uuid
+        message_id:
+          type: [string, "null"]
+          format: uuid
+        tool:
+          type: string
+          enum: [regenerate_summaries, tag_recordings, collect_recordings, set_agenda_type]
+        params:
+          description: Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos).
+          type: object
+        summary:
+          description: O que será feito, em uma frase.
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentActionTarget"
+        status:
+          type: string
+          enum: [proposed, queued, running, done, failed, cancelled, expired]
+        counts:
+          type: object
+          required: [done, skipped, failed, pending]
+          properties:
+            done:
+              type: integer
+              minimum: 0
+            skipped:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
+            pending:
+              type: integer
+              minimum: 0
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+            - type: "null"
+        confirmed_via:
+          type: [string, "null"]
+          enum: [session, pat, null]
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
 
     AgentTurn:
       type: object
@@ -8847,6 +9376,9 @@ components:
     AgentMessageDone:
       summary: Resposta com a fonte e a tabela gerada
       externalValue: ./fixtures/agent-message-done.json
+    AgentActionProposed:
+      summary: Proposta de aplicar a tag auditoria em duas gravações
+      externalValue: ./fixtures/agent-action-proposed.json
     BaseChatRequest:
       summary: Uma pergunta com duas mensagens de histórico
       externalValue: ./fixtures/base-chat-request.json

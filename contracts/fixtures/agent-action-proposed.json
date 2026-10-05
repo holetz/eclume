@@ -1,0 +1,40 @@
+{
+  "id": "01928f3a-1c00-7a00-8000-000000000a31",
+  "session_id": "01928f3a-1c00-7a00-8000-000000000a01",
+  "message_id": "01928f3a-1c00-7a00-8000-000000000a22",
+  "tool": "tag_recordings",
+  "params": {
+    "targets": {
+      "tag": "cliente-aurora"
+    },
+    "add": [
+      "auditoria"
+    ],
+    "remove": []
+  },
+  "summary": "Nas tags de 2 gravações: aplicar \"auditoria\".",
+  "targets": [
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000201",
+      "title": "Kickoff Aurora",
+      "result": null
+    },
+    {
+      "recording_id": "01928f3a-1c00-7a00-8000-000000000202",
+      "title": "Revisão de prazos Aurora",
+      "result": null
+    }
+  ],
+  "status": "proposed",
+  "counts": {
+    "done": 0,
+    "skipped": 0,
+    "failed": 0,
+    "pending": 2
+  },
+  "error": null,
+  "confirmed_via": null,
+  "created_at": "2026-10-05T13:03:00Z",
+  "decided_at": null,
+  "finished_at": null
+}
