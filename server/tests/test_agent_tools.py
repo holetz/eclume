@@ -175,7 +175,7 @@ def test_ferramentas_da_base_seguem_com_fontes_verificadas():
 def test_acao_com_confirmacao_nao_roda():
     ran: list[dict[str, Any]] = []
 
-    async def run(_env: Any, action: dict[str, Any], _budget: int, _state: Any) -> tuple[str, dict[str, Any]]:  # noqa: ANN401, E501
+    async def run(_env: object, action: dict[str, Any], _budget: int, _state: object) -> tuple[str, dict[str, Any]]:
         ran.append(action)
         return "", {}
 

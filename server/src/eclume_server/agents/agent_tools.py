@@ -139,7 +139,7 @@ def _base_tool(name: str, *, transcripts: bool) -> AgentTool:
     return AgentTool(
         name=name,
         usage=base._ACTIONS[name],  # noqa: SLF001
-        validate=lambda action: base._valid(action),  # noqa: SLF001
+        validate=base._valid,  # noqa: SLF001
         run=run,
         available=(lambda caps: caps.transcripts) if transcripts else (lambda _caps: True),
     )
