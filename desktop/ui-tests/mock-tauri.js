@@ -36,6 +36,27 @@
     };
   }
 
+  /** Uma linha do painel Recentes, como o comando `recent` do Rust a devolve. */
+  function recente(key, extra) {
+    return {
+      key,
+      remote_id: key.startsWith("local:") ? null : key,
+      local_id: key.startsWith("local:") ? key.slice(6) : null,
+      title: "",
+      started_at: null,
+      created_at: new Date(hoje(8, 0)).toISOString(),
+      duration_ms: null,
+      phase: "summary_ready",
+      stage: null,
+      progress: null,
+      attention: null,
+      reason: null,
+      detail: null,
+      wait: null,
+      ...extra,
+    };
+  }
+
   const CA = "98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f";
   const CONTA = { email: "ana@exemplo.com.br", token_id: "t-1", server_name: "eclume" };
 
@@ -99,12 +120,18 @@
         theme: "system",
         notify_summary: true,
         autostart: true,
+        recent_count: 5,
         mirror_enabled: false,
         mirror_dir: null,
         mirror_transcripts: true,
         note_silence_s: 4,
       },
       mirror: { running: false, last_sync_ms: null, last_error: null, last: null },
+      recentes: { items: [], fetched_at: agora, error: null },
+      /** O Markdown do resumo atual de cada gravação, para o `copy_summary`. */
+      resumos: {},
+      areaDeTransferencia: null,
+      gravacaoAberta: null,
       microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
       saidas: {
         default: "alsa_output.pci-0000_00_1f.3.analog-stereo",
@@ -232,6 +259,33 @@
           processor: { online: false, offline_since: null },
         },
       };
+    },
+    recentes(e) {
+      e.recentes.items = [
+        recente("local:g1", { phase: "recording", started_at: hoje(10, 5), created_at: null }),
+        recente("local:f1", {
+          phase: "upload_failed",
+          attention: "upload_failed",
+          title: "Kickoff Guion",
+          detail: "HTTP 413: arquivo grande demais",
+        }),
+        recente("srv-t", { phase: "transcribing", title: "Alinhamento semanal", stage: "asr", progress: 420 }),
+        recente("srv-r", { phase: "summary_ready", title: "Comitê de crédito" }),
+        recente("srv-l", {
+          phase: "unknown",
+          attention: "needs_you",
+          title: "Reunião com a diretoria",
+          stage: "speakers",
+          detail: "awaiting_speakers",
+        }),
+        recente("srv-s", { phase: "summary_failed", attention: "summary_failed", title: "1:1 com a Bia" }),
+        recente("srv-q", {
+          phase: "queued",
+          title: "Daily do time",
+          wait: { reason: "processor_queue", ahead: 1, account_ahead: null, estimated_start_at: null, resumes_at: null, processor: null },
+        }),
+      ];
+      e.resumos = { "srv-r": "# Comitê de crédito\n\n- Aprovado o limite da cooperativa" };
     },
     atualizado(e) {
       e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };
@@ -389,6 +443,7 @@
         theme: input.theme ?? e.settings.theme,
         notify_summary: input.notify_summary ?? e.settings.notify_summary,
         autostart: input.autostart ?? e.settings.autostart,
+        recent_count: input.recent_count ?? e.settings.recent_count,
         mirror_enabled: mirrorEnabled,
         mirror_dir: mirrorDir,
         mirror_transcripts: input.mirror_transcripts ?? e.settings.mirror_transcripts,
@@ -480,6 +535,22 @@
     pick_ca_file: () => "/home/ana/caddy-root.pem",
     pick_mirror_dir: () => "/home/ana/Obsidian/eclume",
     mirror_status: (e) => e.mirror,
+    recent(e) {
+      const count = e.settings.recent_count;
+      const items = e.recentes.items.slice(0, count);
+      return { count, items, needs_you: items.filter((i) => i.attention).length, fetched_at: e.recentes.fetched_at, error: e.recentes.error };
+    },
+    recent_refresh: () => null,
+    copy_summary(e, { recordingId }) {
+      const markdown = e.resumos[recordingId];
+      if (!markdown) throw "O resumo ainda não está pronto";
+      e.areaDeTransferencia = markdown;
+      return null;
+    },
+    open_recording(e, { recordingId }) {
+      e.gravacaoAberta = recordingId;
+      return null;
+    },
     mirror_sync_now(e) {
       e.mirror = { running: false, last_sync_ms: Date.UTC(2026, 8, 29, 13, 42), last_error: null, last: { recordings: 12, written: 24, unchanged: 0, removed: 0, failed: 0 } };
       return null;
