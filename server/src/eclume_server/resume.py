@@ -4,7 +4,8 @@ O commit seguido do enfileiramento continua sendo o caminho; se o Redis oscilou 
 entre os dois, a etapa ficaria `pending` para sempre. O cron `resume_pipelines` (a cada 5 min,
 `unique`) relê o estado no banco e relança pelo `_job_id` determinístico, que o arq deduplica:
 
-- na revisão atual com o job de transcrição `succeeded` há mais de `RESUME_AFTER`: tipo de agenda
+- na revisão atual com o job de transcrição `succeeded` há mais de `RESUME_AFTER` e a etapa
+  `speakers` fora de `waiting` (a gravação parada à espera dos nomes não é relançada): tipo de agenda
   sem linha → `detect_agenda_type`; tipo final e campos sem linha → `fill_fields`; campos finais e
   resumo sem linha → o resumo automático (sem refazer os campos);
 - resumo `queued`/`running` há mais de `RESUME_AFTER`: sumido do arq → reenfileirado; concluído no
@@ -57,13 +58,25 @@ async def _stalled_chains(engine: AsyncEngine, cutoff: datetime) -> list[tuple[U
         jobs.c.recording_id
     )
     latest = latest.order_by(jobs.c.recording_id, jobs.c.revision.desc()).subquery()
+    speakers, speakers_on = _joined_step(latest, "speakers")
     agenda, agenda_on = _joined_step(latest, "agenda_type")
     fields, fields_on = _joined_step(latest, "fields")
     summary, summary_on = _joined_step(latest, "summary")
     query = (
         select(latest.c.recording_id, latest.c.revision, agenda.c.state, fields.c.state)
-        .select_from(latest.outerjoin(agenda, agenda_on).outerjoin(fields, fields_on).outerjoin(summary, summary_on))
-        .where(latest.c.state == "succeeded", latest.c.finished_at <= cutoff, summary.c.id.is_(None))
+        .select_from(
+            latest.outerjoin(speakers, speakers_on)
+            .outerjoin(agenda, agenda_on)
+            .outerjoin(fields, fields_on)
+            .outerjoin(summary, summary_on)
+        )
+        .where(
+            latest.c.state == "succeeded",
+            latest.c.finished_at <= cutoff,
+            summary.c.id.is_(None),
+            # Parada à espera de nomear os locutores: quem a solta enfileira o tipo.
+            speakers.c.state.is_distinct_from("waiting"),
+        )
         .order_by(latest.c.finished_at)
     )
     async with system_tx(engine) as conn:

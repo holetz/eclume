@@ -59,6 +59,8 @@ users = Table(
     Column("quotas", JSONB),
     # 029_idioma_da_conta
     Column("transcription_language", Text),
+    # 030_marcacao_dos_locutores
+    Column("require_speaker_naming", Boolean, server_default=FetchedValue()),
 )
 
 sessions = Table(
