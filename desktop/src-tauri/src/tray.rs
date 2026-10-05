@@ -1,7 +1,8 @@
 //! Bandeja do sistema: ícone por estado e o menu de ações rápidas.
 //!
 //! No Linux (AppIndicator) o clique no ícone só abre o menu, então toda ação mora no menu —
-//! inclusive a pergunta de reunião detectada, que ganha dois itens enquanto espera resposta.
+//! inclusive a pergunta de reunião detectada, que ganha dois itens enquanto espera resposta, e a
+//! seção Recentes, com as últimas gravações e um submenu de ações para cada uma.
 
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -9,10 +10,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use eclume_detect::AppKey;
 use eclume_recorder::Kind;
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager, Wry};
 
+use crate::recent::{TrayAction, TraySection};
 use crate::shortcuts::Shortcuts;
 use crate::state::{AppState, AppStatus, StatusView};
 
@@ -27,6 +29,14 @@ const MENU_ASK_IGNORE: &str = "ask-ignore";
 const MENU_OPEN_WEB: &str = "open-web";
 const MENU_SHOW: &str = "show";
 const MENU_QUIT: &str = "quit";
+const MENU_RECENT_HEADER: &str = "recent-header";
+const MENU_RECENT_EMPTY: &str = "recent-empty";
+/// Prefixos dos itens das gravações recentes, seguidos do id que a ação usa.
+const RECENT_SUBMENU: &str = "recent:";
+const RECENT_COPY: &str = "recent-copy:";
+const RECENT_OPEN: &str = "recent-open:";
+const RECENT_RETRY: &str = "recent-retry:";
+const RECENT_SHOW: &str = "recent-show:";
 
 /// O menu em uso e os itens que mudam com o estado.
 struct MenuHandles {
@@ -40,6 +50,9 @@ struct MenuHandles {
     shortcuts: Shortcuts,
     /// O ícone mostrado agora: trocar grava um PNG no Linux, então só troca quando muda.
     icon: Option<TrayIconState>,
+    /// A seção Recentes do menu em uso (`None`: oculta). Reconstruir o menu fecha-o no
+    /// AppIndicator, então só se reconstrói quando ela muda.
+    recent: Option<TraySection>,
 }
 
 struct TrayHandles {
@@ -56,30 +69,88 @@ pub fn is_visible(app: &AppHandle) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuLine {
     Item {
-        id: &'static str,
+        id: String,
         label: String,
         enabled: bool,
         /// A combinação mostrada ao lado do item (o atalho global que faz o mesmo).
         accelerator: Option<String>,
     },
+    /// Um submenu: uma gravação recente com as ações dela.
+    Submenu {
+        id: String,
+        label: String,
+        items: Vec<MenuLine>,
+    },
     Separator,
 }
 
-fn item(id: &'static str, label: impl Into<String>, accelerator: Option<&str>) -> MenuLine {
+fn item(id: impl Into<String>, label: impl Into<String>, accelerator: Option<&str>) -> MenuLine {
     MenuLine::Item {
-        id,
+        id: id.into(),
         label: label.into(),
         enabled: true,
         accelerator: accelerator.map(str::to_string),
     }
 }
 
+fn disabled(id: &str, label: impl Into<String>) -> MenuLine {
+    MenuLine::Item {
+        id: id.into(),
+        label: label.into(),
+        enabled: false,
+        accelerator: None,
+    }
+}
+
+/// A seção Recentes: o cabeçalho desabilitado e uma linha por gravação. Com ação, a linha é um
+/// submenu (Copiar resumo, Abrir no web, Tentar agora); sem ação (gravando, aguardando envio),
+/// um item que abre a janela.
+fn recent_lines(section: &TraySection) -> Vec<MenuLine> {
+    let mut lines = vec![disabled(MENU_RECENT_HEADER, section.header.clone())];
+    if section.entries.is_empty() {
+        lines.push(disabled(MENU_RECENT_EMPTY, "Nenhuma gravação recente"));
+    }
+    for entry in &section.entries {
+        if entry.actions.is_empty() {
+            lines.push(item(
+                format!("{RECENT_SHOW}{}", entry.key),
+                entry.label.clone(),
+                None,
+            ));
+            continue;
+        }
+        let items = entry
+            .actions
+            .iter()
+            .map(|action| match action {
+                TrayAction::CopySummary(id) => {
+                    item(format!("{RECENT_COPY}{id}"), "Copiar resumo", None)
+                }
+                TrayAction::OpenWeb(id) => item(format!("{RECENT_OPEN}{id}"), "Abrir no web", None),
+                TrayAction::Retry(id) => item(format!("{RECENT_RETRY}{id}"), "Tentar agora", None),
+            })
+            .collect();
+        lines.push(MenuLine::Submenu {
+            id: format!("{RECENT_SUBMENU}{}", entry.key),
+            label: entry.label.clone(),
+            items,
+        });
+    }
+    lines
+}
+
 /// As linhas do menu, como o frame "Tray menu" do DS: a linha de status, gravar, nova nota,
-/// marcador (só gravando), importar, abrir o eclume, abrir a biblioteca na web e sair. A
-/// pergunta de reunião detectada entra como dois itens logo abaixo do status.
-pub fn menu_lines(ask: Option<AppKey>, recording: bool, shortcuts: &Shortcuts) -> Vec<MenuLine> {
+/// marcador (só gravando), importar, a seção Recentes (quando ligada), abrir o eclume, abrir a
+/// biblioteca na web e sair. A pergunta de reunião detectada entra como dois itens logo abaixo
+/// do status. Recentes fica abaixo das ações para não mover "Iniciar gravação".
+pub fn menu_lines(
+    ask: Option<AppKey>,
+    recording: bool,
+    shortcuts: &Shortcuts,
+    recent: Option<&TraySection>,
+) -> Vec<MenuLine> {
     let mut lines = vec![MenuLine::Item {
-        id: MENU_STATUS,
+        id: MENU_STATUS.into(),
         label: AppStatus::Idle.label().into(),
         enabled: false,
         accelerator: None,
@@ -113,6 +184,10 @@ pub fn menu_lines(ask: Option<AppKey>, recording: bool, shortcuts: &Shortcuts) -
         ));
     }
     lines.push(item(MENU_IMPORT, "Importar arquivo…", None));
+    if let Some(section) = recent {
+        lines.push(MenuLine::Separator);
+        lines.extend(recent_lines(section));
+    }
     lines.push(MenuLine::Separator);
     lines.push(item(MENU_SHOW, "Abrir o eclume", None));
     lines.push(item(MENU_OPEN_WEB, "Abrir a biblioteca na web", None));
@@ -121,16 +196,15 @@ pub fn menu_lines(ask: Option<AppKey>, recording: bool, shortcuts: &Shortcuts) -
     lines
 }
 
-fn build_menu(
+/// O submenu nativo de uma linha `Submenu`, com os filhos.
+fn submenu(
     app: &AppHandle,
-    ask: Option<AppKey>,
-    recording: bool,
-    shortcuts: &Shortcuts,
-) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
-    let menu = Menu::new(app)?;
-    let mut status = None;
-    let mut toggle = None;
-    for line in menu_lines(ask, recording, shortcuts) {
+    id: &str,
+    label: &str,
+    items: &[MenuLine],
+) -> tauri::Result<Submenu<Wry>> {
+    let menu = Submenu::with_id(app, id, label, true)?;
+    for line in items {
         match line {
             MenuLine::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
             MenuLine::Item {
@@ -138,10 +212,47 @@ fn build_menu(
                 label,
                 enabled,
                 accelerator,
+            } => menu.append(&MenuItem::with_id(
+                app,
+                id.as_str(),
+                label,
+                *enabled,
+                accelerator.as_deref(),
+            )?)?,
+            MenuLine::Submenu { id, label, items } => {
+                menu.append(&submenu(app, id, label, items)?)?;
+            }
+        }
+    }
+    Ok(menu)
+}
+
+fn build_menu(
+    app: &AppHandle,
+    ask: Option<AppKey>,
+    recording: bool,
+    shortcuts: &Shortcuts,
+    recent: Option<TraySection>,
+) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
+    let menu = Menu::new(app)?;
+    let mut status = None;
+    let mut toggle = None;
+    for line in menu_lines(ask, recording, shortcuts, recent.as_ref()) {
+        match line {
+            MenuLine::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
+            MenuLine::Submenu { id, label, items } => {
+                menu.append(&submenu(app, &id, &label, &items)?)?;
+            }
+            MenuLine::Item {
+                id,
+                label,
+                enabled,
+                accelerator,
             } => {
-                let entry = MenuItem::with_id(app, id, label, enabled, accelerator.as_deref())?;
+                let entry =
+                    MenuItem::with_id(app, id.as_str(), label, enabled, accelerator.as_deref())?;
                 menu.append(&entry)?;
-                match id {
+                match id.as_str() {
                     MENU_STATUS => status = Some(entry),
                     MENU_TOGGLE => toggle = Some(entry),
                     _ => {}
@@ -158,6 +269,7 @@ fn build_menu(
             recording,
             shortcuts: shortcuts.clone(),
             icon: None,
+            recent,
         },
     ))
 }
@@ -165,7 +277,7 @@ fn build_menu(
 /// Cria o ícone e o menu da bandeja.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
-    let (menu, handles) = build_menu(app, None, false, &shortcuts)?;
+    let (menu, handles) = build_menu(app, None, false, &shortcuts, None)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(TrayIconState::Idle)?)
         .tooltip(crate::APP_NAME)
@@ -227,6 +339,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             }
         }
         MENU_SHOW => crate::show_window(app),
+        id if id.starts_with("recent") => on_recent_event(app, id),
         MENU_QUIT => {
             // Fechar a gravação pode levar segundos (join, driver, `fsync`): fora da thread da UI,
             // e o app sai ao fim.
@@ -245,6 +358,38 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
+/// As ações da seção Recentes. Copiar lê a API e Tentar agora mexe na fila: fora da thread da UI.
+/// A bandeja não tem outro retorno, então o copiar avisa por notificação.
+fn on_recent_event(app: &AppHandle, id: &str) {
+    if let Some(remote) = id.strip_prefix(RECENT_COPY) {
+        let (app, remote) = (app.clone(), remote.to_string());
+        std::thread::spawn(move || match crate::recent::copy_summary(&app, &remote) {
+            Ok(()) => crate::notify::info(
+                "Resumo copiado",
+                "O resumo em Markdown está na área de transferência.",
+            ),
+            Err(err) => {
+                log::error!("falha ao copiar o resumo pela bandeja: {err:#}");
+                crate::notify::info("Não foi possível copiar o resumo", &format!("{err:#}"));
+            }
+        });
+    } else if let Some(remote) = id.strip_prefix(RECENT_OPEN) {
+        if let Err(err) = crate::recent::open_recording(app, remote) {
+            log::error!("{err:#}");
+        }
+    } else if id.starts_with(RECENT_RETRY) {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Err(err) = crate::sync::sync_now(&app) {
+                log::error!("{err:#}");
+            }
+            crate::refresh_ui(&app);
+        });
+    } else if id.starts_with(RECENT_SHOW) {
+        crate::show_window(app);
+    }
+}
+
 /// Pede a atualização da bandeja, que só é tocada na thread principal: os setters do Tauri
 /// bloqueiam até a thread principal responder, e uma thread de fundo que os chamasse segurando o
 /// mutex do menu travaria o app (#83). Na thread principal roda na hora; de outra thread, só
@@ -257,7 +402,8 @@ pub fn refresh(app: &AppHandle) {
 }
 
 /// Atualiza ícone, dica e textos do menu a partir do estado; troca o menu quando a pergunta de
-/// reunião aparece ou some. Só na thread principal: chame `refresh`.
+/// reunião aparece ou some, ou quando a seção Recentes muda. Só na thread principal: chame
+/// `refresh`.
 fn apply(app: &AppHandle) {
     let Some(handles) = app.try_state::<TrayHandles>() else {
         return;
@@ -277,9 +423,18 @@ fn apply(app: &AppHandle) {
     let ask = view.pending_ask.map(|a| a.app);
     let recording = view.status == AppStatus::Recording;
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
+    // A mesma fila local e o mesmo retrato do painel; uma falha mantém a seção que está no menu.
+    let recent = crate::recent::tray_section(app).unwrap_or_else(|err| {
+        log::error!("falha ao ler as recentes para a bandeja: {err:#}");
+        menu.recent.clone()
+    });
     let result = (|| -> tauri::Result<()> {
-        if menu.ask != ask || menu.recording != recording || menu.shortcuts != shortcuts {
-            let (next, next_handles) = build_menu(app, ask, recording, &shortcuts)?;
+        if menu.ask != ask
+            || menu.recording != recording
+            || menu.shortcuts != shortcuts
+            || menu.recent != recent
+        {
+            let (next, next_handles) = build_menu(app, ask, recording, &shortcuts, recent)?;
             handles.tray.set_menu(Some(next))?;
             *menu = next_handles;
         }
@@ -499,6 +654,9 @@ mod tests {
             .iter()
             .map(|line| match line {
                 MenuLine::Separator => "—".into(),
+                MenuLine::Submenu { label, items, .. } => {
+                    format!("{label} ▸ {}", labels(items).join(" | "))
+                }
                 MenuLine::Item {
                     label, accelerator, ..
                 } => match accelerator {
@@ -517,7 +675,7 @@ mod tests {
             marker: "Ctrl+Alt+M".into(),
         };
         assert_eq!(
-            labels(&menu_lines(None, false, &shortcuts)),
+            labels(&menu_lines(None, false, &shortcuts, None)),
             [
                 "Ocioso",
                 "—",
@@ -531,7 +689,7 @@ mod tests {
                 "Sair [CmdOrCtrl+Q]",
             ]
         );
-        let recording = menu_lines(Some(AppKey::Zoom), true, &shortcuts);
+        let recording = menu_lines(Some(AppKey::Zoom), true, &shortcuts, None);
         assert_eq!(
             labels(&recording)[..8],
             [
@@ -548,12 +706,100 @@ mod tests {
         assert_eq!(
             recording[0],
             MenuLine::Item {
-                id: MENU_STATUS,
+                id: MENU_STATUS.into(),
                 label: "Ocioso".into(),
                 enabled: false,
                 accelerator: None
             }
         );
+    }
+
+    #[test]
+    fn menu_da_bandeja_com_a_secao_recentes() {
+        use crate::recent::TrayEntry;
+
+        let shortcuts = Shortcuts {
+            record: "Ctrl+Alt+R".into(),
+            note: "Ctrl+Alt+N".into(),
+            marker: "Ctrl+Alt+M".into(),
+        };
+        let section = TraySection {
+            header: "Recentes · 1 precisa de você".into(),
+            entries: vec![
+                TrayEntry {
+                    key: "r1".into(),
+                    label: "Reunião X · Resumo pronto".into(),
+                    actions: vec![
+                        TrayAction::CopySummary("r1".into()),
+                        TrayAction::OpenWeb("r1".into()),
+                    ],
+                },
+                TrayEntry {
+                    key: "local:l1".into(),
+                    label: "Daily · Precisa de você (Falhou o envio)".into(),
+                    actions: vec![TrayAction::Retry("l1".into())],
+                },
+                TrayEntry {
+                    key: "local:l2".into(),
+                    label: "05/10 14:02 · Gravando".into(),
+                    actions: vec![],
+                },
+            ],
+        };
+        let lines = menu_lines(None, false, &shortcuts, Some(&section));
+        assert_eq!(
+            labels(&lines)[4..11],
+            [
+                "Importar arquivo…",
+                "—",
+                "Recentes · 1 precisa de você",
+                "Reunião X · Resumo pronto ▸ Copiar resumo | Abrir no web",
+                "Daily · Precisa de você (Falhou o envio) ▸ Tentar agora",
+                "05/10 14:02 · Gravando",
+                "—",
+            ]
+        );
+        // O gravar fica onde estava; o cabeçalho é só texto.
+        assert_eq!(labels(&lines)[2], "Iniciar gravação [Ctrl+Alt+R]");
+        assert_eq!(
+            lines[6],
+            MenuLine::Item {
+                id: MENU_RECENT_HEADER.into(),
+                label: "Recentes · 1 precisa de você".into(),
+                enabled: false,
+                accelerator: None,
+            }
+        );
+        // Os ids levam o que a ação usa, e são únicos no menu.
+        let MenuLine::Submenu { id, items, .. } = &lines[7] else {
+            panic!("a gravação com ações é um submenu");
+        };
+        assert_eq!(id, "recent:r1");
+        let ids: Vec<_> = items
+            .iter()
+            .filter_map(|line| match line {
+                MenuLine::Item { id, .. } => Some(id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids, ["recent-copy:r1", "recent-open:r1"]);
+        let MenuLine::Item { id, .. } = &lines[9] else {
+            panic!("a gravação sem ação é um item");
+        };
+        assert_eq!(id, "recent-show:local:l2");
+
+        let vazia = TraySection {
+            header: "Recentes".into(),
+            entries: vec![],
+        };
+        assert_eq!(
+            labels(&menu_lines(None, false, &shortcuts, Some(&vazia)))[5..8],
+            ["—", "Recentes", "Nenhuma gravação recente"]
+        );
+        // Com 0 na configuração, a seção some.
+        assert!(!labels(&menu_lines(None, false, &shortcuts, None))
+            .iter()
+            .any(|label| label.starts_with("Recentes")));
     }
 
     #[test]
