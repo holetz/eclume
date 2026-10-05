@@ -8273,7 +8273,7 @@ components:
       summary: Atribuição automática ligada, limiar 0,80
       externalValue: ./fixtures/voice-assignment.json
     SpeakerNamingPreference:
-      summary: Marcação ligada, duas gravações esperando
+      summary: Marcação ligada, nenhuma gravação esperando
       externalValue: ./fixtures/speaker-naming-preference.json
     SpeakerNamingPatchRequest:
       summary: Exigir a marcação dos locutores

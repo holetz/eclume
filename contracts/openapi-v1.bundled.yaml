@@ -9946,10 +9946,10 @@ components:
         sample_count: 7
         voiceprint_people: 3
     SpeakerNamingPreference:
-      summary: Marcação ligada, duas gravações esperando
+      summary: Marcação ligada, nenhuma gravação esperando
       value:
         required: true
-        waiting_count: 2
+        waiting_count: 0
     SpeakerNamingPatchRequest:
       summary: Exigir a marcação dos locutores
       value:
