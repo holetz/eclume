@@ -20,6 +20,8 @@ from eclume_server_testing.harness import run
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from fastapi.testclient import TestClient
+
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
 
@@ -30,6 +32,16 @@ def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN
         return result.all() if result.returns_rows else None
 
     return run(services.sql(go))
+
+
+def call(client: TestClient, token: str, tool: str, **arguments: Any) -> dict[str, Any]:  # noqa: ANN401
+    """`tools/call` no `/mcp`, como em test_mcp.py."""
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}
+    headers = {"Accept": "application/json, text/event-stream", "Authorization": f"Bearer {token}"}
+    client.cookies.clear()
+    response = client.post("/mcp", json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()["result"]
 
 
 def _require(services: Services, account: Account, *, on: bool = True) -> None:
@@ -258,3 +270,32 @@ def test_desligar_a_preferencia_solta_as_paradas(
     run_cpu(services.settings)
     for recording in (first, second):
         assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] != "pending"
+
+
+def test_awaiting_na_gravacao_no_filtro_da_biblioteca_e_no_mcp(
+    client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    ready = transcribed(api, services.settings)
+    api.patch("/api/v1/me/speaker-naming", json={"required": True})
+    parked = transcribed(api, services.settings)
+    assert ready["awaiting"] is None
+    assert parked["awaiting"] == "speakers"
+
+    listed = api.get("/api/v1/recordings", params={"awaiting": "speakers"}).json()["items"]
+    assert [item["id"] for item in listed] == [parked["id"]]
+    everything = api.get("/api/v1/recordings").json()["items"]
+    assert {item["id"] for item in everything} == {ready["id"], parked["id"]}
+    assert api.get("/api/v1/recordings", params={"awaiting": "outra"}).status_code == 422
+
+    # Outra conta não vê a gravação parada de ninguém.
+    other = as_user(make_user())
+    assert other.get("/api/v1/recordings", params={"awaiting": "speakers"}).json()["items"] == []
+
+    token = api.pat("recordings:read").token
+    assert token is not None
+    found = call(client, token, "search_recordings", awaiting="speakers")["structuredContent"]["recordings"]
+    assert [(item["id"], item["awaiting"]) for item in found] == [(parked["id"], "speakers")]
+    detail = call(client, token, "get_recording", recording_id=parked["id"])["structuredContent"]
+    assert detail["awaiting"] == "speakers"
+    assert {step["step"]: step["state"] for step in detail["pipeline"]}["speakers"] == "waiting"

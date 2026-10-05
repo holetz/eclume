@@ -24,6 +24,7 @@ from eclume_server.pagination import Cursor, Limit
 from eclume_server.pipeline import current_revision
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import (
+    Awaiting,
     Library,
     Sort,
     Status,
@@ -89,6 +90,7 @@ async def list_recordings(
     person_company: Many = None,
     person_department: Many = None,
     person_tag: Many = None,
+    awaiting: Annotated[list[Awaiting] | None, Query()] = None,
 ) -> dict[str, Any]:
     """A biblioteca: por intervalo de `recorded_at` e filtros (OU no mesmo filtro, E entre filtros).
 
@@ -108,6 +110,7 @@ async def list_recordings(
         person_company=person_company,
         person_department=person_department,
         person_tag=person_tag,
+        awaiting=awaiting,
     )
     return await list_library(ctx, principal.user_id, library, sort=sort, cursor=cursor, limit=limit)
 

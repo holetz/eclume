@@ -111,6 +111,7 @@ def _brief(recording: dict[str, Any]) -> dict[str, Any]:
         "duration_ms": recording["duration_ms"],
         "agenda_type": agenda_type["name"] if agenda_type else None,
         "tags": recording["tags"],
+        "awaiting": recording["awaiting"],
     }
 
 
@@ -163,7 +164,9 @@ def _read_tools(server: MCPServer) -> None:
         annotations=READ_ONLY,
         description=(
             "Busca gravações do usuário. Sem query, lista a biblioteca por data de início (mais recentes "
-            "primeiro) com filtros; com query, busca o texto falado nas transcrições e devolve os trechos."
+            "primeiro) com filtros; com query, busca o texto falado nas transcrições e devolve os trechos. "
+            "Cada gravação diz em awaiting o que espera do usuário (speakers: nomear os locutores); o filtro "
+            "awaiting vale sem query."
         ),
     )
     async def search_recordings(  # noqa: PLR0913, PLR0917 — os filtros da biblioteca
@@ -176,6 +179,10 @@ def _read_tools(server: MCPServer) -> None:
         status: Annotated[
             list[Literal["uploading", "queued", "processing", "transcribed", "failed"]] | None,
             Field(description="Qualquer um destes estados."),
+        ] = None,
+        awaiting: Annotated[
+            Literal["speakers"] | None,
+            Field(description="speakers: só as gravações paradas à espera de nomear os locutores."),
         ] = None,
         limit: Annotated[int, Field(ge=1, le=50)] = 20,
         cursor: Annotated[str | None, Field(description="next_cursor da página anterior.")] = None,
@@ -196,7 +203,19 @@ def _read_tools(server: MCPServer) -> None:
                 )
             principal = need(ctx, "recordings:read")
             types = [uuid_of(value, "agenda_type") for value in agenda_type] if agenda_type else None
-            library = Library(None, started_from, started_to, None, status, tags, None, None, None, types)
+            library = Library(
+                None,
+                started_from,
+                started_to,
+                None,
+                status,
+                tags,
+                None,
+                None,
+                None,
+                types,
+                awaiting=[awaiting] if awaiting else None,
+            )
             page = await list_library(app, principal.user_id, library, sort="recorded_desc", cursor=cursor, limit=limit)
         return {"recordings": [_brief(item) for item in page["items"]], "next_cursor": page["next_cursor"]}
 
