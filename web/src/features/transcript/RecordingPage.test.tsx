@@ -156,7 +156,9 @@ describe('transcrição recolhida', () => {
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     expect(audio.currentTime).toBe(80.9)
     expect(audio.play).not.toHaveBeenCalled()
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    // A lista vem à janela e a fala é centrada por dentro dela.
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(falas)
+    expect(vi.mocked(Element.prototype.scrollTo).mock.contexts).toContain(falas)
   })
 
   it('põe o marcador antes da fala, com a nota, o dispositivo, editar e excluir', async () => {
@@ -239,10 +241,12 @@ describe('página da gravação', () => {
     const falas = await screen.findByRole('list', { name: 'Falas' })
     const items = within(falas).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
     audio.currentTime = 100
     fireEvent.timeUpdate(audio)
     expect(segment(items[7])).toHaveAttribute('aria-current', 'true')
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    // Acompanhar rola só a lista de falas: nada chama `scrollIntoView`, que rolaria a página.
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('falha passageira: o dono retenta e a gravação volta para a fila', async () => {

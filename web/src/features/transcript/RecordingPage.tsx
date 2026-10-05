@@ -75,7 +75,10 @@ export function RecordingPage() {
         <PlaybackProvider recordingId={data.id} durationMs={data.duration_ms} startMs={startMs}>
           {data.transcript_id !== null && (
             <>
-              <Player markers={markers.data ?? []} />
+              {/* Fixo abaixo do cabeçalho: pausar fica a um clique em qualquer ponto da página. */}
+              <div className={styles.playerDock}>
+                <Player markers={markers.data ?? []} />
+              </div>
               <MarkerBar markers={markers.data ?? []} />
             </>
           )}

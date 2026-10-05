@@ -102,6 +102,16 @@
   color: var(--color-text-muted);
 }
 
+/* O player fica fixo logo abaixo do cabeçalho do shell enquanto a página rola, sobre o fundo. */
+.playerDock {
+  position: sticky;
+  top: var(--shell-header, 0px);
+  z-index: 2;
+  display: grid;
+  gap: var(--space-2);
+  background: var(--color-bg);
+}
+
 /* O documento e os campos, lado a lado. */
 .docGrid {
   display: grid;
