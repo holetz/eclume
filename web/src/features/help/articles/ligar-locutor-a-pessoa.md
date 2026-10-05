@@ -5,15 +5,15 @@ paginas: [gravacao, pessoas, pessoa]
 relacionados: [sugestoes-por-voz, corrigir-transcricao, buscar-nas-gravacoes]
 termos: [locutor, pessoa, vincular, quem falou, S1, S2, cadastrar pessoa]
 ordem: 1
-atualizado: 2026-09-30
+atualizado: 2026-10-05
 ---
 A transcrição separa a conversa por locutor (S1, S2, S3…), mas não sabe quem é cada um. Ligar um
 locutor a uma pessoa dá nome às falas.
 
 ## Na página da gravação
 
-1. Abra a transcrição e ache a lista de locutores.
-2. Para cada locutor, escolha a pessoa na lista. Comece a digitar o nome para filtrar.
+1. Abra o bloco **Locutores**, logo acima da transcrição: cada locutor tem um cartão.
+2. Em cada cartão, use **Ligar a pessoa** e escolha a pessoa na lista. Comece a digitar o nome para filtrar.
 3. A pessoa ainda não está cadastrada? Use **Cadastrar** direto na lista: basta o nome.
 
 O vínculo passa a valer na hora, em todas as falas daquele locutor.
