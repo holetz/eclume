@@ -54,8 +54,10 @@ export function situacao(item) {
     case "cancelled":
       return ESTADOS_SERVIDOR.cancelada;
     default: {
-      // Estado que este app não conhece (o servidor é mais novo): o rótulo do vocabulário, se já
-      // houver, senão "Precisa de você".
+      // A etapa `speakers` em `waiting` (contrato 2.22.0) chega aqui como alerta: "Aguardando
+      // locutores", com o link para o web. Outro estado que este app não conhece (o servidor é mais
+      // novo): o rótulo do vocabulário, se já houver, senão "Precisa de você".
+      if (item.stage === "speakers" && item.detail === "waiting") return ESTADOS_SERVIDOR.aguardando_locutores;
       const conhecido = ESTADOS_SERVIDOR[item.detail]?.rotulo;
       return { rotulo: conhecido ?? "Precisa de você", tom: "warning" };
     }

@@ -225,7 +225,9 @@ fetched_at, error }`; a janela só aplica os rótulos do vocabulário
 - **O desconhecido é intervenção, de propósito.** Um estado novo do servidor — como o
   "aguardando locutores" — chega como texto e vira "Precisa de você" com o código, o motivo e
   **Abrir no web**, sem versão nova do app; quando o vocabulário compartilhado ganha o rótulo, a
-  janela passa a mostrá-lo.
+  janela passa a mostrá-lo. É o caso da etapa `speakers` em `waiting` (contrato 2.22.0): o Rust a
+  segue classificando como alerta `needs_you`, e o painel a rotula **Aguardando locutores**, em tom
+  de aviso, com o motivo e **Abrir no web**.
 - **Copiar resumo** (`copy_summary`): lê `Client::current_summary` (o mesmo do aviso e da pasta
   sincronizada) e escreve o `content_md` com o `tauri-plugin-clipboard-manager` — o mesmo Markdown
   do "Copiar" da notificação. Sem resumo concluído, o erro "O resumo ainda não está pronto" volta à

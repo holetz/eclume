@@ -704,6 +704,23 @@ mod tests {
     }
 
     #[test]
+    fn locutores_aguardando_viram_alerta_com_a_etapa_e_o_motivo() {
+        let etapa = classify(&com_etapas(
+            remota("w", "transcribed"),
+            vec![
+                step("transcription", "done", None),
+                step("speakers", "waiting", Some("unnamed_speakers")),
+                step("summary", "pending", None),
+            ],
+        ));
+        assert_eq!(etapa.phase, Phase::Unknown);
+        assert_eq!(etapa.attention, Some(Attention::NeedsYou));
+        assert_eq!(etapa.stage.as_deref(), Some("speakers"));
+        assert_eq!(etapa.detail.as_deref(), Some("waiting"));
+        assert_eq!(etapa.reason.as_deref(), Some("unnamed_speakers"));
+    }
+
+    #[test]
     fn junta_a_fila_local_e_a_pagina_sem_duplicar_e_corta_em_n() {
         let fila = vec![
             local("l-gravando", Status::Recording, 500, None),

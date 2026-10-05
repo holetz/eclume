@@ -276,7 +276,8 @@
           attention: "needs_you",
           title: "Reunião com a diretoria",
           stage: "speakers",
-          detail: "awaiting_speakers",
+          detail: "waiting",
+          reason: "unnamed_speakers",
         }),
         recente("srv-s", { phase: "summary_failed", attention: "summary_failed", title: "1:1 com a Bia" }),
         recente("srv-q", {

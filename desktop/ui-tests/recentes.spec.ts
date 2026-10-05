@@ -57,13 +57,13 @@ test('o painel Recentes fica no topo com as 5 últimas, o estado, o progresso e 
   await expect(linha(page, 'srv-r').locator('svg')).toHaveCount(1)
 })
 
-test('estado desconhecido, como aguardando locutores, vira "Precisa de você" com o link para o web', async ({ abrir }) => {
+test('aguardando locutores (etapa speakers em waiting) é alerta com o link para o web', async ({ abrir }) => {
   const page = await abrir('recentes')
   const desconhecido = linha(page, 'srv-l')
   await expect(desconhecido).toHaveClass(/recente-alerta/)
-  await expect(desconhecido.locator('.badge')).toHaveText('Precisa de você')
+  await expect(desconhecido.locator('.badge')).toHaveText('Aguardando locutores')
   await expect(desconhecido.locator('.badge')).toHaveClass(/badge-warning/)
-  await expect(desconhecido.locator('.recente-detalhe')).toContainText('awaiting_speakers')
+  await expect(desconhecido.locator('.recente-detalhe')).toContainText('Locutores: aguardando você')
   await expect(desconhecido.locator('.recente-detalhe')).toContainText('resolva no web')
   await desconhecido.getByRole('button', { name: 'Abrir no web' }).click()
   await expect.poll(async () => (await estado(page)).gravacaoAberta).toBe('srv-l')
