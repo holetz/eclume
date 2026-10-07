@@ -675,8 +675,10 @@ mod tests {
         let queue = Queue::open_in_memory().unwrap();
         // Uma fonte que nunca entrega (monitor suspenso) não trava a gravação.
         let silent = ScriptedSource::new(48_000, std::iter::repeat_n(Some(Vec::new()), 10_000));
+        // As fontes de teste não são cadenciadas: com 30 s de tom, um runner rápido consumia tudo
+        // antes do `stop` e a parada saía como `SourcesEnded`. Uma hora não acaba nos 100 ms.
         let sources: Vec<Box<dyn AudioSource>> = vec![
-            Box::new(SineSource::new(16_000, 440.0, 0.3, Duration::from_secs(30))),
+            Box::new(SineSource::new(16_000, 440.0, 0.3, Duration::from_secs(3600))),
             Box::new(silent),
         ];
         let active = start(
