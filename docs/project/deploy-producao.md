@@ -472,7 +472,11 @@ deduplicação valer na cópia.
 
 Os dumps só existem em claro numa pasta temporária durante a rodada; fica em claro só o espelho do
 bucket (as gravações já estão no MinIO do mesmo disco). Retenção: **7 diários** (`MANTER`,
-`forget --keep-daily 7 --prune`) nos dois repositórios. **Janela de exclusão:** uma gravação
+`forget --keep-daily 7` todo dia e `prune` só aos domingos, o `--prune` do mesmo `forget`) nos dois
+repositórios. O host também é CI e staging, então todo contêiner do backup leva `--cpu-shares 256`
+e `GOMAXPROCS=1` (restic e mc) e o `restic backup` lê com `--read-concurrency 1`; o `backup.sh`
+passa `backup.log` e `ensaio.log` para `<nome>.log.1` ao chegarem a 5 MB (`ECLUME_LOG_MAX_KB`),
+guardando uma geração. **Janela de exclusão:** uma gravação
 excluída some do bucket na hora, mas sobrevive nos snapshots — local e fora do host — por até 7
 dias, e nos dumps `pre-deploy/` pelo tempo que eles ficarem. Cada etapa grava
 `estado/backup.json`, `estado/fora.json` e `estado/ensaio.json` (`ok`, `at`, `detalhe`), que o
@@ -486,6 +490,17 @@ restaurados contra `estado/secrets.sha256`, a impressão digital da raiz restaur
 `downloads/eclume-root.crt`, o `content_hash` de um lote de 20 áudios restaurados e
 `restic check --read-data-subset` de 1/7 rotativo do repositório fora. Sai sempre com `down -v`;
 recusa com o disco em 90% ou mais. Falha deixa `estado/ensaio.json` com `ok: false` e o motivo.
+
+O ensaio é **proporcional**. Aos domingos (ou com `ECLUME_ENSAIO_DIA=7`) é o **completo**: o
+snapshot inteiro, o lote de áudios conferido sobre o bucket restaurado e o smoke de resumo e chat
+(que gasta a cota do Claude). Nos outros dias é o **parcial**: restaura só `pg/`, `secrets/` e
+`caddy/` mais os áudios do lote, sorteado no banco restaurado, e roda o smoke `--somente-leitura`;
+o `estado/ensaio.json` diz "ensaio parcial". As imagens `eclume-server:<sha>` e `eclume-web:<sha>`
+(ou `eclume-edge:<sha>`) que o deploy reteve para o SHA do `main` são reaproveitadas, sem build; só o
+que falta é construído (e, no completo, a retida do server precisa do `claude`, senão o server é
+reconstruído). Todo contêiner do staging leva `--cpu-shares 256` (os serviços, por um
+`~/eclume-staging/cpu-shares.yml` gerado a cada execução) e o restic e o mc, `GOMAXPROCS=1`. O
+`subir` é sempre a restauração completa.
 
 ```bash
 ssh holetz@192.168.15.199 /srv/eclume/bin/backup.sh                    # backup agora
