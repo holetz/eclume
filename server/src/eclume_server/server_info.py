@@ -10,7 +10,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.serialization import Encoding
 
 from eclume_server import __version__
-from eclume_server.routes.auth import CONTRACT_VERSION
+from eclume_server.contract import CONTRACT_VERSION
 
 if TYPE_CHECKING:
     from eclume_server.config import Settings

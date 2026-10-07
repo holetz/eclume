@@ -36,6 +36,11 @@ def test_cli_so_importa_o_ramo_que_roda():
     assert {m for m in (*PESADOS, "boto3", "argon2") if m in modulos} == set()
 
 
+def test_worker_nao_importa_provider_nem_docx_nem_fastapi():
+    modulos = _modulos_depois_de("import eclume_server.worker")
+    assert {m for m in ("anthropic", "docx", "fastapi", "zeroconf") if m in modulos} == set()
+
+
 def test_sonda_sem_argumentos_ou_com_verbo_errado_sai_2(capsys: pytest.CaptureFixture[str]):
     assert sonda.main([]) == 2
     assert sonda.main(["fila"]) == 2

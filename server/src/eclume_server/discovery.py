@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from zeroconf import ServiceInfo, ServiceStateChange
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
 
-from eclume_server.routes.auth import CONTRACT_VERSION
+from eclume_server.contract import CONTRACT_VERSION
 from eclume_server.server_info import ca_sha256
 
 if TYPE_CHECKING:
