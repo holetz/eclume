@@ -43,6 +43,8 @@ import hashlib
 import http.cookiejar
 import json
 import os
+import select
+import socket
 import ssl
 import sys
 import time
@@ -75,6 +77,7 @@ class Api:
         self.base = base.rstrip("/")
         self.jar = http.cookiejar.CookieJar()
         context = ssl.create_default_context(cafile=ca)
+        self.context = context
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.jar)
         )
@@ -97,6 +100,53 @@ class Api:
                 return response.status, response.headers, response.read()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.headers, exc.read()
+
+    def oversized(self, path: str, size: int) -> int:
+        """Status de um POST de `size` bytes que o proxy recusa no meio do envio.
+
+        O Caddy responde 413 e fecha a conexão sem ler o resto do corpo: o `urllib`, que só lê a
+        resposta depois de enviar tudo, vê a conexão cair. Aqui o envio e a leitura se alternam num
+        socket não bloqueante, como faz o curl, e o envio para quando a resposta chega ou o proxy
+        fecha. Sem status lido, 0.
+        """
+        parts = urllib.parse.urlsplit(self.base)
+        host, port = parts.hostname or "", parts.port or 443
+        head = (
+            f"POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\n"
+            f"Content-Length: {size}\r\nConnection: close\r\n\r\n"
+        ).encode()
+        chunk = b" " * 65536
+        received = b""
+        sent = 0
+        with self.context.wrap_socket(socket.create_connection((host, port), timeout=30), server_hostname=host) as tls:
+            tls.sendall(head)
+            tls.setblocking(False)  # noqa: FBT003 — a API do socket é posicional
+            deadline = time.monotonic() + 60
+            while b"\r\n" not in received and time.monotonic() < deadline:
+                try:
+                    data = tls.recv(65536)
+                except (ssl.SSLWantReadError, BlockingIOError):
+                    data = None
+                except OSError:
+                    break
+                if data == b"":
+                    break
+                if data:
+                    received += data
+                    continue
+                if sent < size:
+                    try:
+                        sent += tls.send(chunk[: size - sent])
+                    except (ssl.SSLWantWriteError, BlockingIOError):
+                        select.select([tls], [tls], [], 0.05)
+                    except OSError:
+                        sent = size  # o proxy fechou a escrita: só falta ler a resposta
+                else:
+                    select.select([tls], [], [], 0.5)
+        try:
+            return int(received.split(b" ", 2)[1])
+        except (IndexError, ValueError):
+            return 0
 
     def json(
         self, method: str, url: str, payload: dict[str, Any] | None = None, expect: tuple[int, ...] = (200,)
@@ -174,7 +224,7 @@ def _body_limits(api: Api) -> None:
     status, headers, body = api.raw("POST", "/api/v1/auth/login", b" " * (65 * 1024), json_type)
     if status != 413 or b"payload_too_large" not in body:  # noqa: PLR2004
         _fail(f"login com 65 KiB → {status} {headers.get('Content-Type')}: {body[:200]!r}")
-    status, _, _ = api.raw("POST", "/api/v1/recordings", b" " * (10 * 1024 * 1024), json_type)
+    status = api.oversized("/api/v1/recordings", 10 * 1024 * 1024)
     if status != 413:  # noqa: PLR2004
         _fail(f"corpo de 10 MiB na API → {status}, esperado 413 do Caddy de borda")
 
