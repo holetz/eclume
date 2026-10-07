@@ -4,7 +4,7 @@ import { errorMessage } from '../../api/problem'
 import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
 import { formatDuration, labelOf, SERVICE_STATUS, SERVICES, STEP_ORDER, STEPS } from './labels'
-import { HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
+import { HEALTH_MAX_REFRESH_MS, HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
 import { formatDateTime } from '../../shared/format'
 
 type Health = Schemas['AdminHealth']
@@ -28,7 +28,7 @@ export function HealthPage() {
         actions={
           data && (
             <span className={`text-muted tabular ${styles.note}`} aria-live="polite">
-              Atualizado às {clock.format(new Date(data.checked_at))} · a cada {HEALTH_REFRESH_MS / 1000} s
+              Atualizado às {clock.format(new Date(data.checked_at))} · a cada {HEALTH_REFRESH_MS / 1000} a {HEALTH_MAX_REFRESH_MS / 1000} s
             </span>
           )
         }

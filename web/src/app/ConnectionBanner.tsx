@@ -1,8 +1,10 @@
 import { onlineManager } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
+import { backoffDelay } from './polling'
 import { useMe } from './session'
 
-const RETRY_MS = 10_000
+export const RETRY_MS = 10_000
+export const RETRY_MAX_MS = 60_000
 
 function useOnline() {
   return useSyncExternalStore(
@@ -14,7 +16,7 @@ function useOnline() {
 /**
  * A faixa de conexão no topo do shell: sem rede, ou com `/me` falhando sobre a sessão em cache.
  * Consultas e mutações já pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só
- * dá o motivo e, com rede mas servidor fora, relê `/me` até ele voltar.
+ * dá o motivo e, com rede mas servidor fora, relê `/me` até ele voltar, a cada 10 s e dobrando até 60 s.
  */
 export function ConnectionBanner() {
   const online = useOnline()
@@ -24,8 +26,23 @@ export function ConnectionBanner() {
 
   useEffect(() => {
     if (!online || !serverDown) return
-    const timer = window.setInterval(() => refetch(), RETRY_MS)
-    return () => window.clearInterval(timer)
+    // Servidor fora: 10 s, dobrando a cada tentativa que falha até 60 s.
+    let attempt = 0
+    let stopped = false
+    let timer: number
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        void refetch().finally(() => {
+          attempt += 1
+          if (!stopped) schedule()
+        })
+      }, backoffDelay(RETRY_MS, RETRY_MAX_MS, attempt))
+    }
+    schedule()
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
   }, [online, serverDown, refetch])
 
   if (online && !serverDown) return null
