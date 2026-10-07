@@ -14,7 +14,8 @@
 #   falhas     3 ou mais falhas em 24 h, ou qualquer `provider_auth`
 #   token      token do Claude vencendo em VIGIA_TOKEN_DIAS (30) dias ou menos; validade
 #              desconhecida avisa uma vez só
-#   gpu        nvidia-smi falhando ou heartbeat do worker GPU ausente
+#   gpu        nvidia-smi falhando ou heartbeat do worker GPU ausente em duas rodadas seguidas (o
+#              reinício limpo do reciclo ocioso, #149, apaga o heartbeat por alguns segundos)
 #   saude      `eclume-server saude --json` sem resposta (server fora)
 # Cada alerta sai uma vez, repete a cada VIGIA_REPETIR_HORAS (6) h enquanto durar e manda aviso de
 # volta ao normal. --simular imprime o que mandaria, sem mandar nem gravar estado.
@@ -149,5 +150,13 @@ fi
 # --- GPU ------------------------------------------------------------------------------------------
 gpu_ok=1
 nvidia-smi > /dev/null 2>&1 || gpu_ok=0
-condicao gpu "$(( gpu_ok == 0 || worker == 0 ))" \
-  "$([[ $gpu_ok == 0 ]] && echo 'nvidia-smi falhou; ')$([[ $worker == 0 ]] && echo 'sem heartbeat do worker GPU')"
+# O worker GPU recicla o processo após a descarga ociosa (#149): o heartbeat some por alguns segundos
+# num reinício limpo. Só a ausência em duas rodadas seguidas conta; o nvidia-smi falho alerta já.
+sem_hb=0
+if [[ "$worker" == 0 ]]; then
+  sem_hb=$(( $(cat "$VIGIA/gpu.rodadas" 2>/dev/null || echo 0) + 1 ))
+fi
+[[ -n "$SIMULAR" ]] || echo "$sem_hb" > "$VIGIA/gpu.rodadas"
+[[ -n "$SIMULAR" && "$worker" == 0 ]] && sem_hb=2
+condicao gpu "$(( gpu_ok == 0 || sem_hb >= 2 ))" \
+  "$([[ $gpu_ok == 0 ]] && echo 'nvidia-smi falhou; ')$([[ $sem_hb -ge 2 ]] && echo 'sem heartbeat do worker GPU')"

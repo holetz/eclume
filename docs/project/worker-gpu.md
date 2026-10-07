@@ -188,6 +188,7 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
 | `ECLUME_DEVICE` | `cuda` | dispositivo do torch e do CTranslate2 |
 | `ECLUME_BATCH_SIZE` | vazio | lote inicial fixo do ASR; vazio, vem da VRAM livre |
 | `ECLUME_MODEL_IDLE_SECONDS` | `300` | descarrega os modelos após esse tempo sem job |
+| `ECLUME_RECYCLE_ON_IDLE` | `1` | após a descarga ociosa, encerra o processo se o torch foi importado (o contêiner sobe de novo sem ele); `0` mantém o processo |
 | `ECLUME_KEEP_ASR_RESIDENT` | `1` | mantém o ASR carregado entre as etapas e entre jobs; `0` volta a um modelo por vez |
 | `ECLUME_RESIDENT_MIN_FREE_MB` | `2500` | VRAM livre mínima, com o ASR carregado, para ele ficar ao carregar o alinhador ou o pyannote |
 | `ECLUME_JOB_TIMEOUT_SECONDS` | `21600` | limite de um job (6 h) |
@@ -208,6 +209,18 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
   de `ECLUME_MODEL_IDLE_SECONDS` sem job, o worker descarrega tudo e fica só com o contexto CUDA
   (~120 MiB). `python -m eclume_worker.bench <áudio> --repeat 3` mede jobs seguidos na mesma
   engine (`runs_s`), e `--single-slot` o comportamento de um modelo por vez.
+- **Reciclo do processo na ociosidade.** Descarregar os modelos devolve a VRAM, mas o processo
+  seguia com ~4,4 GB de memória anônima (torch, CTranslate2, pyannote e as arenas do glibc) e com
+  ~150 MiB de VRAM do contexto CUDA (medido em 2026-10-06). Por isso, logo após a descarga
+  ociosa, se `torch` está em `sys.modules` e não há job em curso, o worker loga "reciclando o
+  processo para devolver a memória" com a RSS do momento e envia `SIGTERM` a si mesmo: o arq para
+  de pegar jobs, roda o `shutdown` (retira o heartbeat) e sai; o `restart: unless-stopped` sobe um
+  processo novo que não importa torch até o próximo job (o `healthcheck.start_period` cobre a
+  volta). Um processo leve, que nunca importou torch, não reinicia. O custo é recarregar os
+  modelos no job seguinte à ociosidade, que já era o caso depois da descarga. Complementam
+  `MALLOC_ARENA_MAX=2` na imagem e `poll_delay` de 2 s no arq. O `vigia.sh` não alerta esse
+  reinício: o contêiner só conta como ruim em duas rodadas seguidas, e o heartbeat ausente
+  também.
 - **Falta de memória.** Um OOM no ASR corta o lote pela metade até 1. Se ainda faltar, o modelo
   cai para `medium` (aviso `fallback_medium`). Esgotado isso, o job falha com `out_of_memory`.
 - **Disco.** O host tem pouco espaço livre. Confira `df -h /` antes de um build, e, depois de

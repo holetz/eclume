@@ -155,6 +155,23 @@ def test_numeros_da_aplicacao(host: Host) -> None:
     assert "12 dia" in saida
 
 
+def test_reinicio_limpo_do_worker_gpu_nao_alerta(host: Host) -> None:
+    """O reciclo ocioso (#149) apaga o heartbeat por segundos: uma rodada sem ele não alerta, duas sim."""
+    host.conteineres = "worker-gpu restarting Restarting (0) 2 seconds ago\n" + CONTEINERES_OK
+    host.saude = {**SAUDE_OK, "health": {"worker": None}}
+    host.rodar()
+    assert host.alertas() == []
+    host.saude = SAUDE_OK
+    host.conteineres = "worker-gpu running Up 3 seconds (health: starting)\n" + CONTEINERES_OK
+    host.rodar()
+    host.saude = {**SAUDE_OK, "health": {"worker": None}}
+    host.rodar()
+    assert host.alertas() == []
+    host.rodar()
+    assert "ALERTA gpu" in host.alertas()[0]
+    assert "sem heartbeat" in host.alertas()[0]
+
+
 def test_token_sem_data_avisa_uma_vez(host: Host) -> None:
     """Token só no env: aviso de validade desconhecida uma vez só."""
     host.saude = {**SAUDE_OK, "claude_token": {"status": "unknown", "days_left": None}}
