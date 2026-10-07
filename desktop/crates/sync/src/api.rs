@@ -307,6 +307,18 @@ pub struct LibraryRecording {
 }
 
 impl LibraryRecording {
+    /// Se a gravação mudou em `since` ou depois (`updated_at >= since`, como o servidor compara).
+    /// Sem `updated_at` legível, conta como mudada: reler é barato, perder uma mudança não é.
+    pub fn updated_since(&self, since: &str) -> bool {
+        match (
+            self.updated_at.as_deref().and_then(instant_ms),
+            instant_ms(since),
+        ) {
+            (Some(updated), Some(since)) => updated >= since,
+            _ => true,
+        }
+    }
+
     /// Estado da etapa `summary` do pipeline, quando a gravação a tem.
     pub fn summary_state(&self) -> Option<&str> {
         self.summary_step().map(|step| step.state.as_str())
@@ -393,6 +405,20 @@ pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<Strin
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string()
         })
+}
+
+/// Um instante RFC 3339 em milissegundos desde a época Unix; `None` se o texto não é uma data.
+/// Compara datas de verdade: como texto, "…:05Z" vem depois de "…:05.5Z".
+pub fn instant_ms(text: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(text)
+        .ok()
+        .map(|at| at.timestamp_millis())
+}
+
+/// Se uma leitura feita com `?since=cached` já traz tudo o que uma com `?since=wanted` traria
+/// (`cached <= wanted`). Texto que não é data nunca cobre.
+pub fn since_covers(cached: &str, wanted: &str) -> bool {
+    matches!((instant_ms(cached), instant_ms(wanted)), (Some(cached), Some(wanted)) if cached <= wanted)
 }
 
 /// Um instante em milissegundos desde a época Unix como RFC 3339 (UTC), para um `?since=`.
@@ -528,5 +554,32 @@ mod tests {
         );
         assert_eq!(cursor_from(&[at(None)], 120), None);
         assert_eq!(cursor_from(&[], 120), None);
+    }
+
+    #[test]
+    fn since_cobre_comparando_datas_e_updated_since_filtra_pelo_instante() {
+        assert!(since_covers(
+            "2026-09-19T10:00:00Z",
+            "2026-09-19T10:00:00.500000Z"
+        ));
+        assert!(since_covers("2026-09-19T10:00:00Z", "2026-09-19T10:00:00Z"));
+        // Como texto, "…:05Z" > "…:05.5Z"; como data, a segunda é maior.
+        assert!(since_covers(
+            "2026-09-19T10:00:05Z",
+            "2026-09-19T10:00:05.500000Z"
+        ));
+        assert!(!since_covers(
+            "2026-09-19T10:00:06Z",
+            "2026-09-19T10:00:05Z"
+        ));
+        assert!(!since_covers("lixo", "2026-09-19T10:00:05Z"));
+        assert!(!since_covers("2026-09-19T10:00:05Z", "lixo"));
+
+        let mut item = at(Some("2026-09-19T10:00:05.500000Z"));
+        assert!(item.updated_since("2026-09-19T10:00:05Z"));
+        assert!(!item.updated_since("2026-09-19T10:00:06Z"));
+        // Sem `updated_at` legível, conta como mudada.
+        item.updated_at = None;
+        assert!(item.updated_since("2026-09-19T10:00:06Z"));
     }
 }

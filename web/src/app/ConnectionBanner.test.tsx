@@ -45,4 +45,37 @@ describe('faixa de conexão', () => {
     await act(() => client.refetchQueries({ queryKey: ME_KEY }))
     await waitFor(() => expect(screen.queryByText(BANNER)).not.toBeInTheDocument())
   })
+
+  it('com o servidor fora, tenta de novo a cada 10 s e dobra até 60 s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let down = false
+      const http = mockShell(() => (down ? problem('unavailable', 503) : fixtures.me()))
+      const { client } = renderApp('/ajuda')
+      await screen.findByRole('navigation', { name: 'Principal' })
+
+      down = true
+      await act(() => client.refetchQueries({ queryKey: ME_KEY }))
+      expect(await screen.findByText(BANNER)).toBeInTheDocument()
+      const reads = () => http.requests('GET /api/v1/me').length
+      const base = reads()
+      const after = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+      await after(9_000)
+      expect(reads()).toBe(base)
+      await after(1_000)
+      expect(reads()).toBe(base + 1)
+      await after(19_000)
+      expect(reads()).toBe(base + 1)
+      await after(1_000)
+      expect(reads()).toBe(base + 2)
+      await after(40_000)
+      expect(reads()).toBe(base + 3)
+      await after(60_000)
+      expect(reads()).toBe(base + 4)
+      await after(60_000)
+      expect(reads()).toBe(base + 5)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

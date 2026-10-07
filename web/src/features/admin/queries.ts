@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { backoffWhileUnchanged } from '../../app/polling'
 
 const SETTINGS_KEY = ['admin', 'settings'] as const
 export const PROVIDERS_KEY = ['admin', 'agent-providers'] as const
@@ -10,8 +11,16 @@ const USERS_KEY = ['admin', 'users'] as const
 const HEALTH_KEY = ['admin', 'health'] as const
 const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
 
-// Alinhado ao heartbeat de 15 s do worker GPU.
+// O ritmo inicial é o do heartbeat de 15 s do worker GPU; sem mudança, dobra até 60 s.
 export const HEALTH_REFRESH_MS = 15_000
+export const HEALTH_MAX_REFRESH_MS = 60_000
+
+/** Os dados da Saúde sem o que oscila a cada leitura (relógio, latência, uso da GPU). */
+const healthSignature = (data: Schemas['AdminHealth']) =>
+  JSON.stringify(data, (key, value) =>
+    ['checked_at', 'latency_ms', 'utilization_pct', 'vram_used_mb'].includes(key) ? undefined : value,
+  )
+const healthInterval = backoffWhileUnchanged(HEALTH_REFRESH_MS, HEALTH_MAX_REFRESH_MS, healthSignature)
 
 export function useAdminSettings() {
   return useQuery({ queryKey: SETTINGS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/settings')) })
@@ -110,8 +119,10 @@ export function useAdminHealth() {
   return useQuery({
     queryKey: HEALTH_KEY,
     queryFn: () => unwrap(api.GET('/api/v1/admin/health')),
-    refetchInterval: HEALTH_REFRESH_MS,
+    refetchInterval: healthInterval,
     refetchIntervalInBackground: false,
+    // Voltar para a aba lê na hora e recomeça o recuo do ritmo inicial.
+    refetchOnWindowFocus: true,
     staleTime: 0,
   })
 }

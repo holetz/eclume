@@ -26,9 +26,11 @@ function mockLibrary() {
   })
 }
 
-/** A query da última consulta da semana. */
+/** A query da última consulta da semana (as leituras incrementais `?since=` ficam de fora). */
 function lastQuery(http: ReturnType<typeof mockFetch>): URLSearchParams {
-  const requests = http.requests('GET /api/v1/recordings')
+  const requests = http
+    .requests('GET /api/v1/recordings')
+    .filter((request) => !new URL(request.url).searchParams.has('since'))
   return new URL(requests[requests.length - 1].url).searchParams
 }
 
@@ -124,8 +126,12 @@ describe('painel de filtros', () => {
 
     expect(within(panel).getByRole('heading', { name: /Filtros/ })).toHaveTextContent('Filtros8')
     await user.click(within(panel).getByRole('button', { name: 'Limpar filtros' }))
-    await waitFor(() => expect(lastQuery(http).has('kind')).toBe(false))
-    const query = lastQuery(http)
+    // A consulta sem filtros já estava em cache: a prova é o painel zerado e a requisição limpa de antes.
+    await waitFor(() => expect(within(panel).getByRole('heading', { name: /Filtros/ })).toHaveTextContent(/^Filtros$/))
+    const query = http
+      .requests('GET /api/v1/recordings')
+      .map((request) => new URL(request.url).searchParams)
+      .find((params) => params.has('from') && !params.has('kind') && !params.has('since'))!
     expect([...query.keys()].sort()).toEqual(['from', 'limit', 'sort', 'to'])
     expect(query.get('from')).toBe('2026-09-21T03:00:00.000Z')
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()

@@ -2,6 +2,7 @@ import { focusManager } from '@tanstack/react-query'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { recordingState } from '../../shared/format'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch, problem } from '../../test/http'
 import { renderApp } from '../../test/render'
@@ -307,6 +308,34 @@ describe('filtros e restauração da biblioteca', () => {
     await userEvent.click(tag)
     await waitFor(() => expect(tag).toHaveAttribute('aria-pressed', 'false'))
     await waitFor(() => expect(localStorage.getItem(LAST)).toBeNull())
+  })
+})
+
+describe('releitura incremental com gravação em andamento', () => {
+  it('lê só o que mudou por ?since= e grava no cache, sem reler o período inteiro', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 8, 26, 11, 12))
+    const page = fixtures.recordingWeekPage()
+    const busy = page.items.find((item) => recordingState(item).state === 'busy')!
+    const finished = { ...fixtures.recordingTranscribed(), id: busy.id, title: 'Já terminou', recorded_at: busy.recorded_at }
+    const http = mockLibrary((request) =>
+      new URL(request.url).searchParams.has('since') ? { items: [finished], next_cursor: null } : page,
+    )
+    renderApp(WEEK)
+    await screen.findByText('21–27 de setembro de 2026')
+    const ranged = () => http.requests('GET /api/v1/recordings').filter((r) => new URL(r.url).searchParams.has('from'))
+    await waitFor(() => expect(ranged()).toHaveLength(1))
+
+    await act(() => vi.advanceTimersByTimeAsync(3_000))
+    await waitFor(() => expect(ranged()).toHaveLength(2))
+    const incremental = new URL(ranged()[1].url).searchParams
+    expect(incremental.get('since')).toMatch(/^2026-/)
+    expect(incremental.get('sort')).toBe('recorded_asc')
+    expect(await screen.findByRole('link', { name: /Já terminou/ })).toBeInTheDocument()
+
+    // Nada mais em andamento: sem novas leituras.
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    expect(ranged()).toHaveLength(2)
   })
 })
 

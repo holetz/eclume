@@ -4,10 +4,10 @@ title: Estrutura do app web
 description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-10-05
+timestamp: 2026-10-06
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143, holetz/eclume#142, holetz/eclume#145
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143, holetz/eclume#142, holetz/eclume#145, holetz/eclume#153
 maintainer: holetz
 ---
 
@@ -53,7 +53,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Faixa de conexão** (`ConnectionBanner`, no topo do `AppShell`): sem rede (`onlineManager`) ou
   com `/me` falhando sobre a sessão em cache, um `.alert-warning` com `role="status"` diz "Sem
   conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…", relê
-  `/me` a cada 10 s enquanto o servidor não responde e some sozinha. Consultas e mutações já
+  `/me` a cada 10 s, dobrando a cada falha até 60 s, enquanto o servidor não responde, e some sozinha. Consultas e mutações já
   pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só dá o motivo.
 - **O que é de uma conta não atravessa para outra** (`app/accountScope.ts`): a aba guarda o id da
   última conta (`eclume-conta` no `sessionStorage`, marcado pelo login, pelo cadastro e pela
@@ -312,9 +312,19 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
 - **Estado de servidor com TanStack Query.** O polling de espera é declarativo e tem um ritmo só
   (`app/polling.ts`, `pollWhile(estáEsperando, inicial)`): o intervalo inicial (2–3 s) nos
   primeiros 2 min de espera, depois dobrando a cada minuto até 30 s, e nada com a consulta em
-  `error`; voltar para a aba ou a rede voltar recomeçam do inicial. Vale para biblioteca,
-  gravação, resumo, chat da gravação, chat da base, pré-visualização e código de vínculo; a Saúde
-  do admin fica fora (15 s por desenho). O padrão global é `refetchOnWindowFocus: false`; as
+  `error`; voltar para a aba ou a rede voltar recomeçam do inicial. Vale para gravação, resumo,
+  chat da gravação, chat da base, pré-visualização e código de vínculo. Três leituras têm ritmo
+  próprio (holetz/eclume#153), todas com recuo exponencial (`backoffDelay`, `app/polling.ts`):
+  a **biblioteca** (período e lista) mantém o `pollDelay` (3 s de início, até 30 s), mas com
+  gravação em andamento lê só `GET /recordings?since=` (maior `updated_at` do cache menos
+  `SINCE_MARGIN_MS`, 60 s, com os mesmos `from`/`to`/filtros) e mescla por id no cache com
+  `setQueryData` — no período entram também as novas, na lista só as que já estavam; a releitura
+  completa fica para o foco, a volta da rede e a cada `FULL_EVERY` (20) leituras incrementais
+  (que pega a gravação apagada); a **Saúde do admin** parte de `HEALTH_REFRESH_MS` (15 s) e dobra a
+  cada leitura sem mudança até `HEALTH_MAX_REFRESH_MS` (60 s), comparando os dados sem relógio,
+  latência e uso da GPU (`backoffWhileUnchanged`), recomeçando ao mudar, ao voltar para a aba
+  (que também relê na hora) ou à rede; a **faixa de conexão** tenta `/me` a cada `RETRY_MS` (10 s)
+  dobrando a cada falha até `RETRY_MAX_MS` (60 s). O padrão global é `refetchOnWindowFocus: false`; as
   gravações (período, lista, gravação), o estado do resumo e o histórico do chat ligam a releitura
   no foco, para uma gravação do desktop ou do celular aparecer sem recarregar. Formulários
   (Campos, Tipos de agenda, Conta) não são relidos debaixo de quem edita. Mutações gravam no cache o que a resposta
@@ -391,7 +401,8 @@ A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library 
 - **Consulta** (`queries.ts`): o período vai em `GET /recordings` com `from`, `to`,
   `sort=recorded_asc` e `limit=200`, seguindo o cursor até 5 páginas ("Mostrando as primeiras 1000
   gravações deste período"); a Lista usa `sort=recorded_desc` e `limit=50`. As duas releem a cada
-  3 s enquanto alguma gravação está em andamento.
+  3 s enquanto alguma gravação está em andamento, lendo só o que mudou (`?since=`, ver
+  "Estado de servidor com TanStack Query").
 - **Painel de filtros** à direita (`.with-filters` e `.filters`, recolhível até 48px): Tipo,
   Precisam de você ("Aguardando locutores", `precisa=locutores` na URL, que vira
   `awaiting=speakers`), Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
@@ -694,8 +705,13 @@ desce; abaixo de 56rem, os campos também):
   visão em que a biblioteca abre sem parâmetros (última usada, semana, mês ou lista) e a lista de
   atalhos de teclado, e o aviso do navegador (abaixo). "Restaurar os padrões" apaga tudo e volta o
   tema ao do sistema. Cada valor padrão apaga a própria chave em vez de gravá-la.
-- **Observador de desfechos** (`app/processingWatch.ts`, holetz/eclume#118): montado no
-  `AppShell` (só com sessão), lê a cada 30 s `GET /recordings?since=` (todas as páginas) e aplica a
+- **Observador de desfechos** (`app/processingWatch.ts`, holetz/eclume#118, ritmo em
+  holetz/eclume#153): montado no `AppShell` (só com sessão), lê a cada 30 s (`WATCH_MS`)
+  `GET /recordings?since=` (todas as páginas) — **só com a aba visível e numa aba por vez**: a aba
+  visível pede o lock `eclume-processing-watch` (Web Locks, `WATCH_LOCK`) e o segura até ocultar ou
+  fechar, quando ele passa para a próxima aba visível; sem `navigator.locks`, cada aba visível lê a
+  sua. Ao reaparecer a aba lê na hora e a marca d'água recupera o que terminou enquanto ela esteve
+  oculta (o aviso chega ao voltar, não durante). Aplica a
   regra do desfecho e a marca d'água do desktop
   ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), com
   os mesmos casos de teste: resumo pronto, resumo que falhou, pronta sem resumo (motivo pelo

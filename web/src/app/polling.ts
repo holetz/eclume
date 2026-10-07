@@ -46,3 +46,41 @@ export function pollWhile<T>(isWaiting: (data: T | undefined) => boolean, initia
     return pollDelay(initialMs, now - since)
   }
 }
+
+/** O recuo exponencial: `baseMs` dobrando a cada leitura sem mudança, até `maxMs`. */
+export function backoffDelay(baseMs: number, maxMs: number, unchanged: number): number {
+  return Math.min(maxMs, baseMs * 2 ** unchanged)
+}
+
+interface WatchedQuery<T> {
+  queryHash: string
+  state: { data: T | undefined; dataUpdatedAt: number }
+}
+
+/**
+ * O `refetchInterval` de uma consulta de estado de serviço (Saúde do admin): `baseMs` enquanto a
+ * `signature` dos dados muda, dobrando a cada leitura igual até `maxMs`. A `signature` deixa de fora o
+ * que oscila sempre (relógio, latência). Voltar para a aba ou a rede voltar recomeça do `baseMs`.
+ */
+export function backoffWhileUnchanged<T>(baseMs: number, maxMs: number, signature: (data: T) => string) {
+  const seen = new Map<string, { at: number; sig: string; unchanged: number }>()
+  let resetAt = 0
+  const reset = () => {
+    resetAt = Date.now()
+  }
+  focusManager.subscribe((focused) => focused && reset())
+  onlineManager.subscribe((online) => online && reset())
+  return (query: WatchedQuery<T>): number => {
+    const { data, dataUpdatedAt } = query.state
+    if (data === undefined) return baseMs
+    const known = seen.get(query.queryHash)
+    if (known?.at === dataUpdatedAt) {
+      // Mesma leitura (reagendamento sem dado novo): o intervalo não muda.
+      return backoffDelay(baseMs, maxMs, dataUpdatedAt < resetAt ? 0 : known.unchanged)
+    }
+    const sig = signature(data)
+    const unchanged = known && known.sig === sig && known.at >= resetAt ? known.unchanged + 1 : 0
+    seen.set(query.queryHash, { at: dataUpdatedAt, sig, unchanged })
+    return backoffDelay(baseMs, maxMs, unchanged)
+  }
+}

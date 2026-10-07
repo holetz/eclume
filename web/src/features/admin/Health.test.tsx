@@ -42,7 +42,7 @@ describe('Saúde', () => {
     renderApp('/admin/saude')
     expect(await screen.findByText('Transcrevendo')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Saúde' })).toBeInTheDocument()
-    expect(screen.getByText(/^Atualizado às \d\d:\d\d:\d\d · a cada 15 s$/)).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByText(/^Atualizado às \d\d:\d\d:\d\d · a cada 15 a 60 s$/)).toHaveAttribute('aria-live', 'polite')
 
     expect(within(stat('Worker GPU')).getByText('NVIDIA GeForce GTX 1660 SUPER · 6 GB')).toBeInTheDocument()
     expect(within(stat('Modelo residente')).getByText('large-v3-turbo')).toBeInTheDocument()
@@ -160,5 +160,39 @@ describe('Saúde', () => {
     await act(() => vi.advanceTimersByTimeAsync(15_000))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.getByText('Transcrevendo')).toBeInTheDocument()
+  })
+
+  it('sem mudança, o intervalo dobra de 15 s até 60 s; uma mudança volta aos 15 s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let queued = 0
+    const http = mockHealthApi(() => {
+      const health = fixtures.adminHealth()
+      health.queue.queued = queued
+      return health
+    })
+    renderApp('/admin/saude')
+    expect(await screen.findByText('Transcrevendo')).toBeInTheDocument()
+    const reads = () => http.requests('GET /api/v1/admin/health').length
+    const after = async (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+    await after(15_000)
+    expect(reads()).toBe(2)
+    await after(29_000)
+    expect(reads()).toBe(2)
+    await after(1_000)
+    expect(reads()).toBe(3)
+    await after(59_000)
+    expect(reads()).toBe(3)
+    await after(1_000)
+    expect(reads()).toBe(4)
+    await after(60_000)
+    expect(reads()).toBe(5)
+
+    // A fila mudou: a leitura seguinte já volta ao ritmo inicial.
+    queued = 7
+    await after(60_000)
+    expect(reads()).toBe(6)
+    await after(15_000)
+    expect(reads()).toBe(7)
   })
 })

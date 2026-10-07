@@ -1,7 +1,8 @@
 //! Laço de sync: a cada 30 s, ou quando cutucado (gravação encerrada, configurações salvas,
 //! "Sincronizar agora"), devolve à fila as falhas cujo backoff venceu, sobe as `pending` pelo
 //! `HttpUploader` e aplica a retenção — o arquivo local só sai depois da confirmação do servidor.
-//! Depois, no máximo a cada minuto, lê as gravações da conta que mudaram (`?since=`) e avisa o fim
+//! Depois, no máximo a cada minuto (a leitura `?since=` é repartida com as recentes e a pasta
+//! sincronizada, ver [`library_since`]), lê as gravações da conta que mudaram e avisa o fim
 //! do processamento de cada uma (resumo pronto, resumo que falhou, pronta sem resumo, transcrição
 //! que falhou), guarda o título que o servidor deu às enviadas daqui e a espera na fila delas.
 //! Com a CA fixada, a cada 6 h aprende a próxima raiz anunciada pelo descritor (rotação), e uma
@@ -16,7 +17,8 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use eclume_recorder::{now_ms, sync_pending, Queue, QueuedRecording, Status};
-use eclume_sync::{Client, Ended, HttpUploader, Outcome, Watermark};
+use eclume_sync::api::LibraryRecording;
+use eclume_sync::{Client, Ended, HttpUploader, Outcome, UploaderConfig, Watermark};
 use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
@@ -30,11 +32,88 @@ const OUTCOMES_EVERY_MS: i64 = 60 * 1000;
 const NOTIFIED_FILE: &str = "resumos-avisados.json";
 
 static LAST_OUTCOMES_CHECK: AtomicI64 = AtomicI64::new(0);
+/// Vida da leitura `?since=` repartida: um pouco menos de um minuto, para o laço do minuto seguinte
+/// já ler de novo em vez de reusar uma leitura velha.
+const SHARED_READ_TTL_MS: i64 = 55 * 1000;
 /// Intervalo entre duas leituras da próxima CA no descritor e a nova tentativa depois de uma falha.
 const NEXT_CA_EVERY_MS: i64 = 6 * 60 * 60 * 1000;
 const NEXT_CA_RETRY_MS: i64 = 10 * 60 * 1000;
 
 static LAST_NEXT_CA_CHECK: AtomicI64 = AtomicI64::new(0);
+
+/// A última leitura `?since=` da conta, de quem a fez primeiro no minuto.
+struct SharedRead {
+    /// De quem é: o endereço e a credencial, para a troca de conta não herdar a leitura do outro.
+    owner: u64,
+    since: String,
+    at_ms: i64,
+    items: Vec<LibraryRecording>,
+}
+
+static SHARED_READ: Mutex<Option<SharedRead>> = Mutex::new(None);
+
+fn owner_of(config: &UploaderConfig) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    config.api_url.hash(&mut hasher);
+    config.pat.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// O que a leitura guardada responde para `?since=wanted` de `owner` em `now`: as gravações dela
+/// com `updated_at >= wanted`, se ela é do mesmo dono, ainda é nova e foi lida com um `since` igual
+/// ou mais antigo (traz tudo o que a pedida traria). `None`: é preciso ler no servidor.
+fn shared_answer(
+    cached: Option<&SharedRead>,
+    owner: u64,
+    wanted: &str,
+    now: i64,
+) -> Option<Vec<LibraryRecording>> {
+    let cached = cached?;
+    let age = now - cached.at_ms;
+    if cached.owner != owner
+        || !(0..SHARED_READ_TTL_MS).contains(&age)
+        || !eclume_sync::api::since_covers(&cached.since, wanted)
+    {
+        return None;
+    }
+    Some(
+        cached
+            .items
+            .iter()
+            .filter(|item| item.updated_since(wanted))
+            .cloned()
+            .collect(),
+    )
+}
+
+/// `GET /recordings?since=`, uma leitura por minuto para quem precisa: o aviso de desfechos, as
+/// recentes e a pasta sincronizada pedem cada um o seu `since`, mas a leitura que um fez já traz o
+/// que os outros pediriam quando o `since` dela é igual ou mais antigo. Quem chega e não é coberto
+/// lê no servidor e deixa a sua (mais antiga) para os demais.
+pub fn library_since(
+    config: &UploaderConfig,
+    client: &Client,
+    since: &str,
+) -> Result<Vec<LibraryRecording>> {
+    let owner = owner_of(config);
+    let now = now_ms();
+    if let Ok(cached) = SHARED_READ.lock() {
+        if let Some(items) = shared_answer(cached.as_ref(), owner, since, now) {
+            return Ok(items);
+        }
+    }
+    let items = client.library(Some(since))?;
+    if let Ok(mut cached) = SHARED_READ.lock() {
+        *cached = Some(SharedRead {
+            owner,
+            since: since.to_string(),
+            at_ms: now,
+            items: items.clone(),
+        });
+    }
+    Ok(items)
+}
 
 /// Sem credencial, as gravações esperam o próximo login.
 fn sign_in_to_send(pending: u32) -> String {
@@ -160,7 +239,7 @@ fn check_outcomes(app: &AppHandle, state: &AppState) -> Result<()> {
     let client = Client::from_config(&config)?;
     let path = state.data_dir().join(NOTIFIED_FILE);
     let mut mark = load_mark(&path).unwrap_or_else(|| Watermark::starting_ms(now));
-    let items = client.library(Some(&mark.since))?;
+    let items = library_since(&config, &client, &mark.since)?;
     let ended = mark.take(&items);
     let mut changed = false;
     {
@@ -423,5 +502,69 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
         assert_eq!(apply_retention(&queue, Some(0), now_ms() + 1).unwrap(), 1);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn changed(id: &str, updated_at: &str) -> LibraryRecording {
+        LibraryRecording {
+            id: id.into(),
+            title: String::new(),
+            status: String::new(),
+            recorded_at: None,
+            created_at: None,
+            updated_at: Some(updated_at.into()),
+            collection_ids: vec![],
+            transcript_id: None,
+            agenda_type: None,
+            pipeline: vec![],
+            job: None,
+        }
+    }
+
+    fn shared(owner: u64, since: &str, at_ms: i64) -> SharedRead {
+        SharedRead {
+            owner,
+            since: since.into(),
+            at_ms,
+            items: vec![
+                changed("a", "2026-10-01T10:00:00Z"),
+                changed("b", "2026-10-01T10:05:00Z"),
+            ],
+        }
+    }
+
+    fn ids(items: Vec<LibraryRecording>) -> Vec<String> {
+        items.into_iter().map(|item| item.id).collect()
+    }
+
+    #[test]
+    fn leitura_repartida_responde_quem_pede_o_mesmo_since_ou_um_mais_novo() {
+        let cached = shared(1, "2026-10-01T09:58:00Z", 1_000_000);
+        let now = 1_000_000 + 30_000;
+        // Mais antigo ou igual ao pedido: serve, filtrando pelo `updated_at` do pedido.
+        assert_eq!(
+            ids(shared_answer(Some(&cached), 1, "2026-10-01T09:58:00Z", now).unwrap()),
+            ["a", "b"]
+        );
+        assert_eq!(
+            ids(shared_answer(Some(&cached), 1, "2026-10-01T10:03:00Z", now).unwrap()),
+            ["b"]
+        );
+        // Um `since` mais velho que o da leitura não está coberto.
+        assert!(shared_answer(Some(&cached), 1, "2026-10-01T09:00:00Z", now).is_none());
+        // Outra conta nunca herda a leitura.
+        assert!(shared_answer(Some(&cached), 2, "2026-10-01T10:03:00Z", now).is_none());
+        assert!(shared_answer(None, 1, "2026-10-01T10:03:00Z", now).is_none());
+    }
+
+    #[test]
+    fn leitura_repartida_vale_menos_de_um_minuto() {
+        let cached = shared(1, "2026-10-01T09:58:00Z", 1_000_000);
+        let since = "2026-10-01T10:00:00Z";
+        assert!(
+            shared_answer(Some(&cached), 1, since, 1_000_000 + SHARED_READ_TTL_MS - 1).is_some()
+        );
+        assert!(shared_answer(Some(&cached), 1, since, 1_000_000 + SHARED_READ_TTL_MS).is_none());
+        // Relógio que andou para trás: não confia na idade.
+        assert!(shared_answer(Some(&cached), 1, since, 999_999).is_none());
     }
 }
