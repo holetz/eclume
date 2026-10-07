@@ -359,3 +359,45 @@ def test_gate_sh_expoe_todos_e_o_host_decide_o_diff() -> None:
     assert "--todos) FORCAR_TODOS=1" in host
     assert "gate.py pilares --stdin" in host
     assert "--dispensados" in host
+
+
+# --- SHA superado, peso de CPU e poda -------------------------------------------------------------
+
+
+def _host() -> str:
+    return (RAIZ / "deploy" / "gate-host.sh").read_text(encoding="utf-8")
+
+
+def test_so_o_pre_push_abandona_sha_superado() -> None:
+    """O hook passa `--superavel` ao gate; o pedido à mão não, e o host só abandona com a flag."""
+    hook = (RAIZ / ".githooks" / "pre-push").read_text(encoding="utf-8")
+    sh = (RAIZ / "deploy" / "gate.sh").read_text(encoding="utf-8")
+    host = _host()
+    assert 'gate.sh" --fundo --superavel' in hook
+    assert "args+=(--superavel)" in sh
+    assert "--superavel) SUPERAVEL=1" in host
+    # Só a ponta à frente do SHA o supera; sem ler a ponta ou com o push em curso, o gate roda.
+    assert '"$SUPERAVEL" -eq 1' in host
+    assert "== ahead" in host
+    assert 'publicar error "superado por' in host
+    # A checagem vem depois da trava, para valer para o SHA que esperou a vez.
+    assert host.index("flock 9") < host.index('"$SUPERAVEL" -eq 1')
+
+
+def test_todo_conteiner_do_gate_leva_cpu_shares() -> None:
+    """Os pilares e os serviços de teste rodam com `--cpu-shares 256`, abaixo da produção."""
+    host = _host()
+    assert "CPU_SHARES=256" in host
+    assert '--cpu-shares "$CPU_SHARES"' in host
+    assert "cpu_shares: %s" in host
+    assert host.count("docker run") == 1  # o único `docker run` do gate é o da linha acima
+    assert '-f "$CPU_YML"' in host
+
+
+def test_gate_poda_logs_imagens_antigas_e_arvores_abandonadas() -> None:
+    """A poda apaga logs de mais de 30 dias e imagens de build de outro Rust, e nunca a imagem atual."""
+    host = _host()
+    assert "-name '*.log' -mtime +30 -delete" in host
+    assert 'grep -vF ":$RUST"' in host
+    assert "eclume-(gate|desktop-build|desktop-build-windows|mobile-build)" in host
+    assert "-name 'src-*' -mtime +1" in host

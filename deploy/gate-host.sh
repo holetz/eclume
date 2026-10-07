@@ -10,8 +10,16 @@
 # deploy/gate.py, o mesmo dos filtros da CI); os outros ficam dispensados e o status diz quais. Sem
 # SHA verde encontrável (primeira execução, histórico reescrito), roda todos.
 #
-# Uso: bash <árvore>/deploy/gate-host.sh --sha <sha> [--pilares a,b] [--todos]
+# Um gate que o hook de pre-push dispara (`--superavel`) sai sem rodar quando o `main` já avançou
+# além do SHA (publica `eclume/gate` = error "superado por <sha>"; o deploy usa a ponta); um gate
+# pedido à mão para um SHA nunca é abandonado.
+# Todo contêiner do gate leva `--cpu-shares 256`: a produção divide o host com o gate e vence a CPU.
+# A cada execução, poda logs com mais de 30 dias, imagens de build de versões antigas do Rust e
+# árvores `src-*` abandonadas.
+#
+# Uso: bash <árvore>/deploy/gate-host.sh --sha <sha> [--pilares a,b] [--todos] [--superavel]
 #   --pilares  roda só esses pilares e não publica status (execução parcial).
+#   --superavel  abandona o SHA se o `main` já passou dele (o pre-push usa; o pedido à mão não).
 #   --todos    publica o status rodando todos os pilares, sem olhar o diff.
 # Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_GATE_MEMORY (teto por contêiner, 4g),
 #            ECLUME_GATE_CACHE_GB (orçamento dos caches, 25), ECLUME_GATE_DIR (~/eclume-gate).
@@ -39,12 +47,15 @@ IMG="eclume-gate:$RUST"
 SHA=""
 PILARES_PEDIDOS=""
 FORCAR_TODOS=0
+SUPERAVEL=0
+CPU_SHARES=256
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sha) SHA="${2:?--sha exige o commit}"; shift 2 ;;
     --pilares) PILARES_PEDIDOS="${2:?--pilares exige a lista}"; shift 2 ;;
     --todos) FORCAR_TODOS=1; shift ;;
+    --superavel) SUPERAVEL=1; shift ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -90,10 +101,18 @@ publicar() {
   echo "Publicado $CONTEXTO = $estado: $descricao"
 }
 
+# O peso de CPU dos serviços de teste e do mock entra por um arquivo extra, sem mexer nos compose
+# que a CI também usa.
+CPU_YML="$GATE_DIR/cpu-shares.yml"
+printf 'services:\n' > "$CPU_YML"
+for servico in postgres redis minio mock; do
+  printf '  %s:\n    cpu_shares: %s\n' "$servico" "$CPU_SHARES" >> "$CPU_YML"
+done
 compose() {
   ECLUME_TEST_PG_PORT=55632 ECLUME_TEST_REDIS_PORT=56579 ECLUME_TEST_MINIO_PORT=59200 \
     ECLUME_MOCK_BIND=127.0.0.1 ECLUME_MOCK_PORT=4210 \
-    docker compose -p "$PROJETO" -f deploy/docker-compose.test.yml -f deploy/docker-compose.mock.yml "$@"
+    docker compose -p "$PROJETO" -f deploy/docker-compose.test.yml -f deploy/docker-compose.mock.yml \
+    -f "$CPU_YML" "$@"
 }
 
 final() {
@@ -105,6 +124,19 @@ final() {
   cd / && rm -rf "$SRC"
 }
 trap final EXIT
+
+# Um gate disparado pelo pre-push que o `main` já ultrapassou não roda: o tip tem o seu próprio gate
+# (e o diff dele desde o último verde cobre este SHA). Tip igual, atrás, divergente ou ilegível (o
+# push ainda em curso) não abandona nada.
+if [[ "$SUPERAVEL" -eq 1 && "$PUBLICAR" -eq 1 ]]; then
+  ponta="$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha 2>/dev/null || true)"
+  if [[ -n "$ponta" && "$ponta" != "$SHA" ]] \
+      && [[ "$(gh api "repos/$REPO/compare/$SHA...$ponta" --jq .status 2>/dev/null || true)" == ahead ]]; then
+    publicar error "superado por ${ponta:0:7}"
+    publicado=1
+    exit 0
+  fi
+fi
 
 # O SHA verde mais próximo no histórico de $1 (o status `eclume/gate` em success); vazio se não achar.
 ultimo_verde() {
@@ -145,6 +177,14 @@ echo "Pilares: ${PILARES[*]:-nenhum}"
 
 publicar pending "rodando ${#PILARES[@]} pilares · log $LOG"
 
+# --- poda: o que o gate deixa para trás ----------------------------------------------------------
+find "$GATE_DIR/logs" -name '*.log' -mtime +30 -delete 2>/dev/null || true
+find "$GATE_DIR" -maxdepth 1 -name 'src-*' -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+# Imagens de build de versões antigas do Rust (sem a atual); as em uso o docker recusa remover.
+docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+  | grep -E '^eclume-(gate|desktop-build|desktop-build-windows|mobile-build):' \
+  | grep -vF ":$RUST" | xargs -r docker rmi >/dev/null 2>&1 || true
+
 pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
 echo "Disco do host: ${pct}% (limite ${DISK_LIMIT}%) · teto de memória por pilar: $MEMORIA"
 (( pct < DISK_LIMIT )) || { echo "Disco do host em ${pct}%: gate recusado."; exit 3; }
@@ -179,7 +219,7 @@ for pilar in "${PILARES[@]}"; do
   t0=$SECONDS
   set +e
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
-    --cpus 2 --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
+    --cpus 2 --cpu-shares "$CPU_SHARES" --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
     -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target \
     -e npm_config_cache=/tmp/.cache/npm -e UV_PYTHON_INSTALL_DIR=/tmp/.cache/uv-python \
     -e UV_LINK_MODE=copy -e ECLUME_ANDROID_NDK=/opt/ndk \
