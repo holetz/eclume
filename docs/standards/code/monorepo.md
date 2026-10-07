@@ -351,7 +351,11 @@ caminhos. Antes de subir, espera a GPU livre (o `busy` do worker de produção, 
 4096) em laços de 30 s até `ECLUME_GPU_E2E_ESPERA` minutos (20); passado o limite, sai **75**
 (inconclusivo) sem subir nada e sem parar a produção, e o gate publica `error` "sem prova: gpu-e2e
 (inconclusivo: GPU ocupada)", nunca `success`: quem lê `eclume/gate` segue exigindo `success`. Fora
-o 75, saída diferente de zero é `failure`. A primeira execução baixa modelos e constrói a imagem do
+o 75, saída diferente de zero é `failure`. O mínimo de 4096 MiB é o pico do teste (3876 MiB) mais
+folga, não um host vazio: parado, o host já ocupa ~0,9 GB com a sessão gráfica e o driver retém
+~400 MiB que nunca aparecem como livres, então 5120 MiB deixaria o pilar inconclusivo sempre que o
+desktop do host estivesse em uso (holetz/eclume#159). O mínimo sobe junto quando o pico do teste
+sobe. A primeira execução baixa modelos e constrói a imagem do
 worker (~8 GB, em cache depois). O pilar não monta as credenciais do `~/.claude`.
 
 Nenhum caminho que publica aceita um SHA sem `eclume/gate` = `success`: `deploy/deploy.sh`,
