@@ -22,6 +22,7 @@ job_id: ContextVar[str | None] = ContextVar("job_id", default=None)
 CONTEXTO: tuple[ContextVar[Any], ...] = (request_id, recording_id, revision, job_id)
 LOGGERS = ("eclume_server", "eclume_worker", "eclume_engines", "uvicorn", "arq")
 ACESSO_UVICORN = "uvicorn.access"
+LOGGER_ARQ = "arq.worker"
 
 
 class FormatadorJson(logging.Formatter):
@@ -58,6 +59,19 @@ def contexto_do_job(job: str | None, gravacao: str | None = None, rev: int | Non
     revision.set(rev)
 
 
+class SemCronDoArq(logging.Filter):
+    """Cala o INFO das execuções de cron do arq (`cron:<função>`), que rodam a cada minuto ou menos.
+
+    Falha, nova tentativa e qualquer registro de WARNING para cima passam; as funções de job comuns
+    seguem em INFO.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: D102 — contrato de logging.Filter
+        if record.levelno >= logging.WARNING or not isinstance(record.args, tuple):
+            return True
+        return not any(isinstance(arg, str) and "cron:" in arg for arg in record.args)
+
+
 def configurar_logs(level: int = logging.INFO, stream: TextIO | None = None) -> logging.Handler:
     """Põe um handler JSON no stdout para os loggers do eclume, do uvicorn e do arq.
 
@@ -76,4 +90,8 @@ def configurar_logs(level: int = logging.INFO, stream: TextIO | None = None) -> 
             continue
         logger.setLevel(level)
         logger.addHandler(handler)
+    arq = logging.getLogger(LOGGER_ARQ)
+    for antigo in [f for f in arq.filters if isinstance(f, SemCronDoArq)]:
+        arq.removeFilter(antigo)
+    arq.addFilter(SemCronDoArq())
     return handler

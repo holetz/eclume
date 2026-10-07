@@ -279,7 +279,7 @@ def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
     agents = agents or FakeAgents()
     for _ in range(_CPU_ROUNDS):
         for make in (worker_settings, agent_worker_settings):
-            params = make(settings) | {"cron_jobs": None}
+            params = make(settings) | {"cron_jobs": None, "poll_delay": 0.05}
             # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
             params["ctx"] = params["ctx"] | {
                 "provider_factory": agents,
@@ -305,7 +305,7 @@ async def _pending(settings: Settings) -> int:
 
 async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
     # O `Worker` guarda o loop corrente ao nascer: precisa ser criado dentro do loop que o roda.
-    worker = Worker(functions, **params, burst=True, max_tries=1, handle_signals=False, poll_delay=0.05)
+    worker = Worker(functions, **params, burst=True, max_tries=1, handle_signals=False)
     try:
         await worker.main()
     finally:

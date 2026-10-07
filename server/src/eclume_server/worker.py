@@ -65,6 +65,8 @@ SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
 # Vagas do worker de `eclume:default` (o padrão do arq, explícito): só ingestão, falhas e varreduras.
 DEFAULT_MAX_JOBS = 10
+DEFAULT_POLL_DELAY_S = 2.0
+AGENT_POLL_DELAY_S = 1.0
 # Falha passageira de Postgres ou S3 nos jobs de retorno do worker GPU: 3 novas tentativas com
 # espera crescente (315 s no total, abaixo de `job_stall_seconds`, para o reaper não decidir antes).
 INGEST_RETRY_DELAYS_S = (15, 60, 240)
@@ -468,9 +470,6 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             func(ingest_transcript, max_tries=RETURN_MAX_TRIES),
             func(transcription_failed, max_tries=RETURN_MAX_TRIES),
             purge_embedding_objects,
-            # Transição: os jobs por agente que já estavam em `eclume:default` antes do worker de
-            # agentes existir ainda rodam aqui. Sai na versão seguinte.
-            *_agent_functions(),
         ],
         "cron_jobs": [
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
@@ -486,6 +485,8 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         ],
         "queue_name": DEFAULT_QUEUE,
         "max_jobs": DEFAULT_MAX_JOBS,
+        # A fila default tem pouco tráfego e as varreduras mais finas são de 15 s: sondar a cada 2 s basta.
+        "poll_delay": DEFAULT_POLL_DELAY_S,
         # A chave de health-check do arq (`eclume:default:health-check`) é a sonda da Saúde.
         "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
@@ -505,6 +506,8 @@ def agent_worker_settings(settings: Settings) -> dict[str, Any]:
         "cron_jobs": None,
         "queue_name": AGENT_QUEUE,
         "max_jobs": settings.agent_max_jobs,
+        # O Agente é interativo (chat, ações): 1 s de espera pelo primeiro job é o teto aceito.
+        "poll_delay": AGENT_POLL_DELAY_S,
         # `eclume:agents:health-check`, a segunda chave da sonda `cpu_worker` da Saúde.
         "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
@@ -533,6 +536,7 @@ class WorkerSettings:
     on_job_start = _FROM_ENV["on_job_start"]
     ctx = _FROM_ENV["ctx"]
     max_jobs = _FROM_ENV["max_jobs"]
+    poll_delay = _FROM_ENV["poll_delay"]
     job_deserializer = _FROM_ENV["job_deserializer"]
 
 
@@ -543,6 +547,7 @@ class AgentWorkerSettings:
     cron_jobs = _AGENTS_FROM_ENV["cron_jobs"]
     queue_name = _AGENTS_FROM_ENV["queue_name"]
     max_jobs = _AGENTS_FROM_ENV["max_jobs"]
+    poll_delay = _AGENTS_FROM_ENV["poll_delay"]
     health_check_interval = _AGENTS_FROM_ENV["health_check_interval"]
     redis_settings = _AGENTS_FROM_ENV["redis_settings"]
     on_startup = _AGENTS_FROM_ENV["on_startup"]
