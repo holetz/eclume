@@ -10,4 +10,7 @@ ignore = [
   # Double free em Consumer::skip/clear só quando o Drop de um elemento entra em pânico: o anel do
   # eclume-audio-capture (src/ring.rs) guarda f32, que não tem Drop. Trocar para ringbuf 0.5.
   { id = "RUSTSEC-2026-0293", reason = "elementos f32 sem Drop; subir o ringbuf para 0.5 · prazo 2026-12-31" },
+  # Leitura além do WAVEFORMATEX em WaveFormat::parse: nem o eclume-audio-capture
+  # (src/system/windows.rs) nem o wasapi 0.23 a chamam; o get_mixformat lê o ponteiro inteiro do WASAPI.
+  { id = "RUSTSEC-2026-0332", reason = "WaveFormat::parse não é chamado; subir o wasapi para 0.25 · prazo 2026-12-31" },
 ]
