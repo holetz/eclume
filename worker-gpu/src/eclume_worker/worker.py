@@ -12,7 +12,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import Any
+import os
+import signal
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from arq.connections import RedisSettings
 from arq.worker import func
@@ -25,18 +29,53 @@ from eclume_worker.health import heartbeat_loop, withdraw
 from eclume_worker.jobs import EngineRegistry, transcribe
 from eclume_worker.storage import ArtifactStore
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = logging.getLogger(__name__)
 
 CONFIG = WorkerConfig.from_env()
 IDLE_CHECK_SECONDS = 30.0
 
 
-async def idle_unloader(registry: EngineRegistry, idle_seconds: float, every: float = IDLE_CHECK_SECONDS) -> None:
-    """Descarrega os modelos depois de `idle_seconds` sem job, devolvendo a VRAM ao host."""
+def _rss_mb() -> float:
+    """RSS do processo em MiB (`VmRSS` de /proc); 0 onde o /proc não existe."""
+    try:
+        with Path("/proc/self/status").open(encoding="ascii") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except OSError:
+        pass
+    return 0.0
+
+
+def _encerrar_processo() -> None:
+    """Pede o encerramento limpo: o SIGTERM é o caminho do deploy (drena e retira o heartbeat)."""
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
+async def idle_unloader(
+    registry: EngineRegistry,
+    idle_seconds: float,
+    every: float = IDLE_CHECK_SECONDS,
+    *,
+    recycle: bool = False,
+    terminate: Callable[[], None] = _encerrar_processo,
+) -> None:
+    """Descarrega os modelos depois de `idle_seconds` sem job, devolvendo a VRAM ao host.
+
+    Com `recycle`, e se o torch foi importado no processo, encerra o processo em seguida (o
+    `restart: unless-stopped` sobe um novo, sem torch) para devolver também a RAM.
+    """
     while True:
         await asyncio.sleep(every)
         if await asyncio.to_thread(registry.unload_if_idle, idle_seconds):
             logger.info("modelos descarregados após %.0f s ociosos", idle_seconds)
+            if recycle and "torch" in sys.modules and not registry.busy:
+                logger.info("reciclando o processo para devolver a memória (RSS %.0f MiB)", _rss_mb())
+                terminate()
+                return
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -45,7 +84,9 @@ async def startup(ctx: dict[str, Any]) -> None:
     ctx["config"] = CONFIG
     ctx["store"] = ArtifactStore.from_config(CONFIG)
     ctx["engines"] = registry = EngineRegistry(CONFIG)
-    ctx["idle_task"] = asyncio.create_task(idle_unloader(registry, CONFIG.model_idle_seconds))
+    ctx["idle_task"] = asyncio.create_task(
+        idle_unloader(registry, CONFIG.model_idle_seconds, recycle=CONFIG.recycle_on_idle)
+    )
     ctx["heartbeat_task"] = asyncio.create_task(heartbeat_loop(ctx["redis"], CONFIG, registry, VramMonitor()))
 
 

@@ -34,6 +34,10 @@ class WorkerConfig:
     # carregado; `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez.
     keep_asr_resident: bool = True
     resident_min_free_mb: int = 2500
+    # Após a descarga ociosa, encerra o processo se o torch foi importado: o torch, o CTranslate2
+    # e as arenas do glibc não devolvem a RAM, e o contêiner sobe de novo sem eles.
+    # `ECLUME_RECYCLE_ON_IDLE=0` mantém o processo.
+    recycle_on_idle: bool = True
     job_timeout_seconds: int = 6 * 3600
     work_dir: Path = Path("/tmp/eclume-work")  # noqa: S108 — diretório de trabalho do container
     remote_base_url: str | None = None
@@ -68,6 +72,7 @@ class WorkerConfig:
             model_idle_seconds=float(get("ECLUME_MODEL_IDLE_SECONDS", defaults.model_idle_seconds)),
             keep_asr_resident=str(get("ECLUME_KEEP_ASR_RESIDENT", "1")).lower() not in {"0", "false", "no", "nao"},
             resident_min_free_mb=int(get("ECLUME_RESIDENT_MIN_FREE_MB", defaults.resident_min_free_mb)),
+            recycle_on_idle=str(get("ECLUME_RECYCLE_ON_IDLE", "1")).lower() not in {"0", "false", "no", "nao"},
             job_timeout_seconds=int(get("ECLUME_JOB_TIMEOUT_SECONDS", defaults.job_timeout_seconds)),
             work_dir=Path(get("ECLUME_WORK_DIR", defaults.work_dir)),
             remote_base_url=get("ECLUME_REMOTE_BASE_URL"),
