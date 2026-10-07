@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -146,6 +147,9 @@ def test_loop_sobrevive_a_uma_falha(tmp_path: Path):
     redis = FakeRedis()
     registry = _registry(tmp_path)
 
+    # A terceira leitura só acontece depois de a segunda ter publicado.
+    terceira = threading.Event()
+
     class Flaky:
         calls = 0
 
@@ -154,11 +158,15 @@ def test_loop_sobrevive_a_uma_falha(tmp_path: Path):
             if Flaky.calls == 1:
                 msg = "NVML_ERROR_UNKNOWN"
                 raise RuntimeError(msg)
+            if Flaky.calls >= 3:
+                terceira.set()
             return GPU
 
     async def go() -> None:
         task = asyncio.create_task(heartbeat_loop(redis, WorkerConfig(), registry, Flaky(), every=0.01))
-        await asyncio.sleep(0.1)
+        # Espera com prazo, não um tempo fixo: cada volta passa por `asyncio.to_thread`, e num runner
+        # carregado 0,1 s não bastava para a segunda volta acontecer.
+        await asyncio.to_thread(terceira.wait, 5)
         task.cancel()
 
     asyncio.run(go())
