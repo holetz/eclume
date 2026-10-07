@@ -9,6 +9,9 @@
 #
 # Antes de subir, espera a GPU livre: o sinal `busy` do worker-gpu de produção (gpu_busy, o mesmo do
 # deploy.sh) e a VRAM livre mínima, porque o worker de produção pode manter o modelo residente.
+# O mínimo é o pico do teste (3876 MiB) mais folga, não um host vazio: parado, o host já tem ~0,9 GB
+# da sessão gráfica (Xorg e apps do desktop) e ~400 MiB que o driver nunca dá como livres (medido em
+# 2026-10-07, holetz/eclume#159), então 5120 MiB livres só passariam com o desktop quase fechado.
 # Passado o limite, avisa e sai com 75 (inconclusivo), sem subir nada e sem tocar na produção.
 #
 # Uso: bash deploy/gpu-e2e.sh
