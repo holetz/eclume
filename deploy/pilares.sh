@@ -124,7 +124,8 @@ pilar_windows() {
     --target x86_64-pc-windows-msvc -- -D warnings
 }
 
-# Vulnerabilidades conhecidas das dependências de produção: pip-audit sobre o uv.lock, npm audit
+# Vulnerabilidades conhecidas das dependências de produção: pip-audit sobre o uv.lock com todos os
+# extras (o `gpu` é o que a imagem do worker GPU instala: whisperx, torch, transformers), npm audit
 # (alta ou crítica) nos projetos que vão para o usuário e cargo-deny (advisories) nos workspaces
 # Rust. Exceção só com motivo e prazo: deploy/auditoria-excecoes.txt (Python), `overrides` no
 # package.json (npm) e o [advisories] ignore de desktop/deny.toml e mobile/deny.toml (Rust). Só no
@@ -132,7 +133,7 @@ pilar_windows() {
 pilar_auditoria() {
   local req ignorar=() id prazo
   req="$(mktemp)"
-  run uv export --locked --all-packages --no-hashes --no-emit-workspace --format requirements-txt -o "$req"
+  run uv export --locked --all-packages --all-extras --no-hashes --no-emit-workspace --format requirements-txt -o "$req"
   # Linha da exceção: <id> <prazo AAAA-MM-DD> <motivo>; vencida, deixa de valer e o pilar falha.
   while read -r id prazo _; do
     [[ -z "$id" || "$id" == \#* ]] && continue
