@@ -223,7 +223,9 @@ rust-toolchain; os alertas e as atualizações de segurança estão ligados no r
 Dependabot só entra com `eclume/gate` = `success` no SHA dele (`bash deploy/gate.sh <ref>`). Major
 (Python, Node, Postgres, Tauri) se decide no próprio PR.
 
-**Auditoria.** O pilar `auditoria` do gate roda `pip-audit` sobre o `uv export --locked`,
+**Auditoria.** O pilar `auditoria` do gate roda `pip-audit` sobre o `uv export --locked --all-extras`
+(com os extras: o `gpu` do `eclume-worker-gpu` é o que a imagem do worker GPU instala, e sem ele
+torch, transformers e nltk ficavam fora da auditoria, holetz/eclume#161),
 `npm audit --omit=dev --audit-level=high` em `web`, `mobile` e `desktop` e
 `cargo deny --locked check advisories` em `desktop` e `mobile`, com as ferramentas de versão fixada
 na imagem do gate. Exceção só com motivo e prazo: `deploy/auditoria-excecoes.txt` (Python; vencida,
