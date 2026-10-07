@@ -2,8 +2,10 @@
 //! transcrições em JSONL, uma subpasta por Collection) numa pasta local. Roda em thread própria,
 //! para uma biblioteca grande não atrasar o upload das gravações.
 //!
-//! Cada ciclo lê só o que mudou desde o último (`?since=` do manifesto); de tempos em tempos, e em
-//! "Sincronizar agora", uma varredura confere a biblioteca inteira e apaga o que saiu do servidor.
+//! Cada ciclo lê só o que mudou desde o último (`?since=` do manifesto, repartido com o aviso de
+//! desfechos e as recentes, ver [`crate::sync::library_since`]) e relê as pendentes por id; a cada
+//! 6 h, e em "Sincronizar agora", uma varredura confere a biblioteca inteira e apaga o que saiu do
+//! servidor.
 //! O contrato está em docs/standards/code/desktop-pasta-sincronizada.md.
 
 use std::collections::HashMap;
@@ -16,7 +18,7 @@ use anyhow::{anyhow, Result};
 use eclume_mirror::{Applied, Mirror, MirrorItem, Segment, Speaker, Summary, Transcript};
 use eclume_recorder::now_ms;
 use eclume_sync::api::{self, CollectionInfo, LibraryRecording};
-use eclume_sync::{Client, LibrarySummary, MissingScope};
+use eclume_sync::{Client, LibrarySummary, MissingScope, UploaderConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
@@ -33,6 +35,8 @@ static LAST_SWEEP: AtomicI64 = AtomicI64::new(0);
 pub trait Source {
     fn collections(&self) -> Result<Vec<CollectionInfo>>;
     fn library(&self, since: Option<&str>) -> Result<Vec<LibraryRecording>>;
+    /// Uma gravação por id (`None`: apagada), para reler uma pendente sem listar a biblioteca.
+    fn recording(&self, recording_id: &str) -> Result<Option<LibraryRecording>>;
     fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>>;
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>>;
     /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que dá mês e nome ao arquivo.
@@ -49,11 +53,42 @@ impl Source for Client {
     fn library(&self, since: Option<&str>) -> Result<Vec<LibraryRecording>> {
         Client::library(self, since)
     }
+    fn recording(&self, recording_id: &str) -> Result<Option<LibraryRecording>> {
+        Client::recording(self, recording_id)
+    }
     fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>> {
         Client::current_summary(self, recording_id)
     }
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
         Client::transcript(self, recording_id)
+    }
+}
+
+/// O `Client` com a leitura `?since=` repartida com o aviso de desfechos e as recentes: a leitura
+/// incremental passa por [`crate::sync::library_since`]; a biblioteca inteira e o resto vão direto.
+struct SharedSource<'a> {
+    config: &'a UploaderConfig,
+    client: &'a Client,
+}
+
+impl Source for SharedSource<'_> {
+    fn collections(&self) -> Result<Vec<CollectionInfo>> {
+        Source::collections(self.client)
+    }
+    fn library(&self, since: Option<&str>) -> Result<Vec<LibraryRecording>> {
+        match since {
+            Some(since) => crate::sync::library_since(self.config, self.client, since),
+            None => Source::library(self.client, None),
+        }
+    }
+    fn recording(&self, recording_id: &str) -> Result<Option<LibraryRecording>> {
+        Source::recording(self.client, recording_id)
+    }
+    fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>> {
+        Source::current_summary(self.client, recording_id)
+    }
+    fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
+        Source::transcript(self.client, recording_id)
     }
 }
 
@@ -179,33 +214,46 @@ pub fn sync_library(
     let cursor = api::cursor_from(&changed, CURSOR_MARGIN_SECS);
     let mut pending = mirror.pending().clone();
 
-    // Primeira passada: a listagem já é a biblioteca inteira. Depois, a varredura (e as
-    // gravações que falharam antes) pede a inteira, para achar o que saiu do servidor, o que o
-    // manifesto ainda não tem e as pendentes.
+    // Primeira passada: a listagem já é a biblioteca inteira. Depois, a varredura pede a inteira,
+    // para achar o que saiu do servidor, o que o manifesto ainda não tem e as pendentes; fora dela,
+    // só as pendentes são relidas, por id.
     let mut todo = changed;
     let mut present: Option<Vec<String>> = None;
     if since.is_none() {
         present = Some(todo.iter().map(|r| r.id.clone()).collect());
-    } else if sweep || !pending.is_empty() {
+    } else if sweep {
         let all = source.library(None)?;
-        if sweep {
-            present = Some(all.iter().map(|r| r.id.clone()).collect());
-        }
+        present = Some(all.iter().map(|r| r.id.clone()).collect());
         for recording in all {
             // O que o manifesto não tem, as transcrições que ficaram faltando (um servidor sem o
-            // escopo, antes) e as pendentes; só a varredura completa as transcrições.
+            // escopo, antes) e as pendentes.
             let missing = pending.contains(&recording.id)
-                || (sweep
-                    && match mirror.entry(&recording.id) {
-                        None => true,
-                        Some(entry) => {
-                            transcripts
-                                && recording.transcript_id.is_some()
-                                && entry.transcript_revision.is_none()
-                        }
-                    });
+                || match mirror.entry(&recording.id) {
+                    None => true,
+                    Some(entry) => {
+                        transcripts
+                            && recording.transcript_id.is_some()
+                            && entry.transcript_revision.is_none()
+                    }
+                };
             if missing && !todo.iter().any(|r| r.id == recording.id) {
                 todo.push(recording);
+            }
+        }
+    } else {
+        // Sem varredura, as pendentes voltam por id: a biblioteca inteira só a cada 6 h.
+        for id in pending.clone() {
+            if todo.iter().any(|r| r.id == id) {
+                continue;
+            }
+            match source.recording(&id) {
+                Ok(Some(recording)) => todo.push(recording),
+                // Apagada no servidor: não há mais o que repetir; a varredura limpa o arquivo.
+                Ok(None) => {
+                    pending.remove(&id);
+                }
+                // Servidor fora: continua pendente e o próximo ciclo tenta de novo.
+                Err(err) => log::info!("pasta sincronizada: pendente {id}: {err:#}"),
             }
         }
     }
@@ -386,7 +434,11 @@ fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
     crate::refresh_ui(app);
     let result = Client::from_config(&uploader).and_then(|client| {
         let mut mirror = Mirror::open(&dir)?;
-        sync_library(&client, &mut mirror, config.transcripts, sweep)
+        let source = SharedSource {
+            config: &uploader,
+            client: &client,
+        };
+        sync_library(&source, &mut mirror, config.transcripts, sweep)
     });
     drop(running);
     if result.is_ok() && sweep {
@@ -441,6 +493,15 @@ mod tests {
                 .filter(|r| since.is_none_or(|s| r.updated_at.as_deref() >= Some(s)))
                 .cloned()
                 .collect())
+        }
+        fn recording(&self, id: &str) -> Result<Option<LibraryRecording>> {
+            self.calls.borrow_mut().push(format!("recording {id}"));
+            Ok(self
+                .recordings
+                .borrow()
+                .iter()
+                .find(|r| r.id == id)
+                .cloned())
         }
         fn current_summary(&self, id: &str) -> Result<Option<LibrarySummary>> {
             Ok(self.summaries.borrow().get(id).cloned())
@@ -700,6 +761,16 @@ mod tests {
             fake.calls.borrow().first().unwrap(),
             "library since=Some(\"2026-09-19T11:58:00Z\")"
         );
+        // A pendente volta por id, nunca pela listagem inteira.
+        assert!(fake
+            .calls
+            .borrow()
+            .contains(&"recording aaaaaaaa-1".to_string()));
+        assert!(!fake
+            .calls
+            .borrow()
+            .iter()
+            .any(|call| call == "library since=None"));
 
         // Consertada, a pendente entra e a fila esvazia.
         fake.broken_transcript.borrow_mut().clear();

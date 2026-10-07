@@ -4,8 +4,12 @@
 //! A fonte é dupla. As linhas da fila local que ainda não chegaram ao servidor (gravando,
 //! aguardando envio, enviando, falhou o envio) vêm primeiro; depois, a página das N mais
 //! recentes da conta (`GET /recordings?limit=N&sort=created_desc`), que a thread
-//! `eclume-recentes` lê a cada 5 s com a janela visível e algo em andamento, e a cada 60 s fora
-//! disso. Uma gravação enviada daqui e presente na página é uma linha só, a do servidor.
+//! `eclume-recentes` lê a cada 5 s com a janela visível e algo em andamento. Fora disso, a cada
+//! 60 s, só o que mudou desde a última leitura (`?since=`, repartido com o aviso de desfechos e a
+//! pasta sincronizada, ver [`crate::sync::library_since`]) é mesclado na página; a página inteira
+//! volta a cada 10 min, ao cutucar o laço (envio concluído, configurações, janela aberta) e quando
+//! a contagem muda. Uma leitura que falha dobra a espera até 60 s. Uma gravação enviada daqui e
+//! presente na página é uma linha só, a do servidor.
 //!
 //! O Rust entrega códigos (fase, etapa, motivo); os rótulos são os do vocabulário compartilhado
 //! (`ui/js/vocabulario.js`), aplicados pela janela.
@@ -17,7 +21,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use eclume_recorder::{now_ms, QueuedRecording, Status};
-use eclume_sync::api::LibraryRecording;
+use eclume_sync::api::{self, LibraryRecording};
 use eclume_sync::{Client, QueueWait};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
@@ -30,6 +34,13 @@ use crate::state::AppState;
 pub const BUSY_INTERVAL: Duration = Duration::from_secs(5);
 /// Fora disso, uma leitura por minuto basta para o painel estar em dia ao abrir.
 pub const IDLE_INTERVAL: Duration = Duration::from_secs(60);
+/// O teto da espera depois de leituras que falham: dobra a partir do ritmo normal até aqui.
+pub const ERROR_MAX_INTERVAL: Duration = Duration::from_secs(60);
+/// De quanto em quanto a página inteira é relida no ritmo lento (pega o que o `?since=` não vê,
+/// como a gravação apagada).
+pub const FULL_READ_EVERY_MS: i64 = 10 * 60 * 1000;
+/// Folga do `?since=` sobre o maior `updated_at` da página, como na pasta sincronizada.
+const SINCE_MARGIN_SECS: i64 = 120;
 
 /// Os estados da gravação que o contrato 2.20.0 conhece (`RecordingStatus`).
 const KNOWN_STATUS: [&str; 5] = ["uploading", "queued", "processing", "transcribed", "failed"];
@@ -367,13 +378,74 @@ pub fn build(
     items
 }
 
+/// Se a janela está visível e alguma linha está em andamento: o ritmo rápido.
+pub fn is_busy(items: &[RecentItem], visible: bool) -> bool {
+    visible && items.iter().any(|item| item.phase.in_progress())
+}
+
 /// Quanto o laço espera até a próxima leitura.
 pub fn interval(items: &[RecentItem], visible: bool) -> Duration {
-    if visible && items.iter().any(|item| item.phase.in_progress()) {
+    if is_busy(items, visible) {
         BUSY_INTERVAL
     } else {
         IDLE_INTERVAL
     }
+}
+
+/// A espera depois de `failures` leituras seguidas que falharam: o ritmo normal dobrando a cada
+/// falha, até [`ERROR_MAX_INTERVAL`]. Sem falha, o ritmo normal.
+pub fn error_interval(normal: Duration, failures: u32) -> Duration {
+    normal
+        .saturating_mul(2u32.saturating_pow(failures.min(8)))
+        .min(ERROR_MAX_INTERVAL.max(normal))
+}
+
+/// Se a próxima leitura é a página inteira (e não só o que mudou): quando o laço foi cutucado,
+/// no ritmo rápido (o progresso anda na tela), sem página ainda, sem `since` para pedir, com a
+/// contagem trocada ou com a última página inteira velha.
+pub fn read_full_page(
+    cursor: Option<&str>,
+    full_at: Option<i64>,
+    same_count: bool,
+    forced: bool,
+    fast: bool,
+    now: i64,
+) -> bool {
+    forced
+        || fast
+        || !same_count
+        || cursor.is_none()
+        || full_at.is_none_or(|at| !(0..FULL_READ_EVERY_MS).contains(&(now - at)))
+}
+
+/// Mescla na página `page` (da mais recente para a mais antiga, por criação) as gravações que
+/// mudaram: troca por id as que já estavam, acrescenta as novas e mantém as `count` mais
+/// recentes. Uma gravação apagada só sai na leitura da página inteira.
+pub fn merge_changes(
+    page: &[LibraryRecording],
+    changed: &[LibraryRecording],
+    count: usize,
+) -> Vec<LibraryRecording> {
+    let mut merged: Vec<LibraryRecording> = page
+        .iter()
+        .map(|item| {
+            changed
+                .iter()
+                .find(|new| new.id == item.id)
+                .unwrap_or(item)
+                .clone()
+        })
+        .collect();
+    for new in changed {
+        if !merged.iter().any(|item| item.id == new.id) {
+            merged.push(new.clone());
+        }
+    }
+    let created = |item: &LibraryRecording| item.created_at.as_deref().and_then(api::instant_ms);
+    // Estável: o que tem a mesma criação (ou nenhuma) fica na ordem em que estava.
+    merged.sort_by_key(|item| std::cmp::Reverse(created(item)));
+    merged.truncate(count);
+    merged
 }
 
 /// A última leitura do servidor.
@@ -381,7 +453,18 @@ pub fn interval(items: &[RecentItem], visible: bool) -> Duration {
 struct Snapshot {
     items: Option<Vec<LibraryRecording>>,
     fetched_at: Option<i64>,
+    /// Quando a página inteira foi lida pela última vez, e com qual contagem.
+    full_at: Option<i64>,
+    count: u8,
     error: Option<String>,
+}
+
+/// O que uma leitura trouxe.
+enum Read {
+    /// A página inteira das `count` mais recentes.
+    Page(Vec<LibraryRecording>),
+    /// Só o que mudou desde o `since`.
+    Changes(Vec<LibraryRecording>),
 }
 
 /// O canal para cutucar o laço e a última leitura.
@@ -402,19 +485,34 @@ pub fn spawn(app: &AppHandle) {
         .name("eclume-recentes".into())
         .spawn(move || {
             let mut wait = Duration::ZERO;
-            while let Ok(()) | Err(RecvTimeoutError::Timeout) = rx.recv_timeout(wait) {
-                while rx.try_recv().is_ok() {}
-                if let Err(err) = fetch(&app) {
-                    log::info!("recentes: {err:#}");
+            let mut failures: u32 = 0;
+            let mut fast = false;
+            // A primeira volta (espera zero) é uma leitura inteira, como um cutucão.
+            let mut forced = true;
+            loop {
+                let woke = rx.recv_timeout(wait);
+                if matches!(woke, Err(RecvTimeoutError::Disconnected)) {
+                    break;
                 }
+                // Um cutucão (e não o fim da espera) pede a página inteira.
+                forced |= woke.is_ok();
+                while rx.try_recv().is_ok() {}
+                match fetch(&app, forced, fast) {
+                    Ok(()) => failures = 0,
+                    Err(err) => {
+                        failures = failures.saturating_add(1);
+                        log::info!("recentes: {err:#}");
+                    }
+                }
+                forced = false;
                 crate::refresh_ui(&app);
                 let visible = app
                     .get_webview_window("main")
                     .and_then(|window| window.is_visible().ok())
                     .unwrap_or(false);
-                wait = view(&app)
-                    .map(|view| interval(&view.items, visible))
-                    .unwrap_or(IDLE_INTERVAL);
+                let items = view(&app).map(|view| view.items).unwrap_or_default();
+                fast = is_busy(&items, visible);
+                wait = error_interval(interval(&items, visible), failures);
             }
         });
     if let Err(err) = spawned {
@@ -437,9 +535,10 @@ pub fn fetch_count(window: u8, tray: u8) -> u8 {
     window.max(tray)
 }
 
-/// Lê a página das recentes. Sem credencial ou com a janela e a bandeja escondendo as recentes,
-/// não lê nada; a falha fica em `error` e o último retrato segue valendo.
-fn fetch(app: &AppHandle) -> Result<()> {
+/// Lê as recentes. Sem credencial ou com a janela e a bandeja escondendo as recentes, não lê
+/// nada. Devagar (`fast` falso, sem `forced`), lê só o que mudou ([`read_full_page`]) e mescla na
+/// página. A falha fica em `error` e o último retrato segue valendo.
+fn fetch(app: &AppHandle, forced: bool, fast: bool) -> Result<()> {
     let state = app.state::<AppState>();
     let count = fetch_count(state.recent_count()?, state.tray_recent_count()?);
     let Some(config) = state.uploader_config()? else {
@@ -448,15 +547,50 @@ fn fetch(app: &AppHandle) -> Result<()> {
     if count == 0 {
         return Ok(());
     }
-    let result = Client::from_config(&config).and_then(|client| client.recent(u32::from(count)));
     let handle = app.state::<RecentHandle>();
+    let now = now_ms();
+    let (full, cursor) = {
+        let snapshot = handle
+            .snapshot
+            .lock()
+            .map_err(|_| anyhow!("painel de recentes envenenado por um pânico"))?;
+        let cursor = snapshot
+            .items
+            .as_deref()
+            .and_then(|items| api::cursor_from(items, SINCE_MARGIN_SECS));
+        let full = read_full_page(
+            cursor.as_deref(),
+            snapshot.full_at,
+            snapshot.count == count,
+            forced,
+            fast,
+            now,
+        );
+        (full, cursor)
+    };
+    let result = Client::from_config(&config).and_then(|client| match (&cursor, full) {
+        (Some(since), false) => {
+            crate::sync::library_since(&config, &client, since).map(Read::Changes)
+        }
+        _ => client.recent(u32::from(count)).map(Read::Page),
+    });
     let mut snapshot = handle
         .snapshot
         .lock()
         .map_err(|_| anyhow!("painel de recentes envenenado por um pânico"))?;
     match result {
-        Ok(items) => {
-            snapshot.items = Some(items);
+        Ok(read) => {
+            match read {
+                Read::Page(items) => {
+                    snapshot.items = Some(items);
+                    snapshot.full_at = Some(now);
+                    snapshot.count = count;
+                }
+                Read::Changes(changed) => {
+                    let page = snapshot.items.take().unwrap_or_default();
+                    snapshot.items = Some(merge_changes(&page, &changed, usize::from(count)));
+                }
+            }
             snapshot.fetched_at = Some(now_ms());
             snapshot.error = None;
             Ok(())
@@ -1132,5 +1266,99 @@ mod tests {
             5,
         );
         assert_eq!(interval(&pronta, true), IDLE_INTERVAL);
+    }
+
+    #[test]
+    fn leitura_que_falha_dobra_a_espera_ate_um_minuto_e_sem_falha_e_o_ritmo_normal() {
+        let secs = Duration::from_secs;
+        assert_eq!(error_interval(BUSY_INTERVAL, 0), secs(5));
+        assert_eq!(error_interval(BUSY_INTERVAL, 1), secs(10));
+        assert_eq!(error_interval(BUSY_INTERVAL, 2), secs(20));
+        assert_eq!(error_interval(BUSY_INTERVAL, 3), secs(40));
+        assert_eq!(error_interval(BUSY_INTERVAL, 4), secs(60));
+        assert_eq!(error_interval(BUSY_INTERVAL, 1_000), secs(60));
+        assert_eq!(error_interval(IDLE_INTERVAL, 0), secs(60));
+        assert_eq!(error_interval(IDLE_INTERVAL, 5), secs(60));
+        assert_eq!(error_interval(IDLE_INTERVAL, u32::MAX), secs(60));
+    }
+
+    #[test]
+    fn a_pagina_inteira_so_no_ritmo_rapido_no_cutucao_e_a_cada_dez_minutos() {
+        let since = Some("2026-10-05T12:00:00Z");
+        let now = 100 * 60 * 1000;
+        let recent = Some(now - 60 * 1000);
+        // Devagar, com página, `since` e contagem iguais: só o que mudou.
+        assert!(!read_full_page(since, recent, true, false, false, now));
+        // Cutucão, ritmo rápido, contagem trocada, sem `since` ou sem página inteira anterior.
+        assert!(read_full_page(since, recent, true, true, false, now));
+        assert!(read_full_page(since, recent, true, false, true, now));
+        assert!(read_full_page(since, recent, false, false, false, now));
+        assert!(read_full_page(None, recent, true, false, false, now));
+        assert!(read_full_page(since, None, true, false, false, now));
+        // A página inteira de 10 min atrás já é velha; o relógio que voltou também não vale.
+        assert!(read_full_page(
+            since,
+            Some(now - FULL_READ_EVERY_MS),
+            true,
+            false,
+            false,
+            now
+        ));
+        assert!(!read_full_page(
+            since,
+            Some(now - FULL_READ_EVERY_MS + 1),
+            true,
+            false,
+            false,
+            now
+        ));
+        assert!(read_full_page(
+            since,
+            Some(now + 1),
+            true,
+            false,
+            false,
+            now
+        ));
+    }
+
+    #[test]
+    fn mescla_troca_por_id_acrescenta_a_nova_e_mantem_as_mais_recentes() {
+        let em = |id: &str, status: &str, created: &str| {
+            let mut rec = remota(id, status);
+            rec.created_at = Some(created.into());
+            rec
+        };
+        let page = vec![
+            em("c", "processing", "2026-10-05T12:03:00Z"),
+            em("b", "transcribed", "2026-10-05T12:02:00Z"),
+            em("a", "transcribed", "2026-10-05T12:01:00Z"),
+        ];
+        let changed = vec![
+            // Troca a "c", que terminou.
+            em("c", "transcribed", "2026-10-05T12:03:00Z"),
+            // Nova, a mais recente.
+            em("d", "queued", "2026-10-05T12:04:00Z"),
+            // Mais antiga que a página inteira: cai fora do corte.
+            em("z", "transcribed", "2026-10-05T11:00:00Z"),
+        ];
+        let merged = merge_changes(&page, &changed, 3);
+        let seen: Vec<(&str, &str)> = merged
+            .iter()
+            .map(|rec| (rec.id.as_str(), rec.status.as_str()))
+            .collect();
+        assert_eq!(
+            seen,
+            [("d", "queued"), ("c", "transcribed"), ("b", "transcribed")]
+        );
+        // Sem mudança, a página fica como estava.
+        assert_eq!(merge_changes(&page, &[], 3), page);
+        // Datas comparadas como datas, não como texto ("…:05Z" vem depois de "…:05.5Z").
+        let fine = vec![
+            em("x", "queued", "2026-10-05T12:00:05Z"),
+            em("y", "queued", "2026-10-05T12:00:05.500000Z"),
+        ];
+        let merged = merge_changes(&[], &fine, 2);
+        assert_eq!(merged[0].id, "y");
     }
 }

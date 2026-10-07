@@ -261,6 +261,19 @@ impl Client {
         Ok(recording.job.and_then(|job| job.queue))
     }
 
+    /// Uma gravação por id (`GET /recordings/{id}`), com `job` e `pipeline`, na forma da listagem.
+    /// `None` com a gravação apagada (404). É a releitura de uma gravação pendente da pasta
+    /// sincronizada sem listar a biblioteca inteira.
+    pub fn recording(&self, recording_id: &str) -> Result<Option<api::LibraryRecording>> {
+        let url = self.endpoint(&format!("/recordings/{recording_id}"));
+        let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
+        match response.status {
+            404 => Ok(None),
+            _ if response.is_success() => Ok(Some(parse("falha ao ler a gravação", &response)?)),
+            _ => Err(api_error("falha ao ler a gravação", &response)),
+        }
+    }
+
     /// Percorre as páginas de uma listagem por cursor (`limit` 200) e junta os itens.
     fn paged<P, T>(
         &self,
@@ -996,6 +1009,30 @@ mod tests {
         );
         // O cursor da próxima página é ignorado: o painel quer só as N primeiras.
         assert_eq!(script.seen().len(), 1);
+    }
+
+    #[test]
+    fn gravacao_por_id_le_a_forma_da_listagem_e_404_e_apagada() {
+        let script = Script::default()
+            .expect(
+                "GET /api/v1/recordings/r1",
+                json(
+                    200,
+                    serde_json::json!({
+                        "id": "r1", "title": "Reunião", "status": "processing",
+                        "updated_at": "2026-09-19T10:00:00Z",
+                        "pipeline": [{"step": "transcription", "state": "active"}]
+                    }),
+                ),
+            )
+            .expect("GET /api/v1/recordings/r2", status(404));
+        let (client, _, _) = make_client(script);
+        let found = client.recording("r1").unwrap().unwrap();
+        assert_eq!(
+            (found.id.as_str(), found.status.as_str()),
+            ("r1", "processing")
+        );
+        assert_eq!(client.recording("r2").unwrap(), None);
     }
 
     #[test]
