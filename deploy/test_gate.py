@@ -8,6 +8,7 @@ import io
 import json
 import os
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -273,6 +274,17 @@ def test_mapa_de_caminhos_do_gate_e_o_dos_filtros_da_ci() -> None:
     for pilar, globs in da_ci.items():
         assert set(gate.FILTROS[pilar]) == globs, pilar
     assert set(gate.FILTROS) == set(gate.PILARES)
+
+
+def test_testpaths_do_pytest_estao_no_filtro_python() -> None:
+    """Cada pasta do `testpaths` está sob um glob `<prefixo>/**` do filtro `python` da CI."""
+    raiz = Path(__file__).resolve().parent.parent
+    testpaths = tomllib.loads((raiz / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"][
+        "testpaths"
+    ]
+    prefixos = {g.removesuffix("/**") for g in _filtros_da_ci()["python"] if g.endswith("/**")}
+    descobertas = [pasta for pasta in testpaths if not any(pasta == p or pasta.startswith(f"{p}/") for p in prefixos)]
+    assert not descobertas, f"pastas do testpaths fora do filtro python da CI: {descobertas}"
 
 
 @pytest.mark.parametrize(

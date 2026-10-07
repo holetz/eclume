@@ -11,7 +11,8 @@
 #
 # Os comandos de cada pilar vêm de `deploy/pilares.sh`, a mesma fonte do gate do host
 # (`deploy/gate.sh`, status `eclume/gate`); cada job aqui só prepara o ambiente e chama o seu pilar.
-# Os pilares `windows` e `auditoria` são só do gate. `deploy/test_gate.py` falha se um job deixar de chamar o seu pilar.
+# Os pilares `windows` e `auditoria` são só do gate. `deploy/test_gate.py` falha se um job deixar de chamar o seu pilar
+# ou se uma pasta do `testpaths` do pytest ficar fora do filtro `python`.
 name: ci
 
 on:
@@ -94,13 +95,9 @@ jobs:
               - "web/src/styles/eclume.css"
               - "desktop/ui/eclume.css"
               - "mobile/ui/src/styles/eclume.css"
-              - "deploy/docker-compose.test.yml"
-              - "deploy/gate.py"
-              - "deploy/test_gate.py"
+              - "deploy/**"
               - ".github/workflows/desktop-release.yml"
               # As três linhas de versão e os CHANGELOGs que o deploy/test_versao.py amarra.
-              - "deploy/versao.py"
-              - "deploy/test_versao.py"
               - "CHANGELOG.md"
               - "desktop/CHANGELOG.md"
               - "mobile/CHANGELOG.md"

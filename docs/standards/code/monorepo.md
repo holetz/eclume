@@ -263,8 +263,10 @@ Com o repositório privado, os minutos de Actions têm cota, então a CI só rod
 em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`
 (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo de que ele depende, foi tocado:
 mudança só de documentação (`docs/`, qualquer `.md`) liga só o `docs`; o `python` e o `web` também
-rodam com `contracts/`, o `python` com `design-system/**` e as três cópias do `eclume.css`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/gate.py`,
-`deploy/test_gate.py` e os workflows de release. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
+rodam com `contracts/`, o `python` com `design-system/**` e as três cópias do `eclume.css`, o `desktop` com `web/src/styles/eclume.css` e os artigos de ajuda, o `mobile` com `desktop/crates/` e o `python` com `deploy/**` (um PR que mexa só no `deploy/` roda
+os `test_*.py` de lá) e os workflows de release. O `python` cobre cada pasta do `testpaths` do pytest
+por um glob `<prefixo>/**`, e o `deploy/test_gate.py` falha, nomeando a pasta, se uma ficar fora do
+filtro. Mudar o `ci.yml` ou o `deploy/pilares.sh`, ou
 disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
 último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,
 acrescente o caminho ao filtro do job que a consome.
