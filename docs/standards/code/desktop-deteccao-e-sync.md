@@ -4,10 +4,10 @@ title: Detecção de reuniões e sync no app desktop
 description: O app desktop percebe uma reunião pelo mic em uso por outro processo somado a processo e título de janela, aplica a política do app (gravar, perguntar ou ignorar) com debounce e indicação visível, entra no servidor com e-mail e senha ou código de pareamento (primeira execução, mDNS e CA fixada pela impressão digital) e sobe cada gravação com a credencial de dispositivo pelo upload resumível do contrato v1 (com o idioma da transcrição escolhido), só apagando o arquivo local depois da confirmação, e avisa o fim do processamento de cada gravação da conta (resumo pronto com "Copiar", resumo que falhou, pronta sem resumo, transcrição que falhou) e mantém as últimas gravações da conta no painel Recentes da janela (fase, progresso, "precisa de você" e Copiar resumo) e na seção Recentes do menu da bandeja, cada uma com a sua contagem — estes são os sinais, a máquina de estados, a conta, o protocolo, o aviso de desfechos, o painel de recentes, a CA e a retenção, e o que o crate de sync oferece ao app móvel.
 resource: desktop/crates/detect/**, desktop/crates/sync/**, desktop/src-tauri/src/auto.rs, desktop/src-tauri/src/sync.rs, desktop/src-tauri/src/recent.rs, desktop/src-tauri/src/account.rs, desktop/src-tauri/src/notify.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/tray.rs, desktop/ui/**
 tags: [code, desktop, deteccao, sync, upload, dispositivo, mdns, tls, tauri]
-timestamp: 2026-10-05
+timestamp: 2026-10-06
 audience: both
 authority: current
-source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141, holetz/eclume#144, holetz/eclume#147
+source: holetz/eclume#13, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, holetz/eclume#57, holetz/eclume#117, holetz/eclume#118, holetz/eclume#121, holetz/eclume#102, holetz/eclume#101, holetz/eclume#141, holetz/eclume#144, holetz/eclume#147, holetz/eclume#153
 maintainer: holetz
 ---
 
@@ -152,6 +152,13 @@ decisão do usuário, então `auto` nunca é padrão.
   mudaram, importadas pelo web, gravadas no celular ou nele. O servidor move o `updated_at` quando
   a etapa `summary` termina (`done` desde a 2.8.0, `failed`/`skipped` desde a 2.17.0,
   [contrato-v1.md](../api/contrato-v1.md)); a mesma leitura também acorda a pasta sincronizada.
+- **Uma leitura `?since=` por minuto, repartida** (holetz/eclume#153, `sync::library_since`): os
+  desfechos, as recentes (fora do ritmo rápido) e a pasta sincronizada pedem cada um o seu `since`,
+  mas a última leitura da conta fica guardada por **55 s** (`SHARED_READ_TTL_MS`) e responde quem
+  pede o mesmo `since` ou um mais novo, filtrando pelo `updated_at` (datas comparadas como datas).
+  Quem chega sem ser coberto lê no servidor e deixa a sua, mais antiga, para os demais. A leitura é
+  da conta que a fez: a troca de endereço ou de credencial não herda a do outro. Efeito: o aviso do
+  desfecho pode chegar até ~1 min depois do servidor, como antes.
 - **O desfecho** (`eclume_sync::outcome::outcome_of`, espelhado em `web/src/app/processingWatch.ts`
   com os mesmos casos de teste): etapa `summary` `done` é **resumo pronto**, `failed` é **resumo
   falhou**, `skipped` é **pronta sem resumo** (com o motivo) — menos `cancelled`,
@@ -207,6 +214,14 @@ fetched_at, error }`; a janela só aplica os rótulos do vocabulário
   quando cutucada (`recent::nudge`) — depois de uma volta de envio do sync, ao salvar as
   configurações e pelo `recent_refresh` que a principal chama ao abrir. Sem credencial, não lê.
   Uma falha fica em `error` e o painel segue com o último retrato.
+- **Recuo e leitura incremental** (holetz/eclume#153). Leituras que falham dobram a espera a partir
+  do ritmo normal (5 s: 10, 20, 40, 60; 60 s fica em 60 s), teto `ERROR_MAX_INTERVAL` de **60 s**,
+  e a primeira que dá certo volta ao ritmo normal. No ritmo lento (janela oculta ou nada em
+  andamento) a leitura não é a página: é o `?since=` repartido (acima), com o `since` no maior
+  `updated_at` da página menos 120 s, e `recent::merge_changes` troca por id, acrescenta as novas
+  e corta nas N mais recentes por criação. A **página inteira** volta no ritmo rápido, a cada
+  `FULL_READ_EVERY_MS` (**10 min**), ao cutucar o laço, na primeira leitura e quando a contagem
+  muda — é ela que tira da lista a gravação apagada.
 - **A fase** de cada linha do servidor sai do `status`, do `job` (`state`, `stage`, `progress`,
   `error.code`/`retryable`, que o `JobInfo` lê com `serde(default)`; o progresso em milésimos) e
   do `pipeline`, nesta precedência — alerta, depois em andamento, depois pronto:
