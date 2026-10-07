@@ -2,11 +2,12 @@
 #
 #   bash deploy/e2e-real.sh
 #
-# As mesmas peças da produção (Caddy com a CA `eclume`, server, worker CPU com a CLI do Claude,
-# worker de transcrição, Postgres, Redis, MinIO), sem nada em comum com ela: dados em tmpfs ou em
-# volumes que o `down -v` apaga, Caddy só em 127.0.0.1:18443 e o worker de transcrição com
-# `ECLUME_ENGINE=cpu`, sem GPU — não disputa VRAM com a produção nem com o Jellyfin. Server e web
-# saem do checkout (`:e2e`); o worker reaproveita a imagem `eclume-worker-gpu:prod`, que tem a
+# As mesmas peças da produção (a borda Caddy com o SPA e a CA `eclume`, server, worker CPU com a
+# CLI do Claude, worker de transcrição, Postgres, Redis, MinIO), sem nada em comum com ela: dados
+# em tmpfs ou em volumes que o `down -v` apaga, Caddy só em 127.0.0.1:18443 e o worker de
+# transcrição com `ECLUME_ENGINE=cpu`, sem GPU — não disputa VRAM com a produção nem com o
+# Jellyfin. Server e borda saem do checkout (`:e2e`); o worker reaproveita a imagem
+# `eclume-worker-gpu:prod`, que tem a
 # engine CPU (faster-whisper) e não vale reconstruir (~8 GB), com o código de `engines/` e
 # `worker-gpu/` do checkout montado na frente (PYTHONPATH). O compose roda no host (bind mounts
 # relativos). Senhas fixas: nada aqui sai do host. A raiz do Caddy é uma raiz própria descartável,
@@ -36,11 +37,15 @@ x-server-image: &server-image
     labels: {org.eclume.image: "server-e2e"}
 
 services:
+  # A borda com o SPA embutido, como na produção (deploy/web.Dockerfile).
   caddy:
-    image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+    image: eclume-edge:e2e
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      labels: {org.eclume.image: "edge-e2e"}
     depends_on:
       server: {condition: service_healthy}
-      web: {condition: service_started}
     ports:
       - "127.0.0.1:18443:8443"
     configs:
@@ -48,13 +53,6 @@ services:
         target: /etc/caddy/Caddyfile
     volumes:
       - ${ECLUME_E2E_CA_DIR:?o e2e-real.sh define a pasta da raiz descartável}:/etc/caddy/ca:ro
-
-  web:
-    image: eclume-web:e2e
-    build:
-      context: ..
-      dockerfile: deploy/web.Dockerfile
-      labels: {org.eclume.image: "web-e2e"}
 
   server:
     <<: *server-image
@@ -69,19 +67,10 @@ services:
       timeout: 5s
       retries: 20
 
+  # O worker CPU único, como na produção: as filas eclume:default e eclume:agents.
   worker-cpu:
     <<: *server-image
-    command: ["arq", "eclume_server.worker.WorkerSettings"]
-    environment:
-      <<: *server-env
-    depends_on:
-      postgres: {condition: service_healthy}
-      redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
-
-  worker-agents:
-    <<: *server-image
-    command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
+    command: ["eclume-server", "worker"]
     environment:
       <<: *server-env
       # O resumo real do E2E sai do `claude -p`, com o token de longa duração da produção.
@@ -193,8 +182,8 @@ configs:
             ca eclume
           }
         }
-        # Cabeçalhos genéricos para o que não vem do web (/api, /media, /mcp, /downloads); `?` não
-        # sobrescreve o que o upstream já mandou (a CSP inteira do web).
+        # Cabeçalhos genéricos para o que não é do SPA (/api, /media); `?` não sobrescreve o que o
+        # upstream ou as regras do SPA já puseram (a CSP inteira do SPA).
         header {
           ?X-Content-Type-Options nosniff
           ?Referrer-Policy no-referrer
@@ -210,9 +199,8 @@ configs:
         handle /media/* {
           reverse_proxy server:8000
         }
-        handle {
-          reverse_proxy web:80
-        }
+        # O SPA (deploy/web.Caddyfile na imagem), depois das rotas acima.
+        import /etc/caddy/spa.caddy
       }
 
 volumes:

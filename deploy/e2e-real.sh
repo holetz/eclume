@@ -5,8 +5,9 @@
 #   remote-run . 'bash deploy/e2e-real.sh'        # da estação de dev
 #   bash deploy/e2e-real.sh [--manter-imagens]     # no próprio host
 #
-# Constrói server e web do checkout (`:e2e`), gera a raiz descartável restrita a 127.0.0.1 com o
-# `eclume-server ca gerar` da imagem, sobe o stack, migra (o migrador liga o papel eclume_server),
+# Constrói server e borda (com o SPA) do checkout (`:e2e`), gera a raiz descartável restrita a
+# 127.0.0.1 com o `eclume-server ca gerar` da imagem, sobe o stack, migra (o migrador liga o papel
+# eclume_server),
 # confere o HTTPS por essa raiz, cria uma conta de admin descartável pelo CLI (o usuário nasce pelo
 # cadastro, no próprio teste), converte a fixture de fala em WAV e roda `npm run test:e2e:real`.
 # Sai sempre com `down -v` (dados, raiz e o modelo baixado somem) e apaga as imagens `:e2e`, a não
@@ -19,7 +20,7 @@ KEEP_IMAGES=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --manter-imagens) KEEP_IMAGES=1; shift ;;
-    --help|-h) sed -n '2,13p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -73,7 +74,7 @@ cleanup() {
   "${COMPOSE[@]}" --profile tools down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$WORK"
   if [[ "$KEEP_IMAGES" -eq 0 ]]; then
-    docker image rm eclume-server:e2e eclume-web:e2e >/dev/null 2>&1 || true
+    docker image rm eclume-server:e2e eclume-edge:e2e eclume-web:e2e >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -81,8 +82,8 @@ trap cleanup EXIT
 pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
 (( pct < 90 )) || { echo "Disco em ${pct}%: acima de 90%, E2E recusado." >&2; exit 3; }
 
-echo "Construindo server e web (:e2e)…" >&2
-BUILDKIT_PROGRESS=plain "${COMPOSE[@]}" build server web
+echo "Construindo server e borda (:e2e)…" >&2
+BUILDKIT_PROGRESS=plain "${COMPOSE[@]}" build server caddy
 mkdir -m 700 "$ECLUME_E2E_CA_DIR"
 docker run --rm --network none --user "$(id -u):$(id -g)" -v "$ECLUME_E2E_CA_DIR:/ca" eclume-server:e2e \
   eclume-server ca gerar --pasta /ca --host 127.0.0.1 --nomes '' >&2
@@ -90,7 +91,7 @@ echo "Subindo o stack eclume-e2e…" >&2
 "${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres redis minio
 "${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm migrate
-"${COMPOSE[@]}" up -d --wait --wait-timeout 180 server worker-cpu worker-agents worker web caddy
+"${COMPOSE[@]}" up -d --wait --wait-timeout 180 server worker-cpu worker caddy
 # O Caddy emite pela raiz restrita: o HTTPS valida com ela e só com ela.
 curl -fsS -o /dev/null --cacert "$ECLUME_E2E_CA_DIR/raiz.crt" https://127.0.0.1:18443/api/v1/health \
   || { echo "O Caddy do e2e não serve uma cadeia da raiz restrita." >&2; exit 1; }
@@ -109,6 +110,6 @@ ECLUME_E2E_URL=https://127.0.0.1:18443 ECLUME_E2E_ADMIN_EMAIL="$ADMIN_EMAIL" ECL
   npm --prefix web run test:e2e:real || {
     status=$?
     echo "E2E falhou; logs do worker e do worker CPU:" >&2
-    "${COMPOSE[@]}" logs --tail 60 worker worker-cpu worker-agents >&2 || true
+    "${COMPOSE[@]}" logs --tail 60 worker worker-cpu >&2 || true
     exit "$status"
   }

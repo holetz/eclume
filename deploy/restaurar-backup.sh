@@ -103,7 +103,7 @@ if [[ "$mode" == --banco ]]; then
   [[ -s "$dump" ]] || { echo "falta $dump" >&2; exit 1; }
   pg="$(container postgres)"
   [[ -n "$pg" ]] || { echo "o postgres do projeto eclume não está rodando" >&2; exit 1; }
-  services=(server worker-cpu worker-agents worker-gpu)
+  services=(server worker worker-gpu)
   ids=()
   for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
   echo "parando ${services[*]}"
@@ -180,7 +180,7 @@ if [[ "$mode" == --teste ]]; then
 fi
 
 # --aplicar
-services=(server worker-cpu worker-agents worker-gpu)
+services=(server worker worker-gpu)
 ids=()
 for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
 echo "parando ${services[*]}"

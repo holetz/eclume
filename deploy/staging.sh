@@ -72,7 +72,7 @@ derrubar() {
 
 SRC="${ECLUME_STAGING_SRC:-$STAGING_DIR/main}"
 install -d -m 700 "$STAGING_DIR"
-# Só os serviços que o compose do `main` declara (o `web` virou `edge` em outra spec).
+# Só os serviços que o compose do `main` declara (sem o `web` desde o holetz/eclume#151).
 gerar_cpu_yml() {
   printf 'services: {}\n' > "$CPU_YML"
   if [[ -f "$SRC/deploy/docker-compose.staging.yml" ]]; then
@@ -208,7 +208,9 @@ compose run --rm -e GOMAXPROCS=1 -v "$R/minio:/espelho:ro" --entrypoint sh minio
 passo="migrate do main sobre o banco restaurado"
 compose run --rm migrate
 passo="subida do stack"
-compose up -d --wait --wait-timeout 300 server worker-cpu worker-agents worker web caddy
+# Todo serviço de longa duração que o compose do `main` declara (os one-shots ficam no perfil
+# `tools`): o mesmo script serve ao compose com `web` e os dois workers CPU e ao da borda com o SPA.
+compose up -d --wait --wait-timeout 300
 
 passo="contas descartáveis"
 compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$CA"
