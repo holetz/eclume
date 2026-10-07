@@ -481,6 +481,37 @@ def test_oom_na_etapa_libera_a_etapa_antes_de_repetir(
     assert "alignment" not in spy.snapshots[0], spy.snapshots
 
 
+@pytest.mark.parametrize(
+    ("stage", "codigo"), [("alignment", "alignment_failed"), ("diarization", "diarization_failed")]
+)
+def test_etapa_que_falha_sai_da_gpu(
+    monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX, stage: str, codigo: str
+):
+    spy.source = fake
+    msg = "shape mismatch"
+    if stage == "alignment":
+
+        def boom(*_args: Any, **_kw: Any) -> dict:
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(sys.modules["whisperx"], "align", boom)
+    else:
+        original = sys.modules["whisperx.diarize"].DiarizationPipeline
+
+        class Boom(original):
+            def __call__(self, audio: Any, **kw: Any) -> Any:
+                raise RuntimeError(msg)
+
+        monkeypatch.setattr(sys.modules["whisperx.diarize"], "DiarizationPipeline", Boom)
+    eng = engine()
+    with pytest.raises(EngineError) as info:
+        eng.transcribe(AUDIO, EngineOptions())
+    assert info.value.code == codigo
+    assert [m["kind"] for m in eng.loaded_models()] == ["asr"]
+    # No último `empty_cache` (a saída da etapa que falhou) só o ASR residente está vivo.
+    assert spy.snapshots[-1] == ("asr",), spy.snapshots
+
+
 @pytest.mark.parametrize(("free", "batch"), [(None, 4), (6000, 4), (3500, 4), (3499, 2), (1000, 2)])
 def test_lote_inicial_pela_vram_livre(free: int | None, batch: int):
     assert initial_batch_size(free) == batch

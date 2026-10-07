@@ -21,6 +21,7 @@ import importlib
 import logging
 import statistics
 import sys
+import traceback
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -185,20 +186,26 @@ class WhisperXLocalEngine:
             raise EngineError(AUDIO_DECODE_FAILED, f"falha ao decodificar o áudio: {exc}") from exc
         duration_s = len(audio) / SAMPLE_RATE
 
-        with self.vram.track() as peak:
-            result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
-            progress("asr", 100.0)
-            # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
-            options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
-            aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
-            progress("align", 100.0)
-            result, embeddings, diarization_model = self._stage(
-                lambda: self._diarize(whisperx, audio, aligned, options, progress, warnings)
-            )
-            progress("diarize", 100.0)
-        if self.keep_asr_resident:
-            # O ASR fica para o próximo job; a VRAM da etapa volta ao host.
-            self._unload_role("stage")
+        try:
+            with self.vram.track() as peak:
+                result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
+                progress("asr", 100.0)
+                # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
+                options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
+                aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
+                progress("align", 100.0)
+                result, embeddings, diarization_model = self._stage(
+                    lambda: self._diarize(whisperx, audio, aligned, options, progress, warnings)
+                )
+                progress("diarize", 100.0)
+        except BaseException as exc:
+            # A falha em voo ainda segura os frames de `_align`/`_diarize` com o modelo da etapa.
+            _clear_frames(exc)
+            raise
+        finally:
+            if self.keep_asr_resident:
+                # O ASR fica para o próximo job; a VRAM da etapa volta ao host, com sucesso ou falha.
+                self._unload_role("stage")
 
         segments = _to_segments(result.get("segments", []))
         progress("embed", 100.0)
@@ -404,6 +411,19 @@ def _is_access_denied(exc: BaseException) -> bool:
             return True
         seen = seen.__cause__ or seen.__context__
     return False
+
+
+def _clear_frames(exc: BaseException) -> None:
+    """Solta os locais dos frames da cadeia da exceção (o modelo da etapa entre eles); o traceback segue legível."""
+    pending: list[BaseException | None] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        traceback.clear_frames(current.__traceback__)
+        pending += [current.__cause__, current.__context__]
 
 
 def _stage_error(code: str, stage: str, exc: Exception) -> EngineError:
