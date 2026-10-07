@@ -155,6 +155,10 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
+      - name: ffmpeg para os testes de pré-processamento
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Serviços de teste do server (Postgres, Redis, MinIO)
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
       - run: bash deploy/pilares.sh python

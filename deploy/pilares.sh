@@ -34,7 +34,10 @@ pilar_python() {
   run uv run ruff check .
   run uv run ruff format --check .
   # A suíte do server falha, em vez de pular, se os serviços não estiverem no ar.
-  ECLUME_TEST_REQUIRE_SERVICES=1 run uv run pytest
+  # O relatório junit alimenta a checagem de pulos: só os da lista versionada passam (deploy/pulos.py).
+  local junit="${TMPDIR:-/tmp}/eclume-pytest-junit.xml"
+  ECLUME_TEST_REQUIRE_SERVICES=1 run uv run pytest --junitxml="$junit"
+  run python3 deploy/pulos.py "$junit" "deploy/pulos-esperados-${ECLUME_PULOS:-ci}.txt"
 }
 
 pilar_contracts() {

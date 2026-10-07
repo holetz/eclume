@@ -9,7 +9,8 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  // `flaky-reporter` resume o teste que só passou no retry (aviso, não falha).
+  reporter: [['list'], ['./e2e/flaky-reporter.ts']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     locale: 'pt-BR',

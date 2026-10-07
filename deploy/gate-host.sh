@@ -224,6 +224,15 @@ for pilar in "${PILARES[@]}"; do
   # desktop deixaria de pular e as URLs de parte das fixtures (127.0.0.1:4010) não chegam ao mock.
   mock=()
   case "$pilar" in contracts|web-browser) mock=(-e ECLUME_MOCK_URL=http://mock:4010) ;; esac
+  # O claude real (test_agents_real) roda só no pilar python, com a credencial do Claude do host
+  # montada somente leitura e o binário da CLI; sem ela o pilar falha na checagem de pulos.
+  claude=(-e ECLUME_PULOS=gate)
+  if [[ "$pilar" == python ]]; then
+    claude+=(-e ECLUME_TEST_CLAUDE=1 -v "$HOME/.claude/.credentials.json:/tmp/.claude/.credentials.json:ro"
+      -v "$(readlink -f "$HOME/.local/bin/claude"):/usr/local/bin/claude:ro")
+  else
+    claude=()
+  fi
   t0=$SECONDS
   set +e
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
@@ -234,7 +243,7 @@ for pilar in "${PILARES[@]}"; do
     -e ECLUME_ANDROID_SDK=/opt/android-sdk -e ECLUME_ANDROID_JDK=/opt/jdk -e GRADLE_USER_HOME=/opt/gradle \
     -e ECLUME_TEST_DATABASE_URL=postgresql+asyncpg://eclume:eclume@postgres:5432/eclume \
     -e ECLUME_TEST_REDIS_URL=redis://redis:6379 -e ECLUME_TEST_S3_ENDPOINT=http://minio:9000 \
-    "${mock[@]}" \
+    "${mock[@]}" "${claude[@]}" \
     -v "$SRC:/src" -v "$CACHE/target-$pilar:/target" -v "$CACHE/registry:/opt/cargo/registry" \
     -v "$CACHE/home:/tmp/.cache" -v "$NDK:/opt/ndk:ro" \
     -v "$ANDROID_SDK:/opt/android-sdk:ro" -v "$JDK:/opt/jdk:ro" -v "$CACHE/gradle:/opt/gradle" \
