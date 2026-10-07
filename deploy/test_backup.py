@@ -159,7 +159,7 @@ def test_backup_snapshot_cifrado_sem_nada_em_claro(host: Host) -> None:
         (legado / velho).parent.mkdir(parents=True, exist_ok=True)
         (legado / velho).write_text("velho")
 
-    r = host.rodar("backup.sh")
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (backup,) = host.restic("backup")
@@ -200,13 +200,14 @@ def test_backup_sem_destino_fora_registra_falha_da_copia(host: Host) -> None:
 def test_backup_copia_para_fora_com_a_mesma_retencao(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("backup.sh")
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="3")
 
     assert r.returncode == 0, r.stderr
     (copia,) = host.restic("copy")
     assert copia[copia.index("--env-file") + 1].endswith("secrets/restic-fora.env")
     assert copia[copia.index("--from-repo") + 1] == "/repo"
     assert len(host.restic("forget")) == 2
+    assert all("--prune" not in f for f in host.restic("forget"))
     assert host.estado("fora")["ok"] is True
 
 
@@ -556,3 +557,68 @@ def test_staging_usa_cpu_shares_e_gomaxprocs_nos_conteineres(staging: Host) -> N
     yml = Path(staging.env["STAGING_DIR"], "cpu-shares.yml").read_text()
     assert yml == "services:\n  caddy:\n    cpu_shares: 256\n  edge:\n    cpu_shares: 256\n"
     assert all(f"-f {staging.env['STAGING_DIR']}/cpu-shares.yml" in c for c in compose_chamadas(staging))
+
+
+# --- backup proporcional: limites, prune dominical e rotação dos logs -----------------------------
+
+
+def test_backup_de_domingo_poda_os_dois_repositorios(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
+
+    assert r.returncode == 0, r.stderr
+    forgets = host.restic("forget")
+    assert len(forgets) == 2
+    assert all("--prune" in f for f in forgets)
+
+
+def test_backup_dos_outros_dias_so_esquece_sem_prune(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    for dia in ("1", "4", "6"):
+        r = host.rodar("backup.sh", ECLUME_BACKUP_DIA=dia)
+        assert r.returncode == 0, r.stderr
+    forgets = host.restic("forget")
+    assert len(forgets) == 6
+    assert all("--prune" not in f and "--keep-daily" in f for f in forgets)
+
+
+def test_backup_roda_todo_conteiner_com_cpu_shares_e_um_nucleo_do_go(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="2")
+
+    assert r.returncode == 0, r.stderr
+    execucoes = [c for c in host.chamadas() if c[0] == "run"]
+    assert len(execucoes) >= 5  # mc, backup, forget, sha256, copy, forget
+    for c in execucoes:
+        assert c[c.index("--cpu-shares") + 1] == "256", c
+        assert "GOMAXPROCS=1" in c, c
+    (backup,) = host.restic("backup")
+    assert backup[backup.index("--read-concurrency") + 1] == "1"
+
+
+def test_backup_rotaciona_os_logs_grandes_e_deixa_os_pequenos(host: Host) -> None:
+    dest = host.data / "backups"
+    (dest / "backup.log").write_text("x" * 3000)
+    (dest / "ensaio.log").write_text("y" * 10)
+
+    r = host.rodar("backup.sh", ECLUME_LOG_MAX_KB="2", ECLUME_BACKUP_DIA="2")
+
+    assert r.returncode == 0, r.stderr
+    assert (dest / "backup.log.1").read_text() == "x" * 3000
+    assert not (dest / "backup.log").exists()
+    assert (dest / "ensaio.log").read_text() == "y" * 10
+    assert not (dest / "ensaio.log.1").exists()
+
+
+def test_releases_rodam_os_conteineres_com_cpu_shares_e_podam_o_dist() -> None:
+    for nome in ("release-desktop.sh", "release-movel.sh"):
+        texto = (DEPLOY / nome).read_text(encoding="utf-8")
+        assert "--cpus 2 --cpu-shares 256" in texto, nome
+        assert "ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf" in texto, nome
+        # Cada `docker run` do release leva o peso, direto ou pelo array `comum`.
+        for linha in texto.splitlines():
+            if linha.strip().startswith("docker run ") and "comum" not in linha:
+                assert "--cpu-shares 256" in linha, (nome, linha)
