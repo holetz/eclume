@@ -379,8 +379,10 @@ fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
 - **ASR residente.** Na `whisperx-local`, o ASR fica carregado entre jobs, ao lado de um lugar
   para o modelo da etapa (alinhamento ou diarização). Antes de carregar o modelo de uma etapa com
   menos de `ECLUME_RESIDENT_MIN_FREE_MB` (2500) livres, o ASR sai; um OOM numa etapa com o ASR
-  residente o descarrega e repete a etapa uma vez. No fim do job, o modelo da etapa sai e o ASR
-  fica até a descarga por ociosidade (`ECLUME_MODEL_IDLE_SECONDS`, 300 s).
+  residente o descarrega e repete a etapa uma vez. Em todo recuo por OOM (do ASR ou da etapa), o
+  modelo anterior sai da VRAM antes da nova tentativa. No fim do job, o modelo da etapa sai,
+  também quando uma etapa falha, e o ASR fica até a descarga por ociosidade
+  (`ECLUME_MODEL_IDLE_SECONDS`, 300 s).
   `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez. O heartbeat declara os residentes.
 - **Idioma.** A engine recebe só o idioma de `language` (`pt-BR` → `pt`), e o raw guarda o valor
   recebido; com `language: null`, a engine detecta e o raw guarda o detectado.
