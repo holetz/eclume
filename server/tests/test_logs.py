@@ -27,6 +27,14 @@ def _app() -> FastAPI:
         logging.getLogger("eclume_server.teste").info("dentro")
         return {}
 
+    @app.get("/api/v1/health/ready")
+    def pronto() -> dict:
+        return {}
+
+    @app.get("/api/v1/health/falha", status_code=503)
+    def falha() -> dict:
+        return {}
+
     app.add_middleware(RequestIdMiddleware)
     return app
 
@@ -43,6 +51,17 @@ def test_request_id_novo_vai_na_resposta_e_no_log():
     assert acesso["logger"] == "eclume_server.acesso"
     assert acesso["msg"].startswith("GET /eco 200 ")
     assert "segredo" not in stream.getvalue()
+
+
+def test_log_de_acesso_pula_o_health_que_deu_certo():
+    stream = io.StringIO()
+    registro.configurar_logs(stream=stream)
+    client = TestClient(_app())
+    assert client.get("/api/v1/health/ready").status_code == 200
+    assert _linhas(stream) == []
+    assert client.get("/api/v1/health/falha").status_code == 503
+    (acesso,) = _linhas(stream)
+    assert acesso["msg"].startswith("GET /api/v1/health/falha 503 ")
 
 
 def test_request_id_recebido_e_reaproveitado_so_se_for_seguro():
