@@ -12,26 +12,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from redis.asyncio import Redis
-from sqlalchemy import exists, insert, select, update
-
 from eclume_engines.registro import configurar_logs
-from eclume_server.accounts import AccountError, create_admin, set_admin_password
-from eclume_server.agents.base import PROVIDER_AUTH
-from eclume_server.ca import CaError, generate, generate_proof, sha256, split_names
 from eclume_server.config import get_settings
-from eclume_server.context import AppContext
-from eclume_server.crypto import decrypt
-from eclume_server.db import tables as t
-from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate, pending
-from eclume_server.db.session import make_engine, system_tx
-from eclume_server.discovery import DiscoveryError, announce, discover
-from eclume_server.health import admin_health
-from eclume_server.queue import Queue
-from eclume_server.storage import Storage, audio_key
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+    from eclume_server.storage import Storage
 
 LEGACY_PREFIX = "orgs/"
 # Token de longa duração do `claude setup-token`: vale um ano a partir do cadastro.
@@ -48,6 +35,9 @@ def _password(from_stdin: bool) -> str:  # noqa: FBT001 — espelha a flag do CL
 
 
 async def _migrate() -> None:
+    from eclume_server.db.migrate import RUNTIME_ROLE, enable_runtime_login, migrate  # noqa: PLC0415
+    from eclume_server.db.session import make_engine  # noqa: PLC0415
+
     settings = get_settings()
     engine = make_engine(settings.database_url)
     try:
@@ -62,6 +52,9 @@ async def _migrate() -> None:
 
 
 async def _pending() -> None:
+    from eclume_server.db.migrate import pending  # noqa: PLC0415
+    from eclume_server.db.session import make_engine  # noqa: PLC0415
+
     engine = make_engine(get_settings().database_url)
     try:
         versions = await pending(engine)
@@ -72,6 +65,10 @@ async def _pending() -> None:
 
 
 async def _create_admin(args: argparse.Namespace, password: str) -> None:
+    from eclume_server.accounts import create_admin  # noqa: PLC0415
+    from eclume_server.db.migrate import migrate  # noqa: PLC0415
+    from eclume_server.db.session import make_engine, system_tx  # noqa: PLC0415
+
     engine = make_engine(get_settings().database_url)
     try:
         await migrate(engine)
@@ -83,6 +80,9 @@ async def _create_admin(args: argparse.Namespace, password: str) -> None:
 
 
 async def _set_admin_password(args: argparse.Namespace, password: str) -> None:
+    from eclume_server.accounts import set_admin_password  # noqa: PLC0415
+    from eclume_server.db.session import make_engine, system_tx  # noqa: PLC0415
+
     engine = make_engine(get_settings().database_url)
     try:
         async with system_tx(engine) as conn:
@@ -100,6 +100,12 @@ async def relocate_legacy(engine: AsyncEngine, storage: Storage, *, dry_run: boo
     Pula a gravação com job `queued`/`running`: o `transcribe` na fila carrega a chave antiga.
     Devolve uma linha por gravação, para o relatório.
     """
+    from sqlalchemy import exists, insert, select, update  # noqa: PLC0415
+
+    from eclume_server.db import tables as t  # noqa: PLC0415
+    from eclume_server.db.session import system_tx  # noqa: PLC0415
+    from eclume_server.storage import audio_key  # noqa: PLC0415
+
     r, jobs = t.recordings.c, t.transcription_jobs.c
     open_job = exists().where(jobs.recording_id == r.id, jobs.state.in_(["queued", "running"]))
     async with system_tx(engine) as conn:
@@ -136,6 +142,9 @@ async def relocate_legacy(engine: AsyncEngine, storage: Storage, *, dry_run: boo
 
 
 async def _relocate(dry_run: bool) -> None:  # noqa: FBT001 — espelha a flag do CLI
+    from eclume_server.db.session import make_engine  # noqa: PLC0415
+    from eclume_server.storage import Storage  # noqa: PLC0415
+
     settings = get_settings()
     engine = make_engine(settings.database_url)
     try:
@@ -148,6 +157,8 @@ async def _relocate(dry_run: bool) -> None:  # noqa: FBT001 — espelha a flag d
 
 
 def _discover(timeout: float) -> int:
+    from eclume_server.discovery import discover  # noqa: PLC0415
+
     servers = asyncio.run(discover(timeout))
     for server in servers:
         print(json.dumps(server, ensure_ascii=False))  # noqa: T201
@@ -155,15 +166,6 @@ def _discover(timeout: float) -> int:
         print("nenhum servidor eclume encontrado", file=sys.stderr)  # noqa: T201
         return 1
     return 0
-
-
-async def _queue_alive(queue: str) -> bool:
-    """A chave `eclume:<fila>:health-check` que o arq do worker renova a cada 15 s existe."""
-    client = Redis.from_url(get_settings().redis_url)
-    try:
-        return bool(await client.exists(f"eclume:{queue}:health-check"))
-    finally:
-        await client.aclose()
 
 
 def token_validity(providers: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
@@ -187,6 +189,17 @@ def token_validity(providers: list[dict[str, Any]], now: datetime) -> dict[str, 
 
 async def _health_report() -> dict[str, Any]:
     """`saude --json`: os números da Saúde do admin, um resumo para o `vigia.sh` e o token do Claude."""
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from eclume_server.agents.base import PROVIDER_AUTH  # noqa: PLC0415
+    from eclume_server.context import AppContext  # noqa: PLC0415
+    from eclume_server.crypto import decrypt  # noqa: PLC0415
+    from eclume_server.db import tables as t  # noqa: PLC0415
+    from eclume_server.db.session import make_engine, system_tx  # noqa: PLC0415
+    from eclume_server.health import admin_health  # noqa: PLC0415
+    from eclume_server.queue import Queue  # noqa: PLC0415
+    from eclume_server.storage import Storage  # noqa: PLC0415
+
     settings = get_settings()
     engine = make_engine(settings.database_url)
     queue = await Queue.connect(settings.redis_url)
@@ -229,6 +242,8 @@ async def _health_report() -> dict[str, Any]:
 
 
 def _ca_generate(args: argparse.Namespace) -> None:
+    from eclume_server.ca import generate, generate_proof, sha256, split_names  # noqa: PLC0415
+
     if args.prova:
         root = generate_proof(Path(args.prova))
         print(f"prova em {args.prova}: raiz.crt, dentro.crt/key (127.0.0.1), fora.crt/key (127.0.0.2)")  # noqa: T201
@@ -248,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pendentes", action="store_true", help="só lista as migrations pendentes, uma por linha, sem aplicar"
     )
 
+    commands.add_parser("worker", help="roda os workers CPU das filas eclume:default e eclume:agents num processo só")
     commands.add_parser("announce", help="anuncia o servidor na rede local (mDNS _eclume._tcp) até ser interrompido")
     found = commands.add_parser("discover", help="procura servidores eclume na rede local e imprime um JSON por linha")
     found.add_argument("--timeout", type=float, default=5.0, help="segundos de escuta (padrão 5)")
@@ -267,7 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="sonda", required=True
     )
     probe_queue = probe.add_parser("fila", help="sai 0 se o worker arq da fila renovou o health-check (16 s)")
-    probe_queue.add_argument("nome", help="fila sem o prefixo eclume: (default, agents)")
+    probe_queue.add_argument("nome", nargs="+", help="filas sem o prefixo eclume: (default, agents)")
 
     ca = commands.add_parser("ca", help="CA raiz própria do eclume").add_subparsers(dest="ca", required=True)
     ca_generate = ca.add_parser(
@@ -296,6 +312,37 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _worker() -> None:
+    from eclume_server.worker import main as worker_main  # noqa: PLC0415
+
+    worker_main()
+
+
+def _announce() -> None:
+    from eclume_server.discovery import announce  # noqa: PLC0415
+
+    asyncio.run(announce(get_settings()))
+
+
+# Comandos que rodam até serem interrompidos e não levam argumento.
+LONG_RUNNING = {"worker": _worker, "announce": _announce}
+
+
+def _sonda(filas: list[str]) -> int:
+    from eclume_server.sonda import main as sonda  # noqa: PLC0415
+
+    return sonda(["fila", *filas])
+
+
+def _erros_de_negocio() -> tuple[type[Exception], ...]:
+    """Os erros que o CLI mostra como `erro: …` (código 2); importados só quando um comando falhou."""
+    from eclume_server.accounts import AccountError  # noqa: PLC0415
+    from eclume_server.ca import CaError  # noqa: PLC0415
+    from eclume_server.discovery import DiscoveryError  # noqa: PLC0415
+
+    return (AccountError, CaError, DiscoveryError)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Ponto de entrada do script `eclume-server`."""
     args = build_parser().parse_args(argv)
@@ -304,14 +351,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "migrate":
             asyncio.run(_pending() if args.pendentes else _migrate())
-        elif args.command == "announce":
-            asyncio.run(announce(get_settings()))
+        elif args.command in LONG_RUNNING:
+            LONG_RUNNING[args.command]()
         elif args.command == "discover":
             return _discover(args.timeout)
         elif args.command == "saude":
             print(json.dumps(asyncio.run(_health_report()), ensure_ascii=False))  # noqa: T201
         elif args.command == "sonda":
-            return 0 if asyncio.run(_queue_alive(args.nome)) else 1
+            return _sonda(args.nome)
         elif args.command == "storage":
             asyncio.run(_relocate(args.dry_run))
         elif args.command == "ca":
@@ -320,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(_create_admin(args, _password(args.password_stdin)))
         else:
             asyncio.run(_set_admin_password(args, _password(args.password_stdin)))
-    except (AccountError, CaError, DiscoveryError) as exc:
+    except _erros_de_negocio() as exc:
         print(f"erro: {exc}", file=sys.stderr)  # noqa: T201
         return 2
     return 0

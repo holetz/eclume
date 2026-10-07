@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://eclume:eclume@127.0.0.1:5432/eclume"
     # Com valor, `eclume-server migrate` liga o LOGIN de `eclume_server` com esta senha.
     runtime_db_password: str | None = None
+    # Pool de conexões do processo (`ECLUME_DB_POOL_SIZE`, `ECLUME_DB_MAX_OVERFLOW`); sem valor,
+    # 5/5 na API e 3/2 no worker (`db.session.make_runtime_engine`).
+    db_pool_size: int | None = None
+    db_max_overflow: int | None = None
     redis_url: str = "redis://127.0.0.1:6379/0"
 
     s3_endpoint: str = "http://127.0.0.1:9000"

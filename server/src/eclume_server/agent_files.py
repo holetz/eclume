@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from docx import Document
-
 from eclume_server.exports import _markdown
 
 if TYPE_CHECKING:
@@ -128,6 +126,8 @@ def _docx_text(data: bytes) -> str:
                 raise FileRejectedError("O documento descompactado passa do limite.")
     except zipfile.BadZipFile as exc:
         raise FileRejectedError("O arquivo não é um documento do Word (.docx).") from exc
+    from docx import Document  # noqa: PLC0415 — o worker não lê DOCX
+
     try:
         doc = Document(BytesIO(data))
     except Exception as exc:
@@ -170,6 +170,8 @@ def render_output(name: str, fmt: str, content: str) -> Rendered:
         raise ValueError(fmt)
     content = content[:MAX_OUTPUT_CHARS]
     if fmt == "docx":
+        from docx import Document  # noqa: PLC0415
+
         doc = Document()
         _markdown(doc, _XML_INVALID.sub("", content))
         buffer = BytesIO()

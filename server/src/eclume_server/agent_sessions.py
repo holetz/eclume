@@ -27,6 +27,7 @@ from eclume_server.agent_files import (
     MAX_INPUT_BYTES,
     MAX_INPUTS_PER_MESSAGE,
     MAX_INPUTS_PER_SESSION,
+    Extracted,
     FileRejectedError,
     clean_name,
     extract_text,
@@ -248,15 +249,37 @@ async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID
 # --- anexos --------------------------------------------------------------------------------------
 
 
-async def add_input_file(  # noqa: PLR0913, PLR0917 — a conversa, o dono, o arquivo e o storage
-    conn: AsyncConnection,
-    storage: Storage,
-    owner_id: UUID,
-    session_id: UUID,
-    name: str,
-    data: bytes,
+@dataclass(frozen=True)
+class PreparedFile:
+    """O anexo com o texto já extraído (ou a recusa), pronto para `add_input_file`."""
+
+    name: str
+    data: bytes
+    extracted: Extracted | None = None
+    rejection: FileRejectedError | None = None
+
+
+async def prepare_input_file(name: str, data: bytes) -> PreparedFile:
+    """Extrai o texto do anexo numa thread, **antes** da transação com trava da conversa.
+
+    A extração de um PDF grande leva segundos; feita dentro da transação, ela seguraria a linha
+    da conversa (`FOR UPDATE`) e uma conexão do pool. A recusa fica guardada e só sobe em
+    `add_input_file`, no ponto de sempre, para a ordem dos erros (413, 404, 409, 415) não mudar.
+    """
+    filename = clean_name(name)
+    if len(data) > MAX_INPUT_BYTES:
+        return PreparedFile(filename, data)
+    try:
+        return PreparedFile(filename, data, extracted=await asyncio.to_thread(extract_text, filename, data))
+    except FileRejectedError as exc:
+        return PreparedFile(filename, data, rejection=exc)
+
+
+async def add_input_file(
+    conn: AsyncConnection, storage: Storage, owner_id: UUID, session_id: UUID, prepared: PreparedFile
 ) -> dict[str, Any]:
     """Guarda o anexo e o texto extraído; 413 acima do teto, 415 fora dos tipos, 409 na conversa cheia."""
+    data = prepared.data
     if len(data) > MAX_INPUT_BYTES:
         raise payload_too_large(MAX_INPUT_BYTES)
     await _session(conn, session_id, lock=True)
@@ -269,11 +292,11 @@ async def add_input_file(  # noqa: PLR0913, PLR0917 — a conversa, o dono, o ar
     ).scalar_one()
     if count >= MAX_INPUTS_PER_SESSION:
         raise conflict(f"A conversa já tem {MAX_INPUTS_PER_SESSION} anexos; comece uma nova.", "too_many_files")
-    filename = clean_name(name)
-    try:
-        extracted = await asyncio.to_thread(extract_text, filename, data)
-    except FileRejectedError as exc:
-        raise unsupported_media_type(str(exc)) from exc
+    filename = prepared.name
+    if prepared.rejection is not None:
+        raise unsupported_media_type(str(prepared.rejection)) from prepared.rejection
+    extracted = prepared.extracted
+    assert extracted is not None  # noqa: S101 — sem recusa e sem excesso de tamanho, a extração existe
     file_id = uuid4()
     key = file_key(owner_id, session_id, file_id)
     row = (
@@ -641,6 +664,7 @@ async def run_agent_turn_job(
 
 
 __all__ = [
+    "PreparedFile",
     "add_input_file",
     "create_session",
     "delete_input_file",

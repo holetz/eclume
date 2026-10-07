@@ -406,14 +406,14 @@ async def put_part(
     return Response(status_code=200, headers={"ETag": etag})
 
 
-async def _read_part(request: Request, expected: int) -> bytes:
+async def _read_part(request: Request, expected: int) -> bytearray:
     """O corpo da parte, lido em pedaços; passar de `expected` é 413 sem ler o resto."""
     data = bytearray()
     async for chunk in request.stream():
         data += chunk
         if len(data) > expected:
             raise payload_too_large(expected)
-    return bytes(data)
+    return data  # o boto3 aceita bytearray: sem a cópia de `bytes(data)` (até 8 MiB por parte)
 
 
 @asynccontextmanager

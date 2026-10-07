@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.9
-# Imagem do server do eclume: API (uvicorn), worker CPU (arq, fila eclume:default), migrations e
-# o CLI `eclume-server`. Uma imagem para os quatro papéis; o compose de produção escolhe o comando.
+# Imagem do server do eclume: API (uvicorn), worker CPU (`eclume-server worker`: arq com as filas
+# eclume:default e eclume:agents num processo), migrations e o CLI `eclume-server`. Uma imagem para
+# todos os papéis; o compose de produção escolhe o comando.
 #
 # Build a partir da RAIZ do repositório, no daemon do host (o contexto é filtrado por
 # deploy/server.Dockerfile.dockerignore, lido pelo BuildKit por estar ao lado deste arquivo):
@@ -51,7 +52,9 @@ RUN mkdir -p /home/app/.claude && chown -R 1000:1000 /home/app
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     HOME=/home/app \
-    DISABLE_AUTOUPDATER=1
+    DISABLE_AUTOUPDATER=1 \
+    MALLOC_ARENA_MAX=2 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 WORKDIR /home/app
 USER 1000:1000
 EXPOSE 8000

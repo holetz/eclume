@@ -56,6 +56,17 @@ def test_idempotente_e_cobre_uvicorn_e_arq():
     assert primeiro.getvalue() == ""
 
 
+def test_cron_do_arq_so_aparece_em_warning():
+    stream = io.StringIO()
+    registro.configurar_logs(stream=stream)
+    arq = logging.getLogger("arq.worker")
+    arq.info("%6.2fs → %s(%s)", 0.0, "cron:reap_stalled_jobs:1:cron:reap_stalled_jobs", "")
+    arq.info("%6.2fs → %s(%s)", 0.0, "abc:ingest_transcript", "")
+    arq.warning("%6.2fs ! %s max retries %d exceeded", 1.0, "cron:x:cron:x", 3)
+    assert [linha["level"] for linha in _linhas(stream)] == ["INFO", "WARNING"]
+    assert "ingest_transcript" in _linhas(stream)[0]["msg"]
+
+
 def test_excecao_vai_no_campo_exc():
     stream = io.StringIO()
     registro.configurar_logs(stream=stream)

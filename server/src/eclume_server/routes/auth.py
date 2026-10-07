@@ -30,6 +30,7 @@ from eclume_server.accounts import (
 )
 from eclume_server.auth import CSRF_COOKIE, SESSION_COOKIE, Principal, requires
 from eclume_server.context import AppContext, get_ctx
+from eclume_server.contract import CONTRACT_VERSION
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.health import readiness
@@ -53,7 +54,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-CONTRACT_VERSION = "2.24.0"
 WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta, timezone
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
-from docx import Document
 from sqlalchemy import select
 
 from eclume_server.agents.prompting import hms
@@ -192,6 +191,8 @@ def _markdown(doc: DocxDocument, markdown: str) -> None:
 def render_docx(export: Export) -> bytes:
     """Título, data/duração/participantes, o resumo (se houver) e a transcrição, um parágrafo por fala."""
     export = _xml_safe(export)
+    from docx import Document  # noqa: PLC0415 — o worker não monta DOCX
+
     doc = Document()
     doc.add_heading(export.title, level=0)
     doc.add_paragraph(" · ".join(export.meta()))

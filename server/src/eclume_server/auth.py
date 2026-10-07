@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hmac
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -67,6 +67,10 @@ class AdminPrincipal:
     session_id: UUID
 
 
+# Precisão de `api_tokens.last_used_at` e `mcp_last_used_at`.
+USED_AT_RESOLUTION = timedelta(seconds=60)
+
+
 async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> Principal:
     now = datetime.now(UTC)
     query = (
@@ -83,9 +87,16 @@ async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> P
             or not row["active"]
         ):
             raise unauthorized("PAT inválido, expirado ou revogado.")
-        # O uso pelo MCP conta os assistentes conectados na Saúde.
-        used = {"last_used_at": now, "mcp_last_used_at": now} if via_mcp else {"last_used_at": now}
-        await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(**used))
+        # O uso pelo MCP conta os assistentes conectados na Saúde. Cada marca só é regravada
+        # quando a gravada tem mais de `USED_AT_RESOLUTION`: o PAT não escreve no banco a cada requisição.
+        stale = now - USED_AT_RESOLUTION
+        used = {
+            column: now
+            for column in (("last_used_at", "mcp_last_used_at") if via_mcp else ("last_used_at",))
+            if row[column] is None or row[column] < stale
+        }
+        if used:
+            await conn.execute(update(t.api_tokens).where(t.api_tokens.c.id == row["id"]).values(**used))
     scopes = tuple(scope for scope in ALL_SCOPES if scope in row["scopes"])
     return Principal(row["user_id"], "pat", scopes, token_id=row["id"])
 

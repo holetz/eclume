@@ -12,12 +12,30 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from uuid import UUID
 
+    from eclume_server.config import Settings
+
+# Conexões fixas e de reserva por processo: a API atende requisições em paralelo, o worker faz
+# transações curtas por job.
+API_POOL = (5, 5)
+WORKER_POOL = (3, 2)
+
 _SET_CONTEXT = text("SELECT set_config('app.user_id', :user, true)")
 
 
 def make_engine(database_url: str) -> AsyncEngine:
     """Engine assíncrono (asyncpg) com pool."""
     return create_async_engine(database_url, pool_pre_ping=True)
+
+
+def make_runtime_engine(settings: Settings, *, worker: bool = False) -> AsyncEngine:
+    """Engine da API ou do worker, com o pool de `ECLUME_DB_POOL_SIZE`/`ECLUME_DB_MAX_OVERFLOW` (ou o padrão)."""
+    size, overflow = WORKER_POOL if worker else API_POOL
+    return create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_size=size if settings.db_pool_size is None else settings.db_pool_size,
+        max_overflow=overflow if settings.db_max_overflow is None else settings.db_max_overflow,
+    )
 
 
 @asynccontextmanager

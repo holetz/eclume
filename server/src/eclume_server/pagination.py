@@ -5,15 +5,27 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
-
-from fastapi import Query
 
 from eclume_server.problems import invalid_field
 
-Limit = Annotated[int, Query(ge=1, le=200, description="Itens por página.")]
-Cursor = Annotated[str | None, Query(description="Cursor opaco devolvido em `next_cursor`.")]
+if TYPE_CHECKING:
+    from fastapi import Query
+
+    Limit = Annotated[int, Query(ge=1, le=200, description="Itens por página.")]
+    Cursor = Annotated[str | None, Query(description="Cursor opaco devolvido em `next_cursor`.")]
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562: `Limit` e `Cursor` só existem com FastAPI
+    """Os parâmetros de rota `Limit` e `Cursor` carregam o FastAPI na primeira importação; o worker não os usa."""
+    if name not in {"Limit", "Cursor"}:
+        raise AttributeError(name)
+    from fastapi import Query  # noqa: PLC0415
+
+    globals()["Limit"] = Annotated[int, Query(ge=1, le=200, description="Itens por página.")]
+    globals()["Cursor"] = Annotated[str | None, Query(description="Cursor opaco devolvido em `next_cursor`.")]
+    return globals()[name]
 
 
 def iso(value: datetime | None) -> str | None:

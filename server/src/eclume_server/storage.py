@@ -113,7 +113,13 @@ class Storage:
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
             region_name=settings.s3_region,
-            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+                # Sem o CRC32 padrão do boto3 recente: o MinIO não o exige e ele custa CPU por parte.
+                request_checksum_calculation="when_required",
+                response_checksum_validation="when_required",
+            ),
         )
 
     async def head_bucket(self) -> None:
@@ -127,7 +133,7 @@ class Storage:
         )
         return response["UploadId"]
 
-    async def upload_part(self, key: str, upload_id: str, part_number: int, body: bytes) -> str:
+    async def upload_part(self, key: str, upload_id: str, part_number: int, body: bytes | bytearray) -> str:
         """Grava uma parte e devolve o `ETag`; multipart sumido é `MultipartGoneError`."""
         try:
             response = await run_in_threadpool(

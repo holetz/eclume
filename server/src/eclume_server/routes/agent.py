@@ -32,6 +32,7 @@ from eclume_server.agent_sessions import (
     enqueue_turn,
     file_for_download,
     list_sessions,
+    prepare_input_file,
     read_message,
     rename_session,
     send_message,
@@ -132,8 +133,9 @@ async def post_file(
     data = await file.read(MAX_INPUT_BYTES + 1)
     if len(data) > MAX_INPUT_BYTES:
         raise payload_too_large(MAX_INPUT_BYTES)
+    prepared = await prepare_input_file(file.filename or "", data)
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        return await add_input_file(conn, ctx.storage, principal.user_id, session_id, file.filename or "", data)
+        return await add_input_file(conn, ctx.storage, principal.user_id, session_id, prepared)
 
 
 @router.delete("/agent/sessions/{session_id}/files/{file_id}", status_code=204)

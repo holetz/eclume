@@ -5,13 +5,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
+# FastAPI só é importado quando uma resposta ou um handler precisa dele: o worker usa os erros
+# (`invalid_field`, `conflict`…) sem carregar o framework web.
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +74,8 @@ class ApiProblemError(Exception):
 
     def response(self) -> JSONResponse:
         """Resposta HTTP do problema."""
+        from fastapi.responses import JSONResponse  # noqa: PLC0415
+
         return JSONResponse(self.body(), status_code=self.status_code, media_type=PROBLEM_JSON, headers=self.headers)
 
 
@@ -166,6 +166,8 @@ def _field(loc: tuple[Any, ...]) -> str:
 
 
 async def _validation_handler(_: Request, exc: Exception) -> JSONResponse:
+    from fastapi.exceptions import RequestValidationError  # noqa: PLC0415
+
     assert isinstance(exc, RequestValidationError)  # noqa: S101 — registrado só para este tipo
     errors = [{"field": _field(tuple(error["loc"])), "message": error["msg"]} for error in exc.errors()]
     return validation_failed(errors).response()
@@ -177,6 +179,9 @@ async def _problem_handler(_: Request, exc: Exception) -> JSONResponse:
 
 
 async def _http_handler(_: Request, exc: Exception) -> JSONResponse:
+    from fastapi import status  # noqa: PLC0415
+    from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: PLC0415
+
     assert isinstance(exc, StarletteHTTPException)  # noqa: S101 — registrado só para este tipo
     code = {
         status.HTTP_404_NOT_FOUND: "not_found",
@@ -192,6 +197,9 @@ async def _internal_handler(request: Request, exc: Exception) -> JSONResponse:
 
 def install_handlers(app: FastAPI) -> None:
     """Faz todo erro da API sair como problem+json, inclusive o 500 inesperado."""
+    from fastapi.exceptions import RequestValidationError  # noqa: PLC0415
+    from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: PLC0415
+
     app.add_exception_handler(ApiProblemError, _problem_handler)
     app.add_exception_handler(RequestValidationError, _validation_handler)
     app.add_exception_handler(StarletteHTTPException, _http_handler)

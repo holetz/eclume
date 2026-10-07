@@ -12,8 +12,8 @@ from typing import Any
 import pytest
 
 from eclume_server.config import Settings
+from eclume_server.contract import CONTRACT_VERSION
 from eclume_server.discovery import SERVICE_TYPE, Announcer, DiscoveryError, describe, endpoint, service_info
-from eclume_server.routes.auth import CONTRACT_VERSION
 
 CA = Path(__file__).parent / "fixtures" / "ca-teste.pem"
 CA_SHA256 = "b127358a576a7cd0e4d76b63271e80a7d168a412e635e10855fcde3f83a4dd20"

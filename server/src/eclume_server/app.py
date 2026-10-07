@@ -15,7 +15,7 @@ from eclume_engines.registro import configurar_logs, request_id
 from eclume_server import __version__
 from eclume_server.config import Settings, get_settings
 from eclume_server.context import AppContext
-from eclume_server.db.session import make_engine
+from eclume_server.db.session import make_runtime_engine
 from eclume_server.limits import BodyLimitMiddleware
 from eclume_server.mcp_server.app import mount_mcp
 from eclume_server.problems import install_handlers
@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 access_log = logging.getLogger("eclume_server.acesso")
 REQUEST_ID_HEADER = b"x-request-id"
+# A sonda do compose e o painel batem aqui o tempo todo: o acesso bem-sucedido não vai ao log.
+HEALTH_PATH = "/api/v1/health"
 # O id recebido só é reaproveitado se for curto e sem nada que injete no log ou no cabeçalho.
 _REQUEST_ID_OK = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
@@ -38,7 +40,7 @@ class RequestIdMiddleware:
     """Dá a cada requisição HTTP um `X-Request-ID` (o recebido ou um novo) e registra o acesso.
 
     O log de acesso grava método, caminho, status e duração; nunca a query string (as URLs de parte
-    e de áudio são assinadas) nem cabeçalhos.
+    e de áudio são assinadas) nem cabeçalhos. `/api/v1/health/*` só aparece quando falha (4xx/5xx).
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -68,7 +70,9 @@ class RequestIdMiddleware:
             await self.app(scope, receive, send_with_id)
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000
-            access_log.info("%s %s %d %.0fms", scope["method"], scope["path"], status, elapsed_ms)
+            path = scope["path"]
+            if status >= 400 or not (path == HEALTH_PATH or path.startswith(HEALTH_PATH + "/")):  # noqa: PLR2004
+                access_log.info("%s %s %d %.0fms", scope["method"], path, status, elapsed_ms)
             request_id.reset(token)
 
 
@@ -79,7 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = make_engine(settings.database_url)
+        engine = make_runtime_engine(settings)
         queue = await Queue.connect(settings.redis_url)
         app.state.ctx = AppContext(settings=settings, engine=engine, storage=Storage(settings), queue=queue)
         try:
