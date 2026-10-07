@@ -6,8 +6,13 @@
 # do projeto compose eclume-gate, e publica o resultado no commit como status `eclume/gate`.
 # Contrato: docs/standards/code/monorepo.md.
 #
-# Uso: bash <árvore>/deploy/gate-host.sh --sha <sha> [--pilares a,b]
+# Os pilares são os que o diff desde o último SHA verde do histórico exige (mapa de caminhos em
+# deploy/gate.py, o mesmo dos filtros da CI); os outros ficam dispensados e o status diz quais. Sem
+# SHA verde encontrável (primeira execução, histórico reescrito), roda todos.
+#
+# Uso: bash <árvore>/deploy/gate-host.sh --sha <sha> [--pilares a,b] [--todos]
 #   --pilares  roda só esses pilares e não publica status (execução parcial).
+#   --todos    publica o status rodando todos os pilares, sem olhar o diff.
 # Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_GATE_MEMORY (teto por contêiner, 4g),
 #            ECLUME_GATE_CACHE_GB (orçamento dos caches, 25), ECLUME_GATE_DIR (~/eclume-gate).
 # Medido em 2026-10-01 (holetz/eclume#89), com a produção de pé: 16 a 21 minutos; pico de memória
@@ -33,11 +38,13 @@ RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml)"
 IMG="eclume-gate:$RUST"
 SHA=""
 PILARES_PEDIDOS=""
+FORCAR_TODOS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sha) SHA="${2:?--sha exige o commit}"; shift 2 ;;
     --pilares) PILARES_PEDIDOS="${2:?--pilares exige a lista}"; shift 2 ;;
+    --todos) FORCAR_TODOS=1; shift ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -51,6 +58,8 @@ else
   PILARES=("${TODOS[@]}")
   PUBLICAR=1
 fi
+DISPENSADOS=()
+DESDE=""
 
 CACHE="$GATE_DIR/cache"
 LOG="$GATE_DIR/logs/$SHA.log"
@@ -62,7 +71,7 @@ echo "Aguardando a trava $GATE_DIR/.trava…" >&2
 flock 9
 
 [[ "$PUBLICAR" -eq 0 ]] || exec > >(tee "$LOG") 2>&1
-echo "Gate de $SHA · pilares: ${PILARES[*]} · $(date -Is)"
+echo "Gate de $SHA · $(date -Is)"
 
 # Publica o status pelo gh do host, tentando até o commit existir no GitHub (o hook de pre-push
 # dispara o gate antes de o push terminar). Sem conseguir em 30 minutos, o resultado fica no log.
@@ -97,6 +106,43 @@ final() {
 }
 trap final EXIT
 
+# O SHA verde mais próximo no histórico de $1 (o status `eclume/gate` em success); vazio se não achar.
+ultimo_verde() {
+  local c
+  while read -r c; do
+    [[ "$c" != "$1" ]] || continue
+    if gh api "repos/$REPO/commits/$c/status" 2>/dev/null | python3 deploy/gate.py decidir >/dev/null; then
+      echo "$c"; return 0
+    fi
+  done < <(gh api "repos/$REPO/commits?sha=$1&per_page=30" --jq '.[].sha' 2>/dev/null)
+}
+
+# Os pilares exigidos pelo diff do último SHA verde até o SHA, decididos depois da trava (a execução
+# anterior pode ter acabado de publicar um verde mais novo). Qualquer falha em saber o diff roda todos.
+if [[ "$PUBLICAR" -eq 1 && "$FORCAR_TODOS" -eq 0 ]]; then
+  verde="$(ultimo_verde "$SHA" || true)"
+  if [[ -z "$verde" ]]; then
+    echo "Sem SHA verde no histórico de $SHA: rodando todos os pilares."
+  elif arquivos="$(gh api "repos/$REPO/compare/$verde...$SHA" --paginate \
+      --jq '.files[] | .filename, (.previous_filename // empty)' 2>/dev/null)" \
+      && mapfile -t exigidos < <(printf '%s\n' "$arquivos" | python3 deploy/gate.py pilares --stdin); then
+    # Compare lista no máximo 3000 arquivos: acima disso o diff está truncado.
+    if (( $(printf '%s\n' "$arquivos" | grep -c .) >= 3000 )); then
+      echo "Diff de $verde a $SHA grande demais para listar: rodando todos os pilares."
+    else
+      PILARES=("${exigidos[@]}")
+      DESDE="$verde"
+      for p in "${TODOS[@]}"; do
+        [[ " ${PILARES[*]} " == *" $p "* ]] || DISPENSADOS+=("$p")
+      done
+      echo "Diff desde o último verde $verde: exigidos ${PILARES[*]:-nenhum}; dispensados ${DISPENSADOS[*]:-nenhum}."
+    fi
+  else
+    echo "Não consegui o diff de $verde a $SHA: rodando todos os pilares."
+  fi
+fi
+echo "Pilares: ${PILARES[*]:-nenhum}"
+
 publicar pending "rodando ${#PILARES[@]} pilares · log $LOG"
 
 pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
@@ -109,6 +155,9 @@ if (( cache_gb > CACHE_GB )); then
   rm -rf "$CACHE"/target-*
 fi
 
+declare -A RESULTADO=()
+inicio=$SECONDS
+if (( ${#PILARES[@]} > 0 )); then
 # --- imagens: as de base do release, se faltarem, e a do gate (camadas em cache) ------------------
 export BUILDKIT_PROGRESS=plain
 docker image inspect "eclume-desktop-build:$RUST" >/dev/null 2>&1 \
@@ -120,8 +169,6 @@ docker build -q --build-arg "RUST=$RUST" -t "$IMG" - < deploy/gate.Dockerfile
 # --- serviços: Postgres, Redis, MinIO e o mock, na rede do projeto --------------------------------
 compose up -d --wait
 
-declare -A RESULTADO=()
-inicio=$SECONDS
 for pilar in "${PILARES[@]}"; do
   echo "=== pilar $pilar · $(date -Is) ==="
   mkdir -p "$CACHE/target-$pilar"
@@ -148,6 +195,7 @@ for pilar in "${PILARES[@]}"; do
   set -e
   echo "=== pilar $pilar: saída ${RESULTADO[$pilar]} em $((SECONDS - t0))s ==="
 done
+fi
 
 resultados=""
 for pilar in "${PILARES[@]}"; do resultados+="$pilar ${RESULTADO[$pilar]}"$'\n'; done
@@ -158,7 +206,8 @@ if [[ "$PUBLICAR" -eq 0 ]]; then
   for pilar in "${PILARES[@]}"; do [[ "${RESULTADO[$pilar]}" -eq 0 ]] || exit 1; done
   exit 0
 fi
-mapfile -t saida < <(printf '%s' "$resultados" | python3 deploy/gate.py descricao --duracao "$((SECONDS - inicio))" --log "$LOG")
+mapfile -t saida < <(printf '%s' "$resultados" | python3 deploy/gate.py descricao --duracao "$((SECONDS - inicio))" --log "$LOG" \
+  --dispensados "$(IFS=,; echo "${DISPENSADOS[*]:-}")" --desde "$DESDE")
 publicar "${saida[0]}" "${saida[1]}"
 publicado=1
 [[ "${saida[0]}" == success ]]
