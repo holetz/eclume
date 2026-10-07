@@ -263,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pendentes", action="store_true", help="só lista as migrations pendentes, uma por linha, sem aplicar"
     )
 
+    commands.add_parser("worker", help="roda os workers CPU das filas eclume:default e eclume:agents num processo só")
     commands.add_parser("announce", help="anuncia o servidor na rede local (mDNS _eclume._tcp) até ser interrompido")
     found = commands.add_parser("discover", help="procura servidores eclume na rede local e imprime um JSON por linha")
     found.add_argument("--timeout", type=float, default=5.0, help="segundos de escuta (padrão 5)")
@@ -311,6 +312,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _worker() -> None:
+    from eclume_server.worker import main as worker_main  # noqa: PLC0415
+
+    worker_main()
+
+
+def _announce() -> None:
+    from eclume_server.discovery import announce  # noqa: PLC0415
+
+    asyncio.run(announce(get_settings()))
+
+
+# Comandos que rodam até serem interrompidos e não levam argumento.
+LONG_RUNNING = {"worker": _worker, "announce": _announce}
+
+
+def _sonda(filas: list[str]) -> int:
+    from eclume_server.sonda import main as sonda  # noqa: PLC0415
+
+    return sonda(["fila", *filas])
+
+
 def _erros_de_negocio() -> tuple[type[Exception], ...]:
     """Os erros que o CLI mostra como `erro: …` (código 2); importados só quando um comando falhou."""
     from eclume_server.accounts import AccountError  # noqa: PLC0415
@@ -328,18 +351,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "migrate":
             asyncio.run(_pending() if args.pendentes else _migrate())
-        elif args.command == "announce":
-            from eclume_server.discovery import announce  # noqa: PLC0415
-
-            asyncio.run(announce(get_settings()))
+        elif args.command in LONG_RUNNING:
+            LONG_RUNNING[args.command]()
         elif args.command == "discover":
             return _discover(args.timeout)
         elif args.command == "saude":
             print(json.dumps(asyncio.run(_health_report()), ensure_ascii=False))  # noqa: T201
         elif args.command == "sonda":
-            from eclume_server.sonda import main as sonda  # noqa: PLC0415
-
-            return sonda(["fila", *args.nome])
+            return _sonda(args.nome)
         elif args.command == "storage":
             asyncio.run(_relocate(args.dry_run))
         elif args.command == "ca":

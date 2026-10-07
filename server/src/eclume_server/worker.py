@@ -1,5 +1,10 @@
 """Workers CPU do server: `eclume:default` (`WorkerSettings`) e `eclume:agents` (`AgentWorkerSettings`).
 
+Em produção os dois rodam no mesmo processo e no mesmo event loop (`eclume-server worker`,
+`run_combined`): dois `arq.Worker`, cada um com a sua fila, as suas vagas, as suas funções e os
+seus crons, mas com um só engine do banco e um só cliente de armazenamento. `WorkerSettings` e
+`AgentWorkerSettings` seguem valendo para `arq` isolado (staging, e2e, testes).
+
 O de `eclume:default` consome o que o worker GPU enfileira ao fim de um `transcribe` —
 `ingest_transcript` e `transcription_failed` —, purga os embeddings e roda os crons: descarta
 uploads vencidos e marca como falha recuperável o job de transcrição que o worker GPU abandonou e a
@@ -13,14 +18,16 @@ docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-autom
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import signal
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from arq import Retry, cron
 from arq.connections import RedisSettings
-from arq.worker import func
+from arq.worker import Worker, func
 from sqlalchemy import delete, select, update
 
 from eclume_engines.fila import desserializar
@@ -82,17 +89,24 @@ TERMINAL_UPLOADS = ("completed", "deduplicated", "aborted", "expired")
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    """Log, engine e storage do processo; `ctx["settings"]` substitui o ambiente (testes)."""
+    """Log, engine e storage do processo; `ctx["settings"]` substitui o ambiente (testes).
+
+    Um `engine` e um `storage` já no `ctx` (o worker único os compartilha entre as filas) ficam
+    como estão, e quem os criou é quem os fecha.
+    """
     configurar_logs()
     settings: Settings = ctx.get("settings") or get_settings()
     ctx["settings"] = settings
-    ctx["engine"] = make_engine(settings.database_url)
-    ctx["storage"] = Storage(settings)
+    if "engine" not in ctx:
+        ctx["engine"] = make_engine(settings.database_url)
+        ctx["engine_owned"] = True
+    ctx.setdefault("storage", Storage(settings))
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    """Fecha o pool do banco."""
-    await ctx["engine"].dispose()
+    """Fecha o pool do banco, se foi este worker que o abriu."""
+    if ctx.get("engine_owned"):
+        await ctx["engine"].dispose()
 
 
 async def job_start(ctx: dict[str, Any]) -> None:
@@ -555,3 +569,55 @@ class AgentWorkerSettings:
     on_job_start = _AGENTS_FROM_ENV["on_job_start"]
     ctx = _AGENTS_FROM_ENV["ctx"]
     job_deserializer = _AGENTS_FROM_ENV["job_deserializer"]
+
+
+async def _run_worker(worker: Worker) -> None:
+    """Roda um `arq.Worker` até o fim ou até o sinal de parada, e o fecha."""
+    try:
+        await worker.async_run()
+    except asyncio.CancelledError:
+        pass  # o `handle_sig` cancelou o laço: parada pedida
+    finally:
+        await worker.close()
+
+
+async def run_combined(settings: Settings | None = None) -> None:
+    """Roda os workers de `eclume:default` e de `eclume:agents` no mesmo event loop.
+
+    Cada fila mantém as próprias vagas (`max_jobs`), funções, crons e chave de health-check; o
+    engine do banco e o armazenamento são um só. SIGTERM e SIGINT vão aos dois workers
+    (`handle_signals=False`: o arq não registra handler por conta própria, para não valer só o do
+    último). Sai quando os dois terminaram; se um deles cai com exceção, o outro é parado e a
+    exceção sobe.
+    """
+    settings = settings or get_settings()
+    engine = make_engine(settings.database_url)
+    shared = {"settings": settings, "engine": engine, "storage": Storage(settings)}
+    workers = []
+    for params in (worker_settings(settings), agent_worker_settings(settings)):
+        params["ctx"] = params["ctx"] | shared
+        workers.append(Worker(**params, handle_signals=False))
+
+    def stop(signum: signal.Signals) -> None:
+        for worker in workers:
+            worker.handle_sig(signum)
+
+    loop = asyncio.get_running_loop()
+    signals = (signal.SIGINT, signal.SIGTERM)
+    for signum in signals:
+        loop.add_signal_handler(signum, stop, signum)
+    tasks = [asyncio.create_task(_run_worker(worker)) for worker in workers]
+    try:
+        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        if pending:  # um dos workers caiu: o outro não fica sozinho
+            stop(signal.SIGTERM)
+        await asyncio.gather(*tasks)
+    finally:
+        for signum in signals:
+            loop.remove_signal_handler(signum)
+        await engine.dispose()
+
+
+def main() -> None:
+    """Entrada de `eclume-server worker`."""
+    asyncio.run(run_combined())
