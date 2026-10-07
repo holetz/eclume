@@ -16,7 +16,7 @@ CONFIGS: dict[str, dict[str, Any]] = COMPOSE["configs"]
 ENV_EXAMPLE = Path(__file__).with_name(".env.prod.example").read_text(encoding="utf-8")
 
 # Serviços da aplicação: nenhum vê a credencial root do MinIO.
-APP = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns", "caddy")
+APP = ("server", "worker", "worker-gpu", "migrate", "mdns", "caddy")
 ROOT_USERS = ("minio", "minio-init")
 
 
@@ -48,8 +48,7 @@ def test_credencial_root_so_no_minio_e_no_init(service: str) -> None:
     ("service", "redis_user", "s3_user", "s3_secret"),
     [
         ("server", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
-        ("worker-cpu", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
-        ("worker-agents", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
+        ("worker", "eclume-server", "eclume-server", "ECLUME_MINIO_SERVER_PASSWORD"),
         ("worker-gpu", "eclume-gpu", "eclume-gpu", "ECLUME_MINIO_GPU_PASSWORD"),
     ],
 )
@@ -94,7 +93,7 @@ def test_credencial_nova_no_env_de_exemplo(name: str) -> None:
 
 
 NETWORKS: dict[str, dict[str, Any]] = COMPOSE["networks"]
-PYTHON = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns")
+PYTHON = ("server", "worker", "worker-gpu", "migrate", "mdns")
 
 
 def _networks(service: str) -> set[str]:
@@ -130,13 +129,62 @@ def test_rede_conteiner_python_sem_capabilities(service: str) -> None:
 
 # Serviços de longa duração com teto; o mdns (rede do host, só anúncio) e o Postgres (protegido
 # pelo `oom_score_adj`) ficam de fora.
-LIMITED = ("caddy", "server", "worker-cpu", "worker-agents", "worker-gpu", "redis", "minio")
+LIMITS = {"caddy": "256m", "server": "768m", "worker": "2g", "worker-gpu": "8g", "redis": "256m", "minio": "512m"}
+_UNIT = {"m": 1, "g": 1024}
 
 
-@pytest.mark.parametrize("service", LIMITED)
-def test_limite_de_memoria_por_env(service: str) -> None:
+def _mb(valor: str) -> int:
+    return int(valor[:-1]) * _UNIT[valor[-1]]
+
+
+def _padrao(texto: str, var: str) -> str:
+    """O padrão de `${VAR:-padrão}` (ou do último fallback aninhado)."""
+    match = re.fullmatch(rf"\$\{{{var}:-(?:\$\{{\w+:-)?(\d+[mg])\}}+", texto)
+    assert match, texto
+    return match.group(1)
+
+
+@pytest.mark.parametrize(("service", "teto"), LIMITS.items())
+def test_limite_de_memoria_por_env(service: str, teto: str) -> None:
     var = "ECLUME_MEM_" + service.upper().replace("-", "_")
-    assert re.fullmatch(rf"\$\{{{var}:-\d+[mg]\}}", str(SERVICES[service]["mem_limit"]))
+    assert _padrao(str(SERVICES[service]["mem_limit"]), var) == teto
+
+
+@pytest.mark.parametrize("service", LIMITS)
+def test_limite_memswap_e_uma_vez_e_meia_o_teto(service: str) -> None:
+    """Sem `memswap_limit`, o contêiner usaria outro tanto em swap."""
+    var = "ECLUME_MEMSWAP_" + service.upper().replace("-", "_")
+    memswap = _padrao(str(SERVICES[service]["memswap_limit"]), var)
+    assert _mb(memswap) * 2 == _mb(LIMITS[service]) * 3
+
+
+def test_limite_so_onde_ha_teto() -> None:
+    """Teto em todo serviço de longa duração, menos o Postgres e o mdns."""
+    longos = {name for name, service in SERVICES.items() if not service.get("profiles")}
+    assert {name for name in longos if "mem_limit" in SERVICES[name]} == set(LIMITS)
+    assert longos - set(LIMITS) == {"postgres", "mdns"}
+
+
+def test_limite_worker_aceita_o_nome_anterior() -> None:
+    """O env.prod com ECLUME_MEM_WORKER_AGENTS (antes do worker único) continua valendo."""
+    assert SERVICES["worker"]["mem_limit"] == "${ECLUME_MEM_WORKER:-${ECLUME_MEM_WORKER_AGENTS:-2g}}"
+
+
+@pytest.mark.parametrize(
+    ("service", "peso"),
+    [
+        ("caddy", 2048),
+        ("server", 2048),
+        ("postgres", 2048),
+        ("redis", 1024),
+        ("minio", 1024),
+        ("worker", 1024),
+        ("worker-gpu", 512),
+        ("mdns", 512),
+    ],
+)
+def test_limite_peso_de_cpu_por_papel(service: str, peso: int) -> None:
+    assert SERVICES[service]["cpu_shares"] == peso
 
 
 def test_limite_postgres_protegido_do_oom() -> None:
@@ -157,10 +205,47 @@ def test_healthcheck_do_server_e_a_prontidao() -> None:
     assert "/api/v1/health/ready" in test
 
 
-def test_healthcheck_dos_workers_arq_pela_chave_da_fila() -> None:
-    """Cada worker arq é sondado pela chave de health-check da própria fila."""
-    assert SERVICES["worker-cpu"]["healthcheck"]["test"] == ["CMD", "eclume-server", "sonda", "fila", "default"]
-    assert SERVICES["worker-agents"]["healthcheck"]["test"] == ["CMD", "eclume-server", "sonda", "fila", "agents"]
+def test_worker_unico_com_as_duas_filas() -> None:
+    """Um worker CPU só, pelo `eclume-server worker`, sem os dois serviços de antes."""
+    worker = SERVICES["worker"]
+    assert worker["command"] == ["eclume-server", "worker"]
+    assert set(worker["networks"]) == {"dados", "saida"}
+    env = _env("worker")
+    assert env["ECLUME_AGENT_MAX_JOBS"] == "${ECLUME_AGENT_MAX_JOBS:-2}"
+    assert "ECLUME_CLAUDE_OAUTH_TOKEN" in env["CLAUDE_CODE_OAUTH_TOKEN"]
+    assert not {"worker-cpu", "worker-agents"} & set(SERVICES)
+
+
+def test_healthcheck_do_worker_pela_sonda_leve_das_duas_filas() -> None:
+    """O worker único é sondado pela chave de health-check das duas filas, sem o CLI inteiro."""
+    assert SERVICES["worker"]["healthcheck"]["test"] == [
+        "CMD",
+        "python",
+        "-m",
+        "eclume_server.sonda",
+        "fila",
+        "default",
+        "agents",
+    ]
+
+
+_SEGUNDOS = {"s": 1, "m": 60}
+
+
+def _s(valor: str) -> int:
+    return int(valor[:-1]) * _SEGUNDOS[valor[-1]]
+
+
+@pytest.mark.parametrize(
+    ("service", "intervalo"),
+    [("server", 30), ("worker", 60), ("worker-gpu", 60), ("postgres", 30), ("redis", 30), ("minio", 30)],
+)
+def test_healthcheck_espacado_com_inicio_curto(service: str, intervalo: int) -> None:
+    """Intervalo longo; `start_interval` curto dentro de um `start_period` para o `up --wait`."""
+    check = SERVICES[service]["healthcheck"]
+    assert _s(check["interval"]) == intervalo
+    assert _s(check["start_interval"]) <= 2  # noqa: PLR2004
+    assert _s(check["start_period"]) >= 30  # noqa: PLR2004
 
 
 def test_healthcheck_do_worker_gpu_pelo_heartbeat_com_folga_para_o_modelo() -> None:
@@ -172,7 +257,7 @@ def test_healthcheck_do_worker_gpu_pelo_heartbeat_com_folga_para_o_modelo() -> N
 
 def test_healthcheck_em_todo_servico_da_aplicacao_que_fica_no_ar() -> None:
     """Server e workers têm healthcheck."""
-    for name in ("server", "worker-cpu", "worker-agents", "worker-gpu"):
+    for name in ("server", "worker", "worker-gpu"):
         assert "healthcheck" in SERVICES[name], name
 
 
