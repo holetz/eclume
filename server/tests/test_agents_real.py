@@ -92,7 +92,7 @@ def _chat(request: str) -> tuple[ChatResult, float]:
 
 
 def test_chat_le_a_transcricao_quando_o_pedido_depende_dela():
-    result, _ = _chat("Quem falou primeiro sobre as turmas? Acrescente o nome dessa pessoa nas decisões.")
+    result, _ = _chat("Quem definiu quantas turmas serão? Acrescente o nome dessa pessoa na decisão das turmas.")
     assert result.reads, "o pedido depende do que foi dito: o agente precisa consultar a transcrição"
     assert result.message
     assert result.summary_md is not None
