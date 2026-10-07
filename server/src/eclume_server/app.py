@@ -15,7 +15,7 @@ from eclume_engines.registro import configurar_logs, request_id
 from eclume_server import __version__
 from eclume_server.config import Settings, get_settings
 from eclume_server.context import AppContext
-from eclume_server.db.session import make_engine
+from eclume_server.db.session import make_runtime_engine
 from eclume_server.limits import BodyLimitMiddleware
 from eclume_server.mcp_server.app import mount_mcp
 from eclume_server.problems import install_handlers
@@ -79,7 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = make_engine(settings.database_url)
+        engine = make_runtime_engine(settings)
         queue = await Queue.connect(settings.redis_url)
         app.state.ctx = AppContext(settings=settings, engine=engine, storage=Storage(settings), queue=queue)
         try:

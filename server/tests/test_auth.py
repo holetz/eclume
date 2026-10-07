@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     import pytest
+    from sqlalchemy.ext.asyncio import AsyncConnection
 
     from eclume_server_testing.api import Account
     from eclume_server_testing.harness import Services
@@ -102,6 +103,38 @@ def test_csrf_obrigatorio_em_metodo_mutavel_com_sessao(
     )
     assert wrong.status_code == 401
     assert api.get("/api/v1/me").status_code == 200  # GET não exige CSRF
+
+
+def test_pat_regrava_last_used_at_so_depois_de_60_s(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    session = as_user(make_user())
+    body = session.post("/api/v1/tokens", json={"name": "lumea", "scopes": ["people:read"]}).json()
+    pat = Api(session.client, token=body["secret"])
+    token_id = body["token"]["id"]
+
+    def last_used() -> datetime:
+        async def go(conn: AsyncConnection) -> datetime:
+            return (
+                await conn.execute(text("SELECT last_used_at FROM api_tokens WHERE id = :i"), {"i": token_id})
+            ).scalar_one()
+
+        return run(services.sql(go))
+
+    assert pat.get("/api/v1/me").status_code == 200
+    first = last_used()
+    assert pat.get("/api/v1/me").status_code == 200
+    assert last_used() == first  # menos de 60 s: sem escrita
+
+    async def backdate(conn: AsyncConnection) -> None:
+        await conn.execute(
+            text("UPDATE api_tokens SET last_used_at = now() - interval '2 minutes' WHERE id = :i"), {"i": token_id}
+        )
+
+    run(services.sql(backdate))
+    stale = last_used()
+    assert pat.get("/api/v1/me").status_code == 200
+    assert last_used() > stale
 
 
 def test_logout_encerra_a_sessao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):

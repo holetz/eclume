@@ -38,7 +38,7 @@ from eclume_server.agent_sessions import run_agent_turn_job
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
-from eclume_server.db.session import make_engine, system_tx
+from eclume_server.db.session import make_runtime_engine, system_tx
 from eclume_server.dispatch import dispatch_waiting, next_for_recording
 from eclume_server.fields import run_fill_fields
 from eclume_server.pipeline import GONE, STALE, current_revision, set_step
@@ -98,7 +98,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     settings: Settings = ctx.get("settings") or get_settings()
     ctx["settings"] = settings
     if "engine" not in ctx:
-        ctx["engine"] = make_engine(settings.database_url)
+        ctx["engine"] = make_runtime_engine(settings, worker=True)
         ctx["engine_owned"] = True
     ctx.setdefault("storage", Storage(settings))
 
@@ -591,7 +591,7 @@ async def run_combined(settings: Settings | None = None) -> None:
     exceção sobe.
     """
     settings = settings or get_settings()
-    engine = make_engine(settings.database_url)
+    engine = make_runtime_engine(settings, worker=True)
     shared = {"settings": settings, "engine": engine, "storage": Storage(settings)}
     workers = []
     for params in (worker_settings(settings), agent_worker_settings(settings)):
