@@ -53,13 +53,14 @@ bash deploy/gate.sh --estado              # status e fim do log no host
 O stack de produção no host GPU (`https://192.168.15.199:8443`), com o runbook completo em
 [docs/project/deploy-producao.md](../docs/project/deploy-producao.md):
 
-- `docker-compose.prod.yml`: projeto `eclume` — caddy (a única porta publicada, 8443), web, server,
-  worker-cpu, worker-gpu, mdns (anúncio `_eclume._tcp` na rede do host), postgres, redis e minio,
-  com dados em `/srv/eclume`, e os one-shots
-  `minio-init`, `migrate` e `publish-ca` no perfil `tools`.
+- `docker-compose.prod.yml`: projeto `eclume` — caddy (a borda com o SPA, a única porta
+  publicada, 8443), server, worker (as filas `eclume:default` e `eclume:agents`), worker-gpu, mdns
+  (anúncio `_eclume._tcp` na rede do host), postgres, redis e minio, com dados em `/srv/eclume`, e
+  os one-shots `minio-init`, `migrate` e `publish-ca` no perfil `tools`.
 - `server.Dockerfile`, `web.Dockerfile` e `web.Caddyfile`: as imagens `eclume-server:prod` e
-  `eclume-web:prod`, cada uma com o `.dockerignore` ao lado. A CLI `claude` só entra na do server
-  com `ECLUME_CLAUDE_CLI=1` (obrigatória no `.env.prod`, 0 ou 1; esta produção usa 1).
+  `eclume-edge:prod` (o Caddy com o SPA e as regras dele), cada uma com o `.dockerignore` ao lado.
+  A CLI `claude` só entra na do server com `ECLUME_CLAUDE_CLI=1` (obrigatória no `.env.prod`, 0 ou
+  1; esta produção usa 1).
 - `.env.prod.example`: as variáveis; `deploy.sh --gerar-env` cria o `deploy/.env.prod` real (600,
   fora do git).
 - `deploy.sh`: build no daemon do host pelo contexto Docker e subida em ordem; `bootstrap-admin.sh`:

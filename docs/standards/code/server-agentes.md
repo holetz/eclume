@@ -364,8 +364,9 @@ com `transcripts:read`; o Agente reaproveita essas ferramentas. O provider vem d
 
 Os jobs por agente — `detect_agenda_type`, `fill_fields`, `summarize`, `summary_chat`,
 `base_chat`, `agent_turn` e `run_preview` — rodam na fila `eclume:agents`, consumida por
-`arq eclume_server.worker.AgentWorkerSettings` (serviço `worker-agents`) com
-`max_jobs = ECLUME_AGENT_MAX_JOBS` (padrão 4): no máximo tantas chamadas a agente juntas, e a
+`AgentWorkerSettings`, que o `eclume-server worker` (serviço `worker`) roda junto da fila
+`eclume:default`, com `max_jobs = ECLUME_AGENT_MAX_JOBS` (padrão 4 no código, 2 no compose de
+produção): no máximo tantas chamadas a agente juntas, e a
 ingestão, em `eclume:default`, nunca espera atrás delas (holetz/eclume#96).
 
 - **O `claude -p` morre com o job.** `ClaudeCliProvider.complete` mata e espera o processo num
@@ -406,7 +407,7 @@ imagem sem a CLI cadastra o `claude-cli` normalmente e o job falha com `provider
 `.env.prod` do deploy, e o `deploy.sh` recusa um env que não declare `ECLUME_CLAUDE_CLI=0` ou `1`,
 para a produção não perder a CLI por omissão.
 
-Com a CLI na imagem, o worker de agentes (`worker-agents`) que roda `claude-cli` acha o `claude` no `PATH` (ou em `ECLUME_CLAUDE_BIN`) e precisa de
+Com a CLI na imagem, o worker de agentes (no serviço `worker`) que roda `claude-cli` acha o `claude` no `PATH` (ou em `ECLUME_CLAUDE_BIN`) e precisa de
 `CLAUDE_CODE_OAUTH_TOKEN`, o token de longa duração que `claude setup-token` gera (1 ano, sem
 renovação), ou do token cadastrado no painel. **Não monte a sessão OAuth do host** (`~/.claude/.credentials.json`): o `claude` do
 host renova o token reescrevendo o arquivo (inode novo), o bind mount de arquivo único fica no

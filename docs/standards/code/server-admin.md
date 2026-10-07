@@ -197,8 +197,9 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   `server` no compose de produção é a prontidão.
 - **Sondas dos workers sem subir o worker:** `eclume-server sonda fila <default|agents>` sai 0 se a
   chave `eclume:<fila>:health-check` existe; `python -m eclume_worker.health --sonda` faz o mesmo
-  com `eclume:gpu:health`. São os healthchecks de `worker-cpu`, `worker-agents` e `worker-gpu`
-  (30 s, 3 tentativas; `start_period` de 120 s no GPU).
+  com `eclume:gpu:health`. São os healthchecks de `worker` (as duas filas, pela sonda leve
+  `python -m eclume_server.sonda fila default agents`) e `worker-gpu` (60 s, 3 tentativas,
+  `start_interval` de 2 s; `start_period` de 120 s no GPU).
 - **`eclume-server saude --json`:** a mesma `admin_health()` da tela, mais um `summary`
   (`queued_over_2h`, `failed_last_24h`, `provider_auth_last_24h`, `services_down`) e o
   `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). É o que o `vigia.sh` do host

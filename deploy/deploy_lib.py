@@ -14,6 +14,12 @@ Subcomandos:
   `--voltar` ao SHA é permitido: o trio dele precisa estar retido, e o banco não pode ter
   migrations que o alvo não conhece, salvo um passo atrás (a regra expandir/contrair garante que o
   código do deploy anterior roda sobre o schema novo). Recusa aponta o dump pré-deploy.
+- `topologia <compose.json>` — a topologia do compose do SHA (`docker compose config --format json`
+  da árvore dele, então vale também para um `--voltar` a um compose anterior ao worker único e à
+  borda com o SPA, holetz/eclume#151): `imagem<TAB>nome<TAB>serviço` por imagem `eclume-<nome>:prod`
+  construída (o trio retido: `server`, `edge` ou o antigo `web`, `worker-gpu`), `app<TAB>serviço`
+  por serviço que sobe antes da borda (todos menos a infraestrutura, o `caddy` e o `mdns`) e
+  `problema<TAB>texto` por `memswap_limit` menor que o `mem_limit`.
 
 `deploys.log` (TSV, uma linha por deploy, do mais antigo ao mais novo): data, SHA, flags, motivo,
 migrations aplicadas (separadas por vírgula, ou `-`) e o dump pré-deploy (caminho, ou `-`).
@@ -24,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -155,12 +162,75 @@ def voltar(deploys: list[Deploy], alvo: str, banco: set[str], conhecidas: set[st
     )
 
 
+INFRA = ("postgres", "redis", "minio")
+# Sobem depois do resto, cada um com o próprio passo: a borda recriada e o anúncio depois do `publish-ca`.
+POR_ULTIMO = ("caddy", "mdns")
+_IMAGEM = re.compile(r"^eclume-([a-z0-9][a-z0-9-]*):prod$")
+_BYTES = re.compile(r"^(\d+)([bkmg]?)b?$", re.IGNORECASE)
+_FATOR = {"": 1, "b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
+
+
+@dataclass(frozen=True)
+class Topologia:
+    """O que o deploy sobe e retém, lido do compose do SHA."""
+
+    imagens: tuple[tuple[str, str], ...]
+    app: tuple[str, ...]
+    problemas: tuple[str, ...]
+
+
+def _bytes(valor: object) -> int | None:
+    """`mem_limit`/`memswap_limit` em bytes: o `config` dá o número; `256m` também passa."""
+    if isinstance(valor, int):
+        return valor
+    achado = _BYTES.match(str(valor).strip())
+    return int(achado.group(1)) * _FATOR[achado.group(2).lower()] if achado else None
+
+
+def topologia(config: dict[str, object]) -> Topologia:
+    """A topologia do compose resolvido (veja o docstring do módulo)."""
+    servicos = {
+        nome: servico
+        for nome, servico in (config.get("services") or {}).items()  # type: ignore[union-attr]
+        if isinstance(servico, dict) and not servico.get("profiles")
+    }
+    donos: dict[str, list[str]] = {}
+    for nome, servico in servicos.items():
+        achado = _IMAGEM.match(str(servico.get("image") or ""))
+        if achado and servico.get("build"):
+            donos.setdefault(achado.group(1), []).append(nome)
+    # O serviço que constrói cada imagem: o de mesmo nome (server, worker-gpu) ou o único (caddy).
+    imagens = tuple((imagem, imagem if imagem in nomes else min(nomes)) for imagem, nomes in sorted(donos.items()))
+    app = tuple(nome for nome in sorted(servicos) if nome not in INFRA + POR_ULTIMO)
+    problemas = []
+    for nome in sorted(servicos):
+        teto = _bytes(servicos[nome].get("mem_limit")) if servicos[nome].get("mem_limit") else None
+        swap = _bytes(servicos[nome].get("memswap_limit")) if servicos[nome].get("memswap_limit") else None
+        if teto and swap and swap < teto:
+            problemas.append(
+                f"{nome}: memswap_limit ({swap // 1024**2} MiB) menor que o mem_limit ({teto // 1024**2} MiB);"
+                f" suba ECLUME_MEMSWAP_{nome.upper().replace('-', '_')} junto com o teto"
+            )
+    return Topologia(imagens=imagens, app=app, problemas=tuple(problemas))
+
+
 def _ler(caminho: str) -> str:
     return Path(caminho).read_text(encoding="utf-8") if Path(caminho).exists() else ""
 
 
 def _linhas(caminho: str) -> set[str]:
     return {linha.strip() for linha in _ler(caminho).splitlines() if linha.strip()}
+
+
+def _imprimir_topologia(caminho: str) -> int:
+    topo = topologia(json.loads(_ler(caminho) or "{}"))
+    for imagem, servico in topo.imagens:
+        sys.stdout.write(f"imagem\t{imagem}\t{servico}\n")
+    for servico in topo.app:
+        sys.stdout.write(f"app\t{servico}\n")
+    for problema in topo.problemas:
+        sys.stdout.write(f"problema\t{problema}\n")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,7 +248,11 @@ def main(argv: list[str] | None = None) -> int:
     for nome in ("log", "alvo", "banco", "conhecidas"):
         volta.add_argument(nome)
     volta.add_argument("--retidos", type=int, default=RETIDOS)
+    sub.add_parser("topologia").add_argument("compose")
     args = parser.parse_args(argv)
+
+    if args.comando == "topologia":
+        return _imprimir_topologia(args.compose)
 
     if args.comando == "env-hashes":
         for chave, valor in env_hashes(_ler(args.env)).items():

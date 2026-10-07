@@ -26,7 +26,7 @@ Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
   explícito): `ingest_transcript`, `transcription_failed`, `purge_embedding_objects` e todos os
   crons (reaper, retomada, uploads vencidos);
 - `eclume:agents`, consumida pelo worker de agentes (`AgentWorkerSettings`, serviço
-  `worker-agents`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, padrão 4): `detect_agenda_type`,
+  `worker`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, padrão 4 no código e 2 no compose de produção): `detect_agenda_type`,
   `fill_fields`, `summarize`, `summary_chat`, `base_chat`, `agent_turn` (o Agente), `agent_action` (a ação
   confirmada do Agente, alvo a alvo, reagendada em 30 s com os resumos em aberto no teto) e `run_preview`. A ingestão não divide
   vaga com chamada a agente. Na transição, o worker de `eclume:default` mantém as funções de agente

@@ -34,11 +34,16 @@ x-server-image: &server-image
     labels: {org.eclume.image: "server-staging"}
 
 services:
+  # A borda com o SPA embutido, como na produção (deploy/web.Dockerfile); o staging.sh reaproveita a
+  # `eclume-edge:<sha>` que o deploy reteve.
   caddy:
-    image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+    image: eclume-edge:staging
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      labels: {org.eclume.image: "edge-staging"}
     depends_on:
       server: {condition: service_healthy}
-      web: {condition: service_started}
     ports:
       - "127.0.0.1:18444:8443"
     configs:
@@ -47,13 +52,6 @@ services:
     volumes:
       # Os manifestos publicados da produção, só leitura (o smoke pede /downloads/latest.json).
       - ${ECLUME_DATA_DIR:-/srv/eclume}/downloads:/srv/downloads:ro
-
-  web:
-    image: eclume-web:staging
-    build:
-      context: ..
-      dockerfile: deploy/web.Dockerfile
-      labels: {org.eclume.image: "web-staging"}
 
   server:
     <<: *server-image
@@ -73,19 +71,10 @@ services:
       timeout: 5s
       retries: 20
 
+  # O worker CPU único, como na produção: as filas eclume:default e eclume:agents.
   worker-cpu:
     <<: *server-image
-    command: ["arq", "eclume_server.worker.WorkerSettings"]
-    environment:
-      <<: *server-env
-    depends_on:
-      postgres: {condition: service_healthy}
-      redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
-
-  worker-agents:
-    <<: *server-image
-    command: ["arq", "eclume_server.worker.AgentWorkerSettings"]
+    command: ["eclume-server", "worker"]
     environment:
       <<: *server-env
       # Sem provider no banco restaurado, o resumo sai do `claude -p` com o token do env.prod.
@@ -202,9 +191,8 @@ configs:
             hide .*
           }
         }
-        handle {
-          reverse_proxy web:80
-        }
+        # O SPA (deploy/web.Caddyfile na imagem), depois das rotas acima.
+        import /etc/caddy/spa.caddy
       }
 
 

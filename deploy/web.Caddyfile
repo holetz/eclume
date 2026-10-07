@@ -1,11 +1,9 @@
-# Servidor estático da imagem eclume-web. TLS e roteamento ficam no Caddy de borda.
-{
-	admin off
-	auto_https off
-}
-
-:80 {
-	root * /srv
+# Regras do SPA na imagem da borda (`eclume-edge`, deploy/web.Dockerfile): o Caddyfile de cada
+# compose (produção, staging, e2e) o inclui com `import /etc/caddy/spa.caddy` DENTRO do bloco do site,
+# depois das rotas /api, /media, /mcp e /downloads. O `handle` sem matcher é o último do site, então
+# só pega o resto. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou /downloads.
+handle {
+	root * /srv/web
 	encode zstd gzip
 	# A CSP viaja com a imagem (produção, e2e e quem usar outro proxy). O áudio vem de /media na
 	# mesma origem e o ffmpeg.wasm dos assets do Vite: `'self'` basta; o wasm pede
@@ -38,8 +36,8 @@
 		try_files {path} /index.html
 		file_server
 	}
-	handle_errors {
-		header Cache-Control "no-store"
-		respond "{err.status_code} {err.status_text}" {err.status_code}
-	}
+}
+handle_errors {
+	header Cache-Control "no-store"
+	respond "{err.status_code} {err.status_text}" {err.status_code}
 }

@@ -27,7 +27,7 @@ args = sys.argv[1:]
 base = Path(os.environ["FAKE_DIR"])
 with open(base / "chamadas.jsonl", "a") as f:
     f.write(json.dumps(args) + "\n")
-running = os.environ.get("FAKE_RUNNING", "postgres minio caddy server worker-cpu worker-agents worker-gpu").split()
+running = os.environ.get("FAKE_RUNNING", "postgres minio caddy server worker worker-gpu").split()
 cmd = args[0] if args else ""
 raiz = Path(os.environ["FAKE_ROOT_CRT"]).read_text() if os.environ.get("FAKE_ROOT_CRT") else "C"
 if cmd == "compose":
@@ -479,6 +479,37 @@ def test_ensaio_constroi_so_o_que_nao_foi_retido(staging: Host) -> None:
     (build,) = [c for c in compose_chamadas(staging) if " build " in c]
     assert build.endswith("build server web")
     assert not any(c[0] == "tag" for c in staging.chamadas())
+
+
+def _compose_staging_real(staging: Host) -> None:
+    """A árvore falsa do `main` com o compose de staging deste checkout (a borda com o SPA)."""
+    real = (DEPLOY / "docker-compose.staging.yml").read_text(encoding="utf-8")
+    (staging.data.parent / "main" / "deploy" / "docker-compose.staging.yml").write_text(real)
+
+
+def test_ensaio_com_a_borda_reaproveita_a_edge_retida_e_sobe_o_compose_inteiro(staging: Host) -> None:
+    _compose_staging_real(staging)
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=f"eclume-web:{SHA}")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert ["tag", f"eclume-edge:{SHA}", "eclume-edge:staging"] in staging.chamadas()
+    assert not any(" build " in c for c in compose_chamadas(staging))
+    # Sem lista de serviços: nada de `web` nem de `worker-agents` a esperar.
+    (subida,) = [c for c in compose_chamadas(staging) if "--wait-timeout 300" in c]
+    assert subida.endswith("up -d --wait --wait-timeout 300")
+
+
+def test_ensaio_com_a_borda_sem_retida_constroi_o_caddy(staging: Host) -> None:
+    _compose_staging_real(staging)
+    sem = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=sem)
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    assert build.endswith("build server caddy")
+    yml = Path(staging.env["STAGING_DIR"], "cpu-shares.yml").read_text()
+    assert "  caddy:\n" in yml
+    assert "web" not in yml
 
 
 def test_ensaio_completo_reconstroi_o_server_retido_sem_claude(staging: Host) -> None:

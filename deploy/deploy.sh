@@ -2,7 +2,7 @@
 # Deploy de produção do eclume no host GPU, pelo contexto Docker (build no daemon do host, sem
 # registry) e por SSH para o que é do host (pastas, disco, cópia do env, scripts de backup e cron).
 #
-# Uso: bash deploy/deploy.sh --context NOME [--plan] [--services "server web worker-gpu"]
+# Uso: bash deploy/deploy.sh --context NOME [--plan] [--services "server caddy worker-gpu"]
 #                            [--sem-gpu] [--sem-build] [--gerar-env] [--sem-gate "motivo"]
 #                            [--fora-do-main "motivo"] [--voltar SHA] [--substituir-env]
 #                            [--espera-gpu MINUTOS] [--interromper-gpu]
@@ -12,7 +12,8 @@
 #   --context         contexto Docker do host (ou $ECLUME_DOCKER_CONTEXT); obrigatório, sem padrão.
 #   --sem-gpu         host sem GPU NVIDIA: acrescenta deploy/docker-compose.cpu.yml (worker de
 #                     transcrição na engine cpu, sem reserva de GPU e sem diarização).
-#   --services        imagens a construir (padrão: server web worker-gpu). O up sobe sempre o stack todo.
+#   --services        serviços cujas imagens construir (padrão: server caddy worker-gpu; `web` é o
+#                     nome antigo do caddy, a borda com o SPA). O up sobe sempre o stack todo.
 #   --sem-build       não constrói nada; sobe as imagens que já estão no host.
 #   --gerar-env       cria deploy/.env.prod com segredos aleatórios e sai (recusa se o host já tem um).
 #   --sem-gate        dispensa só o status eclume/gate = success no HEAD (árvore limpa e commit no GitHub
@@ -32,8 +33,13 @@ cd "$ROOT"
 CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
 SEM_GPU=0
 ENV_FILE=deploy/.env.prod
-BUILD=(server web worker-gpu)
-IMAGES=(server web worker-gpu)
+BUILD=(server caddy worker-gpu)
+# As imagens retidas (`eclume-<nome>:<sha>`) e os serviços da subida vêm do compose do SHA
+# (`deploy_lib.py topologia`): um `--voltar` a um SHA anterior ao holetz/eclume#151 tem `web`, não
+# `edge`, e os dois workers CPU. A retenção passa por todos os nomes, os antigos inclusive.
+IMAGES=()
+APP=()
+RETENCAO=(server edge web worker-gpu)
 PLAN_ONLY=0
 NO_BUILD=0
 GEN_ENV=0
@@ -74,12 +80,16 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || { echo "--espera-gpu exige os minutos." >&2; exit 2; }
       ESPERA_GPU="$2"; shift 2 ;;
     --interromper-gpu) INTERROMPER_GPU=1; shift ;;
-    --help|-h) sed -n '2,28p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,29p' "$0"; exit 0 ;;
     *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
-for service in "${BUILD[@]}"; do
-  case "$service" in server|web|worker-gpu) ;; *) echo "Imagem inválida: $service" >&2; exit 2 ;; esac
+for i in "${!BUILD[@]}"; do
+  case "${BUILD[$i]}" in
+    server|caddy|worker-gpu) ;;
+    web) BUILD[i]=caddy ;;  # o SPA mora na borda desde o holetz/eclume#151
+    *) echo "Serviço inválido em --services: ${BUILD[$i]} (server, caddy ou worker-gpu)" >&2; exit 2 ;;
+  esac
 done
 [[ "$NO_BUILD" -eq 0 && -z "$VOLTAR" ]] || BUILD=()
 # Sem padrão: um contexto implícito publicaria no host de outra pessoa.
@@ -248,6 +258,31 @@ export ECLUME_COMMIT="$SHA"
 COMPOSE=(docker compose -p eclume -f "$TREE/deploy/docker-compose.prod.yml" --env-file "$COMPOSE_ENV")
 [[ "$SEM_GPU" -eq 0 ]] || COMPOSE+=(-f "$TREE/deploy/docker-compose.cpu.yml")
 
+# --- topologia do compose do SHA: imagens retidas, serviços da subida e o par mem/memswap ----------
+# O `config` só resolve o compose (com o env), sem tocar no daemon.
+if "${COMPOSE[@]}" config --format json > "$work/compose.json" 2> "$work/compose.err"; then
+  "$PYTHON" deploy/deploy_lib.py topologia "$work/compose.json" > "$work/topologia"
+else
+  problemas+=("o compose de $SHA não resolve: $(head -n 1 "$work/compose.err")")
+  : > "$work/topologia"
+fi
+declare -A IMAGE_SERVICE=()
+while IFS=$'\t' read -r tipo valor servico; do
+  case "$tipo" in
+    imagem) IMAGES+=("$valor"); IMAGE_SERVICE[$valor]="$servico" ;;
+    app) APP+=("$valor") ;;
+    problema) problemas+=("$valor") ;;
+  esac
+done < "$work/topologia"
+# Imagem que não se constrói agora precisa já estar no host (a primeira `eclume-edge:prod` sai do build).
+if [[ -z "$VOLTAR" ]]; then
+  for image in "${IMAGES[@]}"; do
+    [[ " ${BUILD[*]} " != *" ${IMAGE_SERVICE[$image]} "* ]] || continue
+    docker image inspect "eclume-$image:prod" >/dev/null 2>&1 \
+      || problemas+=("falta a imagem eclume-$image:prod no host: construa o ${IMAGE_SERVICE[$image]} (--services)")
+  done
+fi
+
 # --- versão do produto: o primeiro deploy dela cria a tag v<versão> no SHA (versionamento.md) -------
 # Sem tag no retorno, com a tag já criada ou com entradas em [Não lançado], que pedem cortar a versão.
 VERSAO=""
@@ -371,7 +406,7 @@ else
   echo "CA ativa: local (o compose de $SHA não tem a CA eclume)" >&2
 fi
 echo "Construir: ${BUILD[*]:-nada}" >&2
-echo "Subir: postgres redis minio → minio-init, migrate → server worker-cpu worker-agents worker-gpu web caddy → publish-ca → mdns" >&2
+echo "Subir: postgres redis minio → minio-init, migrate → ${APP[*]:-?} → caddy (retira os órfãos) → publish-ca → mdns" >&2
 for image in "${IMAGES[@]}"; do
   if docker image inspect "eclume-$image:prod" >/dev/null 2>&1; then echo "  imagem eclume-$image:prod: presente" >&2
   else echo "  imagem eclume-$image:prod: ausente" >&2; fi
@@ -512,10 +547,12 @@ if [[ -z "$VOLTAR" ]]; then
   "${COMPOSE[@]}" run --rm migrate
 fi
 echo "Subindo os serviços…" >&2
-"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 server worker-cpu worker-agents worker-gpu web
+"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 "${APP[@]}"
 # O compose não recria um container quando só o `configs.content` muda: o Caddy é sempre recriado,
-# para o Caddyfile do SHA valer. A CA está no volume e sobrevive.
-"${COMPOSE[@]}" up -d --no-build --force-recreate --wait --wait-timeout 60 caddy
+# para o Caddyfile do SHA valer. A CA está no volume e sobrevive. Com a borda nova no ar, saem os
+# contêineres de serviços que o compose do SHA não tem mais (`web`, `worker-cpu` e `worker-agents`
+# depois do holetz/eclume#151; o `worker` num --voltar a antes dele).
+"${COMPOSE[@]}" up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 60 caddy
 
 # A raiz `local` nasce na primeira subida do Caddy; espera o arquivo e publica em /downloads/ a raiz
 # da CA ativa (e a própria como próxima, enquanto a ativa for `local`).
@@ -541,7 +578,7 @@ printf '%s\n' "$entry" | host "cat >> '$LOG'"
 printf '%s\n' "$entry" >> "$work/deploys.log"
 "$PYTHON" deploy/deploy_lib.py retidos "$work/deploys.log" "$RETIDOS" > "$work/retidos"
 keep="$(sed -n 's/^manter\t//p' "$work/retidos")"
-for image in "${IMAGES[@]}"; do
+for image in "${RETENCAO[@]}"; do
   for tag in $(docker image ls "eclume-$image" --format '{{.Tag}}' | grep -E '^[0-9a-f]{40}$' || true); do
     grep -qx "$tag" <<< "$keep" || docker image rm "eclume-$image:$tag" >/dev/null 2>&1 || true
   done
@@ -549,6 +586,8 @@ done
 sed -n 's/^remover-dump\t//p' "$work/retidos" | while read -r old_dump; do host "rm -f '$old_dump'"; done
 # Imagens do eclume que ficaram sem tag (as fora da janela). Nada de outros projetos.
 docker image prune -f --filter label=org.eclume.image >/dev/null
+# Cache do BuildKit com mais de 7 dias; o recente fica para o próximo build.
+docker builder prune -f --filter until=168h >/dev/null || echo "Aviso: a poda do cache de build falhou." >&2
 
 # --- conferência ----------------------------------------------------------------------------------
 ca="$(mktemp)"

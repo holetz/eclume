@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 if TYPE_CHECKING:
     import pytest
@@ -123,3 +126,83 @@ def test_cli_voltar(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "um passo atrás" in capsys.readouterr().out
     assert lib.main(["voltar", str(log), A, str(banco), str(conhecidas)]) == 1
     assert "/d/b.dump" in capsys.readouterr().out
+
+
+def _servico(image: str, *, build: bool = False, **extra: object) -> dict[str, object]:
+    servico: dict[str, object] = {"image": image, **extra}
+    if build:
+        servico["build"] = {"context": ".", "dockerfile": "Dockerfile"}
+    return servico
+
+
+# O `docker compose config --format json` de um compose anterior ao #151 (borda Caddy pura, `web`
+# e os dois workers CPU), como o `--voltar` o lê da árvore do SHA.
+COMPOSE_ANTERIOR = {
+    "services": {
+        "caddy": _servico("caddy:2.11@sha256:0c99", mem_limit="268435456"),
+        "mdns": _servico("eclume-server:prod", build=True),
+        "minio": _servico("pgsty/minio", mem_limit="1073741824"),
+        "postgres": _servico("pgvector/pgvector:pg16"),
+        "redis": _servico("redis:7-alpine", mem_limit="536870912"),
+        "server": _servico("eclume-server:prod", build=True, mem_limit="1073741824"),
+        "web": _servico("eclume-web:prod", build=True, mem_limit="134217728"),
+        "worker-agents": _servico("eclume-server:prod", build=True, mem_limit="2147483648"),
+        "worker-cpu": _servico("eclume-server:prod", build=True, mem_limit="1073741824"),
+        "worker-gpu": _servico("eclume-worker-gpu:prod", build=True, mem_limit="8589934592"),
+    }
+}
+
+
+def test_topologia_do_compose_atual_sobe_o_worker_unico_e_retem_a_borda() -> None:
+    """O compose deste checkout: `edge` construída pelo `caddy`, sem `web` nem os dois workers."""
+    compose = yaml.safe_load(Path(__file__).with_name("docker-compose.prod.yml").read_text(encoding="utf-8"))
+    topo = lib.topologia(compose)
+    assert topo.imagens == (("edge", "caddy"), ("server", "server"), ("worker-gpu", "worker-gpu"))
+    assert topo.app == ("server", "worker", "worker-gpu")
+    assert topo.problemas == ()
+
+
+def test_topologia_do_compose_anterior_no_voltar() -> None:
+    """Um `--voltar` a um SHA anterior ao #151 retém o trio com `web` e sobe os serviços dele."""
+    topo = lib.topologia(COMPOSE_ANTERIOR)
+    assert topo.imagens == (("server", "server"), ("web", "web"), ("worker-gpu", "worker-gpu"))
+    assert topo.app == ("server", "web", "worker-agents", "worker-cpu", "worker-gpu")
+    assert topo.problemas == ()
+
+
+def test_topologia_ignora_os_one_shots_do_perfil_tools() -> None:
+    """Serviço com perfil não sobe com o resto nem conta como imagem retida."""
+    config = {
+        "services": {
+            "server": _servico("eclume-server:prod", build=True),
+            "migrate": _servico("eclume-server:prod", build=True, profiles=["tools"]),
+            "outro": _servico("eclume-outro:prod", build=True, profiles=["tools"]),
+        }
+    }
+    topo = lib.topologia(config)
+    assert topo.imagens == (("server", "server"),)
+    assert topo.app == ("server",)
+
+
+def test_topologia_recusa_memswap_menor_que_o_teto() -> None:
+    """Teto subido sem o par de swap: o `up` falharia no meio do deploy."""
+    config = {
+        "services": {
+            "worker": _servico("eclume-server:prod", build=True, mem_limit="4294967296", memswap_limit="3221225472"),
+            "redis": _servico("redis", mem_limit="256m", memswap_limit="384m"),
+        }
+    }
+    (problema,) = lib.topologia(config).problemas
+    assert problema.startswith("worker: memswap_limit (3072 MiB) menor que o mem_limit (4096 MiB)")
+    assert "ECLUME_MEMSWAP_WORKER" in problema
+
+
+def test_cli_topologia(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """O subcomando lê o JSON do `config` e imprime imagens, serviços e problemas."""
+    compose = tmp_path / "compose.json"
+    compose.write_text(json.dumps(COMPOSE_ANTERIOR), encoding="utf-8")
+    assert lib.main(["topologia", str(compose)]) == 0
+    saida = capsys.readouterr().out.splitlines()
+    assert "imagem\tweb\tweb" in saida
+    assert "app\tworker-agents" in saida
+    assert not [linha for linha in saida if linha.startswith(("app\tcaddy", "app\tmdns", "app\tpostgres"))]

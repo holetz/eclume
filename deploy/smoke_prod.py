@@ -143,7 +143,7 @@ def _public_checks(api: Api) -> None:
         _security_headers(path, headers)
         csp = headers.get("Content-Security-Policy") or ""
         if "default-src 'self'" not in csp or "'wasm-unsafe-eval'" not in csp:
-            _fail(f"{path} sem a CSP do web: {csp!r}")
+            _fail(f"{path} sem a CSP do SPA (regras da borda): {csp!r}")
     # Chunk de um deploy anterior: 404 sem cache longo, nunca o index.html guardado por um ano.
     status, headers, _ = api.raw("GET", "/assets/nao-existe-smoke.js")
     if status != 404 or "immutable" in headers.get("Cache-Control", ""):  # noqa: PLR2004

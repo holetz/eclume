@@ -4,16 +4,17 @@ title: Auto-hospedar o eclume
 description: Como subir o eclume num servidor próprio, com ou sem GPU NVIDIA — requisitos, o caminho sem GPU, o deploy/.env.prod gerado, o deploy por qualquer contexto Docker, o primeiro admin, o provider de resumo, a premissa de rede local (mDNS e CA própria), o que muda ao expor à internet, como fechar o cadastro e o backup.
 resource: deploy/deploy.sh, deploy/docker-compose.prod.yml, deploy/docker-compose.cpu.yml, deploy/.env.prod.example, deploy/bootstrap-admin.sh, deploy/backup.sh
 tags: [deploy, auto-hospedagem, gpu, cpu, instalacao]
-timestamp: 2026-10-01
+timestamp: 2026-10-07
 audience: both
-source: holetz/eclume#126
+source: holetz/eclume#126, holetz/eclume#151
 maintainer: holetz
 ---
 
 # Auto-hospedar o eclume
 
-O eclume roda inteiro num servidor Linux seu, por Docker Compose: Caddy com HTTPS na porta 8443,
-API, web, workers, Postgres, Redis e MinIO. O deploy sai de uma **estação** (a máquina em que
+O eclume roda inteiro num servidor Linux seu, por Docker Compose, em oito contêineres de longa
+duração: a borda Caddy com HTTPS na porta 8443 e o web embutido, a API, um worker CPU, o worker de
+transcrição, o anúncio mDNS, Postgres, Redis e MinIO. O deploy sai de uma **estação** (a máquina em que
 você clonou o repositório) e fala com o servidor por um **contexto Docker** `ssh://`: o build
 roda no daemon do servidor e as pastas de dados são criadas por SSH. Este guia vale para qualquer
 servidor; o registro concreto da produção da consultoria, que segue estes passos, está em
@@ -23,8 +24,12 @@ servidor; o registro concreto da produção da consultoria, que segue estes pass
 
 **No servidor**
 
-- Linux x86_64 com Docker Engine e o plugin Compose **2.24 ou mais novo** (o deploy confere), e
-  SSH por chave a partir da estação.
+- Linux x86_64 com Docker Engine **25 ou mais novo** (o `start_interval` dos healthchecks) e o
+  plugin Compose **2.24 ou mais novo** (o deploy confere), e SSH por chave a partir da estação.
+- Memória: os tetos padrão somam uns 12 GB (8 GB do worker de transcrição, 2 GB do worker CPU e o
+  resto em fração de GB), mais o Postgres, sem teto; cada serviço tem o par
+  `ECLUME_MEM_<SERVIÇO>`/`ECLUME_MEMSWAP_<SERVIÇO>` para ajustar
+  ([deploy-producao.md](../project/deploy-producao.md#stack)).
 - Disco: a imagem do worker de transcrição tem **~8 GB**, e o primeiro job baixa **~3,9 GB** de
   modelos para `<ECLUME_DATA_DIR>/models`; reserve 50 GB ou mais para modelos e áudio. O deploy
   recusa com o disco em 90% ou mais (`ECLUME_DISK_LIMIT`).
