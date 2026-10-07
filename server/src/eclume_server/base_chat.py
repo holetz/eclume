@@ -28,7 +28,7 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
-from eclume_server.quotas import take_agent_request
+from eclume_server.quotas import refunding, take_agent_request
 from eclume_server.search import CONFIG, SearchFilters, search
 from eclume_server.summaries import (
     INTERNAL_ERROR,
@@ -113,15 +113,16 @@ async def create_chat(  # noqa: PLR0913 — o pedido, a credencial e a cota
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
         raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
-    await take_agent_request(redis, owner_id, agent_quota)
-    chat_id = uuid4()
-    key = chat_key(chat_id)
-    request = json.dumps({"message": message, "history": history, "transcripts": transcripts}, ensure_ascii=False)
-    await redis.hset(key, mapping={"owner_id": str(owner_id), "status": "queued", "request": request})
-    await redis.expire(key, TTL_S)
-    await redis.zadd(open_key(owner_id), {str(chat_id): time.time()})
-    await redis.expire(open_key(owner_id), TTL_S)
-    await redis.enqueue_job("base_chat", str(chat_id), _job_id=f"basechat:{chat_id}", _queue_name=AGENT_QUEUE)
+    async with refunding(redis, owner_id) as charge:
+        charge.token = await take_agent_request(redis, owner_id, agent_quota)
+        chat_id = uuid4()
+        key = chat_key(chat_id)
+        request = json.dumps({"message": message, "history": history, "transcripts": transcripts}, ensure_ascii=False)
+        await redis.hset(key, mapping={"owner_id": str(owner_id), "status": "queued", "request": request})
+        await redis.expire(key, TTL_S)
+        await redis.zadd(open_key(owner_id), {str(chat_id): time.time()})
+        await redis.expire(open_key(owner_id), TTL_S)
+        await redis.enqueue_job("base_chat", str(chat_id), _job_id=f"basechat:{chat_id}", _queue_name=AGENT_QUEUE)
     return _view(chat_id, {"status": "queued"})
 
 

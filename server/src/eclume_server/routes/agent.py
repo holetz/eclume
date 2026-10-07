@@ -43,7 +43,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db.session import user_tx
 from eclume_server.pagination import Cursor, Limit
 from eclume_server.problems import payload_too_large
-from eclume_server.quotas import agent_limit, take_agent_request
+from eclume_server.quotas import agent_limit, refunding, take_agent_request
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -151,12 +151,15 @@ async def post_message(session_id: UUID, body: AgentMessageCreate, principal: Re
     """Grava a pergunta e enfileira a resposta; o cliente consulta a resposta até `done` ou `failed`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         quota = await agent_limit(conn, principal.user_id)
-    await take_agent_request(ctx.queue.pool, principal.user_id, quota)
-    async with user_tx(ctx.engine, principal.user_id) as conn:
-        turn = await send_message(conn, principal.user_id, session_id, body.message, body.attachments, skill=body.skill)
-    await enqueue_turn(
-        ctx.queue.pool, turn.answer_id, transcripts=_transcripts(principal), scopes=_write_scopes(principal)
-    )
+    async with refunding(ctx.queue.pool, principal.user_id) as charge:
+        charge.token = await take_agent_request(ctx.queue.pool, principal.user_id, quota)
+        async with user_tx(ctx.engine, principal.user_id) as conn:
+            turn = await send_message(
+                conn, principal.user_id, session_id, body.message, body.attachments, skill=body.skill
+            )
+        await enqueue_turn(
+            ctx.queue.pool, turn.answer_id, transcripts=_transcripts(principal), scopes=_write_scopes(principal)
+        )
     return {"question": turn.question, "answer": turn.answer}
 
 

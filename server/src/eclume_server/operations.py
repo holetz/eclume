@@ -36,8 +36,12 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
 
 
-async def regenerate_summary(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID, recording_id: UUID) -> UUID:
-    """Abre um resumo novo pelas instruções do tipo de agenda da gravação; devolve o id a enfileirar.
+async def regenerate_summary(
+    conn: AsyncConnection, redis: ArqRedis, owner_id: UUID, recording_id: UUID
+) -> tuple[UUID, str]:
+    """Abre um resumo novo pelas instruções do tipo de agenda da gravação; devolve o id a enfileirar e o token da cota.
+
+    Quem chama estorna o token (`refund_agent_request`) se o resumo não chegar à fila.
 
     404 sem a gravação, 409 `transcript_missing` sem transcrição, 429 com os resumos em aberto no
     teto e 403 `quota_exceeded` com a cota de 24 h do agente estourada (o pedido conta nela).
@@ -54,8 +58,8 @@ async def regenerate_summary(conn: AsyncConnection, redis: ArqRedis, owner_id: U
         trigger="manual",
         created_by=owner_id,
     )
-    await charge_agent(conn, redis, owner_id)
-    return row["id"]
+    token = await charge_agent(conn, redis, owner_id)
+    return row["id"], token
 
 
 async def _touch(conn: AsyncConnection, recording_id: UUID, now: datetime) -> None:
