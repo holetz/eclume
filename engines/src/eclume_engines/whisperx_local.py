@@ -261,6 +261,7 @@ class WhisperXLocalEngine:
                 warnings.append(WARN_FALLBACK_MEDIUM)
             batch = first_batch
             while True:
+                pipeline = None  # o `_load_asr` também pode estourar: nenhum modelo da volta anterior sobrevive
                 try:
                     pipeline, compute_type = self._load_asr(whisperx, model, compute_types, options.language)
                     result = pipeline.transcribe(
@@ -274,15 +275,17 @@ class WhisperXLocalEngine:
                 except Exception as exc:
                     if not is_oom(exc):
                         raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
-                    self.unload()
-                    if batch == 1:
-                        break
-                    batch = max(1, batch // 2)
-                    logger.warning("OOM no ASR (%s); tentando batch_size=%d", model, batch)
-                    if WARN_BATCH_REDUCED not in warnings:
-                        warnings.append(WARN_BATCH_REDUCED)
-                    continue
-                return result, model, compute_type, batch
+                else:
+                    return result, model, compute_type, batch
+                # Só o OOM chega aqui, já fora do `except`: o traceback morreu com o `exc` e não segura o modelo.
+                pipeline = None
+                self.unload()
+                if batch == 1:
+                    break
+                batch = max(1, batch // 2)
+                logger.warning("OOM no ASR (%s); tentando batch_size=%d", model, batch)
+                if WARN_BATCH_REDUCED not in warnings:
+                    warnings.append(WARN_BATCH_REDUCED)
         raise EngineError(OUT_OF_MEMORY, f"VRAM insuficiente mesmo com batch_size=1 e o modelo {fallback}")
 
     def _align(

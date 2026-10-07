@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+import weakref
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -59,6 +60,10 @@ class FakeVram:
         peak.observe(2800)
 
 
+class FakeAlignModel:
+    """Instância de classe: `object()` não aceita `weakref`."""
+
+
 class FakeWhisperX:
     """Registra as chamadas; `oom_batches` define os lotes que estouram a memória."""
 
@@ -66,6 +71,14 @@ class FakeWhisperX:
         self.calls: list[tuple[str, Any]] = []
         self.oom_batches = oom_batches or set()
         self.oom_models = oom_models or set()
+        self.models: list[tuple[str, weakref.ref]] = []  # (papel, referência fraca) de cada modelo criado
+
+    def track(self, kind: str, model: Any) -> Any:
+        self.models.append((kind, weakref.ref(model)))
+        return model
+
+    def alive(self) -> list[str]:
+        return [kind for kind, ref in self.models if ref() is not None]
 
     def module(self) -> types.ModuleType:
         mod = types.ModuleType("whisperx")
@@ -100,11 +113,15 @@ class FakeWhisperX:
                     "language": language or "en",
                 }
 
-        return Pipeline()
+        return self.track("asr", Pipeline())
 
     def load_align_model(self, *, language_code: str, device: str) -> tuple[Any, dict]:
         self.calls.append(("load_align_model", (language_code, device)))
-        return object(), {"language": language_code, "dictionary": {}, "type": "huggingface"}
+        return self.track("alignment", FakeAlignModel()), {
+            "language": language_code,
+            "dictionary": {},
+            "type": "huggingface",
+        }
 
     def align(self, segments: list, model: Any, metadata: dict, audio: Any, device: str, **kw: Any) -> dict:
         self.calls.append(("align", kw))
@@ -146,6 +163,7 @@ class FakeWhisperX:
         class DiarizationPipeline:
             def __init__(self, *, model_name: str, token: str, device: str) -> None:
                 fake.calls.append(("DiarizationPipeline", (model_name, token, device)))
+                fake.track("diarization", self)
 
             def __call__(self, audio: Any, **kw: Any) -> Any:
                 fake.calls.append(("diarize", kw))
@@ -160,6 +178,26 @@ class FakeWhisperX:
 
     def names(self) -> list[str]:
         return [name for name, _ in self.calls]
+
+
+class EmptyCacheSpy:
+    """`torch` fake: a cada `empty_cache`, anota quais modelos criados pelo `source` ainda estão vivos."""
+
+    def __init__(self) -> None:
+        self.source: FakeWhisperX | None = None
+        self.snapshots: list[tuple[str, ...]] = []
+
+    def empty_cache(self) -> None:
+        self.snapshots.append(tuple(self.source.alive()) if self.source else ())
+
+
+@pytest.fixture
+def spy(monkeypatch: pytest.MonkeyPatch) -> EmptyCacheSpy:
+    spy = EmptyCacheSpy()
+    torch = types.ModuleType("torch")
+    torch.cuda = types.SimpleNamespace(is_available=lambda: True, empty_cache=spy.empty_cache)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    return spy
 
 
 @pytest.fixture
@@ -262,6 +300,24 @@ def test_oom_reduz_o_lote_pela_metade(monkeypatch: pytest.MonkeyPatch):
     assert batches == [4, 2, 1]
     assert result.batch_size == 1
     assert result.warnings == [WARN_BATCH_REDUCED]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "free"),
+    [({"oom_batches": {4}}, 6000), ({"oom_models": {"large-v3-turbo"}}, 3000)],
+    ids=["lote-pela-metade", "queda-para-medium"],
+)
+def test_oom_no_asr_libera_o_modelo_antes_da_recarga(
+    monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, kwargs: dict, free: int
+):
+    fake = FakeWhisperX(**kwargs)
+    spy.source = fake
+    install(monkeypatch, fake)
+    engine(free=free).transcribe(AUDIO, EngineOptions(diarize=False))
+    # Cada ASR que estourou deixa um `empty_cache`; nele o modelo já está inalcançável.
+    recuos = sum(kind == "asr" for kind, _ in fake.models) - 1
+    assert recuos >= 1
+    assert all("asr" not in alive for alive in spy.snapshots[:recuos]), spy.snapshots
 
 
 def test_lote_fixo_no_construtor(fake: FakeWhisperX):
