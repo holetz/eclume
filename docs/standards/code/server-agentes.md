@@ -171,6 +171,12 @@ cada um no tipo do dono, com o mesmo id. Os tipos, os tipos padrão do admin e a
   O registro é um zset por conta no Redis (`eclume:quota:agent:{owner}`, o instante de cada
   pedido), aparado a cada leitura numa janela móvel de 24 h. Estourada, **403** `quota_exceeded`
   antes de enfileirar; nas rotas com transação, a recusa desfaz o que o pedido gravaria.
+- **Atômica e estornável (holetz/eclume#156):** `quotas.take_agent_request` apara a janela, compara
+  com o limite e inscreve numa só ida ao Redis (script Lua), de modo que pedidos concorrentes da
+  mesma conta nunca passam do limite; devolve o token do pedido contado. Quem gasta cota antes de
+  uma ação que pode falhar (enfileirar, commitar, `hset`, `abandon_reply`) estorna o token no ramo
+  de falha (`quotas.refunding`, `refund_agent_request`): um pedido que não saiu não consome cota. O
+  estorno é idempotente e nunca levanta, para não mascarar o erro original.
 - As etapas automáticas do pipeline (tipo de agenda, campos, resumo automático) não contam: já são
   limitadas pela cota de minutos, uma por gravação, e falhar por cota deixaria gravação sem resumo
   sem a pessoa ter pedido nada.

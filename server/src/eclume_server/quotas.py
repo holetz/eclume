@@ -9,8 +9,10 @@ leitura. Contrato em docs/standards/code/server-nucleo.md (§Upload e áudio) e 
 
 from __future__ import annotations
 
+import logging
 import math
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -21,6 +23,7 @@ from eclume_server.db import tables as t
 from eclume_server.problems import ApiProblemError, rate_limited
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
     from uuid import UUID
 
     from arq.connections import ArqRedis
@@ -144,20 +147,71 @@ async def agent_limit(conn: AsyncConnection, owner_id: UUID) -> int | None:
     return (await effective(conn, owner_id))["agent_requests_24h"]
 
 
-async def take_agent_request(redis: ArqRedis, owner_id: UUID, limit: int | None) -> None:
-    """Conta um pedido da pessoa ao agente; estourada a cota de 24 h, 403 `quota_exceeded`."""
-    if limit is not None:
-        used = await agent_requests_used(redis, owner_id)
-        if used + 1 > limit:
-            raise quota_exceeded("agent_requests_24h", limit, used + 1)
-    key = agent_key(owner_id)
-    await redis.zadd(key, {str(uuid4()): time.time()})
-    await redis.expire(key, WINDOW_S)
+# Apara a janela, compara e inscreve numa só ida ao Redis: pedidos concorrentes da mesma conta não
+# leem o mesmo uso. Devolve 0 quando contou e `uso + 1` quando recusou. ARGV: agora, janela, limite
+# (-1 sem limite), membro.
+_TAKE = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', tonumber(ARGV[1]) - tonumber(ARGV[2]))
+local used = redis.call('ZCARD', KEYS[1])
+local limit = tonumber(ARGV[3])
+if limit >= 0 and used + 1 > limit then
+  return used + 1
+end
+redis.call('ZADD', KEYS[1], ARGV[1], ARGV[4])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 0
+"""
+
+_log = logging.getLogger(__name__)
 
 
-async def charge_agent(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> None:
-    """`take_agent_request` com a cota efetiva da conta."""
-    await take_agent_request(redis, owner_id, await agent_limit(conn, owner_id))
+async def take_agent_request(redis: ArqRedis, owner_id: UUID, limit: int | None) -> str:
+    """Conta um pedido da pessoa ao agente, atômico; devolve o token que `refund_agent_request` estorna.
+
+    Estourada a cota de 24 h, 403 `quota_exceeded`.
+    """
+    member = str(uuid4())
+    script = redis.register_script(_TAKE)
+    refused = int(
+        await script(
+            keys=[agent_key(owner_id)],
+            args=[time.time(), WINDOW_S, -1 if limit is None else limit, member],
+        )
+    )
+    if refused:
+        raise quota_exceeded("agent_requests_24h", limit, refused)
+    return member
+
+
+async def refund_agent_request(redis: ArqRedis, owner_id: UUID, token: str) -> None:
+    """Devolve a cota de um pedido que não saiu; idempotente e nunca levanta (não mascara o erro original)."""
+    try:
+        await redis.zrem(agent_key(owner_id), token)
+    except Exception:  # noqa: BLE001 — o estorno nunca mascara o erro original
+        _log.exception("não foi possível estornar a cota do agente de %s", owner_id)
+
+
+class AgentCharge:
+    """O token da cota gasta dentro de `refunding`; vazio até a cobrança acontecer."""
+
+    token: str | None = None
+
+
+@asynccontextmanager
+async def refunding(redis: ArqRedis, owner_id: UUID) -> AsyncIterator[AgentCharge]:
+    """Estorna a cota cobrada (`charge.token`) se o bloco falhar depois; re-levanta o erro."""
+    charge = AgentCharge()
+    try:
+        yield charge
+    except BaseException:
+        if charge.token is not None:
+            await refund_agent_request(redis, owner_id, charge.token)
+        raise
+
+
+async def charge_agent(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> str:
+    """`take_agent_request` com a cota efetiva da conta; devolve o token."""
+    return await take_agent_request(redis, owner_id, await agent_limit(conn, owner_id))
 
 
 async def check_open_summaries(conn: AsyncConnection, owner_id: UUID) -> None:

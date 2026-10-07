@@ -26,7 +26,7 @@ from eclume_server.markers import list_markers, marker_json
 from eclume_server.operations import regenerate_summary
 from eclume_server.pagination import decode_position, encode_position
 from eclume_server.problems import ApiProblemError
-from eclume_server.quotas import charge_agent
+from eclume_server.quotas import charge_agent, refunding
 from eclume_server.recordings import Library, delete_recording_of, get_visible, list_library, render
 from eclume_server.search import SearchFilters, search
 from eclume_server.summaries import edit_current, recording_transcript, summary_json, summary_state
@@ -354,19 +354,22 @@ def _write_tools(server: MCPServer) -> None:
         app = app_of(ctx)
         rid = uuid_of(recording_id)
         with as_tool_error():
-            async with user_tx(app.engine, principal.user_id) as conn:
-                transcript = await recording_transcript(conn, rid)
+            async with refunding(app.queue.pool, principal.user_id) as charge:
+                async with user_tx(app.engine, principal.user_id) as conn:
+                    transcript = await recording_transcript(conn, rid)
+                    if instruction and instruction.strip():
+                        _, reply = await open_request(conn, transcript, instruction.strip(), principal.user_id)
+                        charge.token = await charge_agent(conn, app.queue.pool, principal.user_id)
+                    else:
+                        # A mesma operação que o Agente usa para regenerar resumos em lote.
+                        summary_id, charge.token = await regenerate_summary(
+                            conn, app.queue.pool, principal.user_id, rid
+                        )
                 if instruction and instruction.strip():
-                    _, reply = await open_request(conn, transcript, instruction.strip(), principal.user_id)
-                    await charge_agent(conn, app.queue.pool, principal.user_id)
-                else:
-                    # A mesma operação que o Agente usa para regenerar resumos em lote.
-                    summary_id = await regenerate_summary(conn, app.queue.pool, principal.user_id, rid)
-        if instruction and instruction.strip():
-            await app.queue.enqueue_summary_chat(reply["id"])
-            return {"recording_id": recording_id, "mode": "chat", "pending_id": str(reply["id"])}
-        await app.queue.enqueue_summarize(summary_id)
-        return {"recording_id": recording_id, "mode": "generate", "pending_id": str(summary_id)}
+                    await app.queue.enqueue_summary_chat(reply["id"])
+                    return {"recording_id": recording_id, "mode": "chat", "pending_id": str(reply["id"])}
+                await app.queue.enqueue_summarize(summary_id)
+                return {"recording_id": recording_id, "mode": "generate", "pending_id": str(summary_id)}
 
     @server.tool(
         annotations=IDEMPOTENT,

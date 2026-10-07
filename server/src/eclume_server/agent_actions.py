@@ -25,6 +25,7 @@ from eclume_server.operations import change_agenda_type, edit_collections, edit_
 from eclume_server.pagination import decode_cursor, encode_cursor, iso
 from eclume_server.problems import ApiProblemError, conflict, insufficient_scope, not_found
 from eclume_server.queue import AGENT_QUEUE, enqueue_summary
+from eclume_server.quotas import refund_agent_request, refunding
 from eclume_server.recordings import Library
 from eclume_server.summaries import TRANSCRIPT_MISSING
 
@@ -375,52 +376,56 @@ async def _record(conn: AsyncConnection, action_id: UUID, rid: str, outcome: dic
 
 async def _apply(
     conn: AsyncConnection, redis: ArqRedis, owner_id: UUID, row: Row, rid: UUID
-) -> tuple[dict[str, Any], UUID | None]:
+) -> tuple[dict[str, Any], UUID | None, str | None]:
     """Executa a ação num alvo; devolve o resultado e o resumo a enfileirar."""
     params, tool = row["params"], row["tool"]
     current = (await conn.execute(select(R.id, R.agenda_type_id).where(R.id == rid))).first()
     if current is None:
-        return {"status": "skipped", "detail": "gravação inexistente ou excluída"}, None
+        return {"status": "skipped", "detail": "gravação inexistente ou excluída"}, None, None
     if tool == "regenerate_summaries":
-        summary_id = await regenerate_summary(conn, redis, owner_id, rid)
-        return {"status": "done", "summary_id": str(summary_id)}, summary_id
+        summary_id, token = await regenerate_summary(conn, redis, owner_id, rid)
+        return {"status": "done", "summary_id": str(summary_id)}, summary_id, token
     if tool == "tag_recordings":
         changed = await edit_tags(conn, owner_id, rid, add=params["add"], remove=params["remove"])
         unchanged = {"status": "skipped", "detail": "as tags já estavam assim"}
-        return ({"status": "done"} if changed else unchanged), None
+        return ({"status": "done"} if changed else unchanged), None, None
     if tool == "collect_recordings":
         add = [UUID(item["id"]) for item in params["add"]]
         remove = [UUID(item["id"]) for item in params["remove"]]
         changed = await edit_collections(conn, rid, add=add, remove=remove)
         unchanged = {"status": "skipped", "detail": "as coleções já estavam assim"}
-        return ({"status": "done"} if changed else unchanged), None
+        return ({"status": "done"} if changed else unchanged), None, None
     agenda_type_id = UUID(params["agenda_type"]["id"])
     if current.agenda_type_id == agenda_type_id:
-        return {"status": "skipped", "detail": "já era deste tipo"}, None
+        return {"status": "skipped", "detail": "já era deste tipo"}, None, None
     summary_id = await change_agenda_type(conn, rid, agenda_type_id)
-    return {"status": "done", "summary_id": str(summary_id) if summary_id else None}, summary_id
+    return {"status": "done", "summary_id": str(summary_id) if summary_id else None}, summary_id, None
 
 
 async def _one(ctx: dict[str, Any], owner_id: UUID, row: Row, rid: str) -> bool:
     """Um alvo numa transação (a operação e o resultado juntos); `False` encerra o resto (cota)."""
     engine: AsyncEngine = ctx["engine"]
     redis: ArqRedis = ctx["redis"]
-    try:
-        async with user_tx(engine, owner_id) as conn:
-            outcome, summary_id = await _apply(conn, redis, owner_id, row, UUID(rid))
-            await _record(conn, row["id"], rid, outcome)
-    except ApiProblemError as exc:
-        if exc.status_code == 429:  # noqa: PLR2004 — os resumos em aberto no teto
-            raise _Retry from exc
-        if exc.code == TRANSCRIPT_MISSING:
-            outcome = {"status": "skipped", "detail": "a gravação ainda não tem transcrição"}
-        else:
-            outcome = {"status": "failed", "code": exc.code, "detail": exc.detail or exc.code}
-        async with user_tx(engine, owner_id) as conn:
-            await _record(conn, row["id"], rid, outcome)
-        return exc.code != "quota_exceeded"
-    if summary_id is not None:
-        await enqueue_summary(redis, summary_id)
+    async with refunding(redis, owner_id) as charge:
+        try:
+            async with user_tx(engine, owner_id) as conn:
+                outcome, summary_id, charge.token = await _apply(conn, redis, owner_id, row, UUID(rid))
+                await _record(conn, row["id"], rid, outcome)
+        except ApiProblemError as exc:
+            # A transação foi desfeita: o pedido não saiu, a cota cobrada volta.
+            if charge.token is not None:
+                await refund_agent_request(redis, owner_id, charge.token)
+            if exc.status_code == 429:  # noqa: PLR2004 — os resumos em aberto no teto
+                raise _Retry from exc
+            if exc.code == TRANSCRIPT_MISSING:
+                outcome = {"status": "skipped", "detail": "a gravação ainda não tem transcrição"}
+            else:
+                outcome = {"status": "failed", "code": exc.code, "detail": exc.detail or exc.code}
+            async with user_tx(engine, owner_id) as conn:
+                await _record(conn, row["id"], rid, outcome)
+            return exc.code != "quota_exceeded"
+        if summary_id is not None:
+            await enqueue_summary(redis, summary_id)
     return True
 
 

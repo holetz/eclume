@@ -96,7 +96,7 @@ def test_regenerar_resumo_abre_versao_na_fila(owner: Account, as_user: Callable[
     async def regenerate(conn: Any) -> Any:  # noqa: ANN401
         redis = await create_pool(RedisSettings.from_dsn(services.settings.redis_url))
         try:
-            summary_id = await regenerate_summary(conn, redis, owner.user_id, rid)
+            summary_id, _token = await regenerate_summary(conn, redis, owner.user_id, rid)
         finally:
             await redis.aclose()
         row = (await conn.execute(select(t.summaries).where(t.summaries.c.id == summary_id))).mappings().one()
