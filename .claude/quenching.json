@@ -1,3 +1,11 @@
 {
-  "backend": "github"
+  "backend": "github",
+  "specs": {
+    "workItemTypes": {
+      "epic": {"description": "Agrupa specs em ondas com dependências; registro de uma rodada de trabalho."},
+      "feature": {"description": "Capacidade nova ou prova nova (pilar, teste de ponta a ponta)."},
+      "bug": {"description": "Comportamento errado no código existente."},
+      "chore": {"description": "Manutenção, testes e higiene sem mudança de comportamento para o usuário.", "default": true}
+    }
+  }
 }
