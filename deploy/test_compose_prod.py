@@ -16,7 +16,7 @@ CONFIGS: dict[str, dict[str, Any]] = COMPOSE["configs"]
 ENV_EXAMPLE = Path(__file__).with_name(".env.prod.example").read_text(encoding="utf-8")
 
 # Serviços da aplicação: nenhum vê a credencial root do MinIO.
-APP = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns", "web", "caddy")
+APP = ("server", "worker-cpu", "worker-agents", "worker-gpu", "migrate", "mdns", "caddy")
 ROOT_USERS = ("minio", "minio-init")
 
 
@@ -101,10 +101,10 @@ def _networks(service: str) -> set[str]:
     return set(SERVICES[service].get("networks") or [])
 
 
-def test_rede_worker_gpu_longe_do_postgres_do_server_e_da_web() -> None:
+def test_rede_worker_gpu_longe_do_postgres_do_server_e_da_borda() -> None:
     gpu = _networks("worker-gpu")
     assert gpu == {"fila-gpu", "saida"}
-    for other in ("postgres", "server", "web", "caddy"):
+    for other in ("postgres", "server", "caddy"):
         assert not gpu & _networks(other), f"worker-gpu divide rede com {other}"
 
 
@@ -130,7 +130,7 @@ def test_rede_conteiner_python_sem_capabilities(service: str) -> None:
 
 # Serviços de longa duração com teto; o mdns (rede do host, só anúncio) e o Postgres (protegido
 # pelo `oom_score_adj`) ficam de fora.
-LIMITED = ("caddy", "web", "server", "worker-cpu", "worker-agents", "worker-gpu", "redis", "minio")
+LIMITED = ("caddy", "server", "worker-cpu", "worker-agents", "worker-gpu", "redis", "minio")
 
 
 @pytest.mark.parametrize("service", LIMITED)
@@ -215,3 +215,61 @@ def test_ca_proxima_no_descritor_e_no_anuncio(service: str) -> None:
 def test_ca_instalacao_nova_ja_nasce_restrita() -> None:
     assert re.search(r"^ECLUME_TLS_CA=eclume$", ENV_EXAMPLE, re.MULTILINE)
     assert re.search(r"^ECLUME_CA_NOMES=", ENV_EXAMPLE, re.MULTILINE)
+
+
+WEB_CADDYFILE = Path(__file__).with_name("web.Caddyfile").read_text(encoding="utf-8")
+WEB_DOCKERFILE = Path(__file__).with_name("web.Dockerfile").read_text(encoding="utf-8")
+CSP_SPA = (
+    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+    "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; "
+    "object-src 'none'"
+)
+CSP_REFERENCIA = (
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+    "script-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+)
+
+
+def test_borda_sem_o_servico_web() -> None:
+    """O SPA mora na imagem da borda: não há serviço `web` nem proxy para ele."""
+    assert "web" not in SERVICES
+    assert "web:80" not in CONFIGS["caddyfile"]["content"]
+    assert "web" not in (SERVICES["caddy"].get("depends_on") or {})
+
+
+def test_borda_e_a_imagem_edge_com_tag_do_sha_e_rotulo() -> None:
+    """`eclume-edge:prod` sai do web.Dockerfile, com a tag do SHA e o rótulo `edge` da retenção."""
+    caddy = SERVICES["caddy"]
+    assert caddy["image"] == "eclume-edge:prod"
+    assert caddy["build"]["dockerfile"] == "deploy/web.Dockerfile"
+    assert caddy["build"]["tags"] == ["eclume-edge:${ECLUME_COMMIT:-sem-commit}"]
+    assert caddy["build"]["labels"]["org.eclume.image"] == "edge"
+
+
+def test_borda_inclui_o_spa_depois_das_rotas_do_server() -> None:
+    """/api, /media, /mcp e /downloads vêm antes do `import` das regras do SPA, no fim do site."""
+    caddyfile = CONFIGS["caddyfile"]["content"]
+    spa = caddyfile.index("import /etc/caddy/spa.caddy")
+    for rota in ("handle /api/*", "handle /media/*", "handle /mcp", "handle_path /downloads/*"):
+        assert caddyfile.index(rota) < spa, rota
+    assert [linha.strip() for linha in caddyfile[spa:].strip().splitlines()] == ["import /etc/caddy/spa.caddy", "}"]
+
+
+def test_borda_imagem_leva_o_spa_e_as_regras() -> None:
+    """O Dockerfile copia o dist para /srv/web e as regras para o caminho do `import`."""
+    assert "COPY deploy/web.Caddyfile /etc/caddy/spa.caddy" in WEB_DOCKERFILE
+    assert "COPY --from=build /app/web/dist /srv/web" in WEB_DOCKERFILE
+    assert "import /etc/caddy/spa.caddy" in WEB_DOCKERFILE
+    assert "root * /srv/web" in WEB_CADDYFILE
+
+
+def test_borda_csp_e_cache_do_spa() -> None:
+    """As CSPs, o cache dos assets só para o arquivo que existe, o index no-cache e o erro no-store."""
+    assert f'Content-Security-Policy "{CSP_SPA}"' in WEB_CADDYFILE
+    assert f'Content-Security-Policy "{CSP_REFERENCIA}"' in WEB_CADDYFILE
+    assert re.search(
+        r'handle /assets/\* \{\s*@exists file\s*header @exists Cache-Control "public, max-age=31536000, immutable"',
+        WEB_CADDYFILE,
+    )
+    assert re.search(r'handle \{\s*header Cache-Control "no-cache"\s*try_files \{path\} /index.html', WEB_CADDYFILE)
+    assert re.search(r'handle_errors \{\s*header Cache-Control "no-store"', WEB_CADDYFILE)

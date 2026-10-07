@@ -6,7 +6,7 @@
 # O daemon é o do host (contexto Docker): todo bind mount resolve NO HOST, nunca na estação. Por
 # isso o Caddyfile é um config `content:` (o compose o copia para o container), nunca `file:`.
 #
-# Só o Caddy publica porta na LAN (8443). Postgres, Redis, MinIO, server e web não têm `ports:`: o
+# Só o Caddy publica porta na LAN (8443). Postgres, Redis, MinIO e server não têm `ports:`: o
 # Docker publica por fora do ufw. Depuração por `compose exec`. Os one-shots (`minio-init`,
 # `migrate`, `publish-ca`) ficam no perfil `tools` e rodam por `compose run --rm`, fora do
 # `up --wait`, que trata a saída 0 de um one-shot como falha. Runbook: docs/project/deploy-producao.md.
@@ -21,8 +21,8 @@ x-restart: &restart
 # Credencial por serviço (docs/standards/code/server-nucleo.md §Credenciais de Redis e MinIO): o
 # root do MinIO fica só no MinIO, no `minio-init` e nos scripts de backup do host; o Redis recusa
 # conexão sem usuário. Server e workers CPU usam `eclume-server`; o worker GPU, `eclume-gpu`.
-# Contêineres Python (uid 1000): sem capabilities e sem ganhar privilégio por setuid. Caddy e web
-# ficam de fora porque escutam em porta baixa.
+# Contêineres Python (uid 1000): sem capabilities e sem ganhar privilégio por setuid. O Caddy
+# fica de fora porque escuta em porta baixa.
 x-hardened: &hardened
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
@@ -69,14 +69,20 @@ x-server-image: &server-image
     labels: {org.eclume.image: "server", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
 services:
+  # A borda: Caddy com o SPA embutido (`eclume-edge`, deploy/web.Dockerfile). TLS, /api, /media,
+  # /mcp e /downloads vêm do Caddyfile abaixo; o resto, das regras do SPA da imagem.
   caddy:
     <<: *restart
     networks: [borda]
     mem_limit: ${ECLUME_MEM_CADDY:-256m}
-    image: caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+    image: eclume-edge:prod
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      tags: ["eclume-edge:${ECLUME_COMMIT:-sem-commit}"]
+      labels: {org.eclume.image: "edge", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
     depends_on:
       server: {condition: service_healthy}
-      web: {condition: service_started}
     ports:
       - "8443:8443"
     configs:
@@ -89,17 +95,6 @@ services:
       # Só a raiz própria (`eclume-server ca gerar`): a pasta secrets também guarda o env de
       # produção e a senha do admin.
       - ${ECLUME_DATA_DIR}/secrets/ca:/etc/caddy/ca:ro
-
-  web:
-    <<: *restart
-    networks: [borda]
-    mem_limit: ${ECLUME_MEM_WEB:-128m}
-    image: eclume-web:prod
-    build:
-      context: ..
-      dockerfile: deploy/web.Dockerfile
-      tags: ["eclume-web:${ECLUME_COMMIT:-sem-commit}"]
-      labels: {org.eclume.image: "web", org.opencontainers.image.revision: "${ECLUME_COMMIT:-}"}
 
   server:
     <<: [*restart, *server-image, *hardened]
@@ -407,8 +402,8 @@ configs:
   # docs/project/deploy-producao.md, "CA raiz nos clientes"). `default_sni`: quem acessa por IP não envia
   # SNI. /api e /media vão ao server sem cortar o prefixo, e /mcp (o servidor MCP, rota exata) também;
   # /downloads/ serve a pasta dos instaladores do desktop (deploy/publicar-desktop.sh); o resto é o
-  # SPA. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou /downloads (a tela é
-  # /config/mcp).
+  # SPA, servido da própria imagem. Nenhuma rota do SPA pode começar com /api, /media, /mcp ou
+  # /downloads (a tela é /config/mcp).
   caddyfile:
     content: |
       {
@@ -431,8 +426,8 @@ configs:
             ca ${ECLUME_TLS_CA:-local}
           }
         }
-        # Cabeçalhos genéricos para o que não vem do web (/api, /media, /mcp, /downloads); `?` não
-        # sobrescreve o que o upstream já mandou (a CSP inteira do web).
+        # Cabeçalhos genéricos para o que não é do SPA (/api, /media, /mcp, /downloads); `?` não
+        # sobrescreve o que o upstream ou as regras do SPA já puseram (a CSP inteira do SPA).
         header {
           ?X-Content-Type-Options nosniff
           ?Referrer-Policy no-referrer
@@ -465,18 +460,17 @@ configs:
             hide .*
           }
         }
-        handle {
-          reverse_proxy web:80
-        }
+        # O SPA (deploy/web.Caddyfile na imagem): o `handle` sem matcher, depois das rotas acima.
+        import /etc/caddy/spa.caddy
       }
 
 # Limites de memória (`mem_limit`) por env, `ECLUME_MEM_<SERVIÇO>`: os padrões são provisórios e
 # folgados (host de 16 GB) até a medição de 24 h (pico × 1,5, docs/project/deploy-producao.md).
 # Os workers não ganham `oom_score_adj`: com teto próprio, o OOM fica dentro do cgroup deles.
 
-# Redes por papel: `borda` (Caddy, web, server); `dados`, interna (Postgres, Redis, MinIO, server,
+# Redes por papel: `borda` (Caddy e server); `dados`, interna (Postgres, Redis, MinIO, server,
 # workers CPU e os one-shots); `fila-gpu`, interna (Redis, MinIO e worker GPU); `saida` (workers que
-# falam com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem web.
+# falam com providers, Claude e Hugging Face). O worker GPU não alcança Postgres nem o server.
 networks:
   borda: {}
   dados: {internal: true}
