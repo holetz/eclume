@@ -1,0 +1,4 @@
+# Pulos esperados do pytest no gate do host (deploy/pulos.py). Formato: arquivo::teste | motivo.
+# Aqui o ffmpeg e o claude real rodam: só o e2e de GPU, do pilar gpu-e2e (S4, #158), pula.
+worker-gpu/tests/test_gpu_e2e.py::test_transcreve_o_dialogo_de_duas_vozes | exige o compose eclume-gpu-test (S4, #158)
+worker-gpu/tests/test_gpu_e2e.py::test_audio_inexistente_gera_transcription_failed | exige o compose eclume-gpu-test (S4, #158)

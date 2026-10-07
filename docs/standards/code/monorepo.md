@@ -2,7 +2,7 @@
 type: standard
 title: Layout do monorepo e comandos por pilar
 description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI, o gate do host e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, deploy/pulos.py, web/e2e/flaky-reporter.ts, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
 tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
@@ -266,6 +266,20 @@ rodam com `contracts/`, o `python` com `design-system/**` e as três cópias do 
 disparar o workflow à mão, roda todos os jobs; o noturno também, mas só quando o `main` mudou desde o
 último noturno verde. Cada job tem `timeout-minutes`. Ao criar uma dependência nova entre pilares,
 acrescente o caminho ao filtro do job que a consome.
+
+**Pulos documentados e flaky.** O pilar `python` roda o pytest com `--junitxml` e passa o relatório
+a `deploy/pulos.py`, que o compara com a lista versionada do ambiente (`ECLUME_PULOS`: `ci`, o
+padrão, ou `gate`): `deploy/pulos-esperados-ci.txt` e `deploy/pulos-esperados-gate.txt`, uma linha
+`arquivo::teste | motivo` por pulo. Pulo fora da lista falha o pilar, e pulo listado que deixou de
+ocorrer também (a lista não apodrece). Na CI os pulos esperados são os 2 de `test_gpu_e2e.py`
+(pilar `gpu-e2e`, S4) e os 3 de `test_agents_real.py`; o `ffmpeg` é instalado no job para os 9 testes
+de pré-processamento rodarem. No gate, só os 2 de GPU: o `gate-host.sh` roda o pilar `python` com
+`ECLUME_TEST_CLAUDE=1`, a credencial do Claude do host (`~/.claude/.credentials.json`) montada
+somente leitura em `$HOME/.claude/` e o binário da CLI somente leitura em `/usr/local/bin/claude`,
+só nesse pilar (o menor alcance: nenhum outro pilar vê a credencial, e ela não entra em variável de
+ambiente nem em log). O `test_agents_real` gasta cota do token do host e falha o gate se o serviço
+estiver fora. O `web/e2e/flaky-reporter.ts` soma ao reporter `list` do Playwright um resumo dos
+testes que só passaram no retry e, na CI, um `::warning::` por teste; é aviso, não falha.
 
 **Documentação (pilar `docs`).** `cq knowledge validate` (a conformidade do bundle OKF, com o
 `cq` do repositório público `holetz/quenching` fixado por SHA — o da tag 6.3.0 —, por `ARG
