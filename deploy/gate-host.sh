@@ -152,14 +152,22 @@ ultimo_verde() {
 # Os pilares exigidos pelo diff do último SHA verde até o SHA, decididos depois da trava (a execução
 # anterior pode ter acabado de publicar um verde mais novo). Qualquer falha em saber o diff roda todos.
 if [[ "$PUBLICAR" -eq 1 && "$FORCAR_TODOS" -eq 0 ]]; then
+  # O hook dispara o gate antes de o push chegar ao GitHub: sem o commit lá, o histórico não acha o
+  # verde e rodaria todos.
+  for _ in $(seq 1 20); do
+    gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null && break
+    sleep 15
+  done
   verde="$(ultimo_verde "$SHA" || true)"
   if [[ -z "$verde" ]]; then
     echo "Sem SHA verde no histórico de $SHA: rodando todos os pilares."
   elif arquivos="$(gh api "repos/$REPO/compare/$verde...$SHA" --paginate \
       --jq '.files[] | .filename, (.previous_filename // empty)' 2>/dev/null)" \
-      && mapfile -t exigidos < <(printf '%s\n' "$arquivos" | python3 deploy/gate.py pilares --stdin); then
-    # Compare lista no máximo 3000 arquivos: acima disso o diff está truncado.
-    if (( $(printf '%s\n' "$arquivos" | grep -c .) >= 3000 )); then
+      && exigidos_txt="$(printf '%s\n' "$arquivos" | python3 deploy/gate.py pilares --stdin)"; then
+    mapfile -t exigidos <<< "$exigidos_txt"
+    [[ -n "${exigidos[0]:-}" ]] || exigidos=()
+    # O compare do GitHub lista no máximo 300 arquivos: a partir daí o diff pode estar truncado.
+    if (( $(printf '%s\n' "$arquivos" | grep -c .) >= 300 )); then
       echo "Diff de $verde a $SHA grande demais para listar: rodando todos os pilares."
     else
       PILARES=("${exigidos[@]}")

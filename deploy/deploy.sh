@@ -553,6 +553,19 @@ echo "Subindo os serviços…" >&2
 # contêineres de serviços que o compose do SHA não tem mais (`web`, `worker-cpu` e `worker-agents`
 # depois do holetz/eclume#151; o `worker` num --voltar a antes dele).
 "${COMPOSE[@]}" up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 60 caddy
+# O `--wait` do `worker` pode ter passado pelas chaves de saúde dos workers antigos, que as renovam
+# até sair como órfãos (e as apagam ao fechar): com eles fora, as duas filas precisam voltar a ter o
+# health-check do worker novo.
+if [[ " ${APP[*]} " == *" worker "* ]]; then
+  filas_ok=0
+  for _ in $(seq 1 15); do
+    if "${COMPOSE[@]}" exec -T worker python -m eclume_server.sonda fila default agents >/dev/null 2>&1; then
+      filas_ok=1; break
+    fi
+    sleep 3
+  done
+  [[ "$filas_ok" -eq 1 ]] || { echo "Recusa: o worker não renovou o health-check das filas default e agents em 45 s." >&2; exit 1; }
+fi
 
 # A raiz `local` nasce na primeira subida do Caddy; espera o arquivo e publica em /downloads/ a raiz
 # da CA ativa (e a própria como próxima, enquanto a ativa for `local`).
@@ -584,6 +597,11 @@ for image in "${RETENCAO[@]}"; do
   done
 done
 sed -n 's/^remover-dump\t//p' "$work/retidos" | while read -r old_dump; do host "rm -f '$old_dump'"; done
+# A tag `:prod` de uma imagem que a topologia do SHA não usa mais (o `eclume-web` depois do
+# holetz/eclume#151): as `:<sha>` retidas ficam para o `--voltar`.
+for image in "${RETENCAO[@]}"; do
+  [[ " ${IMAGES[*]} " == *" $image "* ]] || docker image rm "eclume-$image:prod" >/dev/null 2>&1 || true
+done
 # Imagens do eclume que ficaram sem tag (as fora da janela). Nada de outros projetos.
 docker image prune -f --filter label=org.eclume.image >/dev/null
 # Cache do BuildKit com mais de 7 dias; o recente fica para o próximo build.
