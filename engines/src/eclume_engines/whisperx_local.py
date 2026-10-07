@@ -158,11 +158,13 @@ class WhisperXLocalEngine:
         try:
             return run()
         except EngineError as exc:
-            if exc.code != OUT_OF_MEMORY or not self._unload_role("asr"):
+            if exc.code != OUT_OF_MEMORY or "asr" not in self._slots:
                 raise
-            logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
-            self._unload_role("stage")
-            return run()
+        # Fora do `except`: o `exc` já morreu e não segura o frame da etapa com o modelo que estourou.
+        logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
+        self._unload_role("stage")
+        self._unload_role("asr")
+        return run()
 
     # -- pipeline ---------------------------------------------------------------------------
 

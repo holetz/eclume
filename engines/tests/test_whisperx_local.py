@@ -458,6 +458,29 @@ def test_oom_na_etapa_com_asr_residente_descarrega_e_repete(monkeypatch: pytest.
     assert result.segments
 
 
+def test_oom_na_etapa_libera_a_etapa_antes_de_repetir(
+    monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX
+):
+    spy.source = fake
+    eng = engine()
+    tries = []
+    original = fake.align
+
+    def align_oom_once(*args: Any, **kw: Any) -> dict:
+        tries.append([m["kind"] for m in eng.loaded_models()])
+        if len(tries) == 1:
+            msg = "CUDA out of memory"
+            raise RuntimeError(msg)
+        return original(*args, **kw)
+
+    monkeypatch.setattr(sys.modules["whisperx"], "align", align_oom_once)
+    eng.transcribe(AUDIO, EngineOptions(diarize=False))
+    assert tries == [["asr", "alignment"], ["alignment"]]
+    # O alinhador que estourou já está inalcançável no primeiro `empty_cache` do recuo.
+    assert spy.snapshots
+    assert "alignment" not in spy.snapshots[0], spy.snapshots
+
+
 @pytest.mark.parametrize(("free", "batch"), [(None, 4), (6000, 4), (3500, 4), (3499, 2), (1000, 2)])
 def test_lote_inicial_pela_vram_livre(free: int | None, batch: int):
     assert initial_batch_size(free) == batch
