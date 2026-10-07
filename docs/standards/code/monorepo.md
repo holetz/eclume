@@ -242,6 +242,12 @@ serviços e o mock de `ECLUME_TEST_*` e `ECLUME_MOCK_URL`. A CI e o gate chamam 
 `deploy/test_gate.py` falha se um job da CI deixar de chamar o seu pilar ou se `windows`,
 `auditoria` ou `android` entrarem na CI.
 
+O `python` também exercita o `deploy.sh --voltar`: `deploy/test_deploy_voltar.py` roda o script de
+verdade (`--plan --voltar` e as recusas por migration desconhecida e imagem retida ausente) num
+repositório descartável, com `docker`, `ssh` e `gh` trocados por stubs no `PATH`. Quebrar o ramo
+`--voltar` do script faz o pilar falhar; o ramo de escrita (subir o trio retido) segue provado só pelo
+smoke do host. Em Windows o teste pula por falta de `bash` POSIX.
+
 **CI (aviso, não requisito de publicação).** Jobs `ubuntu-24.04` independentes, em `pull_request`,
 em `push` para `main`, à mão e num noturno (`schedule` às 06:00 UTC): `python`, `contracts`, `web`,
 `web-browser`, `desktop`, `mobile` e `docs`, cada um com o seu setup (actions, apt, serviços de
