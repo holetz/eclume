@@ -13,7 +13,7 @@
 #
 # Uso: bash deploy/gpu-e2e.sh
 # Variáveis: ECLUME_GPU_E2E_ESPERA (minutos de espera pela GPU, 20), ECLUME_GPU_E2E_INTERVALO
-#            (segundos entre consultas, 30), ECLUME_GPU_E2E_VRAM_MIN_MIB (VRAM livre mínima, 5120),
+#            (segundos entre consultas, 30), ECLUME_GPU_E2E_VRAM_MIN_MIB (VRAM livre mínima, 4096),
 #            ECLUME_GATE_IMAGE (imagem do pytest; padrão eclume-gate:<Rust>), ECLUME_GATE_CACHE_HOME
 #            (cache do uv, padrão ~/eclume-gate/cache/home).
 # Saída: a do pytest (e da checagem de pulos); 75 com a GPU ocupada além da espera.
@@ -26,7 +26,7 @@ source "$ROOT/deploy/gpu-lib.sh"
 INCONCLUSIVO=75
 ESPERA="${ECLUME_GPU_E2E_ESPERA:-20}"
 INTERVALO="${ECLUME_GPU_E2E_INTERVALO:-30}"
-VRAM_MIN="${ECLUME_GPU_E2E_VRAM_MIN_MIB:-5120}"
+VRAM_MIN="${ECLUME_GPU_E2E_VRAM_MIN_MIB:-4096}"
 RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml 2>/dev/null || true)"
 IMG="${ECLUME_GATE_IMAGE:-eclume-gate:$RUST}"
 CACHE_HOME="${ECLUME_GATE_CACHE_HOME:-$HOME/eclume-gate/cache/home}"

@@ -233,8 +233,8 @@ deixa de valer), o `[advisories] ignore` de `desktop/deny.toml` e `mobile/deny.t
 ## CI e gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` e `deploy/gate.sh`
 
 Os comandos de prova de cada pilar vivem num só lugar, `deploy/pilares.sh <pilar>`
-(`--lista` enumera os dez: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
-`docs`, `windows`, `auditoria` e `android`), com `--locked` no uv e no cargo, `gen:api -- --check` e o
+(`--lista` enumera os onze: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
+`docs`, `windows`, `auditoria`, `android` e `gpu-e2e`), com `--locked` no uv e no cargo, `gen:api -- --check` e o
 `budget` depois do build no `web`, `playwright install webkit firefox` no `web-browser` e
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` nos pilares cargo (o `Bus error` no link; o dev local
 mantém o debuginfo cheio). Quem chama prepara o ambiente — o script não sobe serviço nenhum e lê os
@@ -296,7 +296,7 @@ do front de design (`.design/build/`, geradas do `.design/tokens.json`) são ver
 exceção `!.design/build/` no `.gitignore` e fora do ruff, e o `--check` acusa a deriva.
 
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
-commit para o host GPU e roda lá `deploy/gate-host.sh`: os pilares que o diff exige (até os dez),
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os pilares que o diff exige (até os onze),
 cada um num contêiner da imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`,
 `--cpu-shares 256`, teto de memória, `nice`, uid 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
 `eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
@@ -305,7 +305,7 @@ commit: `pending` enquanto roda, `success` só com os pilares exigidos verdes (a
 rodaram e quantos ficaram dispensados), `failure` nomeando os pilares que falharam e `error` quando o
 gate não consegue provar; o log fica em
 `~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
-uma parte e nunca publica; `--todos` publica rodando os dez.
+uma parte e nunca publica; `--todos` publica rodando os onze.
 
 **O gate é proporcional.** Depois da trava, o host acha o SHA verde mais próximo no histórico do
 commit (`eclume/gate` = `success`, até 30 commits atrás), lista os arquivos que mudaram desde ele
@@ -336,6 +336,24 @@ da execução, roda `testDebugUnitTest` e `lintRelease` (com `lint-baseline.xml`
 do plugin e do app e confere a ponte JNI por `mobile/scripts/simbolos_jni.py` (cada
 `external fun` do `EclumeCore.kt` com o símbolo `Java_…` na `.so`, pelo `llvm-nm` do NDK, e a
 classe com os métodos nativos no dex, pelo `apkanalyzer` do SDK).
+**O pilar `gpu-e2e` (só do gate, holetz/eclume#158).** Prova o caminho CUDA (WhisperX e diarização na
+GTX 1660 de 6 GB, fila `eclume:gpu`, MinIO), que nenhum outro pilar toca: o staging roda o worker em
+CPU. Exigido por mudança em `worker-gpu/**`, `engines/**`, `contracts/transcript.schema.json`,
+`deploy/docker-compose.gpu-test.yml`, `deploy/gpu-e2e.sh`, `deploy/pilares.sh` e `ci.yml` (e por
+qualquer mudança em `deploy/`, que roda todos). Precisa do docker e da GPU do host, então o
+`gate-host.sh` o roda no host, fora do contêiner dos outros pilares: `deploy/gpu-e2e.sh` sobe o
+compose `eclume-gpu-test` (portas e volumes próprios; os modelos de `/srv/eclume/models` são
+compartilhados), roda os 2 testes de `worker-gpu/tests/test_gpu_e2e.py` com `ECLUME_GPU_E2E=1` num
+contêiner `eclume-gate` com `--network host`, confere os pulos contra uma lista vazia
+(`deploy/pulos-esperados-gpu-e2e.txt`: pulo é falha) e derruba o compose com `down -v` em todos os
+caminhos. Antes de subir, espera a GPU livre (o `busy` do worker de produção, `gpu_busy` em
+`deploy/gpu-lib.sh`, o mesmo do `deploy.sh`, e VRAM livre acima de `ECLUME_GPU_E2E_VRAM_MIN_MIB`,
+4096) em laços de 30 s até `ECLUME_GPU_E2E_ESPERA` minutos (20); passado o limite, sai **75**
+(inconclusivo) sem subir nada e sem parar a produção, e o gate publica `error` "sem prova: gpu-e2e
+(inconclusivo: GPU ocupada)", nunca `success`: quem lê `eclume/gate` segue exigindo `success`. Fora
+o 75, saída diferente de zero é `failure`. A primeira execução baixa modelos e constrói a imagem do
+worker (~8 GB, em cache depois). O pilar não monta as credenciais do `~/.claude`.
+
 Nenhum caminho que publica aceita um SHA sem `eclume/gate` = `success`: `deploy/deploy.sh`,
 `deploy/release-desktop.sh --publicar`, `deploy/release-movel.sh --publicar` e
 `desktop-release.yml`. A saída de emergência é `--sem-gate "<motivo>"`, por invocação, no

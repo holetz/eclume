@@ -221,6 +221,11 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   gate levou ~20 minutos.
 - Projeto compose `eclume-gate` (Postgres, Redis, MinIO e o mock em `127.0.0.1:55632`, `56579`,
   `59200` e `4210`), derrubado com `down -v` ao fim; nunca toca o projeto `eclume`.
+- Pilar `gpu-e2e`: roda no host (não no contêiner), sobe o projeto compose `eclume-gpu-test` (Redis
+  em `127.0.0.1:16379`, MinIO em `19000`, o worker-gpu com a GPU) e o derruba com `down -v` ao fim;
+  usa os modelos e o token do Hugging Face de `/srv/eclume`, divide a VRAM de 6 GB com a produção e
+  espera o `busy` e a VRAM livre antes de subir (sai 75, inconclusivo, se a GPU não liberar).
+  Norma em [monorepo.md](../standards/code/monorepo.md).
 - Limites por pilar: `--cpus 2`, `--cpu-shares 256` (também nos serviços de teste e no mock, por um
   `~/eclume-gate/cpu-shares.yml` gerado a cada execução: a produção vence a CPU quando disputam),
   `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido foi ~2,6 GiB no link do desktop e
