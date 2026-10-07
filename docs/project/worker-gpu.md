@@ -203,7 +203,8 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
   2026-09-25: nome, 6.144 MiB de total e a VRAM do stack de produção (3.659 MiB) lidos certo; o
   hash some em até 45 s depois de um `kill` e na hora num `docker stop`.
 - **VRAM compartilhada com o Jellyfin.** Há no máximo dois modelos na GPU: o ASR, residente entre
-  jobs, e o da etapa em curso (alinhador ou pyannote), que sai no fim do job. Antes de carregar o
+  jobs, e o da etapa em curso (alinhador ou pyannote), que sai no fim do job, também quando uma
+  etapa falha. Antes de carregar o
   da etapa com menos de `ECLUME_RESIDENT_MIN_FREE_MB` livres — o Jellyfin transcodificando, por
   exemplo —, o ASR sai; um OOM numa etapa com ele residente o descarrega e repete a etapa. Depois
   de `ECLUME_MODEL_IDLE_SECONDS` sem job, o worker descarrega tudo e fica só com o contexto CUDA
@@ -222,6 +223,7 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
   reinício: o contêiner só conta como ruim em duas rodadas seguidas, e o heartbeat ausente
   também.
 - **Falta de memória.** Um OOM no ASR corta o lote pela metade até 1. Se ainda faltar, o modelo
-  cai para `medium` (aviso `fallback_medium`). Esgotado isso, o job falha com `out_of_memory`.
+  cai para `medium` (aviso `fallback_medium`). A cada recuo, o modelo anterior sai da VRAM antes
+  da nova tentativa. Esgotado isso, o job falha com `out_of_memory`.
 - **Disco.** O host tem pouco espaço livre. Confira `df -h /` antes de um build, e, depois de
   testar, derrube o compose com `down -v` e apague as imagens `eclume-worker-gpu` antigas.

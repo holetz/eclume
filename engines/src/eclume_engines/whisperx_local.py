@@ -21,6 +21,7 @@ import importlib
 import logging
 import statistics
 import sys
+import traceback
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -158,11 +159,13 @@ class WhisperXLocalEngine:
         try:
             return run()
         except EngineError as exc:
-            if exc.code != OUT_OF_MEMORY or not self._unload_role("asr"):
+            if exc.code != OUT_OF_MEMORY or "asr" not in self._slots:
                 raise
-            logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
-            self._unload_role("stage")
-            return run()
+        # Fora do `except`: o `exc` já morreu e não segura o frame da etapa com o modelo que estourou.
+        logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
+        self._unload_role("stage")
+        self._unload_role("asr")
+        return run()
 
     # -- pipeline ---------------------------------------------------------------------------
 
@@ -183,20 +186,26 @@ class WhisperXLocalEngine:
             raise EngineError(AUDIO_DECODE_FAILED, f"falha ao decodificar o áudio: {exc}") from exc
         duration_s = len(audio) / SAMPLE_RATE
 
-        with self.vram.track() as peak:
-            result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
-            progress("asr", 100.0)
-            # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
-            options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
-            aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
-            progress("align", 100.0)
-            result, embeddings, diarization_model = self._stage(
-                lambda: self._diarize(whisperx, audio, aligned, options, progress, warnings)
-            )
-            progress("diarize", 100.0)
-        if self.keep_asr_resident:
-            # O ASR fica para o próximo job; a VRAM da etapa volta ao host.
-            self._unload_role("stage")
+        try:
+            with self.vram.track() as peak:
+                result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
+                progress("asr", 100.0)
+                # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
+                options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
+                aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
+                progress("align", 100.0)
+                result, embeddings, diarization_model = self._stage(
+                    lambda: self._diarize(whisperx, audio, aligned, options, progress, warnings)
+                )
+                progress("diarize", 100.0)
+        except BaseException as exc:
+            # A falha em voo ainda segura os frames de `_align`/`_diarize` com o modelo da etapa.
+            _clear_frames(exc)
+            raise
+        finally:
+            if self.keep_asr_resident:
+                # O ASR fica para o próximo job; a VRAM da etapa volta ao host, com sucesso ou falha.
+                self._unload_role("stage")
 
         segments = _to_segments(result.get("segments", []))
         progress("embed", 100.0)
@@ -261,6 +270,7 @@ class WhisperXLocalEngine:
                 warnings.append(WARN_FALLBACK_MEDIUM)
             batch = first_batch
             while True:
+                pipeline = None  # o `_load_asr` também pode estourar: nenhum modelo da volta anterior sobrevive
                 try:
                     pipeline, compute_type = self._load_asr(whisperx, model, compute_types, options.language)
                     result = pipeline.transcribe(
@@ -274,15 +284,17 @@ class WhisperXLocalEngine:
                 except Exception as exc:
                     if not is_oom(exc):
                         raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
-                    self.unload()
-                    if batch == 1:
-                        break
-                    batch = max(1, batch // 2)
-                    logger.warning("OOM no ASR (%s); tentando batch_size=%d", model, batch)
-                    if WARN_BATCH_REDUCED not in warnings:
-                        warnings.append(WARN_BATCH_REDUCED)
-                    continue
-                return result, model, compute_type, batch
+                else:
+                    return result, model, compute_type, batch
+                # Só o OOM chega aqui, já fora do `except`: o traceback morreu com o `exc` e não segura o modelo.
+                pipeline = None
+                self.unload()
+                if batch == 1:
+                    break
+                batch = max(1, batch // 2)
+                logger.warning("OOM no ASR (%s); tentando batch_size=%d", model, batch)
+                if WARN_BATCH_REDUCED not in warnings:
+                    warnings.append(WARN_BATCH_REDUCED)
         raise EngineError(OUT_OF_MEMORY, f"VRAM insuficiente mesmo com batch_size=1 e o modelo {fallback}")
 
     def _align(
@@ -399,6 +411,19 @@ def _is_access_denied(exc: BaseException) -> bool:
             return True
         seen = seen.__cause__ or seen.__context__
     return False
+
+
+def _clear_frames(exc: BaseException) -> None:
+    """Solta os locais dos frames da cadeia da exceção (o modelo da etapa entre eles); o traceback segue legível."""
+    pending: list[BaseException | None] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        traceback.clear_frames(current.__traceback__)
+        pending += [current.__cause__, current.__context__]
 
 
 def _stage_error(code: str, stage: str, exc: Exception) -> EngineError:
