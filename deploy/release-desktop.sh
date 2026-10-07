@@ -162,6 +162,8 @@ echo "Enviando o código de $SHA para o host…" >&2
 # Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
 git -c core.autocrlf=false archive --format=tar "$SHA" | host "rm -rf '$SRC' && mkdir -p '$SRC' && tar -x -C '$SRC'"
 host "rm -rf '$DIST' && mkdir -p '$DIST'"
+# Só as 3 versões mais recentes ficam em dist-*: o resto é instalador antigo ocupando disco no host.
+host "cd '$BASE' && ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf"
 
 # --- build ----------------------------------------------------------------------------------------
 export BUILDKIT_PROGRESS=plain
@@ -177,7 +179,7 @@ fi
 # A CLI do Tauri sai de desktop/package-lock.json, instalada sem scripts num contêiner sem a chave
 # do updater; o build depois só a executa (npx --no-install).
 echo "CLI do Tauri (npm ci, sem a chave)…" >&2
-docker run --rm --cpus 2 --memory "$MEMORIA" -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/desktop "$IMG_LINUX" \
+docker run --rm --cpus 2 --cpu-shares 256 --memory "$MEMORIA" -u 1000:1000 -e HOME=/tmp -v "$SRC:/src" -w /src/desktop "$IMG_LINUX" \
   nice -n 10 npm ci --ignore-scripts --no-audit --no-fund
 
 # $1: imagem · $2: pasta do target/ no host · $3: pasta extra montada em /tmp/.cache (ou vazio)
@@ -190,7 +192,7 @@ compilar() {
   local img="$1" target="$2" cache="$3" assina="$4" build_args="$5" bundle_args="$6"
   host "mkdir -p '$target'"
   [[ -z "$cache" ]] || host "mkdir -p '$cache'"
-  local comum=(--rm --cpus 2 --memory "$MEMORIA" -u 1000:1000
+  local comum=(--rm --cpus 2 --cpu-shares 256 --memory "$MEMORIA" -u 1000:1000
     -e HOME=/tmp -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target
     -e ECLUME_SERVER_URL="$SERVER_URL" -e ECLUME_SERVER_CA_SHA256="$SERVER_CA"
     -e APPIMAGE_EXTRACT_AND_RUN=1 -e NO_STRIP=true
@@ -231,7 +233,7 @@ if [[ "$WINDOWS" -eq 1 ]]; then
     # Nenhum instalador sai com assinatura quebrada ou sem carimbo: o setup e os executáveis de
     # dentro (extraídos pelo 7z) passam pela conferência, sem segredo nenhum montado.
     echo "Conferindo a assinatura do instalador Windows…" >&2
-    docker run --rm -u 1000:1000 -e HOME=/tmp -v "$SRC:/src:ro" -v "$NSIS:/nsis:ro" "$IMG_WINDOWS" \
+    docker run --rm --cpu-shares 256 -u 1000:1000 -e HOME=/tmp -v "$SRC:/src:ro" -v "$NSIS:/nsis:ro" "$IMG_WINDOWS" \
       bash -c 'set -euo pipefail
                assinar=/src/desktop/scripts/assinar-windows.sh
                setup="$(ls /nsis/*_'"$VERSAO"'_*-setup.exe)"

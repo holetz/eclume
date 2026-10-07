@@ -6,6 +6,8 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -197,3 +199,205 @@ def test_workflows_de_release_conferem_o_gate_antes_de_publicar(arquivo: str) ->
     assert "publicar == 'true'" in passo["if"]
     assert "--sem-gate" not in passo["run"]
     assert jobs[nome]["permissions"]["statuses"] == "read"
+
+
+# --- pilares pelo diff ----------------------------------------------------------------------------
+
+
+def _filtros_da_ci() -> dict[str, set[str]]:
+    """Os filtros de caminho do job `mudancas` do `ci.yml`, com as âncoras YAML resolvidas."""
+    jobs = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["jobs"]
+    passos = jobs["mudancas"]["steps"]
+    filtros = yaml.safe_load(next(p["with"]["filters"] for p in passos if p.get("id") == "filtro"))
+
+    def achatar(itens: list[object]) -> set[str]:
+        saida: set[str] = set()
+        for item in itens:
+            saida |= achatar(item) if isinstance(item, list) else {str(item)}
+        return saida
+
+    return {nome: achatar(itens) for nome, itens in filtros.items() if nome in gate.PILARES}
+
+
+def test_mapa_de_caminhos_do_gate_e_o_dos_filtros_da_ci() -> None:
+    """Os sete pilares da CI têm no gate exatamente os mesmos caminhos dos filtros do `ci.yml`."""
+    da_ci = _filtros_da_ci()
+    assert set(da_ci) == set(gate.PILARES) - set(gate.SO_NO_GATE)
+    for pilar, globs in da_ci.items():
+        assert set(gate.FILTROS[pilar]) == globs, pilar
+    assert set(gate.FILTROS) == set(gate.PILARES)
+
+
+@pytest.mark.parametrize(
+    ("arquivos", "esperado"),
+    [
+        (["web/src/App.jsx"], ["web", "web-browser"]),
+        (["docs/index.md"], ["docs"]),
+        (["README.md"], ["docs"]),
+        (["server/eclume_server/app.py"], ["python"]),
+        (["contracts/openapi.yaml"], ["python", "contracts", "web", "web-browser"]),
+        (["desktop/src-tauri/src/main.rs"], ["desktop", "windows"]),
+        (["mobile/src-tauri/src/lib.rs"], ["mobile", "android"]),
+        (["desktop/crates/core/src/lib.rs"], ["desktop", "mobile", "windows", "android"]),
+        (["web/src/lib/vocabulario.js"], ["web", "web-browser", "desktop", "mobile", "windows", "android"]),
+        (["desktop/deny.toml"], ["desktop", "auditoria", "windows"]),
+        ([".design/tokens.json", ".claude/settings.json"], []),
+        ([], []),
+    ],
+)
+def test_pilares_exigidos_pelo_mapa_de_caminhos(arquivos: list[str], esperado: list[str]) -> None:
+    """Cada arquivo liga os pilares que o consomem, na ordem de `PILARES`; o resto não liga nenhum."""
+    assert gate.pilares_exigidos(arquivos) == [p for p in gate.PILARES if p in esperado]
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        "deploy/staging.sh",
+        "deploy/gate-host.sh",
+        ".github/workflows/ci.yml",
+        "uv.lock",
+        "pyproject.toml",
+        "web/package-lock.json",
+        "desktop/Cargo.lock",
+        "desktop/rust-toolchain.toml",
+        ".nvmrc",
+    ],
+)
+def test_deploy_lock_e_toolchain_rodam_todos(arquivo: str) -> None:
+    """Mudança em `deploy/`, lock ou toolchain roda os dez pilares, junto com qualquer outro arquivo."""
+    assert gate.pilares_exigidos([arquivo]) == list(gate.PILARES)
+    assert gate.pilares_exigidos(["docs/index.md", arquivo]) == list(gate.PILARES)
+
+
+def test_diff_desconhecido_roda_todos() -> None:
+    """Sem diff (primeira execução, histórico reescrito), todos os pilares."""
+    assert gate.pilares_exigidos(None) == list(gate.PILARES)
+
+
+def test_pilares_pela_linha_de_comando(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """`--stdin` lê os caminhos; `--todos` ignora o diff; `--desde` que o git não resolve roda todos."""
+    codigo, saida = rodar(["pilares", "--stdin"], "docs/a.md\nweb/x.js\n", monkeypatch, capsys)
+    assert (codigo, saida.split()) == (0, ["web", "web-browser", "docs"])
+    _, saida = rodar(["pilares", "--stdin", "--todos"], "docs/a.md\n", monkeypatch, capsys)
+    assert saida.split() == list(gate.PILARES)
+    argv = ["pilares", "--desde", "f" * 40, "--sha", "e" * 40, "--repo", str(RAIZ)]
+    _, saida = rodar(argv, "", monkeypatch, capsys)
+    assert saida.split() == list(gate.PILARES)
+
+
+def test_arquivos_alterados_le_o_diff_do_git(tmp_path: Path) -> None:
+    """O diff `desde..ate` de um repositório de verdade vira a lista de caminhos."""
+    ambiente = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+
+    def git(*args: str) -> str:
+        comando = ["git", "-C", str(tmp_path), *args]
+        return subprocess.run(comando, check=True, capture_output=True, text=True, env=ambiente).stdout.strip()  # noqa: S603
+
+    git("init", "-q")
+    (tmp_path / "a.txt").write_text("1")
+    git("add", ".")
+    git("commit", "-qm", "um")
+    base = git("rev-parse", "HEAD")
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "x.js").write_text("2")
+    git("add", ".")
+    git("commit", "-qm", "dois")
+    assert gate.arquivos_alterados(base, "HEAD", str(tmp_path)) == ["web/x.js"]
+    assert gate.arquivos_alterados("0" * 40, "HEAD", str(tmp_path)) is None
+
+
+# --- descrição com pilares dispensados ------------------------------------------------------------
+
+
+def test_descricao_com_dispensados_conta_so_os_exigidos() -> None:
+    """Dispensado não é pilar faltando: os exigidos verdes dão `success` e a descrição diz o resto."""
+    dispensados = tuple(p for p in gate.PILARES if p not in ("web", "docs"))
+    estado, texto = gate.descricao({"web": 0, "docs": 0}, 90, LOG, dispensados, "b" * 40)
+    assert estado == "success"
+    assert texto.startswith("2 verdes (web, docs); 8 dispensados desde bbbbbbb · 1min30s")
+    assert len(texto) <= gate.LIMITE_DESCRICAO
+
+
+def test_descricao_com_dispensados_ainda_falha_e_exige_prova() -> None:
+    """Pilar exigido que falhou ou não rodou não é coberto pela dispensa dos outros."""
+    assert gate.descricao({"web": 1}, 1, LOG, ("python",), "b" * 40)[0] == "failure"
+    estado, texto = gate.descricao({"web": 0}, 1, LOG, ("python",), "b" * 40)
+    assert estado == "error"
+    assert "sem prova: contracts" in texto
+
+
+def test_descricao_sem_nenhum_pilar_exigido_e_success() -> None:
+    """Um diff que não toca pilar nenhum (só `.design/`) é `success` e diz que nada era exigido."""
+    estado, texto = gate.descricao({}, 0, LOG, gate.PILARES, "b" * 40)
+    assert estado == "success"
+    assert texto.startswith("nenhum pilar exigido; 10 dispensados")
+
+
+def test_descricao_com_dispensados_pela_linha_de_comando(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--dispensados` e `--desde` chegam à descrição."""
+    dispensados = ",".join(p for p in gate.PILARES if p != "docs")
+    argv = ["descricao", "--log", LOG, "--dispensados", dispensados, "--desde", "c" * 40]
+    _, saida = rodar(argv, "docs 0\n", monkeypatch, capsys)
+    assert saida.splitlines()[0] == "success"
+    assert "9 dispensados desde ccccccc" in saida
+
+
+def test_gate_sh_expoe_todos_e_o_host_decide_o_diff() -> None:
+    """`--todos` vai do `gate.sh` ao host; o host decide os pilares pelo diff quando publica."""
+    sh = (RAIZ / "deploy" / "gate.sh").read_text(encoding="utf-8")
+    host = (RAIZ / "deploy" / "gate-host.sh").read_text(encoding="utf-8")
+    assert "args+=(--todos)" in sh
+    assert "--todos) FORCAR_TODOS=1" in host
+    assert "gate.py pilares --stdin" in host
+    assert "--dispensados" in host
+
+
+# --- SHA superado, peso de CPU e poda -------------------------------------------------------------
+
+
+def _host() -> str:
+    return (RAIZ / "deploy" / "gate-host.sh").read_text(encoding="utf-8")
+
+
+def test_so_o_pre_push_abandona_sha_superado() -> None:
+    """O hook passa `--superavel` ao gate; o pedido à mão não, e o host só abandona com a flag."""
+    hook = (RAIZ / ".githooks" / "pre-push").read_text(encoding="utf-8")
+    sh = (RAIZ / "deploy" / "gate.sh").read_text(encoding="utf-8")
+    host = _host()
+    assert 'gate.sh" --fundo --superavel' in hook
+    assert "args+=(--superavel)" in sh
+    assert "--superavel) SUPERAVEL=1" in host
+    # Só a ponta à frente do SHA o supera; sem ler a ponta ou com o push em curso, o gate roda.
+    assert '"$SUPERAVEL" -eq 1' in host
+    assert "== ahead" in host
+    assert 'publicar error "superado por' in host
+    # A checagem vem depois da trava, para valer para o SHA que esperou a vez.
+    assert host.index("flock 9") < host.index('"$SUPERAVEL" -eq 1')
+
+
+def test_todo_conteiner_do_gate_leva_cpu_shares() -> None:
+    """Os pilares e os serviços de teste rodam com `--cpu-shares 256`, abaixo da produção."""
+    host = _host()
+    assert "CPU_SHARES=256" in host
+    assert '--cpu-shares "$CPU_SHARES"' in host
+    assert "cpu_shares: %s" in host
+    assert host.count("docker run") == 1  # o único `docker run` do gate é o da linha acima
+    assert '-f "$CPU_YML"' in host
+
+
+def test_gate_poda_logs_imagens_antigas_e_arvores_abandonadas() -> None:
+    """A poda apaga logs de mais de 30 dias e imagens de build de outro Rust, e nunca a imagem atual."""
+    host = _host()
+    assert "-name '*.log' -mtime +30 -delete" in host
+    assert 'grep -vF ":$RUST"' in host
+    assert "eclume-(gate|desktop-build|desktop-build-windows|mobile-build)" in host
+    assert "-name 'src-*' -mtime +1" in host

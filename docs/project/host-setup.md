@@ -221,9 +221,20 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   gate levou ~20 minutos.
 - Projeto compose `eclume-gate` (Postgres, Redis, MinIO e o mock em `127.0.0.1:55632`, `56579`,
   `59200` e `4210`), derrubado com `down -v` ao fim; nunca toca o projeto `eclume`.
-- Limites por pilar: `--cpus 2`, `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido
-  foi ~2,6 GiB no link do desktop e do windows). Uma execução completa levou 16 a 21 minutos com a
-  produção de pé, e recusa com o disco em 90%.
+- Limites por pilar: `--cpus 2`, `--cpu-shares 256` (também nos serviços de teste e no mock, por um
+  `~/eclume-gate/cpu-shares.yml` gerado a cada execução: a produção vence a CPU quando disputam),
+  `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido foi ~2,6 GiB no link do desktop e
+  do windows). Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
+  disco em 90%.
+- Proporcional: o host roda só os pilares que o diff desde o último SHA verde exige (`--todos` na
+  estação força os dez) e abandona o SHA que o pre-push disparou e que o `main` já ultrapassou
+  (`eclume/gate` = `error` "superado por <sha>"); `bash deploy/gate.sh --estado <sha>` mostra a
+  descrição com os pilares rodados e os dispensados. O deploy sem status do SHA da ponta se resolve
+  com `bash deploy/gate.sh <sha>`, que nunca é abandonado.
+- Poda a cada execução: logs com mais de 30 dias, imagens de build de outra versão do Rust (as
+  `eclume-gate`, `eclume-desktop-build`, `-windows` e `eclume-mobile-build` sem a tag atual) e
+  `src-*` com mais de um dia. Os `dist-*` do release (`~/eclume-build/release` e `/movel`) ficam nos
+  3 mais recentes, podados a cada `release-desktop.sh` e `release-movel.sh`.
 - O `gh` do host (conta `holetz`, escopo `repo`) publica o status `eclume/gate`; os contêineres dos
   pilares não recebem o token. O NDK de `~/android-sdk/ndk/28.2.13676358` entra só leitura no
   pilar `mobile`.

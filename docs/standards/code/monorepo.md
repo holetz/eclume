@@ -276,15 +276,38 @@ do front de design (`.design/build/`, geradas do `.design/tokens.json`) são ver
 exceção `!.design/build/` no `.gitignore` e fora do ruff, e o `--check` acusa a deriva.
 
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
-commit para o host GPU e roda lá `deploy/gate-host.sh`: os dez pilares, cada um num contêiner da
-imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`, teto de memória, `nice`, uid
-1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
+commit para o host GPU e roda lá `deploy/gate-host.sh`: os pilares que o diff exige (até os dez),
+cada um num contêiner da imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`,
+`--cpu-shares 256`, teto de memória, `nice`, uid 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
 `eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
 execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
-commit: `pending` enquanto roda, `success` só com os dez pilares verdes numa execução completa,
-`failure` nomeando os pilares que falharam e `error` quando o gate não consegue provar; o log fica em
+commit: `pending` enquanto roda, `success` só com os pilares exigidos verdes (a descrição diz quais
+rodaram e quantos ficaram dispensados), `failure` nomeando os pilares que falharam e `error` quando o
+gate não consegue provar; o log fica em
 `~/eclume-gate/logs/<sha>.log` no host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` roda
-uma parte e nunca publica. Os pilares `windows` (`cargo xwin clippy` do desktop para
+uma parte e nunca publica; `--todos` publica rodando os dez.
+
+**O gate é proporcional.** Depois da trava, o host acha o SHA verde mais próximo no histórico do
+commit (`eclume/gate` = `success`, até 30 commits atrás), lista os arquivos que mudaram desde ele
+(`gh api compare`) e `python3 deploy/gate.py pilares --stdin` devolve os pilares exigidos pelo mapa
+de caminhos de `FILTROS` — o mesmo dos filtros do `ci.yml` para os sete pilares da CI (o
+`deploy/test_gate.py` falha se divergirem), mais `windows` (os caminhos do `desktop`), `android` (os
+do `mobile`) e `auditoria` (manifestos, locks, `deny.toml` e as exceções). Mudança em `deploy/`, no
+`ci.yml`, num lock ou numa toolchain (`rust-toolchain.toml`, `.nvmrc`, `.python-version`) roda todos,
+e sem SHA verde encontrável (primeira execução, histórico reescrito) ou com o diff truncado também.
+Cada pilar fora do diff é dispensado, não faltante: o status só fica `success` com todos os
+exigidos verdes, e um diff que não toca pilar nenhum (só `.design/`, `.claude/`) publica `success`
+com "nenhum pilar exigido", de modo que o deploy nunca fica sem status. A dispensa vale por
+transitividade (cada verde provou o estado inteiro naquele SHA); `--todos` força a prova completa.
+
+**SHA superado.** O hook de pre-push passa `--superavel`: depois da trava, se o `main` do GitHub
+já está à frente do SHA (`compare` = `ahead`), o host publica `eclume/gate` = `error`
+"superado por <sha>" e sai sem rodar; o deploy usa a ponta, que tem o gate próprio e cujo diff
+desde o último verde cobre o SHA abandonado. Um gate pedido à mão (`bash deploy/gate.sh <ref>`)
+nunca é abandonado, e ponta igual, atrás, divergente ou ilegível (o push ainda em curso) também não.
+A cada execução o host poda logs de mais de 30 dias, imagens de build de outra versão do Rust
+(`eclume-gate`, `eclume-desktop-build`, `eclume-desktop-build-windows`, `eclume-mobile-build`) e
+árvores `src-*` abandonadas. Os pilares `windows` (`cargo xwin clippy` do desktop para
 `x86_64-pc-windows-msvc`, `-D warnings`), `auditoria` e `android` são só do gate. O `android`
 recebe o SDK, o NDK e o JDK de `mobile/scripts/android-sdk.sh` do host, só leitura
 (`ECLUME_ANDROID_SDK`, `ECLUME_ANDROID_NDK`, `ECLUME_ANDROID_JDK`), e o cache do Gradle em
@@ -301,7 +324,7 @@ dispensa só o status (árvore limpa e commit no GitHub seguem exigidos) e deixa
 `eclume/gate-dispensa` = `failure` com o motivo. O workflow de release não tem dispensa.
 
 **Hook de pre-push.** `.githooks/pre-push`, ativado uma vez por clone com
-`git config core.hooksPath .githooks`, dispara `bash deploy/gate.sh --fundo <sha>` para cada
+`git config core.hooksPath .githooks`, dispara `bash deploy/gate.sh --fundo --superavel <sha>` para cada
 atualização de `refs/heads/main` do push: o gate roda no host em segundo plano e o push nunca espera
 nem falha por ele (host fora do alcance vira aviso). Ramos de trabalho rodam o gate à mão.
 

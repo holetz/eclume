@@ -4,12 +4,16 @@
 # `eclume/gate` no commit. Deploy e releases recusam um SHA sem esse status em `success`.
 # Contrato: docs/standards/code/monorepo.md; runbook: docs/project/host-setup.md.
 #
-# Uso: bash deploy/gate.sh [<ref>] [--pilares a,b] [--fundo] [--plan] [--context NOME]
+# Uso: bash deploy/gate.sh [<ref>] [--pilares a,b | --todos] [--fundo] [--superavel] [--plan] [--context NOME]
 #      bash deploy/gate.sh --estado [<ref>]
 #   <ref>       o commit provado (padrão: HEAD); o gate completo exige o commit no GitHub.
 #   --pilares   só esses pilares (vírgulas), sem publicar status; não exige o commit no GitHub.
+#   --todos     publica o status rodando os dez pilares; sem ele, o host roda só os pilares que o
+#               diff desde o último SHA verde exige (deploy/gate.py) e o status diz os dispensados.
 #   --fundo     solta a execução no host e volta em segundos (o hook de pre-push usa este modo,
 #               com o push ainda em curso); host fora do alcance vira aviso.
+#   --superavel o host abandona o SHA se o `main` já passou dele (publica `error` "superado por
+#               <sha>"); o hook de pre-push usa, o pedido à mão nunca é abandonado.
 #   --estado    mostra o status `eclume/gate` do commit e o fim do log no host.
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
@@ -22,6 +26,8 @@ CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
 REPO=holetz/eclume
 REF=HEAD
 PILARES=""
+TODOS=0
+SUPERAVEL=0
 FUNDO=0
 ESTADO=0
 PLAN_ONLY=0
@@ -31,19 +37,22 @@ while [[ $# -gt 0 ]]; do
     --pilares)
       [[ $# -ge 2 && -n "$2" ]] || { echo "--pilares exige a lista (python,web…)." >&2; exit 2; }
       PILARES="$2"; shift 2 ;;
+    --todos) TODOS=1; shift ;;
     --fundo) FUNDO=1; shift ;;
+    --superavel) SUPERAVEL=1; shift ;;
     --estado) ESTADO=1; shift ;;
     --plan|--dry-run) PLAN_ONLY=1; shift ;;
     --context)
       [[ $# -ge 2 && -n "$2" ]] || { echo "--context exige o nome de um contexto Docker." >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
-    --help|-h) sed -n '2,17p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,20p' "$0"; exit 0 ;;
     -*) echo "Flag desconhecida: $1" >&2; exit 2 ;;
     *) REF="$1"; shift ;;
   esac
 done
 
 SHA="$(git rev-parse --verify "$REF^{commit}")"
+[[ -z "$PILARES" || "$TODOS" -eq 0 ]] || { echo "--todos e --pilares não andam juntos." >&2; exit 2; }
 if [[ -n "$PILARES" ]]; then
   validos="$(bash deploy/pilares.sh --lista | tr '\n' ' ')"
   IFS=, read -r -a pedidos <<< "$PILARES"
@@ -71,7 +80,7 @@ fi
 
 commit_no_gh=1  # 1 = o commit está no GitHub
 gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null || commit_no_gh=0
-modo="completo, publica $([[ "$FUNDO" -eq 1 ]] && echo "em segundo plano" || echo "em primeiro plano")"
+modo="$([[ "$TODOS" -eq 1 ]] && echo completo || echo "pelo diff"), publica $([[ "$FUNDO" -eq 1 ]] && echo "em segundo plano" || echo "em primeiro plano")"
 [[ -z "$PILARES" ]] || modo="parcial ($PILARES), sem publicar"
 echo "Commit $SHA · gate $modo · host $SSH (contexto $CONTEXT)" >&2
 if [[ "$PLAN_ONLY" -eq 1 ]]; then
@@ -93,6 +102,8 @@ envs=""
 [[ -z "${ECLUME_DISK_LIMIT:-}" ]] || envs="ECLUME_DISK_LIMIT=${ECLUME_DISK_LIMIT//[^0-9]/} "
 args=(--sha "$SHA")
 [[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")
+[[ "$TODOS" -eq 0 ]] || args+=(--todos)
+[[ "$SUPERAVEL" -eq 0 ]] || args+=(--superavel)
 if [[ "$FUNDO" -eq 1 ]]; then
   host "${envs}setsid nohup bash '$DIR/deploy/gate-host.sh' ${args[*]} >/dev/null 2>&1 < /dev/null &"
   echo "Gate de $SHA solto no host; acompanhe com: bash deploy/gate.sh --estado $SHA" >&2

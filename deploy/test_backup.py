@@ -37,6 +37,8 @@ if cmd == "compose":
     elif "select audio_key" in texto:
         print(os.environ.get("FAKE_LOTE", ""))
     sys.exit(int(os.environ.get("FAKE_COMPOSE_SAIDA", "0")) if " build " in texto else 0)
+if cmd == "image" and args[1:2] == ["inspect"]:
+    sys.exit(1 if args[2] in os.environ.get("FAKE_SEM_IMAGEM", "").split() else 0)
 if cmd == "ps":
     filtros = [args[i + 1] for i, a in enumerate(args) if a == "--filter"]
     servico = next((x.rsplit("=", 1)[1] for x in filtros if "compose.service=" in x), "")
@@ -56,6 +58,8 @@ elif cmd == "exec":
     elif "pg_restore" in args:
         sys.stdin.read()
 elif cmd == "run":
+    if "claude" in args and os.environ.get("FAKE_SEM_CLAUDE"):
+        sys.exit(127)
     mounts = {}
     i = 1
     while i < len(args):
@@ -63,7 +67,7 @@ elif cmd == "run":
             src, dst = args[i + 1].split(":")[:2]
             mounts[dst] = Path(src)
             i += 2
-        elif args[i] in ("-e", "--env-file", "--network", "--user", "--entrypoint", "-w"):
+        elif args[i] in ("-e", "--env-file", "--network", "--user", "--entrypoint", "-w", "--cpu-shares"):
             i += 2
         elif args[i].startswith("-"):
             i += 1
@@ -155,7 +159,7 @@ def test_backup_snapshot_cifrado_sem_nada_em_claro(host: Host) -> None:
         (legado / velho).parent.mkdir(parents=True, exist_ok=True)
         (legado / velho).write_text("velho")
 
-    r = host.rodar("backup.sh")
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (backup,) = host.restic("backup")
@@ -196,13 +200,14 @@ def test_backup_sem_destino_fora_registra_falha_da_copia(host: Host) -> None:
 def test_backup_copia_para_fora_com_a_mesma_retencao(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("backup.sh")
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="3")
 
     assert r.returncode == 0, r.stderr
     (copia,) = host.restic("copy")
     assert copia[copia.index("--env-file") + 1].endswith("secrets/restic-fora.env")
     assert copia[copia.index("--from-repo") + 1] == "/repo"
     assert len(host.restic("forget")) == 2
+    assert all("--prune" not in f for f in host.restic("forget"))
     assert host.estado("fora")["ok"] is True
 
 
@@ -353,6 +358,8 @@ def staging(tmp_path: Path, host: Host) -> Host:
         "STAGING_DIR": str(tmp_path / "home" / "eclume-staging"),
         "FAKE_ROOT_CRT": str(crt),
         "FAKE_LOTE": f"rec/audio.ogg|{AUDIO_HASH}",
+        # Domingo: o ensaio completo, o de sempre nestes testes.
+        "ECLUME_ENSAIO_DIA": "7",
     }
     return host
 
@@ -434,3 +441,184 @@ def test_subir_deixa_o_stack_e_a_conta_sem_estado(staging: Host) -> None:
     assert "ECLUME_URL=https://127.0.0.1:18444" in conta
     assert not any("down" in c for c in compose_chamadas(staging))
     assert not (staging.data / "estado" / "ensaio.json").exists()
+
+
+# --- ensaio proporcional: imagens retidas, parcial na semana e completo no domingo ------------------
+
+SHA = "a" * 40
+
+
+def docker_run(host: Host, *trechos: str) -> list[str]:
+    """As chamadas `docker run` que contêm todos os trechos."""
+    return [" ".join(c) for c in host.chamadas() if c[0] == "run" and all(t in c or t in " ".join(c) for t in trechos)]
+
+
+def test_ensaio_reaproveita_as_imagens_retidas_do_sha_sem_build(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA)
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    chamadas = staging.chamadas()
+    assert ["tag", f"eclume-server:{SHA}", "eclume-server:staging"] in chamadas
+    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in chamadas
+    assert not any(" build " in c for c in compose_chamadas(staging))
+
+
+def test_ensaio_aceita_a_imagem_retida_com_o_nome_edge(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=f"eclume-web:{SHA}")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert ["tag", f"eclume-edge:{SHA}", "eclume-web:staging"] in staging.chamadas()
+    assert not any(" build " in c for c in compose_chamadas(staging))
+
+
+def test_ensaio_constroi_so_o_que_nao_foi_retido(staging: Host) -> None:
+    sem = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=sem)
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    assert build.endswith("build server web")
+    assert not any(c[0] == "tag" for c in staging.chamadas())
+
+
+def test_ensaio_completo_reconstroi_o_server_retido_sem_claude(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_CLAUDE="1")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    assert build.endswith("build server")
+    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in staging.chamadas()
+
+
+def test_ensaio_sem_sha_conhecido_constroi_tudo(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert any(c.endswith("build server web") for c in compose_chamadas(staging))
+
+
+def test_ensaio_de_domingo_restaura_o_snapshot_inteiro_e_roda_o_smoke_completo(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA="7")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (restore,) = staging.restic("sh")
+    assert "--include" not in restore
+    assert "--somente-leitura" not in (staging.bin / "smoke.args").read_text()
+    assert "parcial" not in staging.estado("ensaio")["detalhe"]
+
+
+@pytest.mark.parametrize("dia", ["1", "3", "6"])
+def test_ensaio_dos_outros_dias_restaura_so_banco_secrets_caddy_e_a_amostra_de_audios(staging: Host, dia: str) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA=dia, ECLUME_STAGING_SHA=SHA, FAKE_SEM_CLAUDE="1")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    primeira, segunda = staging.restic("sh")
+    for caminho in ("/eclume/pg", "/eclume/secrets", "/eclume/caddy"):
+        assert caminho in primeira
+    assert "/eclume/minio" not in " ".join(primeira)
+    assert "/eclume/minio/rec/audio.ogg" in segunda
+    # O smoke de resumo e chat fica para o domingo, e a retida do server serve sem o `claude`.
+    assert "--somente-leitura" in (staging.bin / "smoke.args").read_text()
+    assert not any(" build " in c for c in compose_chamadas(staging))
+    estado = staging.estado("ensaio")
+    assert estado["ok"] is True, estado
+    assert "parcial" in estado["detalhe"]
+    assert "1 áudios" in estado["detalhe"]
+    # A fatia do `restic check` continua toda noite, senão o domingo olharia sempre a mesma.
+    assert len(staging.restic("check")) == 1
+
+
+def test_ensaio_parcial_ainda_falha_com_content_hash_divergente(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA="2", FAKE_LOTE="rec/audio.ogg|sha256:00")
+
+    assert r.returncode != 0
+    assert "content_hash" in staging.estado("ensaio")["detalhe"]
+
+
+def test_subir_e_sempre_a_restauracao_completa(staging: Host) -> None:
+    r = staging.rodar("staging.sh", "subir", ECLUME_ENSAIO_DIA="3")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (restore,) = staging.restic("sh")
+    assert "--include" not in restore
+
+
+def test_staging_usa_cpu_shares_e_gomaxprocs_nos_conteineres(staging: Host) -> None:
+    (staging.data.parent / "main" / "deploy" / "docker-compose.staging.yml").write_text(
+        "x-ancora: &a\n  restart: no\n\nservices:\n  caddy:\n    image: c\n  edge:\n    image: eclume-edge:staging\n"
+    )
+
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    for chamada in docker_run(staging, "restic"):
+        assert "--cpu-shares 256" in chamada
+        assert "GOMAXPROCS=1" in chamada
+    yml = Path(staging.env["STAGING_DIR"], "cpu-shares.yml").read_text()
+    assert yml == "services:\n  caddy:\n    cpu_shares: 256\n  edge:\n    cpu_shares: 256\n"
+    assert all(f"-f {staging.env['STAGING_DIR']}/cpu-shares.yml" in c for c in compose_chamadas(staging))
+
+
+# --- backup proporcional: limites, prune dominical e rotação dos logs -----------------------------
+
+
+def test_backup_de_domingo_poda_os_dois_repositorios(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
+
+    assert r.returncode == 0, r.stderr
+    forgets = host.restic("forget")
+    assert len(forgets) == 2
+    assert all("--prune" in f for f in forgets)
+
+
+def test_backup_dos_outros_dias_so_esquece_sem_prune(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    for dia in ("1", "4", "6"):
+        r = host.rodar("backup.sh", ECLUME_BACKUP_DIA=dia)
+        assert r.returncode == 0, r.stderr
+    forgets = host.restic("forget")
+    assert len(forgets) == 6
+    assert all("--prune" not in f and "--keep-daily" in f for f in forgets)
+
+
+def test_backup_roda_todo_conteiner_com_cpu_shares_e_um_nucleo_do_go(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="2")
+
+    assert r.returncode == 0, r.stderr
+    execucoes = [c for c in host.chamadas() if c[0] == "run"]
+    assert len(execucoes) >= 5  # mc, backup, forget, sha256, copy, forget
+    for c in execucoes:
+        assert c[c.index("--cpu-shares") + 1] == "256", c
+        assert "GOMAXPROCS=1" in c, c
+    (backup,) = host.restic("backup")
+    assert backup[backup.index("--read-concurrency") + 1] == "1"
+
+
+def test_backup_rotaciona_os_logs_grandes_e_deixa_os_pequenos(host: Host) -> None:
+    dest = host.data / "backups"
+    (dest / "backup.log").write_text("x" * 3000)
+    (dest / "ensaio.log").write_text("y" * 10)
+
+    r = host.rodar("backup.sh", ECLUME_LOG_MAX_KB="2", ECLUME_BACKUP_DIA="2")
+
+    assert r.returncode == 0, r.stderr
+    assert (dest / "backup.log.1").read_text() == "x" * 3000
+    assert not (dest / "backup.log").exists()
+    assert (dest / "ensaio.log").read_text() == "y" * 10
+    assert not (dest / "ensaio.log.1").exists()
+
+
+def test_releases_rodam_os_conteineres_com_cpu_shares_e_podam_o_dist() -> None:
+    for nome in ("release-desktop.sh", "release-movel.sh"):
+        texto = (DEPLOY / nome).read_text(encoding="utf-8")
+        assert "--cpus 2 --cpu-shares 256" in texto, nome
+        assert "ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf" in texto, nome
+        # Cada `docker run` do release leva o peso, direto ou pelo array `comum`.
+        for linha in texto.splitlines():
+            if linha.strip().startswith("docker run ") and "comum" not in linha:
+                assert "--cpu-shares 256" in linha, (nome, linha)

@@ -147,6 +147,8 @@ trap 'host "rmdir \"$BASE/.trava\""' EXIT
 echo "Enviando o código de $SHA para o host…" >&2
 git -c core.autocrlf=false archive --format=tar "$SHA" | host "rm -rf '$SRC' && mkdir -p '$SRC' && tar -x -C '$SRC'"
 host "rm -rf '$DIST' && mkdir -p '$DIST'"
+# Só as 3 versões mais recentes ficam em dist-*: o resto é instalador antigo ocupando disco no host.
+host "cd '$BASE' && ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf"
 
 # --- build ----------------------------------------------------------------------------------------
 export BUILDKIT_PROGRESS=plain
@@ -155,7 +157,7 @@ docker build -q -t "$IMG_BASE" -f desktop/build.Dockerfile desktop >/dev/null
 docker build -q --build-arg "RUST=$RUST" -t "$IMG" - < mobile/build.Dockerfile >/dev/null
 
 # Contêiner comum: CPU limitada, uid 1000, o SDK, o NDK e o JDK só leitura, caches no host.
-comum=(--rm --cpus 2 -u 1000:1000 -e HOME=/tmp -e CARGO_BUILD_JOBS=2
+comum=(--rm --cpus 2 --cpu-shares 256 -u 1000:1000 -e HOME=/tmp -e CARGO_BUILD_JOBS=2
   -e ANDROID_HOME=/opt/android-sdk -e ANDROID_SDK_ROOT=/opt/android-sdk -e JAVA_HOME=/opt/jdk
   -e NDK_HOME=/opt/ndk -e ANDROID_NDK_HOME=/opt/ndk -e ANDROID_NDK_ROOT=/opt/ndk
   -e GRADLE_USER_HOME=/opt/gradle

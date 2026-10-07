@@ -11,7 +11,8 @@
 #   /eclume/minio/                                 espelho do bucket (backups/minio/.espelho)
 #   /eclume/caddy/data/caddy/pki/                  CA interna do Caddy, com root.key
 #   /eclume/secrets/                               env.prod, senhas, tokens e chaves (sem restic-*)
-# Retenção: MANTER (7) diários, nos dois repositórios. Com secrets/restic-fora.env (RESTIC_REPOSITORY
+# Retenção: MANTER (7) diários, nos dois repositórios: o `forget` roda todo dia e o `prune` (que
+# reescreve pacotes e é a parte cara) só aos domingos. Com secrets/restic-fora.env (RESTIC_REPOSITORY
 # e a credencial do destino), o mesmo snapshot vai por `restic copy` ao repositório fora do host,
 # que usa a mesma senha. Os dumps só existem em claro numa pasta temporária durante a rodada.
 #
@@ -21,6 +22,14 @@
 set -euo pipefail
 DATA_DIR="${ECLUME_DATA_DIR:-/srv/eclume}"
 MANTER="${MANTER:-7}"
+# O host também é CI e staging: todo contêiner do backup leva peso de CPU baixo e o Go do restic e
+# do mc, um núcleo. O `prune` é dominical (ECLUME_BACKUP_DIA força o dia, 1-7; 7 = domingo).
+CPU_SHARES=256
+DIA="${ECLUME_BACKUP_DIA:-$(date +%u)}"
+PRUNE=()
+[[ "$DIA" -ne 7 ]] || PRUNE=(--prune)
+# backup.log e ensaio.log (o cron anexa a eles) passam para <nome>.1 ao chegar neste tamanho.
+LOG_MAX_KB="${ECLUME_LOG_MAX_KB:-5120}"
 DEST="$DATA_DIR/backups"
 SECRETS="$DATA_DIR/secrets"
 ESTADO="$DATA_DIR/estado"
@@ -43,7 +52,7 @@ estado() {
 }
 # restic como root num contêiner (lê a PKI do Caddy, dona root), com o repositório local em /repo.
 restic_() {
-  docker run --rm -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/restic-password \
+  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -e RESTIC_CACHE_DIR=/cache -v "$REPO:/repo" -v "$DEST/.restic-cache:/cache" \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
@@ -60,6 +69,11 @@ fim() {
 }
 trap fim EXIT
 mkdir -p "$ESTADO" "$DEST/minio/.espelho" "$DEST/pre-deploy" "$DEST/.restic-cache"
+for nome in backup ensaio; do
+  if [[ -f "$DEST/$nome.log" && "$(wc -c < "$DEST/$nome.log")" -ge $((LOG_MAX_KB * 1024)) ]]; then
+    mv -f "$DEST/$nome.log" "$DEST/$nome.log.1"
+  fi
+done
 
 motivo="sem $SECRETS/restic-password ou repositório em $REPO (rode o deploy.sh)"
 [[ -s "$SECRETS/restic-password" && -f "$REPO/config" ]] || exit 1
@@ -80,7 +94,7 @@ pass="$(sed -n 's/^ECLUME_MINIO_PASSWORD=//p' "$SECRETS/env.prod" | tail -n 1)"
 # A rede interna `dados` do projeto (o MinIO também está na `fila-gpu`).
 network="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$minio" | grep '_dados$')"
 image="$(docker inspect -f '{{.Config.Image}}' "$minio")"
-docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e HOME=/tmp \
+docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --network "$network" --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -e "MC_HOST_src=http://$user:$pass@minio:9000" -v "$DEST/minio:/b" --entrypoint mc "$image" \
   mirror --overwrite --remove --quiet src/eclume /b/.espelho >/dev/null
 
@@ -89,9 +103,9 @@ fontes=(-v "$tmp:/eclume/pg:ro" -v "$DEST/pre-deploy:/eclume/pre-deploy:ro"
   -v "$DEST/minio/.espelho:/eclume/minio:ro" -v "$SECRETS:/eclume/secrets:ro")
 [[ ! -d "$PKI" ]] || fontes+=(-v "$PKI:/eclume/caddy/data/caddy/pki:ro")
 # --host fixo: o hostname do contêiner muda a cada rodada, e o forget agrupa por host e caminhos.
-restic_ "${fontes[@]}" "$RESTIC_IMAGE" backup --host eclume --tag eclume --quiet \
+restic_ "${fontes[@]}" "$RESTIC_IMAGE" backup --host eclume --tag eclume --quiet --read-concurrency 1 \
   --exclude '/eclume/secrets/restic-*' /eclume
-restic_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" --prune --quiet
+restic_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" "${PRUNE[@]}" --quiet
 # A conferência do ensaio e da prova de host novo: sha256 do que o snapshot levou de secrets/ e da PKI.
 restic_ "${fontes[@]}" --entrypoint sh "$RESTIC_IMAGE" -c \
   'cd /eclume && find secrets $(test -d caddy && echo caddy) -type f ! -name "restic-*" -exec sha256sum {} + | sort -k 2' \
@@ -112,12 +126,12 @@ if [[ ! -s "$SECRETS/restic-fora.env" ]]; then
 fi
 log "restic: cópia para o repositório fora do host"
 fora_() {
-  docker run --rm --env-file "$SECRETS/restic-fora.env" -e RESTIC_PASSWORD_FILE=/run/restic-password \
+  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -e RESTIC_CACHE_DIR=/cache -v "$DEST/.restic-cache:/cache" \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
 fora_ -v "$REPO:/repo" "$RESTIC_IMAGE" copy --from-repo /repo \
   --from-password-file /run/restic-password --host eclume --quiet
-fora_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" --prune --quiet
+fora_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" "${PRUNE[@]}" --quiet
 estado fora true "snapshot copiado; $MANTER diários retidos"
 log "ok: cópia fora do host"
