@@ -364,10 +364,14 @@ services:
 configs:
   # ACL do Redis: `default` desligado; `eclume-server` com tudo menos os comandos perigosos (o INFO
   # volta: o arq o lê ao subir); `eclume-gpu` só nas chaves da fila, da saúde e do progresso dele, e
-  # só lê o pedido de cancelamento.
+  # só lê o pedido de cancelamento. `maxmemory` abaixo do `mem_limit` com `noeviction`: no teto, o
+  # Redis recusa a escrita (o job falha com erro) em vez de despejar chaves da fila ou ser morto pelo
+  # OOM do cgroup; a folga cobre o fork da reescrita do AOF.
   redis-conf:
     content: |
       appendonly yes
+      maxmemory ${ECLUME_REDIS_MAXMEMORY:-160mb}
+      maxmemory-policy noeviction
       user default off
       user eclume-server on >${ECLUME_REDIS_SERVER_PASSWORD} ~* &* +@all -@dangerous +info
       user eclume-gpu on >${ECLUME_REDIS_GPU_PASSWORD} resetchannels ~arq:* ~eclume:gpu* ~eclume:default ~eclume:progress:* %R~eclume:cancel:* +@all -@dangerous -@admin -@pubsub +info

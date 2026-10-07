@@ -228,6 +228,7 @@ host.
 | `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` do MinIO; o `minio-init` as aplica a cada deploy, então trocar é mudar o env e fazer deploy. Um env anterior a elas as ganha geradas pelo `deploy.sh` (append), com aviso no `--plan` |
 | `ECLUME_REDIS_SERVER_PASSWORD`, `ECLUME_REDIS_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` da ACL do Redis; a ACL é recriada com o contêiner do Redis no deploy. Geradas pelo `deploy.sh` quando faltam, como as do MinIO |
 | `ECLUME_MEM_<SERVIÇO>`, `ECLUME_MEMSWAP_<SERVIÇO>` | opcionais: teto de memória e de memória mais swap de cada serviço, que sobem juntos (ver Stack) |
+| `ECLUME_REDIS_MAXMEMORY` | opcional (`160mb`): `maxmemory` do Redis com `noeviction`, abaixo do `ECLUME_MEM_REDIS`; no teto o Redis recusa escritas em vez de despejar chaves da fila ou morrer pelo OOM. Suba os dois juntos |
 | `ECLUME_AGENT_MAX_JOBS` | opcional (2): vagas da fila `eclume:agents` no `worker` |
 | `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
