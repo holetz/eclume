@@ -1,13 +1,13 @@
 ---
 type: standard
 title: Núcleo do server — persistência, isolamento, autenticação, upload, pessoas e busca
-description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, credencial própria por serviço no Redis e no MinIO, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS) e é testado (serviços reais, conformidade com o OpenAPI bundled).
-resource: server/**, engines/src/eclume_engines/registro.py, deploy/docker-compose.test.yml, deploy/docker-compose.prod.yml
+description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, credencial própria por serviço no Redis e no MinIO, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS), roda enxuto (worker único com as filas default e agents no mesmo loop, sonda leve, imports preguiçosos, pool e PAT sem escrita a cada requisição) e é testado (serviços reais, conformidade com o OpenAPI bundled).
+resource: server/**, engines/src/eclume_engines/registro.py, deploy/server.Dockerfile, deploy/docker-compose.test.yml, deploy/docker-compose.prod.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
-timestamp: 2026-10-01
+timestamp: 2026-10-07
 audience: both
 authority: current
-source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#119
+source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#119, holetz/eclume#150
 maintainer: holetz
 ---
 
@@ -43,6 +43,8 @@ Tudo por ambiente (`eclume_server/config.py`):
 | `ECLUME_SIGNUPS_PER_IP_PER_DAY` | `5` | cadastros criados por IP em 24 h (janela móvel); o seguinte recebe 429 `rate_limited` |
 | `ECLUME_ENCRYPTION_KEY` | derivada de `ECLUME_SECRET_KEY` | cifra das chaves de API ([server-agentes.md](server-agentes.md)) |
 | `ECLUME_CLAUDE_BIN` | `claude` | CLI do provider `claude-cli` |
+| `ECLUME_DB_POOL_SIZE`, `ECLUME_DB_MAX_OVERFLOW` | `5`/`5` na API, `3`/`2` no worker | conexões fixas e de reserva do pool do processo (`db.session.make_runtime_engine`); o `pool_pre_ping` fica |
+| `ECLUME_AGENT_MAX_JOBS` | `4` | vagas da fila `eclume:agents` no worker |
 
 ## Logs
 
@@ -58,7 +60,10 @@ Tudo por ambiente (`eclume_server/config.py`):
 - **`X-Request-ID`:** toda resposta HTTP da API o leva — o recebido, se tiver até 128 caracteres de
   `[A-Za-z0-9._-]`, ou um novo (uuid4 hex) — e as linhas de log da requisição levam o mesmo valor.
 - **Log de acesso:** `eclume_server.acesso` grava método, caminho, status e duração. O
-  `uvicorn.access` fica calado.
+  `uvicorn.access` fica calado. `/api/v1/health` e `/api/v1/health/*` só entram quando a resposta
+  é 4xx ou 5xx: o healthcheck e o painel batem ali o tempo todo.
+- **Cron do arq:** o INFO das execuções `cron:*` do `arq.worker` não vai ao log (rodam a cada
+  minuto ou menos); falha, nova tentativa e todo WARNING passam (`registro.SemCronDoArq`).
 - **500 inesperado:** o handler genérico de `problems.py` responde `problem+json` com
   `code: internal_error`, sem detalhe, e grava a exceção com o traceback em
   `eclume_server.problems` (nível `ERROR`), com o `request_id` da resposta.
@@ -68,6 +73,39 @@ Tudo por ambiente (`eclume_server/config.py`):
   teto, descarta o que o app responderia e devolve 413 `payload_too_large`.
 - **Nunca no log:** query string (as URLs de parte e de áudio são assinadas), cabeçalhos de
   credencial, e-mail, título, texto de transcrição ou resumo, tokens e chaves.
+
+## Processos, filas e sonda
+
+O custo de cada processo da imagem do server é o de importar o que ele usa; por isso a imagem
+tem poucos processos e cada um importa só o seu (holetz/eclume#150).
+
+- **Worker único.** `eclume-server worker` (`worker.run_combined`) roda **dois** `arq.Worker` no
+  mesmo event loop: o de `eclume:default` (`WorkerSettings`: ingestão, falhas do retorno, purga de
+  embeddings e os crons) e o de `eclume:agents` (`AgentWorkerSettings`: os jobs por agente, sem
+  crons). Cada fila mantém as próprias vagas (`max_jobs`; `ECLUME_AGENT_MAX_JOBS` na de agentes),
+  funções, `poll_delay` (2 s na default, 1 s na de agentes) e chave de health-check
+  (`eclume:<fila>:health-check`); o engine do banco e o cliente de armazenamento são um só. Os
+  workers são criados com `handle_signals=False` e o processo registra SIGTERM e SIGINT uma vez,
+  repassando-os aos dois; o processo sai quando os dois terminam, e se um cai com exceção o outro
+  é parado. `WorkerSettings` e `AgentWorkerSettings` seguem valendo para `arq` isolado (staging,
+  e2e, testes); a fila default **não** roda mais os jobs de agente (acabou a transição de
+  holetz/eclume#96).
+- **Sonda leve.** `python -m eclume_server.sonda fila <default|agents>...` importa só a biblioteca
+  padrão e `redis.asyncio` (lê `ECLUME_REDIS_URL`), e sai 0 se **todas** as filas nomeadas têm a
+  chave de health-check (16 s), 1 se alguma falta e 2 no uso errado; no worker único, uma chamada
+  com as duas filas basta. `eclume-server sonda fila <nome>...` continua, e delega a ela.
+- **Imports preguiçosos.** `cli.py` importa os módulos dentro de cada ramo de `main()`;
+  `eclume_server.contract` guarda `CONTRACT_VERSION` sem dependências (`routes/auth.py`,
+  `server_info.py` e `discovery.py` leem dele); os providers de agente (`anthropic`, `openai`…) só
+  são importados quando `build_provider` os usa; `docx` só ao montar ou ler um `.docx`;
+  FastAPI só carrega onde há rota, resposta ou handler (`pagination.Limit`/`Cursor` e as respostas
+  de `problems.py` o importam sob demanda). Testes (`test_sonda.py`) conferem, num subprocesso,
+  que a sonda não importa `anthropic`, `fastapi` nem `sqlalchemy` e que `eclume_server.worker` não
+  importa `anthropic`, `docx` nem `fastapi`: quem acrescentar um import no topo desses módulos
+  quebra o teste.
+- **Imagem.** `deploy/server.Dockerfile` fixa `MALLOC_ARENA_MAX=2` (menos arenas do glibc em
+  processos com threads) e `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (a CLI `claude` não faz
+  telemetria, atualização nem outro tráfego fora do necessário).
 
 ## Persistência
 
@@ -80,6 +118,9 @@ Tudo por ambiente (`eclume_server/config.py`):
 - Uma migration nova ganha o próximo número livre **na `main`**, não na branch: duas specs em
   paralelo não disputam o mesmo `NNN`. O runner aplica toda migration ainda não aplicada, então a
   ordem de chegada entre branches não importa.
+- **Índice dos jobs em aberto** (migration 033): `transcription_jobs (state) WHERE state IN
+  ('queued','running')`, para a fila e as varreduras não lerem o histórico. O migrador roda cada
+  arquivo numa transação, então um índice novo é `CREATE INDEX IF NOT EXISTS` sem `CONCURRENTLY`.
 - **Expandir ou contrair, nunca as duas.** Toda migration é uma das duas (holetz/eclume#92):
   *expandir* só acrescenta (tabela, coluna anulável ou com default, índice, função nova) e entra
   junto com o código que a usa; *contrair* (remover, renomear, apertar restrição) só entra num
@@ -196,7 +237,9 @@ nas duas.
   guarda o SHA-256 do token e o CSRF (`sessions`). Método mutável com sessão exige `X-CSRF-Token`
   igual ao CSRF da sessão.
 - **PAT** `eclp_` + 40 caracteres base62, guardado como SHA-256 (segredo de alta entropia
-  dispensa hash lento); `prefix` = os 9 primeiros caracteres. Um `Authorization: Bearer` presente
+  dispensa hash lento); `prefix` = os 9 primeiros caracteres. `last_used_at` (e
+  `mcp_last_used_at`, no uso pelo MCP) só é regravado quando o valor guardado tem mais de 60 s
+  (`auth.USED_AT_RESOLUTION`): a requisição com PAT não escreve no banco a cada chamada. Um `Authorization: Bearer` presente
   nunca cai para o cookie.
 - **Tipo do token** (`api_tokens.kind`, migration 015): `personal`, o PAT de `POST /tokens`
   (sempre desse tipo), ou `device`, a credencial de um aparelho (`platform` preenchida), que só
@@ -513,6 +556,7 @@ ECLUME_TEST_REQUIRE_SERVICES=1 uv run pytest server/tests
 uv run eclume-server migrate
 uv run eclume-server admin create --email admin@exemplo.com.br --name "Admin" --password-stdin
 uv run uvicorn eclume_server.app:create_app --factory
+uv run eclume-server worker
 uv run arq eclume_server.worker.WorkerSettings
 uv run arq eclume_server.worker.AgentWorkerSettings
 ```

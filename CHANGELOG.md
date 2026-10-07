@@ -21,6 +21,10 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 
 ### Alterado
 
+- Server mais enxuto em CPU e memória, sem mudar comportamento: sonda de fila mínima, imports sob
+  demanda, `eclume-server worker` com as filas `eclume:default` e `eclume:agents` num só processo,
+  pool de conexões configurável, `last_used_at` do PAT a cada 60 s, upload sem cópia e índice
+  parcial dos jobs em aberto (migration 033_indice_jobs_em_aberto, holetz/eclume#150).
 - Tela da gravação com a transcrição numa área de rolagem própria e os locutores num bloco
   recolhível (holetz/eclume#143).
 
