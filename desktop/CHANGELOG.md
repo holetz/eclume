@@ -8,6 +8,14 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.5.2] - 2026-10-07
+
+### Alterado
+
+- Menos consultas ao servidor: desfechos, recentes e pasta sincronizada repartem uma leitura por
+  minuto, as recentes recuam até 60 s quando o servidor falha e as pendentes da pasta são relidas
+  uma a uma, sem listar a biblioteca inteira (holetz/eclume#153).
+
 ## [0.5.1] - 2026-10-05
 
 ### Adicionado

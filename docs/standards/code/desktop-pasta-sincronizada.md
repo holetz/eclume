@@ -95,14 +95,17 @@ Thread própria (`eclume-mirror`, a cada 60 s e a cada mudança de configuraçã
 biblioteca grande não atrasar o upload das gravações.
 
 1. `GET /collections` (uma grafia só por nome, sem distinguir maiúsculas: "Clientes" e "clientes"
-   são a mesma pasta no Windows e no macOS) e `GET /recordings?since=<cursor>`. O cursor é o maior
+   são a mesma pasta no Windows e no macOS) e `GET /recordings?since=<cursor>`, lido pela leitura
+   repartida (`sync::library_since`) que também serve os desfechos e as recentes, em vez de uma
+   leitura própria a cada minuto. O cursor é o maior
    `updated_at` lido **menos 2 minutos** (o `now()` do servidor é o início da transação, então uma
    confirmada depois de outra com `updated_at` maior não pode ser pulada) e fica **no manifesto**:
    apagar ou trocar a pasta refaz tudo. Na primeira passada a listagem já é a biblioteca inteira.
 2. Para cada gravação com transcrição: `GET /recordings/{id}/summary` e, se ligadas,
    `GET /transcripts?recording_id=`. Uma falha numa gravação não para as outras: ela vai para a
-   lista de **pendentes** do manifesto e o **cursor avança do mesmo jeito**; o ciclo seguinte repete
-   só as pendentes, nunca a biblioteca inteira. A escrita é idempotente.
+   lista de **pendentes** do manifesto e o **cursor avança do mesmo jeito**; o ciclo seguinte relê
+   só as pendentes, **uma a uma por id** (`GET /recordings/{id}`), nunca pela listagem nem pela
+   biblioteca inteira. A escrita é idempotente.
    **Servidor sem o escopo das transcrições** (403 `insufficient_scope`, um servidor anterior ao
    contrato 2.8.0 ou um token que a migração 018 ainda não alcançou): a primeira recusa vale para o
    ciclo todo, os resumos são escritos, o cursor avança e a aba avisa que falta atualizar o
