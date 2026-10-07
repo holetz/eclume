@@ -13,6 +13,7 @@
 # Um gate que o hook de pre-push dispara (`--superavel`) sai sem rodar quando o `main` já avançou
 # além do SHA (publica `eclume/gate` = error "superado por <sha>"; o deploy usa a ponta); um gate
 # pedido à mão para um SHA nunca é abandonado.
+# O pilar gpu-e2e (só do gate) roda no host, fora do contêiner, por deploy/gpu-e2e.sh.
 # Todo contêiner do gate leva `--cpu-shares 256`: a produção divide o host com o gate e vence a CPU.
 # A cada execução, poda logs com mais de 30 dias, imagens de build de versões antigas do Rust e
 # árvores `src-*` abandonadas.
@@ -234,6 +235,17 @@ for pilar in "${PILARES[@]}"; do
     claude=()
   fi
   t0=$SECONDS
+  # O gpu-e2e precisa do docker e da GPU do host, que o contêiner dos pilares não tem: roda aqui, no
+  # host, e o script sobe o compose eclume-gpu-test e roda o pytest num contêiner eclume-gate à parte.
+  # Sai 75 (inconclusivo) com a GPU ocupada além da espera; o status vira "sem prova: gpu-e2e".
+  if [[ "$pilar" == gpu-e2e ]]; then
+    set +e
+    ECLUME_GATE_IMAGE="$IMG" ECLUME_GATE_CACHE_HOME="$CACHE/home" bash deploy/gpu-e2e.sh
+    RESULTADO[$pilar]=$?
+    set -e
+    echo "=== pilar $pilar: saída ${RESULTADO[$pilar]} em $((SECONDS - t0))s ==="
+    continue
+  fi
   set +e
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
     --cpus 2 --cpu-shares "$CPU_SHARES" --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
@@ -260,7 +272,17 @@ echo "Resultado:"; printf '%s' "$resultados"
 
 if [[ "$PUBLICAR" -eq 0 ]]; then
   publicado=1
-  for pilar in "${PILARES[@]}"; do [[ "${RESULTADO[$pilar]}" -eq 0 ]] || exit 1; done
+  saida=0
+  for pilar in "${PILARES[@]}"; do
+    [[ "${RESULTADO[$pilar]}" -eq 0 ]] || saida=1
+  done
+  # Só o gpu-e2e inconclusivo (75): a execução parcial sai 75, distinto de falha.
+  if [[ "$saida" -eq 1 ]]; then
+    for pilar in "${PILARES[@]}"; do
+      [[ "${RESULTADO[$pilar]}" -eq 0 || ( "$pilar" == gpu-e2e && "${RESULTADO[$pilar]}" -eq 75 ) ]] || exit 1
+    done
+    exit 75
+  fi
   exit 0
 fi
 mapfile -t saida < <(printf '%s' "$resultados" | python3 deploy/gate.py descricao --duracao "$((SECONDS - inicio))" --log "$LOG" \

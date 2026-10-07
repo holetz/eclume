@@ -39,10 +39,13 @@ PILARES = (
     "windows",
     "auditoria",
     "android",
+    "gpu-e2e",
 )
-# Pilares que só o gate roda: a CI não tem o xwin, a rede da auditoria nem o SDK Android (o build
-# do APK verificado leva perto de 15 min) a cada PR.
-SO_NO_GATE = ("windows", "auditoria", "android")
+# Pilares que só o gate roda: a CI não tem o xwin, a rede da auditoria, o SDK Android (o build
+# do APK verificado leva perto de 15 min) a cada PR nem a GPU do gpu-e2e.
+SO_NO_GATE = ("windows", "auditoria", "android", "gpu-e2e")
+# Saída de um pilar que não pôde provar (GPU ocupada além da espera): sem prova, nunca verde nem falha.
+INCONCLUSIVO = 75
 LIMITE_DESCRICAO = 140
 
 # Caminhos que exigem cada pilar: o mesmo mapa dos filtros do `.github/workflows/ci.yml` (o
@@ -122,6 +125,15 @@ FILTROS: dict[str, tuple[str, ...]] = {
     "windows": _DESKTOP,
     "auditoria": (*_CI, *_DEPENDENCIAS),
     "android": _MOBILE,
+    # A prova CUDA: o worker-gpu, os engines, o schema da transcrição, o compose de teste e o script.
+    "gpu-e2e": (
+        *_CI,
+        "worker-gpu/**",
+        "engines/**",
+        "contracts/transcript.schema.json",
+        "deploy/docker-compose.gpu-test.yml",
+        "deploy/gpu-e2e.sh",
+    ),
 }
 # Mudou algum destes, o gate roda todos os pilares: o próprio gate e os scripts de deploy, o lock e
 # a toolchain (uma versão nova de ferramenta pode quebrar qualquer pilar).
@@ -223,12 +235,16 @@ def descricao(
     Os `dispensados` são os pilares que o diff desde o último SHA verde (`desde`) não exigiu: não
     contam como faltando e a descrição diz quais rodaram e quantos ficaram de fora.
     """
-    falharam = [p for p in PILARES if resultados.get(p, 0) != 0]
+    inconclusivos = [p for p in PILARES if resultados.get(p) == INCONCLUSIVO and p == "gpu-e2e"]
+    falharam = [p for p in PILARES if resultados.get(p, 0) != 0 and p not in inconclusivos]
     faltam = [p for p in PILARES if p not in resultados and p not in dispensados]
     if falharam:
         estado, resumo = "failure", "falhou: " + ", ".join(falharam)
-    elif faltam:
-        estado, resumo = "error", "sem prova: " + ", ".join(faltam)
+    elif faltam or inconclusivos:
+        sem_prova = [p for p in PILARES if p in faltam or p in inconclusivos]
+        estado, resumo = "error", "sem prova: " + ", ".join(sem_prova)
+        if inconclusivos:
+            resumo += " (inconclusivo: GPU ocupada)"
     elif dispensados:
         rodaram = [p for p in PILARES if p in resultados]
         base = f"{len(rodaram)} verdes ({', '.join(rodaram)})" if rodaram else "nenhum pilar exigido"

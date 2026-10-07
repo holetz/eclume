@@ -6,14 +6,14 @@
 #
 # Uso: bash deploy/pilares.sh <pilar>     roda os comandos do pilar, parando no primeiro que falha
 #      bash deploy/pilares.sh --lista     enumera os pilares, um por linha
-# Pilares: python contracts web web-browser desktop mobile docs windows auditoria android (os três
-# últimos só no gate).
+# Pilares: python contracts web web-browser desktop mobile docs windows auditoria android gpu-e2e (os
+# quatro últimos só no gate; o gpu-e2e só roda no host, por deploy/gpu-e2e.sh).
 # Contrato: docs/standards/code/monorepo.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PILARES=(python contracts web web-browser desktop mobile docs windows auditoria android)
+PILARES=(python contracts web web-browser desktop mobile docs windows auditoria android gpu-e2e)
 
 # Um grupo dobrável por comando no log da CI; no gate, só um cabeçalho.
 run() {
@@ -188,8 +188,16 @@ PY
   rm -rf "$chaves" "$gradle/keystore.properties"
 }
 
+# A prova CUDA precisa do docker e da GPU do host, que o contêiner dos outros pilares não tem: o
+# gate-host.sh a trata à parte; aqui só delega ao script, e falha claro fora do host.
+pilar_gpu_e2e() {
+  command -v docker >/dev/null 2>&1 \
+    || { echo "gpu-e2e roda só no host GPU (bash deploy/gate.sh --pilares gpu-e2e)." >&2; return 1; }
+  bash deploy/gpu-e2e.sh
+}
+
 case "${1:-}" in
   --lista) printf '%s\n' "${PILARES[@]}" ;;
-  python|contracts|web|web-browser|desktop|mobile|docs|windows|auditoria|android) "pilar_${1//-/_}" ;;
+  python|contracts|web|web-browser|desktop|mobile|docs|windows|auditoria|android|gpu-e2e) "pilar_${1//-/_}" ;;
   *) echo "Uso: bash deploy/pilares.sh <$(IFS='|'; echo "${PILARES[*]}")> | --lista" >&2; exit 2 ;;
 esac
