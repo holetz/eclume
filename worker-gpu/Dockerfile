@@ -44,6 +44,7 @@ RUN uv sync --frozen --no-dev --package eclume-worker --extra gpu --no-editable 
 
 # O CTranslate2 procura cuBLAS e cuDNN no sistema; eles vêm das wheels nvidia-* do torch.
 # O uid 1000 não tem entrada no passwd: HOME=/tmp dá ao matplotlib e ao onnxruntime onde gravar.
+# MALLOC_ARENA_MAX=2 limita as arenas do glibc, que retinham RAM entre os jobs (holetz/eclume#149).
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -54,7 +55,8 @@ ENV PATH=/app/.venv/bin:$PATH \
     TORCH_HOME=/models/torch \
     NLTK_DATA=/usr/share/nltk_data \
     ECLUME_WORK_DIR=/tmp/eclume-work \
-    HOME=/tmp
+    HOME=/tmp \
+    MALLOC_ARENA_MAX=2
 
 # Modelo do RNNoise do pré-processamento (`arnndn`): o conjoined-burgers de GregorR/rnnoise-models,
 # treinado em fala geral com ruído de ambiente. Fixado pelo checksum.

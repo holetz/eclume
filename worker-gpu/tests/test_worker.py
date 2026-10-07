@@ -36,6 +36,7 @@ def test_worker_settings_do_contrato():
     assert WorkerSettings.job_deserializer is desserializar
     # SIGTERM drena: termina o job em curso, até o teto dele, antes de parar.
     assert WorkerSettings.job_completion_wait == WorkerSettings.job_timeout > 0
+    assert WorkerSettings.poll_delay == 2.0
 
 
 class _Registro:

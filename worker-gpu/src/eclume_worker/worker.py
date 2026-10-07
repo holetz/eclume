@@ -117,6 +117,8 @@ class WorkerSettings:
     # deploy drena o worker GPU sem matar transcrição em curso. O `stop_grace_period` do compose
     # cobre o `stop -t` do deploy.
     job_completion_wait = CONFIG.job_timeout_seconds
+    # Fila de um job por vez e jobs de minutos: sondar o Redis a cada 2 s (padrão 0,5 s) basta.
+    poll_delay = 2.0
     # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e o pickle antigo sem globais.
     job_deserializer = desserializar
     redis_settings = RedisSettings.from_dsn(CONFIG.redis_url)
