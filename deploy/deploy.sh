@@ -329,7 +329,9 @@ fi
 if [[ "$TLS_CA" == eclume && -z "$own_sha" ]] && host "test -s '$DATA_DIR/downloads/eclume-root.crt'"; then
   problemas+=("ECLUME_TLS_CA=eclume sem a raiz própria em $CA_DIR: os clientes confiam na raiz publicada; faça antes o deploy com ECLUME_TLS_CA=local, que a gera e a anuncia como próxima")
 fi
-service_id() { docker ps -q --filter label=com.docker.compose.project=eclume --filter "label=com.docker.compose.service=$1" | head -n 1; }
+# service_id e gpu_busy, comuns ao deploy/gpu-e2e.sh.
+# shellcheck source=deploy/gpu-lib.sh
+source "$ROOT/deploy/gpu-lib.sh"
 
 pg="$(service_id postgres)"
 applied=""
@@ -339,17 +341,6 @@ printf '%s\n' "$known_migrations" | sed '/^$/d' | sort > "$work/alvo"
 pending="$(comm -13 "$work/banco" "$work/alvo" | paste -sd, -)"
 [[ -n "$pg" ]] || pending="(banco fora do ar: o migrate aplica o que faltar)"
 
-gpu_busy() {
-  local redis_id
-  redis_id="$(service_id redis)"
-  [[ -n "$redis_id" ]] || { echo 0; return; }
-  # Com a ACL (holetz/eclume#94), o redis-cli autentica com a senha que o próprio contêiner tem; o
-  # Redis anterior a ela não tem a variável e responde sem usuário.
-  # shellcheck disable=SC2016 # expandida dentro do contêiner
-  docker exec "$redis_id" sh -c 'redis-cli --no-auth-warning --raw \
-    ${ECLUME_REDIS_SERVER_PASSWORD:+--user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"} \
-    hget eclume:gpu:health busy' 2>/dev/null | tr -dc 0-9 || echo 0
-}
 busy="$(gpu_busy)"
 
 voltar_decisao=""

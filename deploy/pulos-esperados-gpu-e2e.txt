@@ -1,0 +1,1 @@
+# Pulos esperados do pilar gpu-e2e (deploy/pulos.py): nenhum. Aqui os 2 testes de GPU rodam; pulo é falha.

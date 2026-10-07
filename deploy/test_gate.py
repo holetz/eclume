@@ -174,8 +174,55 @@ def test_cada_job_da_ci_chama_o_seu_pilar() -> None:
 
 def test_android_e_pilar_so_do_gate() -> None:
     """O APK verificado (SDK do host, perto de 15 min) roda só no gate, depois dos outros."""
-    assert gate.PILARES[-1] == "android"
+    assert gate.PILARES[-2] == "android"
     assert "android" in gate.SO_NO_GATE
+
+
+def test_gpu_e2e_e_o_ultimo_pilar_e_so_do_gate() -> None:
+    """A prova CUDA precisa da GPU do host: fica ao fim e fora da CI."""
+    assert gate.PILARES[-1] == "gpu-e2e"
+    assert "gpu-e2e" in gate.SO_NO_GATE
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        "worker-gpu/src/x.py",
+        "engines/whisperx/a.py",
+        "contracts/transcript.schema.json",
+        "deploy/docker-compose.gpu-test.yml",
+    ],
+)
+def test_gpu_e2e_exigido_por_gpu_engines_e_schema(arquivo: str) -> None:
+    """Mudança em worker-gpu, engines, no schema da transcrição ou no compose liga o `gpu-e2e`."""
+    assert "gpu-e2e" in gate.pilares_exigidos([arquivo])
+
+
+def test_gpu_e2e_dispensado_por_mudanca_so_em_web() -> None:
+    """Mudança só em `web/` não paga a GPU."""
+    assert "gpu-e2e" not in gate.pilares_exigidos(["web/src/App.jsx"])
+
+
+def test_gpu_e2e_75_e_sem_prova_inconclusivo_nunca_success_nem_failure() -> None:
+    """Saída 75 do `gpu-e2e` (GPU ocupada) vira `error` "inconclusivo", distinto de falha."""
+    estado, texto = gate.descricao(todos() | {"gpu-e2e": 75}, 10, LOG)
+    assert estado == "error"
+    assert "sem prova: gpu-e2e" in texto
+    assert "inconclusivo" in texto
+    assert "falhou" not in texto
+
+
+def test_gpu_e2e_falha_real_e_failure() -> None:
+    """Outra saída diferente de zero do `gpu-e2e` é falha, não inconclusivo."""
+    estado, texto = gate.descricao(todos() | {"gpu-e2e": 1}, 10, LOG)
+    assert estado == "failure"
+    assert texto.startswith("falhou: gpu-e2e")
+
+
+def test_75_em_outro_pilar_e_falha() -> None:
+    """Só o `gpu-e2e` tem o código de inconclusivo."""
+    estado, _ = gate.descricao(todos() | {"python": 75}, 10, LOG)
+    assert estado == "failure"
 
 
 def test_pilares_sh_lista_os_mesmos_pilares_do_gate() -> None:
@@ -265,7 +312,7 @@ def test_pilares_exigidos_pelo_mapa_de_caminhos(arquivos: list[str], esperado: l
     ],
 )
 def test_deploy_lock_e_toolchain_rodam_todos(arquivo: str) -> None:
-    """Mudança em `deploy/`, lock ou toolchain roda os dez pilares, junto com qualquer outro arquivo."""
+    """Mudança em `deploy/`, lock ou toolchain roda os onze pilares, junto com qualquer outro arquivo."""
     assert gate.pilares_exigidos([arquivo]) == list(gate.PILARES)
     assert gate.pilares_exigidos(["docs/index.md", arquivo]) == list(gate.PILARES)
 
@@ -321,7 +368,7 @@ def test_descricao_com_dispensados_conta_so_os_exigidos() -> None:
     dispensados = tuple(p for p in gate.PILARES if p not in ("web", "docs"))
     estado, texto = gate.descricao({"web": 0, "docs": 0}, 90, LOG, dispensados, "b" * 40)
     assert estado == "success"
-    assert texto.startswith("2 verdes (web, docs); 8 dispensados desde bbbbbbb · 1min30s")
+    assert texto.startswith("2 verdes (web, docs); 9 dispensados desde bbbbbbb · 1min30s")
     assert len(texto) <= gate.LIMITE_DESCRICAO
 
 
@@ -337,7 +384,7 @@ def test_descricao_sem_nenhum_pilar_exigido_e_success() -> None:
     """Um diff que não toca pilar nenhum (só `.design/`) é `success` e diz que nada era exigido."""
     estado, texto = gate.descricao({}, 0, LOG, gate.PILARES, "b" * 40)
     assert estado == "success"
-    assert texto.startswith("nenhum pilar exigido; 10 dispensados")
+    assert texto.startswith("nenhum pilar exigido; 11 dispensados")
 
 
 def test_descricao_com_dispensados_pela_linha_de_comando(
@@ -348,7 +395,7 @@ def test_descricao_com_dispensados_pela_linha_de_comando(
     argv = ["descricao", "--log", LOG, "--dispensados", dispensados, "--desde", "c" * 40]
     _, saida = rodar(argv, "docs 0\n", monkeypatch, capsys)
     assert saida.splitlines()[0] == "success"
-    assert "9 dispensados desde ccccccc" in saida
+    assert "10 dispensados desde ccccccc" in saida
 
 
 def test_gate_sh_expoe_todos_e_o_host_decide_o_diff() -> None:

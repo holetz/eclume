@@ -17,7 +17,8 @@
 #   --estado    mostra o status `eclume/gate` do commit e o fim do log no host.
 #   --plan      só mostra o que faria (somente leitura).
 #   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
-# Variáveis: ECLUME_SSH (quando o contexto não é ssh://).
+# Variáveis: ECLUME_SSH (quando o contexto não é ssh://); ECLUME_DISK_LIMIT e ECLUME_GPU_E2E_ESPERA
+#            (minutos de espera do gpu-e2e pela GPU livre) seguem para o host.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -100,6 +101,7 @@ git -c core.autocrlf=false archive --format=tar "$SHA" | host "mkdir -p '$DIR' &
 # ECLUME_DISK_LIMIT da estação segue para o host, para subir o limite de disco num gate pontual.
 envs=""
 [[ -z "${ECLUME_DISK_LIMIT:-}" ]] || envs="ECLUME_DISK_LIMIT=${ECLUME_DISK_LIMIT//[^0-9]/} "
+[[ -z "${ECLUME_GPU_E2E_ESPERA:-}" ]] || envs+="ECLUME_GPU_E2E_ESPERA=${ECLUME_GPU_E2E_ESPERA//[^0-9]/} "
 args=(--sha "$SHA")
 [[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")
 [[ "$TODOS" -eq 0 ]] || args+=(--todos)

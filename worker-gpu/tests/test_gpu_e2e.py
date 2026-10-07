@@ -1,9 +1,11 @@
 """Integração no host GPU contra o compose `eclume-gpu-test` (Redis, MinIO e o worker de pé).
 
-Pulado sem `ECLUME_GPU_E2E=1`. No host:
+Pulado sem `ECLUME_GPU_E2E=1`. No gate do host o pilar `gpu-e2e` (`deploy/gpu-e2e.sh`) sobe o
+compose, define a variável e roda estes 2 testes sem pulos; à mão, no host:
 
     docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
     remote-run . 'ECLUME_GPU_E2E=1 uv run pytest worker-gpu/tests/test_gpu_e2e.py -v -s'
+    bash deploy/gate.sh --pilares gpu-e2e   # o caminho do gate, com a espera pela GPU livre
 """
 
 from __future__ import annotations

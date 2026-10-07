@@ -127,7 +127,7 @@ def _caso(tmp_path: Path, *, banco: str, imagens_retidas: bool, deploys: int = 2
     (repo / "deploy").mkdir(parents=True)
     migracoes.mkdir(parents=True)
     stubs.mkdir()
-    for nome in ("deploy.sh", "deploy_lib.py"):
+    for nome in ("deploy.sh", "deploy_lib.py", "gpu-lib.sh"):
         shutil.copy(DEPLOY / nome, repo / "deploy" / nome)
     (repo / "deploy/docker-compose.prod.yml").write_text("services: {}\n", encoding="utf-8")
     (repo / "deploy/.env.prod").write_text(ENV_PROD + "\n", encoding="utf-8")
