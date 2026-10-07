@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Visão geral da arquitetura do eclume
-description: Como as partes do eclume se encaixam — web, server com o MCP, os três workers e as filas arq eclume:gpu, eclume:default e eclume:agents, Postgres, Redis, MinIO, Caddy, mDNS, apps desktop e celular e clientes por PAT —, o caminho de uma gravação do upload retomável ao resumo, as fronteiras de confiança e os pontos por onde um dado pode sair do servidor, com a resposta por configuração em GET /privacy.
+description: Como as partes do eclume se encaixam — web, server com o MCP, os workers e as filas arq eclume:gpu, eclume:default e eclume:agents, Postgres, Redis, MinIO, Caddy, mDNS, apps desktop e celular e clientes por PAT —, o caminho de uma gravação do upload retomável ao resumo, as fronteiras de confiança e os pontos por onde um dado pode sair do servidor, com a resposta por configuração em GET /privacy.
 resource: deploy/docker-compose.prod.yml, server/src/eclume_server/queue.py, server/src/eclume_server/worker.py, server/src/eclume_server/privacy.py, worker-gpu/**, web/**, desktop/**, mobile/**
 tags: [arquitetura, componentes, filas, confianca, privacidade]
 timestamp: 2026-10-01
@@ -30,11 +30,9 @@ flowchart LR
   end
 
   subgraph servidor[Servidor eclume · Docker Compose]
-    caddy[Caddy de borda<br/>HTTPS :8443, CA própria]
-    web[web<br/>SPA + referência da API]
+    caddy[Caddy de borda<br/>HTTPS :8443, CA própria<br/>SPA + referência da API]
     server[server<br/>FastAPI /api/v1 + /mcp]
-    wcpu[worker-cpu<br/>eclume:default]
-    wag[worker-agents<br/>eclume:agents]
+    wcpu[worker<br/>eclume:default e eclume:agents]
     wgpu[worker-gpu<br/>eclume:gpu]
     pg[(Postgres + pgvector)]
     redis[(Redis<br/>filas arq e limites)]
@@ -47,32 +45,31 @@ flowchart LR
   hf[Hugging Face<br/>download de modelos]
 
   nav & desk & cel & pat & mcpc --> caddy
-  caddy --> web
   caddy --> server
   server --> pg & redis & minio
-  redis --> wcpu & wag & wgpu
+  redis --> wcpu & wgpu
   wcpu --> pg & minio
-  wag --> pg
   wgpu --> minio
   mdns -. anuncia na LAN .-> desk & cel
-  wag -. se configurado .-> llm
+  wcpu -. se configurado .-> llm
   wgpu -. se configurado .-> asr
   wgpu -. modelos .-> hf
 ```
 
 - **Caddy de borda** termina o TLS na porta 8443 com a CA própria do eclume, encaminha `/api`,
   `/mcp` e `/media` para o server, serve `/downloads` (a raiz da CA e os instaladores) de uma pasta
-  e manda o resto para a imagem **web**. O desenho
+  e serve o resto, o **web**, da própria imagem (`eclume-edge`). O desenho
   concreto da produção, com volumes e portas, está em
   [deploy-producao.md](../../project/deploy-producao.md).
-- **web** é o SPA em React servido por um Caddy mínimo, com a CSP da imagem; o build também gera a
+- **web** é o SPA em React embutido na borda, com a CSP das regras dele; o build também gera a
   **referência da API** (`/referencia-api.html`) do contrato
   ([contrato-v1.md](../../standards/api/contrato-v1.md), [frontend-web.md](../../standards/code/frontend-web.md)).
 - **server** é a API `/api/v1` do contrato OpenAPI, o servidor MCP em `/mcp` no mesmo processo
   ([server-mcp-e-dispositivos.md](../../standards/code/server-mcp-e-dispositivos.md)), o painel
   admin em `/api/v1/admin` e o descritor público `GET /api/v1/server`
   ([server-nucleo.md](../../standards/code/server-nucleo.md), [server-admin.md](../../standards/code/server-admin.md)).
-- **Workers** são processos arq sobre o Redis, um por fila (abaixo).
+- **Workers** são processos arq sobre o Redis (abaixo): o `worker-gpu` e o `worker` CPU, que
+  consome `eclume:default` e `eclume:agents` num processo só.
 - **Postgres** com pgvector guarda contas, gravações, transcrições, embeddings e resumos, isolados
   por RLS. **Redis** guarda as filas, o heartbeat do worker GPU e os contadores de limite de
   tentativas. **MinIO** guarda o áudio, os uploads em partes e os artefatos da transcrição.
@@ -90,8 +87,8 @@ Três filas arq no Redis, cada uma com o seu worker
 | Fila | Worker | O que roda |
 |---|---|---|
 | `eclume:gpu` | `worker-gpu`, um job por vez | `transcribe`: ASR, alinhamento, diarização e impressões de voz |
-| `eclume:default` | `worker-cpu` | `ingest_transcript`, `transcription_failed`, purgas e os crons (reaper, retomada, despacho, uploads vencidos) |
-| `eclume:agents` | `worker-agents`, `ECLUME_AGENT_MAX_JOBS` vagas | `detect_agenda_type`, `fill_fields`, `summarize`, `summary_chat`, `base_chat` e `run_preview` |
+| `eclume:default` | `worker` | `ingest_transcript`, `transcription_failed`, purgas e os crons (reaper, retomada, despacho, uploads vencidos) |
+| `eclume:agents` | `worker` (o mesmo processo), `ECLUME_AGENT_MAX_JOBS` vagas | `detect_agenda_type`, `fill_fields`, `summarize`, `summary_chat`, `base_chat` e `run_preview` |
 
 A separação mantém a ingestão fora da espera por um agente, e a GPU com um job só. O despacho para
 `eclume:gpu` é na vez da conta: cada conta tem no máximo um `transcribe` na fila, e o resto espera
@@ -109,7 +106,7 @@ retido no banco. O worker GPU não lê o banco: recebe tudo no job e devolve pel
    `eclume:gpu` na vez da conta.
 3. **Transcrição.** O `worker-gpu` baixa o áudio do MinIO, pré-processa, transcreve, alinha,
    diariza e grava `transcript.raw.json` e as impressões de voz no bucket.
-4. **Ingestão.** O `worker-cpu` roda `ingest_transcript`: transcrição, busca full-text, embeddings
+4. **Ingestão.** O `worker` roda `ingest_transcript`: transcrição, busca full-text, embeddings
    e sugestões de pessoa por voz no Postgres; a biometria sai do bucket.
 5. **Processamento automático.** A ingestão abre a cadeia por agente em `eclume:agents`: o tipo de
    agenda, os campos e o resumo pelo tipo, cada etapa registrada em `pipeline_steps`

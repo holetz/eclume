@@ -25,6 +25,15 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
   demanda, `eclume-server worker` com as filas `eclume:default` e `eclume:agents` num só processo,
   pool de conexões configurável, `last_used_at` do PAT a cada 60 s, upload sem cópia e índice
   parcial dos jobs em aberto (migration 033_indice_jobs_em_aberto, holetz/eclume#150).
+- Produção mais enxuta para quem hospeda: o SPA embutido na borda Caddy (imagem `eclume-edge`, sem
+  o serviço `web`), um `worker` CPU único para as filas `eclume:default` e `eclume:agents` (sem
+  `worker-agents`; `ECLUME_AGENT_MAX_JOBS` passa a 2 no compose), healthchecks espaçados com
+  `start_interval`, peso de CPU por papel, `memswap_limit` de 1,5 × o teto
+  (`ECLUME_MEMSWAP_<SERVIÇO>`) e tetos revistos. O deploy retira os contêineres antigos, retém a
+  borda nova ao lado dos trios antigos com `web` e poda o cache de build com mais de 7 dias.
+  `ECLUME_MEM_WORKER` substitui `ECLUME_MEM_WORKER_AGENTS` (ainda aceito);
+  `ECLUME_MEM_WORKER_CPU` e `ECLUME_MEM_WEB` deixam de valer. Pede o Docker Engine 25 ou mais novo
+  (holetz/eclume#151).
 - Tela da gravação com a transcrição numa área de rolagem própria e os locutores num bloco
   recolhível (holetz/eclume#143).
 

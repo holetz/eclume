@@ -2,12 +2,12 @@
 type: project
 title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prova-ca-restrita.sh
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prova-ca-restrita.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-10-01
+timestamp: 2026-10-07
 audience: both
 authority: current
-source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101
+source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101, holetz/eclume#151
 maintainer: holetz
 ---
 
@@ -20,27 +20,25 @@ O caminho genérico, para qualquer servidor com ou sem GPU, está em
 compartilhado com o lumea (443) e com os serviços pessoais do usuário, que o deploy nunca toca.
 
 ```
-LAN ──► :8443 caddy (tls internal) ─┬─ /api/*, /media/*  ──► server:8000 (uvicorn)
-                                    ├─ /downloads/*      ──► /srv/eclume/downloads (somente leitura)
-                                    └─ resto             ──► web:80 (SPA)
-server ──► postgres · redis · minio ◄── worker-cpu (eclume:default: ingestão, reaper, retomada)
-                         redis ◄──────── worker-agents (eclume:agents, claude -p)
+LAN ──► :8443 caddy (tls internal) ─┬─ /api/*, /media/*, /mcp ──► server:8000 (uvicorn)
+        eclume-edge                 ├─ /downloads/*           ──► /srv/eclume/downloads (somente leitura)
+                                    └─ resto                  ──► /srv/web (SPA na própria imagem)
+server ──► postgres · redis · minio ◄── worker (eclume:default e eclume:agents, claude -p)
                          redis ◄──────── worker-gpu (eclume:gpu, WhisperX na GTX 1660 SUPER)
 ```
 
 ## Stack
 
-`deploy/docker-compose.prod.yml`, projeto **`eclume`** (containers `eclume-<serviço>-1`):
+`deploy/docker-compose.prod.yml`, projeto **`eclume`** (containers `eclume-<serviço>-1`), com oito
+serviços de longa duração (eram dez antes do holetz/eclume#151, com o `web` e dois workers CPU):
 
 | Serviço | Imagem | Papel |
 |---|---|---|
-| `caddy` | `caddy:2.11` | TLS interno na 8443, a **única porta publicada** |
-| `web` | `eclume-web:prod` (`deploy/web.Dockerfile`) | SPA estática, servida por um Caddy mínimo com fallback para o `index.html` |
-| `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
-| `mdns` | `eclume-server:prod` | `eclume-server announce`: anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
-| `worker-cpu` | `eclume-server:prod` | `arq eclume_server.worker.WorkerSettings`: ingestão, purgas, reaper, retomada e expiração de uploads |
-| `worker-agents` | `eclume-server:prod` | `arq eclume_server.worker.AgentWorkerSettings`: tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` (4) vagas e o `claude -p` |
-| `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1` ([worker-gpu.md](worker-gpu.md)) |
+| `caddy` | `eclume-edge:prod` (`deploy/web.Dockerfile`) | a borda: Caddy 2.11 com o build do SPA em `/srv/web` e as regras dele (`deploy/web.Caddyfile`, em `/etc/caddy/spa.caddy`); TLS interno na 8443, a **única porta publicada** |
+| `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health/ready`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
+| `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
+| `worker` | `eclume-server:prod` | `eclume-server worker`: as filas `eclume:default` (ingestão, purgas, reaper, retomada e expiração de uploads) e `eclume:agents` (tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` vagas, padrão 2, e o `claude -p`) num processo só |
+| `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1`; sai sozinho (código 0) depois da descarga ociosa e o `restart` o traz de volta ([worker-gpu.md](worker-gpu.md)) |
 | `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
@@ -48,45 +46,65 @@ server ──► postgres · redis · minio ◄── worker-cpu (eclume:default
 One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucket, usuários e políticas por serviço), `migrate`
 (`eclume-server migrate`, como o superusuário, que também liga o `LOGIN` de `eclume_server` com `ECLUME_RUNTIME_PG_PASSWORD`) e `publish-ca` (copia a CA para `/downloads/`).
 
-- **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO,
-  server e web não têm `ports:`. Para depurar, use `compose exec`.
+- **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO e
+  server não têm `ports:`. Para depurar, use `compose exec`.
 - **Rotas do Caddy.** `/api/*`, `/media/*` e `/mcp` (rota exata) vão ao server sem cortar o prefixo. `/downloads/*` é a
   pasta dos instaladores ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)),
-  com `Cache-Control: no-cache` nos manifestos e arquivos ocultos escondidos. O resto vai ao SPA.
-  Nenhuma rota do SPA pode começar com `/api`, `/media`, `/mcp` ou `/downloads`.
+  com `Cache-Control: no-cache` nos manifestos e arquivos ocultos escondidos. O resto é o SPA, da
+  própria imagem: o Caddyfile do compose termina com `import /etc/caddy/spa.caddy`, o `handle` sem
+  matcher que só pega o que sobrou. Nenhuma rota do SPA pode começar com `/api`, `/media`, `/mcp`
+  ou `/downloads`.
+- **As regras do SPA viajam com a imagem** (`deploy/web.Caddyfile`), e o mesmo arquivo serve à
+  produção, ao staging e ao e2e: a CSP do SPA, a da referência da API (`/referencia-api.html`, com
+  `style-src` próprio), o cache longo dos assets do Vite só para o arquivo que existe, o `no-cache`
+  do `index.html` e o `no-store` das respostas de erro ([frontend-web.md](../standards/code/frontend-web.md)).
+  Sozinha, a imagem serve o SPA na porta 80, sem TLS.
 - **O `mdns` é recriado depois do `publish-ca`**, e a conferência do deploy exige que
   `/api/v1/server` traga a impressão digital da CA publicada. O multicast (5353/udp na rede do
   host) depende da regra do ufw do [host-setup.md](host-setup.md#6-firewall).
 - **O Caddyfile é um `configs.content` inline.** Com o daemon remoto, um `file:` viraria bind
   mount de um caminho da estação.
-- **As imagens do server e do web ficam em `deploy/`,** com `<Dockerfile>.dockerignore` ao lado
-  filtrando o contexto da raiz. Uma imagem de server serve à API, ao worker CPU, às migrations e ao
-  CLI. Ela roda como uid 1000 (`HOME=/home/app`). O binário nativo da CLI `claude`, de versão
+- **As imagens do server e da borda ficam em `deploy/`,** com `<Dockerfile>.dockerignore` ao lado
+  filtrando o contexto da raiz. Uma imagem de server serve à API, ao worker CPU, ao `mdns`, às
+  migrations e ao CLI. Ela roda como uid 1000 (`HOME=/home/app`). O binário nativo da CLI `claude`, de versão
   fixada, só entra com `ECLUME_CLAUDE_CLI=1` no `deploy/.env.prod` (build arg; o padrão da imagem é
   sem a CLI, [server-agentes.md](../standards/code/server-agentes.md#deploy)). Esta produção usa
   `ECLUME_CLAUDE_CLI=1`; o `deploy.sh` recusa um env que não declare 0 ou 1.
-- **Redes por papel** (holetz/eclume#94): `borda` (caddy, web, server); `dados`, interna
-  (postgres, redis, minio, server, worker-cpu, worker-agents, `minio-init`, `migrate`); `fila-gpu`,
-  interna (redis, minio, worker-gpu); `saida` (worker-cpu, worker-agents e worker-gpu, que falam
-  com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem web.
+- **Redes por papel** (holetz/eclume#94): `borda` (caddy, server); `dados`, interna
+  (postgres, redis, minio, server, worker, `minio-init`, `migrate`); `fila-gpu`,
+  interna (redis, minio, worker-gpu); `saida` (worker e worker-gpu, que falam
+  com providers, Claude e Hugging Face). O worker GPU não alcança Postgres, server nem a borda.
   `publish-ca` roda com `network_mode: none`; `mdns`, na rede do host.
-- **Credencial por serviço:** server e workers CPU usam `eclume-server` no Redis e no MinIO; o
+- **Credencial por serviço:** server e worker CPU usam `eclume-server` no Redis e no MinIO; o
   worker GPU, `eclume-gpu`, que só lê o áudio e escreve os artefatos. O root do MinIO fica no
   MinIO, no `minio-init` e no backup; o usuário `default` do Redis está desligado
   ([server-nucleo.md](../standards/code/server-nucleo.md#credenciais-de-redis-e-minio)). Para
   depurar o Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
 - **Privilégio mínimo:** os contêineres Python (server, workers, `migrate`, `mdns`) rodam com
-  `cap_drop: [ALL]` e `no-new-privileges`; Caddy e web ficam como estão, porque escutam em porta
-  baixa.
-- **Limites de memória (`mem_limit`)** em caddy, web, server, worker-cpu, worker-agents,
-  worker-gpu, redis e minio, cada um por env `ECLUME_MEM_<SERVIÇO>` (`ECLUME_MEM_WORKER_GPU`, por
-  exemplo) com padrão no compose. Os padrões são provisórios e folgados (host de 16 GB: 256m,
-  128m, 1g, 1g, 2g, 8g, 512m, 1g) até a medição de 24 h de `docker stats` com uma transcrição de
-  1 h ou mais e um resumo; o valor certo é o pico × 1,5. Para ajustar, defina a variável em
-  `deploy/.env.prod` e faça deploy. O Postgres não tem teto: ganha `oom_score_adj: -800` (o OOM
-  do host escolhe outro antes) e `shm_size: 256m`. Um contêiner que estoura o teto morre dentro
-  do próprio cgroup e o `restart` o traz de volta. O `release-desktop.sh` limita o build a
+  `cap_drop: [ALL]` e `no-new-privileges`; o Caddy fica como está, porque escuta em porta baixa.
+- **Limites de memória** em caddy, server, worker, worker-gpu, redis e minio: o `mem_limit` por
+  env `ECLUME_MEM_<SERVIÇO>` (256m, 768m, 2g, 8g, 256m e 512m) e o `memswap_limit` (memória mais
+  swap) por `ECLUME_MEMSWAP_<SERVIÇO>`, com padrão de 1,5 × o teto (384m, 1152m, 3g, 12g, 384m e
+  768m). Sem o `memswap_limit`, cada contêiner usaria outro tanto em swap e o `docker stats`
+  subestimaria o uso real. Os padrões são os da revisão do holetz/eclume#151; o valor certo
+  continua o pico × 1,5 da medição de 24 h de `docker stats`. Para
+  ajustar, defina o par em `deploy/.env.prod` e faça deploy: o `deploy.sh` recusa um
+  `memswap_limit` menor que o `mem_limit`, que o `up` recusaria no meio do deploy. **Nomes
+  anteriores ao worker único:** `ECLUME_MEM_WORKER_AGENTS` ainda vale para o `worker` enquanto o
+  env não tiver `ECLUME_MEM_WORKER`; `ECLUME_MEM_WORKER_CPU` e `ECLUME_MEM_WEB` não valem mais
+  (apague-os do env). O Postgres não tem teto: ganha `oom_score_adj: -800` (o OOM do host escolhe
+  outro antes) e `shm_size: 256m`; o `mdns` também não. Um contêiner que estoura o teto morre
+  dentro do próprio cgroup e o `restart` o traz de volta. O `release-desktop.sh` limita o build a
   `ECLUME_BUILD_MEMORY` (6g), ao lado das 2 CPUs.
+- **Peso de CPU por papel (`cpu_shares`, só vale na disputa):** 2048 para quem atende a requisição
+  (caddy, server, postgres), 1024 para o apoio (redis, minio, worker) e 512 para o que pode
+  esperar (worker-gpu, cuja conta pesada é na GPU, e mdns). O gate, o staging e o backup do host
+  rodam com 256.
+- **Healthchecks leves e espaçados:** o `worker` pela sonda `python -m eclume_server.sonda fila
+  default agents` (só a stdlib e o cliente do Redis) e o worker-gpu pelo heartbeat, a cada 60 s; o
+  server (`/api/v1/health/ready`), Postgres, Redis e MinIO a cada 30 s. Durante o `start_period`,
+  o `start_interval` (1 a 2 s) apressa o primeiro `healthy`, para o `up --wait` do deploy não
+  esperar um intervalo inteiro; o `start_interval` pede o Docker Engine 25 ou mais novo.
 - **Restart `unless-stopped` e logs rotacionados** (3 × 10 MB por container): o stack volta
   sozinho depois de um reboot, sem ninguém rodar deploy.
 
@@ -131,9 +149,13 @@ host tem GPU e sobe sem `--sem-gpu`. O `deploy.sh` usa o contexto Docker para bu
    mount viraria pasta.
 3. Guarda a cópia de `deploy/.env.prod` em `/srv/eclume/secrets/env.prod`, instala os scripts
    de backup em `bin/` e a linha `# eclume-backup` no crontab.
-4. Constrói `server`, `web` e `worker-gpu` no daemon do host a partir do `git archive` do SHA num
-   diretório temporário da estação — compose, Dockerfiles e scripts são os do SHA, nunca os da
-   árvore de trabalho (`--services` restringe; `--sem-build` pula). O build grava
+4. Constrói `server`, `caddy` (a imagem `eclume-edge`, com o SPA) e `worker-gpu` no daemon do
+   host a partir do `git archive` do SHA num diretório temporário da estação — compose,
+   Dockerfiles e scripts são os do SHA, nunca os da árvore de trabalho (`--services` restringe, e
+   `web` ainda vale como o nome antigo do `caddy`; `--sem-build` pula). Quais imagens o SHA tem e
+   quais serviços sobem saem do compose dele (`docker compose config` lido pelo `deploy_lib.py
+   topologia`). Uma imagem que não se constrói agora precisa já estar no host: o primeiro deploy
+   da borda com o SPA constrói o `caddy`. O build grava
    `ECLUME_COMMIT` (o `/api/v1/health` o devolve em `commit`) e as tags `:<sha>` ao lado de `:prod`;
    o deploy marca com `:<sha>` também as imagens que não construiu, e cada deploy deixa um trio. No
    `worker-gpu` só a tag muda: com o código igual, o cache devolve a mesma imagem e o container não
@@ -143,24 +165,31 @@ host tem GPU e sobe sem `--sem-gpu`. O `deploy.sh` usa o contexto Docker para bu
 6. Com migration pendente, grava `pg_dump -Fc` em `/srv/eclume/backups/pre-deploy/` antes do
    `migrate`; `restaurar-backup.sh --banco <dump> --confirmo` restaura só o banco a partir dele.
 7. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
-   `up --wait server worker-cpu worker-agents worker-gpu web` → `up --force-recreate --wait caddy`. Os one-shots
-   ficam fora do `--wait`, que trata a saída 0 de um serviço que ninguém espera como falha. O
-   Caddy é sempre recriado porque o compose não recria um container quando só o
-   `configs.content` muda. A CA está no volume e sobrevive.
+   `up --wait server worker worker-gpu` → `up --force-recreate --remove-orphans --wait caddy`.
+   Os one-shots ficam fora do `--wait`, que trata a saída 0 de um serviço que ninguém espera como
+   falha. O Caddy é sempre recriado porque o compose não recria um container quando só o
+   `configs.content` muda. A CA está no volume e sobrevive. Com a borda nova no ar, o
+   `--remove-orphans` retira os contêineres de serviços que o compose do SHA não tem mais: no
+   primeiro deploy do holetz/eclume#151, `web`, `worker-cpu` e `worker-agents`.
 8. Publica a CA em `/srv/eclume/downloads/eclume-root.crt`, acrescenta uma linha ao
-   `/srv/eclume/deploys.log`, aplica a retenção e confere o health (com o `commit` do SHA) pela CA
+   `/srv/eclume/deploys.log`, aplica a retenção, poda o cache do BuildKit com mais de 7 dias
+   (`docker builder prune --filter until=168h`) e confere o health (com o `commit` do SHA) pela CA
    publicada.
 
 ### Rastreio, retenção e retorno
 
 - **O que está em produção** sai de três lugares que concordam: `GET /api/v1/health` (`commit`),
-  as tags `eclume-{server,web,worker-gpu}:<sha>` e `/srv/eclume/deploys.log` (TSV: data, SHA,
-  flags, motivo, migrations aplicadas e o dump pré-deploy).
+  as tags `eclume-{server,edge,worker-gpu}:<sha>` (`eclume-web` em vez de `eclume-edge` nos deploys
+  anteriores ao holetz/eclume#151) e `/srv/eclume/deploys.log` (TSV: data, SHA, flags, motivo,
+  migrations aplicadas e o dump pré-deploy).
 - **Retenção:** o host guarda o trio de imagens e o dump dos últimos 3 deploys distintos
-  (`ECLUME_DEPLOYS_RETIDOS`); as tags fora da janela saem e o `image prune` só leva o que ficou sem
-  tag (rótulo `org.eclume.image`).
+  (`ECLUME_DEPLOYS_RETIDOS`); as tags fora da janela saem, dos trios novos (`edge`) e dos antigos
+  (`web`), e o `image prune` só leva o que ficou sem tag (rótulo `org.eclume.image`: `server`,
+  `edge`, `web`, `worker-gpu`).
 - **`bash deploy/deploy.sh --context gpu-host --voltar <sha>`** sobe o trio retido daquele deploy,
-  sem build e sem migrate (o `deploy_lib.py voltar` decide). Um passo atrás vale mesmo com
+  sem build e sem migrate (o `deploy_lib.py voltar` decide), com o compose daquele SHA: voltar a
+  um SHA anterior ao holetz/eclume#151 sobe `web`, `worker-cpu` e `worker-agents` de novo, com o
+  Caddy puro, e o `--remove-orphans` retira o `worker` único. Um passo atrás vale mesmo com
   migration nova, pela regra expandir/contrair
   ([server-nucleo.md](../standards/code/server-nucleo.md)); mais de um passo com migrations que o
   alvo não conhece recusa e aponta o dump pré-deploy para restaurar o banco antes.
@@ -198,7 +227,8 @@ host.
 | `ECLUME_MINIO_USER`, `ECLUME_MINIO_PASSWORD` | root do MinIO: só o MinIO, o `minio-init` e os scripts de backup a usam |
 | `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` do MinIO; o `minio-init` as aplica a cada deploy, então trocar é mudar o env e fazer deploy. Um env anterior a elas as ganha geradas pelo `deploy.sh` (append), com aviso no `--plan` |
 | `ECLUME_REDIS_SERVER_PASSWORD`, `ECLUME_REDIS_GPU_PASSWORD` | dos usuários `eclume-server` e `eclume-gpu` da ACL do Redis; a ACL é recriada com o contêiner do Redis no deploy. Geradas pelo `deploy.sh` quando faltam, como as do MinIO |
-| `ECLUME_MEM_<SERVIÇO>` | opcionais: teto de memória de cada serviço (ver Stack) |
+| `ECLUME_MEM_<SERVIÇO>`, `ECLUME_MEMSWAP_<SERVIÇO>` | opcionais: teto de memória e de memória mais swap de cada serviço, que sobem juntos (ver Stack) |
+| `ECLUME_AGENT_MAX_JOBS` | opcional (2): vagas da fila `eclume:agents` no `worker` |
 | `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
@@ -207,7 +237,7 @@ host.
 | `ECLUME_SIGNUP_OPEN` | `true` (padrão): qualquer pessoa na LAN cria conta por `POST /api/v1/auth/signup`, com o aceite do aviso. `false` fecha o cadastro sem deploy de código: mude o env e recrie o server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
 | `ECLUME_SIGNUPS_PER_IP_PER_DAY` | `5` (padrão): teto de cadastros criados por IP em 24 h, além do teto por minuto. Depois do deploy das cotas (holetz/eclume#98), a dona sobrepõe as cotas da própria conta em Admin → Usuários |
 | `ECLUME_CLAUDE_CLI` | obrigatória, `0` ou `1`: o build arg que põe a CLI `claude` na imagem do server. Esta produção usa `1` (o `claude-cli` é o provider dela); `0` constrói a imagem só com software livre e o `claude-cli` falha com `provider_not_configured` |
-| `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao worker de agentes (e, na transição, ao worker CPU) como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
+| `ECLUME_CLAUDE_OAUTH_TOKEN` | opcional: token de longa duração do Claude (`claude setup-token`, 1 ano), entregue ao `worker` como `CLAUDE_CODE_OAUTH_TOKEN`. O caminho normal é o token no painel (abaixo), que vence este; sem nenhum dos dois, o `claude-cli` falha com `provider_not_configured`. **Não monte** o `~/.claude/.credentials.json` do host: a renovação do OAuth diverge no bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
 
 ### Admin, contas e provider
 
@@ -495,10 +525,11 @@ O ensaio é **proporcional**. Aos domingos (ou com `ECLUME_ENSAIO_DIA=7`) é o *
 snapshot inteiro, o lote de áudios conferido sobre o bucket restaurado e o smoke de resumo e chat
 (que gasta a cota do Claude). Nos outros dias é o **parcial**: restaura só `pg/`, `secrets/` e
 `caddy/` mais os áudios do lote, sorteado no banco restaurado, e roda o smoke `--somente-leitura`;
-o `estado/ensaio.json` diz "ensaio parcial". As imagens `eclume-server:<sha>` e `eclume-web:<sha>`
-(ou `eclume-edge:<sha>`) que o deploy reteve para o SHA do `main` são reaproveitadas, sem build; só o
-que falta é construído (e, no completo, a retida do server precisa do `claude`, senão o server é
-reconstruído). Todo contêiner do staging leva `--cpu-shares 256` (os serviços, por um
+o `estado/ensaio.json` diz "ensaio parcial". As imagens `eclume-server:<sha>` e `eclume-edge:<sha>`
+(ou `eclume-web:<sha>`, antes do holetz/eclume#151) que o deploy reteve para o SHA do `main` são
+reaproveitadas, sem build; só o que falta é construído (e, no completo, a retida do server precisa
+do `claude`, senão o server é reconstruído). O staging sobe todo serviço de longa duração do
+compose do `main`, sem lista fixa: a borda com o SPA e o worker CPU único, como na produção. Todo contêiner do staging leva `--cpu-shares 256` (os serviços, por um
 `~/eclume-staging/cpu-shares.yml` gerado a cada execução) e o restic e o mc, `GOMAXPROCS=1`. O
 `subir` é sempre a restauração completa.
 
@@ -534,7 +565,7 @@ P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml
 "${P[@]}" logs -f --tail 100 worker-gpu
 "${P[@]}" exec postgres psql -U eclume eclume
 "${P[@]}" run --rm -T migrate eclume-server admin create --email <e-mail> --name "<nome>" --password-stdin
-bash deploy/deploy.sh --context gpu-host --services "server web"   # só código do server e do web
+bash deploy/deploy.sh --context gpu-host --services "server caddy"   # só código do server e do web (a borda)
 ```
 
 - **Token do Claude vencido:** o resumo falha com `provider_auth`. Gere outro com

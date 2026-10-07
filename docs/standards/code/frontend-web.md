@@ -71,7 +71,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   sobrepõem `img` nem `a`): `![alt](url)` vira um link de texto (`alt`, ou a URL sem ele) e todo
   link abre em outra aba com `rel="noopener noreferrer"`. Um resumo envenenado não faz o navegador
   buscar uma URL de fora (rastreio, `Referer`). A ajuda, de conteúdo próprio, fica fora disso.
-- **A CSP é da imagem web** (`deploy/web.Caddyfile`): `default-src 'self'`,
+- **A CSP é das regras do SPA na imagem da borda** (`deploy/web.Caddyfile`, `eclume-edge`): `default-src 'self'`,
   `img-src 'self' data: blob:`, `media-src 'self' blob:`, `connect-src 'self'`,
   `script-src 'self' 'wasm-unsafe-eval'`, `worker-src 'self' blob:`, `frame-ancestors 'none'`,
   `base-uri 'none'` e `object-src 'none'`, com `X-Content-Type-Options: nosniff` e
@@ -145,7 +145,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da bibl
   `vite:preloadError`, se a última recarga por chunk (carimbo `eclume-recarga-chunk` no
   `sessionStorage`) tem mais de 60 s, grava o carimbo, cancela o evento e recarrega; senão o erro
   segue para o `RouteError`. A janela de tempo, e não uma bandeira eterna, deixa um segundo deploy
-  na mesma aba recarregar de novo. O estático da imagem `eclume-web` responde `404` sem
+  na mesma aba recarregar de novo. O estático da borda (`eclume-edge`) responde `404` sem
   `immutable` para `/assets/*` ausente, então o `import()` falha rápido e com motivo.
 - **Guarda de saída** (`app/useLeaveGuard.tsx`): com alterações não salvas, fechar ou recarregar a
   aba dispara o aviso do navegador (`beforeunload`), e ir para outra rota do app pede confirmação

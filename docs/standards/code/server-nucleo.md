@@ -48,7 +48,7 @@ Tudo por ambiente (`eclume_server/config.py`):
 
 ## Logs
 
-- **Formato:** API, CLI, `worker-cpu`, `worker-agents` e worker GPU escrevem uma linha JSON por
+- **Formato:** API, CLI, `worker` e worker GPU escrevem uma linha JSON por
   registro (`eclume_engines/registro.py`, `configurar_logs()`), com `ts` (RFC 3339 UTC), `level`,
   `logger`, `msg`, `exc` quando houver exceção e, quando definidos, `request_id`, `recording_id`,
   `revision` e `job_id`. Vale para `eclume_server.*`, `eclume_worker.*`, `eclume_engines.*`,
