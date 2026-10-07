@@ -4,7 +4,9 @@
 // parada à espera dos nomes dos locutores. A regra e a marca d'água
 // são as do desktop (desktop/crates/sync/src/outcome.rs), com os mesmos casos de teste. Com a aba em
 // segundo plano, o desfecho soma no título da aba; com o aviso do navegador ligado em Ambiente,
-// vira uma notificação do sistema que abre a gravação.
+// vira uma notificação do sistema que abre a gravação. Só lê com a aba visível e, havendo várias
+// abas, só uma por vez (Web Locks); sem a API, cada aba visível lê a sua. Ao reaparecer, a aba lê
+// logo e recupera, pela marca d'água, o que terminou enquanto esteve oculta.
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { api, type Schemas } from '../api/client'
@@ -28,6 +30,8 @@ export interface Ended {
 }
 
 export const WATCH_MS = 30_000
+/** O nome do lock de Web Locks que elege a aba que consulta. */
+export const WATCH_LOCK = 'eclume-processing-watch'
 /** Folga da marca d'água e do `?since=`, como no desktop. */
 export const MARGIN_MS = 60_000
 const KEEP_MS = 7 * 24 * 60 * 60 * 1000
@@ -193,12 +197,53 @@ export function useProcessingWatch(): void {
       if (notifyOutcomesOn()) fresh.forEach(notify)
     }
 
-    const timer = window.setInterval(() => void tick(), WATCH_MS)
-    document.addEventListener('visibilitychange', onVisibility)
+    // Quem consulta: a aba visível que detém o lock (ou qualquer aba visível, sem Web Locks). O lock é
+    // segurado até a aba ocultar ou desmontar, e então passa para a próxima aba visível na fila.
+    let release: (() => void) | null = null
+    let abort: AbortController | null = null
+    let active = false
+
+    const poll = (immediate: boolean) => () =>
+      new Promise<void>((resolve) => {
+        if (immediate) void tick()
+        const timer = window.setInterval(() => void tick(), WATCH_MS)
+        release = () => {
+          window.clearInterval(timer)
+          release = null
+          resolve()
+        }
+      })
+
+    const start = (immediate: boolean) => {
+      if (active) return
+      active = true
+      if (typeof navigator !== 'undefined' && navigator.locks) {
+        abort = new AbortController()
+        navigator.locks.request(WATCH_LOCK, { signal: abort.signal }, poll(immediate)).catch(() => undefined)
+      } else {
+        void poll(immediate)()
+      }
+    }
+
+    const stop = () => {
+      active = false
+      abort?.abort()
+      abort = null
+      release?.()
+    }
+
+    const onChange = () => {
+      onVisibility()
+      if (document.hidden) stop()
+      else start(true)
+    }
+
+    if (!document.hidden) start(false)
+    document.addEventListener('visibilitychange', onChange)
     return () => {
       stopped = true
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibility)
+      stop()
+      document.removeEventListener('visibilitychange', onChange)
       setTitleCount(0)
     }
   }, [])

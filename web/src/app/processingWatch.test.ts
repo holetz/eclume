@@ -167,26 +167,65 @@ describe('observador na aba', () => {
 
   const tick = () => act(async () => void (await vi.advanceTimersByTimeAsync(WATCH_MS)))
 
-  it('conta no título com a aba oculta, zera ao voltar e só notifica com o aviso ligado', async () => {
+  const setHidden = (value: boolean) => {
+    hidden = value
+    act(() => void document.dispatchEvent(new Event('visibilitychange')))
+  }
+
+  it('não lê com a aba oculta; ao reaparecer lê logo e recupera o que terminou, só notificando com o aviso ligado', async () => {
     const ready = recording('r1', 'transcribed', ['done', null, '2026-10-01T12:00:10Z'])
     const failed = failedJob('r2', 'failed', '2026-10-01T12:00:20Z')
     const { http } = watch([[ready], [failed]])
     expect(document.title).toBe('Biblioteca · eclume')
 
-    hidden = true
+    setHidden(true)
     await tick()
+    await tick()
+    expect(http.calls).toHaveLength(0)
+
+    await act(async () => setHidden(false))
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
+    expect(http.calls).toHaveLength(1)
     expect(new URL(http.calls[0].url).searchParams.get('since')).toBe('2026-10-01T11:59:00.000Z')
-    expect(document.title).toBe('(1) Biblioteca · eclume')
     expect(shown).toHaveLength(0)
 
     saveNotifyOutcomes(true)
     await tick()
-    expect(document.title).toBe('(2) Biblioteca · eclume')
+    expect(http.calls).toHaveLength(2)
     expect(shown.map((n) => [n.title, n.options?.tag])).toEqual([['A transcrição falhou', 'r2']])
+  })
 
-    hidden = false
-    act(() => void document.dispatchEvent(new Event('visibilitychange')))
-    expect(document.title).toBe('Biblioteca · eclume')
+  it('com a aba visível lê a cada 30 s e volta a ler só depois de reaparecer', async () => {
+    const { http } = watch([[], [], []])
+    await tick()
+    expect(http.calls).toHaveLength(1)
+    setHidden(true)
+    await tick()
+    expect(http.calls).toHaveLength(1)
+  })
+
+  it('com Web Locks, uma aba por vez: a segunda espera o lock da primeira', async () => {
+    const queue: { name: string; granted: () => Promise<void>; release: () => void; signal?: AbortSignal }[] = []
+    const request = vi.fn((name: string, options: { signal?: AbortSignal }, callback: () => Promise<void>) => {
+      return new Promise<void>((resolve) => {
+        queue.push({ name, signal: options.signal, release: resolve, granted: callback })
+      })
+    })
+    vi.stubGlobal('navigator', { ...navigator, locks: { request } })
+    const { http } = watch([[], []])
+    expect(request).toHaveBeenCalledOnce()
+    expect(request.mock.calls[0][0]).toBe('eclume-processing-watch')
+    // Sem o lock concedido, nada é lido.
+    await tick()
+    expect(http.calls).toHaveLength(0)
+    // Concedido: lê a cada 30 s; ao ocultar, solta o lock.
+    const held = queue[0].granted()
+    await tick()
+    expect(http.calls).toHaveLength(1)
+    setHidden(true)
+    await expect(held).resolves.toBeUndefined()
+    await tick()
+    expect(http.calls).toHaveLength(1)
   })
 
   it('sem permissão do navegador, nada de notificação mesmo ligado', async () => {
