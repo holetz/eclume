@@ -225,6 +225,11 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   em `127.0.0.1:16379`, MinIO em `19000`, o worker-gpu com a GPU) e o derruba com `down -v` ao fim;
   usa os modelos e o token do Hugging Face de `/srv/eclume`, divide a VRAM de 6 GB com a produção e
   espera o `busy` e a VRAM livre antes de subir (sai 75, inconclusivo, se a GPU não liberar).
+  Linha de base com o host parado (2026-10-07, holetz/eclume#159): 887 MiB ocupados pela sessão
+  gráfica (Xorg, gnome-shell, Firefox, Discord, Steam), nenhum processo CUDA do eclume (o worker-gpu
+  descarrega os modelos e recicla o processo na ociosidade) e ~400 MiB retidos pelo driver; sobram
+  ~4,8 GB livres, acima do mínimo de 4096 MiB. Conferir com
+  `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` (vazio com o host parado).
   Norma em [monorepo.md](../standards/code/monorepo.md).
 - Limites por pilar: `--cpus 2`, `--cpu-shares 256` (também nos serviços de teste e no mock, por um
   `~/eclume-gate/cpu-shares.yml` gerado a cada execução: a produção vence a CPU quando disputam),
