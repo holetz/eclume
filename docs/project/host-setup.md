@@ -267,7 +267,10 @@ O gate (`bash deploy/gate.sh` na estação; norma em
 - Limites por pilar: `--cpus 2`, `--cpu-shares 256` (também nos serviços de teste e no mock, por um
   `~/eclume-gate/cpu-shares.yml` gerado a cada execução: a produção vence a CPU quando disputam),
   `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido foi ~2,6 GiB no link do desktop e
-  do windows). Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
+  do windows). O pilar android, medido em 08/10/2026 (holetz/eclume#188) com `memory.peak` do cgroup do
+  contêiner: pico no teto de 4 GiB, `anon` de 4056 MiB e `oom_kill` 1, com o Gradle (2403 MiB), o daemon
+  do Kotlin (972 MiB) e o build-tools do Kotlin (507 MiB) vivos ao mesmo tempo; o cargo não estava no
+  pico. Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
   disco em 90%.
 - Proporcional: o host roda só os pilares que o diff desde o último SHA verde exige (`--todos` na
   estação força os dez) e abandona o SHA que o pre-push disparou e que o `main` já ultrapassou
