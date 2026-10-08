@@ -56,6 +56,9 @@ AGENTS.md
   `recorded_at`, `collections`, `agenda_type`, `summary_version`). O `.jsonl` é a transcrição: a
   primeira linha descreve a gravação e cada linha seguinte é uma fala, com locutor, início, fim e
   texto.
+- Se a gravação tem marcadores com nota, o `.md` termina com a seção **Notas dos marcadores**: uma
+  linha por nota, com o horário no áudio (`- [00:12:30] conferir o número`). Marcador sem nota não
+  aparece.
 - Se a transcrição mudou depois do resumo, o `.md` traz `summary_stale: true` nas propriedades e uma
   faixa de aviso no topo ("Resumo de uma versão anterior da transcrição"). É o mesmo aviso da
   página da gravação: use **Regenerar** no eclume e, no ciclo seguinte, o arquivo volta ao normal.
