@@ -21,6 +21,7 @@ DATA_DIR="${ECLUME_DATA_DIR:-/srv/eclume}"
 DEST="$DATA_DIR/backups"
 ENV_FILE="$DATA_DIR/secrets/env.prod"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
+RCLONE_IMAGE="${RCLONE_IMAGE:-rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5}"
 
 repositorio=local
 if [[ "${1:-}" == --repositorio ]]; then
@@ -50,7 +51,7 @@ SECRETS="${pasta:-$DATA_DIR}/secrets"
 # restic num contêiner como root (a PKI restaurada é dona root até o chown), sem cache.
 restic_() {
   local repo=(-e RESTIC_REPOSITORY=/repo -v "$DEST/restic:/repo")
-  [[ "$repositorio" == local ]] || repo=(--env-file "$SECRETS/restic-fora.env")
+  [[ "$repositorio" == local ]] || repo=(--env-file "$SECRETS/restic-fora.env" "${destino_rclone[@]}")
   docker run --rm "${repo[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
@@ -75,6 +76,16 @@ extrair() {
 }
 [[ -s "$SECRETS/restic-password" || "$mode" == --banco ]] || { echo "falta $SECRETS/restic-password" >&2; exit 1; }
 [[ "$repositorio" == local || -s "$SECRETS/restic-fora.env" ]] || { echo "falta $SECRETS/restic-fora.env" >&2; exit 1; }
+# Destino rclone (RESTIC_REPOSITORY=rclone:<remoto>:<caminho>, como o OneDrive): a imagem do restic
+# não traz o `rclone` que ele chama. O binário estático da imagem fixada entra por um volume, que o
+# Docker preenche com o /usr/local/bin dela na primeira montagem; a configuração, de
+# secrets/restic-rclone/, entra gravável porque o rclone renova o token OAuth (e a regrava como root).
+destino_rclone=()
+if [[ "$repositorio" != local ]] && grep -q '^RESTIC_REPOSITORY=rclone:' "$SECRETS/restic-fora.env"; then
+  volume="eclume-rclone-$(cut -c1-12 <<< "${RCLONE_IMAGE##*sha256:}")"
+  docker run --rm --network none -v "$volume:/usr/local/bin" --entrypoint true "$RCLONE_IMAGE"
+  destino_rclone=(-v "$volume:/usr/local/bin:ro" -v "$SECRETS/restic-rclone:/run/rclone" -e RCLONE_CONFIG=/run/rclone/rclone.conf)
+fi
 
 # --host-novo: só secrets/ e a PKI, sobre a pasta onde o deploy.sh vai criar o resto.
 if [[ "$mode" == --host-novo ]]; then

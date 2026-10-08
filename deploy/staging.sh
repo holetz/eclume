@@ -37,6 +37,7 @@ CPU_SHARES=256
 DIA="${ECLUME_ENSAIO_DIA:-$(date +%u)}"
 SHA="${ECLUME_STAGING_SHA:-}"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
+RCLONE_IMAGE="${RCLONE_IMAGE:-rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5}"
 
 case "${1:-}" in
   ensaio|subir|derrubar) acao="$1" ;;
@@ -61,7 +62,7 @@ compose() {
   docker compose -p eclume-staging -f "$SRC/deploy/docker-compose.staging.yml" -f "$CPU_YML" "$@"
 }
 fora() {
-  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" -e RESTIC_PASSWORD_FILE=/run/restic-password \
+  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" "${destino_rclone[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
 derrubar() {
@@ -116,6 +117,17 @@ pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
 (( pct < 90 )) || { passo="disco em ${pct}%: acima de 90%, staging recusado"; exit 3; }
 passo="sem $SECRETS/restic-fora.env: o ensaio lê o repositório fora do host"
 [[ -s "$SECRETS/restic-fora.env" && -s "$SECRETS/restic-password" ]] || exit 1
+passo="binário do rclone do destino fora"
+# Destino rclone (RESTIC_REPOSITORY=rclone:<remoto>:<caminho>, como o OneDrive): a imagem do restic
+# não traz o `rclone` que ele chama. O binário estático da imagem fixada entra por um volume, que o
+# Docker preenche com o /usr/local/bin dela na primeira montagem; a configuração, de
+# secrets/restic-rclone/, entra gravável porque o rclone renova o token OAuth (e a regrava como root).
+destino_rclone=()
+if grep -q '^RESTIC_REPOSITORY=rclone:' "$SECRETS/restic-fora.env"; then
+  volume="eclume-rclone-$(cut -c1-12 <<< "${RCLONE_IMAGE##*sha256:}")"
+  docker run --rm --network none -v "$volume:/usr/local/bin" --entrypoint true "$RCLONE_IMAGE"
+  destino_rclone=(-v "$volume:/usr/local/bin:ro" -v "$SECRETS/restic-rclone:/run/rclone" -e RCLONE_CONFIG=/run/rclone/rclone.conf)
+fi
 
 passo="código do main"
 if [[ -z "${ECLUME_STAGING_SRC:-}" ]]; then

@@ -4,7 +4,7 @@ title: Deploy de produção no host GPU
 description: Como o eclume roda em produção no host 192.168.15.199 — compose do projeto eclume com Caddy na 8443, build no daemon do host pelo contexto Docker, segredos em deploy/.env.prod, conta de admin separada e cadastro aberto, CA interna nos clientes, backup diário por cron com restauração testada, operação e coexistência com o lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prova-ca-restrita.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-10-07
+timestamp: 2026-10-08
 audience: both
 authority: current
 source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101, holetz/eclume#151
@@ -116,7 +116,7 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 | `caddy/data`, `caddy/config` | **CA interna do Caddy**: apagar gera uma CA nova e obriga a reinstalar a raiz em todos os clientes |
 | `models/` | cache de modelos do worker GPU |
 | `downloads/` | instaladores do desktop, `latest.json` e `eclume-root.crt` |
-| `secrets/` (700) | `env.prod`, `hf_token`, `admin-password`, chaves do updater, keystore Android, `restic-password` e `restic-fora.env` — tudo 600 |
+| `secrets/` (700) | `env.prod`, `hf_token`, `admin-password`, chaves do updater, keystore Android, `restic-password`, `restic-fora.env` e `restic-rclone/` (a configuração do rclone do destino fora) — tudo 600 |
 | `backups/` | `restic/` (repositório cifrado), `minio/.espelho/`, `pre-deploy/`, `backup.log` e `ensaio.log` |
 | `estado/` (700) | `backup.json`, `fora.json`, `ensaio.json` (`ok`, `at`, `detalhe` de cada etapa noturna, lidos pelo `vigia.sh`), `secrets.sha256` e `vigia/` |
 | `bin/` | `backup.sh`, `restaurar-backup.sh`, `staging.sh` e `vigia.sh`, instalados pelo deploy |
@@ -487,10 +487,10 @@ não rodaria fora de sessão. O `deploy.sh` instala os scripts em `bin/`, gera
 fixada por digest, num contêiner como root com as fontes só leitura) e grava um snapshot em
 `backups/restic` (o local, para erro lógico) e o copia (`restic copy`) para o repositório **fora do
 host**, descrito em `secrets/restic-fora.env` (`RESTIC_REPOSITORY` e a credencial do destino; S3,
-B2, `rest-server` ou outro que o restic fale), com a mesma senha (`secrets/restic-password`). Os dois
+B2, `rest-server`, `rclone:` ou outro que o restic fale), com a mesma senha (`secrets/restic-password`). Os dois
 ficam fora do snapshot (seria circular): **a cópia de cada um fora do host é da dona**, num cofre. O
 repositório fora é criado uma vez com `restic init --copy-chunker-params` a partir do local, para a
-deduplicação valer na cópia.
+deduplicação valer na cópia. Nesta produção, o destino é o OneDrive da dona, pelo rclone (abaixo).
 
 | No snapshot (`/eclume/…`) | O que é |
 |---|---|
@@ -557,6 +557,34 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-
    Caddy em `caddy/data/caddy/pki`, **antes** do primeiro deploy, para manter a CA dos clientes.
 3. Rode o deploy (com o `env.prod` restaurado como `deploy/.env.prod`) e então
    `restaurar-backup.sh --repositorio fora --aplicar latest --confirmo`.
+
+Com o destino no OneDrive, a credencial não vai para o cofre: o passo 1 inclui autorizar o rclone de
+novo no host novo, como abaixo, porque a conta da dona é a credencial.
+
+**Destino fora no OneDrive (rclone, desde 2026-10-08).** O `restic-fora.env` é
+`RESTIC_REPOSITORY=rclone:eclume-onedrive:eclume-restic`, uma pasta no OneDrive pessoal da dona,
+escolhido por ela no lugar do B2. A imagem do restic não traz o `rclone` que esse backend chama, e
+por isso o `backup.sh`, o `staging.sh` e o `restaurar-backup.sh` montam dois itens:
+
+- o binário estático da imagem `rclone/rclone` fixada por digest (`RCLONE_IMAGE`), por um volume
+  `eclume-rclone-<digest>` que o Docker preenche na primeira montagem;
+- a configuração de `secrets/restic-rclone/`, gravável porque o rclone renova o token OAuth a cada
+  hora. Ele regrava o arquivo como root, e por isso a configuração só se lê por um contêiner.
+
+A autorização é do eclume, separada da do rclone pessoal do host: um mesmo refresh token usado em
+dois lugares pode ser invalidado pela Microsoft. A pasta `eclume-restic/` está excluída do filtro do
+bisync pessoal (`~/.config/rclone-bisync-onedrive-israel.filters`), que espelha a raiz do OneDrive.
+Para autorizar, ou para reautorizar com `config reconnect eclume-onedrive:` no lugar de
+`config create …` depois de um `invalid_grant` no `backup.log`, rode da estação. O túnel leva a
+porta 53682 do OAuth ao host, e o navegador da estação abre o link `http://127.0.0.1:53682/auth?…`
+que o rclone imprime:
+
+```bash
+ssh -t -L 53682:127.0.0.1:53682 holetz@192.168.15.199 \
+  'install -d -m 700 /srv/eclume/secrets/restic-rclone && docker run --rm -it --network host \
+     -v /srv/eclume/secrets/restic-rclone:/config/rclone rclone/rclone:1.75.1 \
+     config create eclume-onedrive onedrive'
+```
 
 ## Operação
 

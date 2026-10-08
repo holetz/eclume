@@ -153,6 +153,39 @@ def montagens(chamada: list[str]) -> list[str]:
     return [chamada[i + 1] for i, a in enumerate(chamada) if a == "-v"]
 
 
+RCLONE_FORA = "RESTIC_REPOSITORY=rclone:eclume-onedrive:eclume-restic\n"
+
+
+def populacoes(host: Host) -> list[list[str]]:
+    """As chamadas que preenchem o volume do binário do rclone (`--entrypoint true` na imagem dele)."""
+    return [
+        c for c in host.chamadas() if c[0] == "run" and "--entrypoint" in c and c[c.index("--entrypoint") + 1] == "true"
+    ]
+
+
+def volume_do_rclone(host: Host) -> str:
+    """O volume preenchido uma vez, pela imagem fixada do rclone, no /usr/local/bin dela."""
+    (popular,) = populacoes(host)
+    assert popular[-1].startswith("rclone/rclone:")
+    assert "@sha256:" in popular[-1]
+    (montagem,) = montagens(popular)
+    volume, destino = montagem.split(":")
+    assert volume.startswith("eclume-rclone-")
+    assert destino == "/usr/local/bin"
+    return volume
+
+
+def imagem_restic(chamada: list[str]) -> str:
+    return next(a for a in chamada if a.startswith("restic/restic:"))
+
+
+def assert_destino_rclone(chamada: list[str], volume: str, secrets: Path) -> None:
+    """O restic do destino fora recebe o binário do rclone (só leitura) e a configuração gravável."""
+    assert f"{volume}:/usr/local/bin:ro" in montagens(chamada)
+    assert f"{secrets}/restic-rclone:/run/rclone" in montagens(chamada)
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" in chamada
+
+
 def test_backup_snapshot_cifrado_sem_nada_em_claro(host: Host) -> None:
     legado = host.data / "backups"
     for velho in ("pg/eclume-2026-09-29.dump", "caddy/caddy-pki-2026-09-29.tgz", "minio/2026-09-29/x"):
@@ -209,6 +242,50 @@ def test_backup_copia_para_fora_com_a_mesma_retencao(host: Host) -> None:
     assert len(host.restic("forget")) == 2
     assert all("--prune" not in f for f in host.restic("forget"))
     assert host.estado("fora")["ok"] is True
+    # Destino S3: nada de rclone.
+    assert populacoes(host) == []
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in copia
+
+
+def test_backup_copia_para_destino_rclone(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+
+    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="3")
+
+    assert r.returncode == 0, r.stderr
+    volume = volume_do_rclone(host)
+    fora = [c for c in host.chamadas() if c[0] == "run" and "--env-file" in c]
+    assert [c[c.index(imagem_restic(c)) + 1] for c in fora] == ["copy", "forget"]
+    for chamada in fora:
+        assert_destino_rclone(chamada, volume, host.secrets)
+    # O repositório local não passa pelo rclone.
+    (backup,) = host.restic("backup")
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in backup
+    assert host.estado("fora")["ok"] is True
+
+
+def test_backup_conferencia_de_secrets_deixa_de_fora_o_que_o_snapshot_exclui(host: Host, tmp_path: Path) -> None:
+    """O sha256 de secrets/ ignora os restic-* (inclusive a pasta do rclone), como o --exclude do snapshot."""
+    r = host.rodar("backup.sh")
+
+    assert r.returncode == 0, r.stderr
+    (conferencia,) = [c for c in host.restic("-c") if "sha256sum" in c[-1]]
+    raiz = tmp_path / "eclume"
+    for rel in (
+        "secrets/env.prod",
+        "secrets/restic-password",
+        "secrets/restic-fora.env",
+        "secrets/restic-rclone/rclone.conf",
+        "caddy/data/caddy/pki/authorities/local/root.key",
+    ):
+        (raiz / rel).parent.mkdir(parents=True, exist_ok=True)
+        (raiz / rel).write_text(rel)
+    script = conferencia[-1].replace("cd /eclume", f"cd {raiz}")
+    saida = subprocess.run(["sh", "-c", script], capture_output=True, text=True, check=True).stdout
+    assert [linha.split()[1] for linha in saida.splitlines()] == [
+        "caddy/data/caddy/pki/authorities/local/root.key",
+        "secrets/env.prod",
+    ]
 
 
 def test_backup_falha_do_restic_deixa_ok_false(host: Host) -> None:
@@ -267,6 +344,30 @@ def test_restaurar_aplicar_por_data_do_repositorio_fora(host: Host) -> None:
     assert paradas
     assert [c for c in host.chamadas() if c[0] == "start"]
     assert "snapshot bbbb2222" in r.stdout
+
+
+def test_restaurar_do_destino_rclone(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+
+    r = host.rodar("restaurar-backup.sh", "--repositorio", "fora", "--aplicar", "2026-10-01", "--confirmo")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    volume = volume_do_rclone(host)
+    (snapshots,) = host.restic("snapshots")
+    (restore,) = host.restic("sh")
+    for chamada in (snapshots, restore):
+        assert_destino_rclone(chamada, volume, host.secrets)
+
+
+def test_restaurar_do_repositorio_local_ignora_o_rclone(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+
+    r = host.rodar("restaurar-backup.sh", "--aplicar", "2026-10-01", "--confirmo")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert populacoes(host) == []
+    (restore,) = host.restic("sh")
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in restore
 
 
 def test_restaurar_repositorio_invalido(host: Host) -> None:
@@ -388,6 +489,20 @@ def test_ensaio_restaura_do_repositorio_fora_confere_e_derruba(staging: Host) ->
     assert "--url https://127.0.0.1:18444" in smoke
     # Nada restaurado fica em claro depois do ensaio.
     assert not Path(staging.env["STAGING_DIR"], "restaurado").exists()
+
+
+def test_ensaio_le_o_destino_rclone(staging: Host) -> None:
+    (staging.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+
+    r = staging.rodar("staging.sh", "ensaio")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert staging.estado("ensaio")["ok"] is True
+    volume = volume_do_rclone(staging)
+    (restore,) = staging.restic("sh")
+    (check,) = staging.restic("check")
+    for chamada in (restore, check):
+        assert_destino_rclone(chamada, volume, staging.secrets)
 
 
 def test_ensaio_content_hash_divergente_falha(staging: Host) -> None:

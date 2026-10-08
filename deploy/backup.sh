@@ -14,7 +14,8 @@
 # Retenção: MANTER (7) diários, nos dois repositórios: o `forget` roda todo dia e o `prune` (que
 # reescreve pacotes e é a parte cara) só aos domingos. Com secrets/restic-fora.env (RESTIC_REPOSITORY
 # e a credencial do destino), o mesmo snapshot vai por `restic copy` ao repositório fora do host,
-# que usa a mesma senha. Os dumps só existem em claro numa pasta temporária durante a rodada.
+# que usa a mesma senha; um destino rclone (o OneDrive) lê a configuração de secrets/restic-rclone/.
+# Os dumps só existem em claro numa pasta temporária durante a rodada.
 #
 # Estado (contrato com o vigia.sh): estado/backup.json e estado/fora.json ({"ok", "at", "detalhe"},
 # por rename) e estado/secrets.sha256 (sha256sum de secrets/ e da PKI, caminhos relativos ao
@@ -36,6 +37,7 @@ ESTADO="$DATA_DIR/estado"
 REPO="$DEST/restic"
 PKI="$DATA_DIR/caddy/data/caddy/pki"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
+RCLONE_IMAGE="${RCLONE_IMAGE:-rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5}"
 umask 077
 
 log() { echo "$(date '+%F %T') $*"; }
@@ -108,7 +110,7 @@ restic_ "${fontes[@]}" "$RESTIC_IMAGE" backup --host eclume --tag eclume --quiet
 restic_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" "${PRUNE[@]}" --quiet
 # A conferência do ensaio e da prova de host novo: sha256 do que o snapshot levou de secrets/ e da PKI.
 restic_ "${fontes[@]}" --entrypoint sh "$RESTIC_IMAGE" -c \
-  'cd /eclume && find secrets $(test -d caddy && echo caddy) -type f ! -name "restic-*" -exec sha256sum {} + | sort -k 2' \
+  'cd /eclume && find secrets $(test -d caddy && echo caddy) -type f ! -path "secrets/restic-*" -exec sha256sum {} + | sort -k 2' \
   > "$ESTADO/.secrets.sha256.tmp"
 mv -f "$ESTADO/.secrets.sha256.tmp" "$ESTADO/secrets.sha256"
 # O snapshot substitui o que o backup antigo deixava em claro.
@@ -125,8 +127,18 @@ if [[ ! -s "$SECRETS/restic-fora.env" ]]; then
   exit 0
 fi
 log "restic: cópia para o repositório fora do host"
+# Destino rclone (RESTIC_REPOSITORY=rclone:<remoto>:<caminho>, como o OneDrive): a imagem do restic
+# não traz o `rclone` que ele chama. O binário estático da imagem fixada entra por um volume, que o
+# Docker preenche com o /usr/local/bin dela na primeira montagem; a configuração, de
+# secrets/restic-rclone/, entra gravável porque o rclone renova o token OAuth (e a regrava como root).
+destino_rclone=()
+if grep -q '^RESTIC_REPOSITORY=rclone:' "$SECRETS/restic-fora.env"; then
+  volume="eclume-rclone-$(cut -c1-12 <<< "${RCLONE_IMAGE##*sha256:}")"
+  docker run --rm --network none -v "$volume:/usr/local/bin" --entrypoint true "$RCLONE_IMAGE"
+  destino_rclone=(-v "$volume:/usr/local/bin:ro" -v "$SECRETS/restic-rclone:/run/rclone" -e RCLONE_CONFIG=/run/rclone/rclone.conf)
+fi
 fora_() {
-  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" -e RESTIC_PASSWORD_FILE=/run/restic-password \
+  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" "${destino_rclone[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -e RESTIC_CACHE_DIR=/cache -v "$DEST/.restic-cache:/cache" \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
