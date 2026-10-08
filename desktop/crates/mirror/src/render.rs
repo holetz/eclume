@@ -154,6 +154,7 @@ mod tests {
             summary: Some(Summary {
                 version: 3,
                 markdown: "# Ata\n\n- decisão\n\n".into(),
+                transcript_revision: Some(2),
             }),
             markers: vec![],
             transcript: Some(Transcript {
