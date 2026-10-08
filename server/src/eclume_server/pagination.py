@@ -41,12 +41,18 @@ def encode_cursor(sort_value: datetime, row_id: UUID) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
+MAX_CURSOR_LENGTH = 8192
+"""Teto do cursor, medido sobre os reais: ~64 caracteres e, no pior caso (nome com 300 caracteres fora do ASCII), ~5 mil."""
+
+
 def _decode_json(cursor: str) -> object:
-    """O JSON dentro de um cursor base64url; base64, UTF-8 ou JSON inválidos viram 422 no campo `cursor`."""
+    """O JSON dentro de um cursor base64url; grande demais, base64, UTF-8, JSON inválidos ou aninhados demais viram 422 no campo `cursor`."""
+    if len(cursor) > MAX_CURSOR_LENGTH:
+        raise invalid_field("cursor", "cursor inválido")
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         return json.loads(base64.urlsafe_b64decode(padded))
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         raise invalid_field("cursor", "cursor inválido") from exc
 
 
