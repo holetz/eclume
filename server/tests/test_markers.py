@@ -131,3 +131,23 @@ def test_tipo_escolhido_ao_parar_a_gravacao(as_user: Callable[[Account], Api], m
     )
     assert invalid.status_code == 422
     assert invalid.json()["errors"][0]["field"] == "agenda_type_id"
+
+
+def test_marcador_move_o_updated_at_da_gravacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    owner = as_user(make_user())
+    recording = upload_file(owner, audio_bytes(100), markers=[_marker(1_000, "nota")])
+    url = f"/api/v1/recordings/{recording['id']}"
+
+    def updated() -> str:
+        return owner.get(url).json()["updated_at"]
+
+    seen = [updated()]
+    marker_id = _markers(owner, recording["id"])[0]["id"]
+    owner.post(f"{url}/markers", json={"markers": [_marker(2_000, "outra")]})
+    seen.append(updated())
+    owner.patch(f"/api/v1/markers/{marker_id}", json={"note": "editada"})
+    seen.append(updated())
+    owner.delete(f"/api/v1/markers/{marker_id}")
+    seen.append(updated())
+    assert seen == sorted(seen)
+    assert len(set(seen)) == len(seen)

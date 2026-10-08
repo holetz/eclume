@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from eclume_server.db import tables as t
@@ -82,6 +82,12 @@ async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marco
             set_={"note": func.coalesce(statement.excluded.note, t.markers.c.note), "updated_at": func.now()},
         )
     )
+    await touch_recording(conn, recording_id)
+
+
+async def touch_recording(conn: AsyncConnection, recording_id: UUID) -> None:
+    """Move `updated_at` da gravação: é por ele que o `?since=` da pasta sincronizada vê a nota nova."""
+    await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=func.now()))
 
 
 async def list_markers(conn: AsyncConnection, recording_id: UUID) -> list[Row]:
