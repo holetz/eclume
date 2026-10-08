@@ -270,7 +270,11 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   do windows). O pilar android, medido em 08/10/2026 (holetz/eclume#188) com `memory.peak` do cgroup do
   contêiner: pico no teto de 4 GiB, `anon` de 4056 MiB e `oom_kill` 1, com o Gradle (2403 MiB), o daemon
   do Kotlin (972 MiB) e o build-tools do Kotlin (507 MiB) vivos ao mesmo tempo; o cargo não estava no
-  pico. Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
+  pico. A causa era o `./gradlew --stop` que faltava: o Gradle que o `tauri android build` deixa de pé
+  (2 GiB) convivia com o `gradlew --no-daemon` seguinte, e o Kotlin compilava num segundo JVM. Com
+  `kotlin.compiler.execution.strategy=in-process`, `-Xmx1536m`, `org.gradle.workers.max=2` e o `--stop`
+  em `deploy/pilares.sh`, duas execuções seguidas passaram com `anon` de 2658 e 2870 MiB, pico do
+  cgroup de 3581 MiB (o resto é cache de página) e `oom_kill` 0, sem subir o teto. Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
   disco em 90%.
 - Proporcional: o host roda só os pilares que o diff desde o último SHA verde exige (`--todos` na
   estação força os dez) e abandona o SHA que o pre-push disparou e que o `main` já ultrapassou
