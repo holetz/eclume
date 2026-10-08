@@ -5,13 +5,16 @@ O registro é uma tabela literal, de propósito: tirar um cron ou mudar a agenda
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import pytest
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy import text
 
+from eclume_server import storage_deletions
 from eclume_server.config import Settings
 from eclume_server.db.session import make_engine
 from eclume_server.queue import GPU_QUEUE, transcribe_job_id
@@ -140,8 +143,10 @@ def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
     run_cpu(services.settings)
     job = transcribe_job_id(waiting["id"], 1)
     # Borda: com os minutos de 24 h estourados a conta fica retida, e o cron não despacha nada dela.
-    assert _cron(services, dispatch_transcriptions) == 0
+    # (o retorno do cron conta o banco inteiro, então a prova é a fila e o estado da gravação.)
+    _cron(services, dispatch_transcriptions)
     assert job not in _gpu_queue(services)
+    assert api.get(f"/api/v1/recordings/{waiting['id']}").json()["status"] == "queued"
 
     # A janela abre (o despacho do primeiro sai das 24 h): o cron despacha o retido, uma vez.
     _sql(
@@ -149,6 +154,45 @@ def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
         "UPDATE transcription_jobs SET dispatched_at = now() - interval '25 hours' WHERE recording_id = :r",
         r=first["id"],
     )
-    assert _cron(services, dispatch_transcriptions) == 1
-    assert job in _gpu_queue(services)
-    assert _cron(services, dispatch_transcriptions) == 0
+    assert _cron(services, dispatch_transcriptions) >= 1
+    assert _gpu_queue(services).count(job) == 1
+    # Uma segunda passada não repete o despacho.
+    _cron(services, dispatch_transcriptions)
+    assert _gpu_queue(services).count(job) == 1
+
+
+def test_reconcilia_enfileira_o_orfao_velho_e_poupa_o_recente_e_o_conhecido(
+    as_user: Callable[[Account], Api],
+    make_user: Callable[..., Account],
+    services: Services,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    api = as_user(make_user())
+    kept = upload_file(api, audio_bytes(2000, seed="crons-conhecida"))
+    kept_key = _sql(services, "SELECT audio_key FROM recordings WHERE id = :r", r=kept["id"])[0][0]
+    s3, bucket = services.s3(), services.settings.s3_bucket
+    tag = uuid4()
+    orphan = f"users/{tag}/recordings/{tag}/audio"
+    s3.put_object(Bucket=bucket, Key=orphan, Body=b"x")
+
+    def queued() -> set[tuple[str | None, str | None]]:
+        rows = _sql(services, "SELECT key, prefix FROM storage_deletions")
+        return {(key, prefix) for key, prefix in rows}
+
+    before = {row[0] for row in _sql(services, "SELECT id FROM storage_deletions")}
+    try:
+        # Borda: o objeto recém-criado está dentro da margem de 24 h e fica fora da fila.
+        _cron(services, reconcile_storage)
+        assert not any(orphan in pair for pair in queued())
+
+        # Com a margem zerada o órfão entra na fila; o áudio de uma gravação do banco nunca entra.
+        monkeypatch.setattr(storage_deletions, "ORPHAN_AGE", -timedelta(hours=1))
+        assert _cron(services, reconcile_storage) >= 1
+        assert (orphan, None) in queued()
+        assert not any(kept_key in pair or f"recordings/{kept['id']}/" in pair for pair in queued())
+        # Uma segunda passada não duplica o que já está na fila.
+        assert _cron(services, reconcile_storage) == 0
+    finally:
+        # Desfaz tudo o que esta passada enfileirou, inclusive os órfãos de outros testes.
+        _sql(services, "DELETE FROM storage_deletions WHERE id <> ALL(CAST(:ids AS uuid[]))", ids=list(before))
+        s3.delete_object(Bucket=bucket, Key=orphan)
