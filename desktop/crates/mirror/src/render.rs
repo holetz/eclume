@@ -35,6 +35,18 @@ fn hms(ms: u64) -> String {
     )
 }
 
+/// O resumo é de uma revisão anterior da transcrição espelhada. Sem uma das duas revisões não há
+/// como comparar, e o aviso não aparece (a mesma regra do web).
+fn is_stale(item: &MirrorItem) -> bool {
+    match (
+        item.summary.as_ref().and_then(|s| s.transcript_revision),
+        item.transcript.as_ref(),
+    ) {
+        (Some(summary), Some(transcript)) => summary < transcript.revision,
+        _ => false,
+    }
+}
+
 /// O `.md` do resumo: front matter e o Markdown do servidor, ou `None` sem resumo.
 ///
 /// A propriedade `transcript` é o nome do `.jsonl` da mesma pasta (mesmo nome-base); só entra
@@ -68,6 +80,10 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
         out.push_str(&format!("agenda_type: {}\n", yaml_string(agenda)));
     }
     out.push_str(&format!("summary_version: {}\n", summary.version));
+    let stale = is_stale(item);
+    if stale {
+        out.push_str("summary_stale: true\n");
+    }
     if item.transcript.is_some() {
         let file = layout::base_name(layout::start_of(item), &item.recording_id);
         out.push_str(&format!(
@@ -76,6 +92,12 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
         ));
     }
     out.push_str("---\n\n");
+    if stale {
+        out.push_str(
+            "> [!warning] Resumo de uma versão anterior da transcrição\n\
+> A transcrição foi alterada depois deste resumo. Use Regenerar para refletir as mudanças.\n\n",
+        );
+    }
     out.push_str(summary.markdown.trim_end());
     out.push('\n');
     let notes: Vec<String> = item
@@ -199,6 +221,39 @@ summary_version: 3\n\
 transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
 ---\n\n# Ata\n\n- decisão\n";
         assert_eq!(md, expected);
+    }
+
+    #[test]
+    fn resumo_de_revisao_anterior_ganha_propriedade_e_aviso() {
+        let mut velho = item();
+        velho.summary.as_mut().unwrap().transcript_revision = Some(1);
+        let md = markdown(&velho).unwrap();
+        assert!(md.contains("summary_version: 3\nsummary_stale: true\ntranscript:"));
+        assert!(md.contains(
+            "---\n\n> [!warning] Resumo de uma versão anterior da transcrição\n\
+> A transcrição foi alterada depois deste resumo. Use Regenerar para refletir as mudanças.\n\n# Ata\n"
+        ));
+    }
+
+    #[test]
+    fn revisao_igual_maior_ou_ausente_nao_avisa() {
+        for revisao in [Some(2), Some(5), None] {
+            let mut atual = item();
+            atual.summary.as_mut().unwrap().transcript_revision = revisao;
+            let md = markdown(&atual).unwrap();
+            assert!(!md.contains("summary_stale"), "{revisao:?}");
+            assert!(!md.contains("[!warning]"), "{revisao:?}");
+        }
+        let mut sem_transcricao = item();
+        sem_transcricao
+            .summary
+            .as_mut()
+            .unwrap()
+            .transcript_revision = Some(0);
+        sem_transcricao.transcript = None;
+        assert!(!markdown(&sem_transcricao)
+            .unwrap()
+            .contains("summary_stale"));
     }
 
     #[test]
