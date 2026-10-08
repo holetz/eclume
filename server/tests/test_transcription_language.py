@@ -120,3 +120,23 @@ def test_retranscrever_com_locutores_vence_a_nota_e_o_admin(
     assert owner.post(url, json={"min_speakers": 0}).status_code == 422
     assert owner.post(url, json={"min_speakers": 2, "max_speakers": 3}).status_code == 202
     assert _speakers(run_gpu(services.settings)) == (2, 3)
+
+
+def test_retranscrever_recusa_locutores_acima_do_teto_e_booleano(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api], services: Services
+):
+    owner = as_user(make_user())
+    recording = upload_file(owner, audio_bytes(next(_sizes)))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    url = f"/api/v1/recordings/{recording['id']}/retranscribe"
+    for body in (
+        {"min_speakers": 31},
+        {"max_speakers": 31},
+        {"min_speakers": 10**30},
+        {"max_speakers": 256},
+        {"min_speakers": True},
+        {"max_speakers": False},
+    ):
+        assert owner.post(url, json=body).status_code == 422, body
+    assert owner.post(url, json={"min_speakers": 30, "max_speakers": 30}).status_code == 202

@@ -88,6 +88,10 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"diarization": {"model": "pyannote/speaker-diarization-3.1"}}, None),
         ({"diarization": {"min_speakers": 5, "max_speakers": 2}}, "diarization.min_speakers"),
         ({"diarization": {"enabled": None}}, "diarization.enabled"),
+        ({"diarization": {"min_speakers": 31}}, None),
+        ({"diarization": {"max_speakers": 10**30}}, None),
+        ({"diarization": {"min_speakers": True}}, None),
+        ({"diarization": {"max_speakers": False}}, None),
         # O resumo automático segue o tipo de agenda e o provider de `summaries`: o bloco saiu.
         ({"summarization": {"auto_summarize": True}}, None),
         ({"preprocessing": {"denoise": {"method": "spleeter"}}}, None),
