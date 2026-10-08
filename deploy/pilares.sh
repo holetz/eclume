@@ -185,6 +185,9 @@ pilar_android() {
   tauri_android_builds | while read -r antigo; do rm -rf "$antigo"; done
   run npm --prefix mobile run tauri -- android build --apk --target aarch64 --ci
   local invasor
+  # O Gradle que o tauri deixa de pé é um segundo JVM de ~2 GiB ao lado do --no-daemon de baixo, e os dois
+  # somados estouram o teto de memória do contêiner (holetz/eclume#188).
+  (cd "$gradle" && run ./gradlew --stop)
   invasor="$(tauri_android_builds)"
   [[ -z "$invasor" ]] || { echo "o Gradle escreveu no registro do cargo: $invasor" >&2; return 1; }
   (cd "$gradle" && run ./gradlew --no-daemon :tauri-plugin-eclume-gravador:testDebugUnitTest \
