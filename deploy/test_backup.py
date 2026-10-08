@@ -54,9 +54,15 @@ elif cmd == "exec":
         print("DUMP")
     elif "psql" in args:
         sys.stdin.read()
+        if os.environ.get("FAKE_PSQL_FALHA") and os.environ["FAKE_PSQL_FALHA"] in " ".join(args):
+            sys.exit(1)
         print("recordings=1 summaries=0 transcripts=1 users=1")
     elif "pg_restore" in args:
         sys.stdin.read()
+        ruim = os.environ.get("FAKE_DUMP_RUIM", "")
+        if ("--list" in args and ruim == "lista") or ("--list" not in args and ruim == "restaura"):
+            print("pg_restore: error: unexpected end of file", file=sys.stderr)
+            sys.exit(1)
 elif cmd == "run":
     if "claude" in args and os.environ.get("FAKE_SEM_CLAUDE"):
         sys.exit(127)
@@ -322,6 +328,66 @@ def test_restaurar_teste_le_o_snapshot_e_apaga_a_copia_em_claro(host: Host) -> N
     assert "RESTIC_REPOSITORY=/repo" in restore
     assert any(c[:2] == ["exec", "-i"] and "pg_restore" in c for c in host.chamadas())
     assert not list((host.data / "backups").glob(".restaurar.*"))
+
+
+def sql_chamadas(host: Host) -> list[str]:
+    return [" ".join(c) for c in host.chamadas() if c[:2] == ["exec", "-i"] and "psql" in c]
+
+
+def indice(chamadas: list[str], trecho: str) -> int:
+    return next(i for i, c in enumerate(chamadas) if trecho in c)
+
+
+@pytest.fixture
+def dump_pre_deploy(host: Host) -> Path:
+    dump = host.data / "backups" / "pre-deploy" / "x.dump"
+    dump.parent.mkdir(parents=True)
+    dump.write_text("PGDMP")
+    return dump
+
+
+def test_restaurar_banco_valida_e_restaura_no_temporario_antes_de_parar(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    chamadas = [" ".join(c) for c in host.chamadas()]
+    lista = indice(chamadas, "pg_restore --list")
+    temporario = indice(chamadas, "pg_restore -U eclume -d eclume_restore_novo")
+    parada = indice(chamadas, "stop ")
+    troca = indice(chamadas, "rename to eclume_antes")
+    assert lista < temporario < parada < troca
+    assert not any("drop database eclume" in c.replace("if exists ", "") and "eclume_" not in c for c in chamadas)
+    assert [c for c in host.chamadas() if c[0] == "start"]
+
+
+@pytest.mark.parametrize("ruim", ["lista", "restaura"])
+@pytest.mark.parametrize("modo", ["banco", "aplicar"])
+def test_restaurar_dump_truncado_nao_toca_nos_servicos_nem_no_banco(
+    host: Host, dump_pre_deploy: Path, modo: str, ruim: str
+) -> None:
+    args = ("--banco", str(dump_pre_deploy)) if modo == "banco" else ("--aplicar", "latest")
+
+    r = host.rodar("restaurar-backup.sh", *args, "--confirmo", FAKE_DUMP_RUIM=ruim)
+
+    assert r.returncode != 0
+    assert "FALHA" in r.stderr
+    assert [c for c in host.chamadas() if c[0] in ("stop", "start")] == []
+    sql = sql_chamadas(host)
+    assert not any("rename" in c or "pg_terminate_backend" in c for c in sql)
+    assert not any("drop database eclume " in c or c.endswith("drop database eclume") for c in sql)
+    assert not any("mirror" in c for c in [" ".join(c) for c in host.chamadas()])
+
+
+def test_restaurar_falha_na_troca_devolve_o_banco_e_sobe_os_servicos(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar(
+        "restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_PSQL_FALHA="rename to eclume_antes"
+    )
+
+    assert r.returncode != 0
+    chamadas = host.chamadas()
+    assert [c for c in chamadas if c[0] == "stop"]
+    assert [c for c in chamadas if c[0] == "start"]
+    assert "rename to eclume_antes" in " ".join(sql_chamadas(host))
 
 
 def test_restaurar_aplicar_exige_confirmacao(host: Host) -> None:
