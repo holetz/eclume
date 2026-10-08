@@ -130,7 +130,11 @@ export function RecordingPage() {
 
         {data.transcript_id !== null && (
           <div className={styles.docGrid}>
-            <SummaryDoc recording={data} onChangeType={() => setChangingType(true)} />
+            <SummaryDoc
+              recording={data}
+              transcriptRevision={transcript.data?.revision}
+              onChangeType={() => setChangingType(true)}
+            />
             <FieldsPanel recording={data} onChangeType={() => setChangingType(true)} />
           </div>
         )}
