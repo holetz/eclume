@@ -108,22 +108,57 @@ container() {
     --filter "label=com.docker.compose.service=$1" | head -n 1
 }
 
+# trocar_bancos <psql...>: encerra conexões e troca eclume pelo banco temporário (eclume_antes guarda o antigo).
+trocar_bancos() {
+  "$@" -c "drop database if exists eclume_antes" \
+    -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', 'eclume_restore_novo') and pid <> pg_backend_pid()" \
+    -c "alter database eclume rename to eclume_antes" -c "alter database eclume_restore_novo rename to eclume" >/dev/null &&
+    { "$@" -c "drop database if exists eclume_antes" >/dev/null || true; }
+}
+# restaurar_validando <dump> <servicos...>: o dump prova restaurar ANTES de qualquer coisa destrutiva.
+# 1) pg_restore --list; 2) restaura num banco temporário com os serviços ainda no ar; 3) só então para
+# os serviços (ids_parados, que o chamador sobe), renomeia eclume -> eclume_antes e o temporário ->
+# eclume e apaga o antigo. Falha antes da parada: nada muda. Falha depois: o banco antigo volta ao nome e os serviços sobem.
+ids_parados=()
+restaurar_validando() {
+  local dump="$1" tmpdb=eclume_restore_novo antes=eclume_antes
+  local ids=() s id services=(server worker worker-gpu)
+  local sql=(docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt -d postgres)
+  for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
+  if ! docker exec -i "$pg" pg_restore --list < "$dump" >/dev/null; then
+    echo "FALHA: o dump $dump não é legível pelo pg_restore; nada foi alterado" >&2
+    return 1
+  fi
+  "${sql[@]}" -c "drop database if exists $tmpdb" -c "create database $tmpdb" >/dev/null
+  if ! docker exec -i "$pg" pg_restore -U eclume -d "$tmpdb" --exit-on-error < "$dump"; then
+    "${sql[@]}" -c "drop database if exists $tmpdb" >/dev/null || true
+    echo "FALHA: o dump não restaura num banco temporário; produção e serviços intactos" >&2
+    return 1
+  fi
+  echo "dump validado; parando ${services[*]}"
+  [[ "${#ids[@]}" -eq 0 ]] || docker stop "${ids[@]}" >/dev/null
+  ids_parados=("${ids[@]}")
+  if ! trocar_bancos "${sql[@]}"; then
+    # Desfaz o que a troca fez: o banco antigo volta ao nome e os serviços sobem.
+    "${sql[@]}" -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', '$antes') and pid <> pg_backend_pid()" >/dev/null 2>&1 || true
+    if ! "${sql[@]}" -c "select 1 from pg_database where datname = 'eclume'" | grep -q 1; then
+      "${sql[@]}" -c "alter database $antes rename to eclume" >/dev/null 2>&1 || true
+    fi
+    "${sql[@]}" -c "drop database if exists $tmpdb" >/dev/null 2>&1 || true
+    [[ "${#ids[@]}" -eq 0 ]] || docker start "${ids[@]}" >/dev/null 2>&1 || true
+    echo "FALHA: a troca de bancos falhou; o banco anterior foi devolvido e os serviços subiram" >&2
+    return 1
+  fi
+}
+
 # --banco: só o banco, do dump que o deploy grava antes de aplicar migrations (holetz/eclume#92).
 # O bucket não muda: o dump é de minutos antes, e a fila de exclusão e a reconciliação acertam o resto.
 if [[ "$mode" == --banco ]]; then
   [[ -s "$dump" ]] || { echo "falta $dump" >&2; exit 1; }
   pg="$(container postgres)"
   [[ -n "$pg" ]] || { echo "o postgres do projeto eclume não está rodando" >&2; exit 1; }
-  services=(server worker worker-gpu)
-  ids=()
-  for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
-  echo "parando ${services[*]}"
-  [[ "${#ids[@]}" -eq 0 ]] || docker stop "${ids[@]}" >/dev/null
-  docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt -d postgres \
-    -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'eclume' and pid <> pg_backend_pid()" \
-    -c "drop database eclume" -c "create database eclume" >/dev/null
-  docker exec -i "$pg" pg_restore -U eclume -d eclume --exit-on-error < "$dump"
-  [[ "${#ids[@]}" -eq 0 ]] || docker start "${ids[@]}" >/dev/null
+  restaurar_validando "$dump"
+  [[ "${#ids_parados[@]}" -eq 0 ]] || docker start "${ids_parados[@]}" >/dev/null
   echo "OK: banco restaurado de $dump; suba as imagens do deploy correspondente (deploy.sh --voltar)"
   exit 0
 fi
@@ -191,17 +226,10 @@ if [[ "$mode" == --teste ]]; then
 fi
 
 # --aplicar
-services=(server worker worker-gpu)
-ids=()
-for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
-echo "parando ${services[*]}"
-[[ "${#ids[@]}" -eq 0 ]] || docker stop "${ids[@]}" >/dev/null
-psql_ -d postgres -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'eclume' and pid <> pg_backend_pid()" >/dev/null
-psql_ -d postgres -c "drop database eclume" -c "create database eclume"
-docker exec -i "$pg" pg_restore -U eclume -d eclume --exit-on-error < "$dump"
+restaurar_validando "$dump"
 echo "banco: $(psql_ -d eclume -c "$count_sql")"
 mc mb --ignore-existing dst/eclume >/dev/null
 mc mirror --overwrite --quiet /snap dst/eclume >/dev/null
 echo "bucket: $(mc ls --recursive dst/eclume | wc -l) objetos"
-[[ "${#ids[@]}" -eq 0 ]] || docker start "${ids[@]}" >/dev/null
+[[ "${#ids_parados[@]}" -eq 0 ]] || docker start "${ids_parados[@]}" >/dev/null
 echo "OK: produção restaurada do snapshot $snap"
