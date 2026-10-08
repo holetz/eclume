@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy import select
 
 from eclume_server.db import tables as t
@@ -31,6 +31,9 @@ DIARIZATION_MODELS = ("pyannote/speaker-diarization-community-1",)
 HF_TOKEN = "hf_token"  # noqa: S105 — nome do segredo, não o valor
 ANTHROPIC_API_KEY = "anthropic_api_key"
 KNOWN_SECRETS = (HF_TOKEN, ANTHROPIC_API_KEY)
+# Teto de locutores esperados: uma reunião institucional (comitê, conselho, assembleia) raramente passa de
+# duas dezenas de vozes. Fica bem abaixo do `uint8` do `count` do pyannote (255), que estoura além de 255.
+MAX_SPEAKERS = 30
 
 
 def _http_url(value: str | None) -> str | None:
@@ -44,6 +47,16 @@ def _http_url(value: str | None) -> str | None:
 
 
 BaseUrl = Annotated[str | None, AfterValidator(_http_url)]
+
+
+def _not_bool(value: object) -> object:
+    if isinstance(value, bool):
+        msg = "precisa ser um inteiro, não um booleano"
+        raise ValueError(msg)  # noqa: TRY004 — o pydantic só vira 422 com ValueError
+    return value
+
+
+SpeakerCount = Annotated[int, BeforeValidator(_not_bool), Field(ge=1, le=MAX_SPEAKERS)] | None
 
 
 class _Block(BaseModel):
@@ -68,8 +81,8 @@ class DiarizationPatch(_Block):
 
     enabled: bool | None = None
     model: Literal[DIARIZATION_MODELS] | None = None  # type: ignore[valid-type]
-    min_speakers: int | None = Field(default=None, ge=1)
-    max_speakers: int | None = Field(default=None, ge=1)
+    min_speakers: SpeakerCount = None
+    max_speakers: SpeakerCount = None
 
 
 class DenoisePatch(_Block):

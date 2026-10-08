@@ -36,6 +36,7 @@ from eclume_server.recordings import (
 )
 from eclume_server.routes.uploads import LANGUAGE, Kind
 from eclume_server.security import sign, signature_matches
+from eclume_server.settings_admin import SpeakerCount
 from eclume_server.speaker_naming import CONTINUED, release
 
 router = APIRouter()
@@ -65,8 +66,8 @@ class RetranscribeRequest(BaseModel):
     """Schema `RetranscribeRequest`."""
 
     language: str | None = Field(default=None, pattern=LANGUAGE)
-    min_speakers: int | None = Field(default=None, ge=1)
-    max_speakers: int | None = Field(default=None, ge=1)
+    min_speakers: SpeakerCount = None
+    max_speakers: SpeakerCount = None
 
     @model_validator(mode="after")
     def _ordered(self) -> RetranscribeRequest:
