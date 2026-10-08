@@ -50,6 +50,8 @@ class EngineOptions:
     batch_size: int | None = None
     fallback_model: str | None = None
     diarization_model: str | None = None
+    # Termos da conta (nomes de pessoas) que o ASR deve favorecer; valem só para este job.
+    vocabulary: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, options: Mapping[str, Any] | None) -> EngineOptions:
@@ -72,6 +74,7 @@ class EngineOptions:
             batch_size=_int("batch_size"),
             fallback_model=options.get("fallback_model") or None,
             diarization_model=options.get("diarization_model") or None,
+            vocabulary=tuple(str(term) for term in options.get("vocabulary") or () if str(term).strip()),
         )
 
 
