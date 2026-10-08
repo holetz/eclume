@@ -241,6 +241,7 @@ mod tests {
             agenda_type: None,
             summary: None,
             transcript: None,
+            markers: vec![],
         }
     }
 

@@ -373,6 +373,14 @@ impl Client {
         }
     }
 
+    /// Os marcadores da gravação (`recordings:read`), em ordem de instante; a nota é opcional.
+    pub fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>> {
+        let url = self.endpoint(&format!("/recordings/{recording_id}/markers"));
+        let page: api::MarkerPage =
+            self.call_json("falha ao ler os marcadores", HttpRequest::new("GET", url))?;
+        Ok(page.items)
+    }
+
     /// A transcrição de uma gravação: `GET /api/v1/transcripts?recording_id=` (`transcripts:read`,
     /// que a credencial de dispositivo tem desde o contrato 2.8.0). `Ok(None)` sem transcrição.
     pub fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {

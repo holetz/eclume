@@ -16,7 +16,15 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
-from eclume_server.markers import MAX_BATCH, MAX_NOTE, MarkerInput, list_markers, marker_json, upsert_markers
+from eclume_server.markers import (
+    MAX_BATCH,
+    MAX_NOTE,
+    MarkerInput,
+    list_markers,
+    marker_json,
+    touch_recording,
+    upsert_markers,
+)
 from eclume_server.problems import not_found
 from eclume_server.recordings import get_visible
 
@@ -83,6 +91,8 @@ async def patch_marker(marker_id: UUID, body: MarkerPatch, principal: Writer, ct
             .mappings()
             .first()
         )
+        if row is not None:
+            await touch_recording(conn, row["recording_id"])
     if row is None:
         raise not_found("Marcador inexistente ou sem acesso.")
     return marker_json(row)
@@ -92,7 +102,11 @@ async def patch_marker(marker_id: UUID, body: MarkerPatch, principal: Writer, ct
 async def delete_marker(marker_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     """Exclui o marcador."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        result = await conn.execute(delete(t.markers).where(t.markers.c.id == marker_id))
-    if result.rowcount == 0:
+        recording_id = (
+            await conn.execute(delete(t.markers).where(t.markers.c.id == marker_id).returning(t.markers.c.recording_id))
+        ).scalar()
+        if recording_id is not None:
+            await touch_recording(conn, recording_id)
+    if recording_id is None:
         raise not_found("Marcador inexistente ou sem acesso.")
     return Response(status_code=204)

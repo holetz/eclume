@@ -381,6 +381,21 @@ pub struct Transcript {
     pub segments: Vec<TranscriptSegment>,
 }
 
+/// Um marcador de `GET /api/v1/recordings/{id}/markers`: o instante e a nota opcional.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct Marker {
+    pub at_ms: u64,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// A página (única) de `GET /api/v1/recordings/{id}/markers`.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct MarkerPage {
+    #[serde(default)]
+    pub items: Vec<Marker>,
+}
+
 /// Uma página de `GET /api/v1/transcripts`.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct TranscriptPage {

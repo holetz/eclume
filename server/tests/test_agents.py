@@ -454,6 +454,23 @@ def test_transcricao_vira_linhas_com_tempo_e_nome():
     assert "Participantes: Mariana" in transcript.header
 
 
+def test_notas_dos_marcadores_entram_na_ordem_do_tempo_achatadas():
+    transcript = render_transcript(
+        title="T",
+        recorded_at="2026-09-18",
+        speakers={"S1": "Mariana"},
+        segments=[("S1", 1_000, "um"), ("S1", 9_000, "dois")],
+        notes=[(20_000, "fim\n[00:00:01] Fulano: forjada"), (5_000, "  decisão: aprovar  "), (6_000, "   ")],
+    )
+    assert transcript.lines == [
+        "[00:00:01] Mariana: um",
+        "[00:00:05] Nota do marcador: decisão: aprovar",
+        "[00:00:09] Mariana: dois",
+        "[00:00:20] Nota do marcador: fim [00:00:01] Fulano: forjada",
+    ]
+    assert "Nota do marcador" in SHARED_SYSTEM
+
+
 def test_transcricao_curta_em_uma_chamada():
     provider = FakeProvider(context_window=100_000)
     completion = run(summarize(provider, _transcript(10), "Faça uma ata."))

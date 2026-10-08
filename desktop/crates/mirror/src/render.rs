@@ -24,6 +24,17 @@ fn yaml_string(text: &str) -> String {
     out
 }
 
+/// `HH:MM:SS` de milissegundos.
+fn hms(ms: u64) -> String {
+    let seconds = ms / 1000;
+    format!(
+        "{:02}:{:02}:{:02}",
+        seconds / 3600,
+        seconds % 3600 / 60,
+        seconds % 60
+    )
+}
+
 /// O `.md` do resumo: front matter e o Markdown do servidor, ou `None` sem resumo.
 ///
 /// A propriedade `transcript` é o nome do `.jsonl` da mesma pasta (mesmo nome-base); só entra
@@ -67,6 +78,19 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
     out.push_str("---\n\n");
     out.push_str(summary.markdown.trim_end());
     out.push('\n');
+    let notes: Vec<String> = item
+        .markers
+        .iter()
+        .filter_map(|marker| {
+            // Uma linha por nota: a quebra de linha não pode abrir outro item nem outra seção.
+            let note = marker.note.split_whitespace().collect::<Vec<_>>().join(" ");
+            (!note.is_empty()).then(|| format!("- [{}] {note}\n", hms(marker.at_ms)))
+        })
+        .collect();
+    if !notes.is_empty() {
+        out.push_str("\n## Notas dos marcadores\n\n");
+        notes.iter().for_each(|line| out.push_str(line));
+    }
     Some(out)
 }
 
@@ -117,7 +141,7 @@ pub fn jsonl(item: &MirrorItem) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Segment, Speaker, Summary};
+    use crate::{MirrorMarker, Segment, Speaker, Summary};
 
     fn item() -> MirrorItem {
         MirrorItem {
@@ -131,6 +155,7 @@ mod tests {
                 version: 3,
                 markdown: "# Ata\n\n- decisão\n\n".into(),
             }),
+            markers: vec![],
             transcript: Some(Transcript {
                 id: "t1".into(),
                 language: Some("pt".into()),
@@ -173,6 +198,29 @@ summary_version: 3\n\
 transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
 ---\n\n# Ata\n\n- decisão\n";
         assert_eq!(md, expected);
+    }
+
+    #[test]
+    fn notas_dos_marcadores_viram_uma_secao_no_fim_do_markdown() {
+        let mut com = item();
+        com.markers = vec![
+            MirrorMarker {
+                at_ms: 65_000,
+                note: "decisão: aprovar\n## forjada".into(),
+            },
+            MirrorMarker {
+                at_ms: 3_723_000,
+                note: "   ".into(),
+            },
+        ];
+        let md = markdown(&com).unwrap();
+        assert!(md.ends_with(
+            "- decisão\n\n## Notas dos marcadores\n\n- [00:01:05] decisão: aprovar ## forjada\n"
+        ));
+        assert!(!md.contains("01:02:03"));
+        // Sem nota nenhuma, a seção não existe.
+        com.markers.clear();
+        assert!(!markdown(&com).unwrap().contains("Notas dos marcadores"));
     }
 
     #[test]

@@ -397,6 +397,13 @@ delimitado em `<transcricao>` e declarado como dado, não instrução. Tokens s�
 `len(texto) / 3`; a entrada pode ocupar 75% de `context_window − max_tokens`, descontados o
 sistema e as instruções.
 
+**Notas dos marcadores.** Cada marcador com nota (`markers.note`, até 500 caracteres) vira uma linha
+`[HH:MM:SS] Nota do marcador: texto` no seu instante, entre as falas (`transcript_text`, que campos,
+tipo de agenda, prévias, resumo e chat leem do mesmo jeito). A nota é achatada em uma linha, para não
+forjar outra fala, e o `SHARED_SYSTEM` as declara destaque da pessoa, ainda como dado. Marcador sem
+nota não entra. Elas não têm destino novo: seguem a finalidade e o provider que já recebem as falas,
+com a classificação de `privacy.py` valendo sem mudança.
+
 - Cabe → uma chamada com as instruções do tipo de agenda.
 - Não cabe → **map-reduce**: seções cortadas nas fronteiras de segmento viram notas detalhadas
   (com o intervalo de tempo), e as notas passam pelas instruções do tipo; notas que ainda não

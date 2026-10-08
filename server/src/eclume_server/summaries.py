@@ -490,7 +490,15 @@ async def transcript_text(conn: AsyncConnection, transcript_id: UUID) -> Transcr
             .order_by(t.segments.c.position)
         )
     ).all()
+    marks = (
+        await conn.execute(
+            select(t.markers.c.at_ms, t.markers.c.note)
+            .join(t.transcripts, t.transcripts.c.recording_id == t.markers.c.recording_id)
+            .where(t.transcripts.c.id == transcript_id, t.markers.c.note.is_not(None))
+        )
+    ).all()
     return render_transcript(
+        notes=[(at_ms, note) for at_ms, note in marks],
         title=head["title"],
         recorded_at=head["recorded_at"].strftime("%d/%m/%Y"),
         speakers={row.speaker_id: row.label for row in speakers},

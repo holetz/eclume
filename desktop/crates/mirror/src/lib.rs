@@ -33,6 +33,15 @@ pub struct MirrorItem {
     pub agenda_type: Option<String>,
     pub summary: Option<Summary>,
     pub transcript: Option<Transcript>,
+    /// As notas dos marcadores (só os que têm nota), em ordem de instante.
+    pub markers: Vec<MirrorMarker>,
+}
+
+/// Um marcador com nota: vira uma linha da seção "Notas dos marcadores" do `.md`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MirrorMarker {
+    pub at_ms: u64,
+    pub note: String,
 }
 
 /// O resumo atual.
