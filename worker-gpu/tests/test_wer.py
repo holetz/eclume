@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+
 import pytest
 
 from eclume_worker.wer import cer, char_counts, edit_counts, normalize, wer, word_counts
@@ -60,3 +62,40 @@ def test_edit_counts_sequencias_genericas():
     contagens = edit_counts(list("kitten"), list("sitting"))
     assert contagens.errors == 3
     assert (contagens.substitutions, contagens.insertions) == (2, 1)
+
+
+def _matriz_completa(reference: list[str], hypothesis: list[str]) -> int:
+    rows, cols = len(reference), len(hypothesis)
+    cost = [[0] * (cols + 1) for _ in range(rows + 1)]
+    for i in range(rows + 1):
+        cost[i][0] = i
+    for j in range(cols + 1):
+        cost[0][j] = j
+    for i in range(1, rows + 1):
+        for j in range(1, cols + 1):
+            diagonal = cost[i - 1][j - 1] + (reference[i - 1] != hypothesis[j - 1])
+            cost[i][j] = min(diagonal, cost[i - 1][j] + 1, cost[i][j - 1] + 1)
+    return cost[rows][cols]
+
+
+def test_edit_counts_igual_a_matriz_completa_em_entradas_aleatorias():
+    rnd = random.Random(190)  # noqa: S311
+    for _ in range(300):
+        alfabeto = "abcd"[: rnd.randint(1, 4)]
+        ref = [rnd.choice(alfabeto) for _ in range(rnd.randint(0, 40))]
+        hip = [rnd.choice(alfabeto) for _ in range(rnd.randint(0, 40))]
+        c = edit_counts(ref, hip)
+        assert c.errors == _matriz_completa(ref, hip)
+        assert c.deletions - c.insertions == len(ref) - len(hip)
+        assert c.reference_len == len(ref)
+        assert c.substitutions + c.deletions <= len(ref)
+
+
+def test_edit_counts_texto_longo_com_poucos_erros():
+    ref = list("abcdefghij" * 300)
+    hip = ref.copy()
+    hip[100] = "z"
+    del hip[1500]
+    hip.insert(2500, "y")
+    c = edit_counts(ref, hip)
+    assert (c.substitutions, c.deletions, c.insertions) == (1, 1, 1)
