@@ -126,11 +126,13 @@ const NO_PROVIDER = `Sem resumo: ${motivo('no_provider')}.`
 
 interface SummaryDocProps {
   recording: Recording
+  /** A `revision` da transcrição já carregada; `undefined` enquanto ela não chegou. */
+  transcriptRevision?: number
   onChangeType: () => void
 }
 
 /** O documento do resumo com a `.doc-bar` (tipo, origem e versão, e as ações) e os estados da geração. */
-export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
+export function SummaryDoc({ recording, transcriptRevision, onChangeType }: SummaryDocProps) {
   const state = useSummaryState(recording.id, recording.transcript_id !== null)
   const { remove, generate } = useSummaryMutations(recording)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -176,6 +178,10 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
       setCopied('error')
     }
   }
+
+  // Só avisa com a revisão da transcrição em mãos e sem uma versão nova a caminho.
+  const stale =
+    current != null && pending === null && transcriptRevision !== undefined && current.transcript_revision < transcriptRevision
 
   function regenerate() {
     generate.mutate(undefined, {
@@ -303,6 +309,12 @@ export function SummaryDoc({ recording, onChangeType }: SummaryDocProps) {
       {copied === 'error' && (
         <p className="alert alert-error" role="alert">
           Não deu para copiar: o navegador não liberou a área de transferência.
+        </p>
+      )}
+      {stale && (
+        <p className="alert alert-warning" role="status">
+          <span className="alert-title">Resumo de uma versão anterior da transcrição</span>
+          <span>A transcrição foi alterada depois deste resumo. Use Regenerar para refletir as mudanças.</span>
         </p>
       )}
       {pending && (
