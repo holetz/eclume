@@ -38,6 +38,7 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
   (holetz/eclume#151).
 - Tela da gravação com a transcrição numa área de rolagem própria e os locutores num bloco
   recolhível (holetz/eclume#143).
+- Locutores esperados (`min_speakers`/`max_speakers`), ao retranscrever e nos limites do admin, passam a aceitar de 1 a 30 e a recusar booleano com 422, em vez de falhar a diarização depois de gastar a GPU (contrato 2.26.0, holetz/eclume#191).
 
 ### Obsoleto
 
