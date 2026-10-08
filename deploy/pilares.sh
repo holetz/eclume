@@ -157,7 +157,21 @@ pilar_auditoria() {
 tauri_android_builds() {
   local base="${CARGO_HOME:-/opt/cargo}/registry/src"
   [[ -d "$base" ]] || return 0
-  find "$base" -mindepth 5 -maxdepth 5 -path '*/tauri-[0-9]*/mobile/android/build' -type d
+  find "$base" -mindepth 5 -maxdepth 5 -path '*/tauri-[0-9]*/mobile/android/build' -type d -print0
+}
+
+# Os caminhos saem separados por NUL e são lidos assim: um nome com LF não pode partir o caminho e
+# levar o rm -rf para fora do alvo.
+tauri_android_limpar_builds() {
+  local antigo
+  while IFS= read -r -d '' antigo; do rm -rf -- "$antigo"; done < <(tauri_android_builds)
+}
+
+# Falha (e nomeia o que voltou) se algum build/ reapareceu no registro.
+tauri_android_invasores() {
+  local invasor achados=()
+  while IFS= read -r -d '' invasor; do achados+=("$invasor"); done < <(tauri_android_builds)
+  ((${#achados[@]} == 0)) || { echo "o Gradle escreveu no registro do cargo: ${achados[*]}" >&2; return 1; }
 }
 
 # O APK de release do celular, verificado: minificado (R8) e assinado com uma chave descartável
@@ -182,14 +196,12 @@ pilar_android() {
     -validity 2 -storepass gate-descartavel -keypass gate-descartavel -dname "CN=eclume gate"
   printf 'storeFile=%s\npassword=gate-descartavel\nkeyAlias=gate\n' "$chaves/gate.jks" \
     > "$gradle/keystore.properties"
-  tauri_android_builds | while read -r antigo; do rm -rf "$antigo"; done
+  tauri_android_limpar_builds
   run npm --prefix mobile run tauri -- android build --apk --target aarch64 --ci
-  local invasor
   # O Gradle que o tauri deixa de pé é um segundo JVM de ~2 GiB ao lado do --no-daemon de baixo, e os dois
   # somados estouram o teto de memória do contêiner (holetz/eclume#188).
   (cd "$gradle" && run ./gradlew --stop)
-  invasor="$(tauri_android_builds)"
-  [[ -z "$invasor" ]] || { echo "o Gradle escreveu no registro do cargo: $invasor" >&2; return 1; }
+  tauri_android_invasores
   (cd "$gradle" && run ./gradlew --no-daemon :tauri-plugin-eclume-gravador:testDebugUnitTest \
     :tauri-plugin-eclume-gravador:lintRelease :app:lintUniversalRelease)
   local apk
