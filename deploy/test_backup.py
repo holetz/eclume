@@ -12,7 +12,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -70,6 +72,10 @@ elif cmd == "exec":
             if any(x in sql for x in falhas):
                 print(f"ERROR: simulado: {sql}", file=sys.stderr)
                 sys.exit(1)
+            if os.environ.get("FAKE_PARA_EM") and os.environ["FAKE_PARA_EM"] in sql:
+                (base / "parado").write_text(sql)
+                import time
+                time.sleep(60)
             if m := re.match(r"create database (\w+)", sql):
                 bancos.add(m[1])
             elif m := re.match(r"drop database if exists (\w+)", sql):
@@ -971,3 +977,65 @@ def test_releases_rodam_os_conteineres_com_cpu_shares_e_podam_o_dist() -> None:
         for linha in texto.splitlines():
             if linha.strip().startswith("docker run ") and "comum" not in linha:
                 assert "--cpu-shares 256" in linha, (nome, linha)
+
+
+@pytest.mark.parametrize("modo", ["banco", "aplicar"])
+def test_restaurar_nao_apaga_o_work_herdado_do_ambiente(
+    host: Host, dump_pre_deploy: Path, tmp_path: Path, modo: str
+) -> None:
+    vitima = tmp_path / "vitima"
+    vitima.mkdir()
+    (vitima / "x").write_text("x")
+    if modo == "banco":
+        r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", work=str(vitima))
+    else:
+        r = host.rodar(
+            "restaurar-backup.sh", "--aplicar", "latest", "--confirmo", work=str(vitima), FAKE_RUNNING="postgres"
+        )
+
+    assert (r.returncode == 0) == (modo == "banco"), r.stderr
+    assert (vitima / "x").exists()
+
+
+def interromper_em(host: Host, dump: Path, trecho: str) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        ["bash", str(DEPLOY / "restaurar-backup.sh"), "--banco", str(dump), "--confirmo"],
+        env={**host.env, "FAKE_PARA_EM": trecho},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        prazo = time.monotonic() + 20
+        while not (host.bin / "parado").exists() and time.monotonic() < prazo:
+            time.sleep(0.05)
+        assert (host.bin / "parado").exists(), "o docker falso não chegou ao SQL esperado"
+        os.killpg(proc.pid, signal.SIGINT)
+        saida, erro = proc.communicate(timeout=20)
+    finally:
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGKILL)
+    return subprocess.CompletedProcess(proc.args, proc.returncode, saida, erro)
+
+
+def test_restaurar_sigint_no_segundo_rename_sem_eclume_nao_religa_e_diz_como_recuperar(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = interromper_em(host, dump_pre_deploy, "alter database eclume_restore_novo rename to eclume")
+
+    assert r.returncode != 0
+    assert bancos(host) == {"eclume_antes", "eclume_restore_novo"}
+    assert not religou(host)
+    assert "estado medido" in r.stderr
+    assert "eclume_antes=sim" in r.stderr
+    assert "eclume_restore_novo=sim" in r.stderr
+    assert "rename to eclume" in r.stderr
+
+
+def test_restaurar_sigint_com_eclume_presente_religa_os_servicos(host: Host, dump_pre_deploy: Path) -> None:
+    r = interromper_em(host, dump_pre_deploy, "alter database eclume rename to eclume_antes")
+
+    assert r.returncode != 0
+    assert "eclume" in bancos(host)
+    assert religou(host)
