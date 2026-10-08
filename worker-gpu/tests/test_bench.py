@@ -66,3 +66,31 @@ def test_benchmark_mede_e_grava_transcript(tmp_path: Path, monkeypatch: Any):
     assert report["minutes_per_audio_hour"] == round(report["realtime_factor"] * 60, 2)
     assert report["speakers"] == 1
     Draft202012Validator(SCHEMA, format_checker=FormatChecker()).validate(json.loads(saida.read_text()))
+
+
+def _factory(name: str, **kwargs: Any) -> FakeEngine:
+    return FakeEngine(**kwargs)
+
+
+def test_benchmark_sem_reference_nao_traz_quality(tmp_path: Path):
+    audio = tmp_path / "bench.ogg"
+    audio.write_bytes(b"OggS")
+    assert "quality" not in run(parse_args([str(audio), "--no-diarize"]), factory=_factory)
+
+
+def test_benchmark_mede_wer_e_cer_contra_a_referencia(tmp_path: Path):
+    audio = tmp_path / "bench.ogg"
+    audio.write_bytes(b"OggS")
+    referencia = tmp_path / "ref.txt"
+    referencia.write_text("Oi, tudo.", encoding="utf-8")
+
+    report = run(parse_args([str(audio), "--no-diarize", "--reference", str(referencia)]), factory=_factory)
+
+    assert report["quality"]["wer"] == {
+        "rate": 0.5,
+        "reference_len": 2,
+        "substitutions": 0,
+        "deletions": 1,
+        "insertions": 0,
+    }
+    assert report["quality"]["cer"]["rate"] == round(5 / 7, 4)
