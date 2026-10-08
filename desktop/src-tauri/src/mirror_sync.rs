@@ -166,6 +166,7 @@ pub fn to_item(
         summary: summary.map(|s| Summary {
             version: s.version,
             markdown: s.content_md,
+            transcript_revision: s.transcript_revision,
         }),
         transcript: transcript.map(|t| Transcript {
             id: t.id,
@@ -581,6 +582,7 @@ mod tests {
             version,
             agenda_type: Some("Reunião de equipe".into()),
             content_md: format!("# Ata v{version}"),
+            transcript_revision: Some(1),
         }
     }
 
@@ -718,6 +720,30 @@ mod tests {
             std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md"))
                 .unwrap();
         assert!(md.contains("summary_version: 2") && md.contains("# Ata v2"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn resumo_de_revisao_anterior_da_transcricao_chega_marcado_no_md() {
+        let dir = tmp("desatualizado");
+        let fake = fake();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        let caminho = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
+        assert!(!std::fs::read_to_string(&caminho)
+            .unwrap()
+            .contains("summary_stale"));
+        // O resumo partiu da revisão 0 e a transcrição já está na 1.
+        let mut velho = summary(2);
+        velho.transcript_revision = Some(0);
+        fake.summaries
+            .borrow_mut()
+            .insert("bbbbbbbb-2".into(), velho);
+        fake.recordings.borrow_mut()[1].updated_at = Some("2026-09-20T09:00:00Z".into());
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        let md = std::fs::read_to_string(&caminho).unwrap();
+        assert!(md.contains("summary_stale: true\n"));
+        assert!(md.contains("> [!warning] Resumo de uma versão anterior da transcrição"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
