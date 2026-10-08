@@ -73,7 +73,7 @@ async def next_for(engine: AsyncEngine, redis: ArqRedis, owner_id: UUID) -> UUID
         if waiting is None or not await within_gpu_minutes(conn, owner_id):
             return None
         await conn.execute(update(jobs).where(jobs.c.id == waiting["id"]).values(dispatched_at=func.now()))
-        payload = await transcribe_payload(conn, waiting["options"] or {})
+        payload = await transcribe_payload(conn, waiting["options"] or {}, owner_id)
     recording_id = waiting["recording_id"]
     await redis.enqueue_job(
         "transcribe",
