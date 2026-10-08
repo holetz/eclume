@@ -2,7 +2,7 @@
 type: project
 title: Referências de mercado
 description: Soluções de mercado avaliadas (WhisperX, speaches, Anarlog, Meetily, OpenTranscribe, Scriberr) e como o eclume usa cada uma na estratégia compor.
-resource: **
+resource: "**"
 tags: [references, market, asr, desktop]
 timestamp: 2026-09-24
 audience: both
