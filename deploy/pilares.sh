@@ -149,6 +149,17 @@ pilar_auditoria() {
   done
 }
 
+# O fonte do :tauri-android (tauri-<versão>/mobile/android) vive no registro do cargo, compartilhado e
+# persistente. O build.rs de cada plugin Android o copia arquivo a arquivo; se o Gradle escrever um
+# build/ ali no meio da cópia, o arquivo listado some e o pilar cai (falha intermitente). O Gradle do
+# app escreve o build/ do :tauri-android fora do registro (mobile/src-tauri/gen/android/build.gradle.kts);
+# aqui se apaga o build/ que execuções antigas deixaram e se confere que nada voltou.
+tauri_android_builds() {
+  local base="${CARGO_HOME:-/opt/cargo}/registry/src"
+  [[ -d "$base" ]] || return 0
+  find "$base" -mindepth 5 -maxdepth 5 -path '*/tauri-[0-9]*/mobile/android/build' -type d
+}
+
 # O APK de release do celular, verificado: minificado (R8) e assinado com uma chave descartável
 # desta execução, com os testes de unidade e o lint do plugin e do app, os símbolos da ponte JNI na
 # .so e a classe EclumeCore no dex (mobile/scripts/simbolos_jni.py). Só no gate: o SDK, o NDK e o
@@ -171,7 +182,11 @@ pilar_android() {
     -validity 2 -storepass gate-descartavel -keypass gate-descartavel -dname "CN=eclume gate"
   printf 'storeFile=%s\npassword=gate-descartavel\nkeyAlias=gate\n' "$chaves/gate.jks" \
     > "$gradle/keystore.properties"
+  tauri_android_builds | while read -r antigo; do rm -rf "$antigo"; done
   run npm --prefix mobile run tauri -- android build --apk --target aarch64 --ci
+  local invasor
+  invasor="$(tauri_android_builds)"
+  [[ -z "$invasor" ]] || { echo "o Gradle escreveu no registro do cargo: $invasor" >&2; return 1; }
   (cd "$gradle" && run ./gradlew --no-daemon :tauri-plugin-eclume-gravador:testDebugUnitTest \
     :tauri-plugin-eclume-gravador:lintRelease :app:lintUniversalRelease)
   local apk
