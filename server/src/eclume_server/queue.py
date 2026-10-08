@@ -96,16 +96,26 @@ def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str,
     return raw
 
 
-def transcribe_options(platform: Any, language: str | None, *, keep_samples: bool = True) -> dict[str, Any]:  # noqa: ANN401 — linha de platform_settings
-    """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco."""
+def transcribe_options(
+    platform: Any,  # noqa: ANN401 — linha de platform_settings
+    language: str | None,
+    *,
+    keep_samples: bool = True,
+    speakers: tuple[int | None, int | None] | None = None,
+) -> dict[str, Any]:
+    """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco.
+
+    `speakers` é o par `(min, max)` de locutores que vence os limites do admin (a nota e o pedido).
+    """
     asr = platform["asr"]
     diarization = platform["diarization"]
+    low, high = speakers if speakers is not None else (diarization.get("min_speakers"), diarization.get("max_speakers"))
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
         # O ASR recebe o idioma sem região (`pt-BR` → `pt`); `auto` vira `null`, e a engine detecta.
         "language": None if chosen == AUTO_LANGUAGE else chosen.split("-", 1)[0],
-        "min_speakers": diarization.get("min_speakers"),
-        "max_speakers": diarization.get("max_speakers"),
+        "min_speakers": low,
+        "max_speakers": high,
         "engine": asr["engine"],
         "model": asr["model"],
         "compute_type": asr["compute_type"],

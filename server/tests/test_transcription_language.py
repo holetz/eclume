@@ -89,3 +89,34 @@ def test_retranscrever_aceita_auto(
     again = owner.post(f"/api/v1/recordings/{recording['id']}/retranscribe", json={"language": "auto"})
     assert again.status_code == 202, again.text
     assert run_gpu(services.settings)[0][2]["language"] is None
+
+
+def _speakers(calls: list) -> tuple[int | None, int | None]:
+    options = calls[0][2]
+    return options["min_speakers"], options["max_speakers"]
+
+
+def test_nota_de_voz_leva_um_locutor_e_a_reuniao_os_limites_do_admin(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api], admin: Api, services: Services
+):
+    admin.patch("/api/v1/admin/settings", json={"diarization": {"min_speakers": 2, "max_speakers": 5}})
+    owner = as_user(make_user())
+    upload_file(owner, audio_bytes(next(_sizes)), kind="note")
+    assert _speakers(run_gpu(services.settings)) == (1, 1)
+    run_cpu(services.settings)
+    upload_file(owner, audio_bytes(next(_sizes)))
+    assert _speakers(run_gpu(services.settings)) == (2, 5)
+
+
+def test_retranscrever_com_locutores_vence_a_nota_e_o_admin(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api], services: Services
+):
+    owner = as_user(make_user())
+    recording = upload_file(owner, audio_bytes(next(_sizes)), kind="note")
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    url = f"/api/v1/recordings/{recording['id']}/retranscribe"
+    assert owner.post(url, json={"min_speakers": 3, "max_speakers": 2}).status_code == 422
+    assert owner.post(url, json={"min_speakers": 0}).status_code == 422
+    assert owner.post(url, json={"min_speakers": 2, "max_speakers": 3}).status_code == 202
+    assert _speakers(run_gpu(services.settings)) == (2, 3)

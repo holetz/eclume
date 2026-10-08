@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, update
 
 from eclume_server.auth import Principal, requires
@@ -65,6 +65,15 @@ class RetranscribeRequest(BaseModel):
     """Schema `RetranscribeRequest`."""
 
     language: str | None = Field(default=None, pattern=LANGUAGE)
+    min_speakers: int | None = Field(default=None, ge=1)
+    max_speakers: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> RetranscribeRequest:
+        if self.min_speakers and self.max_speakers and self.min_speakers > self.max_speakers:
+            msg = "min_speakers não pode passar de max_speakers"
+            raise ValueError(msg)
+        return self
 
 
 @router.get("/recordings")
@@ -231,7 +240,10 @@ async def retranscribe(
                 update(t.recordings).where(t.recordings.c.id == recording_id).values(language=body.language)
             )
         language = body.language if body is not None and body.language else row["language"]
-        await start_next_revision(conn, row, language)
+        speakers = None
+        if body is not None and (body.min_speakers or body.max_speakers):
+            speakers = (body.min_speakers, body.max_speakers)
+        await start_next_revision(conn, row, language, speakers)
         refreshed = await get_visible(conn, recording_id)
     await next_for(ctx.engine, ctx.queue.pool, principal.user_id)
     return (await render(ctx, principal.user_id, [refreshed]))[0]
