@@ -121,6 +121,21 @@ são palavras diferentes; números e símbolos não são expandidos ("10" e "dez
 No CER, o espaço entre palavras é um caractere. Referência vazia com hipótese não vazia dá taxa
 nula (`null`), sem divisão por zero.
 
+**Memória e tempo do CER.** A distância de edição usa o algoritmo de Hirschberg: memória linear e
+tempo quadrático. A matriz completa anterior gastava ~37 bytes por célula e não cabia no host de
+15 GB com a referência de 1 h. Medido com `/usr/bin/time -v` em `char_counts`, texto aleatório de
+11 símbolos com 15% de troca (pior caso, sem prefixo comum), nesta estação:
+
+| Caracteres | Antes: pico / tempo | Depois: pico / tempo |
+| --- | --- | --- |
+| 6000 | 1,39 GB / 7,4 s | 46,9 MB / 13,3 s |
+| 50000 | não executado (estimado em ~93 GB) | 46,5 MB / 16 min 07 s (967 s) |
+
+O pico "depois" é praticamente o do interpretador. O tempo dobra, e 50 mil caracteres levam uns 16
+minutos, uma vez por medição e depois da hora de ASR. Num empate o alinhamento ótimo não é único: a
+divisão entre substituições, remoções e inserções pode diferir da versão anterior (no caso de 6000,
+798/13/20 antes e 778/23/30 depois), mas o total de erros e a taxa são idênticos (831).
+
 O texto de referência do LibriVox não está no repositório; quem mede o entrega por caminho. Leitores
 omitem ou acrescentam trechos, o que infla o WER: o número serve para comparar configurações
 (`compute_type`, modelo reserva, versão do WhisperX) no mesmo par áudio/texto, não como valor
