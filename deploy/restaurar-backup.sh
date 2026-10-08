@@ -19,6 +19,10 @@
 set -euo pipefail
 DATA_DIR="${ECLUME_DATA_DIR:-/srv/eclume}"
 DEST="$DATA_DIR/backups"
+# Variáveis que o trap lê (ou que mudam o caminho) nascem vazias: nada herdado do ambiente é apagado.
+work=""
+pasta=""
+dump=""
 ENV_FILE="$DATA_DIR/secrets/env.prod"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 RCLONE_IMAGE="${RCLONE_IMAGE:-rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5}"
@@ -157,9 +161,27 @@ religar() {
 }
 limpar() {
   religar || true
-  [[ -z "${work:-}" ]] || rm -rf "$work"
+  [[ -z "$work" ]] || rm -rf "$work"
+}
+# interromper <código>: INT/TERM no meio da troca. Mede o pg_database; sem eclume provado, não religa
+# (subir os serviços sem banco esconde o problema) e diz o estado e como recuperar.
+interromper() {
+  local rc=0
+  trap '' INT TERM
+  if [[ "${#sql[@]}" -gt 0 && "${#ids_parados[@]}" -gt 0 ]]; then
+    existe eclume || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "INTERROMPIDO: eclume não está provado no pg_database; estado medido: $(estado_bancos). Os serviços continuam parados (${ids_parados[*]}) e nada foi apagado; recupere à mão com: alter database <eclume_antes ou eclume_restore_novo> rename to eclume, e então docker start ${ids_parados[*]}" >&2
+      ids_parados=()
+    else
+      echo "INTERROMPIDO: eclume existe; estado medido: $(estado_bancos)" >&2
+    fi
+  fi
+  exit "$1"
 }
 trap limpar EXIT
+trap 'interromper 130' INT
+trap 'interromper 143' TERM
 
 # trocar_bancos: encerra conexões e troca eclume pelo temporário (eclume_antes guarda o antigo).
 trocar_bancos() {
