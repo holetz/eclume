@@ -1,10 +1,10 @@
 ---
 type: project
 title: Runbook do host GPU
-description: Como preparar o servidor 192.168.15.199 (Ubuntu 24.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context.
+description: "Como preparar o servidor 192.168.15.199 (Ubuntu 26.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context."
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
-timestamp: 2026-10-01
+timestamp: 2026-10-08
 audience: both
 authority: current
 source: holetz/eclume#1, holetz/eclume#28, holetz/eclume#41
@@ -17,7 +17,7 @@ Este é o runbook **deste** host: deixa o servidor da consultoria pronto para re
 containers do eclume e do lumea. Os requisitos e passos para qualquer servidor, com ou sem GPU,
 estão em [auto-hospedar.md](../how-to/auto-hospedar.md); desenvolver sem GPU e sem este host, em
 [desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). O servidor
-roda Ubuntu 24.04 LTS com uma NVIDIA GTX 1660 Super (6 GB). Os passos 1 a 8 rodam **no
+roda Ubuntu 26.04 LTS (atualizado do 24.04 em 2026-10-08) com uma NVIDIA GTX 1660 Super (6 GB). Os passos 1 a 8 rodam **no
 servidor**; o passo 9 roda **na máquina de desenvolvimento**.
 
 Portas:
@@ -31,9 +31,9 @@ Portas:
 
 | Item | Estado |
 |---|---|
-| Máquina | `holetz-pc`, usuário `holetz` (sudo sem senha), 4 CPUs, 15 GB RAM, ~56 GB livres em `/` |
-| GPU | GTX 1660 SUPER 6 GB, driver 595.91.07, runtime `nvidia` já configurado no Docker |
-| Docker | 29.1.3 do repositório do Ubuntu, mantido no lugar do Docker CE (passo 3 dispensado) |
+| Máquina | `holetz-pc`, usuário `holetz` (sudo pede senha desde o upgrade para o 26.04), 4 CPUs, 15 GB RAM, ~56 GB livres em `/` |
+| GPU | GTX 1660 SUPER 6 GB, driver 595.99.02 (`nvidia-driver-595-open` e `linux-modules-nvidia-595-open-generic`), runtime `nvidia` já configurado no Docker |
+| Docker | 29.1.3 do repositório do Ubuntu, mantido no lugar do Docker CE (passo 3 dispensado). `docker.io`, `containerd` e `runc` marcados como manuais (`apt-mark manual`), e os plugins compose e buildx em `~/.docker/cli-plugins` |
 | Coexistência | O host é o servidor doméstico do usuário, com Jellyfin, *arr, qBittorrent, homepage, Sunshine e Samba. Esses serviços **não são tocados**. O Jellyfin pode disputar a GPU. |
 | Firewall | ufw já ativo, com regras 443 (lumea) e 8443 (eclume) só para `192.168.15.0/24` |
 | SSH | chave `ed25519` da máquina de dev autorizada. **O login por senha foi mantido** (passo 1.4 não aplicado), para não trancar o usuário fora de outros dispositivos. |
@@ -202,6 +202,39 @@ scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
 
 A conferência da impressão digital e o uso pelo lumea (`LUMEA_ECLUME_CA_BUNDLE`) estão em
 [deploy-producao.md](deploy-producao.md#ca-raiz-nos-clientes).
+
+## Upgrade de versão do Ubuntu
+
+O upgrade do 24.04 para o 26.04 (2026-10-08) derrubou o host inteiro. O `do-release-upgrade`
+removeu o `docker-compose` v1, e o `apt autoremove` seguinte levou `docker.io`, `containerd` e
+`runc`, que tinham sido instalados como dependência dele. Os dados em `/var/lib/docker` sobrevivem,
+porque o pacote é removido sem purge. No próximo upgrade:
+
+- **Antes do `autoremove`:** `apt-mark showmanual | grep -E '^(docker.io|containerd|runc)$'` deve
+  listar os três. Se faltar algum, rode `sudo apt-get install -y docker.io` e
+  `sudo apt-mark manual docker.io containerd runc`.
+- **Repositórios de terceiros:** o upgrade desativa as listas de fora do Ubuntu. Reative a do NVIDIA
+  Container Toolkit no formato deb822, em `/etc/apt/sources.list.d/nvidia-container-toolkit.sources`:
+  ```
+  Types: deb
+  URIs: https://nvidia.github.io/libnvidia-container/stable/deb/amd64/
+  Suites: /
+  Signed-By: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  ```
+- **Driver do kernel novo:** `sudo apt-get install -y linux-modules-nvidia-595-open-generic`, e
+  depois confira com `nvidia-smi`.
+- **GPU nos contêineres:** um `systemctl daemon-reload` (que `systemctl enable` e a instalação de
+  pacotes também disparam) com contêineres GPU já de pé corta o acesso deles aos `/dev/nvidia*`.
+  No `eclume-worker-gpu-1`, o `nvidia-smi` falha com `Failed to initialize NVML: Unknown Error`; no
+  `jellyfin`, `: < /dev/nvidia-uvm` dá `Operation not permitted`. O host continua normal e o
+  vigia não percebe, porque testa o `nvidia-smi` do host e o heartbeat do worker. Para corrigir,
+  basta `docker restart` nos dois.
+- **Contêineres sem política de restart** não voltam depois de um boot. O lumea ficou parado de
+  2026-10-02 a 2026-10-08 assim. Ele foi corrigido com
+  `docker update --restart unless-stopped` nos serviços longos, que é o que o
+  `docker-compose.remote.yml` dele declara.
+- **Prova:** o smoke só leitura do eclume ([deploy-producao.md](deploy-producao.md)) e
+  `curl -k https://192.168.15.199/api/health` (200) do lumea.
 
 ## Gate de qualidade (`~/eclume-gate`)
 
