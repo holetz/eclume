@@ -79,6 +79,11 @@ transcript: "2026-09-18_1100_01928f3a.jsonl"   # só com transcrição
 ---
 ```
 
+Com marcador que tem nota, o `.md` termina com a seção `## Notas dos marcadores`: uma linha
+`- [HH:MM:SS] nota` por marcador, em ordem de instante, a nota achatada em uma linha. Sem nota
+nenhuma, a seção não existe. O app lê `GET /recordings/{id}/markers` (`recordings:read`) só das
+gravações que têm resumo a escrever; uma falha vira pendência, como as outras leituras.
+
 **Transcrição (`.jsonl`)**: uma linha por objeto. A primeira é `{"type":"meta", id, recording_id,
 title, language, recorded_at, duration_ms, revision, speakers:[{id,label}]}`; as demais,
 `{"type":"segment", speaker, speaker_id, start_ms, end_ms, text}`. O Obsidian não indexa `.jsonl`,
@@ -123,7 +128,8 @@ biblioteca grande não atrasar o upload das gravações.
 
 Para o cursor ver as mudanças, o servidor move `recordings.updated_at` quando: um resumo termina,
 é editado ou é apagado; a transcrição é editada (locutor, segmento, mesclagem); a Collection é
-renomeada ou excluída; e nas mudanças de campo que já existiam.
+renomeada ou excluída; um marcador é criado, tem a nota editada ou é excluído
+(`markers.touch_recording`); e nas mudanças de campo que já existiam.
 
 ## Sobrescrita e segurança
 
