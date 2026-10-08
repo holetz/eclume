@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
+from eclume_server.limits import DEFAULT_LIMIT
 from eclume_server.problems import invalid_field
 
 if TYPE_CHECKING:
@@ -37,22 +39,40 @@ def iso(value: datetime | None) -> str | None:
 
 def encode_cursor(sort_value: datetime, row_id: UUID) -> str:
     """Cursor opaco da posição `(ordenação, id)`."""
-    raw = json.dumps([sort_value.isoformat(), str(row_id)]).encode()
+    return _encode([sort_value.isoformat(), str(row_id)])
+
+
+def _encode(values: list[str]) -> str:
+    """Base64url do JSON em UTF-8 direto: um emoji custa 4 bytes, e não os 12 do escape duplo."""
+    raw = json.dumps(values, ensure_ascii=False).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-MAX_CURSOR_LENGTH = 8192
-"""Teto do cursor, medido sobre os reais: ~64 caracteres e, no pior caso (nome com 300 caracteres fora do ASCII), ~5 mil."""
+_MAX_JSON_BYTES = 2 * DEFAULT_LIMIT + 512
+MAX_CURSOR_LENGTH = -(-_MAX_JSON_BYTES // 3) * 4
+"""Teto do cursor, derivado do maior valor que o servidor emite e não medido sobre exemplos.
+
+O maior nome é o corpo máximo da API (`DEFAULT_LIMIT`, 1 MiB); o JSON do cursor o carrega em UTF-8 direto,
+no máximo um byte por byte do corpo, e o dobro absorve o que `unaccent` expande no `sort_name`. O teto é
+o comprimento base64 desse JSON mais uma folga para colchetes, aspas e o id.
+"""
+
+_JSON_STRING = r'"[^"\\]*(?:\\.[^"\\]*)*"'
+_FLAT_LIST = re.compile(rf"\[\s*{_JSON_STRING}(?:\s*,\s*{_JSON_STRING})*\s*\]", re.DOTALL)
+"""Uma lista plana de strings JSON, em tempo linear: qualquer `[` ou `{` fora de string reprova."""
 
 
 def _decode_json(cursor: str) -> object:
-    """O JSON dentro de um cursor base64url; grande demais, base64, UTF-8, JSON inválidos ou aninhados demais viram 422 no campo `cursor`."""
+    """O JSON dentro de um cursor base64url; grande demais, base64, UTF-8, formato, JSON inválidos ou aninhados viram 422 no campo `cursor`."""
     if len(cursor) > MAX_CURSOR_LENGTH:
         raise invalid_field("cursor", "cursor inválido")
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
-        return json.loads(base64.urlsafe_b64decode(padded))
-    except (ValueError, RecursionError) as exc:
+        text = base64.urlsafe_b64decode(padded).decode()
+        if not _FLAT_LIST.fullmatch(text):
+            raise invalid_field("cursor", "cursor inválido")
+        return json.loads(text)
+    except ValueError as exc:
         raise invalid_field("cursor", "cursor inválido") from exc
 
 
@@ -67,8 +87,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 def encode_position(*values: object) -> str:
     """Cursor opaco de uma posição qualquer (texto, número, id), para ordenações sem data."""
-    raw = json.dumps([str(value) for value in values]).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return _encode([str(value) for value in values])
 
 
 def decode_position(cursor: str, size: int) -> list[str]:
