@@ -18,6 +18,8 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
   das sessões (contrato 2.23.0, holetz/eclume#142).
 - Habilidades do usuário no Agente e ações no ambiente que o agente propõe e a pessoa confirma
   (contrato 2.24.0, holetz/eclume#145).
+- Nota de voz transcrita com um locutor só e, ao retranscrever, o número de locutores esperado
+  (`min_speakers`/`max_speakers`; contrato 2.25.0, holetz/eclume#175).
 
 ### Alterado
 

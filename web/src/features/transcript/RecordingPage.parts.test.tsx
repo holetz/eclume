@@ -172,6 +172,25 @@ describe('transcrever de novo em…', () => {
     expect(await http.requests('POST /api/v1/recordings/:id/retranscribe')[0].json()).toEqual({ language: 'en' })
   })
 
+  it('leva o número de locutores quando preenchido', async () => {
+    const user = userEvent.setup()
+    const http = mockTranscriptApi({
+      'POST /api/v1/recordings/:id/retranscribe': () => fixtures.recordingQueued(),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    await user.click(await screen.findByRole('button', { name: 'Transcrever de novo em…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Transcrever de novo?' })
+    await user.type(within(dialog).getByLabelText('Mínimo de locutores'), '1')
+    await user.type(within(dialog).getByLabelText('Máximo de locutores'), '2')
+    await user.click(within(dialog).getByRole('button', { name: 'Transcrever de novo' }))
+    await vi.waitFor(() => expect(http.requests('POST /api/v1/recordings/:id/retranscribe')).toHaveLength(1))
+    expect(await http.requests('POST /api/v1/recordings/:id/retranscribe')[0].json()).toEqual({
+      language: 'pt',
+      min_speakers: 1,
+      max_speakers: 2,
+    })
+  })
+
   it('o pedido duplicado diz que já há uma transcrição em andamento', async () => {
     const user = userEvent.setup()
     mockTranscriptApi({

@@ -269,13 +269,21 @@ async def insert_job(
     revision: int,
     *,
     error: tuple[str, str] | None = None,
+    speakers: tuple[int | None, int | None] | None = None,
 ) -> None:
-    """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho."""
+    """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho.
+
+    Locutores: o `speakers` pedido; sem ele, a nota de voz (uma pessoa só) leva `(1, 1)`; o resto,
+    os limites do admin.
+    """
     platform = (await conn.execute(select(t.platform_settings))).mappings().one()
     keep = await keeps_samples(conn, recording["owner_id"])
     # O idioma do arquivo, o da conta; sem nenhum, `transcribe_options` cai no do servidor e em `pt`.
     language = recording["language"] or await account_language(conn, recording["owner_id"])
-    options = transcribe_options(platform, language, keep_samples=keep)
+    if speakers is None:
+        kind = (await conn.execute(select(t.recordings.c.kind).where(t.recordings.c.id == recording["id"]))).scalar()
+        speakers = (1, 1) if kind == "note" else None
+    options = transcribe_options(platform, language, keep_samples=keep, speakers=speakers)
     values: dict[str, Any] = {
         "owner_id": recording["owner_id"],
         "recording_id": recording["id"],
@@ -290,7 +298,12 @@ async def insert_job(
     await set_step(conn, recording, revision, "received", "failed" if error else "done", error=error)
 
 
-async def start_next_revision(conn: AsyncConnection, recording: Row, language: str | None) -> int:
+async def start_next_revision(
+    conn: AsyncConnection,
+    recording: Row,
+    language: str | None,
+    speakers: tuple[int | None, int | None] | None = None,
+) -> int:
     """Cria o job da revisão seguinte e põe a gravação na fila; devolve a revisão.
 
     A revisão é uma acima da maior entre a transcrição e o último job (retranscrever e retentar).
@@ -300,7 +313,12 @@ async def start_next_revision(conn: AsyncConnection, recording: Row, language: s
         await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording["id"]))
     ).scalar()
     revision = max(transcript_revision or 0, recording["job_revision"] or 0) + 1
-    await insert_job(conn, {"id": recording["id"], "owner_id": recording["owner_id"], "language": language}, revision)
+    await insert_job(
+        conn,
+        {"id": recording["id"], "owner_id": recording["owner_id"], "language": language},
+        revision,
+        speakers=speakers,
+    )
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording["id"]).values(status="queued", updated_at=func.now())
     )

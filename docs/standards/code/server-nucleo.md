@@ -417,7 +417,10 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   gravações do desktop e `upload` no resto: o import web de antes não mandava data.
 - **`kind`**: `meeting` (padrão) ou `note` (nota de voz), no upload e no `PATCH`. A nota passa
   pelo mesmo pipeline da reunião (detecção de tipo e resumo incluídos); a
-  [processamento-automatico.md](processamento-automatico.md) não distingue as duas.
+  [processamento-automatico.md](processamento-automatico.md) não distingue as duas. Na transcrição, a nota
+  leva `min_speakers = max_speakers = 1` no job (uma pessoa só), sem os limites globais do admin; o
+  `POST .../retranscribe` pode pedir outro par (`min_speakers`/`max_speakers`), que vale só para a
+  revisão nova e vence a regra da nota.
 - **Tipo escolhido no upload** (`agenda_type_id`, a folha "Agenda type" ao parar a gravação no
   celular): vira o tipo do usuário, origem `edited`, com o padrão de título e as tags padrão
   aplicados já no `complete`; a detecção o respeita (`set_by_user`). Tipo inexistente → 422.
