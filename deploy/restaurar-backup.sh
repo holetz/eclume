@@ -108,45 +108,129 @@ container() {
     --filter "label=com.docker.compose.service=$1" | head -n 1
 }
 
-# trocar_bancos <psql...>: encerra conexões e troca eclume pelo banco temporário (eclume_antes guarda o antigo).
-trocar_bancos() {
-  "$@" -c "drop database if exists eclume_antes" \
-    -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', 'eclume_restore_novo') and pid <> pg_backend_pid()" \
-    -c "alter database eclume rename to eclume_antes" -c "alter database eclume_restore_novo rename to eclume" >/dev/null &&
-    { "$@" -c "drop database if exists eclume_antes" >/dev/null || true; }
-}
-# restaurar_validando <dump> <servicos...>: o dump prova restaurar ANTES de qualquer coisa destrutiva.
-# 1) pg_restore --list; 2) restaura num banco temporário com os serviços ainda no ar; 3) só então para
-# os serviços (ids_parados, que o chamador sobe), renomeia eclume -> eclume_antes e o temporário ->
-# eclume e apaga o antigo. Falha antes da parada: nada muda. Falha depois: o banco antigo volta ao nome e os serviços sobem.
+# Estado real do cluster: nada é apagado sem prova de outra cópia (o `pg_database` é a fonte da verdade).
+sql=()
 ids_parados=()
+# existe <db>: 0 existe, 1 não existe, 2 não foi possível ler (nunca autoriza apagar).
+existe() {
+  local saida
+  saida="$("${sql[@]}" -c "select 1 from pg_database where datname = '$1'" 2>/dev/null)" || return 2
+  [[ "$saida" == 1 ]]
+}
+# apagar_com_garantia <alvo> <garantia...>: só apaga <alvo> se alguma garantia existir no cluster.
+apagar_com_garantia() {
+  local alvo="$1" g rc
+  shift
+  for g in "$@"; do
+    rc=0
+    existe "$g" || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      "${sql[@]}" -c "drop database if exists $alvo" >/dev/null 2>&1 && return 0
+      echo "ALERTA: não consegui apagar $alvo; ele continua no cluster" >&2
+      return 1
+    fi
+  done
+  echo "ALERTA: $alvo mantido: não provei que há outra cópia ($*)" >&2
+  return 1
+}
+# estado_bancos: o que o pg_database tem agora, para a mensagem final.
+estado_bancos() {
+  local b rc out=()
+  for b in eclume eclume_antes eclume_restore_novo; do
+    rc=0
+    existe "$b" || rc=$?
+    case "$rc" in 0) out+=("$b=sim") ;; 1) out+=("$b=não") ;; *) out+=("$b=?") ;; esac
+  done
+  echo "${out[*]}"
+}
+# religar: sobe os serviços parados, uma vez só; vale no sucesso e em qualquer falha (trap de EXIT).
+religar() {
+  [[ "${#ids_parados[@]}" -gt 0 ]] || return 0
+  local ids=("${ids_parados[@]}")
+  ids_parados=()
+  if docker start "${ids[@]}" >/dev/null; then
+    echo "serviços religados" >&2
+  else
+    echo "ALERTA: o docker start falhou; os serviços podem estar parados: ${ids[*]}" >&2
+    return 1
+  fi
+}
+limpar() {
+  religar || true
+  [[ -z "${work:-}" ]] || rm -rf "$work"
+}
+trap limpar EXIT
+
+# trocar_bancos: encerra conexões e troca eclume pelo temporário (eclume_antes guarda o antigo).
+trocar_bancos() {
+  local rc=0 tmpdb=eclume_restore_novo antes=eclume_antes
+  local termina="select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', '$tmpdb') and pid <> pg_backend_pid()"
+  existe eclume || rc=$?
+  [[ "$rc" -ne 2 ]] || { echo "FALHA: não consegui ler o pg_database" >&2; return 1; }
+  if [[ "$rc" -eq 1 ]]; then
+    echo "ALERTA: não existe o banco eclume; o restaurado é promovido a eclume e $antes (se existir) só sai depois de provar o eclume" >&2
+    "${sql[@]}" -c "$termina" -c "alter database $tmpdb rename to eclume" >/dev/null || return 1
+  else
+    apagar_com_garantia "$antes" eclume || true
+    "${sql[@]}" -c "$termina" -c "alter database eclume rename to $antes" \
+      -c "alter database $tmpdb rename to eclume" >/dev/null || return 1
+  fi
+  existe eclume || { echo "FALHA: depois da troca, eclume não está no pg_database" >&2; return 1; }
+  apagar_com_garantia "$antes" eclume || true
+}
+# desfazer_troca: mede o estado, devolve o banco antigo ao nome se faltar eclume e só então apaga o temporário.
+desfazer_troca() {
+  local e=0 a=0
+  "${sql[@]}" -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', 'eclume_antes') and pid <> pg_backend_pid()" >/dev/null 2>&1 || true
+  existe eclume || e=$?
+  existe eclume_antes || a=$?
+  if [[ "$e" -eq 1 && "$a" -eq 0 ]]; then
+    "${sql[@]}" -c "alter database eclume_antes rename to eclume" >/dev/null 2>&1 || true
+    e=0
+    existe eclume || e=$?
+  fi
+  [[ "$e" -ne 0 ]] || apagar_com_garantia eclume_restore_novo eclume || true
+  if [[ "$e" -eq 0 ]]; then
+    echo "FALHA: a troca de bancos falhou; estado medido: $(estado_bancos)" >&2
+  else
+    echo "FALHA: a troca de bancos falhou e NENHUM banco se chama eclume; estado medido: $(estado_bancos). Nada foi apagado; recupere à mão com: alter database <eclume_antes ou eclume_restore_novo> rename to eclume" >&2
+  fi
+}
+# restaurar_validando <dump>: o dump prova restaurar ANTES de qualquer coisa destrutiva.
+# 1) pg_restore --list; 2) restaura num banco temporário com os serviços ainda no ar; 3) só então para
+# os serviços (ids_parados, que o trap de EXIT religa em qualquer falha), troca os bancos e confere o pg_database.
 restaurar_validando() {
-  local dump="$1" tmpdb=eclume_restore_novo antes=eclume_antes
+  local dump="$1" tmpdb=eclume_restore_novo rc=0
   local ids=() s id services=(server worker worker-gpu)
-  local sql=(docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt -d postgres)
+  sql=(docker exec -i "$pg" psql -U eclume -v ON_ERROR_STOP=1 -qAt -d postgres)
   for s in "${services[@]}"; do id="$(container "$s")"; [[ -z "$id" ]] || ids+=("$id"); done
   if ! docker exec -i "$pg" pg_restore --list < "$dump" >/dev/null; then
     echo "FALHA: o dump $dump não é legível pelo pg_restore; nada foi alterado" >&2
     return 1
   fi
-  "${sql[@]}" -c "drop database if exists $tmpdb" -c "create database $tmpdb" >/dev/null
+  existe "$tmpdb" || rc=$?
+  if [[ "$rc" -eq 2 ]]; then
+    echo "FALHA: não consegui ler o pg_database; nada foi alterado" >&2
+    return 1
+  elif [[ "$rc" -eq 0 ]] && ! apagar_com_garantia "$tmpdb" eclume eclume_antes; then
+    echo "FALHA: sobrou $tmpdb de uma tentativa anterior e não há outra cópia; nada foi alterado" >&2
+    return 1
+  fi
+  "${sql[@]}" -c "create database $tmpdb" >/dev/null
   if ! docker exec -i "$pg" pg_restore -U eclume -d "$tmpdb" --exit-on-error < "$dump"; then
     "${sql[@]}" -c "drop database if exists $tmpdb" >/dev/null || true
     echo "FALHA: o dump não restaura num banco temporário; produção e serviços intactos" >&2
     return 1
   fi
   echo "dump validado; parando ${services[*]}"
-  [[ "${#ids[@]}" -eq 0 ]] || docker stop "${ids[@]}" >/dev/null
   ids_parados=("${ids[@]}")
-  if ! trocar_bancos "${sql[@]}"; then
-    # Desfaz o que a troca fez: o banco antigo volta ao nome e os serviços sobem.
-    "${sql[@]}" -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('eclume', '$antes') and pid <> pg_backend_pid()" >/dev/null 2>&1 || true
-    if ! "${sql[@]}" -c "select 1 from pg_database where datname = 'eclume'" | grep -q 1; then
-      "${sql[@]}" -c "alter database $antes rename to eclume" >/dev/null 2>&1 || true
-    fi
-    "${sql[@]}" -c "drop database if exists $tmpdb" >/dev/null 2>&1 || true
-    [[ "${#ids[@]}" -eq 0 ]] || docker start "${ids[@]}" >/dev/null 2>&1 || true
-    echo "FALHA: a troca de bancos falhou; o banco anterior foi devolvido e os serviços subiram" >&2
+  if [[ "${#ids[@]}" -gt 0 ]] && ! docker stop "${ids[@]}" >/dev/null; then
+    echo "FALHA: o docker stop falhou; nenhum banco foi trocado" >&2
+    apagar_com_garantia "$tmpdb" eclume || true
+    return 1
+  fi
+  if ! trocar_bancos; then
+    desfazer_troca
     return 1
   fi
 }
@@ -158,7 +242,7 @@ if [[ "$mode" == --banco ]]; then
   pg="$(container postgres)"
   [[ -n "$pg" ]] || { echo "o postgres do projeto eclume não está rodando" >&2; exit 1; }
   restaurar_validando "$dump"
-  [[ "${#ids_parados[@]}" -eq 0 ]] || docker start "${ids_parados[@]}" >/dev/null
+  religar
   echo "OK: banco restaurado de $dump; suba as imagens do deploy correspondente (deploy.sh --voltar)"
   exit 0
 fi
@@ -169,8 +253,6 @@ snap="$(resolver "$snap")"
 [[ -n "$snap" ]] || { echo "nenhum snapshot nessa data" >&2; exit 1; }
 # O snapshot fica em claro numa pasta temporária só durante a restauração.
 work="$(mktemp -d "$DEST/.restaurar.XXXXXX")"
-limpar() { rm -rf "$work"; }
-trap limpar EXIT
 echo "restaurando o snapshot $snap do repositório $repositorio"
 extrair "$snap" "$work" /eclume/pg /eclume/minio
 dump="$work/eclume/pg/eclume.dump"
@@ -229,7 +311,8 @@ fi
 restaurar_validando "$dump"
 echo "banco: $(psql_ -d eclume -c "$count_sql")"
 mc mb --ignore-existing dst/eclume >/dev/null
-mc mirror --overwrite --quiet /snap dst/eclume >/dev/null
+mc mirror --overwrite --quiet /snap dst/eclume >/dev/null ||
+  { echo "FALHA: o espelhamento do bucket falhou depois da troca; o banco já foi restaurado" >&2; exit 1; }
 echo "bucket: $(mc ls --recursive dst/eclume | wc -l) objetos"
-[[ "${#ids_parados[@]}" -eq 0 ]] || docker start "${ids_parados[@]}" >/dev/null
+religar
 echo "OK: produção restaurada do snapshot $snap"
