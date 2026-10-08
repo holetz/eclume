@@ -168,7 +168,7 @@ trocar_bancos() {
   existe eclume || rc=$?
   [[ "$rc" -ne 2 ]] || { echo "FALHA: não consegui ler o pg_database" >&2; return 1; }
   if [[ "$rc" -eq 1 ]]; then
-    echo "ALERTA: não existe o banco eclume; o restaurado é promovido e $antes (se existir) fica" >&2
+    echo "ALERTA: não existe o banco eclume; o restaurado é promovido a eclume e $antes (se existir) só sai depois de provar o eclume" >&2
     "${sql[@]}" -c "$termina" -c "alter database $tmpdb rename to eclume" >/dev/null || return 1
   else
     apagar_com_garantia "$antes" eclume || true

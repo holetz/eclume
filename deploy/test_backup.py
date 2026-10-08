@@ -422,6 +422,111 @@ def test_restaurar_falha_na_troca_devolve_o_banco_e_sobe_os_servicos(host: Host,
     assert "rename to eclume_antes" in " ".join(sql_chamadas(host))
 
 
+def bancos(host: Host) -> set[str]:
+    return set((host.bin / "bancos").read_text().split())
+
+
+def religou(host: Host) -> bool:
+    return any(c[0] == "start" for c in host.chamadas())
+
+
+DUAS_RENAMES = "alter database eclume_restore_novo rename to eclume|alter database eclume_antes rename to eclume"
+
+
+def test_restaurar_desfazer_que_nao_consegue_devolver_nao_apaga_nada_nem_diz_que_devolveu(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_SQL_FALHA=DUAS_RENAMES)
+
+    assert r.returncode != 0
+    assert bancos(host) == {"eclume_antes", "eclume_restore_novo"}
+    assert "NENHUM banco se chama eclume" in r.stderr
+    assert "foi devolvido" not in r.stderr
+    assert "eclume_antes=sim" in r.stderr
+    assert "eclume_restore_novo=sim" in r.stderr
+    assert religou(host)
+
+
+def test_restaurar_desfazer_devolve_o_antigo_e_so_entao_apaga_o_temporario(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar(
+        "restaurar-backup.sh",
+        "--banco",
+        str(dump_pre_deploy),
+        "--confirmo",
+        FAKE_SQL_FALHA="alter database eclume_restore_novo rename to eclume",
+    )
+
+    assert r.returncode != 0
+    assert bancos(host) == {"eclume"}
+    assert "eclume=sim eclume_antes=não eclume_restore_novo=não" in r.stderr
+    assert religou(host)
+
+
+def test_restaurar_sem_eclume_promove_o_restaurado_e_so_apaga_o_antes_depois(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_DBS="eclume_antes")
+
+    assert r.returncode == 0, r.stderr
+    assert bancos(host) == {"eclume"}
+    assert "não existe o banco eclume" in r.stderr
+    chamadas = sql_chamadas(host)
+    promocao = indice(chamadas, "rename to eclume")
+    assert not any("drop database if exists eclume_antes" in c for c in chamadas[:promocao])
+    assert religou(host)
+
+
+def test_restaurar_com_eclume_antes_de_tentativa_anterior_o_apaga_com_garantia(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_DBS="eclume eclume_antes")
+
+    assert r.returncode == 0, r.stderr
+    assert bancos(host) == {"eclume"}
+
+
+def test_restaurar_pg_database_ilegivel_nao_apaga_nem_para(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar(
+        "restaurar-backup.sh",
+        "--banco",
+        str(dump_pre_deploy),
+        "--confirmo",
+        FAKE_DBS="eclume eclume_restore_novo",
+        FAKE_SQL_FALHA="from pg_database",
+    )
+
+    assert r.returncode != 0
+    assert bancos(host) == {"eclume", "eclume_restore_novo"}
+    assert [c for c in host.chamadas() if c[0] in ("stop", "start")] == []
+
+
+def test_restaurar_docker_stop_falhando_religa_e_remove_o_temporario(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_STOP_FALHA="1")
+
+    assert r.returncode != 0
+    assert "docker stop falhou" in r.stderr
+    assert religou(host)
+    assert bancos(host) == {"eclume"}
+
+
+def test_restaurar_aplicar_com_mirror_falhando_religa_os_servicos(host: Host) -> None:
+    r = host.rodar("restaurar-backup.sh", "--aplicar", "latest", "--confirmo", FAKE_MIRROR_FALHA="1")
+
+    assert r.returncode != 0
+    assert "espelhamento do bucket falhou" in r.stderr
+    chamadas = host.chamadas()
+    assert [c for c in chamadas if c[0] == "stop"]
+    assert religou(host)
+    assert bancos(host) == {"eclume"}
+    assert not list((host.data / "backups").glob(".restaurar.*"))
+
+
+def test_restaurar_sucesso_deixa_so_o_eclume(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo")
+
+    assert r.returncode == 0, r.stderr
+    assert bancos(host) == {"eclume"}
+    assert religou(host)
+
+
 def test_restaurar_aplicar_exige_confirmacao(host: Host) -> None:
     r = host.rodar("restaurar-backup.sh", "--aplicar", "latest")
 
