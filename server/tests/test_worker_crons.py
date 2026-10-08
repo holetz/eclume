@@ -5,7 +5,15 @@ O registro é uma tabela literal, de propósito: tirar um cron ou mudar a agenda
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+from arq import create_pool
+from arq.connections import RedisSettings
+from sqlalchemy import text
+
 from eclume_server.config import Settings
+from eclume_server.db.session import make_engine
+from eclume_server.storage import Storage
 from eclume_server.worker import (
     dispatch_transcriptions,
     drain_storage_deletions,
@@ -17,6 +25,13 @@ from eclume_server.worker import (
     resume_pipelines,
     worker_settings,
 )
+from eclume_server_testing.harness import run
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from eclume_server_testing.api import Account, Api
+    from eclume_server_testing.harness import Services
 
 # (função, minuto, hora, dia da semana, segundo): o que o arq guarda em cada campo da agenda.
 CRONS = [
@@ -40,3 +55,50 @@ def test_registro_dos_oito_crons_com_agenda_unique_e_sem_run_at_startup():
         assert (job.month, job.day, job.microsecond) == (None, None, 123456), job.name
         assert job.run_at_startup is False, job.name
         assert job.unique is True, job.name
+
+
+def _cron(services: Services, func: Callable[[dict[str, Any]], Any]) -> Any:  # noqa: ANN401
+    """Roda a função do cron como o arq a chama: com o `ctx` do worker (engine, Redis, bucket)."""
+
+    async def go() -> Any:  # noqa: ANN401
+        engine = make_engine(services.settings.database_url)
+        pool = await create_pool(RedisSettings.from_dsn(services.settings.redis_url))
+        try:
+            return await func({"engine": engine, "redis": pool, "storage": Storage(services.settings)})
+        finally:
+            await pool.aclose()
+            await engine.dispose()
+
+    return run(go())
+
+
+def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN401
+    async def go(conn: Any) -> Any:  # noqa: ANN401
+        result = await conn.execute(text(statement), params)
+        return result.all() if result.returns_rows else None
+
+    return run(services.sql(go))
+
+
+def _pairing_ids(services: Services, *ids: str) -> set[str]:
+    rows = _sql(services, "SELECT id FROM pairing_codes WHERE id = ANY(CAST(:ids AS uuid[]))", ids=list(ids))
+    return {str(row[0]) for row in rows}
+
+
+def test_pareamento_apaga_so_o_vencido_ha_mais_de_um_dia_sem_uso(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    session = as_user(make_user())
+    old, recent, used = (session.post("/api/v1/devices/pairing-codes").json()["id"] for _ in range(3))
+    _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '2 days' WHERE id = :id", id=old)
+    # Borda: vencido há pouco fica (a janela de um dia), e o usado fica mesmo velho (guarda o `token_id`).
+    _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '1 hour' WHERE id = :id", id=recent)
+    _sql(
+        services,
+        "UPDATE pairing_codes SET expires_at = now() - interval '2 days', used_at = now() - interval '2 days'"
+        " WHERE id = :id",
+        id=used,
+    )
+    assert _cron(services, expire_pairing_codes) >= 1
+    assert _pairing_ids(services, old, recent, used) == {recent, used}
+    assert _cron(services, expire_pairing_codes) == 0
