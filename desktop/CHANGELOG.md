@@ -8,6 +8,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Alterado
+
+- O `.md` da pasta sincronizada avisa quando o resumo é de uma versão anterior da transcrição: a
+  propriedade `summary_stale: true` e um aviso no topo, com o mesmo texto do web (holetz/eclume#186).
+
 ## [0.5.2] - 2026-10-07
 
 ### Alterado

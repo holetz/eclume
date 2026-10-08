@@ -75,9 +75,17 @@ collections:
   - "Clientes"
 agenda_type: "Reunião de equipe"     # omitido sem tipo de agenda
 summary_version: 3
+summary_stale: true                  # só quando o resumo é de uma revisão anterior da transcrição
 transcript: "2026-09-18_1100_01928f3a.jsonl"   # só com transcrição
 ---
 ```
+
+**Resumo desatualizado.** O app lê `transcript_revision` do resumo atual (contrato 2.25.0). Quando
+ela é menor que a `revision` da transcrição espelhada, o front matter ganha `summary_stale: true` e
+o corpo abre, logo abaixo dele, com o callout `> [!warning] Resumo de uma versão anterior da
+transcrição` e a linha `A transcrição foi alterada depois deste resumo. Use Regenerar para refletir
+as mudanças.` (o mesmo texto do aviso do web). Sem uma das duas revisões (servidor anterior ao
+2.25.0, ou transcrição não espelhada) não há aviso, e a propriedade não existe.
 
 Com marcador que tem nota, o `.md` termina com a seção `## Notas dos marcadores`: uma linha
 `- [HH:MM:SS] nota` por marcador, em ordem de instante, a nota achatada em uma linha. Sem nota

@@ -237,6 +237,7 @@ mod tests {
             summary: Some(Summary {
                 version: versao,
                 markdown: format!("# {title} v{versao}"),
+                transcript_revision: None,
             }),
             transcript: Some(Transcript {
                 id: format!("t-{id}"),

@@ -50,7 +50,8 @@ são os 8 primeiros caracteres do id da gravação (a referência que o eclume w
     out.push_str(
         "Começa com front matter YAML (propriedades no Obsidian): `recording_id`, `title`, `aliases`, \
 `recorded_at`, `collections`, `agenda_type` (o tipo de agenda, como \"Reunião de equipe\"), \
-`summary_version`",
+`summary_version`, `summary_stale` (só aparece, como `true`, quando o resumo é de uma revisão anterior \
+da transcrição; o corpo então abre com um aviso)",
     );
     if transcripts {
         out.push_str(" e `transcript` (o arquivo `.jsonl` da mesma gravação)");

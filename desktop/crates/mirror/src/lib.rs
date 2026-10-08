@@ -49,6 +49,8 @@ pub struct MirrorMarker {
 pub struct Summary {
     pub version: u64,
     pub markdown: String,
+    /// A `revision` da transcrição de que o resumo partiu; `None` num servidor anterior ao 2.25.0.
+    pub transcript_revision: Option<u64>,
 }
 
 /// A transcrição, já sem o que o espelho não usa.
