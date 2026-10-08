@@ -3250,6 +3250,16 @@ export interface components {
         RetranscribeRequest: {
             /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
             language?: string;
+            /**
+             * @description Desde a 2.25.0. Mínimo de locutores a esperar nesta revisão; vence os limites do admin
+             *     e a regra da nota de voz (um locutor). Não persiste: vale só para a revisão pedida.
+             */
+            min_speakers?: number;
+            /**
+             * @description Desde a 2.25.0. Máximo de locutores a esperar nesta revisão (422 se menor que
+             *     `min_speakers`). Uma nota de voz (`kind: note`) sem este campo usa 1 locutor.
+             */
+            max_speakers?: number;
         };
         /** @description Resumo de listagem de uma transcrição (sem segmentos). */
         TranscriptSummary: {
