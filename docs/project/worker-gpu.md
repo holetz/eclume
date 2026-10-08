@@ -103,6 +103,29 @@ Do segundo job em diante, o job curto cai ~43% (≈4,5 s a menos por job): o ali
 recarregado, o ASR não. O pico acima da linha de base com o ASR residente foi 1.746 MiB, longe do
 limiar de 2.500 MiB livres que faria o ASR sair.
 
+### Qualidade do texto (WER e CER)
+
+`--reference texto.txt` (UTF-8) acrescenta ao JSON o bloco `quality`, com a taxa, o tamanho da
+referência e as substituições, remoções e inserções de `wer` (palavras) e `cer` (caracteres). O
+texto reconhecido é a junção dos segmentos. A conta é própria, em `eclume_worker.wer`, sem
+dependência. Não está ligada ao gate nem a `deploy/`.
+
+```bash
+python -m eclume_worker.bench /bench/bench-1h.ogg --no-diarize --reference /bench/bench-1h.txt
+```
+
+**Normalização pt-BR**, igual para referência e hipótese: Unicode NFC, minúsculas, pontuação
+(inclusive aspas e travessões tipográficos) vira espaço, o hífen e o apóstrofo entre letras ficam
+dentro da palavra e os espaços repetidos colapsam. Os acentos são preservados, porque "é" e "e"
+são palavras diferentes; números e símbolos não são expandidos ("10" e "dez" contam como erro).
+No CER, o espaço entre palavras é um caractere. Referência vazia com hipótese não vazia dá taxa
+nula (`null`), sem divisão por zero.
+
+O texto de referência do LibriVox não está no repositório; quem mede o entrega por caminho. Leitores
+omitem ou acrescentam trechos, o que infla o WER: o número serve para comparar configurações
+(`compute_type`, modelo reserva, versão do WhisperX) no mesmo par áudio/texto, não como valor
+absoluto. Ainda não há WER base medido no host.
+
 ## Imagem
 
 `worker-gpu/Dockerfile` é construído no host, a partir da raiz do repositório:

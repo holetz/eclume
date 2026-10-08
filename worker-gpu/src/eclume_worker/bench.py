@@ -9,6 +9,8 @@ processamento por hora de áudio e a VRAM de pico acima da linha de base. Com `-
 grava também o `transcript.raw.json` para inspeção. `--repeat N` roda N jobs seguidos na mesma
 engine (como o worker faz) e lista o tempo de cada um em `runs_s`: com o ASR residente, do segundo
 em diante não há carga do modelo; `--single-slot` mede o comportamento antigo, um modelo por vez.
+Com `--reference texto.txt`, o JSON traz também `quality`: WER e CER do texto reconhecido contra a
+referência, com a normalização pt-BR de `eclume_worker.wer`.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from eclume_engines.hf_token import resolve_hf_token
 from eclume_engines.vram import VramMonitor
 from eclume_worker.storage import sha256_file
 from eclume_worker.transcript import build_transcript
+from eclume_worker.wer import EditCounts, char_counts, word_counts
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -47,10 +50,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, help="lote inicial fixo do ASR (padrão: pela VRAM livre)")
     parser.add_argument("--no-diarize", action="store_true")
     parser.add_argument("--no-embeddings", action="store_true")
+    parser.add_argument("--reference", type=Path, help="texto de referência (UTF-8) para medir WER e CER")
     parser.add_argument("--transcript", type=Path, help="grava o transcript.raw.json neste caminho")
     parser.add_argument("--repeat", type=int, default=1, help="jobs seguidos na mesma engine (padrão: 1)")
     parser.add_argument("--single-slot", action="store_true", help="um modelo por vez, sem o ASR residente")
     return parser.parse_args(argv)
+
+
+def _quality(reference: str, hypothesis: str) -> dict[str, Any]:
+    """WER e CER com as contagens que os explicam."""
+
+    def block(counts: EditCounts) -> dict[str, Any]:
+        return {
+            "rate": None if counts.rate is None else round(counts.rate, 4),
+            "reference_len": counts.reference_len,
+            "substitutions": counts.substitutions,
+            "deletions": counts.deletions,
+            "insertions": counts.insertions,
+        }
+
+    return {"wer": block(word_counts(reference, hypothesis)), "cer": block(char_counts(reference, hypothesis))}
 
 
 def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -> dict[str, Any]:
@@ -92,7 +111,7 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
         args.transcript.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
 
     rtf = processing_s / result.duration_s if result.duration_s else None
-    return {
+    report = {
         "audio": str(args.audio),
         "engine": result.engine,
         "model": result.model,
@@ -111,6 +130,10 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
         "speakers": len({s.speaker for s in result.segments if s.speaker is not None}),
         "warnings": result.warnings,
     }
+    if args.reference is not None:
+        hypothesis = " ".join(s.text for s in result.segments)
+        report["quality"] = _quality(args.reference.read_text(encoding="utf-8"), hypothesis)
+    return report
 
 
 def main(argv: Sequence[str] | None = None) -> int:
