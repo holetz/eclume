@@ -161,16 +161,19 @@ tauri_android_builds() {
 }
 
 # Os caminhos saem separados por NUL e são lidos assim: um nome com LF não pode partir o caminho e
-# levar o rm -rf para fora do alvo.
+# levar o rm -rf para fora do alvo. O `wait $!` traz de volta o status do find, que a substituição de
+# processo perde: sem ele, um registro ilegível passaria por limpo.
 tauri_android_limpar_builds() {
   local antigo
   while IFS= read -r -d '' antigo; do rm -rf -- "$antigo"; done < <(tauri_android_builds)
+  wait $! || return 1
 }
 
 # Falha (e nomeia o que voltou) se algum build/ reapareceu no registro.
 tauri_android_invasores() {
   local invasor achados=()
   while IFS= read -r -d '' invasor; do achados+=("$invasor"); done < <(tauri_android_builds)
+  wait $! || return 1
   ((${#achados[@]} == 0)) || { echo "o Gradle escreveu no registro do cargo: ${achados[*]}" >&2; return 1; }
 }
 

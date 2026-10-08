@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
+
+import pytest
 
 PILARES = Path(__file__).with_name("pilares.sh")
 FUNCOES = ("tauri_android_builds", "tauri_android_limpar_builds", "tauri_android_invasores")
@@ -52,3 +55,14 @@ def test_guarda_acusa_invasor_e_passa_sem_ele(tmp_path: Path) -> None:
     registro(tmp_path)
     assert bash(tmp_path, "tauri_android_invasores\n").returncode == 1
     assert bash(tmp_path, "tauri_android_limpar_builds\ntauri_android_invasores\n").returncode == 0
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="o root atravessa e lista qualquer diretório")
+def test_limpeza_e_guarda_falham_quando_o_find_nao_le_o_registro(tmp_path: Path) -> None:
+    idx = registro(tmp_path)
+    idx.chmod(0o300)
+    try:
+        assert bash(tmp_path, "tauri_android_limpar_builds\n").returncode != 0
+        assert bash(tmp_path, "tauri_android_invasores\n").returncode != 0
+    finally:
+        idx.chmod(0o700)
