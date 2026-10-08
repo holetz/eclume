@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import pytest
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy import text
 
 from eclume_server.config import Settings
 from eclume_server.db.session import make_engine
+from eclume_server.queue import GPU_QUEUE, transcribe_job_id
 from eclume_server.storage import Storage
 from eclume_server.worker import (
     dispatch_transcriptions,
@@ -25,10 +27,12 @@ from eclume_server.worker import (
     resume_pipelines,
     worker_settings,
 )
+from eclume_server_testing.api import audio_bytes, override_quotas, upload_file
+from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
@@ -102,3 +106,49 @@ def test_pareamento_apaga_so_o_vencido_ha_mais_de_um_dia_sem_uso(
     assert _cron(services, expire_pairing_codes) >= 1
     assert _pairing_ids(services, old, recent, used) == {recent, used}
     assert _cron(services, expire_pairing_codes) == 0
+
+
+def _gpu_queue(services: Services) -> list[str]:
+    async def read() -> list[str]:
+        pool = await create_pool(RedisSettings.from_dsn(services.settings.redis_url))
+        try:
+            return [job_id.decode() for job_id in await pool.zrange(GPU_QUEUE, 0, -1)]
+        finally:
+            await pool.aclose()
+
+    return run(read())
+
+
+@pytest.fixture
+def _drain_gpu(services: Services) -> Iterator[None]:
+    """Termina drenando `eclume:gpu`: um job despachado e esquecido ficaria em aberto para os outros testes."""
+    yield
+    while _gpu_queue(services):
+        run_gpu(services.settings)
+        run_cpu(services.settings)
+
+
+@pytest.mark.usefixtures("_drain_gpu")
+def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
+):
+    api = as_user(make_user())
+    override_quotas(services, api, {"gpu_minutes_24h": 2})
+    first = upload_file(api, audio_bytes(2000, seed="crons-longa"), duration_ms=150_000)
+    waiting = upload_file(api, audio_bytes(2000, seed="crons-espera"))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    job = transcribe_job_id(waiting["id"], 1)
+    # Borda: com os minutos de 24 h estourados a conta fica retida, e o cron não despacha nada dela.
+    assert _cron(services, dispatch_transcriptions) == 0
+    assert job not in _gpu_queue(services)
+
+    # A janela abre (o despacho do primeiro sai das 24 h): o cron despacha o retido, uma vez.
+    _sql(
+        services,
+        "UPDATE transcription_jobs SET dispatched_at = now() - interval '25 hours' WHERE recording_id = :r",
+        r=first["id"],
+    )
+    assert _cron(services, dispatch_transcriptions) == 1
+    assert job in _gpu_queue(services)
+    assert _cron(services, dispatch_transcriptions) == 0
