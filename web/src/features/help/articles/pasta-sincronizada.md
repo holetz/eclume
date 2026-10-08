@@ -5,7 +5,7 @@ paginas: [app-desktop, colecoes]
 relacionados: [tags-e-colecoes, instalar-app-desktop, conectar-assistente-mcp]
 termos: [pasta, sincronizar, sincronização, Obsidian, vault, Markdown, JSONL, agente, AGENTS.md, Claude Code, coleção, coleções, subpasta, espelho]
 ordem: 6
-atualizado: 2026-09-30
+atualizado: 2026-10-08
 ---
 O app desktop pode manter uma pasta do seu computador com o **resumo** e a **transcrição** de cada
 gravação da sua biblioteca. Assim você lê, busca e reaproveita o conteúdo fora do eclume, num editor
@@ -56,6 +56,13 @@ AGENTS.md
   `recorded_at`, `collections`, `agenda_type`, `summary_version`). O `.jsonl` é a transcrição: a
   primeira linha descreve a gravação e cada linha seguinte é uma fala, com locutor, início, fim e
   texto.
+- Se a gravação tem marcadores com nota, o `.md` termina com a seção **Notas dos marcadores**: uma
+  linha por nota, com o horário no áudio (`- [00:12:30] conferir o número`). Marcador sem nota não
+  aparece.
+- Se a transcrição mudou depois do resumo, o `.md` traz `summary_stale: true` nas propriedades e uma
+  faixa de aviso no topo ("Resumo de uma versão anterior da transcrição"). É o mesmo aviso da
+  página da gravação: use **Regenerar** no eclume e, no ciclo seguinte, o arquivo volta ao normal.
+  Sem a transcrição espelhada, o app não consegue comparar e não avisa.
 - Mudou a coleção no eclume? Os arquivos mudam de pasta no ciclo seguinte. Quem já usava a
   pasta antes da divisão por mês tem os arquivos reorganizados sozinhos, sem duplicar.
 

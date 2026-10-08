@@ -5,7 +5,7 @@ paginas: [gravacao]
 relacionados: [editar-resumo, ajustar-pelo-chat, trocar-tipo-da-gravacao]
 termos: [versão, histórico, gerada, manual, chat, comparar, voltar, desfazer]
 ordem: 3
-atualizado: 2026-09-27
+atualizado: 2026-10-08
 ---
 Toda mudança no resumo cria uma versão nova. Nenhuma mudança apaga a anterior.
 
@@ -26,6 +26,13 @@ agente, trecho por trecho.
 
 **Voltar à gerada** traz de volta o texto da última versão gerada. A volta também cria uma versão,
 então as suas edições continuam no histórico e nada se perde.
+
+## O aviso de resumo de uma versão anterior
+
+Cada versão lembra de qual transcrição saiu. Quando a transcrição muda depois (uma fala corrigida,
+um locutor renomeado, ligado a uma pessoa ou juntado a outro), a barra do resumo mostra **Resumo de
+uma versão anterior da transcrição**. **Regenerar** cria uma versão gerada
+sobre a transcrição de agora. Enquanto o agente escreve a versão nova, o aviso não aparece.
 
 ## Quando sai uma versão gerada nova
 

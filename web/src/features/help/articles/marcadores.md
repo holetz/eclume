@@ -2,10 +2,10 @@
 titulo: Marcadores feitos durante a gravação
 topico: transcricao
 paginas: [gravacao, app-desktop, app-movel]
-relacionados: [primeira-gravacao, gravar-pelo-celular, corrigir-transcricao]
+relacionados: [primeira-gravacao, gravar-pelo-celular, corrigir-transcricao, pasta-sincronizada]
 termos: [marcador, marcar, momento, instante, nota, atalho]
 ordem: 5
-atualizado: 2026-09-27
+atualizado: 2026-10-08
 ---
 Um marcador guarda um instante da gravação para você achar depois: uma decisão, uma pergunta, um
 número que precisa conferir.
@@ -28,3 +28,14 @@ Os marcadores sobem junto com a gravação.
 
 Os marcadores aparecem como traços no player e numa lista logo abaixo. Clique num marcador para
 ouvir aquele trecho e ver a fala na transcrição. Dá para editar a nota e excluir o marcador.
+
+## Para onde vai a nota
+
+A nota não fica só no marcador:
+
+- **No resumo:** quando o agente escreve o resumo, ele recebe as suas notas junto da transcrição, cada
+  uma no instante em que você marcou. Elas orientam o que ele destaca, mas o texto do resumo é do
+  agente: a nota não é copiada palavra por palavra. Se mudar uma nota depois, peça um resumo novo.
+- **Na pasta sincronizada:** o `.md` de cada gravação ganha a seção **Notas dos marcadores**, com uma
+  linha por nota e o horário dela. Marcador sem nota não entra. Como o arquivo vai para o seu
+  computador, as notas saem do servidor; veja [Sincronize seus resumos numa pasta](/ajuda/pasta-sincronizada).
