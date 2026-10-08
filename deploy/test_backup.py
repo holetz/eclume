@@ -20,7 +20,7 @@ import pytest
 DEPLOY = Path(__file__).parent
 
 FAKE_DOCKER = r"""#!/usr/bin/env python3
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -45,6 +45,8 @@ if cmd == "ps":
     projeto = next((x.rsplit("=", 1)[1] for x in filtros if "compose.project=" in x), "")
     if projeto == "eclume" and servico in running:
         print(f"cid-{servico}")
+elif cmd == "stop":
+    sys.exit(1 if os.environ.get("FAKE_STOP_FALHA") else 0)
 elif cmd == "inspect":
     print("eclume_fila-gpu\neclume_dados" if "Networks" in " ".join(args) else "minio-img")
 elif cmd == "exec":
@@ -56,7 +58,35 @@ elif cmd == "exec":
         sys.stdin.read()
         if os.environ.get("FAKE_PSQL_FALHA") and os.environ["FAKE_PSQL_FALHA"] in " ".join(args):
             sys.exit(1)
-        print("recordings=1 summaries=0 transcripts=1 users=1")
+        arquivo = base / "bancos"
+        if not arquivo.exists():
+            arquivo.write_text(os.environ.get("FAKE_DBS", "eclume").replace(" ", "\n"))
+        bancos = set(arquivo.read_text().split())
+        falhas = [x for x in os.environ.get("FAKE_SQL_FALHA", "").split("|") if x]
+        for i, a in enumerate(args):
+            if a != "-c":
+                continue
+            sql = args[i + 1].strip()
+            if any(x in sql for x in falhas):
+                print(f"ERROR: simulado: {sql}", file=sys.stderr)
+                sys.exit(1)
+            if m := re.match(r"create database (\w+)", sql):
+                bancos.add(m[1])
+            elif m := re.match(r"drop database if exists (\w+)", sql):
+                bancos.discard(m[1])
+            elif m := re.match(r"alter database (\w+) rename to (\w+)", sql):
+                if m[1] not in bancos or m[2] in bancos:
+                    print(f"ERROR: rename {sql}", file=sys.stderr)
+                    sys.exit(1)
+                bancos.discard(m[1])
+                bancos.add(m[2])
+            elif m := re.match(r"select 1 from pg_database where datname = '(\w+)'", sql):
+                print(1 if m[1] in bancos else "", end="\n" if m[1] in bancos else "")
+            elif "pg_terminate_backend" not in sql:
+                print("recordings=1 summaries=0 transcripts=1 users=1")
+            arquivo.write_text("\n".join(sorted(bancos)))
+        if "-c" not in args:
+            print("recordings=1 summaries=0 transcripts=1 users=1")
     elif "pg_restore" in args:
         sys.stdin.read()
         ruim = os.environ.get("FAKE_DUMP_RUIM", "")
@@ -81,6 +111,8 @@ elif cmd == "run":
             break
     image, rest = args[i], args[i + 1:]
     if image == "minio-img":
+        if "mirror" in rest and os.environ.get("FAKE_MIRROR_FALHA"):
+            sys.exit(1)
         if "mirror" in rest and "/b/.espelho" in rest:
             (mounts["/b"] / ".espelho" / "rec").mkdir(parents=True, exist_ok=True)
             (mounts["/b"] / ".espelho" / "rec" / "audio.ogg").write_text("audio")
