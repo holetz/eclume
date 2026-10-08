@@ -5,7 +5,7 @@ paginas: [biblioteca, app-desktop, app-movel]
 relacionados: [primeira-gravacao, gravar-pelo-celular, etapas-do-processamento]
 termos: [nota, nota de voz, ideia, lembrete, ditar, atalho]
 ordem: 5
-atualizado: 2026-09-28
+atualizado: 2026-10-08
 ---
 Uma nota de voz é uma gravação de uma pessoa só: uma ideia, um lembrete, um rascunho ditado.
 
@@ -19,7 +19,11 @@ Uma nota de voz é uma gravação de uma pessoa só: uma ideia, um lembrete, um 
 
 ## O que acontece com ela
 
-A nota passa pelas mesmas etapas de uma reunião e cai no tipo de agenda **Nota de voz**. O resumo
+A nota passa pelas mesmas etapas de uma reunião, mas é transcrita com um locutor só, sem separar
+vozes, e cai no tipo de agenda **Nota de voz**. O resumo
 desse tipo é o seu próprio texto, limpo das hesitações e dividido em parágrafos, pronto para copiar.
 
 Na biblioteca, as notas têm uma marca própria, e o filtro **Tipo** separa as notas das reuniões.
+
+Se a nota tiver mais de uma voz, use **Transcrever de novo em…** na gravação e informe o mínimo e o
+máximo de locutores.
