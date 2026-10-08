@@ -19,6 +19,16 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
+def test_listagem_com_cursor_malformado_responde_422(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    api = as_user(make_user())
+    # `["2026-01-01T00:00:00", 5]`: JSON bem formado, mas o id não é texto.
+    response = api.get("/api/v1/recordings", params={"cursor": "WyIyMDI2LTAxLTAxVDAwOjAwOjAwIiwgNV0"})
+    assert response.status_code == 422
+    assert "cursor inválido" in response.text
+
+
 def test_listar_obter_e_filtrar(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     first = upload_file(api, audio_bytes(100), tags=["cliente-a"])
