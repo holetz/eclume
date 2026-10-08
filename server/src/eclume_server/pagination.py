@@ -41,13 +41,21 @@ def encode_cursor(sort_value: datetime, row_id: UUID) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
-    """Posição de um cursor; inválido vira 422 no campo `cursor`."""
+def _decode_json(cursor: str) -> object:
+    """O JSON dentro de um cursor base64url; base64, UTF-8 ou JSON inválidos viram 422 no campo `cursor`."""
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
-        sort_value, row_id = json.loads(base64.urlsafe_b64decode(padded))
+        return json.loads(base64.urlsafe_b64decode(padded))
+    except ValueError as exc:
+        raise invalid_field("cursor", "cursor inválido") from exc
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
+    """Posição de um cursor; inválido vira 422 no campo `cursor`."""
+    sort_value, row_id = decode_position(cursor, 2)
+    try:
         return datetime.fromisoformat(sort_value), UUID(row_id)
-    except (ValueError, TypeError) as exc:
+    except ValueError as exc:
         raise invalid_field("cursor", "cursor inválido") from exc
 
 
@@ -59,11 +67,7 @@ def encode_position(*values: object) -> str:
 
 def decode_position(cursor: str, size: int) -> list[str]:
     """Os `size` valores de um cursor de `encode_position`; inválido vira 422 no campo `cursor`."""
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        values = json.loads(base64.urlsafe_b64decode(padded))
-    except (ValueError, TypeError) as exc:
-        raise invalid_field("cursor", "cursor inválido") from exc
+    values = _decode_json(cursor)
     if not isinstance(values, list) or len(values) != size or not all(isinstance(v, str) for v in values):
         raise invalid_field("cursor", "cursor inválido")
     return values
