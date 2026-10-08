@@ -254,6 +254,7 @@ mod tests {
                     text: "oi".into(),
                 }],
             }),
+            markers: vec![],
         }
     }
 

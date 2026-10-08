@@ -15,7 +15,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use eclume_mirror::{Applied, Mirror, MirrorItem, Segment, Speaker, Summary, Transcript};
+use eclume_mirror::{
+    Applied, Mirror, MirrorItem, MirrorMarker, Segment, Speaker, Summary, Transcript,
+};
 use eclume_recorder::now_ms;
 use eclume_sync::api::{self, CollectionInfo, LibraryRecording};
 use eclume_sync::{Client, LibrarySummary, MissingScope, UploaderConfig};
@@ -39,6 +41,8 @@ pub trait Source {
     fn recording(&self, recording_id: &str) -> Result<Option<LibraryRecording>>;
     fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>>;
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>>;
+    /// Os marcadores da gravação, para a seção de notas do `.md`.
+    fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>>;
     /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que dá mês e nome ao arquivo.
     /// O padrão usa o fuso deste computador; os testes fixam um.
     fn local_start(&self, recorded_at: &str) -> Option<String> {
@@ -61,6 +65,9 @@ impl Source for Client {
     }
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
         Client::transcript(self, recording_id)
+    }
+    fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>> {
+        Client::markers(self, recording_id)
     }
 }
 
@@ -90,6 +97,9 @@ impl Source for SharedSource<'_> {
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
         Source::transcript(self.client, recording_id)
     }
+    fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>> {
+        Source::markers(self.client, recording_id)
+    }
 }
 
 /// O resultado de um ciclo.
@@ -114,6 +124,7 @@ pub fn to_item(
     collections: &HashMap<String, String>,
     summary: Option<LibrarySummary>,
     transcript: Option<api::Transcript>,
+    markers: Vec<api::Marker>,
 ) -> MirrorItem {
     let title = if recording.title.trim().is_empty() {
         transcript
@@ -142,6 +153,16 @@ pub fn to_item(
         local_start,
         collections: names,
         agenda_type,
+        markers: markers
+            .into_iter()
+            .filter_map(|marker| {
+                let note = marker.note?;
+                (!note.trim().is_empty()).then_some(MirrorMarker {
+                    at_ms: marker.at_ms,
+                    note,
+                })
+            })
+            .collect(),
         summary: summary.map(|s| Summary {
             version: s.version,
             markdown: s.content_md,
@@ -274,6 +295,12 @@ pub fn sync_library(
             } else {
                 None
             };
+            // Só há `.md` com resumo; sem ele, ler os marcadores seria uma chamada à toa.
+            let markers = if summary.is_some() {
+                source.markers(&recording.id)?
+            } else {
+                Vec::new()
+            };
             let transcript = if *transcripts_on && recording.transcript_id.is_some() {
                 match source.transcript(&recording.id) {
                     Ok(transcript) => transcript,
@@ -301,6 +328,7 @@ pub fn sync_library(
                 &names,
                 summary,
                 transcript,
+                markers,
             )))
         };
         let outcome = match read(&mut transcripts_on, &mut report.transcripts_denied) {
@@ -473,6 +501,7 @@ mod tests {
         /// O servidor recusa `transcripts:read` (403 `insufficient_scope`).
         denied_transcripts: RefCell<bool>,
         transcript_calls: RefCell<usize>,
+        markers: RefCell<BTreeMap<String, Vec<api::Marker>>>,
         /// Fuso do "computador" do teste, em horas a oeste de UTC (0 = UTC).
         west_hours: RefCell<i32>,
         calls: RefCell<Vec<String>>,
@@ -508,6 +537,9 @@ mod tests {
         }
         fn local_start(&self, recorded_at: &str) -> Option<String> {
             api::start_at_offset(recorded_at, -*self.west_hours.borrow() * 3600)
+        }
+        fn markers(&self, id: &str) -> Result<Vec<api::Marker>> {
+            Ok(self.markers.borrow().get(id).cloned().unwrap_or_default())
         }
         fn transcript(&self, id: &str) -> Result<Option<api::Transcript>> {
             *self.transcript_calls.borrow_mut() += 1;
@@ -686,6 +718,41 @@ mod tests {
             std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md"))
                 .unwrap();
         assert!(md.contains("summary_version: 2") && md.contains("# Ata v2"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn nota_de_marcador_entra_no_md_e_editada_reescreve_so_ele() {
+        let dir = tmp("notas");
+        let fake = fake();
+        let mut mirror = Mirror::open(&dir).unwrap();
+        let note = |at_ms, text: &str| api::Marker {
+            at_ms,
+            note: Some(text.into()),
+        };
+        fake.markers.borrow_mut().insert(
+            "bbbbbbbb-2".into(),
+            vec![
+                note(61_000, "decisão: aprovar"),
+                api::Marker {
+                    at_ms: 90_000,
+                    note: None,
+                },
+            ],
+        );
+        sync_library(&fake, &mut mirror, true, false).unwrap();
+        let path = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
+        let md = std::fs::read_to_string(&path).unwrap();
+        assert!(md.ends_with("## Notas dos marcadores\n\n- [00:01:01] decisão: aprovar\n"));
+        // A nota editada move o `updated_at` da gravação (servidor) e o `.md` é reescrito.
+        fake.markers
+            .borrow_mut()
+            .insert("bbbbbbbb-2".into(), vec![note(61_000, "decisão: adiar")]);
+        fake.recordings.borrow_mut()[1].updated_at = Some("2026-09-20T09:00:00Z".into());
+        let report = sync_library(&fake, &mut mirror, true, false).unwrap();
+        assert_eq!(report.written, 1);
+        let md = std::fs::read_to_string(&path).unwrap();
+        assert!(md.contains("decisão: adiar") && !md.contains("aprovar"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1015,7 +1082,7 @@ mod tests {
         let names = HashMap::from([("c1".to_string(), "Clientes".to_string())]);
         let mut t = transcript("eeeeeeee-5");
         t.title = "Título da transcrição".into();
-        let item = to_item(&rec, None, &names, Some(summary(1)), Some(t));
+        let item = to_item(&rec, None, &names, Some(summary(1)), Some(t), Vec::new());
         assert_eq!(item.collections, ["Clientes"]);
         assert_eq!(item.title, "Título da transcrição");
         assert_eq!(item.agenda_type.as_deref(), Some("Reunião de equipe"));
