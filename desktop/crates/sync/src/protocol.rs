@@ -365,6 +365,7 @@ impl Client {
                             version: current.version,
                             agenda_type: current.agenda_type.map(|agenda| agenda.name),
                             content_md: markdown,
+                            transcript_revision: current.transcript_revision,
                         }
                     })
                 }))
@@ -648,6 +649,10 @@ pub struct SummaryVersion {
     pub version: u64,
     #[serde(default)]
     pub agenda_type: Option<api::AgendaRef>,
+    /// A `revision` da transcrição de que o resumo partiu (contrato 2.25.0); ausente num servidor
+    /// anterior.
+    #[serde(default)]
+    pub transcript_revision: Option<u64>,
 }
 
 /// O resumo atual de uma gravação para o espelho local.
@@ -656,6 +661,7 @@ pub struct LibrarySummary {
     pub version: u64,
     pub agenda_type: Option<String>,
     pub content_md: String,
+    pub transcript_revision: Option<u64>,
 }
 
 /// Um endereço de servidor: `http://` ou `https://` seguido do host.
@@ -1049,7 +1055,7 @@ mod tests {
             json(
                 200,
                 serde_json::json!({
-                    "current": {"status": status, "content_md": md, "version": 3,
+                    "current": {"status": status, "content_md": md, "version": 3, "transcript_revision": 4,
                                 "agenda_type": {"id": "a1", "name": "1:1"}},
                     "generated": null, "pending": null, "version_count": 3
                 }),
@@ -1079,6 +1085,7 @@ mod tests {
         assert_eq!(pronto.version, 3);
         assert_eq!(pronto.agenda_type.as_deref(), Some("1:1"));
         assert_eq!(pronto.content_md, "# Ata");
+        assert_eq!(pronto.transcript_revision, Some(4));
         assert_eq!(client.current_summary("r2").unwrap(), None);
         assert_eq!(client.current_summary("r3").unwrap(), None);
         assert_eq!(client.current_summary("r4").unwrap(), None);

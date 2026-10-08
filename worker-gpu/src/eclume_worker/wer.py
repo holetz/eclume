@@ -51,30 +51,61 @@ def normalize(text: str) -> str:
     return " ".join(text.split())
 
 
+def _cost_row(reference: Sequence[str], hypothesis: Sequence[str], *, reverse: bool) -> list[int]:
+    """Última linha de custo da referência contra os prefixos da hipótese.
+
+    Com `reverse`, ambas são lidas de trás para frente, então `row[k]` é o custo dos últimos `k`
+    itens da hipótese contra a referência inteira.
+    """
+    hyp = hypothesis[::-1] if reverse else hypothesis
+    ref = reference[::-1] if reverse else reference
+    row = list(range(len(hyp) + 1))
+    for item in ref:
+        diagonal = row[0]
+        row[0] += 1
+        for j, other in enumerate(hyp, 1):
+            above = row[j]
+            row[j] = min(diagonal + (item != other), above + 1, row[j - 1] + 1)
+            diagonal = above
+    return row
+
+
 def edit_counts(reference: Sequence[str], hypothesis: Sequence[str]) -> EditCounts:
-    """Levenshtein com as contagens de S, D e I do alinhamento de menor custo."""
-    rows, cols = len(reference), len(hypothesis)
-    cost = [[0] * (cols + 1) for _ in range(rows + 1)]
-    for i in range(1, rows + 1):
-        cost[i][0] = i
-    for j in range(1, cols + 1):
-        cost[0][j] = j
-    for i in range(1, rows + 1):
-        for j in range(1, cols + 1):
-            diagonal = cost[i - 1][j - 1] + (reference[i - 1] != hypothesis[j - 1])
-            cost[i][j] = min(diagonal, cost[i - 1][j] + 1, cost[i][j - 1] + 1)
+    """Levenshtein com as contagens de S, D e I de um alinhamento de menor custo.
+
+    Algoritmo de Hirschberg: memória linear no tamanho da hipótese e tempo quadrático. A referência
+    é partida ao meio; o corte da hipótese que minimiza `custo(esq) + custo(dir)` separa dois
+    subproblemas independentes, e as folhas somam a distância ótima. Num empate o alinhamento
+    escolhido pode diferir do de uma matriz completa, mas o total de erros é o mesmo.
+    """
+    rows = len(reference)
+    start = 0
+    stop_ref, stop_hyp = rows, len(hypothesis)
+    while start < stop_ref and start < stop_hyp and reference[start] == hypothesis[start]:
+        start += 1
+    while stop_ref > start and stop_hyp > start and reference[stop_ref - 1] == hypothesis[stop_hyp - 1]:
+        stop_ref -= 1
+        stop_hyp -= 1
     substitutions = deletions = insertions = 0
-    i, j = rows, cols
-    while i > 0 or j > 0:
-        if i > 0 and j > 0 and cost[i][j] == cost[i - 1][j - 1] + (reference[i - 1] != hypothesis[j - 1]):
-            substitutions += reference[i - 1] != hypothesis[j - 1]
-            i, j = i - 1, j - 1
-        elif i > 0 and cost[i][j] == cost[i - 1][j] + 1:
-            deletions += 1
-            i -= 1
+    pending = [(start, stop_ref, start, stop_hyp)]
+    while pending:
+        r0, r1, h0, h1 = pending.pop()
+        height, width = r1 - r0, h1 - h0
+        if height == 0:
+            insertions += width
+        elif width == 0:
+            deletions += height
+        elif height == 1:
+            insertions += width - 1
+            if reference[r0] not in hypothesis[h0:h1]:
+                substitutions += 1
         else:
-            insertions += 1
-            j -= 1
+            mid = r0 + height // 2
+            left = _cost_row(reference[r0:mid], hypothesis[h0:h1], reverse=False)
+            right = _cost_row(reference[mid:r1], hypothesis[h0:h1], reverse=True)
+            cut = min(range(width + 1), key=lambda k: left[k] + right[width - k])
+            pending.append((r0, mid, h0, h0 + cut))
+            pending.append((mid, r1, h0 + cut, h1))
     return EditCounts(substitutions, deletions, insertions, rows)
 
 
