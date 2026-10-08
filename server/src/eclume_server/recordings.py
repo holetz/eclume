@@ -325,10 +325,44 @@ async def start_next_revision(
     return revision
 
 
-async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any]) -> dict[str, Any]:
-    """As `options` do `transcribe` com o token do HF da plataforma cifrado (papel de conexão)."""
+VOCABULARY_MAX_TERMS = 50
+VOCABULARY_MAX_CHARS = 400
+
+
+def limit_vocabulary(names: list[str]) -> list[str]:
+    """Os nomes sem repetição nem vazios, na ordem dada, até o teto de termos e de caracteres."""
+    terms: list[str] = []
+    seen: set[str] = set()
+    chars = 0
+    for raw in names:
+        name = " ".join((raw or "").split())
+        if not name or name.casefold() in seen:
+            continue
+        if len(terms) >= VOCABULARY_MAX_TERMS or chars + len(name) + 1 > VOCABULARY_MAX_CHARS:
+            break
+        seen.add(name.casefold())
+        terms.append(name)
+        chars += len(name) + 1
+    return terms
+
+
+async def account_vocabulary(conn: AsyncConnection, owner_id: UUID | str) -> list[str]:
+    """Os nomes das pessoas da conta, para o ASR: filtrados por dono, nunca de outra conta."""
+    rows = await conn.execute(
+        select(t.people.c.name).where(t.people.c.owner_id == owner_id).order_by(t.people.c.sort_name, t.people.c.id)
+    )
+    return limit_vocabulary([name for (name,) in rows])
+
+
+async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any], owner_id: UUID | str) -> dict[str, Any]:
+    """As `options` do `transcribe` com o token do HF cifrado e o vocabulário da conta (só no payload)."""
+    payload = dict(options)
     hf_token = await secret_encrypted(conn, HF_TOKEN)
-    return {**options, "hf_token_encrypted": hf_token} if hf_token else options
+    if hf_token:
+        payload["hf_token_encrypted"] = hf_token
+    if vocabulary := await account_vocabulary(conn, owner_id):
+        payload["vocabulary"] = vocabulary
+    return payload
 
 
 # --- biblioteca ----------------------------------------------------------------------------------

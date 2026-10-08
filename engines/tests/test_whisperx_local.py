@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import types
 import weakref
@@ -64,6 +65,11 @@ class FakeAlignModel:
     """Instância de classe: `object()` não aceita `weakref`."""
 
 
+@dataclasses.dataclass(frozen=True)
+class FakeAsrOptions:
+    hotwords: str | None = None
+
+
 class FakeWhisperX:
     """Registra as chamadas; `oom_batches` define os lotes que estouram a memória."""
 
@@ -71,6 +77,7 @@ class FakeWhisperX:
         self.calls: list[tuple[str, Any]] = []
         self.oom_batches = oom_batches or set()
         self.oom_models = oom_models or set()
+        self.hotwords: list[str | None] = []  # as hotwords vistas pelo ASR em cada transcribe
         self.models: list[tuple[str, weakref.ref]] = []  # (papel, referência fraca) de cada modelo criado
 
     def track(self, kind: str, model: Any) -> Any:
@@ -98,8 +105,11 @@ class FakeWhisperX:
         fake = self
 
         class Pipeline:
+            options = FakeAsrOptions()
+
             def transcribe(self, audio: Any, *, batch_size: int, language: str | None, progress_callback: Any) -> dict:
                 fake.calls.append(("transcribe", (model, batch_size, language)))
+                fake.hotwords.append(self.options.hotwords)
                 if model in fake.oom_models or batch_size in fake.oom_batches:
                     msg = "CUDA failed with error out of memory"
                     raise RuntimeError(msg)
@@ -580,3 +590,24 @@ def test_sem_idioma_detecta_e_alinha_pelo_detectado(fake: FakeWhisperX):
     assert calls["load_model"][3] is None
     assert calls["transcribe"][2] is None
     assert calls["load_align_model"][0] == "en"
+
+
+def test_vocabulario_vira_hotwords_so_no_job_e_nao_recarrega(fake: FakeWhisperX):
+    eng = engine()
+    eng.transcribe(AUDIO, EngineOptions(vocabulary=("Ana Souza", "Unicred")))
+    eng.transcribe(AUDIO, EngineOptions())
+    eng.transcribe(AUDIO, EngineOptions(vocabulary=("Outra Conta",)))
+    assert fake.hotwords == ["Ana Souza Unicred", None, "Outra Conta"]
+    assert fake.names().count("load_model") == 1
+
+
+def test_hotwords_voltam_ao_normal_quando_o_asr_estoura_a_memoria(monkeypatch: pytest.MonkeyPatch):
+    fake = FakeWhisperX(oom_batches={8})
+    install(monkeypatch, fake)
+    engine().transcribe(AUDIO, EngineOptions(vocabulary=("Ana",), batch_size=8))
+    assert set(fake.hotwords) == {"Ana"}
+
+
+def test_opcoes_do_job_trazem_o_vocabulario():
+    assert EngineOptions.from_mapping({"vocabulary": ["Ana", " ", "Bia"]}).vocabulary == ("Ana", "Bia")
+    assert EngineOptions.from_mapping({}).vocabulary == ()

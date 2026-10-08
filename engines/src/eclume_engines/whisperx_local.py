@@ -22,6 +22,7 @@ import logging
 import statistics
 import sys
 import traceback
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -42,7 +43,7 @@ from eclume_engines.base import (
 from eclume_engines.vram import VramMonitor, initial_batch_size
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,24 @@ WARN_FALLBACK_MEDIUM = "fallback_medium"
 WARN_BATCH_REDUCED = "batch_size_reduced"
 WARN_FLOAT16_REJECTED = "compute_type_float16_rejected"
 WARN_ALIGN_UNAVAILABLE = "alignment_unavailable"
+
+
+@contextmanager
+def _hotwords(pipeline: Any, vocabulary: tuple[str, ...]) -> Iterator[None]:  # noqa: ANN401 — pipeline do WhisperX
+    """Os termos da conta como `hotwords` do ASR só durante a transcrição.
+
+    O WhisperX lê `pipeline.options` a cada chamada, então o modelo residente não recarrega; as
+    opções originais voltam ao sair (mesmo em erro), e o termo de uma conta não chega à seguinte.
+    """
+    original = getattr(pipeline, "options", None)
+    if not vocabulary or original is None or not dataclasses.is_dataclass(original):
+        yield
+        return
+    pipeline.options = dataclasses.replace(original, hotwords=" ".join(vocabulary))
+    try:
+        yield
+    finally:
+        pipeline.options = original
 
 
 def _noop(_stage: str, _pct: float) -> None:
@@ -273,12 +292,13 @@ class WhisperXLocalEngine:
                 pipeline = None  # o `_load_asr` também pode estourar: nenhum modelo da volta anterior sobrevive
                 try:
                     pipeline, compute_type = self._load_asr(whisperx, model, compute_types, options.language)
-                    result = pipeline.transcribe(
-                        audio,
-                        batch_size=batch,
-                        language=options.language,
-                        progress_callback=lambda pct: progress("asr", pct),
-                    )
+                    with _hotwords(pipeline, options.vocabulary):
+                        result = pipeline.transcribe(
+                            audio,
+                            batch_size=batch,
+                            language=options.language,
+                            progress_callback=lambda pct: progress("asr", pct),
+                        )
                 except EngineError:
                     raise
                 except Exception as exc:

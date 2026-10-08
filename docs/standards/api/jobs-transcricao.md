@@ -105,6 +105,12 @@ argumentos:
     alinhador segue o detectado e o raw guarda o detectado. Sem a chave (job antigo), vale `pt`;
   - `preprocess` — o bloco `preprocessing` da plataforma (`denoise`, `loudnorm`, `trim_silence`,
     `split_channels`), que o worker aplica antes do ASR. Sem ele, o worker só converte o formato.
+- Acrescentado pela holetz/eclume#174 (aditivo, opcional):
+  - `vocabulary` — lista de termos (até 50 e ~400 caracteres): os nomes de `people` da conta dona da
+    gravação, montados pelo server ao enfileirar, só no payload arq (nunca em `transcription_jobs.options`;
+    um reenfileiramento recalcula). O `whisperx-local` os repassa ao ASR como `hotwords` durante aquele
+    job e devolve as opções originais ao fim, mesmo em erro: o modelo residente não recarrega e o termo
+    de uma conta não chega à seguinte. A engine `openai-compatible` os ignora.
 
 ## Pré-processamento
 

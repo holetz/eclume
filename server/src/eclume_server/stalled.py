@@ -189,12 +189,15 @@ async def _requeue_once(
     if not await redis.set(_REQUEUED_PREFIX + job_key, "1", ex=REQUEUED_TTL_S, nx=True):
         return False
     async with system_tx(engine) as conn:
-        audio_key = (
-            await conn.execute(select(t.recordings.c.audio_key).where(t.recordings.c.id == recording_id))
-        ).scalar()
-        if audio_key is None:
+        found = (
+            await conn.execute(
+                select(t.recordings.c.audio_key, t.recordings.c.owner_id).where(t.recordings.c.id == recording_id)
+            )
+        ).first()
+        if found is None or found[0] is None:
             return False
-        payload = await transcribe_payload(conn, options or {})
+        audio_key, owner_id = found
+        payload = await transcribe_payload(conn, options or {}, owner_id)
     await redis.enqueue_job("transcribe", str(recording_id), audio_key, payload, _job_id=job_key, _queue_name=GPU_QUEUE)
     return True
 
