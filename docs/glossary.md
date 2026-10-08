@@ -61,6 +61,7 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - **eclume** — Serviço de transcrição institucional e auto-hospedado (eco + lume), extraído do lumea e ligado a ele só por contrato de API.
 - [eclume_pt](standards/code/server-nucleo.md) — Configuração de busca textual do Postgres: `portuguese` com `unaccent` antes do stemmer, usada no `tsvector` dos segmentos.
 - **engine** — Implementação da interface de ASR do pacote `eclume_engines` (`whisperx-local`, remota OpenAI-compatível ou CPU para dev).
+- **épico** — Spec orquestradora (`holetz/eclume#1`) cujas tasks apontam para specs filhas, cada uma uma issue própria.
 - [escopo](standards/api/contrato-v1.md#convenções) — Permissão de um token (`recordings:read`, `summaries:write`, `people:read`…) que cada rota da API e cada ferramenta do servidor MCP exige.
 - [estado no aparelho](standards/code/frontend-web.md) — Como o desktop e o celular nomeiam a gravação antes e durante o envio (Gravando, Aguardando envio, Enviando, Enviada, Interrompida, Falhou o envio), pelo vocabulário compartilhado `vocabulario.js`.
 - [estado no servidor](standards/code/frontend-web.md) — Como a web nomeia a gravação no servidor (Na fila, a etapa em andamento, Pronta, Falhou, Cancelada); "Na fila" é só a espera pela transcrição.
@@ -98,7 +99,6 @@ Uma entrada **sem link** (termo sem doc próprio) é um estado válido e permane
 - [pasta sincronizada](standards/code/desktop-pasta-sincronizada.md) — Pasta do computador que o app desktop mantém como espelho da biblioteca: o resumo atual de cada gravação em Markdown e a transcrição em JSONL, uma subpasta por coleção e um `AGENTS.md` na raiz, para servir de vault do Obsidian e de pasta de trabalho de agente.
 - [PAT](standards/code/server-nucleo.md#autenticação) — Personal Access Token (na tela, token de acesso): token pessoal `eclp_` com escopos, guardado como hash, usado pelo lumea e pelos assistentes (MCP) para acessar a API; o desktop e o celular usam a credencial de dispositivo.
 - [pessoa](standards/code/server-nucleo.md) — Entrada do diretório do usuário a que os locutores das transcrições são ligados; base do filtro `person=` do lumea.
-- **épico** — Spec orquestradora (`holetz/eclume#1`) cujas tasks apontam para specs filhas, cada uma uma issue própria.
 - **pilar** — Uma das pastas de topo do monorepo com toolchain própria: `server/`, `worker-gpu/`, `engines/`, `web/`, `desktop/`, `mobile/`, `contracts/`, `deploy/`.
 - [pré-processamento](standards/api/jobs-transcricao.md#pré-processamento) — Tratamento do áudio pelo worker GPU antes do ASR, configurado pelo admin: 16 kHz mono, redução de ruído (RNNoise), normalização de loudness, corte do silêncio das pontas e separação de canais.
 - [primeira execução](standards/code/desktop-deteccao-e-sync.md#primeira-execução-descoberta-e-ca-fixada) — A tela "Bem-vindo" do app desktop sem credencial: o servidor do instalador, achado na rede ou digitado, a CA fixada pela impressão digital e a entrada por e-mail e senha ou código de pareamento.
