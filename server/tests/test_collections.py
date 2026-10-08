@@ -235,3 +235,24 @@ def test_configuracao_das_tags_automaticas(as_user: Callable[[Account], Api], ma
     assert api.patch("/api/v1/me/tag-assignment", json={"mode": None}).status_code == 422
     assert api.patch("/api/v1/me/tag-assignment", json={}).status_code == 422
     assert api.pat("recordings:read").get("/api/v1/me/tag-assignment").status_code in {401, 403}
+
+
+def test_cursor_de_colecao_com_nome_longo_e_aceito_de_volta(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    api = as_user(make_user())
+    longo = "c" * 6200
+    for name in ("acme", longo, "zeta"):
+        assert api.post("/api/v1/collections", json={"name": name}).status_code == 201
+
+    seen: list[str] = []
+    cursor = None
+    while True:
+        params = {"limit": 1} | ({"cursor": cursor} if cursor else {})
+        response = api.get("/api/v1/collections", params=params)
+        assert response.status_code == 200, response.text
+        seen += [c["name"] for c in response.json()["items"]]
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == ["acme", longo, "zeta"]
