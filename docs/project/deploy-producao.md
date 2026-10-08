@@ -48,6 +48,11 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 
 - **Só o Caddy publica porta.** O Docker publica por fora do ufw, então Postgres, Redis, MinIO e
   server não têm `ports:`. Para depurar, use `compose exec`.
+- **Premissa do IP do cliente.** O server roda com `--proxy-headers --forwarded-allow-ips "*"`
+  (`deploy/server.Dockerfile`) e `ratelimit.client_ip` usa o `X-Forwarded-For` que chega. Isso só é
+  seguro porque o Caddy, sem `trusted_proxies`, sobrescreve o cabeçalho e porque só ele publica porta.
+  Dar `ports:` ao server, ou fazer o Caddy confiar num proxy à frente, deixa qualquer um forjar o IP e
+  zera os limites por IP de login, pareamento e cadastro. `deploy/test_compose_prod.py` falha nos três casos.
 - **Rotas do Caddy.** `/api/*`, `/media/*` e `/mcp` (rota exata) vão ao server sem cortar o prefixo. `/downloads/*` é a
   pasta dos instaladores ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)),
   com `Cache-Control: no-cache` nos manifestos e arquivos ocultos escondidos. O resto é o SPA, da

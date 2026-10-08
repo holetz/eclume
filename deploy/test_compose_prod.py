@@ -358,3 +358,33 @@ def test_borda_csp_e_cache_do_spa() -> None:
     )
     assert re.search(r'handle \{\s*header Cache-Control "no-cache"\s*try_files \{path\} /index.html', WEB_CADDYFILE)
     assert re.search(r'handle_errors \{\s*header Cache-Control "no-store"', WEB_CADDYFILE)
+
+
+# Premissa do IP do cliente (`ratelimit.client_ip`): o server confia no `X-Forwarded-For` que chega.
+_RISCO_IP = (
+    "O server roda com `--forwarded-allow-ips *` e `ratelimit.client_ip` usa o `X-Forwarded-For` que chega. "
+    "Isso só é seguro porque o Caddy sobrescreve o cabeçalho (sem `trusted_proxies`) e porque só o Caddy "
+    "publica porta. Quebrar isso deixa qualquer um forjar o IP por requisição e zera os limites por IP de "
+    "login, pareamento e cadastro. Se a mudança é intencional, revise o modelo de confiança e este teste juntos."
+)
+SERVER_DOCKERFILE = Path(__file__).with_name("server.Dockerfile").read_text(encoding="utf-8")
+
+
+def test_premissa_ip_so_o_caddy_publica_porta() -> None:
+    publicam = {name for name, service in SERVICES.items() if service.get("ports")}
+    assert publicam == {"caddy"}, f"serviços com `ports:` além do caddy: {publicam - {'caddy'}}. {_RISCO_IP}"
+
+
+def test_premissa_ip_caddy_nao_confia_em_proxy_a_frente() -> None:
+    caddyfile = CONFIGS["caddyfile"]["content"]
+    assert "trusted_proxies" not in caddyfile, _RISCO_IP
+    assert "trusted_proxies" not in WEB_CADDYFILE, _RISCO_IP
+
+
+def test_premissa_ip_forwarded_allow_ips_do_server_nao_muda() -> None:
+    cmd = re.search(r"^CMD (\[.*\])$", SERVER_DOCKERFILE, re.MULTILINE)
+    assert cmd, "CMD do server.Dockerfile não encontrado"
+    args = re.findall(r'"([^"]*)"', cmd.group(1))
+    assert "--proxy-headers" in args, _RISCO_IP
+    assert args[args.index("--forwarded-allow-ips") + 1] == "*", _RISCO_IP
+    assert "command" not in SERVICES["server"], f"o server não pode sobrescrever o CMD. {_RISCO_IP}"
