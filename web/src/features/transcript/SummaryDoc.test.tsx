@@ -39,6 +39,32 @@ describe('documento do resumo', () => {
     expect(screen.getByRole('menuitem', { name: /^Resumo/ })).not.toHaveAttribute('aria-disabled')
   })
 
+  it('avisa quando o resumo é de uma revisão anterior da transcrição e não avisa quando coincidem', async () => {
+    mockTranscriptApi()
+    const { unmount } = renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    expect(within(section).queryByText('Resumo de uma versão anterior da transcrição')).not.toBeInTheDocument()
+    unmount()
+
+    mockTranscriptApi({
+      'GET /api/v1/transcripts/:id': () => {
+        const transcript = fixtures.transcript()
+        transcript.revision += 1
+        return transcript
+      },
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const stale = await screen.findByText('Resumo de uma versão anterior da transcrição')
+    expect(stale.closest('.alert')).toHaveClass('alert-warning')
+  })
+
+  it('não avisa enquanto a transcrição não carregou', async () => {
+    mockTranscriptApi({ 'GET /api/v1/transcripts/:id': () => new Promise<Response>(() => {}) })
+    renderApp(`/gravacoes/${RECORDING}`)
+    const section = await summarySection()
+    expect(within(section).queryByText('Resumo de uma versão anterior da transcrição')).not.toBeInTheDocument()
+  })
+
   it('o selo de um tipo que não existe mais fica sem link', async () => {
     const http = mockTranscriptApi({ 'GET /api/v1/agenda-types': () => ({ items: [], next_cursor: null }) })
     renderApp(`/gravacoes/${RECORDING}`)
