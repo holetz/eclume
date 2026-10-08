@@ -545,10 +545,16 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-
   id restic ou a data AAAA-MM-DD) numa pasta temporária, o dump num banco `eclume_restore_teste` e o
   bucket num `eclume-restore-teste`. Depois compara as contagens (usuários, gravações,
   transcrições, resumos e objetos) com a produção e apaga tudo.
-- **`[--repositorio local|fora] --aplicar <snap> --confirmo`** para server e workers e recria o
-  banco `eclume` a partir do dump. Depois espelha o bucket do snapshot de volta, sem apagar objetos
+- **`[--repositorio local|fora] --aplicar <snap> --confirmo`** valida o dump e o restaura num banco
+  temporário (`eclume_restore_novo`) antes de parar qualquer coisa; só então para server e workers
+  e troca o banco `eclume` pelo temporário. Depois espelha o bucket do snapshot de volta, sem apagar objetos
   que não estão no backup, e sobe os serviços.
 - **`--banco <dump> --confirmo`** volta só o banco a um dump `pre-deploy/` (holetz/eclume#92).
+- **Validação prévia (`--banco` e `--aplicar`).** O script roda `pg_restore --list` e restaura o
+  dump num banco temporário com os serviços ainda no ar. Dump truncado ou corrompido recusa a
+  restauração com `FALHA`, apaga o temporário e deixa o banco `eclume` e os serviços como estavam.
+  Se a troca de nomes falhar depois da parada, o banco antigo (`eclume_antes`) volta ao nome e os
+  serviços sobem. Exige espaço para uma segunda cópia do banco durante a restauração.
 
 **Host novo.** Basta a senha do repositório e a credencial do destino, tiradas do cofre:
 
