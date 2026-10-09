@@ -1,15 +1,15 @@
 # CLAUDE.md — eclume
 
-Language: pt-BR — the contract is /docs/standards/agents/communication.md
+Language: en — the contract is /docs/standards/agents/communication.md
 
-Serviço de transcrição institucional e auto-hospedado. Este arquivo é o ponteiro operacional
-carregado pelo Claude; o conhecimento durável vive em `docs/`.
+Self-hosted institutional transcription service. This file is the operational pointer Claude
+loads; durable knowledge lives in `docs/`.
 
 ## Operating this repo
 
-Monorepo com um pilar por pasta de topo; o layout e o porquê de cada comando estão em
-[docs/standards/code/monorepo.md](docs/standards/code/monorepo.md). O ambiente Python é gerido
-por `uv`; use sempre `uv run` para comandos Python.
+Monorepo with one pillar per top-level folder; the layout and the reason for each command are in
+[docs/standards/code/monorepo.md](docs/standards/code/monorepo.md). The Python environment is
+managed by `uv`; always use `uv run` for Python commands.
 
 ```bash
 uv sync --all-packages
@@ -41,30 +41,35 @@ bash deploy/deploy.sh --context gpu-host
 cq knowledge validate
 ```
 
-- A CI (`.github/workflows/ci.yml`) roda os jobs `python`, `contracts`, `web`, `web-browser`,
-  `desktop` e `mobile` em Linux a cada PR e push em `main`, cada um por `deploy/pilares.sh`.
-- O gate do host (`bash deploy/gate.sh`, status `eclume/gate`) roda os mesmos pilares mais o
-  `windows` e é o que libera deploy e releases; o hook de pre-push o dispara a cada push do `main`.
-- Mudanças de dependência exigem atualizar `pyproject.toml`/`uv.lock`, `web/package.json`/
-  `web/package-lock.json` ou `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, conforme o pilar.
-- Destino de hospedagem: `192.168.15.199` (Ubuntu, GTX 1660 Super com 6 GB), acessado por
-  `docker --context gpu-host`; runbook em [docs/project/host-setup.md](docs/project/host-setup.md).
-  Produção em `https://192.168.15.199:8443` (projeto `eclume`); deploy, segredos e backup em
+- CI (`.github/workflows/ci.yml`) runs the `python`, `contracts`, `web`, `web-browser`, `desktop`
+  and `mobile` jobs on Linux for every PR and every push to `main`, each through `deploy/pilares.sh`.
+- The host gate (`bash deploy/gate.sh`, status `eclume/gate`) runs the same pillars plus `windows`
+  and is what clears deploys and releases; the pre-push hook fires it on every push to `main`.
+- Rust/Tauri never builds on this workstation: the `desktop`, `mobile`, `android` and `windows`
+  pillars run on the host gate (or in CI).
+- Dependency changes require updating `pyproject.toml`/`uv.lock`, `web/package.json`/
+  `web/package-lock.json` or `desktop/**/Cargo.toml`/`desktop/Cargo.lock`, per pillar.
+- Hosting target: `192.168.15.199` (Ubuntu, GTX 1660 Super with 6 GB), reached through
+  `docker --context gpu-host`; runbook in [docs/project/host-setup.md](docs/project/host-setup.md).
+  Production at `https://192.168.15.199:8443` (project `eclume`); deploy, secrets and backup in
   [docs/project/deploy-producao.md](docs/project/deploy-producao.md).
-  Esta máquina de desenvolvimento não tem GPU: em dev, o ASR roda em CPU ou aponta para o host.
+  This development machine has no GPU: in dev, ASR runs on CPU or points at the host.
+- The repository is being prepared for its open-source release (epic in the specs workspace):
+  much of the existing prose, code and UI is still pt-BR while that work translates it. Author
+  every new artifact — doc, comment, identifier, commit, PR, spec — in English.
 
 ## Where knowledge lives
 
-Conhecimento não vive neste arquivo; vive no bundle OKF em [docs/](docs/index.md). Aponte para a
-fonte, sem duplicar sua prosa.
+Knowledge does not live in this file; it lives in the OKF bundle under [docs/](docs/index.md).
+Point to the source instead of duplicating its prose.
 
-**Resolving a term.** Consulte primeiro o [glossário](docs/glossary.md): `grep -i '<termo>' docs/glossary.md`.
+**Resolving a term.** Check the [glossary](docs/glossary.md) first: `grep -i '<term>' docs/glossary.md`.
 
-- [docs/standards/](docs/standards/index.md) — contratos e convenções atuais do repositório.
-- [docs/concepts/](docs/concepts/index.md) — conceitos genéricos sustentados pelo projeto.
-- [docs/vision/](docs/vision/index.md) — direção sem prazo operacional.
-- [docs/project/](docs/project/index.md) — manual do repositório: referências de mercado e runbook do host.
+- [docs/standards/](docs/standards/index.md) — the repository's current contracts and conventions.
+- [docs/concepts/](docs/concepts/index.md) — generic concepts the project relies on.
+- [docs/vision/](docs/vision/index.md) — direction with no operational deadline.
+- [docs/project/](docs/project/index.md) — the repository's manual: market references and the host runbook.
 
-O workspace de specs é gerido pelo backend GitHub (`holetz/eclume`); a direção do produto está em
-`docs/vision/`, e o épico `holetz/eclume#1` é o registro da primeira construção. Use as skills `quenching:specs:*` para consultar ou conduzir esse ciclo e
-`quenching:knowledge:*` para criar, editar ou mover conhecimento.
+The specs workspace is managed by the GitHub backend (`holetz/eclume`); product direction is in
+`docs/vision/`, and epic `holetz/eclume#1` records the first build. Use the `quenching:specs:*`
+skills to query or drive that cycle and `quenching:knowledge:*` to create, edit or move knowledge.
