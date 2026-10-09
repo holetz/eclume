@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.25.0
+  version: 2.26.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -6610,12 +6610,14 @@ components:
             e a regra da nota de voz (um locutor). Não persiste: vale só para a revisão pedida.
           type: integer
           minimum: 1
+          maximum: 30
         max_speakers:
           description: |
             Desde a 2.25.0. Máximo de locutores a esperar nesta revisão (422 se menor que
             `min_speakers`). Uma nota de voz (`kind: note`) sem este campo usa 1 locutor.
           type: integer
           minimum: 1
+          maximum: 30
 
     TranscriptSummary:
       description: Resumo de listagem de uma transcrição (sem segmentos).
@@ -8737,9 +8739,11 @@ components:
         min_speakers:
           type: [integer, "null"]
           minimum: 1
+          maximum: 30
         max_speakers:
           type: [integer, "null"]
           minimum: 1
+          maximum: 30
 
     PreprocessingSettings:
       description: |
@@ -8886,9 +8890,11 @@ components:
             min_speakers:
               type: [integer, "null"]
               minimum: 1
+              maximum: 30
             max_speakers:
               type: [integer, "null"]
               minimum: 1
+              maximum: 30
         voice_identification:
           type: object
           properties:

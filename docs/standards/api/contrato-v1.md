@@ -85,9 +85,14 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `recordings:write` para as demais; 409 `action_expired` ou `action_cancelled`) e `POST
   .../cancel` (só de `proposed`; 409 `action_not_proposed`). Aditivo: nada muda para quem não usa.
 - **Locutores ao retranscrever (2.25.0, `recordings`):** `RetranscribeRequest` ganha `min_speakers` e
-  `max_speakers` (inteiros ≥ 1, opcionais; 422 se o mínimo passa do máximo). O par vale só para a
-  revisão pedida e vence os limites do admin. Sem pedido, a nota de voz (`kind: note`) é transcrita
-  com 1 locutor. Aditivo: quem não envia os campos não vê mudança nas reuniões.
+  `max_speakers` (inteiros de 1 a 30, opcionais; 422 se o mínimo passa do máximo). O par vale só
+  para a revisão pedida e vence os limites do admin. Sem pedido, a nota de voz (`kind: note`) é
+  transcrita com 1 locutor. Aditivo: quem não envia os campos não vê mudança nas reuniões.
+  **Teto de 30 (2.26.0):** o mesmo `maximum` vale para `min_speakers`/`max_speakers` do bloco
+  `diarization` do admin; acima dele, ou com um booleano no lugar do número, a resposta é 422. O
+  teto é do produto (reuniões institucionais) e fica abaixo do `uint8` da diarização, que estourava
+  em 256 depois de gastar a GPU. Exceção deliberada a "apertar validação": o campo tinha horas de
+  vida e todo valor acima do teto já terminava em `DIARIZATION_FAILED`.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
