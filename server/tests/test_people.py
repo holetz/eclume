@@ -249,3 +249,24 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
 
     other = as_user(make_user())
     assert other.get("/api/v1/people/facets").json() == {"companies": [], "departments": [], "tags": []}
+
+
+def test_cursor_de_nome_longo_ou_emoji_e_aceito_de_volta(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
+    api = as_user(make_user())
+    longo = "a" + "\U0001f600" * 520
+    for name in ("Ana", longo, "zélia"):
+        assert api.post("/api/v1/people", json={"name": name}).status_code == 201
+
+    seen: list[str] = []
+    cursor = None
+    while True:
+        params: dict[str, Any] = {"limit": 1} | ({"cursor": cursor} if cursor else {})
+        response = api.get("/api/v1/people", params=params)
+        assert response.status_code == 200, response.text
+        seen += [p["name"] for p in response.json()["items"]]
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == [longo, "Ana", "zélia"]
