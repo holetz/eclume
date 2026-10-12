@@ -251,11 +251,19 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
     assert other.get("/api/v1/people/facets").json() == {"companies": [], "departments": [], "tags": []}
 
 
+def test_nome_acima_do_teto_e_recusado(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+    api = as_user(make_user())
+    assert api.post("/api/v1/people", json={"name": "A" * 201}).status_code == 422
+    created = api.post("/api/v1/people", json={"name": "A" * 200})
+    assert created.status_code == 201, created.text
+    assert api.patch(f"/api/v1/people/{created.json()['id']}", json={"name": "B" * 201}).status_code == 422
+
+
 def test_cursor_de_nome_longo_ou_emoji_e_aceito_de_volta(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
-    longo = "a" + "\U0001f600" * 520
+    longo = "a" + "\U0001f600" * 199
     for name in ("Ana", longo, "zélia"):
         assert api.post("/api/v1/people", json={"name": name}).status_code == 201
 
