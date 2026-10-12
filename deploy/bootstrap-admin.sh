@@ -15,7 +15,7 @@ cd "$ROOT"
 
 CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
 EMAIL="${ECLUME_ADMIN_EMAIL:-}"
-NAME="Administração EK"
+NAME="Administrator"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --context) CONTEXT="${2:?}"; shift 2 ;;

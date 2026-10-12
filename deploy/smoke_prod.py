@@ -477,7 +477,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", default=STAGING, help="padrão: o staging; a produção só com --somente-leitura")
     parser.add_argument("--ca", help="CA raiz do Caddy do eclume (padrão: as CAs do sistema)")
-    parser.add_argument("--email", default="admin@example.com", help="e-mail das duas contas")
+    parser.add_argument(
+        "--email",
+        default=os.environ.get("ECLUME_ADMIN_EMAIL"),
+        help="e-mail das duas contas (padrão: $ECLUME_ADMIN_EMAIL)",
+    )
     parser.add_argument("--admin-email", help="e-mail da conta de admin (padrão: --email)")
     parser.add_argument("--audio", type=Path, default=FIXTURE)
     parser.add_argument("--timeout", type=int, default=1200, help="espera máxima da transcrição, em segundos")
@@ -493,6 +497,8 @@ def main() -> int:
     if e_producao(args.url) and not args.somente_leitura:
         print(f"{args.url} é a produção: o smoke escreve dados; use o staging ou --somente-leitura.", file=sys.stderr)  # noqa: T201
         return 2
+    if not args.email:
+        _fail("informe a conta por --email ou ECLUME_ADMIN_EMAIL")
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
     if not password:
         _fail("informe a senha pelo stdin ou por ECLUME_SMOKE_PASSWORD")
