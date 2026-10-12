@@ -93,6 +93,12 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   teto é do produto (reuniões institucionais) e fica abaixo do `uint8` da diarização, que estourava
   em 256 depois de gastar a GPU. Exceção deliberada a "apertar validação": o campo tinha horas de
   vida e todo valor acima do teto já terminava em `DIARIZATION_FAILED`.
+- **Nome de pessoa limitado (2.27.0, `people`):** `PersonCreate.name` e `PersonPatch.name` ganham
+  `maxLength: 200`; acima disso a resposta é 422. O vocabulário que vai ao ASR tem 400 caracteres no
+  total, e um nome só não pode consumir a metade dele. Nomes já gravados acima do teto continuam
+  legíveis e editáveis: só a escrita nova é limitada. Exceção deliberada a "apertar validação": um
+  nome de mais de 200 caracteres não é um nome, e o servidor passa a pular, em vez de parar, o
+  nome que não cabe no vocabulário.
 - **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
   mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
   ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a

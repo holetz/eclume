@@ -40,6 +40,7 @@ EMAIL_TAKEN = "Já existe uma pessoa sua com este e-mail."
 
 
 PersonTag = Annotated[str, Field(min_length=1, max_length=MAX_PERSON_TAG)]
+MAX_PERSON_NAME = 200
 Attribute = Annotated[str | None, Field(max_length=120)]
 
 
@@ -54,7 +55,7 @@ def _clean_tags(value: list[str] | None) -> list[str] | None:
 class PersonCreate(BaseModel):
     """Schema `PersonCreate`."""
 
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=MAX_PERSON_NAME)
     email: str | None = None
     notes: str | None = None
     company: Attribute = None
@@ -71,7 +72,7 @@ class PersonCreate(BaseModel):
 class PersonPatch(BaseModel):
     """Schema `PersonPatch`."""
 
-    name: str | None = Field(default=None, min_length=1)
+    name: str | None = Field(default=None, min_length=1, max_length=MAX_PERSON_NAME)
     email: str | None = None
     notes: str | None = None
     company: Attribute = None
