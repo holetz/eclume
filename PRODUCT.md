@@ -26,7 +26,7 @@ Ferramenta de trabalho em desktop, na LAN, com sessões longas de leitura e revi
 
 ## Brand Commitments
 
-Paleta linho e nogueira do ecossistema Jane, Archivo + IBM Plex Mono, raio zero, fios de 2px, terracota só para gravação e falha; produto em pt-BR.
+Paleta linho e nogueira, Archivo + IBM Plex Mono, raio zero, fios de 2px, terracota só para gravação e falha; produto em pt-BR.
 
 ## Product Principles
 
