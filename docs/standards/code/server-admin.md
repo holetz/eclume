@@ -71,7 +71,9 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   `int8_float16`, `int8`, `int8_float32` ou `float32` — `float16` é recusado aqui, porque a GTX
   16xx dá NaN nele ([worker-gpu.md](/docs/project/worker-gpu.md)); `diarization.model` só
   `pyannote/speaker-diarization-community-1`, o único pipeline que a engine carrega;
-  `min_speakers ≤ max_speakers`; `endpoint_url` obrigatória com `engine: openai-compatible`;
+  `min_speakers ≤ max_speakers`; a JSON boolean in any numeric field (integer or float, in every block and
+  preprocessing step) is a 422 instead of silently becoming `1`/`1.0` (`asr.batch_size`, `quotas.*`);
+  `"4"` and `4.0` are still accepted; `endpoint_url` obrigatória com `engine: openai-compatible`;
   `voice_identification.enabled` exige `diarization.enabled` (a impressão é por locutor), checada
   só quando o `PATCH` toca um dos dois blocos: um estado antigo que a quebra não trava a edição de
   outro bloco. As regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
