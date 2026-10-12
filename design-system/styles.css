@@ -1,4 +1,4 @@
-/* eclume — design-system tokens and component classes. Linen & walnut palette shared with the Jane ecosystem; Archivo, zero radius, 2px rules. Source of truth for the look; see readme.md. */
+/* eclume — design-system tokens and component classes. Linen & walnut palette; Archivo, zero radius, 2px rules. Source of truth for the look; see readme.md. */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {

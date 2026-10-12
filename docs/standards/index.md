@@ -56,6 +56,6 @@ derivado (o escopo do repositório que ele governa).
 ### design/
 | Doc | Covers |
 | --- | --- |
-| [brand.md](design/brand.md) | A identidade visual do eclume — linho e nogueira do ecossistema Jane, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md. |
+| [brand.md](design/brand.md) | A identidade visual do eclume — linho e nogueira, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md. |
 | [production.md](design/production.md) | O portão para produzir um artefato com a marca do eclume a partir de uma fonte única de tokens, em web, Typst e PDF. |
 <!-- END GENERATED -->
