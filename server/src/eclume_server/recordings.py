@@ -330,7 +330,7 @@ VOCABULARY_MAX_CHARS = 400
 
 
 def limit_vocabulary(names: list[str]) -> list[str]:
-    """Os nomes sem repetição nem vazios, na ordem dada, até o teto de termos e de caracteres."""
+    """Os nomes sem repetição nem vazios, na ordem dada, até o teto de termos e de caracteres; o nome que não cabe é pulado, os seguintes ainda entram."""
     terms: list[str] = []
     seen: set[str] = set()
     chars = 0
@@ -338,8 +338,10 @@ def limit_vocabulary(names: list[str]) -> list[str]:
         name = " ".join((raw or "").split())
         if not name or name.casefold() in seen:
             continue
-        if len(terms) >= VOCABULARY_MAX_TERMS or chars + len(name) + 1 > VOCABULARY_MAX_CHARS:
+        if len(terms) >= VOCABULARY_MAX_TERMS:
             break
+        if chars + len(name) + 1 > VOCABULARY_MAX_CHARS:
+            continue
         seen.add(name.casefold())
         terms.append(name)
         chars += len(name) + 1

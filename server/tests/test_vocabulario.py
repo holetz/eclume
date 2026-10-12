@@ -17,3 +17,8 @@ def test_limita_os_caracteres():
     terms = limit_vocabulary(["x" * 150, "y" * 150, "z" * 150])
     assert sum(len(term) + 1 for term in terms) <= VOCABULARY_MAX_CHARS
     assert terms == ["x" * 150, "y" * 150]
+
+
+def test_nome_que_nao_cabe_nao_derruba_os_seguintes():
+    assert limit_vocabulary(["A" * VOCABULARY_MAX_CHARS, "Bia", "Caio"]) == ["Bia", "Caio"]
+    assert limit_vocabulary(["x" * 300, "y" * 150, "Bia"]) == ["x" * 300, "Bia"]
