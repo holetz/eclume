@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.26.0
+  version: 2.27.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -6846,6 +6846,7 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
         email:
           type: [string, "null"]
           format: email
@@ -6879,6 +6880,7 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
         email:
           type: [string, "null"]
           format: email
