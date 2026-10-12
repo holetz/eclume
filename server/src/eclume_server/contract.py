@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-CONTRACT_VERSION = "2.26.0"
+CONTRACT_VERSION = "2.27.0"
