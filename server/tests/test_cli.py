@@ -43,11 +43,11 @@ def test_admin_create_cria_a_conta_que_entra_no_painel(
 ):
     _env(monkeypatch, services)
     email = f"admin-{secrets.token_hex(4)}@example.com"
-    assert _run(monkeypatch, "uma-senha-bem-longa", "create", "--email", email, "--name", "Administração EK") == 0
+    assert _run(monkeypatch, "uma-senha-bem-longa", "create", "--email", email, "--name", "Administrator") == 0
     assert capsys.readouterr().out.startswith("admin ")
     me = admin_login(client, email, "uma-senha-bem-longa").get("/api/v1/admin/me").json()
     assert me["email"] == email
-    assert me["name"] == "Administração EK"
+    assert me["name"] == "Administrator"
 
     # E-mail repetido e senha curta saem com código 2.
     assert _run(monkeypatch, "uma-senha-bem-longa", "create", "--email", email.upper(), "--name", "X") == 2

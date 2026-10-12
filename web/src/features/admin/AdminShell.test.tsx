@@ -138,7 +138,7 @@ describe('moldura do painel', () => {
       'Saúde',
     ])
     expect(within(nav).getByRole('link', { name: 'Usuários' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByText('Administração EK')).toBeInTheDocument()
+    expect(screen.getByText('Administrator')).toBeInTheDocument()
     expect(screen.getByText('mariana.couto@example.com')).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: 'Tema' })).not.toBeInTheDocument()
