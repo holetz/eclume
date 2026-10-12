@@ -13,7 +13,7 @@ maintainer: holetz
 
 # Deploy de produção no host GPU
 
-Este é o runbook **desta** produção: o eclume da consultoria roda no host `192.168.15.199`,
+Este é o runbook **desta** produção: o eclume desta instituição roda no host `192.168.15.199`,
 preparado pelo [runbook do host](host-setup.md), e responde em **`https://192.168.15.199:8443`**.
 O caminho genérico, para qualquer servidor com ou sem GPU, está em
 [auto-hospedar.md](../how-to/auto-hospedar.md); aqui ficam os valores e as escolhas deste host. O host é

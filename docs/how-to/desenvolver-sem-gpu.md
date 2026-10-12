@@ -13,7 +13,7 @@ maintainer: holetz
 # Desenvolver o eclume sem GPU
 
 O loop de desenvolvimento roda inteiro numa máquina comum: o worker de transcrição usa a engine
-`cpu` (faster-whisper `small` int8, sem diarização), e o host de build da consultoria
+`cpu` (faster-whisper `small` int8, sem diarização), e o host de build do projeto
 (`remote-run`, em [monorepo.md](../standards/code/monorepo.md)) é uma comodidade, não um
 requisito. Os comandos de lint e teste de cada pilar estão em
 [monorepo.md](../standards/code/monorepo.md); este guia leva do clone a uma gravação transcrita e

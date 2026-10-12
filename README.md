@@ -4,7 +4,7 @@ Serviço de transcrição institucional e auto-hospedado. Grava reuniões, trans
 servidor, separa e reconhece os locutores, organiza as transcrições por pessoa e as resume com o
 agente que o admin da plataforma configurar. Cada usuário tem o próprio espaço, sem organização.
 
-> Estado: em produção no host da consultoria (`https://192.168.15.199:8443`); o runbook está em
+> Estado: em produção no host da instituição (`https://192.168.15.199:8443`); o runbook está em
 > [docs/project/deploy-producao.md](docs/project/deploy-producao.md). A direção do produto está em
 > [docs/vision/](docs/vision/index.md); o épico `holetz/eclume#1` é o registro da primeira construção.
 

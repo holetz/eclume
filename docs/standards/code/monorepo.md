@@ -17,7 +17,7 @@ O eclume é um monorepo com **um pilar por pasta de topo**, cada um com a própr
 `packages/`: o nome da pasta é o nome da peça no épico `holetz/eclume#1`.
 
 **O host de build é opção, não requisito.** `remote-run <dir> '<comando>'` sincroniza o checkout
-para o host de build da consultoria e roda o comando lá, para poupar uma estação fraca. Todo
+para o host de build do projeto e roda o comando lá, para poupar uma estação fraca. Todo
 `remote-run` desta norma tem o equivalente local: o mesmo comando, rodado em `<dir>` do checkout
 (com o Chrome, o Docker ou o SDK Android que ele pede instalados). O caminho completo sem GPU e sem
 o host, com a tabela dos equivalentes, está em
