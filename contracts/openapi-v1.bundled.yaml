@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.26.0
+  version: 2.26.1
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
     desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
@@ -9917,7 +9917,7 @@ components:
           items:
             $ref: '#/components/schemas/MarkerInput'
         device_name:
-          description: Quem marcou ("iPhone 15 · Jane").
+          description: Quem marcou ("Field phone").
           type:
           - string
           - 'null'
@@ -11253,7 +11253,7 @@ components:
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         email: mariana.couto@example.com
-        name: Administração EK
+        name: Administrator
         created_at: '2026-09-10T12:00:00Z'
         last_login_at: '2026-09-28T11:40:00Z'
     TokenPage:
@@ -13506,7 +13506,8 @@ components:
           content_md: '# Ata — Alinhamento do programa de lideranças
 
 
-            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (Example Org), Locutor 2, Locutor
+            3
 
 
             ## Decisões
@@ -13588,7 +13589,7 @@ components:
         content_md: '# Ata — Alinhamento do programa de lideranças
 
 
-          **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+          **Data:** 18/09/2026 · **Participantes:** Mariana Couto (Example Org), Locutor 2, Locutor 3
 
 
           ## Decisões
@@ -13638,7 +13639,8 @@ components:
           content_md: '# Ata — Alinhamento do programa de lideranças
 
 
-            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (Example Org), Locutor 2, Locutor
+            3
 
 
             ## Decisões
@@ -13688,7 +13690,8 @@ components:
           content_md: '# Ata — Alinhamento do programa de lideranças
 
 
-            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+            **Data:** 18/09/2026 · **Participantes:** Mariana Couto (Example Org), Locutor 2, Locutor
+            3
 
 
             ## Decisões
@@ -13725,7 +13728,7 @@ components:
         content_md: '# Ata — Alinhamento do programa de lideranças
 
 
-          **Data:** 18/09/2026 · **Participantes:** Mariana Couto (EK), Locutor 2, Locutor 3
+          **Data:** 18/09/2026 · **Participantes:** Mariana Couto (Example Org), Locutor 2, Locutor 3
 
 
           ## Decisões
@@ -14447,7 +14450,7 @@ components:
         - id: 01928f3a-1c00-7a00-8000-000000000301
           name: Mariana Couto
           email: mariana.couto@example.com
-          notes: Consultora EK.
+          notes: Consultant.
           company: null
           department: null
           job_title: null
@@ -14661,7 +14664,7 @@ components:
         updated_at: '2026-09-14T18:25:00Z'
         updated_by:
           id: 01928f3a-1c00-7a00-8000-000000000a01
-          name: Administração EK
+          name: Administrator
     AdminSettingsPatchRequest:
       summary: Trocar o modelo e ligar o resumo automático
       value:

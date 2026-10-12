@@ -4289,7 +4289,7 @@ export interface components {
         };
         MarkerBatch: {
             markers: components["schemas"]["MarkerInput"][];
-            /** @description Quem marcou ("iPhone 15 · Jane"). */
+            /** @description Quem marcou ("Field phone"). */
             device_name?: string | null;
         };
         MarkerPatch: {
