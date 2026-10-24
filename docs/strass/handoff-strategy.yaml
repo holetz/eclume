@@ -1,0 +1,53 @@
+from: product-strategist
+phase: 01-discovery
+to: [product-owner, product-marketer]
+status: APROVADO — fundadora validou o discovery em 2026-09-13 (12 respostas de questionário
+  de acompanhamento). Handoff liberado para product-owner e product-marketer.
+
+artifacts:
+  - jtbd.md
+  - market-scan.md
+  - vpc.md
+  - bmc.md
+  - personas.md
+  - risks-assumptions.md
+  - vision-doc.md
+
+mvp:
+  job_completo: "RH/HRBP ou empresa sem RH capacitado (Persona 5) de um cliente atual da EK monta/importa estrutura, roda diagnóstico de risco de liderança e recebe a recomendação correta dentre as quatro categorias da biblioteca de ações (assessment, mentoria, redesenho de time, dimensionamento), sem sair da ferramenta. Desde a v1, o líder/gestor de área (Carla) também acessa uma visão própria, com permissionamento por papel (RH vê a estrutura completa; líder vê só a hierarquia abaixo dele)."
+  profundidade_das_acoes: "Recomendação + orientação de próximo passo é suficiente no MVP (confirmado pela fundadora, resposta 2). A ferramenta não precisa acompanhar a execução completa de cada ação — isso fica em v1.1 (acompanhamento de execução)."
+  permissionamento_por_papel: "Requisito novo confirmado (resposta 3, 2026-09-13): RH vê a estrutura organizacional completa; líder de área vê apenas o que está abaixo dele na hierarquia. Não é uma tela a mais — é uma segunda experiência de uso com escopo de dados diferente. Insumo direto para requirements.md e para o architect."
+  ponto_de_entrada: "Cliente atual da EK (RH/HRBP ou Persona 5), não consultoria de RH parceira (confirmado, resposta 4)."
+  frequencia_por_persona: "RH interno de empresa cliente: semanalmente, para acompanhamento. Consultoria de RH parceira: por cliente atendido, conforme demanda. Líder/gestor de time: sob demanda do acompanhamento do time. Empresa sem RH estruturado (Persona 5): diariamente, pelo responsável/líder da área. (Confirmado, resposta 5 — resolve a maior lacuna do corte de MVP.)"
+  assessment_no_escopo: "A plataforma de assessment entra no escopo técnico deste projeto agora, não como integração futura separada (confirmado, resposta 6). Motivo: alimenta a ferramenta com informações que compõem o diagnóstico — é também insumo do diagnóstico, além de uma das quatro ações recomendadas por ele. Arquitetura do fluxo de dados nos dois sentidos ainda não desenhada — ver risks-assumptions.md."
+  time_to_value: "~1h dentro da plataforma (meta declarada pela fundadora; linha de base manual não medida)"
+  gatilho_retorno: "Confirmado por persona — ver frequencia_por_persona acima. Deixa de ser 'não medido'."
+  vs_alternativa: "diagnóstico permanece vivo na ferramenta, ao contrário de organograma estático + assessment avulso + consultoria pontual que terminam com o ciclo"
+  criterio_de_corte: "valor/risco — qual fatia testa H1 e entrega o job completo; esforço de código explicitamente excluído como critério (revisão 2026-09-13, feedback do dono do produto). Ver vision-doc.md, seção 'Critério de corte do MVP'"
+  tiers_testados_simultaneamente: "MUDANÇA DE PLANO (2026-09-13, resposta 8): a fundadora decidiu testar os dois tiers — 'Self-Service' e 'Lumea + EK' — AO MESMO TEMPO, com clientes reais que já tem hoje em que consegue aplicar os dois formatos. Isto substitui a suposição anterior deste handoff de que 'Lumea + EK' seria testado primeiro e Self-Service ficaria para v1.1. Ver vision-doc.md, 'Conexão com o modelo de tiers' (revisada). Efeito prático: o MVP precisa suportar operação sem revisão humana da EK para pelo menos um cliente-piloto do tier Self-Service, além do modo assistido — a profundidade exata desse self-service não foi detalhada pela fundadora e é a maior inferência aberta que resta neste handoff."
+
+riskiest_assumption: "H1 — RH/HRBP e consultorias de RH trocam a alternativa atual pela Lumea a ponto de pagar por isso (risks-assumptions.md). Confirmado pela fundadora como a aposta mais arriscada (resposta 1, 2026-09-13) — não é mais leitura do Strategist, é decisão explícita da dona do produto."
+secondary_hypothesis_new: "H5 — a EK, sozinha ou via consultores treinados, consegue entregar o tier 'Lumea + EK' em escala, e a camada de IA absorve trabalho humano suficiente para o modelo ter margem. PARCIALMENTE EVIDENCIADA (2026-09-13, respostas 9 e 10): a fundadora confirma que atende bem 4 clientes simultâneos sozinha hoje (teto conhecido, não gargalo atual) e que a divisão IA/humano é meio a meio, com humano sempre revisando antes de finalizar. Continua não testada em escala real além desse teto; condiciona o modelo de negócio depois que H1 for validada. Ver risks-assumptions.md."
+
+market_scan_skipped: false
+bmc_skipped: false
+bmc_tiers_model: true
+bmc_tiers_model_note: "bmc.md revisão v1.1 modela a Lumea em dois tiers (Self-Service e 'Lumea + EK'/service-as-software). CONFIRMADO PELA FUNDADORA (2026-09-13, resposta 7): ela reconhece esse direcionamento como sua estratégia de negócio. Precificação também confirmada (resposta 11): uma assinatura única, com o acompanhamento da equipe da EK como serviço extra por cima — não são planos/preços estruturalmente separados por tier."
+
+owner_approved: true
+owner_approval_date: "2026-09-13"
+owner_approval_note: "Jane Doe (EK) respondeu as 12 perguntas em aberto listadas neste handoff e em risks-assumptions.md via questionário de acompanhamento. Todas as pendências que bloqueavam o handoff foram resolvidas. Duas decisões da fundadora ampliam o escopo do MVP em relação ao que este documento assumia antes (2026-09-13): (1) Carla/líder de área entra na v1 com permissionamento por papel — requisito novo, não confirmação; (2) os dois tiers (Self-Service e Lumea+EK) são testados simultaneamente, não em sequência — a ferramenta precisa suportar um modo sem revisão humana da EK desde o MVP. Ambos os pontos exigem atenção do product-owner ao dimensionar requirements.md e sizing.md, e do architect ao desenhar o modelo de permissão e o fluxo de dados do assessment."
+
+unconfirmed_inferences:
+  - "[INFERÊNCIA] Profundidade exata do self-service necessária para testar os dois tiers simultaneamente (resposta 8) — a fundadora confirmou testar os dois formatos ao mesmo tempo, mas não detalhou o quanto de fluxo sem revisão humana o MVP precisa suportar."
+  - "[INFERÊNCIA] Como reconciliar o assessment como insumo do diagnóstico (resposta 6) com o assessment como uma das quatro ações recomendadas pelo diagnóstico (jtbd.md/vpc.md) — as duas direções de dado podem coexistir, mas a arquitetura não foi desenhada."
+  - "[INFERÊNCIA] Quem decide a compra dentro do RH interno (Marina ou uma liderança acima)"
+  - "[INFERÊNCIA] Linha de base numérica de horas manuais hoje (só o alvo ~1h foi citado)"
+  - "[INFERÊNCIA] Modelo de venda/canal de purchase (self-serve vs. consultivo) para o tier Self-Service ainda não definido"
+  - "[INFERÊNCIA] Que fração da base de clientes potenciais da EK cai em cada tier — não medido, afeta o sizing"
+  - "[INFERÊNCIA] Arranjo com consultores treinados para o tier managed além do teto de 4 clientes (contratação, franquia de metodologia, outro modelo) — não definido"
+  - "[INFERÊNCIA] Job social do RH: ser visto como estratégico, não administrativo"
+  - "[INFERÊNCIA] Job emocional do líder de área: segurança na decisão de pessoas"
+  - "[INFERÊNCIA] Se a fundadora confirma que o MVP deve ser lançado/comunicado já com a linguagem comercial de tiers ('Lumea + EK'), ou se prefere manter isso como detalhe interno de operação por enquanto"
+
+next_step: "Liberar product-owner (requirements.md, user-stories.md, success-metrics.md, sizing.md) e product-marketer (positioning.md, messaging.md, packaging.md) em paralelo. Ambos devem ler risks-assumptions.md e vision-doc.md (revisão 2026-09-13) para tratar como requisito novo — não como detalhe de UI — o permissionamento por papel (RH vs. líder) e a necessidade de suportar os dois tiers desde o MVP. O product-owner deve dimensionar sizing.md considerando o teto de 4 clientes simultâneos do tier managed (H5) e a ampliação de escopo dos dois tiers testados em paralelo."
