@@ -21,6 +21,12 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 - Nota de voz transcrita com um locutor só e, ao retranscrever, o número de locutores esperado
   (`min_speakers`/`max_speakers`; contrato 2.25.0, holetz/eclume#175).
 
+### Corrigido
+
+- Re-transcribing with only the minimum or only the maximum number of speakers filled in keeps the
+  platform limit on the empty side, as the help text promises; before, the whole pair was replaced
+  and the ceiling disappeared (holetz/eclume#216).
+
 ### Alterado
 
 - Server mais enxuto em CPU e memória, sem mudar comportamento: sonda de fila mínima, imports sob
