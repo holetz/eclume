@@ -1,16 +1,17 @@
-# ruff: noqa: S603, S607 — o ffmpeg e o ffprobe do PATH, com argumentos montados aqui e sem shell
-"""Pré-processamento do áudio antes do ASR, com o `ffmpeg` da imagem.
+# ruff: noqa: S603, S607 — ffmpeg and ffprobe from PATH, with arguments built here and no shell
+"""Audio preprocessing before the ASR, with the image's `ffmpeg`.
 
-A configuração chega em `options.preprocess` (o bloco `preprocessing` da plataforma). A ordem é
-fixa: separar canais (só estéreo de duas fontes), 48 kHz, redução de ruído, normalização de loudness
-e 16 kHz mono no fim; depois, o corte do silêncio do início e do fim, medido já normalizado. O
-áudio tratado vive só no diretório de trabalho: o bucket guarda o original, que o usuário ouve, e o
-deslocamento do corte volta às marcas de tempo. Contrato em docs/standards/api/jobs-transcricao.md.
+The configuration arrives in `options.preprocess` (the platform's `preprocessing` block). The order
+is fixed: split channels (only two-source stereo), 48 kHz, noise reduction, loudness normalization
+and 16 kHz mono at the end; then, trimming the silence at the start and at the end, measured
+already normalized. The processed audio lives only in the working directory: the bucket keeps the
+original, the one the user hears, and the trim offset goes back into the time marks. Contract in
+docs/standards/api/jobs-transcricao.md.
 
-O contêiner é escolhido pelos bytes iniciais, numa lista permitida, e chega ao `ffprobe` e ao
-`ffmpeg` com `-f` explícito e `-protocol_whitelist file`: o ffmpeg nunca adivinha o formato, então
-playlist HLS, `concat`, SDP e afins não abrem nada além do próprio arquivo. Todo processo tem
-tempo limite.
+The container is chosen from the initial bytes, in an allow list, and reaches `ffprobe` and
+`ffmpeg` with an explicit `-f` and `-protocol_whitelist file`: ffmpeg never guesses the format, so
+HLS playlists, `concat`, SDP and the like open nothing beyond the file itself. Every process has a
+timeout.
 """
 
 from __future__ import annotations
@@ -28,10 +29,10 @@ AUDIO_DECODE_FAILED = "audio_decode_failed"
 PREPROCESS_FAILED = "preprocess_failed"
 WARN_RNNOISE_MODEL_MISSING = "rnnoise_model_missing"
 SAMPLE_RATE = 16_000
-# Diferença entre os canais abaixo disto: é o mesmo sinal nos dois (mono duplicado).
+# Difference between the channels below this: it is the same signal in both (duplicated mono).
 DUAL_MONO_DB = -60.0
 _STDERR_TAIL = 600
-# Tolerância (s) para um silêncio "começar no início" ou "terminar no fim".
+# Tolerance (s) for a silence to "start at the start" or "end at the end".
 _EDGE_S = 0.05
 
 _SILENCE_START = re.compile(r"silence_start: (-?[\d.]+)")
@@ -39,28 +40,28 @@ _SILENCE_END = re.compile(r"silence_end: (-?[\d.]+)")
 _MEAN_VOLUME = re.compile(r"mean_volume: (-?[\d.]+|-inf) dB")
 
 PROBE_TIMEOUT_S = 60.0
-# Teto de cada ffmpeg: uma base mais a duração do áudio (tempo real), ou o máximo se ela é desconhecida.
+# Ceiling of each ffmpeg: a base plus the audio duration (real time), or the maximum if it is unknown.
 FFMPEG_BASE_TIMEOUT_S = 300.0
 FFMPEG_MAX_TIMEOUT_S = 4 * 3600.0
 _HEAD_BYTES = 12
-# O áudio tratado no diretório de trabalho é sempre WAV gerado aqui.
+# The processed audio in the working directory is always a WAV generated here.
 _WAV = "wav"
-# Os contêineres permitidos: (posição, bytes mágicos, demuxer do ffmpeg). MPEG e ADTS vêm à parte.
+# The allowed containers: (position, magic bytes, ffmpeg demuxer). MPEG and ADTS come separately.
 _MAGIC = (
     (0, b"OggS", "ogg"),
     (0, b"\x1a\x45\xdf\xa3", "matroska"),  # Matroska e WebM
     (4, b"ftyp", "mov"),  # MP4, MOV, M4A
-    (0, b"RIFF", _WAV),  # com `WAVE` na posição 8
+    (0, b"RIFF", _WAV),  # with `WAVE` at position 8
     (0, b"fLaC", "flac"),
     (0, b"ID3", "mp3"),
 )
 
 
 class PreprocessError(Exception):
-    """O áudio não abre nem só convertido: o job falha com `audio_decode_failed`."""
+    """The audio does not open even when only converted: the job fails with `audio_decode_failed`."""
 
     def __init__(self, message: str) -> None:
-        """Mensagem com o fim do stderr do ffmpeg."""
+        """Message with the tail of ffmpeg's stderr."""
         super().__init__(message)
         self.code = AUDIO_DECODE_FAILED
         self.message = message
@@ -68,7 +69,7 @@ class PreprocessError(Exception):
 
 @dataclass
 class PreprocessResult:
-    """Os arquivos para o ASR (um por canal separado) e o que foi feito, para o `engine_info`."""
+    """The files for the ASR (one per separated channel) and what was done, for the `engine_info`."""
 
     paths: list[Path]
     offset_ms: int
@@ -79,7 +80,7 @@ class PreprocessResult:
     warnings: list[str] = field(default_factory=list)
     ms: int = 0
     ffmpeg_version: str | None = None
-    # A duração do original (ffprobe), que o usuário ouve; `None` se o contêiner não a diz.
+    # The duration of the original (ffprobe), the one the user hears; `None` if the container does not state it.
     duration_ms: int | None = None
 
     def info(self) -> dict[str, Any]:
@@ -97,21 +98,21 @@ class PreprocessResult:
 
 
 def demuxer(path: Path) -> str:
-    """O demuxer do ffmpeg para o contêiner pelos bytes iniciais; `PreprocessError` fora da lista."""
+    """The ffmpeg demuxer for the container from the initial bytes; `PreprocessError` outside the list."""
     with path.open("rb") as audio:
         head = audio.read(_HEAD_BYTES)
     for offset, magic, fmt in _MAGIC:
         if head[offset : offset + len(magic)] == magic and (fmt != _WAV or head[8:12] == b"WAVE"):
             return fmt
-    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0:  # noqa: PLR2004 — sincronia MPEG
-        # Camada 00 é o cabeçalho ADTS (AAC); as demais, MPEG áudio (MP3).
+    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0:  # noqa: PLR2004 — MPEG sync
+        # Layer 00 is the ADTS header (AAC); the others are MPEG audio (MP3).
         return "aac" if head[1] & 0x06 == 0 else "mp3"
-    msg = f"contêiner fora da lista permitida (bytes iniciais {head[:8].hex()})"
+    msg = f"container outside the allow list (initial bytes {head[:8].hex()})"
     raise PreprocessError(msg)
 
 
 def _input(path: Path, fmt: str) -> list[str]:
-    """A entrada com o demuxer explícito e só o protocolo `file`."""
+    """The input with an explicit demuxer and only the `file` protocol."""
     return ["-protocol_whitelist", "file", "-f", fmt, "-i", f"file:{path}"]
 
 
@@ -122,12 +123,12 @@ def _timeout(duration_ms: int | None) -> float:
 
 
 def _run(*args: str, timeout: float = FFMPEG_MAX_TIMEOUT_S) -> subprocess.CompletedProcess[str]:
-    """O ffmpeg; estourar o tempo limite é uma falha como outra (código -1)."""
+    """Run ffmpeg; exceeding the timeout is a failure like any other (code -1)."""
     command = ["ffmpeg", "-hide_banner", "-nostdin", *args]
     try:
         return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(command, -1, "", f"tempo limite de {timeout:g} s esgotado")
+        return subprocess.CompletedProcess(command, -1, "", f"timeout of {timeout:g} s exceeded")
 
 
 def _tail(stderr: str) -> str:
@@ -135,7 +136,7 @@ def _tail(stderr: str) -> str:
 
 
 def ffmpeg_version() -> str | None:
-    """A versão do ffmpeg (`6.1.1-3ubuntu5`), ou `None` sem ffmpeg."""
+    """The ffmpeg version (`6.1.1-3ubuntu5`), or `None` without ffmpeg."""
     try:
         out = subprocess.run(
             ["ffmpeg", "-version"], capture_output=True, text=True, check=False, timeout=PROBE_TIMEOUT_S
@@ -147,7 +148,7 @@ def ffmpeg_version() -> str | None:
 
 
 def probe(path: Path, fmt: str) -> tuple[int, int | None]:
-    """Canais do primeiro fluxo de áudio e a duração (ms) do arquivo; `PreprocessError` se não abre."""
+    """Channels of the first audio stream and the file's duration (ms); `PreprocessError` if it does not open."""
     command = [
         "ffprobe",
         "-v",
@@ -167,13 +168,13 @@ def probe(path: Path, fmt: str) -> tuple[int, int | None]:
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=PROBE_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:
-        msg = f"o áudio não abre: ffprobe passou de {PROBE_TIMEOUT_S:g} s"
+        msg = f"the audio does not open: ffprobe exceeded {PROBE_TIMEOUT_S:g} s"
         raise PreprocessError(msg) from exc
     try:
         data = json.loads(result.stdout)
         channels = int(data["streams"][0]["channels"])
     except (ValueError, KeyError, IndexError) as exc:
-        msg = f"o áudio não abre: {_tail(result.stderr)}"
+        msg = f"the audio does not open: {_tail(result.stderr)}"
         raise PreprocessError(msg) from exc
     try:
         duration_ms = round(float(data["format"]["duration"]) * 1000)
@@ -183,7 +184,7 @@ def probe(path: Path, fmt: str) -> tuple[int, int | None]:
 
 
 def _dual_mono(path: Path, fmt: str, timeout: float) -> bool:
-    """Os dois canais têm o mesmo sinal: a diferença entre eles é silêncio."""
+    """Both channels carry the same signal: the difference between them is silence."""
     result = _run(*_input(path, fmt), "-af", "pan=mono|c0=c0-c1,volumedetect", "-f", "null", "-", timeout=timeout)
     match = _MEAN_VOLUME.search(result.stderr)
     return bool(match) and (match.group(1) == "-inf" or float(match.group(1)) < DUAL_MONO_DB)
@@ -195,7 +196,7 @@ def _enabled(config: dict[str, Any], step: str) -> dict[str, Any] | None:
 
 
 def _chain(config: dict[str, Any], model: str | None, warnings: list[str]) -> tuple[list[str], list[dict[str, Any]]]:
-    """Os filtros depois da escolha do canal, na ordem fixa, e o registro de cada etapa."""
+    """The filters after the channel choice, in the fixed order, and the record of each step."""
     filters = ["aresample=48000"]
     steps: list[dict[str, Any]] = []
     denoise = _enabled(config, "denoise")
@@ -223,7 +224,7 @@ def _chain(config: dict[str, Any], model: str | None, warnings: list[str]) -> tu
     return filters, steps
 
 
-def _render(  # noqa: PLR0913 — a entrada, a saída, a cadeia e o teto de cada chamada
+def _render(  # noqa: PLR0913 — the input, the output, the chain and the ceiling of each call
     src: Path, fmt: str, dst: Path, pick: str, filters: list[str], *, timeout: float
 ) -> subprocess.CompletedProcess[str]:
     return _run(
@@ -243,7 +244,7 @@ def _render(  # noqa: PLR0913 — a entrada, a saída, a cadeia e o teto de cada
 
 
 def _silences(path: Path, threshold_db: float, min_silence_s: float, timeout: float) -> tuple[float, float | None]:
-    """`(início da fala, fim da fala ou None)` pelo `silencedetect` do arquivo já normalizado."""
+    """`(speech start, speech end or None)` from `silencedetect` on the already normalized file."""
     result = _run(
         *_input(path, _WAV),
         "-af",
@@ -259,14 +260,14 @@ def _silences(path: Path, threshold_db: float, min_silence_s: float, timeout: fl
         duration = audio.getnframes() / audio.getframerate()
     speech_start = ends[0] if starts and starts[0] <= _EDGE_S and ends else 0.0
     speech_end = None
-    # O último silêncio vai até o fim: sem `silence_end` (ffmpeg antigo) ou com ele no fim do arquivo.
+    # The last silence runs to the end: without `silence_end` (old ffmpeg) or with it at the end of the file.
     if starts and (len(ends) < len(starts) or ends[-1] >= duration - _EDGE_S) and starts[-1] > speech_start:
         speech_end = starts[-1]
     return speech_start, speech_end
 
 
 def _trim(paths: list[Path], config: dict[str, Any], timeout: float) -> tuple[float, dict[str, Any]]:
-    """Corta o mesmo intervalo de todos os arquivos; devolve o deslocamento (s) e a etapa."""
+    """Trim the same interval from all files; return the offset (s) and the step."""
     trim = _enabled(config, "trim_silence")
     if trim is None:
         return 0.0, {"step": "trim_silence", "state": "skipped", "reason": "disabled"}
@@ -283,8 +284,8 @@ def _trim(paths: list[Path], config: dict[str, Any], timeout: float) -> tuple[fl
     if end is not None and end <= start:
         return 0.0, {"step": "trim_silence", "state": "skipped", "reason": "all_silence", "params": params}
     window = f"atrim=start={start:.3f}" + (f":end={end:.3f}" if end is not None else "")
-    # Todos os canais cortados em temporários e trocados só no fim: ou todos saem cortados (com o
-    # deslocamento), ou nenhum.
+    # All channels trimmed into temporaries and swapped only at the end: either all come out trimmed
+    # (with the offset), or none do.
     trimmed = [path.with_name(path.stem + ".trim.wav") for path in paths]
     for path, target in zip(paths, trimmed, strict=True):
         result = _run(
@@ -307,10 +308,10 @@ def _trim(paths: list[Path], config: dict[str, Any], timeout: float) -> tuple[fl
 
 
 def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: str | None) -> PreprocessResult:
-    """Trata `src` para o ASR; sem configuração (servidor antigo), só converte o formato.
+    """Process `src` for the ASR; without a configuration (old server), only convert the format.
 
-    Falha da cadeia: refaz só o formato (16 kHz mono) e marca a etapa falha; se nem isso sai,
-    `PreprocessError`, como o contêiner fora da lista permitida.
+    On a chain failure: redo only the format (16 kHz mono) and mark the step failed; if even that
+    fails, `PreprocessError`, like a container outside the allow list.
     """
     started = time.monotonic()
     config = config or {}
@@ -324,7 +325,7 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
     picks = ["aformat=channel_layouts=mono"]
     if _enabled(config, "split_channels") is None:
         steps.append({"step": "split_channels", "state": "skipped", "reason": "disabled"})
-    elif channels != 2:  # noqa: PLR2004 — só estéreo de duas fontes
+    elif channels != 2:  # noqa: PLR2004 — only two-source stereo
         steps.append({"step": "split_channels", "state": "skipped", "reason": "not_stereo"})
     elif _dual_mono(src, fmt, timeout):
         steps.append({"step": "split_channels", "state": "skipped", "reason": "dual_mono"})
@@ -347,7 +348,7 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
         ]
         failed = next((r for r in results if r.returncode != 0), None)
         if failed is not None:
-            msg = f"o áudio não abre nem só convertido: {_tail(failed.stderr)}"
+            msg = f"the audio does not open even when only converted: {_tail(failed.stderr)}"
             raise PreprocessError(msg)
     steps += chain_steps
     offset, trim_step = _trim(paths, config, timeout)

@@ -1,16 +1,17 @@
-"""Job `transcribe` da fila `eclume:gpu` (contrato em docs/standards/api/jobs-transcricao.md).
+"""`transcribe` job of the `eclume:gpu` queue (contract in docs/standards/api/jobs-transcricao.md).
 
-Baixa o áudio, pré-processa (`preprocess.py`), roda a engine numa thread (uma vez por canal, com
-os canais separados), grava `transcript.raw.json` e `speaker_embeddings.json` da revisão no bucket e
-enfileira `ingest_transcript` em `eclume:default`. Em falha, enfileira `transcription_failed` com a
-etapa em que parou e retorna sem relançar: o retry é decisão do server, não do arq. Os dois retornos
-levam a revisão no `_job_id` (`{job}:{recording_id}:{revision}`); os argumentos são os de sempre.
+Download the audio, preprocess it (`preprocess.py`), run the engine in a thread (once per channel,
+with separated channels), write the revision's `transcript.raw.json` and `speaker_embeddings.json`
+to the bucket and enqueue `ingest_transcript` on `eclume:default`. On failure, enqueue
+`transcription_failed` with the stage where it stopped and return without re-raising: the retry is
+the server's decision, not arq's. Both returns carry the revision in the `_job_id`
+(`{job}:{recording_id}:{revision}`); the arguments are the usual ones.
 
-Cancelar é cooperativo: o server grava `eclume:cancel:{recording_id}:{revision}`; o job confere a
-chave ao começar e a cada `CANCEL_POLL_S` enquanto roda, e para no próximo ponto de checagem — a
-callback de progresso da engine (por lote do ASR e da diarização) e entre download,
-pré-processamento, ASR e upload. Cancelado, não enfileira retorno e apaga o hash de progresso e o
-diretório de trabalho antes de liberar a vaga.
+Cancelling is cooperative: the server writes `eclume:cancel:{recording_id}:{revision}`; the job
+checks the key at the start and every `CANCEL_POLL_S` while it runs, and stops at the next
+checkpoint — the engine's progress callback (per ASR and diarization batch) and between download,
+preprocessing, ASR and upload. When cancelled, it enqueues no return and deletes the progress hash
+and the working directory before freeing the slot.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from eclume_engines import DEFAULT_ENGINE, EngineError, EngineOptions, get_engine
 from eclume_engines.hf_token import resolve_hf_token
-from eclume_engines.registro import contexto_do_job
+from eclume_engines.logs import job_context
 from eclume_worker import __version__
 from eclume_worker.config import DEFAULT_QUEUE
 from eclume_worker.preprocess import PreprocessError, PreprocessResult, preprocess
@@ -49,17 +50,17 @@ logger = logging.getLogger(__name__)
 AUDIO_DOWNLOAD_FAILED = "audio_download_failed"
 UPLOAD_FAILED = "upload_failed"
 INTERNAL_ERROR = "internal_error"
-WARN_HF_TOKEN_UNDECRYPTABLE = "hf_token_undecryptable"  # noqa: S105 — código de aviso, não segredo
-# De quanto em quanto tempo o job em curso confere o pedido de cancelamento.
+WARN_HF_TOKEN_UNDECRYPTABLE = "hf_token_undecryptable"  # noqa: S105 — warning code, not a secret
+# How often the running job checks for the cancellation request.
 CANCEL_POLL_S = 5.0
 
 
 class JobCancelledError(Exception):
-    """O dono cancelou o job (chave `eclume:cancel:…`): para sem retorno."""
+    """The owner cancelled the job (`eclume:cancel:…` key): stop with no return."""
 
 
 def cancel_key(recording_id: str, revision: int) -> str:
-    """Chave em que o server pede a parada do `transcribe` da revisão."""
+    """Key where the server asks for the revision's `transcribe` to stop."""
     return f"eclume:cancel:{recording_id}:{revision}"
 
 
@@ -69,34 +70,34 @@ def _checkpoint(stop: threading.Event) -> None:
 
 
 async def _watch_cancel(redis: Any, key: str, stop: threading.Event, every: float) -> None:  # noqa: ANN401 — ArqRedis
-    """Liga `stop` quando a chave de cancelamento aparece; uma falha do Redis só vai ao log."""
+    """Set `stop` when the cancellation key appears; a Redis failure only goes to the log."""
     while not stop.is_set():
         try:
             if await redis.exists(key):
                 stop.set()
                 return
         except Exception:
-            logger.exception("conferência do cancelamento falhou")
+            logger.exception("cancellation check failed")
         await asyncio.sleep(every)
 
 
 class JobFailedError(Exception):
-    """Falha com `error_code` do contrato, reportada por `transcription_failed`."""
+    """Failure with the contract's `error_code`, reported by `transcription_failed`."""
 
     def __init__(self, code: str, message: str) -> None:
-        """Guarda o código do contrato junto da mensagem."""
+        """Keep the contract code together with the message."""
         super().__init__(message)
         self.code = code
         self.message = message
 
 
 def return_job_id(job: str, recording_id: str, revision: int) -> str:
-    """`_job_id` `{job}:{recording_id}:{revision}`: o do `transcribe` e o dos retornos da revisão."""
+    """`_job_id` `{job}:{recording_id}:{revision}`: the `transcribe`'s and the revision's returns'."""
     return f"{job}:{recording_id}:{revision}"
 
 
 def parse_revision(job_id: str | None) -> int:
-    """Lê a revisão do `_job_id` `transcribe:{recording_id}:{revision}`; padrão 1."""
+    """Read the revision from the `_job_id` `transcribe:{recording_id}:{revision}`; default 1."""
     try:
         return max(1, int(str(job_id).rsplit(":", 1)[1]))
     except (IndexError, ValueError):
@@ -104,7 +105,7 @@ def parse_revision(job_id: str | None) -> int:
 
 
 class EngineRegistry:
-    """Mantém a engine do processo, marca uso e descarrega os modelos ociosos."""
+    """Hold the process's engine, mark usage and unload idle models."""
 
     def __init__(
         self,
@@ -113,7 +114,7 @@ class EngineRegistry:
         hf_token: Callable[[], str | None] = resolve_hf_token,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        """A engine é criada na primeira vez que um job a pede."""
+        """The engine is created the first time a job asks for it."""
         self.config = config
         self.factory = factory
         self.hf_token = hf_token
@@ -122,28 +123,28 @@ class EngineRegistry:
         self._key: tuple[str, str | None] | None = None
         self._engine: Engine | None = None
         self._last_used = clock()
-        # O `_job_id` do `transcribe` em execução (do download ao enfileiramento do retorno).
+        # The `_job_id` of the running `transcribe` (from download to enqueueing the return).
         self.current_job: str | None = None
-        # A engine continua no registro depois da descarga ociosa (recarrega no próximo job); isto
-        # diz se os modelos dela já foram descarregados desde o último uso.
+        # The engine stays in the registry after the idle unload (it reloads on the next job); this
+        # says whether its models have been unloaded since the last use.
         self._unloaded = False
 
     def resolve_name(self, options: dict[str, Any]) -> str:
-        """`ECLUME_ENGINE` força a engine do processo; senão vale `options.engine`."""
+        """`ECLUME_ENGINE` forces the process's engine; otherwise `options.engine` applies."""
         return self.config.engine or options.get("engine") or DEFAULT_ENGINE
 
     @property
     def current_name(self) -> str | None:
-        """Engine criada no processo, se alguma."""
+        """Engine created in the process, if any."""
         return self._key[0] if self._key else None
 
     @property
     def busy(self) -> bool:
-        """Há um `transcribe` em execução (ou a engine em uso)."""
+        """There is a `transcribe` running (or the engine in use)."""
         return self.current_job is not None or self._lock.locked()
 
     def loaded_models(self) -> list[dict[str, Any]]:
-        """Modelos residentes da engine, para o heartbeat; engines sem o método não declaram nenhum."""
+        """The engine's resident models, for the heartbeat; engines without the method declare none."""
         loaded = getattr(self._engine, "loaded_models", None)
         return loaded() if loaded is not None else []
 
@@ -157,7 +158,7 @@ class EngineRegistry:
             }
         if name == "openai-compatible":
             if not base_url:
-                msg = "engine openai-compatible sem endpoint_url nas options nem ECLUME_REMOTE_BASE_URL"
+                msg = "openai-compatible engine with no endpoint_url in the options nor ECLUME_REMOTE_BASE_URL"
                 raise JobFailedError(INTERNAL_ERROR, msg)
             kwargs: dict[str, Any] = {"base_url": base_url, "api_key": self.config.remote_api_key}
             if self.config.remote_model:
@@ -176,11 +177,11 @@ class EngineRegistry:
                 raise JobFailedError(INTERNAL_ERROR, str(exc)) from exc
             self._key = (name, base_url)
         if hasattr(self._engine, "hf_token"):
-            # o da plataforma (vindo no job) vence; o do ambiente é relido a cada job
+            # the platform's (coming in the job) wins; the environment's is re-read on each job
             self._engine.hf_token = hf_token or self.hf_token()
         return self._engine
 
-    def run(  # noqa: PLR0913 — o job passa o que a engine precisa, nomeado
+    def run(  # noqa: PLR0913 — the job passes what the engine needs, named
         self,
         name: str,
         audio_path: Path,
@@ -190,7 +191,7 @@ class EngineRegistry:
         base_url: str | None = None,
         hf_token: str | None = None,
     ) -> EngineResult:
-        """Transcreve segurando o lock, para a descarga ociosa não disputar a engine."""
+        """Transcribe holding the lock, so the idle unload does not compete for the engine."""
         with self._lock:
             try:
                 return self._get(name, base_url, hf_token).transcribe(audio_path, options, progress)
@@ -199,10 +200,10 @@ class EngineRegistry:
                 self._unloaded = False
 
     def unload_if_idle(self, idle_seconds: float) -> bool:
-        """Descarrega se nenhum job usou a engine há `idle_seconds`; não bloqueia um job em curso.
+        """Unload if no job has used the engine for `idle_seconds`; it does not block a running job.
 
-        Devolve `True` só na descarga de fato: já descarregada desde o último uso, não há o que
-        descarregar de novo (nem o que logar a cada volta do laço ocioso).
+        Return `True` only on an actual unload: once unloaded since the last use, there is nothing to
+        unload again (nor to log on every round of the idle loop).
         """
         if not self._lock.acquire(blocking=False):
             return False
@@ -216,7 +217,7 @@ class EngineRegistry:
             self._lock.release()
 
     def unload(self) -> None:
-        """Descarrega incondicionalmente (desligamento do worker)."""
+        """Unload unconditionally (worker shutdown)."""
         with self._lock:
             if self._engine is not None:
                 self._engine.unload()
@@ -249,7 +250,7 @@ def _engine_info(
 async def _preprocess(
     config: WorkerConfig, reporter: ProgressReporter, audio_path: Path, workdir: Path, settings: dict[str, Any] | None
 ) -> PreprocessResult:
-    """O pré-processamento numa thread, com a etapa `preprocess` no progresso."""
+    """Preprocessing in a thread, with the `preprocess` stage in the progress."""
     await reporter.report("preprocess")
     try:
         pre = await asyncio.to_thread(preprocess, audio_path, workdir, settings, config.rnnoise_model)
@@ -261,11 +262,11 @@ async def _preprocess(
 
 
 def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOptions) -> EngineResult:
-    """O ASR do áudio tratado; com os canais separados, uma vez por canal, e a mescla.
+    """The ASR of the processed audio; with separated channels, once per channel, then the merge.
 
-    Cada canal é uma pessoa (`min_speakers = max_speakers = 1`, o que mantém o embedding para a
-    identificação por voz): as falas do canal k ganham o rótulo `CANAL_k` e os segmentos se mesclam
-    pelo início.
+    Each channel is one person (`min_speakers = max_speakers = 1`, which keeps the embedding for
+    voice identification): the speech of channel k gets the label `CHANNEL_k` and the segments are
+    merged by start.
     """
     if len(paths) == 1:
         return run(paths[0], options)
@@ -274,7 +275,7 @@ def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOpt
     merged = results[0]
     segments, embeddings = [], {}
     for channel, result in enumerate(results):
-        label = f"CANAL_{channel}"
+        label = f"CHANNEL_{channel}"
         for segment in result.segments:
             segment.speaker = label
             for word in segment.words:
@@ -295,9 +296,9 @@ def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOpt
 def _thread_progress(
     reporter: ProgressReporter, loop: asyncio.AbstractEventLoop, stop: threading.Event
 ) -> tuple[Callable[[str, float], None], list[Any]]:
-    """Callback para a thread da engine: agenda no loop só quando o `pct` geral muda.
+    """Callback for the engine thread: schedule on the loop only when the overall `pct` changes.
 
-    Com o cancelamento pedido, levanta `JobCancelledError` na thread da engine, no próximo lote.
+    With cancellation requested, raise `JobCancelledError` in the engine thread, on the next batch.
     """
     futures: list[Any] = []
     last: list[tuple[str, int]] = []
@@ -314,17 +315,17 @@ def _thread_progress(
 
 
 async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any] | None) -> dict:
-    """Job `transcribe(recording_id, audio_key, options)` do contrato."""
+    """The contract's `transcribe(recording_id, audio_key, options)` job."""
     config: WorkerConfig = ctx["config"]
     registry: EngineRegistry = ctx["engines"]
     redis = ctx["redis"]
     revision = parse_revision(ctx.get("job_id"))
     registry.current_job = ctx.get("job_id") or return_job_id("transcribe", recording_id, revision)
-    contexto_do_job(registry.current_job, recording_id, revision)
+    job_context(registry.current_job, recording_id, revision)
     try:
         cancel = cancel_key(recording_id, revision)
         if await redis.exists(cancel):
-            logger.info("gravação %s (revisão %s): cancelada antes de começar", recording_id, revision)
+            logger.info("recording %s (revision %s): cancelled before starting", recording_id, revision)
             return {"status": "cancelled"}
         stop = threading.Event()
         watcher = asyncio.create_task(_watch_cancel(redis, cancel, stop, ctx.get("cancel_poll_s", CANCEL_POLL_S)))
@@ -334,12 +335,12 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
         try:
             return await _run(ctx, recording_id, audio_key, dict(options or {}), workdir, reporter=reporter, stop=stop)
         except Exception as exc:
-            # Cancelado, a engine pode ter embrulhado a interrupção num erro dela: vale o pedido.
+            # When cancelled, the engine may have wrapped the interruption in an error of its own: the request wins.
             if stop.is_set() or isinstance(exc, JobCancelledError):
                 return await _cancelled(redis, reporter)
             if isinstance(exc, JobFailedError):
                 return await _fail(redis, reporter, exc)
-            logger.exception("gravação %s: erro inesperado", recording_id)
+            logger.exception("recording %s: unexpected error", recording_id)
             return await _fail(redis, reporter, JobFailedError(INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"))
         finally:
             watcher.cancel()
@@ -349,13 +350,13 @@ async def transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, opt
 
 
 async def _cancelled(redis: Any, reporter: ProgressReporter) -> dict:  # noqa: ANN401 — ArqRedis
-    """Sem retorno ao server (o job já está `cancelled` no banco); o hash de progresso sai."""
-    logger.info("gravação %s (revisão %s): cancelada em %s", reporter.recording_id, reporter.revision, reporter.stage)
+    """No return to the server (the job is already `cancelled` in the database); the progress hash goes away."""
+    logger.info("recording %s (revision %s): cancelled at %s", reporter.recording_id, reporter.revision, reporter.stage)
     await redis.delete(progress_key(reporter.recording_id))
     return {"status": "cancelled"}
 
 
-async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha também lê e o cancelamento
+async def _run(  # noqa: PLR0913 — the job, the progress reporter the failure also reads, and the cancellation
     ctx: dict[str, Any],
     recording_id: str,
     audio_key: str,
@@ -374,8 +375,8 @@ async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha 
         engine_options = dataclasses.replace(engine_options, language=engine_options.language.split("-", 1)[0].lower())
     engine_name = registry.resolve_name(options)
     if options.get("engine") and engine_name != options["engine"]:
-        # Modelo, compute type e lote do admin são da engine que ele escolheu; a engine forçada pelo
-        # operador (`ECLUME_ENGINE`, ex. `cpu` no dev e no E2E) usa os padrões dela.
+        # The admin's model, compute type and batch belong to the engine they chose; the engine forced by
+        # the operator (`ECLUME_ENGINE`, e.g. `cpu` in dev and E2E) uses its own defaults.
         engine_options = dataclasses.replace(
             engine_options, model=None, compute_type=None, batch_size=None, fallback_model=None
         )
@@ -385,7 +386,7 @@ async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha 
         await asyncio.to_thread(store.download, audio_key, audio_path)
         content_hash = await asyncio.to_thread(sha256_file, audio_path)
     except Exception as exc:
-        raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"falha ao baixar {audio_key}: {exc}") from exc
+        raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"failed to download {audio_key}: {exc}") from exc
     await reporter.report("download", 100)
     _checkpoint(stop)
 
@@ -404,19 +405,19 @@ async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha 
         raise JobFailedError(exc.code, exc.message) from exc
     finally:
         await asyncio.gather(*(asyncio.wrap_future(f) for f in futures), return_exceptions=True)
-    # O alinhamento não chama a callback: o pedido feito durante ele vale aqui.
+    # Alignment does not call the callback: a request made during it counts here.
     _checkpoint(stop)
     processing_s = time.monotonic() - engine_started
     result.warnings[:0] = [*token_warnings, *pre.warnings]
     for warning in result.warnings:
-        logger.warning("gravação %s: %s", recording_id, warning)
+        logger.warning("recording %s: %s", recording_id, warning)
 
     transcript = build_transcript(
         result,
         recording_id=recording_id,
         revision=reporter.revision,
         content_hash=content_hash,
-        # O pedido (com a região), ou o que a engine detectou.
+        # The requested one (with the region), or what the engine detected.
         language=options.get("language") or result.language,
         now=datetime.now(UTC),
         offset_ms=pre.offset_ms,
@@ -429,11 +430,11 @@ async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha 
         await asyncio.to_thread(store.put_json, t_key, transcript)
         await asyncio.to_thread(store.put_json, e_key, build_embeddings(result))
     except Exception as exc:
-        raise JobFailedError(UPLOAD_FAILED, f"falha ao gravar os artefatos: {exc}") from exc
+        raise JobFailedError(UPLOAD_FAILED, f"failed to write the artifacts: {exc}") from exc
 
     info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at, pre)
     _checkpoint(stop)
-    # 100 antes do retorno: o server apaga o hash ao ingerir, e uma gravação depois o recriaria.
+    # 100 before the return: the server deletes the hash on ingest, and a later write would recreate it.
     await reporter.report("upload", 100)
     await redis.enqueue_job(
         "ingest_transcript",
@@ -444,25 +445,25 @@ async def _run(  # noqa: PLR0913 — o job, o reporter de progresso que a falha 
         _job_id=return_job_id("ingest_transcript", recording_id, reporter.revision),
         _queue_name=DEFAULT_QUEUE,
     )
-    logger.info("gravação %s transcrita: %s", recording_id, info)
+    logger.info("recording %s transcribed: %s", recording_id, info)
     return {"status": "done", "transcript_key": t_key, "embeddings_key": e_key, "engine_info": info}
 
 
 def _platform_hf_token(config: WorkerConfig, encrypted: str | None) -> tuple[str | None, list[str]]:
-    """Token do HF da plataforma (cifrado nas `options`); não abrir cai no do ambiente, com aviso."""
+    """The platform's HF token (encrypted in the `options`); failing to open it falls back to the environment's, with a warning."""
     if not encrypted:
         return None, []
     try:
         return open_secret(encrypted, encryption_key=config.encryption_key, secret_key=config.secret_key), []
     except SecretError as exc:
-        logger.warning("token do HF da plataforma não abre (%s); usando o do ambiente", exc)
+        logger.warning("platform HF token does not open (%s); using the environment's", exc)
         return None, [WARN_HF_TOKEN_UNDECRYPTABLE]
 
 
 async def _fail(redis: Any, reporter: ProgressReporter, failure: JobFailedError) -> dict:  # noqa: ANN401 — ArqRedis
     recording_id, revision, stage = reporter.recording_id, reporter.revision, reporter.stage
     code, message = failure.code, failure.message
-    logger.error("gravação %s (revisão %s) falhou em %s (%s): %s", recording_id, revision, stage, code, message)
+    logger.error("recording %s (revision %s) failed at %s (%s): %s", recording_id, revision, stage, code, message)
     await redis.enqueue_job(
         "transcription_failed",
         recording_id,
