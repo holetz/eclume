@@ -513,8 +513,13 @@ repositórios. O host também é CI e staging, então todo contêiner do backup 
 e `GOMAXPROCS=1` (restic e mc) e o `restic backup` lê com `--read-concurrency 1`; o `backup.sh`
 passa `backup.log` e `ensaio.log` para `<nome>.log.1` ao chegarem a 5 MB (`ECLUME_LOG_MAX_KB`),
 guardando uma geração. **Janela de exclusão:** uma gravação
-excluída some do bucket na hora, mas sobrevive nos snapshots — local e fora do host — por até 7
-dias, e nos dumps `pre-deploy/` pelo tempo que eles ficarem. Cada etapa grava
+excluída some do bucket na hora, mas sobrevive nos snapshots — local e fora do host — por até 14
+dias, e nos dumps `pre-deploy/` pelo tempo que eles ficarem. The 14 days also bound the audio
+removed by the audio retention policy: the next daily backup drops the object from the mirror
+(`mc mirror --remove`), the last snapshot that holds it is at most one day older than the
+deletion, `forget --keep-daily 7` releases it once seven newer daily snapshots exist (at most 7
+days later), and the Sunday `prune` frees the space (at most 7 days after that). No snapshot is
+rewritten on deletion. Cada etapa grava
 `estado/backup.json`, `estado/fora.json` e `estado/ensaio.json` (`ok`, `at`, `detalhe`), que o
 `vigia.sh` lê, e o backup grava `estado/secrets.sha256` (sha256 de `secrets/` e da PKI no snapshot).
 O `deploy.sh --plan` mostra a idade do último `ok` de cada etapa.
