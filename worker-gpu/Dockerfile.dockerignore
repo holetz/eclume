@@ -1,5 +1,5 @@
-# Contexto do build do worker GPU (lido pelo BuildKit por ficar ao lado do Dockerfile):
-# só os manifestos do workspace uv e o código dos pacotes da imagem.
+# GPU worker build context (read by BuildKit because it sits next to the Dockerfile):
+# only the uv workspace manifests and the code of the packages in the image.
 *
 !pyproject.toml
 !uv.lock

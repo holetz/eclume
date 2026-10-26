@@ -329,7 +329,7 @@ anterior não pode voltar como `index.html` guardado por um ano), `/downloads/la
 e o cadastro aberto com o aviso, entra pela sessão de admin (escolhe o provider de resumos já
 cadastrado, sem cadastrar nenhum; falha dizendo o que cadastrar se não houver) e pela de
 usuário, com o mesmo e-mail e a mesma senha (`--admin-email` e `ECLUME_SMOKE_ADMIN_PASSWORD`
-quando divergirem), e envia `worker-gpu/tests/fixtures/duas-vozes.ogg` pelo upload
+quando divergirem), e envia `worker-gpu/tests/fixtures/two-voices.ogg` pelo upload
 multipart. Depois espera a transcrição com 2 locutores e um resumo `done`. Sobre essa gravação,
 prova a gravação centrada no resumo (holetz/eclume#34): edita o resumo à mão (versão `manual`),
 pede ao chat "Diga quem fala primeiro na reunião e acrescente isso no início do resumo" e espera a
@@ -368,7 +368,7 @@ chat, baixa o DOCX (assinatura `PK`) e exclui a gravação da prova. Os screensh
 ficam no host em `~/build/<pasta>/test-results/prod/`.
 
 ```bash
-remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && . ~/eclume-staging/conta && ECLUME_E2E_EMAIL="$ECLUME_EMAIL" ECLUME_E2E_PASSWORD="$ECLUME_PASSWORD" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
+remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/two-voices.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && . ~/eclume-staging/conta && ECLUME_E2E_EMAIL="$ECLUME_EMAIL" ECLUME_E2E_PASSWORD="$ECLUME_PASSWORD" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
 ```
 
 **MCP e pareamento** (`deploy/smoke_mcp.py`, com o SDK `mcp`, então por `uv run`): confere que o

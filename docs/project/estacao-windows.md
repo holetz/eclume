@@ -160,6 +160,6 @@ reaberto. O áudio do sistema chegava mudo ao servidor por um defeito na dívida
 corrigido. O grupo de microfones dessa máquina entrega silêncio digital, e isso é do driver.
 
 Depois da correção (0.1.2, publicada pelo `desktop-release`), o updater levou o app de 0.1.1 para
-0.1.2 e o reabriu. Uma gravação manual de 35 s com `duas-vozes.ogg` tocando nos alto-falantes saiu
+0.1.2 e o reabriu. Uma gravação manual de 35 s com `two-voices.ogg` tocando nos alto-falantes saiu
 com 86 KB (antes, 18 KB mudos) e chegou ao servidor transcrita com 13 segmentos e 2 locutores, o
 mesmo resultado da fixture enviada direto. O `eclume.log` registrou a abertura, a gravação e o sync.

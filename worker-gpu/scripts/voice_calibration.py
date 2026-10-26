@@ -1,20 +1,21 @@
-# ruff: noqa: INP001, T201, S310, S603, S607, S311 — script solto de linha de comando: imprime, baixa de URLs fixas, chama o ffmpeg e sorteia sem fim criptográfico
-"""Calibração do limiar de identificação por voz com fala real (holetz/eclume#15).
+# ruff: noqa: INP001, T201, S310, S603, S607, S311 — standalone command-line script: prints, downloads from fixed URLs, calls ffmpeg and draws random numbers with no cryptographic purpose
+"""Calibration of the voice identification threshold with real speech (holetz/eclume#15).
 
-Mede como os embeddings de locutor do pyannote `community-1` (os mesmos que o worker GPU grava em
-`speaker_embeddings.json`) separam a mesma pessoa de pessoas diferentes, entre gravações distintas.
+Measures how the speaker embeddings of pyannote `community-1` (the same ones the GPU worker writes
+to `speaker_embeddings.json`) separate the same person from different people, across distinct
+recordings.
 
-Os dados são leituras do LibriVox em português (domínio público), com o leitor de cada seção
-conhecido pelo catálogo. Cada "reunião" sintética junta 2 ou 3 leitores em turnos alternados, cada
-um tirado de uma seção (uma sessão de gravação) diferente, e passa pelo mesmo `DiarizationPipeline`
-do WhisperX que a produção usa, com `return_embeddings=True`. O locutor diarizado é casado com o
-leitor pela sobreposição com os turnos conhecidos.
+The data are LibriVox readings in Portuguese (public domain), with each section's reader known
+from the catalog. Each synthetic "meeting" joins 2 or 3 readers in alternating turns, each drawn
+from a different section (a recording session), and goes through the same WhisperX
+`DiarizationPipeline` that production uses, with `return_embeddings=True`. The diarized speaker is
+matched to the reader by the overlap with the known turns.
 
 ```bash
-python voice_calibration.py manifest --out manifest.json            # só stdlib, em qualquer máquina
-python voice_calibration.py prepare manifest.json --work /work      # ffmpeg (imagem do worker)
-python voice_calibration.py embed --work /work --out embeddings.json  # GPU (imagem do worker)
-python voice_calibration.py analyze embeddings.json                 # só stdlib
+python voice_calibration.py manifest --out manifest.json            # stdlib only, on any machine
+python voice_calibration.py prepare manifest.json --work /work      # ffmpeg (worker image)
+python voice_calibration.py embed --work /work --out embeddings.json  # GPU (worker image)
+python voice_calibration.py analyze embeddings.json                 # stdlib only
 ```
 
 No host (`docs/project/calibracao-voz.md`):
@@ -43,7 +44,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-# Coleções LibriVox em português com vários leitores e várias seções por leitor.
+# LibriVox collections in Portuguese with several readers and several sections per reader.
 COLLECTIONS = (
     "contos1_0911_librivox",
     "contos_2_0911_librivox",
@@ -78,12 +79,12 @@ COLLECTIONS = (
     "vida_vertiginosa_2110_librivox",
     "infelizes_historias_vividas_2103_librivox",
 )
-MIN_SECTION_S = 150  # uma seção precisa render ao menos um turno longo de fala
+MIN_SECTION_S = 150  # a section must yield at least one long speech turn
 MAX_SECTIONS_PER_READER = 4
-SECTION_CUT_S = 300  # só os primeiros 5 min de cada seção entram (o bastante para os turnos)
-TALK_TARGETS_S = (15, 30, 60, 120, 240)  # fala total do leitor numa reunião
-TURN_S = (6.0, 25.0)  # duração de um turno
-PURITY = 0.8  # fração da fala do locutor diarizado que precisa ser de um leitor só
+SECTION_CUT_S = 300  # only the first 5 min of each section are used (enough for the turns)
+TALK_TARGETS_S = (15, 30, 60, 120, 240)  # total speech of the reader in a meeting
+TURN_S = (6.0, 25.0)  # duration of a turn
+PURITY = 0.8  # fraction of the diarized speaker's speech that must come from a single reader
 USER_AGENT = {"User-Agent": "eclume-voice-calibration/1.0"}
 
 
@@ -93,7 +94,7 @@ def _get(url: str, attempts: int = 4) -> str:
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return response.read().decode("utf-8", "replace")
-        except OSError:  # o catálogo do LibriVox dá 522 de vez em quando
+        except OSError:  # the LibriVox catalog returns a 522 now and then
             if attempt == attempts - 1:
                 raise
             time.sleep(5 * (attempt + 1))
@@ -108,7 +109,7 @@ def _seconds(hms: str) -> int:
 
 
 def _catalog_rows(catalog_url: str) -> list[tuple[str, list[str], int]]:
-    """`(URL do mp3 de 64 kbps, leitores, duração em s)` por seção do catálogo do LibriVox."""
+    """`(64 kbps mp3 URL, readers, duration in s)` per section of the LibriVox catalog."""
     page = _get(catalog_url)
     rows = []
     for row in re.findall(r"<tr>(.*?)</tr>", page, re.DOTALL):
@@ -124,7 +125,7 @@ def _catalog_rows(catalog_url: str) -> list[tuple[str, list[str], int]]:
 
 
 def build_manifest() -> dict[str, Any]:
-    """Seções por leitor, só de leitores com duas seções ou mais (sessões diferentes)."""
+    """Sections per reader, only for readers with two or more sections (different sessions)."""
     by_reader: dict[str, list[dict[str, Any]]] = {}
     skipped = []
     for identifier in COLLECTIONS:
@@ -142,7 +143,7 @@ def build_manifest() -> dict[str, Any]:
                 by_reader.setdefault(readers[0], []).append({"url": url, "duration_s": duration})
     readers = {}
     for reader, sections in sorted(by_reader.items()):
-        # Seções de coleções diferentes primeiro: sessões de gravação mais distintas.
+        # Sections from different collections first: more distinct recording sessions.
         sections.sort(key=lambda s: (s["url"].split("/")[4], -s["duration_s"]))
         distinct = []
         seen = set()
@@ -153,12 +154,12 @@ def build_manifest() -> dict[str, Any]:
                 seen.add(collection)
         rest = [s for s in sections if s not in distinct]
         chosen = (distinct + rest)[:MAX_SECTIONS_PER_READER]
-        if len(chosen) >= 2:  # noqa: PLR2004 — o mínimo para um par genuíno entre sessões
+        if len(chosen) >= 2:  # noqa: PLR2004 — the minimum for a genuine pair across sessions
             readers[reader] = chosen
     return {"readers": readers, "skipped_collections": skipped}
 
 
-# --- prepare: áudio no formato do upload e reuniões sintéticas -------------------------------
+# --- prepare: audio in the upload format and synthetic meetings -------------------------------
 
 
 def _ffmpeg(*args: str) -> None:
@@ -166,7 +167,7 @@ def _ffmpeg(*args: str) -> None:
 
 
 def _encode_upload(source: str, output: Path, *, cut_s: int | None = None) -> None:
-    """Opus mono 16 kHz 32 kbps, como o upload (formato-audio-upload.md), e WAV para cortar."""
+    """Opus mono 16 kHz 32 kbps, like the upload (formato-audio-upload.md), and WAV for cutting."""
     extra = ["-t", str(cut_s)] if cut_s else []
     _ffmpeg(
         "-i",
@@ -187,7 +188,7 @@ def _encode_upload(source: str, output: Path, *, cut_s: int | None = None) -> No
 
 
 def prepare(manifest: dict[str, Any], work: Path, *, seed: int, meetings_per_round: int) -> None:
-    """Baixa as seções (só o começo), converte e monta as reuniões com a verdade dos turnos."""
+    """Download the sections (only the start), convert and assemble the meetings with the ground truth of the turns."""
     sections_dir = work / "sections"
     sections_dir.mkdir(parents=True, exist_ok=True)
     sections: list[dict[str, Any]] = []
@@ -204,8 +205,8 @@ def prepare(manifest: dict[str, Any], work: Path, *, seed: int, meetings_per_rou
 
     rng = random.Random(seed)
     meetings = []
-    # Cada rodada usa cada seção no máximo uma vez: uma seção é uma sessão, e dois trechos da
-    # mesma sessão nunca formam um par "genuíno".
+    # Each round uses each section at most once: a section is a session, and two excerpts of the
+    # same session never form a "genuine" pair.
     for round_index in range(meetings_per_round):
         pool = sections[:]
         rng.shuffle(pool)
@@ -216,19 +217,19 @@ def prepare(manifest: dict[str, Any], work: Path, *, seed: int, meetings_per_rou
                 if len(group) < size and all(g["reader"] != candidate["reader"] for g in group):
                     group.append(candidate)
                     pool.remove(candidate)
-            if len(group) < 2:  # noqa: PLR2004 — sobrou um leitor só
+            if len(group) < 2:  # noqa: PLR2004 — only one reader left
                 break
             meetings.append(_assemble(work, len(meetings), round_index, group, rng))
     (work / "meetings.json").write_text(json.dumps(meetings, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"{len(sections)} seções, {len(meetings)} reuniões")
+    print(f"{len(sections)} sections, {len(meetings)} meetings")
 
 
 def _assemble(
     work: Path, number: int, round_index: int, group: list[dict[str, Any]], rng: random.Random
 ) -> dict[str, Any]:
-    """Uma reunião: turnos alternados até cada leitor atingir a fala-alvo; áudio no formato do upload."""
+    """A meeting: alternating turns until each reader reaches the target speech; audio in the upload format."""
     targets = {g["section"]: rng.choice(TALK_TARGETS_S) for g in group}
-    # O deslocamento na seção varia por rodada, para duas rodadas não repetirem o mesmo trecho.
+    # The offset within the section varies per round, so two rounds do not repeat the same excerpt.
     offsets = {g["section"]: 5.0 + round_index * 7.0 for g in group}
     spoken = dict.fromkeys(targets, 0.0)
     pieces, turns = [], []
@@ -264,12 +265,12 @@ def _assemble(
     return {"id": f"m{number:03d}", "audio": str(output), "turns": turns, "targets": targets}
 
 
-# --- embed: diarização com embeddings, como o worker -----------------------------------------
+# --- embed: diarization with embeddings, like the worker -----------------------------------------
 
 
 def embed(work: Path, output: Path, extra: list[dict[str, Any]]) -> None:
-    """Roda o `DiarizationPipeline` em cada reunião e casa os locutores com os leitores."""
-    import whisperx  # noqa: PLC0415 — só existe na imagem do worker GPU
+    """Run the `DiarizationPipeline` on each meeting and match the speakers to the readers."""
+    import whisperx  # noqa: PLC0415 — only present in the GPU worker image
     from whisperx.diarize import DiarizationPipeline  # noqa: PLC0415
 
     from eclume_engines.hf_token import resolve_hf_token  # noqa: PLC0415
@@ -292,11 +293,11 @@ def embed(work: Path, output: Path, extra: list[dict[str, Any]]) -> None:
                         overlap[key] = overlap.get(key, 0.0) + shared
             talk = sum(end - start for start, end in spans)
             if not overlap:
-                discarded.append({"meeting": meeting["id"], "speaker": speaker, "talk_s": talk, "reason": "sem leitor"})
+                discarded.append({"meeting": meeting["id"], "speaker": speaker, "talk_s": talk, "reason": "no reader"})
                 continue
             (reader, section), best = max(overlap.items(), key=lambda kv: kv[1])
             if best < PURITY * sum(overlap.values()):
-                discarded.append({"meeting": meeting["id"], "speaker": speaker, "talk_s": talk, "reason": "misturado"})
+                discarded.append({"meeting": meeting["id"], "speaker": speaker, "talk_s": talk, "reason": "mixed"})
                 continue
             items.append(
                 {
@@ -307,15 +308,15 @@ def embed(work: Path, output: Path, extra: list[dict[str, Any]]) -> None:
                     "embedding": vector,
                 }
             )
-        print(f"{meeting['id']}: {len(vectors or {})} locutores", flush=True)
+        print(f"{meeting['id']}: {len(vectors or {})} speakers", flush=True)
     output.write_text(
         json.dumps({"embedding_model": EMBEDDING_MODEL, "items": items, "discarded": discarded}, ensure_ascii=False),
         encoding="utf-8",
     )
-    print(f"{len(items)} locutores casados, {len(discarded)} descartados")
+    print(f"{len(items)} speakers matched, {len(discarded)} discarded")
 
 
-# --- analyze: FPR/FNR por limiar, duração e modo de comparação -------------------------------
+# --- analyze: FPR/FNR by threshold, duration and comparison mode -------------------------------
 
 
 def _unit(vector: list[float]) -> list[float]:
@@ -341,10 +342,10 @@ def _bucket(talk_s: float) -> str:
 def score_trials(
     items: list[dict[str, Any]], *, enroll: int, mode: str, min_talk_s: float, seed: int
 ) -> list[tuple[float, bool, float]]:
-    """`(score, mesma pessoa?, fala do teste)` para cada teste contra cada impressão.
+    """`(score, same person?, test speech)` for each test against each voiceprint.
 
-    A impressão de um leitor sai de `enroll` amostras de seções diferentes da do teste; o teste é
-    um locutor de outra reunião. Só entram amostras e testes com fala ≥ `min_talk_s`.
+    A reader's voiceprint comes from `enroll` samples from sections different from the test's; the
+    test is a speaker from another meeting. Only samples and tests with speech ≥ `min_talk_s` are used.
     """
     rng = random.Random(seed)
     usable = [dict(i, unit=_unit(i["embedding"])) for i in items if i["talk_s"] >= min_talk_s]
@@ -365,14 +366,14 @@ def score_trials(
                 score = _cos(_centroid(vectors), test["unit"])
             elif mode == "max":
                 score = max(_cos(v, test["unit"]) for v in vectors)
-            else:  # "mean": média dos cossenos com cada amostra
+            else:  # "mean": average of the cosines with each sample
                 score = statistics.fmean(_cos(v, test["unit"]) for v in vectors)
             trials.append((max(0.0, score), reader == test["reader"], test["talk_s"]))
     return trials
 
 
 def rates(trials: list[tuple[float, bool, float]], threshold: float) -> tuple[float, float, int, int]:
-    """`(FPR, FNR, impostores, genuínos)` no limiar."""
+    """`(FPR, FNR, impostors, genuine)` at the threshold."""
     genuine = [s for s, same, _ in trials if same]
     impostor = [s for s, same, _ in trials if not same]
     fpr = sum(s >= threshold for s in impostor) / len(impostor) if impostor else math.nan
@@ -381,7 +382,7 @@ def rates(trials: list[tuple[float, bool, float]], threshold: float) -> tuple[fl
 
 
 def eer(trials: list[tuple[float, bool, float]]) -> tuple[float, float]:
-    """`(EER, limiar)` por varredura fina."""
+    """`(EER, threshold)` by a fine sweep."""
     best = (1.0, 0.0)
     for step in range(1001):
         threshold = step / 1000
@@ -394,7 +395,7 @@ def eer(trials: list[tuple[float, bool, float]]) -> tuple[float, float]:
 
 
 def threshold_for_fpr(trials: list[tuple[float, bool, float]], target: float) -> float:
-    """Menor limiar (passo 0,005) com FPR ≤ alvo."""
+    """Lowest threshold (step 0.005) with FPR ≤ target."""
     for step in range(201):
         threshold = step / 200
         if rates(trials, threshold)[0] <= target:
@@ -403,7 +404,7 @@ def threshold_for_fpr(trials: list[tuple[float, bool, float]], target: float) ->
 
 
 def analyze(data: dict[str, Any], *, seed: int) -> dict[str, Any]:
-    """Tabelas da calibração, em JSON e em texto."""
+    """Calibration tables, as JSON and as text."""
     items = data["items"]
     report: dict[str, Any] = {
         "embedding_model": data.get("embedding_model"),
@@ -471,22 +472,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("manifest", type=Path)
     p.add_argument("--work", type=Path, required=True)
     p.add_argument("--seed", type=int, default=15)
-    p.add_argument("--rounds", type=int, default=3, help="quantas vezes cada seção entra numa reunião")
+    p.add_argument("--rounds", type=int, default=3, help="how many times each section enters a meeting")
     p = sub.add_parser("embed")
     p.add_argument("--work", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--extra", type=Path, help="JSON com reuniões extras (`id`, `audio`, `turns`), como o bench de 1 h")
+    p.add_argument("--extra", type=Path, help="JSON with extra meetings (`id`, `audio`, `turns`), like the 1 h bench")
     p = sub.add_parser("analyze")
     p.add_argument("embeddings", type=Path)
     p.add_argument("--seed", type=int, default=15)
-    p.add_argument("--json", type=Path, help="grava o relatório em JSON")
+    p.add_argument("--json", type=Path, help="write the report as JSON")
     args = parser.parse_args(argv)
 
     if args.command == "manifest":
         manifest = build_manifest()
         args.out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         total = sum(len(v) for v in manifest["readers"].values())
-        print(f"{len(manifest['readers'])} leitores, {total} seções; puladas: {manifest['skipped_collections']}")
+        print(f"{len(manifest['readers'])} readers, {total} sections; skipped: {manifest['skipped_collections']}")
     elif args.command == "prepare":
         prepare(
             json.loads(args.manifest.read_text(encoding="utf-8")),
@@ -504,9 +505,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({k: v for k, v in report.items() if k != "scenarios"}, ensure_ascii=False))
         for s in report["scenarios"]:
             print(
-                f"{s['mode']:>8} k={s['enroll']} fala>={s['min_talk_s']:>3}s  gen={s['genuine']:>5} imp={s['impostor']:>6}  "
+                f"{s['mode']:>8} k={s['enroll']} speech>={s['min_talk_s']:>3}s  gen={s['genuine']:>5} imp={s['impostor']:>6}  "
                 f"EER={s['eer']:.3f}@{s['eer_threshold']:.3f}  FPR1%@{s['threshold_fpr_1pct']:.3f} FNR={s['fnr_at_fpr_1pct']:.3f}  "
-                f"FPR0,1%@{s['threshold_fpr_0_1pct']:.3f} FNR={s['fnr_at_fpr_0_1pct']:.3f}"
+                f"FPR0.1%@{s['threshold_fpr_0_1pct']:.3f} FNR={s['fnr_at_fpr_0_1pct']:.3f}"
             )
     return 0
 

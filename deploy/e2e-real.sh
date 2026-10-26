@@ -102,7 +102,7 @@ printf '%s\n' "$ADMIN_PASSWORD" | "${COMPOSE[@]}" run --rm -T migrate \
   eclume-server admin create --email "$ADMIN_EMAIL" --name "Admin E2E" --password-stdin >/dev/null
 
 # Fala real (duas vozes sintéticas em pt): WAV para exercitar a conversão no navegador.
-ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -ar 48000 -ac 1 "$WORK/duas-vozes.wav"
+ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/two-voices.ogg -ar 48000 -ac 1 "$WORK/duas-vozes.wav"
 
 [[ -d web/node_modules ]] || npm --prefix web ci --no-audit --no-fund
 ECLUME_E2E_URL=https://127.0.0.1:18443 ECLUME_E2E_ADMIN_EMAIL="$ADMIN_EMAIL" ECLUME_E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \

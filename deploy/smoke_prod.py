@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 
 STAGING = "https://127.0.0.1:18444"
 PRODUCAO = "https://192.168.15.199:8443"
-FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fixtures" / "duas-vozes.ogg"
+FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fixtures" / "two-voices.ogg"
 
 
 class Api:
