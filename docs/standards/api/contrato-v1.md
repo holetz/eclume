@@ -99,6 +99,16 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   legíveis e editáveis: só a escrita nova é limitada. Exceção deliberada a "apertar validação": um
   nome de mais de 200 caracteres não é um nome, e o servidor passa a pular, em vez de parar, o
   nome que não cabe no vocabulário.
+- **Tetos de tamanho nas escritas (2.28.0, `input-limits`):** campos que só tinham o limite do
+  corpo da requisição ganham teto, e acima dele a resposta é 422: `SegmentPatch.text` (20000
+  caracteres); `PersonCreate`/`PersonPatch` `notes` (4000) e `email` (254); `CollectionCreate`/
+  `CollectionPatch` `name` (200) e `description` (2000); `RecordingPatch` `tags` (50 itens de até
+  64), `collection_ids` (100) e `metadata` (50 entradas, chaves de até 64 e valores de até 1000);
+  `AgentSkillCreate`/`AgentSkillPatch` `allowed_tools` (100 itens de até 64). Valores já gravados
+  acima do teto continuam legíveis, e um PATCH que não envia o campo não é afetado: só a escrita
+  nova é limitada. Exceção deliberada a "apertar validação", campo a campo, como em 2.27.0: um
+  valor acima do teto nunca foi legítimo e hoje só infla listagens, resumos, busca, embeddings e
+  prompts do Agente. Minor.
 - **Exemplos anonimizados (2.27.1, `fixtures`):** os e-mails, nomes e o exemplo de `device_name`
   dos fixtures e do contrato passam a ser neutros, sem pessoa ou organização real. Só exemplos e
   descrições mudam: nenhum schema, rota ou validação. Patch, sem efeito para clientes.
