@@ -235,7 +235,7 @@ host.
 | `ECLUME_MEM_<SERVIÇO>`, `ECLUME_MEMSWAP_<SERVIÇO>` | opcionais: teto de memória e de memória mais swap de cada serviço, que sobem juntos (ver Stack) |
 | `ECLUME_REDIS_MAXMEMORY` | opcional (`160mb`): `maxmemory` do Redis com `noeviction`, abaixo do `ECLUME_MEM_REDIS`; no teto o Redis recusa escritas em vez de despejar chaves da fila ou morrer pelo OOM. Suba os dois juntos |
 | `ECLUME_AGENT_MAX_JOBS` | opcional (2): vagas da fila `eclume:agents` no `worker` |
-| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
+| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#dead-job)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
@@ -618,7 +618,7 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # só códi
   nada é montado do host e nenhum serviço precisa reiniciar.
 - **Job de transcrição parado:** o worker CPU marca sozinho como falha recuperável (`worker_lost`,
   `job_lost`, `job_stalled`) o job que o worker GPU abandonou; o dono retranscreve ou o admin usa
-  "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
+  "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#dead-job)).
 - **Staging** (`eclume-staging`, 127.0.0.1:18444): `staging.sh subir` para as provas,
   `staging.sh derrubar` depois; o ensaio noturno o sobe e derruba sozinho. Falha do ensaio: veja
   `estado/ensaio.json` e o fim de `backups/ensaio.log`.

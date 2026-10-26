@@ -88,7 +88,7 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
   `loudnorm` (`target_lufs` −30 a −10, `true_peak_db` −9 a 0, `lra` 1–20), `trim_silence`
   (`min_silence_s` 1–30, `threshold_db` −80 a −20) e `split_channels` (`enabled`). A conversão
   para 16 kHz mono não tem chave. Vai inteiro ao worker em `options.preprocess`; a ordem e o
-  tratamento estão no [contrato de jobs](../api/jobs-transcricao.md#pré-processamento).
+  tratamento estão no [contrato de jobs](../api/jobs-transcricao.md#preprocessing).
 - **Vale para os próximos jobs.** O worker não lê o banco: `transcribe_options` monta as
   `options` do `transcribe` a partir de `platform_settings` num lugar só (`recordings.insert_job`),
   usado pelo upload completo, pela retranscrição e pela retentativa. Transcrições prontas não mudam.
@@ -165,13 +165,13 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
 - **Jobs retidos (`held_jobs`, holetz/eclume#98):** só números — `account_turn`, os jobs que
   aguardam a vez da conta (ela já tem um `transcribe` na GPU), e `gpu_minutes`, os que aguardam a
   janela de minutos de 24 h (`dispatch.held_counts`). O
-  [despacho na vez da conta](../api/jobs-transcricao.md#filas) explica a retenção.
+  [despacho na vez da conta](../api/jobs-transcricao.md#queues) explica a retenção.
 - **Jobs e falhas da plataforma**, lidos com o papel de conexão: `running_jobs` são os
   `transcription_jobs` `queued`/`running` **despachados** (o retido conta em `held_jobs`, e por
   isso o `queued_over_2h` do `saude --json` não alerta pela espera da vez) com etapa, progresso e o `updated_at` do hash de
   progresso; `recent_failures` são as últimas 20 etapas do pipeline `failed` em 24 h (todas as
   etapas), com `step`, e `job_id` e `retryable` só no pré-processamento e na transcrição, que são
-  do job que o admin retenta (a falha passageira do [job morto](../api/jobs-transcricao.md#job-morto),
+  do job que o admin retenta (a falha passageira do [job morto](../api/jobs-transcricao.md#dead-job),
   falta de VRAM, S3). O título da gravação nunca sai: `recording_title` é sempre o rótulo fixo
   "Gravação de usuário".
 - **Etapas (`steps`):** para cada etapa do pipeline fora o recebido, nas últimas 24 h, as

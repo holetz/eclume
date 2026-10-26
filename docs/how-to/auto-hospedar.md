@@ -54,7 +54,7 @@ Um servidor sem GPU NVIDIA sobe o mesmo stack com `--sem-gpu`: o deploy acrescen
 (faster-whisper `small` int8), sem reserva de GPU. O limite: **sem diarização** (a transcrição
 sai com um locutor só, e a identificação por voz não tem o que sugerir) e várias vezes mais lenta
 que na GPU. O contrato da engine está em
-[jobs-transcricao.md](../standards/api/jobs-transcricao.md#como-o-worker-cumpre-a-sua-parte).
+[jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part).
 Passe `--sem-gpu` em **todo** deploy desse servidor: sem ele, o compose pede a GPU e o worker não
 sobe.
 

@@ -81,7 +81,7 @@ ECLUME_S3_ENDPOINT_URL=http://127.0.0.1:9000 ECLUME_S3_ACCESS_KEY=eclume ECLUME_
 
 O primeiro job baixa o modelo `small` (~0,5 GB) para o cache do Hugging Face do usuário. A
 transcrição sai com um locutor só: a engine `cpu` não diariza
-([jobs-transcricao.md](../standards/api/jobs-transcricao.md#como-o-worker-cumpre-a-sua-parte)).
+([jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part)).
 
 ## 5. Web
 

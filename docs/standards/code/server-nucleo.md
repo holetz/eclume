@@ -29,7 +29,7 @@ Tudo por ambiente (`eclume_server/config.py`):
 |---|---|---|
 | `ECLUME_DATABASE_URL` | `postgresql+asyncpg://eclume:eclume@127.0.0.1:5432/eclume` | papel de conexão: `eclume_server` em produção, o migrador (superusuário) só no `migrate`; no dev, o superusuário serve aos dois |
 | `ECLUME_RUNTIME_DB_PASSWORD` | — | com valor, `eclume-server migrate` liga o `LOGIN` de `eclume_server` com essa senha |
-| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | `120`, `1800` | detecção de job morto ([jobs-transcricao.md](../api/jobs-transcricao.md#job-morto)) |
+| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | `120`, `1800` | detecção de job morto ([jobs-transcricao.md](../api/jobs-transcricao.md#dead-job)) |
 | `ECLUME_REDIS_URL` | `redis://127.0.0.1:6379/0` | filas arq e progresso |
 | `ECLUME_S3_ENDPOINT`, `_ACCESS_KEY`, `_SECRET_KEY`, `_BUCKET`, `_REGION` | MinIO do compose de dev | áudio e artefatos |
 | `ECLUME_SECRET_KEY` | inseguro, de dev | assina as URLs de parte e de áudio |
@@ -355,7 +355,7 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   uploads abertos + o novo; artefatos da transcrição ficam de fora); estourado, **403**
   `quota_exceeded` com `quota`, `limit` e `used`. Deduplicar e retomar não passam pela cota. Os
   minutos de áudio (`gpu_minutes_24h`) nunca recusam: a soma de `recordings.duration_ms` dos jobs
-  despachados nas últimas 24 h decide o [despacho](../api/jobs-transcricao.md#filas), e a
+  despachados nas últimas 24 h decide o [despacho](../api/jobs-transcricao.md#queues), e a
   gravação espera retida. `GET /me/usage` devolve `{usage, quotas}` a qualquer credencial.
 
 - **A URL de parte é o `PUT /api/v1/uploads/{id}/parts/{n}` da própria API**, assinada como um

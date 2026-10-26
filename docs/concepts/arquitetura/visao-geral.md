@@ -82,7 +82,7 @@ flowchart LR
 ## As filas
 
 Três filas arq no Redis, cada uma com o seu worker
-([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#filas)):
+([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#queues)):
 
 | Fila | Worker | O que roda |
 |---|---|---|
