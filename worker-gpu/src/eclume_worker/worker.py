@@ -1,10 +1,10 @@
-"""`WorkerSettings` do arq para o worker GPU: fila `eclume:gpu`, um job por vez.
+"""arq `WorkerSettings` for the GPU worker: `eclume:gpu` queue, one job at a time.
 
 ```bash
 arq eclume_worker.worker.WorkerSettings
 ```
 
-Importar este módulo não carrega torch nem WhisperX: a engine os importa no primeiro job.
+Importing this module loads neither torch nor WhisperX: the engine imports them on the first job.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Any
 from arq.connections import RedisSettings
 from arq.worker import func
 
-from eclume_engines.fila import desserializar
-from eclume_engines.registro import configurar_logs
+from eclume_engines.logs import configure_logs
+from eclume_engines.queue_codec import deserialize
 from eclume_engines.vram import VramMonitor
 from eclume_worker.config import GPU_QUEUE, WorkerConfig
 from eclume_worker.health import heartbeat_loop, withdraw
@@ -39,7 +39,7 @@ IDLE_CHECK_SECONDS = 30.0
 
 
 def _rss_mb() -> float:
-    """RSS do processo em MiB (`VmRSS` de /proc); 0 onde o /proc não existe."""
+    """Process RSS in MiB (`VmRSS` from /proc); 0 where /proc does not exist."""
     try:
         with Path("/proc/self/status").open(encoding="ascii") as status:
             for line in status:
@@ -50,8 +50,8 @@ def _rss_mb() -> float:
     return 0.0
 
 
-def _encerrar_processo() -> None:
-    """Pede o encerramento limpo: o SIGTERM é o caminho do deploy (drena e retira o heartbeat)."""
+def _terminate_process() -> None:
+    """Ask for a clean shutdown: SIGTERM is the deploy path (it drains and withdraws the heartbeat)."""
     os.kill(os.getpid(), signal.SIGTERM)
 
 
@@ -61,26 +61,26 @@ async def idle_unloader(
     every: float = IDLE_CHECK_SECONDS,
     *,
     recycle: bool = False,
-    terminate: Callable[[], None] = _encerrar_processo,
+    terminate: Callable[[], None] = _terminate_process,
 ) -> None:
-    """Descarrega os modelos depois de `idle_seconds` sem job, devolvendo a VRAM ao host.
+    """Unload the models after `idle_seconds` without a job, giving the VRAM back to the host.
 
-    Com `recycle`, e se o torch foi importado no processo, encerra o processo em seguida (o
-    `restart: unless-stopped` sobe um novo, sem torch) para devolver também a RAM.
+    With `recycle`, and if torch was imported in the process, exit the process afterwards (the
+    `restart: unless-stopped` brings up a new one, without torch) to give the RAM back too.
     """
     while True:
         await asyncio.sleep(every)
         if await asyncio.to_thread(registry.unload_if_idle, idle_seconds):
-            logger.info("modelos descarregados após %.0f s ociosos", idle_seconds)
+            logger.info("models unloaded after %.0f s idle", idle_seconds)
             if recycle and "torch" in sys.modules and not registry.busy:
-                logger.info("reciclando o processo para devolver a memória (RSS %.0f MiB)", _rss_mb())
+                logger.info("recycling the process to give the memory back (RSS %.0f MiB)", _rss_mb())
                 terminate()
                 return
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    """Prepara o log, o S3, a engine, a descarga por ociosidade e o heartbeat."""
-    configurar_logs()
+    """Set up the log, S3, the engine, the idle unload and the heartbeat."""
+    configure_logs()
     ctx["config"] = CONFIG
     ctx["store"] = ArtifactStore.from_config(CONFIG)
     ctx["engines"] = registry = EngineRegistry(CONFIG)
@@ -91,7 +91,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    """Para a descarga ociosa e o heartbeat, retira o heartbeat e libera a GPU."""
+    """Stop the idle unload and the heartbeat, withdraw the heartbeat and free the GPU."""
     for name in ("idle_task", "heartbeat_task"):
         task = ctx.get(name)
         if task is not None:
@@ -106,21 +106,21 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    """Configuração lida pelo CLI do arq."""
+    """Configuration read by the arq CLI."""
 
     functions = (func(transcribe, name="transcribe", max_tries=1, timeout=CONFIG.job_timeout_seconds),)
     queue_name = GPU_QUEUE
     max_jobs = 1
     max_tries = 1
     job_timeout = CONFIG.job_timeout_seconds
-    # No SIGTERM (deploy), o arq para de pegar jobs e espera o atual terminar até o teto do job: o
-    # deploy drena o worker GPU sem matar transcrição em curso. O `stop_grace_period` do compose
-    # cobre o `stop -t` do deploy.
+    # On SIGTERM (deploy), arq stops taking jobs and waits for the current one to finish up to the
+    # job ceiling: the deploy drains the GPU worker without killing a transcription in progress. The
+    # compose `stop_grace_period` covers the deploy's `stop -t`.
     job_completion_wait = CONFIG.job_timeout_seconds
-    # Fila de um job por vez e jobs de minutos: sondar o Redis a cada 2 s (padrão 0,5 s) basta.
+    # A one-job-at-a-time queue with jobs of minutes: polling Redis every 2 s (default 0.5 s) is enough.
     poll_delay = 2.0
-    # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e o pickle antigo sem globais.
-    job_deserializer = desserializar
+    # Phase A of the pickle-free queue (holetz/eclume#94): reads JSON and the old pickle with no globals.
+    job_deserializer = deserialize
     redis_settings = RedisSettings.from_dsn(CONFIG.redis_url)
     on_startup = startup
     on_shutdown = shutdown

@@ -1,7 +1,7 @@
 [project]
 name = "eclume-worker"
 version = "0.2.0"
-description = "Worker GPU do eclume: ASR, alinhamento, diarização e embeddings de locutor com WhisperX."
+description = "eclume GPU worker: ASR, alignment, diarization and speaker embeddings with WhisperX."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -9,11 +9,11 @@ dependencies = [
   "eclume-engines",
   "arq>=0.26",
   "boto3>=1.34",
-  # Abre o token do HF que o server manda cifrado nas options do job.
+  # Opens the HF token the server sends encrypted in the job options.
   "cryptography>=44",
 ]
 
-# A imagem GPU instala `gpu` (WhisperX, torch); o dev sem GPU pode usar `cpu` (faster-whisper).
+# The GPU image installs `gpu` (WhisperX, torch); dev without a GPU can use `cpu` (faster-whisper).
 [project.optional-dependencies]
 gpu = ["eclume-engines[whisperx]"]
 cpu = ["eclume-engines[cpu]"]
@@ -25,6 +25,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/eclume_worker"]
 
-# Resolve a interface de engine a partir do workspace (não do PyPI).
+# Resolve the engine interface from the workspace (not from PyPI).
 [tool.uv.sources]
 eclume-engines = { workspace = true }

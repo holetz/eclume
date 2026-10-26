@@ -1,4 +1,4 @@
-"""Worker GPU do eclume: consome `transcribe` da fila `eclume:gpu` (arq)."""
+"""eclume GPU worker: consumes `transcribe` from the `eclume:gpu` queue (arq)."""
 
 from importlib.metadata import version
 

@@ -1,9 +1,9 @@
-"""Heartbeat do worker GPU: `HSET eclume:gpu:health` a cada 15 s, com TTL de 45 s.
+"""GPU worker heartbeat: `HSET eclume:gpu:health` every 15 s, with a 45 s TTL.
 
-O server lê o hash para `/admin/health` e para o reaper (contrato em
-docs/standards/api/jobs-transcricao.md). Sem o hash, o worker está parado há mais de 45 s. `busy` vale
-do início ao fim de um `transcribe`, e `job_id` é o `_job_id` dele (fora do hash quando ocioso). Sem
-NVML (engine CPU), os campos da GPU ficam de fora.
+The server reads the hash for `/admin/health` and for the reaper (contract in
+docs/standards/api/jobs-transcricao.md). Without the hash, the worker has been stopped for more than
+45 s. `busy` holds from the start to the end of a `transcribe`, and `job_id` is its `_job_id`
+(absent from the hash when idle). Without NVML (CPU engine), the GPU fields are left out.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ HEALTH_TTL_SECONDS = 45
 def heartbeat_fields(
     config: WorkerConfig, registry: EngineRegistry, gpu: dict[str, Any] | None, now: datetime
 ) -> dict[str, str]:
-    """O conteúdo do hash, todo em texto."""
+    """The hash content, all as text."""
     fields = {
         "updated_at": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
         "worker_version": __version__,
@@ -53,7 +53,7 @@ def heartbeat_fields(
 
 
 async def publish(redis: Any, config: WorkerConfig, registry: EngineRegistry, vram: VramMonitor) -> None:  # noqa: ANN401 — ArqRedis
-    """Grava um heartbeat; os campos da GPU saem inteiros a cada vez (o hash é substituído)."""
+    """Write a heartbeat; the GPU fields go out whole each time (the hash is replaced)."""
     gpu = await asyncio.to_thread(vram.snapshot)
     fields = heartbeat_fields(config, registry, gpu, datetime.now(UTC))
     pipe = redis.pipeline(transaction=True)
@@ -70,23 +70,23 @@ async def heartbeat_loop(
     vram: VramMonitor,
     every: float = HEARTBEAT_SECONDS,
 ) -> None:
-    """Publica até ser cancelado; uma falha só vai para o log, e a próxima volta tenta de novo."""
+    """Publish until cancelled; a failure only goes to the log, and the next round tries again."""
     while True:
         try:
             await publish(redis, config, registry, vram)
         except Exception:
-            logger.exception("heartbeat do worker GPU falhou")
+            logger.exception("GPU worker heartbeat failed")
         await asyncio.sleep(every)
 
 
 async def withdraw(redis: Any) -> None:  # noqa: ANN401 — ArqRedis
-    """Apaga o heartbeat no desligamento, para a saúde mostrar o worker parado na hora."""
+    """Delete the heartbeat on shutdown, so health shows the worker stopped right away."""
     with contextlib.suppress(Exception):
         await redis.delete(HEALTH_KEY)
 
 
 async def alive(redis_url: str) -> bool:
-    """O heartbeat `eclume:gpu:health` existe (o worker publicou nos últimos 45 s)."""
+    """The `eclume:gpu:health` heartbeat exists (the worker published within the last 45 s)."""
     client = Redis.from_url(redis_url)
     try:
         return bool(await client.exists(HEALTH_KEY))
@@ -95,13 +95,16 @@ async def alive(redis_url: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python -m eclume_worker.health --sonda`: sai 0 com heartbeat, 1 sem; healthcheck do compose."""
+    """`python -m eclume_worker.health --probe`: exit 0 with a heartbeat, 1 without; the compose healthcheck."""
     parser = argparse.ArgumentParser(prog="python -m eclume_worker.health")
-    parser.add_argument("--sonda", action="store_true", required=True, help="confere o heartbeat e sai 0/1")
+    # `--sonda` is the former name, still used by deploy/docker-compose.prod.yml until the deploy specs rename it.
+    parser.add_argument(
+        "--probe", "--sonda", dest="probe", action="store_true", required=True, help="check the heartbeat and exit 0/1"
+    )
     parser.parse_args(argv)
     try:
         return 0 if asyncio.run(alive(WorkerConfig.from_env().redis_url)) else 1
-    except Exception:  # noqa: BLE001 — Redis fora é worker sem sinal
+    except Exception:  # noqa: BLE001 — Redis down means a worker with no signal
         return 1
 
 
