@@ -12,8 +12,8 @@ function withSteps(status: Schemas['Recording']['status'], states: Partial<Recor
   return recording
 }
 
-describe('formatos', () => {
-  it('formata duração e tamanho', () => {
+describe('formats', () => {
+  it('formats duration and size', () => {
     expect(formatDuration(45_000)).toBe('45 s')
     expect(formatDuration(166_000)).toBe('2 min 46 s')
     expect(formatDuration(120_000)).toBe('2 min')
@@ -23,8 +23,8 @@ describe('formatos', () => {
   })
 })
 
-describe('estado da gravação', () => {
-  it('aguardando locutores quando a etapa speakers espera o dono, antes do tipo e do resumo pendentes', () => {
+describe('recording state', () => {
+  it('awaiting speakers when the speakers step waits for the owner, before the pending type and summary', () => {
     const recording = withSteps('transcribed', { speakers: 'waiting', agenda_type: 'pending', fields: 'pending', summary: 'pending' })
     expect(recordingState(recording)).toEqual({
       state: 'waiting',
@@ -34,7 +34,7 @@ describe('estado da gravação', () => {
     })
   })
 
-  it('pronta quando o pipeline terminou, com o aviso de resumo que falhou', () => {
+  it('ready when the pipeline finished, with the failed-summary notice', () => {
     expect(recordingState(fixtures.recordingTranscribed())).toEqual({
       state: 'ready',
       label: 'Pronta',
@@ -45,11 +45,11 @@ describe('estado da gravação', () => {
       state: 'ready',
       noSummary: true,
     })
-    // Etapa pulada (sem provider, sem tipo) não segura a gravação.
+    // A skipped step (no provider, no type) does not hold the recording back.
     expect(recordingState(withSteps('transcribed', { summary: 'skipped', fields: 'skipped' })).state).toBe('ready')
   })
 
-  it('falhou quando a gravação, a transcrição ou o pré-processamento falhou', () => {
+  it('failed when the recording, the transcription or the preprocessing failed', () => {
     for (const recording of [
       withSteps('failed', {}),
       withSteps('processing', { transcription: 'failed' }),
@@ -59,7 +59,7 @@ describe('estado da gravação', () => {
     }
   })
 
-  it('cancelada quando a gravação falhou com uma etapa pulada por cancelamento', () => {
+  it('cancelled when the recording failed with a step skipped by cancellation', () => {
     const recording = withSteps('failed', {})
     recording.pipeline = recording.pipeline.map((step) =>
       step.step === 'transcription' ? { ...step, state: 'skipped', reason: 'cancelled' } : step,
@@ -67,7 +67,7 @@ describe('estado da gravação', () => {
     expect(recordingState(recording)).toMatchObject({ state: 'failed', label: 'Cancelada', tone: 'neutral' })
   })
 
-  it('em andamento mostra a etapa corrente em palavra', () => {
+  it('in progress shows the current step as a word', () => {
     const busy = (recording: Schemas['Recording']) => {
       const state = recordingState(recording)
       expect(state.state).toBe('busy')
@@ -84,13 +84,13 @@ describe('estado da gravação', () => {
     )
     expect(busy(withSteps('transcribed', { agenda_type: 'active', summary: 'pending' }))).toBe('Detectando o tipo')
     expect(busy(withSteps('transcribed', { summary: 'active' }))).toBe('Resumindo')
-    // Transcrita, com uma etapa depois dela ainda na fila.
+    // Transcribed, with a step after it still queued.
     expect(busy(withSteps('transcribed', { summary: 'pending' }))).toBe('Resumindo')
   })
 })
 
 describe('shortRef', () => {
-  it('são os 8 primeiros caracteres do id, sem os hífens', () => {
+  it('is the first 8 characters of the id, without the hyphens', () => {
     expect(shortRef('01928f3a-1c00-7a00-8000-000000000101')).toBe('01928f3a')
     expect(shortRef('a-b-c')).toBe('abc')
     expect(shortRef('')).toBe('')

@@ -1,12 +1,12 @@
-// Teste do reporter de flaky do Playwright (web/e2e/flaky-reporter.ts): só o que passa no retry entra.
+// Test of the Playwright flaky reporter (web/e2e/flaky-reporter.ts): only what passes on retry gets in.
 import type { TestCase, TestResult } from '@playwright/test/reporter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import FlakyReporter, { tituloFlaky } from '../e2e/flaky-reporter'
 
-const caso = (projeto: string, caminho: string[]) =>
-  ({ parent: { project: () => ({ name: projeto }) }, titlePath: () => caminho }) as unknown as TestCase
-const resultado = (status: string, retry: number) => ({ status, retry }) as unknown as TestResult
+const testCase = (project: string, path: string[]) =>
+  ({ parent: { project: () => ({ name: project }) }, titlePath: () => path }) as unknown as TestCase
+const result = (status: string, retry: number) => ({ status, retry }) as unknown as TestResult
 
 describe('FlakyReporter', () => {
   afterEach(() => {
@@ -14,29 +14,29 @@ describe('FlakyReporter', () => {
     vi.unstubAllEnvs()
   })
 
-  it('lista o teste que falhou na 1a tentativa e passou na 2a', () => {
+  it('lists the test that failed on the 1st attempt and passed on the 2nd', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const r = new FlakyReporter()
-    r.onTestEnd(caso('chromium', ['', 'app.spec.ts', 'login']), resultado('passed', 1))
-    r.onTestEnd(caso('chromium', ['', 'app.spec.ts', 'estavel']), resultado('passed', 0))
+    r.onTestEnd(testCase('chromium', ['', 'app.spec.ts', 'login']), result('passed', 1))
+    r.onTestEnd(testCase('chromium', ['', 'app.spec.ts', 'stable']), result('passed', 0))
     r.onEnd()
-    const saida = log.mock.calls.map((c) => String(c[0])).join('\n')
-    expect(saida).toContain('flaky: [chromium] app.spec.ts > login')
-    expect(saida).not.toContain('estavel')
+    const output = log.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(output).toContain('flaky: [chromium] app.spec.ts > login')
+    expect(output).not.toContain('stable')
   })
 
-  it('emite ::warning:: na CI e fica mudo sem flaky', () => {
+  it('emits ::warning:: on CI and stays silent without flaky tests', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.stubEnv('CI', '1')
     const r = new FlakyReporter()
     r.onEnd()
     expect(log).not.toHaveBeenCalled()
-    r.onTestEnd(caso('webkit', ['', 'a.spec.ts', 't']), resultado('passed', 1))
+    r.onTestEnd(testCase('webkit', ['', 'a.spec.ts', 't']), result('passed', 1))
     r.onEnd()
     expect(log.mock.calls.some((c) => String(c[0]).startsWith('::warning title=Teste flaky::[webkit]'))).toBe(true)
   })
 
-  it('o título ignora a raiz do caminho', () => {
+  it('the title ignores the root of the path', () => {
     expect(tituloFlaky('firefox', ['', 'x.spec.ts', 'a', 'b'])).toBe('[firefox] x.spec.ts > a > b')
   })
 })
