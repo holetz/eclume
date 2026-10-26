@@ -144,6 +144,7 @@ def recording_json(
         "awaiting": awaiting_of(steps),
         "transcript_id": str(row["transcript_id"]) if row["transcript_id"] else None,
         "marker_count": row["marker_count"],
+        "audio_deleted_at": iso(row["audio_deleted_at"]),
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
     }
