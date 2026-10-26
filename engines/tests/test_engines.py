@@ -8,16 +8,16 @@ from eclume_engines import EngineOptions, UnknownEngineError, get_engine
 from eclume_engines.base import EngineError, is_oom
 
 
-def test_pacote_importa_com_versao():
+def test_package_imports_with_version():
     assert re.fullmatch(r"\d+\.\d+\.\d+", eclume_engines.__version__)
 
 
-def test_importar_o_pacote_nao_carrega_dependencia_pesada():
-    for pesado in ("torch", "whisperx", "faster_whisper", "ctranslate2"):
-        assert pesado not in sys.modules
+def test_importing_the_package_loads_no_heavy_dependency():
+    for heavy in ("torch", "whisperx", "faster_whisper", "ctranslate2"):
+        assert heavy not in sys.modules
 
 
-def test_opcoes_a_partir_do_dict_do_job():
+def test_options_from_the_job_dict():
     opts = EngineOptions.from_mapping(
         {
             "language": "pt",
@@ -31,7 +31,7 @@ def test_opcoes_a_partir_do_dict_do_job():
             "batch_size": 2,
             "fallback_model": "medium",
             "diarization_model": None,
-            "hf_token_encrypted": "v1:ignorado-pela-engine",
+            "hf_token_encrypted": "v1:ignored-by-the-engine",
         }
     )
     assert opts == EngineOptions(
@@ -47,37 +47,37 @@ def test_opcoes_a_partir_do_dict_do_job():
     )
 
 
-def test_opcoes_vazias_usam_os_padroes():
+def test_empty_options_use_the_defaults():
     assert EngineOptions.from_mapping(None) == EngineOptions()
     assert EngineOptions.from_mapping({}).language == "pt"
-    # `language: null` é o idioma automático: a engine detecta.
+    # `language: null` is automatic language: the engine detects it.
     assert EngineOptions.from_mapping({"language": None}).language is None
 
 
-def test_fabrica_recusa_engine_desconhecida():
-    with pytest.raises(UnknownEngineError, match="desconhecida"):
-        get_engine("nao-existe")
+def test_factory_refuses_an_unknown_engine():
+    with pytest.raises(UnknownEngineError, match="unknown"):
+        get_engine("does-not-exist")
 
 
-def test_engine_error_carrega_o_codigo():
-    err = EngineError("asr_failed", "falhou")
+def test_engine_error_carries_the_code():
+    err = EngineError("asr_failed", "failed")
     assert err.code == "asr_failed"
-    assert str(err) == "falhou"
+    assert str(err) == "failed"
 
 
 @pytest.mark.parametrize(
-    ("mensagem", "esperado"),
+    ("message", "expected"),
     [
         ("CUDA out of memory. Tried to allocate 20.00 MiB", True),
         ("CUDA failed with error out of memory", True),
         ("RuntimeError: shape mismatch", False),
     ],
 )
-def test_reconhece_oom(mensagem: str, *, esperado: bool):
-    assert is_oom(RuntimeError(mensagem)) is esperado
+def test_recognizes_oom(message: str, *, expected: bool):
+    assert is_oom(RuntimeError(message)) is expected
 
 
-def test_retrato_da_gpu_pela_nvml():
+def test_gpu_snapshot_through_nvml():
     from types import SimpleNamespace  # noqa: PLC0415
 
     from eclume_engines.vram import VramMonitor  # noqa: PLC0415
