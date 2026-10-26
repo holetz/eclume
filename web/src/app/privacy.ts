@@ -6,9 +6,9 @@ export type DataDestination = Schemas['DataDestination']
 export type PrivacyInfo = Schemas['PrivacyInfo']
 
 /**
- * Para onde vai cada dado (`GET /privacy`, pública). O servidor classifica; as telas só mostram. A
- * configuração muda em runtime: sem `staleTime: Infinity`, ao contrário do descritor do servidor. O
- * painel admin passa `revision` (o instante da configuração que acabou de ler) para reler depois de salvar.
+ * Where each piece of data goes (`GET /privacy`, public). The server classifies; the screens only show it. The
+ * configuration changes at runtime: no `staleTime: Infinity`, unlike the server descriptor. The admin
+ * panel passes `revision` (the timestamp of the configuration it just read) to re-read after saving.
  */
 export function usePrivacy(revision?: string | number) {
   return useQuery({
@@ -25,7 +25,7 @@ export const PURPOSE_LABEL: Record<DataDestination['purpose'], string> = {
   agenda_detection: 'Detecção do tipo de agenda',
 }
 
-/** O destino em palavras: "Neste servidor", "Na rede local", "Fora do servidor: Anthropic"… */
+/** The destination in words: "Neste servidor", "Na rede local", "Fora do servidor: Anthropic"… */
 export function locationLabel(destination: DataDestination): string {
   switch (destination.location) {
     case 'server':
@@ -39,7 +39,7 @@ export function locationLabel(destination: DataDestination): string {
   }
 }
 
-/** Os destinos que mandam dados para fora do servidor e da rede local. */
+/** The destinations that send data outside the server and the local network. */
 export function externalDestinations(info: PrivacyInfo | undefined): DataDestination[] {
   return info?.destinations.filter((destination) => destination.location === 'external') ?? []
 }

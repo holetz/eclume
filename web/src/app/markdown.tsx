@@ -1,7 +1,7 @@
-// Markdown gerado por LLM (resumo, cópia para colar, chat da base, pré-visualização do tipo de agenda)
-// nunca carrega imagem: `![alt](url)` vira um link de texto, para que um resumo não faça o navegador
-// buscar uma URL de fora (rastreio, vazamento pelo Referer). Links abrem em outra aba sem `opener` nem
-// `Referer`. A ajuda, de conteúdo próprio, não passa por aqui.
+// LLM-generated Markdown (summary, copy for pasting, knowledge base chat, agenda type preview) never
+// loads an image: `![alt](url)` becomes a text link, so that a summary does not make the browser fetch
+// an outside URL (tracking, leaking through the Referer). Links open in another tab with neither `opener`
+// nor `Referer`. Help, with its own content, does not go through here.
 import type { Components } from 'react-markdown'
 
 export const SAFE_MARKDOWN: Components = {
@@ -20,7 +20,7 @@ export const SAFE_MARKDOWN: Components = {
   ),
 }
 
-/** `SAFE_MARKDOWN` com os `components` próprios de uma tela (que não trocam `img` nem `a`). */
+/** `SAFE_MARKDOWN` with a screen's own `components` (which replace neither `img` nor `a`). */
 export function safeMarkdown(own: Components = {}): Components {
   return { ...own, ...SAFE_MARKDOWN }
 }

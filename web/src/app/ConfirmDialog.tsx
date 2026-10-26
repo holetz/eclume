@@ -4,7 +4,7 @@ import { Dialog } from './Dialog'
 interface ConfirmDialogProps {
   title: string
   children?: ReactNode
-  /** O rótulo da ação destrutiva (`btn btn-danger`). */
+  /** The label of the destructive action (`btn btn-danger`). */
   confirmLabel: string
   onConfirm: () => void
   onCancel: () => void
@@ -12,8 +12,8 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Pede confirmação antes de uma ação destrutiva, no `Dialog` do DS. "Cancelar" vem primeiro e recebe
- * o foco; o Esc e o clique no fundo também cancelam. Com `busy`, a mutação corre e a confirmação espera.
+ * Asks for confirmation before a destructive action, in the DS `Dialog`. "Cancelar" comes first and takes
+ * focus; Esc and a click on the backdrop also cancel. With `busy`, the mutation runs and the confirmation waits.
  */
 export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCancel, busy = false }: ConfirmDialogProps) {
   return (
