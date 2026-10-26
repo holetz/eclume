@@ -448,7 +448,7 @@ def test_gates_and_pillars_run_in_parallel_without_sharing_state() -> None:
     host = _host()
     assert 'SLOTS="${ECLUME_GATE_SLOTS:-2}"' in host
     assert 'PROJETO="eclume-gate-$SLOT"' in host
-    assert 'cpu-shares-$SLOT.yml' in host
+    assert "cpu-shares-$SLOT.yml" in host
     assert "$((55633 + SLOT))" in host
     assert 'cp -a "$SRC" "$arvore"' in host
     assert '-v "$arvore:/src"' in host
