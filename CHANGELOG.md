@@ -29,6 +29,10 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 
 ### Alterado
 
+- Python dependencies raised to clear the `auditoria` pillar: aiohttp 3.14.5, certifi 2026.10.23,
+  filelock 4.2.4, opentelemetry 1.45.1, pillow 13.0.0 (GPU worker image only, through matplotlib),
+  pypdf 6.21.2 (floor raised in `server/pyproject.toml`) and setuptools 84.2.1
+  (holetz/eclume#296).
 - Server mais enxuto em CPU e memória, sem mudar comportamento: sonda de fila mínima, imports sob
   demanda, `eclume-server worker` com as filas `eclume:default` e `eclume:agents` num só processo,
   pool de conexões configurável, `last_used_at` do PAT a cada 60 s, upload sem cópia e índice
