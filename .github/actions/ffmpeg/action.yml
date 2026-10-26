@@ -1,0 +1,27 @@
+name: ffmpeg
+description: >-
+  Installs ffmpeg from a cached set of .deb files, so the distro mirror is only contacted on a
+  cache miss (a slow mirror once cancelled whole jobs at their time ceiling).
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/ffmpeg-debs
+        key: ffmpeg-${{ runner.os }}-${{ env.ImageVersion }}
+    - name: Download the ffmpeg packages (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      timeout-minutes: 5
+      run: |
+        mkdir -p ~/ffmpeg-debs/partial
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends --download-only \
+          -o Dir::Cache::archives="$HOME/ffmpeg-debs" ffmpeg
+    - name: Install ffmpeg from the cached packages
+      shell: bash
+      timeout-minutes: 5
+      run: |
+        sudo dpkg -i "$HOME"/ffmpeg-debs/*.deb
+        ffmpeg -version | head -n 1
