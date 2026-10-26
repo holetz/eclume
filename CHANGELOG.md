@@ -23,9 +23,9 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 
 ### Corrigido
 
-- Retranscrever com só o mínimo ou só o máximo de locutores preenchido mantém o limite da plataforma
-  no lado vazio, como a ajuda promete; antes o par inteiro era trocado e o teto sumia
-  (holetz/eclume#216).
+- Re-transcribing with only the minimum or only the maximum number of speakers filled in keeps the
+  platform limit on the empty side, as the help text promises; before, the whole pair was replaced
+  and the ceiling disappeared (holetz/eclume#216).
 
 ### Alterado
 

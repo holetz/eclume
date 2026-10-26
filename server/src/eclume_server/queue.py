@@ -126,7 +126,7 @@ def transcribe_options(
     """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco.
 
     `speakers` é o par `(min, max)` de locutores que vence os limites do admin (a nota e o pedido);
-    o lado vazio do par mantém o limite da plataforma.
+    an empty side of the pair keeps the platform limit.
     """
     asr = platform["asr"]
     diarization = platform["diarization"]
