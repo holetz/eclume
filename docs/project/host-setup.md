@@ -242,8 +242,11 @@ O gate (`bash deploy/gate.sh` na estação; norma em
 [monorepo.md](../standards/code/monorepo.md)) roda no host, no usuário `holetz`:
 
 - `~/eclume-gate/src-<sha>-<época>`: a árvore extraída do `git archive`, apagada ao fim;
-  `~/eclume-gate/logs/<sha>.log`: o log de cada execução completa; `~/eclume-gate/.trava`: o
-  `flock` que enfileira as execuções.
+  `~/eclume-gate/logs/<sha>.log`: o log de cada execução completa; `~/eclume-gate/.trava-<n>`:
+  the slot locks. Up to `ECLUME_GATE_SLOTS` (2) gates run at once, one per slot; a third waits for
+  a free slot. Inside a gate, up to `ECLUME_GATE_JOBS` (2) pillars run at once, each from its own
+  copy of the tree (`src-<sha>-<época>.p-<pilar>`), and `gpu-e2e` runs last, alone, under
+  `~/eclume-gate/.trava-gpu`.
 - `~/eclume-gate/cache`: target do cargo por pilar, registry do cargo, caches do uv, do npm, dos
   navegadores do Playwright e do `cargo-xwin` (~15 GB depois de duas execuções; acima de
   `ECLUME_GATE_CACHE_GB`, 25 GB, os target/ recomeçam). Para liberar disco, apague a pasta inteira:
@@ -252,8 +255,9 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   e `eclume-desktop-build:<Rust>` (a versão de `desktop/rust-toolchain.toml`), que o gate constrói
   se faltarem; as de tag `24.04` são da época anterior à fixação e podem ser apagadas. O primeiro build da imagem do
   gate levou ~20 minutos.
-- Projeto compose `eclume-gate` (Postgres, Redis, MinIO e o mock em `127.0.0.1:55632`, `56579`,
-  `59200` e `4210`), derrubado com `down -v` ao fim; nunca toca o projeto `eclume`.
+- Compose project `eclume-gate-<slot>` (Postgres, Redis, MinIO and the mock on `127.0.0.1:55633`,
+  `56580`, `59201` and `4211`, plus the slot number), brought down with `down -v` at the end; it
+  never touches the `eclume` project.
 - Pilar `gpu-e2e`: roda no host (não no contêiner), sobe o projeto compose `eclume-gpu-test` (Redis
   em `127.0.0.1:16379`, MinIO em `19000`, o worker-gpu com a GPU) e o derruba com `down -v` ao fim;
   usa os modelos e o token do Hugging Face de `/srv/eclume`, divide a VRAM de 6 GB com a produção e
@@ -264,8 +268,8 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   ~4,8 GB livres, acima do mínimo de 4096 MiB. Conferir com
   `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` (vazio com o host parado).
   Norma em [monorepo.md](../standards/code/monorepo.md).
-- Limites por pilar: `--cpus 2`, `--cpu-shares 256` (também nos serviços de teste e no mock, por um
-  `~/eclume-gate/cpu-shares.yml` gerado a cada execução: a produção vence a CPU quando disputam),
+- Limites por pilar: `--cpus` `ECLUME_GATE_CPUS` (3; the host has had 12 CPUs since October 2026), `--cpu-shares 256` (também nos serviços de teste e no mock, por um
+  `~/eclume-gate/cpu-shares-<slot>.yml` gerado a cada execução: a produção vence a CPU quando disputam),
   `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido foi ~2,6 GiB no link do desktop e
   do windows). O pilar android, medido em 08/10/2026 (holetz/eclume#188) com `memory.peak` do cgroup do
   contêiner: pico no teto de 4 GiB, `anon` de 4056 MiB e `oom_kill` 1, com o Gradle (2403 MiB), o daemon
