@@ -18,8 +18,8 @@ async function fill(password = NEW_PASSWORD, confirm = password) {
   await userEvent.type(screen.getByLabelText('Repita a nova senha'), confirm)
 }
 
-describe('redefinir a senha', () => {
-  it('lê o segredo do fragmento, mostra o e-mail, redefine e volta à entrada com o aviso', async () => {
+describe('reset password', () => {
+  it('reads the secret from the fragment, shows the e-mail, resets and returns to the sign-in with the notice', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/password-reset/check': () => fixtures.passwordResetInfo(),
@@ -47,7 +47,7 @@ describe('redefinir a senha', () => {
     })
   })
 
-  it('senha curta não deixa enviar', async () => {
+  it('a short password does not allow submitting', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/password-reset/check': () => fixtures.passwordResetInfo(),
@@ -57,7 +57,7 @@ describe('redefinir a senha', () => {
     expect(screen.getByRole('button', { name: 'Redefinir a senha' })).toBeDisabled()
   })
 
-  it('link vencido ou usado mostra a mensagem sem o formulário', async () => {
+  it('an expired or used link shows the message without the form', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/password-reset/check': () => problem('invalid_reset_link', 401),
@@ -67,14 +67,14 @@ describe('redefinir a senha', () => {
     expect(screen.queryByLabelText('Nova senha')).not.toBeInTheDocument()
   })
 
-  it('sem segredo no endereço não consulta o servidor', async () => {
+  it('without a secret in the address it does not query the server', async () => {
     const http = mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     renderApp('/redefinir-senha')
     expect(await screen.findByRole('alert')).toHaveTextContent(INVALID)
     expect(http.requests('POST /api/v1/auth/password-reset/check')).toHaveLength(0)
   })
 
-  it('link que vence entre conferir e redefinir avisa na mesma tela', async () => {
+  it('a link that expires between checking and resetting warns on the same screen', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/password-reset/check': () => fixtures.passwordResetInfo(),
