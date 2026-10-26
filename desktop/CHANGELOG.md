@@ -10,6 +10,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ### Alterado
 
+- Dependencies raised to the releases that fix the RustSec advisories on rustls, tokio and the bundled
+  root certificates (holetz/eclume#298).
 - O `.md` da pasta sincronizada avisa quando o resumo é de uma versão anterior da transcrição: a
   propriedade `summary_stale: true` e um aviso no topo, com o mesmo texto do web (holetz/eclume#186).
 
