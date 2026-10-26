@@ -1,4 +1,4 @@
-"""Descritor público do servidor: nome, endereços, impressões digitais da CA raiz (e da próxima) e versões."""
+"""Public server descriptor: name, addresses, root CA fingerprints (and the next one's) and versions."""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ from eclume_server.contract import CONTRACT_VERSION
 if TYPE_CHECKING:
     from eclume_server.config import Settings
 
-# Impressão digital por arquivo, válida enquanto o `mtime` não muda: no primeiro deploy a CA é
-# publicada depois de o server subir, e o descritor passa a trazê-la sem restart.
+# Fingerprint per file, valid while the `mtime` does not change: on the first deploy the CA is
+# published after the server starts, and the descriptor starts carrying it without a restart.
 _fingerprints: dict[Path, tuple[int, str | None]] = {}
 
 
 def ca_sha256(ca_file: str | None) -> str | None:
-    """SHA-256 (hex minúsculo) do DER do primeiro certificado do PEM; `None` sem arquivo válido."""
+    """SHA-256 (lowercase hex) of the DER of the PEM's first certificate; `None` without a valid file."""
     if not ca_file:
         return None
     path = Path(ca_file)
@@ -42,7 +42,7 @@ def ca_sha256(ca_file: str | None) -> str | None:
 
 
 def server_info(settings: Settings, base_url: str) -> dict[str, Any]:
-    """Schema `ServerInfo`; `base_url` vale quando `ECLUME_PUBLIC_URL` não está definida."""
+    """Schema `ServerInfo`; `base_url` applies when `ECLUME_PUBLIC_URL` is not set."""
     url = (settings.public_url or base_url).rstrip("/")
     return {
         "name": settings.server_name,
