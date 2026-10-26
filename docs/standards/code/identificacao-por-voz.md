@@ -34,6 +34,10 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 - **Só entra amostra** com a identificação por voz ligada na plataforma e pelo menos
   `MIN_SAMPLE_TALK_MS` (10 s) de fala. A condição mora no próprio `INSERT ... SELECT`
   (`voice.add_sample`), não num `if` antes dele.
+- **No new sample from a recording whose audio was deleted** by the audio retention policy
+  (`recordings.audio_deleted_at IS NOT NULL`): `_ADD_SAMPLE` joins `recordings` and requires it
+  null, so confirming a speaker of such a recording adds nothing. The voiceprints already
+  extracted stay and keep matching other recordings; only new contributions stop.
 - **A pessoa e a amostra são da mesma conta.** A FK `(person_id, owner_id) → people (id,
   owner_id)` garante que a impressão de uma pessoa só junta vozes das gravações do dono dela.
 

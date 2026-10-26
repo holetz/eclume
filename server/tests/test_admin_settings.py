@@ -254,3 +254,16 @@ def test_cotas_padrao_mescladas_campo_a_campo(
     assert (effective["open_uploads"], effective["agent_requests_24h"]) == (1, None)
     assert admin.patch(URL, json={"quotas": {"open_uploads": -1}}).status_code == 422
     assert admin.patch(URL, json={"quotas": {"desconhecida": 1}}).status_code == 422
+
+
+def test_retention_block_defaults_to_no_ceiling_and_validates(admin: Api):
+    assert admin.get(URL).json()["retention"] == {"audio_max_days": None}
+    patched = admin.patch(URL, json={"retention": {"audio_max_days": 90}})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["retention"] == {"audio_max_days": 90}
+    assert admin.patch(URL, json={"retention": {"audio_max_days": None}}).json()["retention"] == {
+        "audio_max_days": None
+    }
+    for value in (0, -1, 3651):
+        assert admin.patch(URL, json={"retention": {"audio_max_days": value}}).status_code == 422, value
+    assert admin.patch(URL, json={"retention": {"other": 1}}).status_code == 422

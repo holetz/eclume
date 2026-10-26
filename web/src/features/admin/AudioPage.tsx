@@ -282,6 +282,77 @@ function AudioForm({ settings }: { settings: Settings }) {
         </p>
         <p className={styles.meta}>{lastChangeText(settings)}</p>
       </form>
+      <RetentionCeiling settings={settings} />
     </>
+  )
+}
+
+const MAX_RETENTION_DAYS = 3650
+
+/** O teto da retenção do áudio: limita o que cada conta escolhe e nunca apaga o áudio de quem não ligou a retenção. */
+function RetentionCeiling({ settings }: { settings: Settings }) {
+  const update = useUpdateSettings()
+  const id = useId()
+  const saved = settings.retention.audio_max_days
+  const [enabled, setEnabled] = useState(saved !== null)
+  const [value, setValue] = useState(String(saved ?? 365))
+
+  const days = Number(value)
+  const valid = Number.isInteger(days) && days >= 1 && days <= MAX_RETENTION_DAYS
+  const chosen = enabled ? days : null
+  const canSave = (!enabled || valid) && chosen !== saved && !update.isPending
+  const serverError = fieldErrorsOf(update.error)['retention.audio_max_days']
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (canSave) update.mutate({ retention: { audio_max_days: chosen } })
+  }
+
+  return (
+    <form className={`panel ${styles.audioForm}`} onSubmit={submit} aria-label="Retenção do áudio no servidor">
+      <h2 className={styles.note}>Retenção do áudio no servidor</h2>
+      <p className={`text-muted ${styles.lede}`}>
+        Cada conta escolhe por quantos dias o servidor guarda o áudio das suas gravações; este teto limita essa
+        escolha. Ele não apaga nada de quem deixou a retenção desligada. A transcrição e o resumo nunca são
+        apagados. Cópias de segurança podem guardar o áudio por até 14 dias depois de apagado.
+      </p>
+      <Switch checked={enabled} onChange={setEnabled}>
+        Limitar a retenção do áudio
+      </Switch>
+      {enabled && (
+        <div className="field">
+          <label htmlFor={id}>Teto, em dias</label>
+          <input
+            id={id}
+            className="input"
+            type="number"
+            min={1}
+            max={MAX_RETENTION_DAYS}
+            step={1}
+            value={value}
+            aria-invalid={!valid || serverError ? true : undefined}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          {(!valid || serverError) && (
+            <span className={`field-hint ${styles.error}`}>{serverError ?? `Entre 1 e ${MAX_RETENTION_DAYS}.`}</span>
+          )}
+        </div>
+      )}
+      {update.isError && !serverError && (
+        <p className="alert alert-error" role="alert">
+          {errorMessage(update.error)}
+        </p>
+      )}
+      {update.isSuccess && chosen === saved && (
+        <p role="status" className="text-muted">
+          Teto salvo.
+        </p>
+      )}
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={!canSave}>
+          Aplicar o teto
+        </button>
+      </div>
+    </form>
   )
 }

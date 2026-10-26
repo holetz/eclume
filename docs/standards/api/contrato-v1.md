@@ -109,6 +109,16 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   nova é limitada. Exceção deliberada a "apertar validação", campo a campo, como em 2.27.0: um
   valor acima do teto nunca foi legítimo e hoje só infla listagens, resumos, busca, embeddings e
   prompts do Agente. Minor.
+- **Audio retention (2.29.0, `audio-retention`):** `GET`/`PATCH /me/audio-retention` (read with
+  `recordings:read`, write by session only) carry `{days, max_days, effective_days}`: `days` is the
+  account's choice in days (1 to 3650, `null` is off, the default), `max_days` is the admin's
+  ceiling and `effective_days` is `days` capped by it. `AdminSettings` and `AdminSettingsPatch` gain
+  the `retention` block with `audio_max_days` (`null` is no ceiling; it never deletes anything for
+  an account that left retention off). `Recording` gains `audio_deleted_at` (date-time or `null`,
+  always sent, not in `required`). A recording whose audio was deleted answers 410
+  `audio_deleted` on `GET /recordings/{id}/audio` and on the signed media URL, and 409
+  `audio_deleted` on every route that starts a new revision (retranscribe, retry). Transcript,
+  summary and chat stay. All additive. Minor.
 - **Exemplos anonimizados (2.27.1, `fixtures`):** os e-mails, nomes e o exemplo de `device_name`
   dos fixtures e do contrato passam a ser neutros, sem pessoa ou organização real. Só exemplos e
   descrições mudam: nenhum schema, rota ou validação. Patch, sem efeito para clientes.

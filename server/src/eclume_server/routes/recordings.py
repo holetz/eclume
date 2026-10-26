@@ -28,7 +28,7 @@ from eclume_server.input_limits import (
 )
 from eclume_server.operations import change_agenda_type, check_collections
 from eclume_server.pagination import Cursor, Limit
-from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
+from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, not_found, unauthorized
 from eclume_server.recordings import (
     Awaiting,
     Library,
@@ -198,11 +198,18 @@ async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> 
     return Response(status_code=204)
 
 
+def audio_deleted() -> ApiProblemError:
+    """410 — o áudio foi apagado pela retenção; a transcrição segue."""
+    return ApiProblemError(410, "audio_deleted", "O áudio desta gravação foi apagado pela política de retenção.")
+
+
 @router.get("/recordings/{recording_id}/audio", status_code=302)
 async def get_audio(recording_id: UUID, request: Request, principal: Reader, ctx: Ctx) -> RedirectResponse:
     """Redireciona para uma URL temporária e assinada do áudio, que aceita `Range`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        await get_visible(conn, recording_id)
+        row = await get_visible(conn, recording_id)
+    if row["audio_deleted_at"] is not None:
+        raise audio_deleted()
     expires = int(time.time()) + AUDIO_URL_TTL_SECONDS
     sig = sign(ctx.settings.secret_key, "audio", recording_id, expires)
     base = (ctx.settings.public_url or str(request.base_url)).rstrip("/")
@@ -229,9 +236,18 @@ async def stream_audio(
     if expires < time.time():
         raise forbidden("URL de áudio expirada.")
     async with system_tx(ctx.engine) as conn:
-        key = (await conn.execute(select(t.recordings.c.audio_key).where(t.recordings.c.id == recording_id))).scalar()
-    if key is None:
+        found = (
+            await conn.execute(
+                select(t.recordings.c.audio_key, t.recordings.c.audio_deleted_at).where(
+                    t.recordings.c.id == recording_id
+                )
+            )
+        ).first()
+    if found is None:
         raise not_found("Gravação inexistente.")
+    key, deleted_at = found
+    if key is None or deleted_at is not None:
+        raise audio_deleted()
     obj = await ctx.storage.open_range(
         key, range_header if range_header and range_header.startswith("bytes=") else None
     )

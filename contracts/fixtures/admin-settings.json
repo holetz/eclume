@@ -46,6 +46,9 @@
     "gpu_minutes_24h": 600,
     "agent_requests_24h": 200
   },
+  "retention": {
+    "audio_max_days": 90
+  },
   "updated_at": "2026-09-14T18:25:00Z",
   "updated_by": {
     "id": "01928f3a-1c00-7a00-8000-000000000a01",

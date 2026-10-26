@@ -24,6 +24,7 @@ from eclume_server.worker import (
     drain_storage_deletions,
     expire_pairing_codes,
     expire_uploads,
+    purge_audio,
     purge_expired,
     reap_stalled_jobs,
     reconcile_storage,
@@ -45,6 +46,7 @@ CRONS = [
     (expire_uploads, {0, 30}, None, None, 0),
     (expire_pairing_codes, 15, None, None, 0),
     (purge_expired, 40, 3, None, 0),
+    (purge_audio, 50, 3, None, 0),
     (reap_stalled_jobs, None, None, None, 0),
     (dispatch_transcriptions, None, None, None, 15),
     (resume_pipelines, set(range(2, 60, 5)), None, None, 0),
@@ -53,7 +55,7 @@ CRONS = [
 ]
 
 
-def test_registro_dos_oito_crons_com_agenda_unique_e_sem_run_at_startup():
+def test_registro_dos_nove_crons_com_agenda_unique_e_sem_run_at_startup():
     registrados = worker_settings(Settings())["cron_jobs"]
     assert [job.coroutine for job in registrados] == [c[0] for c in CRONS]
     for job, (func, minute, hour, weekday, second) in zip(registrados, CRONS, strict=True):

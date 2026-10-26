@@ -106,4 +106,42 @@ describe('Pré-processamento de áudio', () => {
     expect(screen.getByLabelText('Faixa de loudness (LRA)')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText('fora da faixa aceita')).toBeInTheDocument()
   })
+
+  it('salva o teto da retenção do áudio só no bloco retention', async () => {
+    const http = mockAudioApi({
+      'PATCH /api/v1/admin/settings': async (request) => ({
+        ...fixtures.adminSettings(),
+        retention: (await request.json()).retention,
+      }),
+    })
+    renderApp('/admin/audio')
+    const form = await screen.findByRole('form', { name: 'Retenção do áudio no servidor' })
+    expect(within(form).getByRole('switch')).toBeChecked()
+    expect(within(form).getByLabelText('Teto, em dias')).toHaveValue(90)
+    expect(within(form).getByRole('button', { name: 'Aplicar o teto' })).toBeDisabled()
+
+    const days = within(form).getByLabelText('Teto, em dias')
+    await userEvent.clear(days)
+    await userEvent.type(days, '120')
+    await userEvent.click(within(form).getByRole('button', { name: 'Aplicar o teto' }))
+    expect(await within(form).findByText('Teto salvo.')).toBeInTheDocument()
+    expect(await sentBody(http)).toEqual({ retention: { audio_max_days: 120 } })
+  })
+
+  it('tira o teto com null e recusa um valor fora do limite', async () => {
+    const http = mockAudioApi({
+      'PATCH /api/v1/admin/settings': async () => ({ ...fixtures.adminSettings(), retention: { audio_max_days: null } }),
+    })
+    renderApp('/admin/audio')
+    const form = await screen.findByRole('form', { name: 'Retenção do áudio no servidor' })
+    const days = within(form).getByLabelText('Teto, em dias')
+    await userEvent.clear(days)
+    await userEvent.type(days, '4000')
+    expect(days).toHaveAttribute('aria-invalid', 'true')
+    expect(within(form).getByRole('button', { name: 'Aplicar o teto' })).toBeDisabled()
+    await userEvent.click(within(form).getByRole('switch'))
+    await userEvent.click(within(form).getByRole('button', { name: 'Aplicar o teto' }))
+    await within(form).findByText('Teto salvo.')
+    expect(await sentBody(http)).toEqual({ retention: { audio_max_days: null } })
+  })
 })

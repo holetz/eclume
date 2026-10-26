@@ -62,11 +62,14 @@ _ADD_SAMPLE = text(
     SELECT e.transcript_id, e.speaker_id, e.owner_id, sp.person_id, e.model, e.embedding, sp.talk_ms, :actor
     FROM speaker_embeddings e
     JOIN speakers sp ON sp.transcript_id = e.transcript_id AND sp.speaker_id = e.speaker_id
+    JOIN transcripts tr ON tr.id = e.transcript_id
+    JOIN recordings rec ON rec.id = tr.recording_id
     CROSS JOIN platform_settings o
     WHERE e.transcript_id = :transcript AND e.speaker_id = :speaker
       AND sp.person_id IS NOT NULL AND sp.auto_score IS NULL
       AND (o.voice_identification ->> 'enabled')::boolean
       AND sp.talk_ms >= :min_talk
+      AND rec.audio_deleted_at IS NULL
     ON CONFLICT (transcript_id, speaker_id) DO NOTHING
     RETURNING person_id
     """
@@ -77,6 +80,7 @@ async def add_sample(conn: AsyncConnection, transcript_id: UUID, speaker_id: str
     """Guarda o locutor (ligado e confirmado) como amostra da pessoa, com a identificação por voz ligada.
 
     O vínculo que a voz fez sozinho (`auto_score`) não entra: só uma confirmação reforça a impressão.
+    Gravação sem áudio (apagado pela retenção) também não gera amostra nova.
     """
     params = {"transcript": transcript_id, "speaker": speaker_id, "actor": actor_id, "min_talk": MIN_SAMPLE_TALK_MS}
     return (await conn.execute(_ADD_SAMPLE, params)).first() is not None

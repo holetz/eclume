@@ -9,6 +9,7 @@ import { MarkerBar } from './MarkerBar'
 import { useMarkers } from './markers'
 import { Pipeline } from './Pipeline'
 import { PlaybackProvider } from './PlaybackProvider'
+import { AudioDeletedNotice } from './RetryTranscription'
 import { Player } from './Player'
 import { useRecording, useRefreshOnPipeline, useTranscript } from './queries'
 import { RecordingHeader } from './RecordingHeader'
@@ -91,12 +92,17 @@ export function RecordingPage() {
         />
         <Pipeline recording={data} />
 
-        <PlaybackProvider recordingId={data.id} durationMs={data.duration_ms} startMs={startMs}>
+        <PlaybackProvider
+          recordingId={data.id}
+          durationMs={data.duration_ms}
+          startMs={startMs}
+          audioDeleted={Boolean(data.audio_deleted_at)}
+        >
           {data.transcript_id !== null && (
             <>
               {/* Fixo abaixo do cabeçalho: pausar fica a um clique em qualquer ponto da página. */}
               <div className={styles.playerDock}>
-                <Player markers={markers.data ?? []} />
+                {data.audio_deleted_at ? <AudioDeletedNotice /> : <Player markers={markers.data ?? []} />}
               </div>
               <MarkerBar markers={markers.data ?? []} />
             </>

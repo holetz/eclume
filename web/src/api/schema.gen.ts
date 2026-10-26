@@ -267,6 +267,30 @@ export interface paths {
         patch: operations["updateTranscriptionPreference"];
         trace?: never;
     };
+    "/api/v1/me/audio-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the account's audio retention
+         * @description Since 2.29.0. `days` is how long the audio of the account's recordings stays on the server (`null` is off, the default); `max_days` is the ceiling set by the admin (`null` is none); `effective_days` is the window in force (`days` capped by `max_days`, `null` when `days` is off). Session or PAT with `recordings:read`.
+         */
+        get: operations["getAudioRetention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set the account's audio retention
+         * @description Since 2.29.0. `days` from 1 to 3650, or `null` to turn retention off. A daily job deletes the audio of every recording of the account older than the effective window; the transcript, summary and chat stay. Deleting is irreversible, and backups age out through the restic rotation. A value above the ceiling is stored as sent and capped on read. Session only.
+         */
+        patch: operations["updateAudioRetention"];
+        trace?: never;
+    };
     "/api/v1/me/speaker-naming": {
         parameters: {
             query?: never;
@@ -740,7 +764,7 @@ export interface paths {
         };
         /**
          * Áudio da gravação (redirecionamento)
-         * @description Redireciona para uma URL temporária do áudio, que aceita `Range` para o player.
+         * @description Redireciona para uma URL temporária do áudio, que aceita `Range` para o player. Desde a 2.29.0, 410 (`code: audio_deleted`) quando a retenção já apagou o áudio; o endereço assinado responde o mesmo.
          */
         get: operations["getRecordingAudio"];
         put?: never;
@@ -764,7 +788,7 @@ export interface paths {
         put?: never;
         /**
          * Transcrever de novo com a configuração atual
-         * @description A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização.
+         * @description A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização. Desde a 2.29.0, 409 com `code: audio_deleted` quando a retenção já apagou o áudio.
          */
         post: operations["retranscribeRecording"];
         delete?: never;
@@ -2761,6 +2785,19 @@ export interface components {
             /** @description Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor. */
             language: string | null;
         };
+        /** @description Since 2.29.0. How long the audio of the account's recordings stays on the server, the platform ceiling and the window in force. */
+        AudioRetention: {
+            /** @description The account's choice in days; `null` is off (the default). */
+            days: number | null;
+            /** @description The admin's ceiling (`retention.audio_max_days`); `null` is none. */
+            max_days: number | null;
+            /** @description `days` capped by `max_days`; `null` when `days` is off, whatever the ceiling. */
+            effective_days: number | null;
+        };
+        AudioRetentionPatch: {
+            /** @description Days from 1 to 3650, or `null` to turn retention off. */
+            days: number | null;
+        };
         VoiceAssignmentPatch: {
             enabled?: boolean;
             threshold?: number;
@@ -3185,6 +3222,11 @@ export interface components {
             transcript_id: string | null;
             /** @description Marcadores da gravação. */
             marker_count: number;
+            /**
+             * Format: date-time
+             * @description Since 2.29.0. When the retention policy deleted the audio; `null` while it exists. The server always sends it. A recording without audio refuses playback (410) and retranscription (409), both with `code: audio_deleted`.
+             */
+            audio_deleted_at?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -4393,10 +4435,16 @@ export interface components {
             preprocessing: components["schemas"]["PreprocessingSettings"];
             /** @description Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta. */
             quotas: components["schemas"]["Quotas"];
+            /** @description Since 2.29.0. Platform-wide audio retention settings. */
+            retention: components["schemas"]["RetentionSettings"];
             /** Format: date-time */
             updated_at: string;
             /** @description Conta de admin que mudou por último. */
             updated_by: components["schemas"]["AdminRef"] | null;
+        };
+        RetentionSettings: {
+            /** @description Ceiling, in days, on the audio retention an account may choose; `null` is none. It only caps the accounts' values and deletes nothing for an account that left retention off. */
+            audio_max_days: number | null;
         };
         /** @description Cada bloco é mesclado campo a campo; campos ausentes ficam como estão. */
         AdminSettingsPatch: {
@@ -4456,6 +4504,10 @@ export interface components {
             };
             /** @description Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite. */
             quotas?: components["schemas"]["QuotasOverride"];
+            /** @description Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it. */
+            retention?: {
+                audio_max_days?: number | null;
+            };
         };
         AgentProvider: {
             /** Format: uuid */
@@ -4822,6 +4874,15 @@ export interface components {
         };
         /** @description O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento, resumo mudado desde a versão aberta, chat com pedido em aberto). */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.29.0. The audio of the recording was deleted by the retention policy (`code: audio_deleted`); the transcript and the summary stay. */
+        Gone: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5289,6 +5350,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptionPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAudioRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current retention. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioRetention"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateAudioRetention: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AudioRetentionPatch"];
+            };
+        };
+        responses: {
+            /** @description Resulting retention. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioRetention"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -6052,6 +6165,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            410: components["responses"]["Gone"];
         };
     };
     retranscribeRecording: {

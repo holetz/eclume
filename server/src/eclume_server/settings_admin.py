@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy import select
 
+from eclume_server.audio_retention import MAX_DAYS, MIN_DAYS
 from eclume_server.db import tables as t
 from eclume_server.pagination import iso
 from eclume_server.problems import invalid_field
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 
     from eclume_server.serialize import Row
 
-BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing", "quotas")
+BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing", "quotas", "retention")
 # O `float16` puro é recusado: a série GTX 16xx dá NaN nele, e a engine o troca (worker-gpu.md).
 COMPUTE_TYPES = ("int8_float16", "int8", "int8_float32", "float32")
 # O único pipeline de diarização que a engine `whisperx-local` sabe carregar.
@@ -149,6 +150,12 @@ class QuotasPatch(_Block):
     agent_requests_24h: PlainInt | None = Field(default=None, ge=0)
 
 
+class RetentionPatch(_Block):
+    """Bloco `retention` do `AdminSettingsPatch`: `audio_max_days` nulo é sem teto."""
+
+    audio_max_days: PlainInt | None = Field(default=None, ge=MIN_DAYS, le=MAX_DAYS)
+
+
 class AdminSettingsPatch(_Block):
     """Schema `AdminSettingsPatch`: cada bloco é mesclado campo a campo."""
 
@@ -157,6 +164,7 @@ class AdminSettingsPatch(_Block):
     voice_identification: VoiceIdentificationPatch | None = None
     preprocessing: PreprocessingPatch | None = None
     quotas: QuotasPatch | None = None
+    retention: RetentionPatch | None = None
 
 
 # Campos que o schema aceita como `null`; os demais, enviados como `null`, são 422.
@@ -166,6 +174,7 @@ _NULLABLE = {
     "voice_identification": set(),
     "preprocessing": set(),
     "quotas": set(QuotasPatch.model_fields),
+    "retention": set(RetentionPatch.model_fields),
 }
 
 

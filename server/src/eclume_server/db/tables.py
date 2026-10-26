@@ -59,6 +59,8 @@ users = Table(
     Column("quotas", JSONB),
     # 029_idioma_da_conta
     Column("transcription_language", Text),
+    # 034_audio_retention
+    Column("audio_retention_days", Integer),
     # 030_marcacao_dos_locutores
     Column("require_speaker_naming", Boolean, server_default=FetchedValue()),
 )
@@ -126,6 +128,8 @@ platform_settings = Table(
     Column("voice_identification", JSONB),
     Column("preprocessing", JSONB),
     Column("quotas", JSONB),
+    # 034_audio_retention
+    Column("retention", JSONB, server_default=FetchedValue()),
     _ts("updated_at"),
     _uuid("updated_by"),
 )
@@ -145,6 +149,8 @@ recordings = Table(
     Column("content_type", Text),
     Column("content_hash", Text),
     Column("audio_key", Text),
+    # 034_audio_retention: set together with a null `audio_key` when the retention purge ran.
+    _ts("audio_deleted_at"),
     Column("tags", ARRAY(Text)),
     Column("collection_ids", ARRAY(UUID(as_uuid=True))),
     Column("metadata", JSONB),

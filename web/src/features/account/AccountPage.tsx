@@ -18,6 +18,7 @@ import { LanguageSelect } from '../../shared/LanguageSelect'
 import { Switch } from '../../shared/Switch'
 import { useUpdateVoiceAssignment, useVoiceAssignment, type VoiceAssignment } from '../people/queries'
 import styles from './Account.module.css'
+import { AudioRetentionCard } from './AudioRetentionCard'
 
 // A regra do cadastro: o servidor recusa senha mais curta (422 em `new_password`).
 const MIN_PASSWORD = 12
@@ -49,6 +50,8 @@ export function AccountPage() {
       )}
 
       <TranscriptionSection />
+
+      <AudioRetentionCard />
 
       <PrivacySection />
 
