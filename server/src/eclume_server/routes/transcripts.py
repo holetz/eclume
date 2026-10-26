@@ -16,6 +16,7 @@ from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
 from eclume_server.exports import slug
+from eclume_server.input_limits import MAX_SEGMENT_TEXT
 from eclume_server.pagination import Cursor, Limit, decode_cursor, page
 from eclume_server.people import get_person
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
@@ -60,7 +61,7 @@ class SpeakerMerge(BaseModel):
 class SegmentPatch(BaseModel):
     """Schema `SegmentPatch`."""
 
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=MAX_SEGMENT_TEXT)
     speaker_id: SpeakerId | None = None
 
 
