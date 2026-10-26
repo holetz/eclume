@@ -1,4 +1,4 @@
-"""O `transcript.raw.json` do worker valida contra `contracts/transcript.schema.json`."""
+"""The worker's `transcript.raw.json` validates against `contracts/transcript.schema.json`."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ HASH = "sha256:" + "ab" * 32
 NOW = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
 
 
-def resultado(*, diarizado: bool = True) -> EngineResult:
-    spk = (lambda s: s) if diarizado else (lambda _s: None)
+def result_of(*, diarized: bool = True) -> EngineResult:
+    spk = (lambda s: s) if diarized else (lambda _s: None)
     return EngineResult(
         engine="whisperx-local",
         model="large-v3-turbo",
@@ -46,25 +46,25 @@ def resultado(*, diarizado: bool = True) -> EngineResult:
             Segment(6.5, 9.0, "Primeiro item.", spk("SPEAKER_01"), [], 0.7),
         ],
         speaker_embeddings={"SPEAKER_00": [0.1, 0.2, 0.3], "SPEAKER_01": [0.4, 0.5, 0.6], "SPEAKER_02": [0.0, 0.0, 1.0]}
-        if diarizado
+        if diarized
         else {},
-        diarization_model="pyannote/speaker-diarization-community-1" if diarizado else None,
-        embedding_model="pyannote/wespeaker-voxceleb-resnet34-LM" if diarizado else None,
+        diarization_model="pyannote/speaker-diarization-community-1" if diarized else None,
+        embedding_model="pyannote/wespeaker-voxceleb-resnet34-LM" if diarized else None,
     )
 
 
-def montar(result: EngineResult) -> dict:
+def assemble(result: EngineResult) -> dict:
     return build_transcript(result, recording_id=RECORDING, revision=2, content_hash=HASH, language="pt", now=NOW)
 
 
-def assert_valido(doc: dict) -> None:
-    erros = sorted(VALIDATOR.iter_errors(doc), key=lambda e: list(e.path))
-    assert not erros, [f"{list(e.path)}: {e.message}" for e in erros]
+def assert_valid(doc: dict) -> None:
+    errors = sorted(VALIDATOR.iter_errors(doc), key=lambda e: list(e.path))
+    assert not errors, [f"{list(e.path)}: {e.message}" for e in errors]
 
 
-def test_raw_diarizado_valida_no_schema():
-    doc = montar(resultado())
-    assert_valido(doc)
+def test_diarized_raw_validates_against_the_schema():
+    doc = assemble(result_of())
+    assert_valid(doc)
     assert doc["recording_id"] == RECORDING
     assert doc["revision"] == 2
     assert doc["content_hash"] == HASH
@@ -76,8 +76,8 @@ def test_raw_diarizado_valida_no_schema():
     }
 
 
-def test_locutores_pela_ordem_da_primeira_fala_sem_pessoa_nem_sugestoes():
-    doc = montar(resultado())
+def test_speakers_in_order_of_first_speech_with_no_person_or_suggestions():
+    doc = assemble(result_of())
     assert doc["speakers"] == [
         {"id": "S1", "label": "Locutor 1", "person": None, "talk_ms": 1800 + 2500},
         {"id": "S2", "label": "Locutor 2", "person": None, "talk_ms": 2500 + 900},
@@ -85,33 +85,33 @@ def test_locutores_pela_ordem_da_primeira_fala_sem_pessoa_nem_sugestoes():
     assert [s["speaker_id"] for s in doc["segments"]] == ["S1", "S2", "S2", "S1"]
 
 
-def test_segmentos_e_palavras_em_milissegundos():
-    first = montar(resultado())["segments"][0]
+def test_segments_and_words_in_milliseconds():
+    first = assemble(result_of())["segments"][0]
     assert first["id"] == "seg-0001"
     assert (first["start_ms"], first["end_ms"]) == (200, 2000)
     assert first["confidence"] == 0.8
     assert first["words"][2] == {"text": "a", "start_ms": None, "end_ms": None}
     assert first["words"][3] == {"text": "todos.", "start_ms": 1200, "end_ms": 1200, "confidence": 0.7}
-    assert "words" not in montar(resultado())["segments"][2]
+    assert "words" not in assemble(result_of())["segments"][2]
 
 
-def test_sem_diarizacao_um_locutor():
-    doc = montar(resultado(diarizado=False))
-    assert_valido(doc)
+def test_without_diarization_one_speaker():
+    doc = assemble(result_of(diarized=False))
+    assert_valid(doc)
     assert [s["id"] for s in doc["speakers"]] == ["S1"]
     assert {s["speaker_id"] for s in doc["segments"]} == {"S1"}
     assert doc["engine"]["diarization_model"] is None
 
 
-def test_transcricao_vazia_ainda_valida():
-    vazio = EngineResult(engine="cpu", model="small", compute_type="int8", language="pt", duration_s=0.0, segments=[])
-    doc = montar(vazio)
-    assert_valido(doc)
+def test_empty_transcript_still_validates():
+    empty = EngineResult(engine="cpu", model="small", compute_type="int8", language="pt", duration_s=0.0, segments=[])
+    doc = assemble(empty)
+    assert_valid(doc)
     assert doc["speakers"] == [{"id": "S1", "label": "Locutor 1", "person": None, "talk_ms": 0}]
 
 
-def test_embeddings_pelos_ids_do_transcript():
-    emb = build_embeddings(resultado())
+def test_embeddings_by_transcript_ids():
+    emb = build_embeddings(result_of())
     assert emb == {
         "embedding_model": "pyannote/wespeaker-voxceleb-resnet34-LM",
         "dimension": 3,
@@ -119,33 +119,33 @@ def test_embeddings_pelos_ids_do_transcript():
     }
 
 
-def test_embeddings_vazios_sem_diarizacao():
-    assert build_embeddings(resultado(diarizado=False)) == {
+def test_empty_embeddings_without_diarization():
+    assert build_embeddings(result_of(diarized=False)) == {
         "embedding_model": None,
         "dimension": None,
         "speaker_embeddings": {},
     }
 
 
-@pytest.mark.parametrize("ruim", [float("nan"), float("inf"), float("-inf")])
-def test_embedding_nao_finito_fica_de_fora(ruim: float):
-    # Fala curta demais: o pyannote devolve NaN (desvio-padrão com zero graus de liberdade), e o
-    # pgvector recusaria a ingestão inteira. O locutor segue no transcript, só sem embedding.
-    result = resultado()
-    result.speaker_embeddings["SPEAKER_00"] = [0.1, ruim, 0.3]
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_embedding_is_left_out(bad: float):
+    # Speech that is too short: pyannote returns NaN (standard deviation with zero degrees of freedom),
+    # and pgvector would refuse the whole ingestion. The speaker stays in the transcript, just without an embedding.
+    result = result_of()
+    result.speaker_embeddings["SPEAKER_00"] = [0.1, bad, 0.3]
     emb = build_embeddings(result)
     assert emb["speaker_embeddings"] == {"S1": [0.4, 0.5, 0.6]}
     assert emb["dimension"] == 3
-    assert [s["id"] for s in montar(result)["speakers"]] == ["S1", "S2"]
+    assert [s["id"] for s in assemble(result)["speakers"]] == ["S1", "S2"]
 
 
-def test_so_embeddings_nao_finitos_fica_sem_modelo():
-    result = resultado()
+def test_only_non_finite_embeddings_leaves_no_model():
+    result = result_of()
     result.speaker_embeddings = {"SPEAKER_01": [float("nan")] * 3}
     assert build_embeddings(result) == {"embedding_model": None, "dimension": None, "speaker_embeddings": {}}
 
 
-@pytest.mark.parametrize("diarizado", [True, False])
-def test_mapa_de_locutores_cobre_todo_segmento(*, diarizado: bool):
-    mapa = speaker_map(resultado(diarizado=diarizado))
-    assert set(mapa.values()) <= {"S1", "S2"}
+@pytest.mark.parametrize("diarized", [True, False])
+def test_speaker_map_covers_every_segment(*, diarized: bool):
+    mapping = speaker_map(result_of(diarized=diarized))
+    assert set(mapping.values()) <= {"S1", "S2"}
