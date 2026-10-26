@@ -1,9 +1,9 @@
-"""Por que um `transcribe` em `queued` espera: `Job.queue` das gravações.
+"""Why a `queued` `transcribe` waits: the recordings' `Job.queue`.
 
-Três motivos: na fila do processador (`processor_queue`, já em `eclume:gpu`), atrás de outras
-gravações da própria conta (`account_turn`, retido pela fila justa) ou na janela de minutos de
-24 h (`quota_window`). Só contagens e horários: nada de outra conta sai daqui. Calculado na
-leitura, uma vez por resposta. Regras em docs/standards/api/jobs-transcricao.md.
+Three reasons: in the processor's queue (`processor_queue`, already in `eclume:gpu`), behind other
+recordings of the same account (`account_turn`, held by the fair queue) or in the 24 h minutes
+window (`quota_window`). Only counts and times: nothing about another account leaves here.
+Computed on read, once per response. Rules in docs/standards/api/jobs-transcricao.md.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from eclume_server.queue import Queue
     from eclume_server.serialize import Row
 
-# Ritmo do processador: mediana das últimas transcrições bem-sucedidas, guardada no Redis.
+# Processor pace: the median of the latest successful transcriptions, kept in Redis.
 PACE_KEY = "eclume:queue:pace"
 PACE_TTL_S = 300
 PACE_SAMPLES = 20
@@ -41,7 +41,7 @@ _OPEN = ("queued", "running")
 
 
 async def pace(engine: AsyncEngine, redis: ArqRedis) -> tuple[float, float] | None:
-    """`(processamento por ms de áudio, mediana do processamento em ms)`, ou `None` sem histórico."""
+    """`(processing per ms of audio, median processing in ms)`, or `None` without history."""
     cached = await redis.get(PACE_KEY)
     if cached is not None:
         data = json.loads(cached)
@@ -61,7 +61,7 @@ async def pace(engine: AsyncEngine, redis: ArqRedis) -> tuple[float, float] | No
         .limit(PACE_SAMPLES)
         .subquery()
     )
-    # Só números, de toda a plataforma: o papel de conexão.
+    # Only numbers, for the whole platform: the connection role.
     async with system_tx(engine) as conn:
         count, ratio, median_ms = (
             await conn.execute(
@@ -78,13 +78,13 @@ async def pace(engine: AsyncEngine, redis: ArqRedis) -> tuple[float, float] | No
 
 
 def _wait(reason: str, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
-    """`Job.queue` sem o processador: o motivo (não é o `reason` de uma etapa pulada) e os campos dele."""
+    """`Job.queue` without the processor: the reason (not the `reason` of a skipped step) and its fields."""
     empty = {"ahead": None, "account_ahead": None, "estimated_start_at": None, "resumes_at": None}
     return {"reason": reason} | empty | fields
 
 
 def _recording_of(job_id: str) -> str | None:
-    """A gravação do `_job_id` `transcribe:{recording_id}:{revision}`."""
+    """The recording of the `_job_id` `transcribe:{recording_id}:{revision}`."""
     parts = job_id.split(":")
     return parts[1] if len(parts) == 3 and parts[0] == "transcribe" else None  # noqa: PLR2004
 
@@ -97,7 +97,7 @@ def _parse(moment: str | None) -> datetime | None:
 
 
 class _Processor:
-    """O que a fila `eclume:gpu` e o heartbeat dizem, lido uma vez por resposta."""
+    """What the `eclume:gpu` queue and the heartbeat say, read once per response."""
 
     def __init__(self, job_ids: list[str], *, online: bool, offline_since: str | None) -> None:
         self.job_ids = job_ids
@@ -109,7 +109,7 @@ class _Processor:
         return {"online": self.online, "offline_since": None if self.online else self.offline_since}
 
     async def load_estimates(self, engine: AsyncEngine, queue: Queue, now: datetime) -> None:
-        """Quanto falta, em ms, a cada job da fila; sem ritmo conhecido, nada."""
+        """How much is left, in ms, for each job in the queue; without a known pace, nothing."""
         found = await pace(engine, queue.pool)
         if found is None:
             return
@@ -138,7 +138,7 @@ class _Processor:
         self.estimates = estimates
 
     def wait(self, job_id: str, now: datetime) -> dict[str, Any]:
-        """Posição e início estimado de um job já despachado."""
+        """Position and estimated start of an already dispatched job."""
         ahead = self.job_ids.index(job_id) if job_id in self.job_ids else None
         estimated = None
         if ahead is not None and self.online and self.estimates is not None:
@@ -147,7 +147,7 @@ class _Processor:
 
 
 async def _resumes_at(conn: AsyncConnection, owner_id: UUID, limit: int) -> str | None:
-    """Quando a conta volta a ter minutos: o despacho que, ao sair das 24 h, a põe abaixo da cota."""
+    """When the account has minutes again: the dispatch that, leaving the 24 h window, puts it below the quota."""
     jobs, recordings = t.transcription_jobs.c, t.recordings.c
     since = datetime.now(UTC) - timedelta(seconds=WINDOW_S)
     rows = (
@@ -169,7 +169,7 @@ async def _resumes_at(conn: AsyncConnection, owner_id: UUID, limit: int) -> str 
 
 
 async def _held(engine: AsyncEngine, owner_id: UUID) -> dict[str, dict[str, Any]]:
-    """Espera dos jobs retidos de uma conta, pela id do job."""
+    """The wait of an account's held jobs, by job id."""
     jobs = t.transcription_jobs.c
     async with system_tx(engine) as conn:
         rows = (
@@ -186,7 +186,7 @@ async def _held(engine: AsyncEngine, owner_id: UUID) -> dict[str, dict[str, Any]
     for ahead, (job_id, dispatched_at) in enumerate(rows):
         if dispatched_at is not None:
             continue
-        # Sem job despachado e sem janela a esperar, o próximo despacho (ou o cron) o leva: vez da conta.
+        # With no dispatched job and no window to wait for, the next dispatch (or the cron) takes it: account turn.
         if resumes_at is not None:
             waits[str(job_id)] = _wait("quota_window", resumes_at=resumes_at)
         else:
@@ -195,7 +195,7 @@ async def _held(engine: AsyncEngine, owner_id: UUID) -> dict[str, dict[str, Any]
 
 
 async def waiting(engine: AsyncEngine, queue: Queue, rows: list[Row]) -> dict[UUID, dict[str, Any]]:
-    """`Job.queue` de cada gravação cujo job está `queued` (sem progresso), pela id da gravação."""
+    """The `Job.queue` of each recording whose job is `queued` (no progress), by recording id."""
     if not rows:
         return {}
     now = datetime.now(UTC)

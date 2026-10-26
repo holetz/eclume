@@ -1,20 +1,20 @@
-"""Detecção de job de transcrição morto: o server percebe o que o worker GPU não pôde avisar.
+"""Dead transcription job detection: the server notices what the GPU worker could not report.
 
-Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, restart, deploy) não
-enfileira `transcription_failed`, e a gravação ficaria `processing` para sempre. O cron
-`reap_stalled_jobs` do worker CPU cruza três sinais por job em aberto — o estado no arq, o hash de
-progresso da revisão do job e o heartbeat do worker GPU (`busy` e o `job_id` em curso) — e marca
-como falha **recuperável** o que não tem mais quem o termine — inclusive o `transcribe` concluído
-cuja ingestão nunca chegou (`ingest_failed`).
-Regras em docs/standards/api/jobs-transcricao.md §Job morto.
+With `max_tries=1`, a GPU worker that dies in the middle of a `transcribe` (OOM kill, restart,
+deploy) does not enqueue `transcription_failed`, and the recording would stay `processing` forever.
+The CPU worker's `reap_stalled_jobs` cron crosses three signals per open job — the state in arq,
+the progress hash of the job's revision and the GPU worker heartbeat (`busy` and the current
+`job_id`) — and marks as a **recoverable** failure whatever nobody is left to finish — including a
+finished `transcribe` whose ingestion never arrived (`ingest_failed`).
+Rules in docs/standards/api/jobs-transcricao.md `§Job morto`.
 
-O `transcribe` cujo enfileiramento se perdeu (job `queued` no banco, sumido do arq, sem progresso)
-volta à fila uma vez antes de virar `job_lost`: ele nunca rodou, então não repete OOM nem áudio
-ruim. A marca `eclume:reaper:requeued:<_job_id>` (7 dias) impede a segunda volta.
+A `transcribe` whose enqueueing was lost (job `queued` in the database, gone from arq, no progress)
+goes back to the queue once before becoming `job_lost`: it never ran, so it does not repeat an OOM
+or bad audio. The mark `eclume:reaper:requeued:<_job_id>` (7 days) prevents a second round.
 
-Nada é marcado na primeira vez que parece morto: a suspeita fica registrada no Redis e só vira
-falha se continuar igual depois da graça (`job_grace_seconds`), o que cobre o worker que acabou
-de pegar o job e ainda não publicou progresso nem heartbeat.
+Nothing is marked the first time it looks dead: the suspicion is recorded in Redis and only becomes
+a failure if it stays the same after the grace period (`job_grace_seconds`), which covers the worker
+that just picked up the job and has not yet published progress or a heartbeat.
 """
 
 from __future__ import annotations
@@ -52,12 +52,12 @@ log = logging.getLogger(__name__)
 WORKER_LOST = "worker_lost"
 JOB_LOST = "job_lost"
 JOB_STALLED = "job_stalled"
-# A transcrição ficou pronta no worker GPU, mas a ingestão no worker CPU falhou ou nunca aconteceu.
+# The transcript was ready on the GPU worker, but ingestion on the CPU worker failed or never happened.
 INGEST_FAILED = "ingest_failed"
 INGEST_FAILED_MESSAGE = "A transcrição ficou pronta, mas não foi possível gravá-la. Tente de novo."
-# O dono cancelou a transcrição (ou excluiu a gravação): estado do job e código do erro.
+# The owner cancelled the transcription (or deleted the recording): job state and error code.
 CANCELLED = "cancelled"
-# Falhas passageiras: retentar (retranscrever ou `POST /admin/jobs/{id}/retry`) tende a resolver.
+# Transient failures: retrying (retranscribe or `POST /admin/jobs/{id}/retry`) tends to solve them.
 RETRYABLE_CODES = frozenset(
     {
         WORKER_LOST,
@@ -84,7 +84,7 @@ REQUEUED = "requeued"
 
 
 def is_retryable(code: str | None) -> bool:
-    """Se a falha de código `code` é passageira."""
+    """Whether the failure with code `code` is transient."""
     return code in RETRYABLE_CODES
 
 
@@ -106,31 +106,31 @@ def _decode(values: dict[Any, Any]) -> dict[str, str]:
 
 
 async def _diagnose_complete(job: Job, *, now: datetime, settings: Settings) -> str | None:
-    """O `transcribe` terminou no arq, mas o job segue em aberto no banco."""
+    """The `transcribe` finished in arq, but the job is still open in the database."""
     try:
         result: JobResult | None = await job.result_info()
     except DeserializationError:
-        # Um resultado em pickle com objeto (a exceção de um job que explodiu no arq) é recusado
-        # pelo unpickler sem globais: o `transcribe` sempre devolve um dict, então é falha.
+        # A pickled result holding an object (the exception of a job that blew up in arq) is refused
+        # by the globals-free unpickler: `transcribe` always returns a dict, so it is a failure.
         return WORKER_LOST
     if result is None:
         return None
-    # Falha no arq: o worker morreu e o retry do arq (max_tries=1) encerrou o job sem
+    # Failure in arq: the worker died and arq's retry (max_tries=1) ended the job without
     # `transcription_failed`.
     if not result.success:
         return WORKER_LOST
-    # Sucesso: a ingestão pode estar na fila `eclume:default`; passado o teto, não está mais (a
-    # que falha já marca `ingest_failed` sozinha; isto cobre a que se perdeu).
+    # Success: ingestion may be in the `eclume:default` queue; past the ceiling, it no longer is (a
+    # failing one already marks `ingest_failed` on its own; this covers the one that got lost).
     finished = result.finish_time if result.finish_time.tzinfo else result.finish_time.replace(tzinfo=UTC)
     return INGEST_FAILED if now - finished > timedelta(seconds=settings.job_stall_seconds) else None
 
 
 def _worker_on(beat: dict[str, str] | None, job_id: str) -> bool:
-    """O worker vivo declara estar rodando este job (sem `job_id` no heartbeat, worker antigo, basta `busy`)."""
+    """The live worker declares it is running this job (without `job_id` in the heartbeat, an old worker, `busy` is enough)."""
     return beat is not None and beat.get("busy") == "1" and beat.get("job_id", job_id) == job_id
 
 
-async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram explícitos, para o teste
+async def diagnose(  # noqa: PLR0913 — the three signals and the clock are explicit, for the test
     redis: ArqRedis,
     job_id: str,
     *,
@@ -140,15 +140,15 @@ async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram exp
     now: datetime,
     settings: Settings,
 ) -> str | None:
-    """O código de falha que o job merece agora, ou `None` se ele ainda tem quem o termine."""
+    """The failure code the job deserves now, or `None` if someone is still there to finish it."""
     job = Job(job_id, redis, _queue_name=GPU_QUEUE, _deserializer=desserializar)
     status = await job.status()
     if status in {JobStatus.queued, JobStatus.deferred}:
-        return None  # fila atrasada não é falha
+        return None  # a delayed queue is not a failure
     if status == JobStatus.complete:
         return await _diagnose_complete(job, now=now, settings=settings)
 
-    # O progresso de outra revisão não diz nada deste job.
+    # Progress of another revision says nothing about this job.
     progress = progress_of_revision(_decode(await redis.hgetall(progress_key(recording_id))), revision) or {}
     if status == JobStatus.not_found and not progress:
         return JOB_LOST
@@ -162,7 +162,7 @@ async def diagnose(  # noqa: PLR0913 — os três sinais e o relógio entram exp
 
 
 async def _confirmed(redis: ArqRedis, job_key: str, code: str | None, now: datetime, grace: float) -> bool:
-    """Registra a suspeita; confirma só a que dura a graça inteira com o mesmo diagnóstico."""
+    """Record the suspicion; confirm only one that lasts the whole grace period with the same diagnosis."""
     key = _SUSPECT_PREFIX + job_key
     if code is None:
         await redis.delete(key)
@@ -182,8 +182,8 @@ async def _confirmed(redis: ArqRedis, job_key: str, code: str | None, now: datet
 async def _requeue_once(
     engine: AsyncEngine, redis: ArqRedis, recording_id: UUID, job_key: str, options: dict[str, Any] | None
 ) -> bool:
-    """Reenfileira o `transcribe` perdido, se ainda não voltou uma vez; diz se reenfileirou."""
-    # `recordings` importa daqui (`is_retryable`): o import fica na função.
+    """Re-enqueue the lost `transcribe`, if it has not gone back once yet; tell whether it re-enqueued."""
+    # `recordings` imports from here (`is_retryable`): the import stays inside the function.
     from eclume_server.recordings import transcribe_payload  # noqa: PLC0415
 
     if not await redis.set(_REQUEUED_PREFIX + job_key, "1", ex=REQUEUED_TTL_S, nx=True):
@@ -203,12 +203,12 @@ async def _requeue_once(
 
 
 async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: datetime | None = None) -> list[str]:
-    """Marca como falha recuperável os jobs sem quem os termine; devolve o que marcou, para o log."""
+    """Mark as a recoverable failure the jobs nobody will finish; return what it marked, for the log."""
     now = now or datetime.now(UTC)
     grace = timedelta(seconds=settings.job_grace_seconds)
     raw_beat = await redis.hgetall(GPU_HEALTH_KEY)
     beat = _decode(raw_beat) if raw_beat else None
-    # O último visto, antes de olhar os jobs: é o "fora do ar desde" da espera (`queue_status.py`).
+    # The last seen, before looking at the jobs: it is the wait's "down since" (`queue_status.py`).
     if beat is not None and beat.get("updated_at"):
         await redis.set(GPU_LAST_SEEN_KEY, beat["updated_at"])
     jobs = t.transcription_jobs
@@ -216,7 +216,7 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
         rows = (
             await conn.execute(
                 select(jobs.c.id, jobs.c.recording_id, jobs.c.revision, jobs.c.state, jobs.c.options).where(
-                    # O job retido (sem despacho) espera a vez da conta no banco: não está morto.
+                    # A held job (not dispatched) waits for the account's turn in the database: it is not dead.
                     jobs.c.state.in_(["queued", "running"]),
                     jobs.c.dispatched_at <= now - grace,
                 )
@@ -238,7 +238,7 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
             and await _requeue_once(engine, redis, recording_id, job_key, options)
         ):
             log.warning(
-                "job %s (gravação %s): transcribe perdido antes de rodar; de volta à fila", job_row_id, recording_id
+                "job %s (recording %s): transcribe lost before running; back in the queue", job_row_id, recording_id
             )
             reaped.append(f"{recording_id}: {REQUEUED}")
             continue
@@ -247,6 +247,6 @@ async def reap(engine: AsyncEngine, redis: ArqRedis, settings: Settings, now: da
         if not result.closed:
             continue
         await redis.delete(progress_key(recording_id))
-        log.warning("job %s (gravação %s): %s — %s", job_row_id, recording_id, code, result.message)
+        log.warning("job %s (recording %s): %s — %s", job_row_id, recording_id, code, result.message)
         reaped.append(f"{recording_id}: {code}")
     return reaped
