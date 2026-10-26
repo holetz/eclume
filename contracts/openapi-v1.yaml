@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.28.0
+  version: 2.29.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -515,6 +515,73 @@ paths:
               examples:
                 conta:
                   $ref: "#/components/examples/TranscriptionPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/audio-retention:
+    get:
+      tags: [recordings]
+      operationId: getAudioRetention
+      summary: Read the account's audio retention
+      description: >-
+        Since 2.29.0. `days` is how long the audio of the account's recordings stays on the server
+        (`null` is off, the default); `max_days` is the ceiling set by the admin (`null` is none);
+        `effective_days` is the window in force (`days` capped by `max_days`, `null` when `days`
+        is off). Session or PAT with `recordings:read`.
+      security:
+        - sessionCookie: []
+        - pat: ["recordings:read"]
+      responses:
+        "200":
+          description: Current retention.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioRetention"
+              examples:
+                conta:
+                  $ref: "#/components/examples/AudioRetention"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [recordings]
+      operationId: updateAudioRetention
+      summary: Set the account's audio retention
+      description: >-
+        Since 2.29.0. `days` from 1 to 3650, or `null` to turn retention off. A daily job deletes
+        the audio of every recording of the account older than the effective window; the
+        transcript, summary and chat stay. Deleting is irreversible, and backups age out through
+        the restic rotation. A value above the ceiling is stored as sent and capped on read.
+        Session only.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioRetentionPatch"
+            examples:
+              trinta:
+                $ref: "#/components/examples/AudioRetentionPatchRequest"
+      responses:
+        "200":
+          description: Resulting retention.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioRetention"
+              examples:
+                conta:
+                  $ref: "#/components/examples/AudioRetention"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1457,7 +1524,10 @@ paths:
       tags: [recordings]
       operationId: getRecordingAudio
       summary: Áudio da gravação (redirecionamento)
-      description: Redireciona para uma URL temporária do áudio, que aceita `Range` para o player.
+      description: >-
+        Redireciona para uma URL temporária do áudio, que aceita `Range` para o player. Desde a
+        2.29.0, 410 (`code: audio_deleted`) quando a retenção já apagou o áudio; o endereço
+        assinado responde o mesmo.
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
@@ -1476,6 +1546,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "410":
+          $ref: "#/components/responses/Gone"
 
   /api/v1/recordings/{recording_id}/retranscribe:
     parameters:
@@ -1484,7 +1556,10 @@ paths:
       tags: [recordings]
       operationId: retranscribeRecording
       summary: Transcrever de novo com a configuração atual
-      description: A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização.
+      description: >-
+        A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos
+        pela nova diarização. Desde a 2.29.0, 409 com `code: audio_deleted` quando a retenção já
+        apagou o áudio.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -5145,6 +5220,14 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Gone:
+      description: >-
+        Since 2.29.0. The audio of the recording was deleted by the retention policy
+        (`code: audio_deleted`); the transcript and the summary stay.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     UnsupportedMediaType:
       description: >-
         O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a
@@ -5754,6 +5837,40 @@ components:
           description: Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor.
           type: [string, "null"]
           pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
+
+    AudioRetention:
+      description: >-
+        Since 2.29.0. How long the audio of the account's recordings stays on the server, the
+        platform ceiling and the window in force.
+      type: object
+      required: [days, max_days, effective_days]
+      properties:
+        days:
+          description: The account's choice in days; `null` is off (the default).
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
+        max_days:
+          description: The admin's ceiling (`retention.audio_max_days`); `null` is none.
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
+        effective_days:
+          description: "`days` capped by `max_days`; `null` when `days` is off, whatever the ceiling."
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
+
+    AudioRetentionPatch:
+      type: object
+      additionalProperties: false
+      required: [days]
+      properties:
+        days:
+          description: Days from 1 to 3650, or `null` to turn retention off.
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
 
     VoiceAssignmentPatch:
       type: object
@@ -6495,6 +6612,13 @@ components:
           description: Marcadores da gravação.
           type: integer
           minimum: 0
+        audio_deleted_at:
+          description: >-
+            Since 2.29.0. When the retention policy deleted the audio; `null` while it exists. The
+            server always sends it. A recording without audio refuses playback (410) and
+            retranscription (409), both with `code: audio_deleted`.
+          type: [string, "null"]
+          format: date-time
         created_at:
           type: string
           format: date-time
@@ -8855,7 +8979,7 @@ components:
 
     AdminSettings:
       type: object
-      required: [asr, diarization, voice_identification, preprocessing, quotas, updated_at, updated_by]
+      required: [asr, diarization, voice_identification, preprocessing, quotas, retention, updated_at, updated_by]
       properties:
         asr:
           $ref: "#/components/schemas/AsrSettings"
@@ -8868,6 +8992,9 @@ components:
         quotas:
           description: Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta.
           $ref: "#/components/schemas/Quotas"
+        retention:
+          description: Since 2.29.0. Platform-wide audio retention settings.
+          $ref: "#/components/schemas/RetentionSettings"
         updated_at:
           type: string
           format: date-time
@@ -8876,6 +9003,19 @@ components:
           oneOf:
             - $ref: "#/components/schemas/AdminRef"
             - type: "null"
+
+    RetentionSettings:
+      type: object
+      required: [audio_max_days]
+      properties:
+        audio_max_days:
+          description: >-
+            Ceiling, in days, on the audio retention an account may choose; `null` is none. It
+            only caps the accounts' values and deletes nothing for an account that left retention
+            off.
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
 
     AdminSettingsPatch:
       description: Cada bloco é mesclado campo a campo; campos ausentes ficam como estão.
@@ -8994,6 +9134,15 @@ components:
         quotas:
           description: Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite.
           $ref: "#/components/schemas/QuotasOverride"
+        retention:
+          description: Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it.
+          type: object
+          additionalProperties: false
+          properties:
+            audio_max_days:
+              type: [integer, "null"]
+              minimum: 1
+              maximum: 3650
 
     AgentProvider:
       type: object
@@ -9414,6 +9563,12 @@ components:
     TranscriptionPreferencePatchRequest:
       summary: Transcrever em inglês por padrão
       externalValue: ./fixtures/transcription-preference-patch-request.json
+    AudioRetention:
+      summary: Thirty days chosen, ceiling of ninety
+      externalValue: ./fixtures/audio-retention.json
+    AudioRetentionPatchRequest:
+      summary: Keep the audio for thirty days
+      externalValue: ./fixtures/audio-retention-patch-request.json
     VoiceAssignmentPatchRequest:
       summary: Subir o limiar para 0,80
       externalValue: ./fixtures/voice-assignment-patch-request.json

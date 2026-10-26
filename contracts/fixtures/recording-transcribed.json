@@ -117,6 +117,7 @@
   "awaiting": null,
   "transcript_id": "01928f3a-1c00-7a00-8000-000000000501",
   "marker_count": 2,
+  "audio_deleted_at": null,
   "created_at": "2026-09-18T14:09:31Z",
   "updated_at": "2026-09-18T15:02:17Z"
 }

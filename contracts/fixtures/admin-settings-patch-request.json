@@ -9,5 +9,8 @@
     "trim_silence": {
       "enabled": false
     }
+  },
+  "retention": {
+    "audio_max_days": 90
   }
 }
