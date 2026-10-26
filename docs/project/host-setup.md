@@ -247,6 +247,9 @@ O gate (`bash deploy/gate.sh` na estação; norma em
   a free slot. Inside a gate, up to `ECLUME_GATE_JOBS` (2) pillars run at once, each from its own
   copy of the tree (`src-<sha>-<época>.p-<pilar>`), and `gpu-e2e` runs last, alone, under
   `~/eclume-gate/.trava-gpu`.
+  Each pillar container gets `ECLUME_E2E_WORKERS` set to its CPU share (`ECLUME_GATE_CPUS`, 3), and
+  both Playwright suites use it as `--workers`: a container sees every host CPU, and Playwright's
+  default of half of them put six browsers in a 4 GB container, which the kernel OOM-killed.
 - `~/eclume-gate/cache`: target do cargo por pilar, registry do cargo, caches do uv, do npm, dos
   navegadores do Playwright e do `cargo-xwin` (~15 GB depois de duas execuções; acima de
   `ECLUME_GATE_CACHE_GB`, 25 GB, os target/ recomeçam). Para liberar disco, apague a pasta inteira:

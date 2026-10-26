@@ -259,7 +259,7 @@ rodar_pilar() {
   fi
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
     --cpus "$CPUS" --cpu-shares "$CPU_SHARES" --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
-    -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS="$CPUS" -e CARGO_TARGET_DIR=/target \
+    -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS="$CPUS" -e ECLUME_E2E_WORKERS="$CPUS" -e CARGO_TARGET_DIR=/target \
     -e npm_config_cache=/tmp/.cache/npm -e UV_PYTHON_INSTALL_DIR=/tmp/.cache/uv-python \
     -e UV_LINK_MODE=copy -e ECLUME_ANDROID_NDK=/opt/ndk \
     -e ECLUME_ANDROID_SDK=/opt/android-sdk -e ECLUME_ANDROID_JDK=/opt/jdk -e GRADLE_USER_HOME=/opt/gradle \
