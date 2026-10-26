@@ -14,7 +14,7 @@ const secure = {
 }
 
 describe('checkEnvironment', () => {
-  it('reconhece um contexto seguro com WebCodecs', () => {
+  it('recognizes a secure context with WebCodecs', () => {
     expect(checkEnvironment(secure)).toEqual({
       secureContext: true,
       webCodecs: true,
@@ -22,7 +22,7 @@ describe('checkEnvironment', () => {
     })
   })
 
-  it('reporta a ausência de cada capacidade', () => {
+  it('reports the absence of each capability', () => {
     expect(checkEnvironment({ isSecureContext: false })).toEqual({
       secureContext: false,
       webCodecs: false,
@@ -30,7 +30,7 @@ describe('checkEnvironment', () => {
     })
   })
 
-  it('falha com insecure-context em HTTP', () => {
+  it('fails with insecure-context on HTTP', () => {
     const error = (() => {
       try {
         assertSecureContext({ ...secure, isSecureContext: false })
@@ -43,25 +43,25 @@ describe('checkEnvironment', () => {
     expect((error as MediaConvertError).message).toMatch(/HTTPS/)
   })
 
-  it('não falha em contexto seguro sem WebCodecs (o fallback ainda serve)', () => {
+  it('does not fail in a secure context without WebCodecs (the fallback still works)', () => {
     expect(() => assertSecureContext({ isSecureContext: true, crypto: { subtle: {} } })).not.toThrow()
   })
 })
 
 describe('estimateOutputSize', () => {
-  it('fica na ordem de 15 MB por hora no bitrate padrão', () => {
+  it('stays around 15 MB per hour at the default bitrate', () => {
     const bytes = estimateOutputSize(3600)
     expect(DEFAULT_BITRATE).toBe(32_000)
     expect(bytes).toBeGreaterThan(14_000_000)
     expect(bytes).toBeLessThan(15_000_000)
   })
 
-  it('escala com o bitrate e começa pelos cabeçalhos', () => {
+  it('scales with the bitrate and starts from the headers', () => {
     expect(estimateOutputSize(0)).toBe(1024)
     expect(estimateOutputSize(60, 16_000)).toBeLessThan(estimateOutputSize(60, 32_000))
   })
 
-  it('recusa entradas inválidas', () => {
+  it('refuses invalid inputs', () => {
     expect(() => estimateOutputSize(-1)).toThrow(RangeError)
     expect(() => estimateOutputSize(Number.NaN)).toThrow(RangeError)
     expect(() => normalizeBitrate(8_000)).toThrow(RangeError)
@@ -73,17 +73,17 @@ describe('estimateOutputSize', () => {
 describe('sha256Hex', () => {
   const abc = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
 
-  it('produz o hex minúsculo do vetor conhecido', async () => {
+  it('produces the lowercase hex of the known vector', async () => {
     expect(await sha256Hex(new TextEncoder().encode('abc'))).toBe(abc)
   })
 
-  it('aceita Blob', async () => {
+  it('accepts a Blob', async () => {
     expect(await sha256Hex(new Blob(['a', 'bc']))).toBe(abc)
   })
 })
 
 describe('ProgressTracker', () => {
-  it('é monótono, limitado e termina em 1', () => {
+  it('is monotonic, clamped and ends at 1', () => {
     const seen: number[] = []
     const tracker = new ProgressTracker(100, (p) => seen.push(p.ratio))
     tracker.setRatio(0.4)
@@ -94,7 +94,7 @@ describe('ProgressTracker', () => {
     expect(seen).toEqual([0.4, 0.4, 1, 1])
   })
 
-  it('soma os bytes lidos até o total', () => {
+  it('adds the bytes read up to the total', () => {
     const onProgress = vi.fn()
     const tracker = new ProgressTracker(100, onProgress)
     tracker.addBytesRead(60)
@@ -104,8 +104,8 @@ describe('ProgressTracker', () => {
   })
 })
 
-describe('erros', () => {
-  it('normaliza falhas e dá prioridade ao abort', () => {
+describe('errors', () => {
+  it('normalizes failures and gives priority to the abort', () => {
     const cause = new Error('x')
     expect(toMediaConvertError(cause).code).toBe('failed')
     expect(toMediaConvertError(cause).cause).toBe(cause)
@@ -114,14 +114,14 @@ describe('erros', () => {
     expect(toMediaConvertError(own, AbortSignal.abort())).toBe(own)
   })
 
-  it('throwIfAborted só lança com o sinal abortado', () => {
+  it('throwIfAborted throws only with the signal aborted', () => {
     expect(() => throwIfAborted(new AbortController().signal)).not.toThrow()
     expect(() => throwIfAborted(AbortSignal.abort())).toThrow(MediaConvertError)
   })
 })
 
-describe('ProgressTracker com bytes pela razão', () => {
-  it('aceita a contagem de bytes dada pelo motor, sem recuar', () => {
+describe('ProgressTracker with bytes from the ratio', () => {
+  it('accepts the byte count given by the engine, without going back', () => {
     const tracker = new ProgressTracker(1000)
     tracker.setRatio(0.5, 500)
     tracker.setRatio(0.4, 400)
