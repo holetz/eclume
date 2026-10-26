@@ -57,7 +57,7 @@ function RenameDialog({ session, onClose }: { session: AgentSession; onClose: ()
   )
 }
 
-/** A página Conversas: todas as conversas do Agente, da mais recente, com renomear e excluir. */
+/** The Conversas page: all of the Agent's conversations, newest first, with rename and delete. */
 export function ConversationsPage() {
   useHelpTopic('agente')
   const sessions = useAllSessions()

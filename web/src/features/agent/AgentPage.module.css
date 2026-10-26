@@ -1,4 +1,4 @@
-/* A tela Agente: as conversas recentes ao lado e a conversa, com anexos, arquivos gerados e fontes. */
+/* The Agente screen: recent conversations alongside and the conversation, with attachments, generated files and sources. */
 .layout {
   display: grid;
   grid-template-columns: minmax(180px, 220px) minmax(0, 820px);
@@ -164,14 +164,14 @@
   color: var(--color-danger);
 }
 
-/* A página Conversas: a lista de todas, nas linhas do DS. */
+/* The Conversas page: the list of all of them, in DS rows. */
 .sessions {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Habilidades: o formulário e a lista de ferramentas permitidas (holetz/eclume#145). */
+/* Habilidades: the form and the list of allowed tools (holetz/eclume#145). */
 .skillForm {
   display: grid;
   gap: var(--space-4);
@@ -191,7 +191,7 @@
   padding-inline-start: var(--space-4);
 }
 
-/* O cartão de confirmação de uma ação proposta pelo Agente. */
+/* The confirmation card of an action the Agent proposes. */
 .action {
   display: grid;
   gap: var(--space-2);
