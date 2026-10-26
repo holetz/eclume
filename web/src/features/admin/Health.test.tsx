@@ -30,14 +30,14 @@ function stat(kicker: string) {
   return screen.getByText(kicker, { selector: '.stat .kicker' }).closest('.stat') as HTMLElement
 }
 
-describe('Saúde', () => {
-  it('formata a mediana em m:ss', () => {
+describe('Health', () => {
+  it('formats the median as m:ss', () => {
     expect(formatDuration(6200)).toBe('0:06')
     expect(formatDuration(92_000)).toBe('1:32')
     expect(formatDuration(3_725_000)).toBe('62:05')
   })
 
-  it('mostra os indicadores, as etapas, os serviços e as falhas sem conteúdo de usuário', async () => {
+  it('shows the indicators, the steps, the services and the failures without user content', async () => {
     mockHealthApi()
     renderApp('/admin/saude')
     expect(await screen.findByText('Transcrevendo')).toBeInTheDocument()
@@ -49,7 +49,7 @@ describe('Saúde', () => {
     expect(within(stat('Modelo residente')).getByText('3,8 / 6 GB de VRAM')).toBeInTheDocument()
     expect(within(stat('Fila')).getByText('2')).toBeInTheDocument()
     expect(within(stat('Fila')).getByText('1 rodando · 1 esperando')).toBeInTheDocument()
-    // As falhas de todas as etapas, e a mais recente pela etapa e pelo código.
+    // The failures of every step, and the most recent by step and by code.
     expect(within(stat('Falhas · 24 h')).getByText('2')).toBeInTheDocument()
     expect(within(stat('Falhas · 24 h')).getByText('Resumo · provider_unavailable')).toBeInTheDocument()
 
@@ -76,15 +76,15 @@ describe('Saúde', () => {
     const failures = screen.getByRole('region', { name: 'Falhas recentes' })
     const failure = within(failures).getByRole('row', { name: /provider_unavailable/ })
     expect(failure).toHaveTextContent('Resumo')
-    // Resumo não tem job para retentar, e o admin não abre a gravação.
+    // Summary has no job to retry, and the admin does not open the recording.
     expect(within(failure).queryByRole('button')).not.toBeInTheDocument()
     expect(within(failures).queryByRole('link')).not.toBeInTheDocument()
-    // Saíram as filas e os jobs em andamento, que traziam o título da gravação.
+    // The queues and the running jobs are gone, which carried the recording title.
     expect(screen.queryByText(/Reunião de alinhamento/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Transcrição \(GPU\)/)).not.toBeInTheDocument()
   })
 
-  it('sem worker, sem GPU e com etapas faltando; retenta a transcrição', async () => {
+  it('without a worker, without a GPU and with missing steps; retries the transcription', async () => {
     const health = fixtures.adminHealth()
     health.worker = null
     health.gpu = null
@@ -136,7 +136,7 @@ describe('Saúde', () => {
     )
   })
 
-  it('relê a cada 15 s só com a aba visível e mantém os dados num erro', async () => {
+  it('rereads every 15 s only with the tab visible and keeps the data on an error', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let fail = false
     const http = mockHealthApi(() => (fail ? problem('internal', 500) : fixtures.adminHealth()))
@@ -150,7 +150,7 @@ describe('Saúde', () => {
     await act(() => vi.advanceTimersByTimeAsync(1_000))
     expect(reads()).toBe(2)
 
-    // Aba escondida: sem releitura.
+    // Hidden tab: no reread.
     act(() => focusManager.setFocused(false))
     await act(() => vi.advanceTimersByTimeAsync(30_000))
     expect(reads()).toBe(2)
@@ -162,7 +162,7 @@ describe('Saúde', () => {
     expect(screen.getByText('Transcrevendo')).toBeInTheDocument()
   })
 
-  it('sem mudança, o intervalo dobra de 15 s até 60 s; uma mudança volta aos 15 s', async () => {
+  it('with no change, the interval doubles from 15 s up to 60 s; a change returns to 15 s', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let queued = 0
     const http = mockHealthApi(() => {
@@ -188,7 +188,7 @@ describe('Saúde', () => {
     await after(60_000)
     expect(reads()).toBe(5)
 
-    // A fila mudou: a leitura seguinte já volta ao ritmo inicial.
+    // The queue changed: the next read already returns to the initial pace.
     queued = 7
     await after(60_000)
     expect(reads()).toBe(6)

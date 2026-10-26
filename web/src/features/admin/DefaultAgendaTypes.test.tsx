@@ -17,7 +17,7 @@ function mockTypesApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/admin/me': () => fixtures.adminMe(),
     'GET /api/v1/admin/default-agenda-types': () => fixtures.defaultAgendaTypePage(),
-    // O server devolve o tipo com o que foi mandado.
+    // The server returns the type with what was sent.
     'PATCH /api/v1/admin/default-agenda-types/:id': async (request) => {
       const id = new URL(request.url).pathname.split('/').pop()
       const type = fixtures.defaultAgendaTypePage().items.find((item) => item.id === id)!
@@ -30,14 +30,14 @@ function mockTypesApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 const bodyOf = (http: ReturnType<typeof mockFetch>, key: string, index = 0) => http.requests(key)[index].json()
 const row = (name: string) => screen.getByRole('button', { name }).closest('.list-row') as HTMLElement
 
-describe('Tipos de agenda padrão', () => {
-  it('resume as instruções pelos títulos ## ou pelo começo do texto', () => {
+describe('Default agenda types', () => {
+  it('summarizes the instructions by the ## titles or by the start of the text', () => {
     expect(summaryOf('## A\nx\n## B\ny\n## C\n## D')).toBe('A, B, C')
     expect(summaryOf('Texto corrido sem títulos.')).toBe('Texto corrido sem títulos.')
     expect(summaryOf('a'.repeat(70))).toBe(`${'a'.repeat(60)}…`)
   })
 
-  it('lista os tipos e abre o primeiro no painel', async () => {
+  it('lists the types and opens the first in the panel', async () => {
     mockTypesApi()
     renderApp('/admin/tipos-de-agenda')
     const panel = await screen.findByRole('form', { name: 'Reunião de equipe' })
@@ -58,7 +58,7 @@ describe('Tipos de agenda padrão', () => {
     expect(row('1:1')).toHaveAttribute('aria-current', 'true')
   })
 
-  it('"Incluir para novos usuários" grava na hora e volta atrás no erro', async () => {
+  it('"Incluir para novos usuários" saves at once and rolls back on error', async () => {
     const http = mockTypesApi()
     renderApp('/admin/tipos-de-agenda')
     const include = await screen.findByRole('switch', { name: 'Incluir 1:1 para novos usuários' })
@@ -76,7 +76,7 @@ describe('Tipos de agenda padrão', () => {
     expect(team).toBeChecked()
   })
 
-  it('edita só o que mudou, com tags em minúsculas e sem repetição', async () => {
+  it('edits only what changed, with lowercase tags and no repetition', async () => {
     const http = mockTypesApi()
     renderApp('/admin/tipos-de-agenda')
     const panel = await screen.findByRole('form', { name: 'Reunião de equipe' })
@@ -95,7 +95,7 @@ describe('Tipos de agenda padrão', () => {
     await vi.waitFor(() => expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeDisabled())
   })
 
-  it('cria um tipo novo e mostra o nome repetido no campo', async () => {
+  it('creates a new type and shows the repeated name on the field', async () => {
     const created: AgendaType = {
       ...fixtures.defaultAgendaTypePage().items[1],
       id: '01928f3a-1c00-7a00-8000-000000000c09',
@@ -134,7 +134,7 @@ describe('Tipos de agenda padrão', () => {
     expect(row('Nota de voz')).toHaveAttribute('aria-current', 'true')
   })
 
-  it('pede confirmação ao sair com mudanças e ao excluir', async () => {
+  it('asks for confirmation when leaving with changes and when deleting', async () => {
     const http = mockTypesApi({ 'DELETE /api/v1/admin/default-agenda-types/:id': () => empty(204) })
     renderApp('/admin/tipos-de-agenda')
     const panel = await screen.findByRole('form', { name: 'Reunião de equipe' })
@@ -157,7 +157,7 @@ describe('Tipos de agenda padrão', () => {
     )
   })
 
-  it('/admin/templates leva aos tipos de agenda padrão', async () => {
+  it('/admin/templates leads to the default agenda types', async () => {
     mockTypesApi()
     renderApp('/admin/templates')
     expect(await screen.findByRole('heading', { level: 1, name: 'Tipos de agenda padrão' })).toBeInTheDocument()
