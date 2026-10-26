@@ -19,8 +19,8 @@ function mockSettingsApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('idiomas do Whisper', () => {
-  it('são os 100 do tokenizer, nomeados em pt-BR e em ordem', () => {
+describe('Whisper languages', () => {
+  it('are the 100 from the tokenizer, named in pt-BR and in order', () => {
     expect(new Set(WHISPER_LANGUAGE_CODES).size).toBe(100)
     const languages = whisperLanguages()
     const labels = languages.map((option) => option.label)
@@ -32,8 +32,8 @@ describe('idiomas do Whisper', () => {
   })
 })
 
-describe('Transcrição', () => {
-  it('mostra motor, modelo e idioma do DS e salva só o bloco asr', async () => {
+describe('Transcription', () => {
+  it('shows the DS engine, model and language and saves only the asr block', async () => {
     const http = mockSettingsApi({
       'PATCH /api/v1/admin/settings': async (request) => {
         const settings = fixtures.adminSettings()
@@ -56,7 +56,7 @@ describe('Transcrição', () => {
     expect(within(language).getByRole('group', { name: 'Idiomas (100)' })).toBeInTheDocument()
     expect(screen.getByLabelText('Tipo de computação')).toHaveValue('int8_float16')
     expect(within(screen.getByLabelText('Tipo de computação')).queryByText(/^float16/)).not.toBeInTheDocument()
-    // A diarização saiu desta tela.
+    // Diarization moved off this screen.
     expect(screen.queryByLabelText(/locutores/)).not.toBeInTheDocument()
     const form = screen.getByRole('form', { name: 'Configuração de transcrição' })
     expect(within(form).getByRole('link', { name: 'Locutores' })).toHaveAttribute('href', '/admin/locutores')
@@ -84,7 +84,7 @@ describe('Transcrição', () => {
     })
   })
 
-  it('pede o endereço para o motor remoto e mostra o erro do servidor', async () => {
+  it('asks for the address of the remote engine and shows the server error', async () => {
     mockSettingsApi({
       'PATCH /api/v1/admin/settings': () =>
         problem('validation_failed', 422, { errors: [{ field: 'asr.endpoint_url', message: 'obrigatória' }] }),
@@ -98,7 +98,7 @@ describe('Transcrição', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('asr.endpoint_url: obrigatória')
   })
 
-  it('mostra um modelo e um idioma salvos fora das listas', async () => {
+  it('shows a saved model and language outside the lists', async () => {
     const settings = fixtures.adminSettings()
     settings.asr.model = 'distil-large-v3'
     settings.asr.default_language = 'pt-BR'
@@ -108,7 +108,7 @@ describe('Transcrição', () => {
     expect(screen.getByLabelText('Idioma')).toHaveValue('pt-BR')
   })
 
-  it('oferece a detecção automática do idioma', async () => {
+  it('offers automatic language detection', async () => {
     const http = mockSettingsApi({ 'PATCH /api/v1/admin/settings': () => fixtures.adminSettings() })
     renderApp('/admin/transcricao')
     const language = await screen.findByLabelText('Idioma')
@@ -119,7 +119,7 @@ describe('Transcrição', () => {
     expect(sent.asr.default_language).toBe('auto')
   })
 
-  it('avisa quando a engine remota manda o áudio para fora do servidor', async () => {
+  it('warns when the remote engine sends audio off the server', async () => {
     mockSettingsApi({
       'GET /api/v1/privacy': () => ({
         destinations: [{ purpose: 'transcription', location: 'external', processor: 'asr.example.com' }],
@@ -130,7 +130,7 @@ describe('Transcrição', () => {
     expect(note).toHaveTextContent('transcrição do áudio (asr.example.com)')
   })
 
-  it('sem destino externo, não avisa', async () => {
+  it('with no external destination, does not warn', async () => {
     mockSettingsApi()
     renderApp('/admin/transcricao')
     expect(await screen.findByRole('form', { name: 'Configuração de transcrição' })).toBeInTheDocument()
