@@ -1,4 +1,4 @@
-// Estado de servidor da área Administração. Mutações gravam no cache o que a resposta devolve.
+// Server state of the Administração area. Mutations write to the cache what the response returns.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -11,11 +11,11 @@ const USERS_KEY = ['admin', 'users'] as const
 const HEALTH_KEY = ['admin', 'health'] as const
 const DEFAULT_TYPES_KEY = ['admin', 'default-agenda-types'] as const
 
-// O ritmo inicial é o do heartbeat de 15 s do worker GPU; sem mudança, dobra até 60 s.
+// The initial pace is the GPU worker's 15 s heartbeat; with no change, it doubles up to 60 s.
 export const HEALTH_REFRESH_MS = 15_000
 export const HEALTH_MAX_REFRESH_MS = 60_000
 
-/** Os dados da Saúde sem o que oscila a cada leitura (relógio, latência, uso da GPU). */
+/** The Saúde data without what fluctuates on every read (clock, latency, GPU usage). */
 const healthSignature = (data: Schemas['AdminHealth']) =>
   JSON.stringify(data, (key, value) =>
     ['checked_at', 'latency_ms', 'utilization_pct', 'vram_used_mb'].includes(key) ? undefined : value,
@@ -45,7 +45,7 @@ export function useSecrets() {
   return useQuery({ queryKey: SECRETS_KEY, queryFn: () => unwrap(api.GET('/api/v1/admin/secrets')) })
 }
 
-/** Grava ou apaga um segredo da plataforma (só escrita); a lista se relê em seguida. */
+/** Saves or deletes a platform secret (write-only); the list rereads right after. */
 export function usePlatformSecret(name: string) {
   const queryClient = useQueryClient()
   const path = { params: { path: { secret_name: name } } }
@@ -63,10 +63,10 @@ export function usePlatformSecret(name: string) {
   }
 }
 
-// A busca de usuários filtra a lista já carregada: o contrato não tem `q`, e são poucas contas.
+// The user search filters the already loaded list: the contract has no `q`, and there are few accounts.
 const MAX_USER_PAGES = 20
 
-/** Todas as contas de usuário, seguindo `next_cursor` até o fim (com teto de páginas). */
+/** Every user account, following `next_cursor` to the end (with a page ceiling). */
 export function useAllUsers() {
   return useQuery({
     queryKey: USERS_KEY,
@@ -84,7 +84,7 @@ export function useAllUsers() {
   })
 }
 
-/** Ativa ou desativa uma conta e troca a linha no cache pela resposta. */
+/** Enables or disables an account and replaces the row in the cache with the response. */
 export function useSetUserActive() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -97,7 +97,7 @@ export function useSetUserActive() {
   })
 }
 
-/** Gera o link de redefinição de senha da conta; a URL só volta nesta resposta. */
+/** Generates the account's password-reset link; the URL only comes back in this response. */
 export function useCreatePasswordReset() {
   return useMutation({
     mutationFn: (id: string) =>
@@ -105,7 +105,7 @@ export function useCreatePasswordReset() {
   })
 }
 
-/** Retenta o job que falhou (a revisão seguinte da gravação); a Saúde se atualiza em seguida. */
+/** Retries the failed job (the recording's next revision); Saúde refreshes right after. */
 export function useRetryJob() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -121,7 +121,7 @@ export function useAdminHealth() {
     queryFn: () => unwrap(api.GET('/api/v1/admin/health')),
     refetchInterval: healthInterval,
     refetchIntervalInBackground: false,
-    // Voltar para a aba lê na hora e recomeça o recuo do ritmo inicial.
+    // Coming back to the tab reads at once and restarts the initial pace backoff.
     refetchOnWindowFocus: true,
     staleTime: 0,
   })
@@ -129,7 +129,7 @@ export function useAdminHealth() {
 
 type DefaultAgendaType = Schemas['DefaultAgendaType']
 
-/** Os tipos de agenda padrão, na ordem de `position`. */
+/** The default agenda types, in `position` order. */
 export function useDefaultAgendaTypes() {
   return useQuery({
     queryKey: DEFAULT_TYPES_KEY,
@@ -143,7 +143,7 @@ export function useDefaultAgendaTypes() {
 const replaceType = (updated: DefaultAgendaType) => (types: DefaultAgendaType[] | undefined) =>
   types?.map((type) => (type.id === updated.id ? updated : type))
 
-/** Cria (sem `id`) ou edita um tipo padrão; a resposta entra no cache. */
+/** Creates (without `id`) or edits a default type; the response goes into the cache. */
 export function useSaveDefaultAgendaType() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -163,7 +163,7 @@ export function useSaveDefaultAgendaType() {
   })
 }
 
-/** "Incluir para novos usuários" na hora: otimista, e volta atrás se o servidor recusar. */
+/** "Incluir para novos usuários" at once: optimistic, and rolls back if the server refuses. */
 export function useToggleDefaultAgendaType() {
   const queryClient = useQueryClient()
   return useMutation({
