@@ -48,7 +48,7 @@ def test_request_id_novo_vai_na_resposta_e_no_log():
     dentro, acesso = _linhas(stream)
     assert dentro["request_id"] == rid
     assert acesso["request_id"] == rid
-    assert acesso["logger"] == "eclume_server.acesso"
+    assert acesso["logger"] == "eclume_server.access"
     assert acesso["msg"].startswith("GET /eco 200 ")
     assert "segredo" not in stream.getvalue()
 
