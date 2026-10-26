@@ -29,8 +29,8 @@ async function signIn(email = 'mariana.couto@example.com', password = 'senha-do-
   await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 }
 
-describe('login do admin', () => {
-  it('tem a variante do painel, sem cadastro nem sessão de usuário', async () => {
+describe('admin login', () => {
+  it('has the panel variant, with no signup nor user session', async () => {
     const http = mockAdminApi({ 'GET /api/v1/admin/me': signedOut })
     const { container } = renderApp('/admin/entrar')
     expect(await screen.findByRole('heading', { name: 'Entrar como admin' })).toBeInTheDocument()
@@ -42,16 +42,16 @@ describe('login do admin', () => {
     expect(http.requests('GET /api/v1/me')).toHaveLength(0)
   })
 
-  it('sem sessão de admin, a guarda leva ao login com a volta', async () => {
+  it('without an admin session, the guard leads to the login with the return path', async () => {
     const http = mockAdminApi({ 'GET /api/v1/admin/me': signedOut })
     renderApp('/admin/saude?x=1')
     expect(await screen.findByRole('heading', { name: 'Entrar como admin' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
-    // O painel nunca lê a sessão do usuário.
+    // The panel never reads the user session.
     expect(http.requests('GET /api/v1/me')).toHaveLength(0)
   })
 
-  it('o login abre a sessão de admin e volta à rota pedida', async () => {
+  it('the login opens the admin session and returns to the requested route', async () => {
     let session = false
     const http = mockAdminApi({
       'GET /api/v1/admin/me': () => (session ? fixtures.adminMe() : signedOut()),
@@ -70,7 +70,7 @@ describe('login do admin', () => {
     expect(http.requests('GET /api/v1/me')).toHaveLength(0)
   })
 
-  it('volta fora do painel cai em Usuários', async () => {
+  it('a return path outside the panel lands on Usuários', async () => {
     let session = false
     mockAdminApi({
       'GET /api/v1/admin/me': () => (session ? fixtures.adminMe() : signedOut()),
@@ -84,22 +84,22 @@ describe('login do admin', () => {
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
   })
 
-  it('senha errada', async () => {
+  it('wrong password', async () => {
     mockAdminApi({ 'GET /api/v1/admin/me': signedOut, 'POST /api/v1/admin/auth/login': signedOut })
     renderApp('/admin/entrar')
     await signIn('x@y.com.br', 'errada')
     expect(await screen.findByRole('alert')).toHaveTextContent('E-mail ou senha incorretos.')
   })
 
-  it('com a sessão de admin aberta, o login leva ao painel', async () => {
+  it('with the admin session open, the login leads to the panel', async () => {
     mockAdminApi()
     renderApp('/admin/entrar')
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
   })
 })
 
-describe('sessão de admin', () => {
-  it('um 401 durante o uso leva ao login com a volta', async () => {
+describe('admin session', () => {
+  it('a 401 during use leads to the login with the return path', async () => {
     let session = true
     mockAdminApi({
       'GET /api/v1/admin/me': () => (session ? fixtures.adminMe() : signedOut()),
@@ -112,7 +112,7 @@ describe('sessão de admin', () => {
     expect(await screen.findByRole('heading', { name: 'Entrar como admin' })).toBeInTheDocument()
   })
 
-  it('sair encerra a sessão de admin', async () => {
+  it('signing out ends the admin session', async () => {
     const http = mockAdminApi({ 'POST /api/v1/admin/auth/logout': () => empty() })
     renderApp('/admin/usuarios')
     await userEvent.click(await screen.findByRole('button', { name: 'Sair' }))
@@ -121,8 +121,8 @@ describe('sessão de admin', () => {
   })
 })
 
-describe('moldura do painel', () => {
-  it('tem a marca com o selo Admin, as sete seções da Plataforma e a conta no rodapé', async () => {
+describe('panel frame', () => {
+  it('has the brand with the Admin badge, the seven Plataforma sections and the account in the footer', async () => {
     const http = mockAdminApi()
     renderApp('/admin')
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
@@ -146,7 +146,7 @@ describe('moldura do painel', () => {
     expect(http.requests('GET /api/v1/me')).toHaveLength(0)
   })
 
-  it('navega pelas seções e dá o título da aba', async () => {
+  it('navigates through the sections and sets the tab title', async () => {
     mockAdminApi()
     renderApp('/admin/usuarios')
     const nav = await screen.findByRole('navigation', { name: 'Plataforma' })
@@ -157,7 +157,7 @@ describe('moldura do painel', () => {
     await waitFor(() => expect(document.title).toBe('Locutores — Admin eclume'))
   })
 
-  it('uma rota inexistente mostra a página não encontrada dentro do painel', async () => {
+  it('a nonexistent route shows the not-found page inside the panel', async () => {
     mockAdminApi()
     renderApp('/admin/nao-existe')
     const main = await screen.findByRole('main')
@@ -166,7 +166,7 @@ describe('moldura do painel', () => {
     expect(screen.getByRole('navigation', { name: 'Plataforma' })).toBeInTheDocument()
   })
 
-  it('tem o menu compacto do shell', async () => {
+  it('has the shell compact menu', async () => {
     mockAdminApi()
     renderApp('/admin/usuarios')
     const button = await screen.findByRole('button', { name: 'Menu' })
