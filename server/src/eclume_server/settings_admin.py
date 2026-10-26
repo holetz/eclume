@@ -56,7 +56,11 @@ def _not_bool(value: object) -> object:
     return value
 
 
-SpeakerCount = Annotated[int, BeforeValidator(_not_bool), Field(ge=1, le=MAX_SPEAKERS)] | None
+# The lax mode of pydantic turns `true` into `1` / `1.0`; these refuse it and keep every other coercion.
+PlainInt = Annotated[int, BeforeValidator(_not_bool)]
+PlainFloat = Annotated[float, BeforeValidator(_not_bool)]
+
+SpeakerCount = Annotated[PlainInt, Field(ge=1, le=MAX_SPEAKERS)] | None
 
 
 class _Block(BaseModel):
@@ -69,7 +73,7 @@ class AsrPatch(_Block):
     engine: Literal["whisperx-local", "openai-compatible", "cpu"] | None = None
     model: str | None = Field(default=None, min_length=1)
     compute_type: Literal[COMPUTE_TYPES] | None = None  # type: ignore[valid-type]
-    batch_size: int | None = Field(default=None, ge=1)
+    batch_size: PlainInt | None = Field(default=None, ge=1)
     # `auto`: a engine detecta o idioma de cada gravação.
     default_language: str | None = Field(default=None, pattern=r"^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$")
     fallback_model: str | None = Field(default=None, min_length=1)
@@ -90,24 +94,24 @@ class DenoisePatch(_Block):
 
     enabled: bool | None = None
     method: Literal["rnnoise", "afftdn"] | None = None
-    strength: float | None = Field(default=None, ge=0, le=1)
+    strength: PlainFloat | None = Field(default=None, ge=0, le=1)
 
 
 class LoudnormPatch(_Block):
     """Etapa `loudnorm` do pré-processamento: normalização de loudness EBU R128."""
 
     enabled: bool | None = None
-    target_lufs: float | None = Field(default=None, ge=-30, le=-10)
-    true_peak_db: float | None = Field(default=None, ge=-9, le=0)
-    lra: float | None = Field(default=None, ge=1, le=20)
+    target_lufs: PlainFloat | None = Field(default=None, ge=-30, le=-10)
+    true_peak_db: PlainFloat | None = Field(default=None, ge=-9, le=0)
+    lra: PlainFloat | None = Field(default=None, ge=1, le=20)
 
 
 class TrimSilencePatch(_Block):
     """Etapa `trim_silence` do pré-processamento: corta o silêncio do início e do fim."""
 
     enabled: bool | None = None
-    min_silence_s: float | None = Field(default=None, ge=1, le=30)
-    threshold_db: float | None = Field(default=None, ge=-80, le=-20)
+    min_silence_s: PlainFloat | None = Field(default=None, ge=1, le=30)
+    threshold_db: PlainFloat | None = Field(default=None, ge=-80, le=-20)
 
 
 class SplitChannelsPatch(_Block):
@@ -132,17 +136,17 @@ class VoiceIdentificationPatch(_Block):
     """Bloco `voice_identification` do `AdminSettingsPatch`."""
 
     enabled: bool | None = None
-    suggestion_threshold: float | None = Field(default=None, ge=0, le=1)
+    suggestion_threshold: PlainFloat | None = Field(default=None, ge=0, le=1)
 
 
 class QuotasPatch(_Block):
     """Bloco `quotas` do `AdminSettingsPatch` e a sobreposição por conta: `null` é sem limite."""
 
-    storage_bytes: int | None = Field(default=None, ge=0)
-    file_bytes: int | None = Field(default=None, ge=0)
-    open_uploads: int | None = Field(default=None, ge=0)
-    gpu_minutes_24h: int | None = Field(default=None, ge=0)
-    agent_requests_24h: int | None = Field(default=None, ge=0)
+    storage_bytes: PlainInt | None = Field(default=None, ge=0)
+    file_bytes: PlainInt | None = Field(default=None, ge=0)
+    open_uploads: PlainInt | None = Field(default=None, ge=0)
+    gpu_minutes_24h: PlainInt | None = Field(default=None, ge=0)
+    agent_requests_24h: PlainInt | None = Field(default=None, ge=0)
 
 
 class AdminSettingsPatch(_Block):

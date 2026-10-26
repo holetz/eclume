@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, get_args, get_origin
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy import text
 
+from eclume_server.settings_admin import AdminSettingsPatch
 from eclume_server_testing.api import audio_bytes, upload_file
 from eclume_server_testing.fakes import run_cpu, run_gpu
 from eclume_server_testing.harness import run
@@ -114,6 +116,49 @@ def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
     assert response.json()["code"] == "validation_failed"
     if field is not None:
         assert field in {e["field"] for e in response.json()["errors"]}
+
+
+def _is_number(annotation: object) -> bool:
+    if annotation in {int, float}:
+        return True
+    args = get_args(annotation)
+    if get_origin(annotation) is Annotated:
+        args = args[:1]
+    return any(_is_number(arg) for arg in args)
+
+
+def _numeric_paths(model: type[BaseModel], prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    paths: list[tuple[str, ...]] = []
+    for name, info in model.model_fields.items():
+        nested = next((a for a in get_args(info.annotation) if isinstance(a, type) and issubclass(a, BaseModel)), None)
+        if nested is not None:
+            paths += _numeric_paths(nested, (*prefix, name))
+        elif _is_number(info.annotation):
+            paths.append((*prefix, name))
+    return paths
+
+
+NUMERIC_PATHS = _numeric_paths(AdminSettingsPatch)
+
+
+def test_todo_campo_numerico_foi_achado():
+    assert len(NUMERIC_PATHS) >= 15
+    assert ("asr", "batch_size") in NUMERIC_PATHS
+    assert ("preprocessing", "loudnorm", "lra") in NUMERIC_PATHS
+
+
+@pytest.mark.parametrize("path", NUMERIC_PATHS, ids=[".".join(p) for p in NUMERIC_PATHS])
+@pytest.mark.parametrize("value", [True, False])
+def test_booleano_em_campo_numerico_e_recusado(admin: Api, path: tuple[str, ...], value: object):
+    before = admin.get(URL).json()
+    body: Any = value
+    for key in reversed(path):
+        body = {key: body}
+    response = admin.patch(URL, json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "validation_failed"
+    assert ".".join(path) in {e["field"] for e in response.json()["errors"]}
+    assert admin.get(URL).json() == before
 
 
 def test_proximo_transcribe_sai_com_a_configuracao_nova(
