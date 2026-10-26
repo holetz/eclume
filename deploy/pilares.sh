@@ -57,6 +57,11 @@ pilar_web() {
   run npm --prefix web run budget
 }
 
+# Playwright starts one browser per worker and defaults to half the CPUs it sees; a gate container
+# sees every host CPU, so the gate passes the CPUs it reserved and both suites use that as --workers.
+E2E_WORKERS=()
+if [[ -n "${ECLUME_E2E_WORKERS:-}" ]]; then E2E_WORKERS=(--workers "$ECLUME_E2E_WORKERS"); fi
+
 # Navegador: a conversão de mídia e a transcrição longa (vitest browser mode) e o E2E contra o mock,
 # no Google Chrome e, no smoke e nos testes de navegador, no WebKit e no Firefox do Playwright. As
 # dependências de sistema dos motores vêm de quem chama (setup da CI, imagem do gate).
@@ -69,7 +74,7 @@ pilar_web_browser() {
   for motor in chromium firefox webkit; do
     run npm --prefix web run test:browser -- --project "$motor"
   done
-  run npm --prefix web run test:e2e
+  run npm --prefix web run test:e2e -- "${E2E_WORKERS[@]}"
 }
 
 pilar_desktop() {
@@ -83,7 +88,7 @@ pilar_desktop() {
   # navegador vêm de quem chama (setup da CI, imagem do gate).
   run npm --prefix desktop/ui-tests ci
   run npm --prefix desktop/ui-tests exec -- playwright install chromium
-  run npm --prefix desktop/ui-tests test
+  run npm --prefix desktop/ui-tests test -- "${E2E_WORKERS[@]}"
 }
 
 pilar_mobile() {

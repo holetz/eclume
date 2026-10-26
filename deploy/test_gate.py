@@ -458,6 +458,15 @@ def test_gates_and_pillars_run_in_parallel_without_sharing_state() -> None:
     assert 'rm -rf "$SRC" "$SRC".p-*' in host
 
 
+def test_playwright_workers_follow_the_gate_cpu_share() -> None:
+    """The gate passes its CPU share and both Playwright suites use it as --workers."""
+    assert '-e ECLUME_E2E_WORKERS="$CPUS"' in _host()
+    pilares = (RAIZ / "deploy" / "pilares.sh").read_text(encoding="utf-8")
+    assert 'E2E_WORKERS=(--workers "$ECLUME_E2E_WORKERS")' in pilares
+    assert 'run npm --prefix web run test:e2e -- "${E2E_WORKERS[@]}"' in pilares
+    assert 'run npm --prefix desktop/ui-tests test -- "${E2E_WORKERS[@]}"' in pilares
+
+
 def test_todo_conteiner_do_gate_leva_cpu_shares() -> None:
     """Os pilares e os serviços de teste rodam com `--cpu-shares 256`, abaixo da produção."""
     host = _host()
