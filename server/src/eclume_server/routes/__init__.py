@@ -16,6 +16,7 @@ from eclume_server.routes import (
     agent,
     agent_providers,
     agent_skills,
+    audio_retention,
     auth,
     base_chat,
     collections,
@@ -81,6 +82,7 @@ def include_routes(app: FastAPI) -> None:
         search,
         voice,
         transcription,
+        audio_retention,
         speaker_naming,
     ):
         app.include_router(module.router, prefix=PREFIX)
