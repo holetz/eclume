@@ -1,4 +1,4 @@
-// Dublê de fetch para os testes: rotas "MÉTODO /caminho/:param" respondem com fixtures do contrato.
+// fetch double for the tests: "METHOD /path/:param" routes answer with contract fixtures.
 import { vi } from 'vitest'
 
 type Params = Record<string, string>
@@ -35,8 +35,8 @@ function match(pattern: string, path: string): Params | null {
 }
 
 /**
- * Instala um fetch que despacha pelas rotas dadas. Um handler que devolve um objeto qualquer
- * vira JSON 200; rota não simulada lança, para o teste falhar alto.
+ * Installs a fetch that dispatches through the given routes. A handler that returns any object
+ * becomes JSON 200; a route that is not simulated throws, so the test fails loudly.
  */
 export function mockFetch(routes: Record<string, Handler>) {
   const calls: Request[] = []
@@ -58,7 +58,7 @@ export function mockFetch(routes: Record<string, Handler>) {
   return {
     calls,
     fetch: fetchMock,
-    /** Requisições feitas a uma rota ("MÉTODO /caminho/:param"). */
+    /** Requests made to a route ("METHOD /path/:param"). */
     requests(key: string): Request[] {
       const [method, pattern] = key.split(' ')
       return calls.filter((r) => r.method === method && match(pattern, new URL(r.url).pathname))
