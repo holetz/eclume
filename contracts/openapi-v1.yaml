@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.27.1
+  version: 2.28.0
   summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
   description: |
     Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app
@@ -6567,18 +6567,27 @@ components:
         tags:
           description: Substitui a lista inteira.
           type: array
+          maxItems: 50
           items:
             type: string
             minLength: 1
+            maxLength: 64
         collection_ids:
           description: Substitui a lista inteira.
           type: array
+          maxItems: 100
           items:
             type: string
             format: uuid
         metadata:
-          description: Substitui o objeto inteiro.
-          $ref: "#/components/schemas/RecordingMetadata"
+          description: Substitui o objeto inteiro (até 50 entradas).
+          type: object
+          maxProperties: 50
+          propertyNames:
+            maxLength: 64
+          additionalProperties:
+            type: string
+            maxLength: 1000
         agenda_type_id:
           description: |
             Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
@@ -6715,6 +6724,7 @@ components:
       properties:
         text:
           type: string
+          maxLength: 20000
         speaker_id:
           type: string
           pattern: "^S[0-9]+$"
@@ -6850,8 +6860,10 @@ components:
         email:
           type: [string, "null"]
           format: email
+          maxLength: 254
         notes:
           type: [string, "null"]
+          maxLength: 4000
         company:
           type: [string, "null"]
           maxLength: 120
@@ -6884,8 +6896,10 @@ components:
         email:
           type: [string, "null"]
           format: email
+          maxLength: 254
         notes:
           type: [string, "null"]
+          maxLength: 4000
         company:
           type: [string, "null"]
           maxLength: 120
@@ -7023,8 +7037,10 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
         description:
           type: [string, "null"]
+          maxLength: 2000
         instructions:
           type: string
           maxLength: 4000
@@ -7038,8 +7054,10 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
         description:
           type: [string, "null"]
+          maxLength: 2000
         instructions:
           type: string
           maxLength: 4000
@@ -8174,8 +8192,10 @@ components:
           maxLength: 8000
         allowed_tools:
           type: [array, "null"]
+          maxItems: 100
           items:
             type: string
+            maxLength: 64
         enabled:
           type: boolean
 
@@ -8196,8 +8216,10 @@ components:
           maxLength: 8000
         allowed_tools:
           type: [array, "null"]
+          maxItems: 100
           items:
             type: string
+            maxLength: 64
         enabled:
           type: boolean
 
