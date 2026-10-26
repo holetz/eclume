@@ -44,7 +44,7 @@ function retranscribeError(error: unknown): string {
 export function RetryTranscription({ recording }: { recording: Recording }) {
   const retry = useRetranscribe(recording);
 
-  if (recording.status !== "failed") return null;
+  if (recording.status !== "failed" || recording.audio_deleted_at) return null;
   const cancelled = recording.job?.error?.code === "cancelled";
   const retryable = recording.job?.error?.retryable === true;
   return (
@@ -91,7 +91,10 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
   const [maxSpeakers, setMaxSpeakers] = useState("");
   const retranscribe = useRetranscribe(recording);
 
-  if (recording.status !== "transcribed" && recording.status !== "failed")
+  if (
+    (recording.status !== "transcribed" && recording.status !== "failed") ||
+    recording.audio_deleted_at
+  )
     return null;
   return (
     <>
@@ -169,5 +172,18 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
         </ConfirmDialog>
       )}
     </>
+  );
+}
+
+/**
+ * No lugar do player e das ações de transcrever de novo quando a retenção apagou o áudio: a
+ * transcrição, o resumo e o chat continuam, e o aviso diz o que deixou de existir.
+ */
+export function AudioDeletedNotice() {
+  return (
+    <p className="alert alert-warning" role="status">
+      O áudio desta gravação foi apagado pela política de retenção. A transcrição e o resumo continuam aqui, mas não
+      dá para ouvir a gravação nem transcrever de novo.
+    </p>
   );
 }

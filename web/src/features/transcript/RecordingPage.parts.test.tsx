@@ -135,6 +135,22 @@ describe('player e marcadores', () => {
   })
 })
 
+describe('áudio apagado pela retenção', () => {
+  it('troca o player e as ações de transcrever de novo pelo aviso, sem pedir o áudio', async () => {
+    mockTranscriptApi({
+      'GET /api/v1/recordings/:id': () => ({
+        ...fixtures.recordingTranscribed(),
+        audio_deleted_at: '2026-10-20T03:50:00Z',
+      }),
+    })
+    renderApp(`/gravacoes/${RECORDING}`)
+    expect(await screen.findByText(/O áudio desta gravação foi apagado pela política de retenção/)).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Player' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Áudio da gravação')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Transcrever de novo em…' })).not.toBeInTheDocument()
+  })
+})
+
 describe('exportar', () => {
   it('um 401 no export encerra a sessão como qualquer outra chamada', async () => {
     const user = userEvent.setup()

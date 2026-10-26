@@ -7,6 +7,8 @@ interface PlaybackProviderProps {
   durationMs: number | null
   /** Instante inicial (`?t=`), sem tocar. */
   startMs?: number | null
+  /** O áudio já foi apagado pela retenção: não há `<audio>` nem pedido à rota, que responde 410. */
+  audioDeleted?: boolean
   children: ReactNode
 }
 
@@ -18,7 +20,7 @@ const OPUS = 'audio/ogg; codecs=opus'
  * erro do `<audio>` pede uma assinatura nova (outro `src`) e retoma do mesmo instante, tocando se
  * tocava, uma vez sozinho; se falhar de novo, o erro vai para o player.
  */
-export function PlaybackProvider({ recordingId, durationMs, startMs = null, children }: PlaybackProviderProps) {
+export function PlaybackProvider({ recordingId, durationMs, startMs = null, audioDeleted = false, children }: PlaybackProviderProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [clock] = useState(() => createPlaybackClock(startMs ?? 0))
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
@@ -110,36 +112,38 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, chil
 
   return (
     <PlaybackContext.Provider value={value}>
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        src={src}
-        aria-label="Áudio da gravação"
-        onTimeUpdate={(event) => clock.set(event.currentTarget.currentTime * 1000)}
-        onPlay={() => setPlaying(true)}
-        onPlaying={() => {
-          // Tocou de novo: uma próxima expiração tem direito à sua renovação automática.
-          renewed.current = false
-        }}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          wantsPlay.current = false
-          setPlaying(false)
-        }}
-        onError={(event) => handleError(event.currentTarget)}
-        onLoadedMetadata={(event) => {
-          const audio = event.currentTarget
-          loaded.current = true
-          const seconds = audio.duration
-          if (Number.isFinite(seconds) && seconds > 0) setLoadedMs(seconds * 1000)
-          if (resumeAt.current !== null) {
-            audio.currentTime = resumeAt.current / 1000
-            audio.playbackRate = rate
-            resumeAt.current = null
-            if (wantsPlay.current) audio.play().catch(() => {})
-          }
-        }}
-      />
+      {!audioDeleted && (
+        <audio
+          ref={audioRef}
+          preload="metadata"
+          src={src}
+          aria-label="Áudio da gravação"
+          onTimeUpdate={(event) => clock.set(event.currentTarget.currentTime * 1000)}
+          onPlay={() => setPlaying(true)}
+          onPlaying={() => {
+            // Tocou de novo: uma próxima expiração tem direito à sua renovação automática.
+            renewed.current = false
+          }}
+          onPause={() => setPlaying(false)}
+          onEnded={() => {
+            wantsPlay.current = false
+            setPlaying(false)
+          }}
+          onError={(event) => handleError(event.currentTarget)}
+          onLoadedMetadata={(event) => {
+            const audio = event.currentTarget
+            loaded.current = true
+            const seconds = audio.duration
+            if (Number.isFinite(seconds) && seconds > 0) setLoadedMs(seconds * 1000)
+            if (resumeAt.current !== null) {
+              audio.currentTime = resumeAt.current / 1000
+              audio.playbackRate = rate
+              resumeAt.current = null
+              if (wantsPlay.current) audio.play().catch(() => {})
+            }
+          }}
+        />
+      )}
       {children}
     </PlaybackContext.Provider>
   )
