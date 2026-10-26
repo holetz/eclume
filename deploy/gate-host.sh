@@ -23,7 +23,9 @@
 #   --superavel  abandona o SHA se o `main` já passou dele (o pre-push usa; o pedido à mão não).
 #   --todos    publica o status rodando todos os pilares, sem olhar o diff.
 # Variáveis: ECLUME_DISK_LIMIT (90), ECLUME_GATE_MEMORY (teto por contêiner, 4g),
-#            ECLUME_GATE_CACHE_GB (orçamento dos caches, 25), ECLUME_GATE_DIR (~/eclume-gate).
+#            ECLUME_GATE_CACHE_GB (orçamento dos caches, 25), ECLUME_GATE_DIR (~/eclume-gate),
+#            ECLUME_GATE_SLOTS (gates at once, 2), ECLUME_GATE_JOBS (pillars at once per gate, 2),
+#            ECLUME_GATE_CPUS (CPUs per pillar container, 3).
 # Medido em 2026-10-01 (holetz/eclume#89), com a produção de pé: 16 a 21 minutos; pico de memória
 # de ~2,6 GiB (windows e desktop, no link), ~1,7 GiB no web-browser e < 1 GiB nos outros; ~15 GB de
 # caches depois de duas execuções.
@@ -37,11 +39,13 @@ GATE_DIR="${ECLUME_GATE_DIR:-$HOME/eclume-gate}"
 DISK_LIMIT="${ECLUME_DISK_LIMIT:-90}"
 MEMORIA="${ECLUME_GATE_MEMORY:-4g}"
 CACHE_GB="${ECLUME_GATE_CACHE_GB:-25}"
+SLOTS="${ECLUME_GATE_SLOTS:-2}"
+JOBS="${ECLUME_GATE_JOBS:-2}"
+CPUS="${ECLUME_GATE_CPUS:-3}"
 NDK="${ECLUME_GATE_NDK:-$HOME/android-sdk/ndk/28.2.13676358}"
 # O SDK e o JDK do mobile/scripts/android-sdk.sh, só leitura, para o pilar android.
 ANDROID_SDK="${ECLUME_GATE_ANDROID_SDK:-$HOME/android-sdk}"
 JDK="${ECLUME_GATE_JDK:-$HOME/jdk-21}"
-PROJETO=eclume-gate
 # As imagens levam na tag a versão do Rust de desktop/rust-toolchain.toml.
 RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml)"
 IMG="eclume-gate:$RUST"
@@ -77,10 +81,22 @@ CACHE="$GATE_DIR/cache"
 LOG="$GATE_DIR/logs/$SHA.log"
 mkdir -p "$CACHE/registry" "$CACHE/home" "$CACHE/gradle" "$GATE_DIR/logs"
 
-# Uma execução por vez no host; a segunda espera a primeira.
-exec 9>"$GATE_DIR/.trava"
-echo "Aguardando a trava $GATE_DIR/.trava…" >&2
-flock 9
+# Up to $SLOTS gates run at once, each holding one slot lock; the next one waits for a free slot.
+# The slot names the compose project and offsets its ports, so concurrent gates never share services.
+SLOT=""
+while [[ -z "$SLOT" ]]; do
+  for ((i = 0; i < SLOTS; i++)); do
+    exec 9>"$GATE_DIR/.trava-$i"
+    if flock -n 9; then SLOT=$i; break; fi
+    exec 9>&-
+  done
+  if [[ -z "$SLOT" ]]; then
+    echo "Waiting for a free gate slot ($SLOTS busy)…" >&2
+    sleep 15
+  fi
+done
+PROJETO="eclume-gate-$SLOT"
+echo "Gate slot $SLOT (project $PROJETO)" >&2
 
 [[ "$PUBLICAR" -eq 0 ]] || exec > >(tee "$LOG") 2>&1
 echo "Gate de $SHA · $(date -Is)"
@@ -104,14 +120,14 @@ publicar() {
 
 # O peso de CPU dos serviços de teste e do mock entra por um arquivo extra, sem mexer nos compose
 # que a CI também usa.
-CPU_YML="$GATE_DIR/cpu-shares.yml"
+CPU_YML="$GATE_DIR/cpu-shares-$SLOT.yml"
 printf 'services:\n' > "$CPU_YML"
 for servico in postgres redis minio mock; do
   printf '  %s:\n    cpu_shares: %s\n' "$servico" "$CPU_SHARES" >> "$CPU_YML"
 done
 compose() {
-  ECLUME_TEST_PG_PORT=55632 ECLUME_TEST_REDIS_PORT=56579 ECLUME_TEST_MINIO_PORT=59200 \
-    ECLUME_MOCK_BIND=127.0.0.1 ECLUME_MOCK_PORT=4210 \
+  ECLUME_TEST_PG_PORT=$((55633 + SLOT)) ECLUME_TEST_REDIS_PORT=$((56580 + SLOT)) \
+    ECLUME_TEST_MINIO_PORT=$((59201 + SLOT)) ECLUME_MOCK_BIND=127.0.0.1 ECLUME_MOCK_PORT=$((4211 + SLOT)) \
     docker compose -p "$PROJETO" -f deploy/docker-compose.test.yml -f deploy/docker-compose.mock.yml \
     -f "$CPU_YML" "$@"
 }
@@ -122,7 +138,7 @@ final() {
     publicar error "o gate não conseguiu provar (saída $codigo) · log $LOG"
   fi
   compose down -v --remove-orphans >/dev/null 2>&1 || true
-  cd / && rm -rf "$SRC"
+  cd / && rm -rf "$SRC" "$SRC".p-*
 }
 trap final EXIT
 
@@ -218,52 +234,79 @@ docker build -q --build-arg "RUST=$RUST" -t "$IMG" - < deploy/gate.Dockerfile
 # --- serviços: Postgres, Redis, MinIO e o mock, na rede do projeto --------------------------------
 compose up -d --wait
 
-for pilar in "${PILARES[@]}"; do
+# Each pillar runs from its own copy of the tree: npm ci, uv sync and the builds write into it, and
+# two pillars sharing one tree would race. Up to $JOBS run at once; gpu-e2e runs alone at the end,
+# under a host-wide GPU lock, because it needs the host's docker and the only GPU.
+PARTES="$GATE_DIR/partes-$SHA-$SLOT"
+rm -rf "$PARTES" && mkdir -p "$PARTES"
+rodar_pilar() {
+  local pilar="$1" arvore="$SRC.p-$1" t0=$SECONDS
+  set +e
   echo "=== pilar $pilar · $(date -Is) ==="
   mkdir -p "$CACHE/target-$pilar"
+  rm -rf "$arvore" && cp -a "$SRC" "$arvore"
   # O mock só para os pilares que o têm na CI: com ECLUME_MOCK_URL, o teste do eclume-sync no
   # desktop deixaria de pular e as URLs de parte das fixtures (127.0.0.1:4010) não chegam ao mock.
-  mock=()
+  local mock=()
   case "$pilar" in contracts|web-browser) mock=(-e ECLUME_MOCK_URL=http://mock:4010) ;; esac
   # O claude real (test_agents_real) roda só no pilar python, com a credencial do Claude do host
   # montada somente leitura e o binário da CLI; sem ela o pilar falha na checagem de pulos.
-  claude=(-e ECLUME_PULOS=gate)
+  local claude=()
   if [[ "$pilar" == python ]]; then
-    claude+=(-e ECLUME_TEST_CLAUDE=1 -v "$HOME/.claude/.credentials.json:/tmp/.claude/.credentials.json:ro"
+    claude=(-e ECLUME_PULOS=gate -e ECLUME_TEST_CLAUDE=1
+      -v "$HOME/.claude/.credentials.json:/tmp/.claude/.credentials.json:ro"
       -v "$(readlink -f "$HOME/.local/bin/claude"):/usr/local/bin/claude:ro")
-  else
-    claude=()
   fi
-  t0=$SECONDS
-  # O gpu-e2e precisa do docker e da GPU do host, que o contêiner dos pilares não tem: roda aqui, no
-  # host, e o script sobe o compose eclume-gpu-test e roda o pytest num contêiner eclume-gate à parte.
-  # Sai 75 (inconclusivo) com a GPU ocupada além da espera; o status vira "sem prova: gpu-e2e".
-  if [[ "$pilar" == gpu-e2e ]]; then
-    set +e
-    ECLUME_GATE_IMAGE="$IMG" ECLUME_GATE_CACHE_HOME="$CACHE/home" bash deploy/gpu-e2e.sh
-    RESULTADO[$pilar]=$?
-    set -e
-    echo "=== pilar $pilar: saída ${RESULTADO[$pilar]} em $((SECONDS - t0))s ==="
-    continue
-  fi
-  set +e
   docker run --rm --name "$PROJETO-$pilar" --network "${PROJETO}_default" \
-    --cpus 2 --cpu-shares "$CPU_SHARES" --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
-    -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS=2 -e CARGO_TARGET_DIR=/target \
+    --cpus "$CPUS" --cpu-shares "$CPU_SHARES" --memory "$MEMORIA" --memory-swap "$MEMORIA" --shm-size 1g -u 1000:1000 \
+    -e HOME=/tmp -e CI=1 -e CARGO_BUILD_JOBS="$CPUS" -e CARGO_TARGET_DIR=/target \
     -e npm_config_cache=/tmp/.cache/npm -e UV_PYTHON_INSTALL_DIR=/tmp/.cache/uv-python \
     -e UV_LINK_MODE=copy -e ECLUME_ANDROID_NDK=/opt/ndk \
     -e ECLUME_ANDROID_SDK=/opt/android-sdk -e ECLUME_ANDROID_JDK=/opt/jdk -e GRADLE_USER_HOME=/opt/gradle \
     -e ECLUME_TEST_DATABASE_URL=postgresql+asyncpg://eclume:eclume@postgres:5432/eclume \
     -e ECLUME_TEST_REDIS_URL=redis://redis:6379 -e ECLUME_TEST_S3_ENDPOINT=http://minio:9000 \
     "${mock[@]}" "${claude[@]}" \
-    -v "$SRC:/src" -v "$CACHE/target-$pilar:/target" -v "$CACHE/registry:/opt/cargo/registry" \
+    -v "$arvore:/src" -v "$CACHE/target-$pilar:/target" -v "$CACHE/registry:/opt/cargo/registry" \
     -v "$CACHE/home:/tmp/.cache" -v "$NDK:/opt/ndk:ro" \
     -v "$ANDROID_SDK:/opt/android-sdk:ro" -v "$JDK:/opt/jdk:ro" -v "$CACHE/gradle:/opt/gradle" \
     -w /src "$IMG" nice -n 10 bash deploy/pilares.sh "$pilar"
+  local codigo=$?
+  rm -rf "$arvore"
+  echo "=== pilar $pilar: saída $codigo em $((SECONDS - t0))s ==="
+  echo "$codigo" > "$PARTES/$pilar.rc"
+}
+
+GPU=0
+for pilar in "${PILARES[@]}"; do
+  if [[ "$pilar" == gpu-e2e ]]; then GPU=1; continue; fi
+  while (( $(jobs -rp | wc -l) >= JOBS )); do wait -n || true; done
+  echo "=== pilar $pilar iniciado · $(date -Is) ==="
+  rodar_pilar "$pilar" > "$PARTES/$pilar.log" 2>&1 &
+done
+wait || true
+for pilar in "${PILARES[@]}"; do
+  [[ "$pilar" != gpu-e2e ]] || continue
+  cat "$PARTES/$pilar.log"
+  RESULTADO[$pilar]="$(cat "$PARTES/$pilar.rc" 2>/dev/null || echo 1)"
+done
+rm -rf "$PARTES"
+
+# O gpu-e2e precisa do docker e da GPU do host, que o contêiner dos pilares não tem: roda aqui, no
+# host, e o script sobe o compose eclume-gpu-test e roda o pytest num contêiner eclume-gate à parte.
+# Sai 75 (inconclusivo) com a GPU ocupada além da espera; o status vira "sem prova: gpu-e2e".
+if [[ "$GPU" -eq 1 ]]; then
+  pilar=gpu-e2e
+  echo "=== pilar $pilar · $(date -Is) ==="
+  t0=$SECONDS
+  set +e
+  (
+    flock 8
+    ECLUME_GATE_IMAGE="$IMG" ECLUME_GATE_CACHE_HOME="$CACHE/home" bash deploy/gpu-e2e.sh
+  ) 8>"$GATE_DIR/.trava-gpu"
   RESULTADO[$pilar]=$?
   set -e
   echo "=== pilar $pilar: saída ${RESULTADO[$pilar]} em $((SECONDS - t0))s ==="
-done
+fi
 fi
 
 resultados=""

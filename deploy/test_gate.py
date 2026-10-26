@@ -440,7 +440,22 @@ def test_so_o_pre_push_abandona_sha_superado() -> None:
     assert "== ahead" in host
     assert 'publicar error "superado por' in host
     # A checagem vem depois da trava, para valer para o SHA que esperou a vez.
-    assert host.index("flock 9") < host.index('"$SUPERAVEL" -eq 1')
+    assert host.index("flock -n 9") < host.index('"$SUPERAVEL" -eq 1')
+
+
+def test_gates_and_pillars_run_in_parallel_without_sharing_state() -> None:
+    """Concurrent gates hold distinct slots and projects; pillars run from their own tree copy."""
+    host = _host()
+    assert 'SLOTS="${ECLUME_GATE_SLOTS:-2}"' in host
+    assert 'PROJETO="eclume-gate-$SLOT"' in host
+    assert "cpu-shares-$SLOT.yml" in host
+    assert "$((55633 + SLOT))" in host
+    assert 'cp -a "$SRC" "$arvore"' in host
+    assert '-v "$arvore:/src"' in host
+    assert "jobs -rp | wc -l) >= JOBS" in host
+    # gpu-e2e never runs beside another gate's gpu-e2e: one GPU, one compose project.
+    assert '8>"$GATE_DIR/.trava-gpu"' in host
+    assert 'rm -rf "$SRC" "$SRC".p-*' in host
 
 
 def test_todo_conteiner_do_gate_leva_cpu_shares() -> None:

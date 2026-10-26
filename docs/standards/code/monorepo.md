@@ -301,10 +301,12 @@ exceção `!.design/build/` no `.gitignore` e fora do ruff, e o `--check` acusa 
 
 **Gate do host (o que libera a publicação).** `bash deploy/gate.sh [<ref>]` envia o `git archive` do
 commit para o host GPU e roda lá `deploy/gate-host.sh`: os pilares que o diff exige (até os onze),
-cada um num contêiner da imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 2`,
+cada um num contêiner da imagem `eclume-gate:<versão do Rust>` (`deploy/gate.Dockerfile`, `--cpus 3`,
 `--cpu-shares 256`, teto de memória, `nice`, uid 1000, sem socket do Docker nem token do `gh`), contra os serviços e o mock do projeto compose
-`eclume-gate` (portas `55632`, `56579`, `59200` e `4210` em `127.0.0.1`, `down -v` ao fim), uma
-execução por vez (`flock`) e recusa com o disco em 90%. O resultado vira o status `eclume/gate` no
+`eclume-gate-<slot>` (ports `55633`, `56580`, `59201` and `4211` plus the slot, on `127.0.0.1`,
+`down -v` at the end), e recusa com o disco em 90%. Up to two gates run at once, one per slot
+(`flock`); inside a gate, up to two pillars run at once, each from its own copy of the tree, and
+`gpu-e2e` runs last under a host-wide GPU lock. O resultado vira o status `eclume/gate` no
 commit: `pending` enquanto roda, `success` só com os pilares exigidos verdes (a descrição diz quais
 rodaram e quantos ficaram dispensados), `failure` nomeando os pilares que falharam e `error` quando o
 gate não consegue provar; o log fica em
