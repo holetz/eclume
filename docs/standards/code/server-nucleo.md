@@ -4,7 +4,7 @@ title: Núcleo do server — persistência, isolamento, autenticação, upload, 
 description: Como o pacote eclume_server guarda e isola os dados (migrations SQL pelo migrador, conexão da aplicação como eclume_server sem superusuário, credencial própria por serviço no Redis e no MinIO, RLS por dono sob o papel eclume_app, tabelas da plataforma fora da RLS), autentica (sessão de usuário com CSRF e aceite do aviso, PAT pessoal ou de dispositivo com escopos, limite de tentativas, sessão de admin separada), recebe uploads (URL de parte assinada pela própria API, dedup e retomada por hash, natureza, origem da data e marcadores), serve a biblioteca (intervalo de tempo e filtros repetíveis), organiza (pessoas, coleções e edição da transcrição, tudo do dono), exclui em cascata, busca (full-text eclume_pt sob a RLS), roda enxuto (worker único com as filas default e agents no mesmo loop, sonda leve, imports preguiçosos, pool e PAT sem escrita a cada requisição) e é testado (serviços reais, conformidade com o OpenAPI bundled).
 resource: server/**, engines/src/eclume_engines/registro.py, deploy/server.Dockerfile, deploy/docker-compose.test.yml, deploy/docker-compose.prod.yml
 tags: [code, server, postgres, rls, auth, upload, pessoas, busca, admin, testes]
-timestamp: 2026-10-07
+timestamp: 2026-10-26
 audience: both
 authority: current
 source: holetz/eclume#5, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#34, holetz/eclume#35, holetz/eclume#37, holetz/eclume#86, holetz/eclume#97, holetz/eclume#100, holetz/eclume#92, holetz/eclume#94, holetz/eclume#93, holetz/eclume#99, holetz/eclume#98, holetz/eclume#119, holetz/eclume#150
@@ -478,6 +478,29 @@ Só pela sessão (o PAT não serve) e com o limite de tentativas das credenciais
   1 dia e uploads terminais (`completed`, `deduplicated`, `aborted`, `expired`) com mais de 30
   dias. Um app que retome depois disso recebe 404, abre outro upload e cai no dedup por hash.
   `api_tokens` ficam: o usuário vê os revogados.
+
+- **Audio retention** (`audio_retention.py`, cron `purge_audio` daily at 03:50, `unique`). Each
+  account sets `users.audio_retention_days` (1 to 3650; `NULL` is off, the default) through
+  `GET`/`PATCH /me/audio-retention`; the admin sets one ceiling, `platform_settings.retention.
+  audio_max_days` (`NULL` is none). The window in force is `min(user, ceiling)` when both exist,
+  the user value without a ceiling, and none when the user value is `NULL`: the ceiling only caps
+  user values and never deletes anything for an account that left retention off. A value above
+  the ceiling is stored as typed and capped on read, so raising the ceiling needs no action from
+  the user. The age is `recordings.created_at` (when the server received the audio), never
+  `recorded_at`, which the user controls.
+- **The purge** selects due recordings under the system role and, per recording, in one short
+  transaction under a row lock re-checks the predicate (so a job that appeared meanwhile is
+  honoured), sets `audio_key = NULL` and `audio_deleted_at = now()` together (a CHECK keeps the
+  two in agreement) and inserts the key into `storage_deletions`; the existing dreno removes the
+  object and retries until the bucket lets go. A recording with a `queued` or `running` job is
+  skipped until the next run. Only the audio object goes: the derived artefacts under
+  `recordings/{id}/`, the transcript, summary, chat, markers and voiceprints stay.
+- **A recording without audio** is the single state `audio_deleted_at IS NOT NULL`, exposed as
+  `Recording.audio_deleted_at`. Both audio routes (`GET /recordings/{id}/audio` and the signed
+  media URL) answer `410` with code `audio_deleted`; `start_next_revision` refuses with `409`
+  `audio_deleted`, which covers retranscribe and the retry of a failed job; the voice
+  identification adds no sample from it (see identificacao-por-voz.md). Every reader of
+  `audio_key` treats `NULL` as gone.
 
 ## Pessoas, coleções e edição da transcrição
 
