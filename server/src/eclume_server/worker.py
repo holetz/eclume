@@ -35,6 +35,7 @@ from eclume_engines.registro import configurar_logs, contexto_do_job
 from eclume_server.agenda_types import ensure_type, run_detect
 from eclume_server.agent_actions import run_agent_action_job
 from eclume_server.agent_sessions import run_agent_turn_job
+from eclume_server.audio_retention import purge_due_audio
 from eclume_server.base_chat import run_base_chat_job
 from eclume_server.config import Settings, get_settings
 from eclume_server.db import tables as t
@@ -429,6 +430,11 @@ async def purge_expired(ctx: dict[str, Any]) -> int:
     return sum(removed.values())
 
 
+async def purge_audio(ctx: dict[str, Any]) -> int:
+    """Daily cron: delete the audio of recordings past their account's retention, keeping transcript and summary."""
+    return await purge_due_audio(ctx["engine"])
+
+
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
     """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
@@ -489,6 +495,7 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(expire_uploads, minute={0, 30}, run_at_startup=False),
             cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             cron(purge_expired, hour=3, minute=40, run_at_startup=False, unique=True),
+            cron(purge_audio, hour=3, minute=50, run_at_startup=False, unique=True),
             # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
             # O job retido cujo despacho não veio (reaper, cancelamento, exclusão, janela de minutos).
