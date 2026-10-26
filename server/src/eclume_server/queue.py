@@ -96,6 +96,26 @@ def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str,
     return raw
 
 
+def _speaker_limits(
+    diarization: dict[str, Any], speakers: tuple[int | None, int | None] | None
+) -> tuple[int | None, int | None]:
+    """The requested `(min, max)` with each empty side filled from the platform limits.
+
+    If filling would invert the pair (min above max), the explicit side wins and the filled one is dropped.
+    """
+    platform = (diarization.get("min_speakers"), diarization.get("max_speakers"))
+    if speakers is None:
+        return platform
+    low, high = speakers
+    if low is not None and high is not None:
+        return low, high
+    if low is None:
+        low = platform[0]
+        return (None if low is not None and high is not None and low > high else low), high
+    high = platform[1]
+    return low, (None if high is not None and low > high else high)
+
+
 def transcribe_options(
     platform: Any,  # noqa: ANN401 — linha de platform_settings
     language: str | None,
@@ -105,11 +125,12 @@ def transcribe_options(
 ) -> dict[str, Any]:
     """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco.
 
-    `speakers` é o par `(min, max)` de locutores que vence os limites do admin (a nota e o pedido).
+    `speakers` é o par `(min, max)` de locutores que vence os limites do admin (a nota e o pedido);
+    an empty side of the pair keeps the platform limit.
     """
     asr = platform["asr"]
     diarization = platform["diarization"]
-    low, high = speakers if speakers is not None else (diarization.get("min_speakers"), diarization.get("max_speakers"))
+    low, high = _speaker_limits(diarization, speakers)
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
         # O ASR recebe o idioma sem região (`pt-BR` → `pt`); `auto` vira `null`, e a engine detecta.
