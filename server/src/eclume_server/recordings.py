@@ -308,8 +308,10 @@ async def start_next_revision(
     """Cria o job da revisão seguinte e põe a gravação na fila; devolve a revisão.
 
     A revisão é uma acima da maior entre a transcrição e o último job (retranscrever e retentar).
-    `recording` traz `id`, `owner_id` e `job_revision` (a linha de `recording_select`).
+    `recording` traz `id`, `owner_id`, `job_revision` e `audio_deleted_at` (a linha de `recording_select`).
     """
+    if recording["audio_deleted_at"] is not None:
+        raise conflict("O áudio desta gravação foi apagado pela política de retenção.", "audio_deleted")
     transcript_revision = (
         await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording["id"]))
     ).scalar()
