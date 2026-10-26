@@ -1,9 +1,9 @@
-"""Cadastro de tags do usuário: a lista fixa de que o agente escolhe e o que a mantém em ordem.
+"""The user's tag registry: the fixed list the agent chooses from and what keeps it in order.
 
-`recordings.tags` continua sendo o valor das gravações (a busca, a biblioteca e a exportação o
-leem); o cadastro fica ao lado. Toda tag escrita pelo usuário entra no cadastro na grafia dele
-(`adopt`), e renomear, mesclar e excluir mexem nas gravações e nas tags padrão dos tipos. O agente
-casa variações (`canonical`) antes de propor uma tag nova. Contrato em
+`recordings.tags` is still the recordings' value (search, the library and export read it); the
+registry sits beside it. Every tag the user writes enters the registry in their spelling (`adopt`),
+and renaming, merging and deleting change the recordings and the types' default tags. The agent
+matches variations (`canonical`) before proposing a new tag. Contract in
 docs/standards/code/processamento-automatico.md.
 """
 
@@ -25,18 +25,18 @@ if TYPE_CHECKING:
     from eclume_server.serialize import Row
 
 Mode = Literal["fixed", "auto"]
-# O teto do cadastro para o agente: acima dele, o modo autogerenciado não cria mais tags.
+# The registry ceiling for the agent: above it, the self-managed mode creates no more tags.
 MAX_CATALOG = 200
 MAX_NEW_LIMIT = 5
 
-# Terminações de plural do português, trocadas pela do singular antes de comparar.
+# Portuguese plural endings, replaced by the singular one before comparing.
 _PLURALS = (("oes", "ao"), ("aes", "ao"), ("ais", "al"), ("eis", "el"), ("ns", "m"))
-# Palavras curtas terminadas em "s" ("gas", "mes") não são tratadas como plural.
+# Short words ending in "s" ("gas", "mes") are not treated as plural.
 _MIN_PLURAL = 3
 
 
 def _plain(name: str) -> str:
-    """Minúsculas e sem acento, como o índice único do cadastro."""
+    """Lowercase and without accents, like the registry's unique index."""
     return unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower().strip()
 
 
@@ -48,21 +48,21 @@ def _singular(word: str) -> str:
 
 
 def canonical(name: str) -> str:
-    """A forma de comparar duas tags: sem acento nem caixa, hífens e espaços unificados, no singular."""
+    """The form to compare two tags by: no accents or case, hyphens and spaces unified, in the singular."""
     return " ".join(_singular(word) for word in re.split(r"[\s_\-]+", _plain(name)) if word)
 
 
 async def catalog(conn: AsyncConnection, owner_id: UUID) -> list[Row]:
-    """As tags cadastradas da conta, em ordem alfabética."""
+    """The account's registered tags, in alphabetical order."""
     c = t.tags.c
     query = select(t.tags).where(c.owner_id == owner_id).order_by(func.lower(c.name), c.id)
     return list((await conn.execute(query)).mappings().all())
 
 
 async def adopt(conn: AsyncConnection, owner_id: UUID, names: list[str], origin: str = "user") -> list[str]:
-    """As tags na grafia do cadastro, cadastrando as que faltam; sem repetição, na ordem dada.
+    """The tags in the registry's spelling, registering the missing ones; without repeats, in the given order.
 
-    Compara sem acento e sem caixa, como o índice único: "Cliente" vira a "cliente" já cadastrada.
+    Compares ignoring accents and case, like the unique index: "Cliente" becomes the already registered "cliente".
     """
     known = {_plain(row["name"]): row["name"] for row in await catalog(conn, owner_id)}
     result: list[str] = []
@@ -88,11 +88,11 @@ async def adopt(conn: AsyncConnection, owner_id: UUID, names: list[str], origin:
 
 
 def resolve(proposed: list[str] | None, names: list[str], *, allow_new: int, room: int) -> tuple[list[str], list[str]]:
-    """As tags que o agente propôs, casadas com o cadastro: as que ficam e, entre elas, as novas.
+    """The tags the agent proposed, matched against the registry: the ones that stay and, among them, the new ones.
 
-    Uma variação de uma tag cadastrada (caixa, acento, plural) vira a cadastrada. As demais só ficam
-    no modo autogerenciado (`allow_new`, o limite por gravação) e enquanto o cadastro tem espaço
-    (`room`); no modo fixo, somem.
+    A variation of a registered tag (case, accent, plural) becomes the registered one. The others only
+    stay in the self-managed mode (`allow_new`, the per-recording limit) and while the registry has
+    room (`room`); in the fixed mode, they are dropped.
     """
     by_canonical: dict[str, str] = {}
     for name in names:
@@ -113,14 +113,14 @@ def resolve(proposed: list[str] | None, names: list[str], *, allow_new: int, roo
 
 
 async def prefs(conn: AsyncConnection, owner_id: UUID) -> tuple[Mode, int]:
-    """O modo das tags da conta e o limite de tags novas por gravação (0 no modo fixo)."""
+    """The account's tag mode and the limit of new tags per recording (0 in the fixed mode)."""
     mode, limit = (
         await conn.execute(select(t.users.c.tag_mode, t.users.c.tag_new_limit).where(t.users.c.id == owner_id))
     ).one()
     return mode, limit if mode == "auto" else 0
 
 
-# Troca `:old` por `:new` (ou tira, com `:new` nulo) nas gravações, mantendo a ordem e sem repetir.
+# Replaces `:old` with `:new` (or removes it, with a null `:new`) in the recordings, keeping the order and without repeats.
 _REPLACE_IN_RECORDINGS = text(
     """
     UPDATE recordings SET
@@ -163,11 +163,11 @@ _REPLACE_IN_TYPES = text(
 
 
 async def replace_everywhere(conn: AsyncConnection, old: str, new: str | None) -> int:
-    """Troca a tag `old` por `new` (ou a tira) nas gravações e nas tags padrão dos tipos da conta.
+    """Replace the tag `old` with `new` (or remove it) in the recordings and in the account's types' default tags.
 
-    Roda sob a RLS do dono. As transcrições das gravações tocadas sobem de `updated_at`: título e
-    tags aparecem nelas, e o `?since=` dos clientes precisa ver a mudança. Devolve quantas gravações
-    mudaram.
+    Runs under the owner's RLS. The transcripts of the touched recordings bump their `updated_at`:
+    title and tags show in them, and the clients' `?since=` must see the change. Return how many
+    recordings changed.
     """
     moved = list((await conn.execute(_REPLACE_IN_RECORDINGS, {"old": old, "new": new})).scalars())
     await conn.execute(_REPLACE_IN_TYPES, {"old": old, "new": new})
