@@ -27,7 +27,7 @@ dependencies = [
   # anúncio e descoberta na rede local (mDNS, holetz/eclume#35)
   "zeroconf>=0.151,<1",
   # anexos e arquivos do Agente: texto de PDF e upload multipart (holetz/eclume#142)
-  "pypdf>=5.1",
+  "pypdf>=6.21.2",
   "python-multipart>=0.0.18",
 ]
 
