@@ -5,11 +5,11 @@ import { AuthLayout } from '../auth/AuthLayout'
 import { adminReturnPath, useAdminLogin, useAdminMe } from './adminSession'
 import { useAdminTitle } from './sections'
 
-/** Login da conta de admin, na variante `.auth-admin`: sem cadastro nem "esqueci a senha" (é pelo CLI). */
+/** Admin account login, in the `.auth-admin` variant: no signup nor "esqueci a senha" (that is through the CLI). */
 export function AdminSignInPage() {
   useAdminTitle('Entrar')
   const [params] = useSearchParams()
-  const volta = adminReturnPath(params.get('volta'))
+  const returnPath = adminReturnPath(params.get('volta'))
   const me = useAdminMe()
   const login = useAdminLogin()
   const navigate = useNavigate()
@@ -17,11 +17,11 @@ export function AdminSignInPage() {
   const [password, setPassword] = useState('')
   const errorId = useId()
 
-  if (me.data) return <Navigate to={volta} replace />
+  if (me.data) return <Navigate to={returnPath} replace />
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    login.mutate({ email: email.trim(), password }, { onSuccess: () => navigate(volta, { replace: true }) })
+    login.mutate({ email: email.trim(), password }, { onSuccess: () => navigate(returnPath, { replace: true }) })
   }
 
   const error = login.error
