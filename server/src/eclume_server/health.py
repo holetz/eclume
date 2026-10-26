@@ -1,8 +1,8 @@
-"""Saúde para o painel admin: filas, worker GPU, jobs, etapas do pipeline, serviços e falhas.
+"""Health for the admin panel: queues, GPU worker, jobs, pipeline steps, services and failures.
 
-Regras em docs/standards/code/server-admin.md. As filas, a GPU, os jobs, as etapas e as falhas são
-da plataforma; nada do conteúdo dos usuários sai daqui (o título da gravação, nunca): só números e
-códigos de erro.
+Rules in docs/standards/code/server-admin.md. The queues, the GPU, the jobs, the steps and the
+failures belong to the platform; nothing of the users' content leaves here (never the recording
+title): only numbers and error codes.
 """
 
 from __future__ import annotations
@@ -32,30 +32,30 @@ if TYPE_CHECKING:
     from eclume_server.context import AppContext
 
 log = logging.getLogger(__name__)
-# O catálogo do Postgres, só as colunas que a sonda lê.
+# The Postgres catalog, only the columns the probe reads.
 t_pg_class = Table(
     "pg_class", MetaData(), Column("relname", Text), Column("relkind", Text), Column("relforcerowsecurity", Boolean)
 )
 
 FAILURE_WINDOW = timedelta(hours=24)
 MAX_FAILURES = 20
-# As etapas que rodam (o recebido é instantâneo), na ordem do pipeline.
+# The steps that run (received is instantaneous), in pipeline order.
 HEALTH_STEPS = ("preprocessing", "transcription", "fields", "agenda_type", "summary")
-# Etapas cuja falha é do job de transcrição, que o admin retenta.
+# Steps whose failure belongs to the transcription job, which the admin retries.
 JOB_STEPS = ("preprocessing", "transcription")
 PROBE_TIMEOUT_S = 2.0
 STORAGE_SLOW_S = 1.0
-# Chave de health-check do arq do worker CPU (`health_check_interval` no `worker_settings`).
+# arq health-check key of the CPU worker (`health_check_interval` in `worker_settings`).
 CPU_HEALTH_KEY = f"{DEFAULT_QUEUE}:health-check"
-# A do worker de agentes: a sonda `cpu_worker` exige as duas.
+# The agent worker's: the `cpu_worker` probe requires both.
 AGENT_HEALTH_KEY = f"{AGENT_QUEUE}:health-check"
 
 
 class ProbeDownError(Exception):
-    """A sonda achou o serviço fora; a mensagem vira o `detail`."""
+    """The probe found the service down; the message becomes the `detail`."""
 
 
-# Tabelas do usuário: a RLS forçada em todas é o "RLS ativa" do Postgres.
+# User tables: RLS forced on all of them is the Postgres "RLS ativa".
 USER_TABLES = (
     "recordings",
     "uploads",
@@ -74,7 +74,7 @@ USER_TABLES = (
     "voice_samples",
     "speaker_suggestions",
 )
-# O admin não vê conteúdo de usuário: no lugar do título da gravação, um rótulo fixo.
+# The admin does not see user content: in place of the recording title, a fixed label.
 RECORDING_TITLE = "Gravação de usuário"
 
 
@@ -86,7 +86,7 @@ def _int(value: str | None) -> int | None:
 
 
 def worker_json(beat: dict[str, str] | None) -> dict[str, Any] | None:
-    """Bloco `worker` do `AdminHealth`, do hash `eclume:gpu:health`."""
+    """Block `worker` of the `AdminHealth`, from the `eclume:gpu:health` hash."""
     if beat is None:
         return None
     return {
@@ -100,7 +100,7 @@ def worker_json(beat: dict[str, str] | None) -> dict[str, Any] | None:
 
 
 def gpu_json(beat: dict[str, str] | None) -> dict[str, Any] | None:
-    """Bloco `gpu`; `null` sem heartbeat ou sem NVML (engine CPU)."""
+    """Block `gpu`; `null` with no heartbeat or no NVML (CPU engine)."""
     if not beat or not beat.get("gpu_name"):
         return None
     try:
@@ -116,13 +116,13 @@ def gpu_json(beat: dict[str, str] | None) -> dict[str, Any] | None:
 
 
 def models_json(beat: dict[str, str] | None) -> list[dict[str, Any]]:
-    """`models_loaded`: o modelo residente que o worker declarou, se houver."""
+    """`models_loaded`: the resident model the worker declared, if any."""
     if not beat or not beat.get("models"):
         return []
     try:
         models = json.loads(beat["models"])
     except ValueError:
-        log.warning("heartbeat do worker GPU com `models` ilegível: %r", beat["models"])
+        log.warning("GPU worker heartbeat with unreadable `models`: %r", beat["models"])
         return []
     return [
         {"name": m["name"], "kind": m["kind"], "loaded_at": m["loaded_at"], "vram_mb": m.get("vram_mb")}
@@ -132,7 +132,7 @@ def models_json(beat: dict[str, str] | None) -> list[dict[str, Any]]:
 
 
 async def steps_json(conn: AsyncConnection, since: datetime) -> list[dict[str, Any]]:
-    """`steps`: execuções, mediana (ms) e falhas de cada etapa nas últimas 24 h, só números."""
+    """`steps`: runs, median (ms) and failures of each step in the last 24 h, numbers only."""
     ps = t.pipeline_steps.c
     finished = ps.state.in_(["done", "failed"])
     rows = (
@@ -158,7 +158,7 @@ async def steps_json(conn: AsyncConnection, since: datetime) -> list[dict[str, A
 
 
 async def failures_json(conn: AsyncConnection, since: datetime) -> list[dict[str, Any]]:
-    """`recent_failures`: as etapas que falharam nas últimas 24 h; o job só nas da transcrição."""
+    """`recent_failures`: the steps that failed in the last 24 h; the job only on the transcription ones."""
     ps, jobs = t.pipeline_steps.c, t.transcription_jobs.c
     rows = (
         await conn.execute(
@@ -188,14 +188,14 @@ async def failures_json(conn: AsyncConnection, since: datetime) -> list[dict[str
 
 
 async def _probe(name: str, check: Callable[[], Awaitable[str | None]], slow_s: float | None = None) -> dict[str, Any]:
-    """Roda a sonda com teto de 2 s: `healthy`, `degraded` (lenta) ou `down`."""
+    """Run the probe with a 2 s ceiling: `healthy`, `degraded` (slow) or `down`."""
     started = time.monotonic()
     try:
         async with asyncio.timeout(PROBE_TIMEOUT_S):
             detail = await check()
     except ProbeDownError as exc:
         status, detail = "down", str(exc)
-    except Exception as exc:  # noqa: BLE001 — qualquer falha da sonda é o serviço fora
+    except Exception as exc:  # noqa: BLE001 — any probe failure means the service is down
         status, detail = "down", "sem resposta em 2 s" if isinstance(exc, TimeoutError) else type(exc).__name__
     else:
         status = "healthy"
@@ -206,7 +206,7 @@ async def _probe(name: str, check: Callable[[], Awaitable[str | None]], slow_s: 
 
 
 def connected_assistants(count: int) -> str:
-    """O detalhe do serviço `mcp` na Saúde."""
+    """The detail of the `mcp` service on the Health screen."""
     if count == 0:
         return "nenhum assistente conectado nas últimas 24 h"
     if count == 1:
@@ -215,7 +215,7 @@ def connected_assistants(count: int) -> str:
 
 
 async def check_postgres(ctx: AppContext) -> str:
-    """Sonda do Postgres: responde e diz se a RLS está forçada nas tabelas do usuário."""
+    """Postgres probe: answers and says whether RLS is forced on the user tables."""
     async with system_tx(ctx.engine) as conn:
         forced = (
             await conn.execute(
@@ -228,19 +228,19 @@ async def check_postgres(ctx: AppContext) -> str:
 
 
 async def check_redis(ctx: AppContext) -> None:
-    """Sonda do Redis."""
+    """Redis probe."""
     await ctx.queue.pool.ping()
 
 
 async def check_storage(ctx: AppContext) -> None:
-    """Sonda do armazenamento S3."""
+    """S3 storage probe."""
     await ctx.storage.head_bucket()
 
 
 async def readiness(ctx: AppContext) -> dict[str, Any]:
-    """`/health/ready`: as sondas de Postgres, Redis e armazenamento, só com nome e `ok`/`down`.
+    """`/health/ready`: the Postgres, Redis and storage probes, with only the name and `ok`/`down`.
 
-    Pública: sem latência nem mensagem de erro, que diriam demais a quem não está logado.
+    Public: no latency or error message, which would tell too much to someone not logged in.
     """
     probes = await asyncio.gather(
         _probe("postgres", lambda: check_postgres(ctx)),
@@ -252,7 +252,7 @@ async def readiness(ctx: AppContext) -> dict[str, Any]:
 
 
 async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[dict[str, Any]]:
-    """`services`: uma sonda por serviço, em paralelo."""
+    """`services`: one probe per service, in parallel."""
 
     async def postgres() -> str:
         return await check_postgres(ctx)
@@ -279,7 +279,7 @@ async def services_json(ctx: AppContext, beat: dict[str, str] | None) -> list[di
         return __version__
 
     async def mcp() -> str:
-        # Sem estado, não há sessão MCP aberta: conectado é o token usado pelo MCP nas últimas 24 h.
+        # Stateless, there is no open MCP session: connected is a token used through MCP in the last 24 h.
         since = datetime.now(UTC) - FAILURE_WINDOW
         async with system_tx(ctx.engine) as conn:
             count = (
@@ -309,10 +309,10 @@ async def admin_health(ctx: AppContext) -> dict[str, Any]:
         queues.append({"name": name, "queued": queued, "running": running})
 
     jobs = t.transcription_jobs
-    # Com o papel de conexão: os jobs são de todos os usuários.
+    # With the connection role: the jobs belong to every user.
     async with system_tx(ctx.engine) as conn:
         open_jobs = (
-            # Só os despachados: o retido no banco (vez da conta, janela de minutos) conta em `held_jobs`.
+            # Only the dispatched ones: one held in the database (the account's turn, the minutes window) counts in `held_jobs`.
             (
                 await conn.execute(
                     select(jobs)
