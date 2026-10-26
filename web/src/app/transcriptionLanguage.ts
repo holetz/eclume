@@ -7,7 +7,7 @@ export type TranscriptionPreference = Schemas['TranscriptionPreference']
 
 const KEY = ['me', 'transcription'] as const
 
-/** O idioma de transcrição preferido da conta e o padrão do servidor (`GET /me/transcription`). */
+/** The account's preferred transcription language and the server default (`GET /me/transcription`). */
 export function useTranscriptionPreference() {
   return useQuery({ queryKey: KEY, queryFn: () => unwrap(api.GET('/api/v1/me/transcription')) })
 }
@@ -21,17 +21,17 @@ export function useUpdateTranscriptionPreference() {
   })
 }
 
-/** "Padrão do servidor: Português": o padrão sempre nomeado pelo idioma real. */
+/** "Padrão do servidor: Português": the default always named by the real language. */
 export function serverDefaultLabel(preference: TranscriptionPreference): string {
   return `Padrão do servidor: ${languageLabel(preference.platform_default)}`
 }
 
-/** O idioma que vale para a conta: o escolhido ou o do servidor. */
+/** The language that holds for the account: the chosen one or the server's. */
 export function accountLanguage(preference: TranscriptionPreference): string {
   return preference.language ?? preference.platform_default
 }
 
-/** "Padrão da conta: Português": o que vale para um arquivo sem idioma próprio. */
+/** "Padrão da conta: Português": what holds for a file without its own language. */
 export function accountDefaultLabel(preference: TranscriptionPreference): string {
   return `Padrão da conta: ${languageLabel(accountLanguage(preference))}`
 }

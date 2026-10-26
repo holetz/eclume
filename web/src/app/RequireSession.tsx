@@ -17,8 +17,8 @@ export function PageStatus({ children }: { children: ReactNode }) {
 }
 
 /**
- * Guarda das rotas autenticadas: sem sessão, leva ao login com a rota de volta; com o aviso em
- * vigor ainda não aceito, pede o aceite antes do shell.
+ * Guard of the authenticated routes: without a session, leads to the login with the return route; with the notice in
+ * force not yet accepted, asks for acceptance before the shell.
  */
 export function RequireSession() {
   const me = useMe()
@@ -27,14 +27,14 @@ export function RequireSession() {
   const queryClient = useQueryClient()
   const userId = me.data?.user.id
 
-  // A sessão que já vinha do cookie (sem passar pelo login) também marca a conta da aba.
+  // The session that already came from the cookie (without going through login) also marks the tab's account.
   useEffect(() => {
     if (userId) enterAccount(queryClient, userId, ME_KEY)
   }, [queryClient, userId])
 
   if (me.isPending) return <PageStatus>Carregando…</PageStatus>
-  // Um refetch que falha com a sessão já carregada não derruba o shell: o React Query mantém o
-  // dado, e a falha vira a faixa de conexão. A tela de erro só aparece sem sessão nenhuma em cache.
+  // A refetch that fails with the session already loaded does not bring the shell down: React Query keeps the
+  // data, and the failure becomes the connection banner. The error screen only shows with no session at all in cache.
   if (me.isError && !me.data) {
     return (
       <PageStatus>

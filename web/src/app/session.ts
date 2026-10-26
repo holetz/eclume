@@ -8,7 +8,7 @@ type Me = Schemas['Me']
 
 export const ME_KEY = ['me'] as const
 
-/** Usuário da sessão, ou `null` sem sessão (401). */
+/** The session user, or `null` without a session (401). */
 async function fetchMe(): Promise<Me | null> {
   const { data, error, response } = await api.GET('/api/v1/me')
   if (response.status === 401) return null
@@ -20,14 +20,14 @@ export function useMe() {
   return useQuery({ queryKey: ME_KEY, queryFn: fetchMe, staleTime: 60_000 })
 }
 
-/** Caminho interno seguro para voltar depois do login; qualquer outra coisa volta ao início. */
+/** A safe internal path to return to after login; anything else returns to the start. */
 export function safeReturnPath(value: string | null): string {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/'
 }
 
 /**
- * Depois do login ou do cadastro: relê a sessão e, se a conta não é a última desta aba, apaga o
- * que era da anterior (`accountScope.ts`).
+ * After login or signup: rereads the session and, if the account is not this tab's last one, clears
+ * what belonged to the previous one (`accountScope.ts`).
  */
 export async function refreshSession(queryClient: QueryClient): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: ME_KEY })
@@ -41,7 +41,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: async () => {
       const { response } = await api.POST('/api/v1/auth/logout')
-      // Sessão já expirada também é saída.
+      // An already expired session is also a sign-out.
       if (!response.ok && response.status !== 401) throw new ApiError(response.status, null)
     },
     onSuccess: () => {
