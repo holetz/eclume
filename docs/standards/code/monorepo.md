@@ -95,7 +95,7 @@ npm --prefix web run budget
 O `budget` roda depois do build: o JS inicial do `dist/index.html` não passa do teto em gzip de
 `web/bundle-budget.json`. O `build` também gera a referência da API (`dist/referencia-api.html` e
 `dist/referencia-api/`) do `contracts/openapi-v1.bundled.yaml`, por `web/scripts/referencia-api.mjs`
-([contrato-v1.md](../api/contrato-v1.md#referência-navegável)); é página à parte, fora do
+([contrato-v1.md](../api/contrato-v1.md#browsable-reference)); é página à parte, fora do
 `index.html` e do orçamento. Por isso o contexto da imagem da borda com o web (`deploy/web.Dockerfile` e o
 `.dockerignore` ao lado) inclui o bundle, além de `contracts/fixtures/`. Os testes de navegador ficam fora do `npm test`: os da conversão de mídia
 e da transcrição longa (vitest browser mode no Google Chrome, no Firefox e no WebKit; o porquê e as
