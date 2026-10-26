@@ -350,7 +350,7 @@ function RetentionCeiling({ settings }: { settings: Settings }) {
       )}
       <div>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
-          Salvar o teto
+          Aplicar o teto
         </button>
       </div>
     </form>

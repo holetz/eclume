@@ -20,6 +20,9 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
   (contrato 2.24.0, holetz/eclume#145).
 - Nota de voz transcrita com um locutor só e, ao retranscrever, o número de locutores esperado
   (`min_speakers`/`max_speakers`; contrato 2.25.0, holetz/eclume#175).
+- Audio retention: each account can choose how many days the server keeps the audio of its
+  recordings, the admin can set a ceiling, and a daily job deletes the audio past the window while
+  the transcript, summary and chat stay (contract 2.29.0, holetz/eclume#179).
 
 ### Corrigido
 
@@ -57,7 +60,8 @@ está em [versionamento.md](docs/standards/code/versionamento.md). A versão do 
 ### Para quem hospeda
 
 - **Migrations**, nenhuma destrutiva: `030_marcacao_dos_locutores` (troca os `CHECK` das etapas),
-  `031_agente_conversas` e `032_agente_habilidades_e_acoes`.
+  `031_agente_conversas`, `032_agente_habilidades_e_acoes` and `034_audio_retention` (adds the
+  account and platform retention settings and makes `recordings.audio_key` nullable).
 
 ## [0.2.0] - 2026-10-03
 
