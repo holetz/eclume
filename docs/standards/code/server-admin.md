@@ -37,7 +37,7 @@ variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
 - **Fronteira:** toda rota de `/admin/*` depende de `auth.require_admin`, que aceita só o cookie de
   admin, com double-submit `X-CSRF-Token` = `eclume_admin_csrf` em método mutável. PAT, sessão de
   usuário ou nada → 401 `unauthorized`. Admin desativado não entra nem mantém a sessão. As regras
-  de credencial comuns estão em [server-nucleo.md](server-nucleo.md#autenticação).
+  de credencial comuns estão em [server-nucleo.md](server-nucleo.md#authentication).
 - **As rotas de admin rodam em `system_tx`** (papel de conexão) e só tocam `platform_*`,
   `agent_providers`, `admins`, `admin_sessions`, `users` (lista, contagem de gravações por dono e
   `active`), `sessions` e `api_tokens` (ao desativar), `password_resets` (gerar e vencer o link), além da fila e dos jobs para Saúde e
@@ -125,7 +125,7 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   `file_bytes` (2 GiB), `open_uploads` (3), `gpu_minutes_24h` (600) e `agent_requests_24h` (200);
   `null` é sem limite. Mesclado campo a campo pelo mesmo `PATCH /admin/settings`, com inteiros
   `>= 0` ou `null`. A conta da dona não é conhecida pela migration: ela se sobrepõe pelo painel
-  depois do deploy. Regras de uso em [server-nucleo.md](server-nucleo.md#upload-e-áudio) e
+  depois do deploy. Regras de uso em [server-nucleo.md](server-nucleo.md#upload-and-audio) e
   [server-agentes.md](server-agentes.md#cota-de-pedidos-ao-agente).
 
 ## Usuários (`/admin/users`)
@@ -151,7 +151,7 @@ têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
   da conta; conta desativada → 409 `conflict`; inexistente → 404. O link só volta nesta resposta, e
   o painel o mostra uma vez para o admin copiar e entregar por fora, depois de confirmar quem pede.
   O admin nunca vê nem define a senha; o uso do link está em
-  [server-nucleo.md](server-nucleo.md#autenticação).
+  [server-nucleo.md](server-nucleo.md#authentication).
 
 ## Saúde (`/admin/health`)
 

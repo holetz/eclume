@@ -182,7 +182,7 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
 
 - `voice_samples` e `speaker_suggestions` têm `owner_id`, `ENABLE` + `FORCE ROW LEVEL SECURITY` e a
   política de dono `<tabela>_own`, como toda tabela de conteúdo
-  ([server-nucleo.md](server-nucleo.md#isolamento-por-rls)). `eclume_app` tem `DELETE` nas duas,
+  ([server-nucleo.md](server-nucleo.md#rls-isolation)). `eclume_app` tem `DELETE` nas duas,
   para esquecer a voz sob a RLS.
 - A prova está em `server/tests/test_voice.py`: outra conta nunca é comparada nem lida, pela API e
   por SQL direto sob `eclume_app`.

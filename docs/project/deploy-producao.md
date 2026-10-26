@@ -39,7 +39,7 @@ serviços de longa duração (eram dez antes do holetz/eclume#151, com o `web` e
 | `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
 | `worker` | `eclume-server:prod` | `eclume-server worker`: as filas `eclume:default` (ingestão, purgas, reaper, retomada e expiração de uploads) e `eclume:agents` (tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` vagas, padrão 2, e o `claude -p`) num processo só |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1`; sai sozinho (código 0) depois da descarga ociosa e o `restart` o traz de volta ([worker-gpu.md](worker-gpu.md)) |
-| `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
+| `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#database-roles)) |
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
 
@@ -83,7 +83,7 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 - **Credencial por serviço:** server e worker CPU usam `eclume-server` no Redis e no MinIO; o
   worker GPU, `eclume-gpu`, que só lê o áudio e escreve os artefatos. O root do MinIO fica no
   MinIO, no `minio-init` e no backup; o usuário `default` do Redis está desligado
-  ([server-nucleo.md](../standards/code/server-nucleo.md#credenciais-de-redis-e-minio)). Para
+  ([server-nucleo.md](../standards/code/server-nucleo.md#redis-and-minio-credentials)). Para
   depurar o Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
 - **Privilégio mínimo:** os contêineres Python (server, workers, `migrate`, `mdns`) rodam com
   `cap_drop: [ALL]` e `no-new-privileges`; o Caddy fica como está, porque escuta em porta baixa.
