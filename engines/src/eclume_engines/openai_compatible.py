@@ -1,7 +1,7 @@
-"""Engine `openai-compatible`: cliente de `POST /v1/audio/transcriptions` (speaches, OpenAI).
+"""Engine `openai-compatible`: client of `POST /v1/audio/transcriptions` (speaches, OpenAI).
 
-Pede `response_format=verbose_json` com granularidade de palavra e segmento. O servidor remoto
-não diariza, então o resultado tem um locutor só.
+Asks for `response_format=verbose_json` with word and segment granularity. The remote server does
+not diarize, so the result has a single speaker.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ TRANSCRIPTIONS_PATH = "/v1/audio/transcriptions"
 
 
 class OpenAICompatibleEngine:
-    """Delegação do ASR a um servidor OpenAI-compatível."""
+    """Delegation of the ASR to an OpenAI-compatible server."""
 
     name = "openai-compatible"
 
@@ -43,7 +43,7 @@ class OpenAICompatibleEngine:
         timeout_s: float = 3600.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        """`base_url` sem o `/v1` (ex.: `http://speaches:8000`)."""
+        """`base_url` without the `/v1` (e.g. `http://speaches:8000`)."""
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self.default_model = default_model
         self._client = httpx.Client(
@@ -51,7 +51,7 @@ class OpenAICompatibleEngine:
         )
 
     def unload(self) -> None:
-        """Nada a descarregar: o modelo vive no servidor remoto."""
+        """Nothing to unload: the model lives on the remote server."""
 
     def transcribe(
         self,
@@ -59,7 +59,7 @@ class OpenAICompatibleEngine:
         options: EngineOptions,
         progress: ProgressFn | None = None,
     ) -> EngineResult:
-        """Envia o arquivo e converte o `verbose_json`."""
+        """Send the file and convert the `verbose_json`."""
         model = options.model or self.default_model
         data = {
             "model": model,
@@ -67,7 +67,7 @@ class OpenAICompatibleEngine:
             "timestamp_granularities[]": ["word", "segment"],
         }
         if options.language:
-            # Sem idioma, o servidor detecta e o devolve no `verbose_json`.
+            # With no language, the server detects it and returns it in the `verbose_json`.
             data["language"] = options.language
         try:
             with audio_path.open("rb") as fh:
@@ -77,7 +77,7 @@ class OpenAICompatibleEngine:
             response.raise_for_status()
             body = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise EngineError(ASR_FAILED, f"falha no servidor remoto: {exc}") from exc
+            raise EngineError(ASR_FAILED, f"remote server failed: {exc}") from exc
         if progress is not None:
             progress("asr", 100.0)
 
@@ -115,8 +115,8 @@ def _segments(body: dict[str, Any]) -> list[Segment]:
                 confidence=None if logprob is None else min(1.0, math.exp(float(logprob))),
             )
         )
-    # A API da OpenAI devolve as palavras no topo, não dentro de cada segmento; o speaches pode
-    # devolver as duas formas, e aí valem as de dentro.
+    # The OpenAI API returns the words at the top level, not inside each segment; speaches may
+    # return both forms, and then the inner ones win.
     if any(s.words for s in segments):
         return segments
     for raw in body.get("words") or []:

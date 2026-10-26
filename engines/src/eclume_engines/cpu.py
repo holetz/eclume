@@ -1,8 +1,8 @@
-"""Engine `cpu`: faster-whisper `small` com `int8`, para desenvolvimento sem GPU.
+"""Engine `cpu`: faster-whisper `small` with `int8`, for development without a GPU.
 
-Sem alinhamento wav2vec2 (os tempos de palavra vêm do próprio faster-whisper) e sem diarização:
-o pyannote puxaria torch para a máquina de dev. O faster-whisper vem do extra `cpu` e é
-importado só ao transcrever.
+No wav2vec2 alignment (word times come from faster-whisper itself) and no diarization: pyannote
+would pull torch onto the dev machine. faster-whisper comes from the `cpu` extra and is imported
+only when transcribing.
 """
 
 from __future__ import annotations
@@ -31,18 +31,18 @@ WARN_NO_DIARIZATION = "diarization_unavailable_cpu"
 
 
 class CpuEngine:
-    """ASR em CPU com faster-whisper."""
+    """CPU ASR with faster-whisper."""
 
     name = "cpu"
 
     def __init__(self, *, threads: int = 0) -> None:
-        """`threads=0` deixa o CTranslate2 escolher pelo número de núcleos."""
+        """`threads=0` lets CTranslate2 choose from the number of cores."""
         self.threads = threads
         self._model_key: tuple[str, str] | None = None
         self._model: Any = None
 
     def unload(self) -> None:
-        """Descarta o modelo carregado."""
+        """Drop the loaded model."""
         self._model = None
         self._model_key = None
 
@@ -61,7 +61,7 @@ class CpuEngine:
         options: EngineOptions,
         progress: ProgressFn | None = None,
     ) -> EngineResult:
-        """Transcreve com timestamps de palavra; um locutor só."""
+        """Transcribe with word timestamps; a single speaker."""
         model_name = options.model or DEFAULT_MODEL
         compute_type = options.compute_type or DEFAULT_COMPUTE_TYPE
         warnings = [WARN_NO_DIARIZATION] if options.diarize else []
@@ -71,7 +71,7 @@ class CpuEngine:
                 str(audio_path), language=options.language, word_timestamps=True, vad_filter=True
             )
         except Exception as exc:
-            raise EngineError(AUDIO_DECODE_FAILED, f"falha ao abrir o áudio: {exc}") from exc
+            raise EngineError(AUDIO_DECODE_FAILED, f"failed to open the audio: {exc}") from exc
 
         duration = float(info.duration)
         segments: list[Segment] = []
@@ -94,13 +94,13 @@ class CpuEngine:
                 if progress is not None and duration > 0:
                     progress("asr", min(100.0, raw.end / duration * 100))
         except Exception as exc:
-            raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
+            raise EngineError(ASR_FAILED, f"ASR failed: {exc}") from exc
 
         return EngineResult(
             engine=self.name,
             model=model_name,
             compute_type=compute_type,
-            # Sem idioma pedido, o faster-whisper detecta.
+            # With no requested language, faster-whisper detects it.
             language=options.language or info.language,
             duration_s=duration,
             segments=segments,

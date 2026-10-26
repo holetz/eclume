@@ -1,7 +1,7 @@
-"""Interface de engine de ASR do eclume.
+"""ASR engine interface of eclume.
 
-O núcleo não importa torch, WhisperX nem faster-whisper: cada engine pesada importa as próprias
-dependências só ao transcrever, e elas vêm dos extras `whisperx` e `cpu` do pacote.
+The core does not import torch, WhisperX or faster-whisper: each heavy engine imports its own
+dependencies only when transcribing, and they come from the package's `whisperx` and `cpu` extras.
 """
 
 from importlib.metadata import version

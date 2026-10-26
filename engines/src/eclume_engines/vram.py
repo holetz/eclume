@@ -1,8 +1,8 @@
-"""Medição de VRAM pela NVML.
+"""VRAM measurement through NVML.
 
-O CTranslate2 aloca fora do torch, então `torch.cuda.max_memory_allocated` não enxerga o ASR. A
-medida aqui é o uso do dispositivo inteiro menos a linha de base anterior ao job, amostrado numa
-thread. Outro processo usando a GPU (o Jellyfin do host) entra na linha de base ou no pico.
+CTranslate2 allocates outside torch, so `torch.cuda.max_memory_allocated` does not see the ASR. The
+measure here is the whole device's usage minus the baseline before the job, sampled in a thread.
+Another process using the GPU (the host's Jellyfin) enters the baseline or the peak.
 """
 
 from __future__ import annotations
@@ -18,37 +18,37 @@ _MB = 1024 * 1024
 
 
 class VramMonitor:
-    """Lê memória livre e usada de uma GPU; sem NVML, todas as leituras são `None`."""
+    """Read the free and used memory of a GPU; without NVML, every reading is `None`."""
 
     def __init__(self, device_index: int = 0, interval_s: float = 0.2) -> None:
-        """Abre a NVML se ela existir; a ausência não é erro (dev sem GPU)."""
+        """Open NVML if it exists; its absence is not an error (dev without a GPU)."""
         self.interval_s = interval_s
         self._nvml: Any = None
         self._handle: Any = None
         with contextlib.suppress(Exception):
-            import pynvml  # noqa: PLC0415 — extra `whisperx`, só existe na imagem GPU
+            import pynvml  # noqa: PLC0415 — `whisperx` extra, only present in the GPU image
 
             pynvml.nvmlInit()
             self._handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
             self._nvml = pynvml
 
-    def _info(self) -> Any:  # noqa: ANN401 — struct da NVML
+    def _info(self) -> Any:  # noqa: ANN401 — NVML struct
         if self._nvml is None:
             return None
         return self._nvml.nvmlDeviceGetMemoryInfo(self._handle)
 
     def free_mb(self) -> int | None:
-        """VRAM livre agora, em MiB."""
+        """Free VRAM now, in MiB."""
         info = self._info()
         return None if info is None else int(info.free // _MB)
 
     def used_mb(self) -> int | None:
-        """VRAM usada agora por todos os processos, em MiB."""
+        """VRAM used now by all processes, in MiB."""
         info = self._info()
         return None if info is None else int(info.used // _MB)
 
     def snapshot(self) -> dict[str, Any] | None:
-        """Nome, VRAM total e usada (MiB) e utilização (%) da GPU agora; `None` sem NVML."""
+        """Name, total and used VRAM (MiB) and utilization (%) of the GPU now; `None` without NVML."""
         info = self._info()
         if info is None:
             return None
@@ -62,7 +62,7 @@ class VramMonitor:
 
     @contextlib.contextmanager
     def track(self) -> Iterator[PeakVram]:
-        """Amostra o uso durante o bloco; `PeakVram.mb` é o pico acima da linha de base."""
+        """Sample the usage during the block; `PeakVram.mb` is the peak above the baseline."""
         peak = PeakVram(baseline=self.used_mb())
         if peak.baseline is None:
             yield peak
@@ -89,33 +89,34 @@ class VramMonitor:
 
 
 class PeakVram:
-    """Pico de uso observado acima da linha de base."""
+    """Peak usage observed above the baseline."""
 
     def __init__(self, baseline: int | None) -> None:
-        """Começa sem observação; `mb` é `None` enquanto não houver NVML."""
+        """Start with no observation; `mb` is `None` while there is no NVML."""
         self.baseline = baseline
         self.max_used: int | None = baseline
 
     def observe(self, used: int) -> None:
-        """Registra uma amostra de uso total."""
+        """Record a sample of total usage."""
         if self.max_used is None or used > self.max_used:
             self.max_used = used
 
     @property
     def mb(self) -> int | None:
-        """Pico acima da linha de base, em MiB."""
+        """Peak above the baseline, in MiB."""
         if self.baseline is None or self.max_used is None:
             return None
         return max(0, self.max_used - self.baseline)
 
 
 def initial_batch_size(free_mb: int | None) -> int:
-    """Lote inicial do ASR pela VRAM livre: 4 com ≥ 3,5 GB, senão 2.
+    """Initial ASR batch size from the free VRAM: 4 with ≥ 3.5 GB, otherwise 2.
 
-    Medido na GTX 1660 SUPER (1 h de áudio, `large-v3-turbo` `int8_float16`): lotes 4, 8 e 16
-    levam o mesmo tempo (357, 381 e 370 s), porque a GPU já satura com 4, mas o 16 sobe o pico de
-    VRAM de ~3,0 para ~3,9 GB. O lote pequeno deixa folga para o Jellyfin do host.
+    Measured on the GTX 1660 SUPER (1 h of audio, `large-v3-turbo` `int8_float16`): batches 4, 8
+    and 16 take the same time (357, 381 and 370 s), because the GPU already saturates at 4, but 16
+    raises the VRAM peak from ~3.0 to ~3.9 GB. The small batch leaves headroom for the host's
+    Jellyfin.
     """
-    if free_mb is None or free_mb >= 3500:  # noqa: PLR2004 — medida em docs/project/worker-gpu.md
+    if free_mb is None or free_mb >= 3500:  # noqa: PLR2004 — measured in docs/project/worker-gpu.md
         return 4
     return 2

@@ -1,4 +1,4 @@
-"""Resolução do token do Hugging Face, exigido pelos modelos gated do pyannote."""
+"""Resolution of the Hugging Face token, required by pyannote's gated models."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-DEFAULT_TOKEN_FILE = "/run/secrets/hf_token"  # noqa: S105 — caminho do arquivo, não o segredo
+DEFAULT_TOKEN_FILE = "/run/secrets/hf_token"  # noqa: S105 — file path, not the secret
 
 
 def resolve_hf_token(env: Mapping[str, str] | None = None) -> str | None:
-    """Devolve o token de `HF_TOKEN` ou do arquivo `ECLUME_HF_TOKEN_FILE`, ou `None` sem token.
+    """Return the token from `HF_TOKEN` or from the `ECLUME_HF_TOKEN_FILE` file, or `None` without a token.
 
-    O arquivo padrão é `/run/secrets/hf_token`, montado de `/srv/eclume/secrets/hf_token` no host.
+    The default file is `/run/secrets/hf_token`, mounted from `/srv/eclume/secrets/hf_token` on the host.
     """
     env = os.environ if env is None else env
     token = (env.get("HF_TOKEN") or "").strip()

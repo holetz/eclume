@@ -1,20 +1,20 @@
 [project]
 name = "eclume-engines"
 version = "0.2.0"
-description = "Interface de engine de ASR do eclume, compartilhada pelo server e pelo worker."
+description = "ASR engine interface of eclume, shared by the server and the worker."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
-  # cliente da engine `openai-compatible` (speaches); leve, por isso fica no núcleo
+  # client of the `openai-compatible` engine (speaches); light, so it stays in the core
   "httpx>=0.27",
 ]
 
-# As engines pesadas vivem em extras: `uv sync --all-packages` não os instala, então a CI e a
-# máquina de dev (sem GPU) seguem sem torch. A imagem do worker GPU instala `whisperx`.
+# The heavy engines live in extras: `uv sync --all-packages` does not install them, so CI and the
+# dev machine (no GPU) stay without torch. The GPU worker image installs `whisperx`.
 [project.optional-dependencies]
 whisperx = [
-  # fixado: a engine chama a API dele diretamente; traz torch 2.8 e pyannote.audio 4
+  # pinned: the engine calls its API directly; it brings torch 2.8 and pyannote.audio 4
   "whisperx==3.8.6; python_version < '3.14'",
   "nvidia-ml-py>=12",
 ]

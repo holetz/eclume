@@ -1,7 +1,7 @@
-"""Tipos neutros da interface de engine de ASR.
+"""Neutral types of the ASR engine interface.
 
-A engine devolve um `EngineResult` sem conhecer o schema do contrato: quem converte para o
-`transcript.raw.json` é o worker. Tempos aqui são em segundos (`float`), como no WhisperX.
+The engine returns an `EngineResult` without knowing the contract schema: the worker converts it
+to `transcript.raw.json`. Times here are in seconds (`float`), as in WhisperX.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 type ProgressFn = Callable[[str, float], None]
-"""Callback de progresso: `(etapa, pct_da_etapa)`, etapa em `asr`, `align`, `diarize` ou `embed`."""
+"""Progress callback: `(step, step_pct)`, with step one of `asr`, `align`, `diarize` or `embed`."""
 
-# Códigos de erro que uma engine pode levantar; o worker acrescenta os de download e upload.
+# Error codes an engine may raise; the worker adds the download and upload ones.
 AUDIO_DECODE_FAILED = "audio_decode_failed"
 OUT_OF_MEMORY = "out_of_memory"
 ASR_FAILED = "asr_failed"
@@ -25,10 +25,10 @@ DIARIZATION_FAILED = "diarization_failed"
 
 
 class EngineError(Exception):
-    """Falha de uma engine, com o `error_code` do contrato de jobs."""
+    """Failure of an engine, with the job contract's `error_code`."""
 
     def __init__(self, code: str, message: str) -> None:
-        """Guarda o código do contrato junto da mensagem."""
+        """Keep the contract code together with the message."""
         super().__init__(message)
         self.code = code
         self.message = message
@@ -36,9 +36,9 @@ class EngineError(Exception):
 
 @dataclass(frozen=True)
 class EngineOptions:
-    """Opções de um job de transcrição, vindas de `options` do job `transcribe`."""
+    """Options of a transcription job, coming from `options` of the `transcribe` job."""
 
-    # `None`: a engine detecta o idioma e o devolve em `EngineResult.language`.
+    # `None`: the engine detects the language and returns it in `EngineResult.language`.
     language: str | None = "pt"
     model: str | None = None
     compute_type: str | None = None
@@ -46,23 +46,23 @@ class EngineOptions:
     embeddings: bool = True
     min_speakers: int | None = None
     max_speakers: int | None = None
-    # Da configuração do admin; vazios, valem os padrões da engine (e `ECLUME_BATCH_SIZE` no worker).
+    # From the admin configuration; when empty, the engine defaults apply (and `ECLUME_BATCH_SIZE` in the worker).
     batch_size: int | None = None
     fallback_model: str | None = None
     diarization_model: str | None = None
-    # Termos da conta (nomes de pessoas) que o ASR deve favorecer; valem só para este job.
+    # Account terms (people's names) the ASR should favour; they apply to this job only.
     vocabulary: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, options: Mapping[str, Any] | None) -> EngineOptions:
-        """Constrói a partir do dict do job, ignorando chaves desconhecidas (como `engine`)."""
+        """Build from the job dict, ignoring unknown keys (such as `engine`)."""
         options = options or {}
 
         def _int(key: str) -> int | None:
             value = options.get(key)
             return None if value is None else int(value)
 
-        # `language: null` pede a detecção; sem a chave (job antigo), vale o português.
+        # `language: null` asks for detection; without the key (old job), Portuguese applies.
         return cls(
             language=options.get("language", "pt") or None,
             model=options.get("model") or None,
@@ -80,7 +80,7 @@ class EngineOptions:
 
 @dataclass
 class Word:
-    """Palavra com tempo; `start`/`end` são `None` quando o alinhador não a posicionou."""
+    """Timed word; `start`/`end` are `None` when the aligner did not place it."""
 
     text: str
     start: float | None
@@ -91,7 +91,7 @@ class Word:
 
 @dataclass
 class Segment:
-    """Fala contínua, com o rótulo bruto de locutor da diarização (`SPEAKER_00`) ou `None`."""
+    """Continuous speech, with the raw speaker label from diarization (`SPEAKER_00`) or `None`."""
 
     start: float
     end: float
@@ -103,12 +103,12 @@ class Segment:
 
 @dataclass
 class EngineResult:
-    """Saída neutra de uma engine."""
+    """Neutral output of an engine."""
 
     engine: str
     model: str
     compute_type: str
-    # O idioma pedido, ou o detectado quando o job pediu a detecção.
+    # The requested language, or the detected one when the job asked for detection.
     language: str
     duration_s: float
     segments: list[Segment]
@@ -122,7 +122,7 @@ class EngineResult:
 
 
 class Engine(Protocol):
-    """Contrato de uma engine de ASR."""
+    """Contract of an ASR engine."""
 
     name: str
 
@@ -132,14 +132,14 @@ class Engine(Protocol):
         options: EngineOptions,
         progress: ProgressFn | None = None,
     ) -> EngineResult:
-        """Transcreve o arquivo; levanta `EngineError` com o código do contrato em falha."""
+        """Transcribe the file; raise `EngineError` with the contract code on failure."""
         ...
 
     def unload(self) -> None:
-        """Libera os modelos carregados (VRAM e RAM)."""
+        """Release the loaded models (VRAM and RAM)."""
         ...
 
 
 def is_oom(exc: BaseException) -> bool:
-    """Reconhece falta de memória de GPU vinda do torch ou do CTranslate2."""
+    """Recognize a GPU out-of-memory error coming from torch or CTranslate2."""
     return "out of memory" in str(exc).lower()
