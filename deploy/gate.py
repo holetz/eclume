@@ -50,7 +50,7 @@ LIMITE_DESCRICAO = 140
 
 # Caminhos que exigem cada pilar: o mesmo mapa dos filtros do `.github/workflows/ci.yml` (o
 # `deploy/test_gate.py` falha se os dois divergirem) mais os três pilares que só o gate roda.
-_CI = (".github/workflows/ci.yml", "deploy/pilares.sh")
+_CI = (".github/workflows/ci.yml", ".github/actions/**", "deploy/pilares.sh")
 _UV = ("pyproject.toml", "uv.lock", ".python-version")
 _DEPENDENCIAS = (
     "pyproject.toml",

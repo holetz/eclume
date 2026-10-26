@@ -2,7 +2,7 @@
 type: standard
 title: Layout do monorepo e comandos por pilar
 description: Cada pilar do eclume fica na raiz com a própria toolchain — workspace uv (server, worker-gpu, engines), npm em web/, workspace cargo em desktop/ e o app móvel em mobile/ (npm e workspace cargo próprio que usa os crates do desktop) — e estes são os comandos de build, lint e teste que a CI, o gate do host e as specs usam.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, deploy/pulos.py, web/e2e/flaky-reporter.ts, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/actions/ffmpeg/action.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, deploy/pulos.py, web/e2e/flaky-reporter.ts, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
 tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
@@ -259,6 +259,13 @@ Chromium no `desktop`, do WebKit e do Firefox no `web-browser`) e uma chamada a
 e o WebKit e o Firefox do Playwright, com as dependências de sistema do `playwright install-deps`
 (no gate, já na `deploy/gate.Dockerfile`); o `python` roda com `ECLUME_TEST_REQUIRE_SERVICES=1`, para
 a suíte do server nunca pular; o `desktop` imprime `df -h` e `free -m` antes do cargo.
+**ffmpeg in CI.** Jobs that need ffmpeg (`python`, `web-browser`) call the local composite action
+`.github/actions/ffmpeg`, never an inline `apt-get install`: it restores the `.deb` set from
+`actions/cache` (keyed on the runner image version) and contacts the distro mirror only on a miss,
+with its own `timeout-minutes` per step. A slow mirror once ran the `python` job into its 15-minute
+ceiling and cancelled it with no test failure; the healthy suite takes about 8 minutes of pytest, so the
+ceiling stays and `deploy/test_ci_ffmpeg.py` fails if an inline install returns.
+
 Com o repositório privado, os minutos de Actions têm cota, então a CI só roda o que mudou: mudança só
 em `.design/`, `.impeccable/` ou `.claude/` não dispara o workflow, e o job `mudancas`
 (`dorny/paths-filter`) liga cada job só quando o pilar dele, ou algo de que ele depende, foi tocado:
