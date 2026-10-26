@@ -122,6 +122,26 @@ def test_retranscrever_com_locutores_vence_a_nota_e_o_admin(
     assert _speakers(run_gpu(services.settings)) == (2, 3)
 
 
+def test_retranscribe_with_one_speaker_side_keeps_the_platform_limit_on_the_other(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api], admin: Api, services: Services
+):
+    admin.patch("/api/v1/admin/settings", json={"diarization": {"min_speakers": 2, "max_speakers": 4}})
+    owner = as_user(make_user())
+    recording = upload_file(owner, audio_bytes(next(_sizes)))
+    run_gpu(services.settings)
+    run_cpu(services.settings)
+    url = f"/api/v1/recordings/{recording['id']}/retranscribe"
+    for body, expected in (
+        ({"min_speakers": 3}, (3, 4)),
+        ({"max_speakers": 3}, (2, 3)),
+        ({"min_speakers": 5}, (5, None)),
+        ({"max_speakers": 1}, (None, 1)),
+    ):
+        assert owner.post(url, json=body).status_code == 202
+        assert _speakers(run_gpu(services.settings)) == expected, body
+        run_cpu(services.settings)
+
+
 def test_retranscrever_recusa_locutores_acima_do_teto_e_booleano(
     make_user: Callable[..., Account], as_user: Callable[[Account], Api], services: Services
 ):
