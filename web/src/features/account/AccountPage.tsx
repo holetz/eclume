@@ -20,17 +20,17 @@ import { useUpdateVoiceAssignment, useVoiceAssignment, type VoiceAssignment } fr
 import styles from './Account.module.css'
 import { AudioRetentionCard } from './AudioRetentionCard'
 
-// A regra do cadastro: o servidor recusa senha mais curta (422 em `new_password`).
+// The signup rule: the server refuses a shorter password (422 on `new_password`).
 const MIN_PASSWORD = 12
 
-/** A mensagem do campo que o servidor recusou (422), se for este. */
+/** The message of the field the server refused (422), if it is this one. */
 function fieldError(error: unknown, field: string): string | null {
   if (!(error instanceof ApiError) || error.status !== 422) return null
   const errors = (error.problem as { errors?: { field: string; message: string }[] } | null)?.errors ?? []
   return errors.find((item) => item.field === field)?.message ?? null
 }
 
-/** Minhas configurações › Conta: os dados da conta, o idioma da transcrição, privacidade e dados, trocar a senha e excluir a conta. */
+/** Minhas configurações › Conta: the account data, the transcription language, privacy and data, changing the password and deleting the account. */
 export function AccountPage() {
   useHelpTopic('conta')
   const me = useMe()
@@ -79,7 +79,7 @@ export function AccountPage() {
   )
 }
 
-/** O idioma em que as gravações desta conta são transcritas quando o arquivo não escolhe outro. */
+/** The language this account's recordings are transcribed in when the file does not choose another. */
 function TranscriptionSection() {
   const id = useId()
   const preference = useTranscriptionPreference()
@@ -115,7 +115,7 @@ function TranscriptionSection() {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** Para onde vai cada dado, conforme a configuração deste servidor, e a voz que a conta guarda. */
+/** Where each piece of data goes, per this server's configuration, and the voice the account keeps. */
 function PrivacySection() {
   const privacy = usePrivacy()
   const voice = useVoiceAssignment()
@@ -203,7 +203,7 @@ function PasswordSection() {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [repeat, setRepeat] = useState('')
-  // Quem troca a senha por suspeita de vazamento quer encerrar todo acesso: marcada por padrão.
+  // Someone changing the password over a suspected leak wants to end all access: checked by default.
   const [revokeTokens, setRevokeTokens] = useState(true)
   const [done, setDone] = useState<'sessions' | 'all' | null>(null)
   const change = useMutation({

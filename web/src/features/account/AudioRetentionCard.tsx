@@ -25,7 +25,7 @@ function useUpdateAudioRetention() {
   })
 }
 
-/** Quanto tempo o servidor guarda o áudio das gravações desta conta; a transcrição e o resumo ficam. */
+/** How long the server keeps the audio of this account's recordings; the transcript and the summary stay. */
 export function AudioRetentionCard() {
   const retention = useAudioRetention()
   return retention.data ? (
