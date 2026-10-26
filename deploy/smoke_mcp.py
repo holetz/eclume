@@ -118,8 +118,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="https://192.168.15.199:8443")
     parser.add_argument("--ca", required=True, help="a CA raiz publicada em /downloads/eclume-root.crt")
-    parser.add_argument("--email", default="admin@example.com")
+    parser.add_argument("--email", default=os.environ.get("ECLUME_ADMIN_EMAIL"), help="padrão: $ECLUME_ADMIN_EMAIL")
     args = parser.parse_args()
+    if not args.email:
+        _fail("informe a conta por --email ou ECLUME_ADMIN_EMAIL")
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
     context = ssl.create_default_context(cafile=args.ca)
 

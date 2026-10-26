@@ -1,7 +1,7 @@
 ---
 type: standard
 title: Marca do eclume
-description: A identidade visual do eclume — linho e nogueira do ecossistema Jane, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md.
+description: A identidade visual do eclume — linho e nogueira, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md.
 resource: .design/**
 tags: [design, brand, tokens]
 timestamp: 2026-10-01

@@ -13,7 +13,7 @@ maintainer: holetz
 
 # Preparar o host 192.168.15.199
 
-Este é o runbook **deste** host: deixa o servidor da consultoria pronto para receber os
+Este é o runbook **deste** host: deixa o servidor da instituição pronto para receber os
 containers do eclume e do lumea. Os requisitos e passos para qualquer servidor, com ou sem GPU,
 estão em [auto-hospedar.md](../how-to/auto-hospedar.md); desenvolver sem GPU e sem este host, em
 [desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). O servidor

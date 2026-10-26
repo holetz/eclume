@@ -92,7 +92,7 @@ VALUES ('{org}', '{transcript}', 1, gen_random_uuid(), 'Ata de reunião', 'x', 1
 
 SEED = f"""
 INSERT INTO organizations (id, name, created_at) VALUES
-    ('{ORG_A}', 'EK Consultoria', '2026-09-01T00:00:00Z'),
+    ('{ORG_A}', 'Example Org', '2026-09-01T00:00:00Z'),
     ('{ORG_B}', 'Outra', '2026-09-02T00:00:00Z'),
     ('{ORG_C}', 'Sem templates', '2026-09-03T00:00:00Z');
 INSERT INTO users (id, org_id, email, name, password_hash, role, created_at) VALUES

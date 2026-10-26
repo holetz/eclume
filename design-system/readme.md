@@ -1,6 +1,6 @@
 # eclume design system
 
-eclume is a self-hosted institutional transcription service ([holetz/eclume](https://github.com/holetz/eclume)). The name joins eco and lume. This system keeps the Modernist grammar: flat and architectural, set entirely in Archivo, a warm linen-and-walnut palette shared with the Jane ecosystem, a visible grid, zero corner radius and strong 2px rules. On top of that it adds the eclume brand and the product layer the web app and the desktop app need: recording status, transcripts with six speaker hues, the grouped app shell, the tray window, and a dark theme.
+eclume is a self-hosted institutional transcription service ([holetz/eclume](https://github.com/holetz/eclume)). The name joins eco and lume. This system keeps the Modernist grammar: flat and architectural, set entirely in Archivo, a warm linen-and-walnut palette, a visible grid, zero corner radius and strong 2px rules. On top of that it adds the eclume brand and the product layer the web app and the desktop app need: recording status, transcripts with six speaker hues, the grouped app shell, the tray window, and a dark theme.
 
 ## How to use this
 
@@ -23,7 +23,7 @@ The design system is written in English: interface copy, labels, sample content,
 
 ## Color
 
-The ground is `--color-bg` #f7f5f2 (linen) with `--color-text` #262420 and one walnut accent, #6f5a44, plus 100–900 ramps. Walnut is spent on the primary action, links, focus and the current nav item. Terracotta `--color-rec` #b8432c (the `accent-2` ramp) is reserved for recording; `--color-danger` #a33a26 for failure. Everything else is ink. The palette follows the Jane Home Page system so both products read as one family.
+The ground is `--color-bg` #f7f5f2 (linen) with `--color-text` #262420 and one walnut accent, #6f5a44, plus 100–900 ramps. Walnut is spent on the primary action, links, focus and the current nav item. Terracotta `--color-rec` #b8432c (the `accent-2` ramp) is reserved for recording; `--color-danger` #a33a26 for failure. Everything else is ink.
 
 - `--color-accent-ink` is the accent for small text (accent-600 on light, accent-300 on dark).
 - `--color-text-muted`, `--color-success`, `--color-warning` and `--color-danger` are the status roles.

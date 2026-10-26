@@ -17,7 +17,7 @@ duração: a borda Caddy com HTTPS na porta 8443 e o web embutido, a API, um wor
 transcrição, o anúncio mDNS, Postgres, Redis e MinIO. O deploy sai de uma **estação** (a máquina em que
 você clonou o repositório) e fala com o servidor por um **contexto Docker** `ssh://`: o build
 roda no daemon do servidor e as pastas de dados são criadas por SSH. Este guia vale para qualquer
-servidor; o registro concreto da produção da consultoria, que segue estes passos, está em
+servidor; o registro concreto da produção da instituição, que segue estes passos, está em
 [deploy-producao.md](../project/deploy-producao.md) e [host-setup.md](../project/host-setup.md).
 
 ## Requisitos

@@ -289,7 +289,7 @@ def test_outra_conta_nunca_e_comparada(new_account: Callable[[], Conta], service
     stranger = other.person("Pessoa de fora")
     other.link(other.transcript(), "S2", stranger["id"])
     assert other.samples(stranger["id"]) == 1
-    # A mesma voz na conta da EK: nenhuma sugestão, nenhuma leitura, nenhuma exclusão.
+    # A mesma voz na conta da outra organização: nenhuma sugestão, nenhuma leitura, nenhuma exclusão.
     assert all(s["suggestions"] == [] for s in ek.speakers(ek.transcript()).values())
     assert ek.owner.get(f"/api/v1/people/{stranger['id']}/voiceprint").status_code == 404
     assert ek.owner.delete(f"/api/v1/people/{stranger['id']}/voiceprint").status_code == 404

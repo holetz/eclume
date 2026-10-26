@@ -60,7 +60,7 @@ describe('Transcrição', () => {
     expect(screen.queryByLabelText(/locutores/)).not.toBeInTheDocument()
     const form = screen.getByRole('form', { name: 'Configuração de transcrição' })
     expect(within(form).getByRole('link', { name: 'Locutores' })).toHaveAttribute('href', '/admin/locutores')
-    expect(screen.getByText(/Última alteração por Administração EK/)).toBeInTheDocument()
+    expect(screen.getByText(/Última alteração por Administrator/)).toBeInTheDocument()
 
     const save = screen.getByRole('button', { name: 'Salvar' })
     expect(save).toBeDisabled()
