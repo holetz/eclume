@@ -16,6 +16,7 @@ const base = {
   'GET /api/v1/privacy': () => fixtures.privacyInfo(),
   'GET /api/v1/me/voice-assignment': () => fixtures.voiceAssignment(),
   'GET /api/v1/me/transcription': () => fixtures.transcriptionPreference(),
+  'GET /api/v1/me/audio-retention': () => fixtures.audioRetention(),
 }
 
 describe('conta', () => {
@@ -33,6 +34,44 @@ describe('conta', () => {
     await waitFor(() => expect(http.requests('PATCH /api/v1/me/transcription')).toHaveLength(1))
     expect(await http.requests('PATCH /api/v1/me/transcription')[0].json()).toEqual({ language: null })
     await waitFor(() => expect(select).toHaveValue(''))
+  })
+
+  it('define a retenção do áudio, mostrando o teto e o aviso de irreversibilidade', async () => {
+    const http = mockFetch({
+      ...base,
+      'GET /api/v1/me/audio-retention': () => ({ days: null, max_days: 90, effective_days: null }),
+      'PATCH /api/v1/me/audio-retention': () => ({ days: 45, max_days: 90, effective_days: 45 }),
+    })
+    renderApp('/config/conta')
+    const form = await screen.findByRole('form', { name: 'Retenção do áudio' })
+    expect(within(form).getByText(/irreversível/)).toBeInTheDocument()
+    expect(within(form).getByText(/até 14 dias/)).toBeInTheDocument()
+    expect(within(form).getByText('O administrador limitou a retenção a 90 dias.')).toBeInTheDocument()
+    expect(within(form).getByRole('switch')).not.toBeChecked()
+    expect(within(form).getByRole('button', { name: 'Salvar' })).toBeDisabled()
+
+    await userEvent.click(within(form).getByRole('switch'))
+    const days = within(form).getByLabelText('Dias até apagar o áudio')
+    await userEvent.clear(days)
+    await userEvent.type(days, '45')
+    await userEvent.click(within(form).getByRole('button', { name: 'Salvar' }))
+    expect(await within(form).findByRole('status')).toHaveTextContent('Retenção salva.')
+    expect(await http.requests('PATCH /api/v1/me/audio-retention')[0].json()).toEqual({ days: 45 })
+  })
+
+  it('desliga a retenção enviando days nulo', async () => {
+    const http = mockFetch({
+      ...base,
+      'PATCH /api/v1/me/audio-retention': () => ({ days: null, max_days: 90, effective_days: null }),
+    })
+    renderApp('/config/conta')
+    const form = await screen.findByRole('form', { name: 'Retenção do áudio' })
+    const toggle = within(form).getByRole('switch')
+    expect(toggle).toBeChecked()
+    await userEvent.click(toggle)
+    await userEvent.click(within(form).getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(http.requests('PATCH /api/v1/me/audio-retention')).toHaveLength(1))
+    expect(await http.requests('PATCH /api/v1/me/audio-retention')[0].json()).toEqual({ days: null })
   })
 
   it('mostra a conta e troca a senha, conferindo a repetição', async () => {

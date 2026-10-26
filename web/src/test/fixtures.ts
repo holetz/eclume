@@ -52,6 +52,7 @@ import uploadCreated from '../../../contracts/fixtures/upload-created.json'
 import uploadDeduplicated from '../../../contracts/fixtures/upload-deduplicated.json'
 import uploadInProgress from '../../../contracts/fixtures/upload-in-progress.json'
 import voiceprint from '../../../contracts/fixtures/voiceprint.json'
+import audioRetention from '../../../contracts/fixtures/audio-retention.json'
 import transcriptionPreference from '../../../contracts/fixtures/transcription-preference.json'
 import voiceAssignment from '../../../contracts/fixtures/voice-assignment.json'
 
@@ -118,5 +119,6 @@ export const fixtures = {
   tagList: fresh<Schemas['TagList']>(tagList),
   voiceprint: fresh<Schemas['Voiceprint']>(voiceprint),
   voiceAssignment: fresh<Schemas['VoiceAssignment']>(voiceAssignment),
+  audioRetention: fresh<Schemas['AudioRetention']>(audioRetention),
   transcriptionPreference: fresh<Schemas['TranscriptionPreference']>(transcriptionPreference),
 }
