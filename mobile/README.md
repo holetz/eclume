@@ -9,7 +9,7 @@ transcrições.
   sobre o DS do eclume; o núcleo Rust (`crates/core`) reaproveita os crates de gravação e sync do
   desktop (`../desktop/crates`).
 - **Arquitetura e contratos:** [docs/standards/code/mobile-app.md](../docs/standards/code/mobile-app.md).
-- **Comandos:** [docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md#móvel--npm-e-workspace-cargo-em-mobile).
+- **Comandos:** [docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md#mobile--npm-and-cargo-workspace-in-mobile).
 - **Ambiente Android no host:** `scripts/android-sdk.sh`
   ([docs/project/host-setup.md](../docs/project/host-setup.md)).
 

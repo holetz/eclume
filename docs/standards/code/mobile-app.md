@@ -20,7 +20,7 @@ isso é da web, e o celular não notifica o fim do processamento (só fala com o
 eclume; o aviso é do desktop e do web, holetz/eclume#118). Só Android: o iOS está fora do escopo, sem spec aberta (o plugin recusa o iOS em
 `mobile/plugins/gravador/src/lib.rs`; o núcleo, a UI com `data-os` e a interface do plugin não
 fecham a porta para um lado Swift). O layout e os comandos do pilar estão em
-[monorepo.md](monorepo.md#móvel--npm-e-workspace-cargo-em-mobile); a distribuição, em
+[monorepo.md](monorepo.md#mobile--npm-and-cargo-workspace-in-mobile); a distribuição, em
 [mobile-distribuicao.md](mobile-distribuicao.md).
 
 ## Arquitetura
