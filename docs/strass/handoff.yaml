@@ -1,0 +1,61 @@
+from: product-owner
+phase: 01-discovery
+to: [ux-ui-designer, architect]
+
+artifacts:
+  strategy: [jtbd.md, market-scan.md, vpc.md, bmc.md, personas.md, risks-assumptions.md, vision-doc.md]
+  spec: [requirements.md, spec-questions.md, user-stories.md, success-metrics.md, sizing.md]
+  marketing: [docs/marketing/positioning.md, docs/marketing/messaging.md, docs/marketing/packaging.md, docs/marketing/gtm-handoff.yaml]
+
+mvp_ref: handoff-strategy.yaml   # job_completo, time_to_value, gatilho de retorno e RAT vivem lá
+
+stories_mvp:
+  - US-1.1  # Montar estrutura organizacional (manual)
+  - US-1.2  # Importar estrutura via planilha
+  - US-1.3  # Rodar diagnóstico de risco de liderança e dimensionamento
+  - US-1.4  # Recomendação dentre as quatro categorias
+  - US-1.5  # Revisão humana no fluxo assistido (tier Lumea+EK)
+  - US-1.6  # Liberação direta no tier Self-Service
+  - US-1.7  # Visão do líder de área com permissionamento por hierarquia
+  - US-1.8  # Assessment como insumo do diagnóstico
+  - US-1.9  # Controle de acesso e conformidade LGPD
+
+recorte_verificado: true
+recorte_verificado_nota: "As 9 stories MVP juntas fecham o Job 2 completo (estrutura → diagnóstico → recomendação dentre as 4 categorias, sem sair da ferramenta) para RH/HRBP e Persona 5, e o Job 4 completo para o líder de área (Carla), nos dois tiers testados em paralelo. Nenhuma etapa do job ficou fora do MVP."
+
+nsm_candidato: "Taxa de continuidade pós-ciclo — clientes que seguem usando a Lumea depois que o contrato de consultoria ativo termina (proxy de H1). Alvo numérico não medido — a fundadora não declarou percentual, só o comportamento observável."
+
+sizing_total_baseline: "~19-20 dias de esforço humano equivalente na leitura mais otimista; pode passar de 25-28 dias contando a variação larga de US-1.3/US-1.4 (metodologia proprietária não formalizada em regras) e US-1.8 (M a XL, pendente SQ-009). Ver sizing.md."
+
+spec_sweep:
+  categorias_rodadas: [vocabulario-de-dominio, entrada-e-validacao, unicidade-e-duplicidade, ciclo-de-vida-completo, os-tres-estados-de-uma-leitura, estado-inicial, operacao-assincrona, falha-de-dependencia-externa, permissao-e-visibilidade, dados-pre-existentes, alcancabilidade]
+  fr_totais: 45   # 33 originais + FR-034 a FR-045, geradas pelas respostas da fundadora (2026-09-14)
+  nfr_totais: 4   # NFR-LGPD + NFR-LGPD-RETENCAO (nova, SQ-008)
+  perguntas: 9
+  respondidas: 9
+
+spec_questions_resolved:
+  date: "2026-09-14"
+  source: "Formulário \"9 Decisões da Lumea\" respondido por Jane Doe (EK)"
+  all_9_answered: true
+  summary:
+    SQ-001: "B — estrutura modela posições vagas e colaboradores; dimensionamento compara ocupação real com planejada. Ver FR-034, FR-035."
+    SQ-002: "C — duplicidade por nome completo + cargo, sinalizada sem bloqueio automático (trade-off de precisão aceito pela fundadora). Ver FR-036."
+    SQ-003: "B — diagnóstico/recomendação pendente permanece pendente quando o colaborador é removido; sistema avisa, revisor decide. Ver FR-037. Corrige referência anterior a 'SQ-002' nas notas de FR-006/FR-033, que sempre foi SQ-003."
+    SQ-004: "A — reimportação de planilha substitui a estrutura inteira; quem não consta na planilha nova é removido. Ver FR-038 (substituição) e FR-039 (confirmação explícita, spec-detail)."
+    SQ-005: "B — resultado mostra classificação + explicação qualitativa dos fatores, sem pesos/fórmula. Ver FR-040."
+    SQ-006: "B — cliente escolhe o tier na contratação, registrado como atributo da assinatura. Ver FR-041. RESSALVA FECHADA (2026-09-14, esclarecida por Sid Hamada em conversa direta com o main loop, não é resposta nova da fundadora nem do formulário): a contratação acontece via rede de relacionamento da fundadora, mediada pela EK — o recorte atual do MVP se mantém, sem expansão de escopo."
+    SQ-007: "B — resultado individual de assessment exige sub-papel adicional dentro do RH. Ver FR-042, FR-043."
+    SQ-008: "A — retenção fixa de 5 anos. RESSALVA REDUZIDA, NÃO FECHADA (2026-09-14, esclarecida por Sid Hamada em conversa direta com o main loop, não é resposta nova da fundadora nem parecer jurídico formal): a base legal agora é dupla (LGPD + legislação trabalhista), mas confirmação jurídica formal segue pendente — ver NFR-LGPD-RETENCAO e unconfirmed_inferences."
+    SQ-009: "C — MVP só recebe resultado de assessment externo (upload/integração); aplicação própria fica para depois. Ver FR-045. Direção de longo prazo (assessment nativo opcional) registrada como nota, não como requisito."
+
+unconfirmed_inferences:
+  - "SQ-006 (RESOLVIDA em 2026-09-14, esclarecida por Sid Hamada em conversa direta com o main loop — não é resposta nova da fundadora nem do formulário '9 Decisões da Lumea'): os primeiros clientes compram pela rede de relacionamento da fundadora, e a escolha do tier acontece dentro dessa negociação, ainda mediada pela EK — não é autoatendimento público. Isso confirma que o recorte atual do MVP (vision-doc.md: self-service restrito a 'pelo menos um cliente-piloto elegível', onboarding próprio sem intervenção da EK reservado para v1.1) se mantém, sem expansão de escopo. Mantido aqui como registro histórico da inferência que foi fechada, não como pendência aberta."
+  - "SQ-008 (REDUZIDA, NÃO FECHADA em 2026-09-14, esclarecida por Sid Hamada em conversa direta com o main loop — não é resposta nova da fundadora nem parecer jurídico formal por escrito): confirma o prazo fixo de 5 anos e esclarece que a base legal não é só LGPD — é também legislação trabalhista (retenção de registros de RH). A base de trabalho agora é dupla (LGPD + trabalhista), reduzindo a incerteza da resposta original (que não citava base nenhuma). LGPD permanece bloqueador de lançamento (vision-doc.md) até validação por assessoria jurídica especializada em LGPD e legislação trabalhista — não tratar 5 anos como número legal fechado antes dessa validação."
+  - "SQ-009 (direção de longo prazo, fora do MVP e do v1.1 confirmado): a fundadora sinalizou intenção futura de o cliente poder optar por assessment nativo da Lumea, solicitar inclusão depois, ou trazer outro assessment externo — por declaração dela, 'ainda não está definido em detalhe, é direção, não spec fechada'. Não vira requisito até nova rodada de discovery."
+
+open_questions: []   # vazio = nenhuma pergunta da varredura ficou sem chegar ao spec-questions.md — todas as 9 foram ao gate e todas as 9 foram respondidas (2026-09-14)
+
+blocking_note: "As 9 SQs de spec-questions.md foram respondidas pela fundadora em 2026-09-14 (formulário \"9 Decisões da Lumea\"). O architect pode desenhar schema para estrutura organizacional, diagnóstico, tiers e assessment usando FR-034 a FR-045. Duas ressalvas ficaram abertas por natureza e foram tratadas mais tarde no mesmo dia por Sid Hamada em conversa direta com o main loop (não é resposta nova da fundadora): (1) SQ-006 — FECHADA: o mecanismo de contratação do tier é uma negociação mediada pela EK, confirmando o recorte atual do MVP, sem expansão de escopo; (2) SQ-008 — REDUZIDA, NÃO FECHADA: o prazo de retenção de 5 anos agora tem base legal dupla (LGPD + trabalhista), mas segue sem confirmação jurídica formal, e LGPD continua bloqueador de lançamento até essa validação."
+
+next_step: "ux-ui-designer inicia com personas.md e user-stories.md (US-1.1 a US-1.9, todos os ACs resolvidos) — a maior atenção de design é US-1.7 (visão do líder, familiaridade digital variável, NFR-USABILIDADE-LIDER) e a diferenciação visual entre estado 'aguardando revisão' (US-1.5) e recomendação liberada. architect inicia com requirements.md (45 FR + 4 NFR) e sizing.md; a ressalva de SQ-006 já fechou e não bloqueia o desenho do fluxo de contratação/tier. Recomendação direta ao squad-manager/dono do projeto: buscar confirmação jurídica formal (LGPD + trabalhista) do prazo de retenção de 5 anos (SQ-008) antes do lançamento comercial — não bloqueia a Fase 03. Pendência cruzada com marketing: product-marketer revalida messaging.md/gtm-handoff.yaml trocando lastro 'In Scope' por US-IDs agora que user-stories.md existe — não refeito aqui, fora do escopo do product-owner."
