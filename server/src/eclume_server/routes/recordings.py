@@ -18,6 +18,14 @@ from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.dispatch import next_for
 from eclume_server.fields import mark_edited
+from eclume_server.input_limits import (
+    MAX_METADATA_ENTRIES,
+    MAX_METADATA_KEY_LENGTH,
+    MAX_METADATA_VALUE_LENGTH,
+    MAX_RECORDING_COLLECTIONS,
+    MAX_RECORDING_TAG_LENGTH,
+    MAX_RECORDING_TAGS,
+)
 from eclume_server.operations import change_agenda_type, check_collections
 from eclume_server.pagination import Cursor, Limit
 from eclume_server.problems import conflict, forbidden, invalid_field, not_found, unauthorized
@@ -56,9 +64,17 @@ class RecordingPatch(BaseModel):
     recorded_at: datetime | None = None
     kind: Kind | None = None
     language: str | None = Field(default=None, pattern=LANGUAGE)
-    tags: list[Annotated[str, Field(min_length=1)]] | None = None
-    collection_ids: list[UUID] | None = None
-    metadata: dict[str, str] | None = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=MAX_RECORDING_TAG_LENGTH)]] | None = Field(
+        default=None, max_length=MAX_RECORDING_TAGS
+    )
+    collection_ids: list[UUID] | None = Field(default=None, max_length=MAX_RECORDING_COLLECTIONS)
+    metadata: (
+        dict[
+            Annotated[str, Field(max_length=MAX_METADATA_KEY_LENGTH)],
+            Annotated[str, Field(max_length=MAX_METADATA_VALUE_LENGTH)],
+        ]
+        | None
+    ) = Field(default=None, max_length=MAX_METADATA_ENTRIES)
     agenda_type_id: UUID | None = None
 
 

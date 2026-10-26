@@ -15,6 +15,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
+from eclume_server.input_limits import MAX_EMAIL, MAX_PERSON_NOTES
 from eclume_server.pagination import Cursor, Limit, decode_cursor, decode_named_position, encode_position, page
 from eclume_server.people import (
     MAX_PERSON_TAG,
@@ -56,8 +57,8 @@ class PersonCreate(BaseModel):
     """Schema `PersonCreate`."""
 
     name: str = Field(min_length=1, max_length=MAX_PERSON_NAME)
-    email: str | None = None
-    notes: str | None = None
+    email: str | None = Field(default=None, max_length=MAX_EMAIL)
+    notes: str | None = Field(default=None, max_length=MAX_PERSON_NOTES)
     company: Attribute = None
     department: Attribute = None
     job_title: Attribute = None
@@ -73,8 +74,8 @@ class PersonPatch(BaseModel):
     """Schema `PersonPatch`."""
 
     name: str | None = Field(default=None, min_length=1, max_length=MAX_PERSON_NAME)
-    email: str | None = None
-    notes: str | None = None
+    email: str | None = Field(default=None, max_length=MAX_EMAIL)
+    notes: str | None = Field(default=None, max_length=MAX_PERSON_NOTES)
     company: Attribute = None
     department: Attribute = None
     job_title: Attribute = None

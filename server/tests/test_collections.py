@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from eclume_server.input_limits import MAX_COLLECTION_NAME
 from eclume_server_testing.api import audio_bytes, upload_file
 
 if TYPE_CHECKING:
@@ -241,7 +242,7 @@ def test_cursor_de_colecao_com_nome_longo_e_aceito_de_volta(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
-    longo = "c" * 6200
+    longo = "c" * MAX_COLLECTION_NAME
     for name in ("acme", longo, "zeta"):
         assert api.post("/api/v1/collections", json={"name": name}).status_code == 201
 

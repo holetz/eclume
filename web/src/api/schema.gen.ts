@@ -3234,8 +3234,10 @@ export interface components {
             tags?: string[];
             /** @description Substitui a lista inteira. */
             collection_ids?: string[];
-            /** @description Substitui o objeto inteiro. */
-            metadata?: components["schemas"]["RecordingMetadata"];
+            /** @description Substitui o objeto inteiro (até 50 entradas). */
+            metadata?: {
+                [key: string]: string;
+            };
             /**
              * Format: uuid
              * @description Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);

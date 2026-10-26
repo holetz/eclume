@@ -26,6 +26,7 @@ from eclume_server.agents.agent_tools import default_registry
 from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db.session import user_tx
+from eclume_server.input_limits import MAX_ALLOWED_TOOLS, MAX_TOOL_NAME_LENGTH
 
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
@@ -40,7 +41,9 @@ class AgentSkillCreate(BaseModel):
     name: str = Field(min_length=1, max_length=MAX_NAME + 1)
     description: str = Field(min_length=1, max_length=MAX_DESCRIPTION)
     instructions: str = Field(min_length=1, max_length=MAX_INSTRUCTIONS)
-    allowed_tools: list[str] | None = None
+    allowed_tools: list[Annotated[str, Field(max_length=MAX_TOOL_NAME_LENGTH)]] | None = Field(
+        default=None, max_length=MAX_ALLOWED_TOOLS
+    )
     enabled: bool = True
 
 
@@ -52,7 +55,9 @@ class AgentSkillPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=MAX_NAME + 1)
     description: str | None = Field(default=None, min_length=1, max_length=MAX_DESCRIPTION)
     instructions: str | None = Field(default=None, min_length=1, max_length=MAX_INSTRUCTIONS)
-    allowed_tools: list[str] | None = None
+    allowed_tools: list[Annotated[str, Field(max_length=MAX_TOOL_NAME_LENGTH)]] | None = Field(
+        default=None, max_length=MAX_ALLOWED_TOOLS
+    )
     enabled: bool | None = None
 
 

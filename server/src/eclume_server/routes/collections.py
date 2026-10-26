@@ -16,6 +16,7 @@ from eclume_server.auth import Principal, requires
 from eclume_server.context import AppContext, get_ctx
 from eclume_server.db import tables as t
 from eclume_server.db.session import user_tx
+from eclume_server.input_limits import MAX_COLLECTION_DESCRIPTION, MAX_COLLECTION_NAME
 from eclume_server.pagination import Cursor, Limit, decode_named_position, encode_position, iso
 from eclume_server.problems import ApiProblemError, invalid_field, not_found
 
@@ -43,8 +44,8 @@ _recording_count = (
 class CollectionCreate(BaseModel):
     """Schema `CollectionCreate`."""
 
-    name: str = Field(min_length=1)
-    description: str | None = None
+    name: str = Field(min_length=1, max_length=MAX_COLLECTION_NAME)
+    description: str | None = Field(default=None, max_length=MAX_COLLECTION_DESCRIPTION)
     instructions: str = Field(default="", max_length=MAX_INSTRUCTIONS)
     auto_assign: bool = False
 
@@ -52,8 +53,8 @@ class CollectionCreate(BaseModel):
 class CollectionPatch(BaseModel):
     """Schema `CollectionPatch`."""
 
-    name: str | None = Field(default=None, min_length=1)
-    description: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=MAX_COLLECTION_NAME)
+    description: str | None = Field(default=None, max_length=MAX_COLLECTION_DESCRIPTION)
     instructions: str | None = Field(default=None, max_length=MAX_INSTRUCTIONS)
     auto_assign: bool | None = None
 
